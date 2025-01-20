@@ -78,7 +78,7 @@ class KafkaCompatTest(EndToEndTest):
 
 class TxKafkaCompatTest(KafkaCompatTest):
     @cluster(num_nodes=6)
-    @parametrize(metadata_quorum='COLOCATED_KRAFT')
+    @parametrize(metadata_quorum='COMBINED_KRAFT')
     def test_concurrent_producer_ids(self, metadata_quorum):
         def test_case(broker_service: RedpandaServiceForClients) -> list[str]:
 
