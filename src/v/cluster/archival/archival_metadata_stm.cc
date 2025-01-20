@@ -944,84 +944,42 @@ ss::future<std::error_code> archival_metadata_stm::add_segments(
   model::producer_id highest_pid,
   ss::lowres_clock::time_point deadline,
   ss::abort_source& as,
-  segment_validated is_validated) {
-    auto now = ss::lowres_clock::now();
-    auto timeout = now < deadline ? deadline - now : 0ms;
-    return _lock.with(
-      timeout,
-      [this,
-       s = std::move(segments),
-       clean_offset,
-       highest_pid,
-       deadline,
-       &as,
-       is_validated]() mutable {
-          return do_add_segments(
-            std::move(s),
-            clean_offset,
-            highest_pid,
-            deadline,
-            as,
-            is_validated);
-      });
-}
-
-ss::future<std::error_code> archival_metadata_stm::do_add_segments(
-  std::vector<cloud_storage::segment_meta> add_segments,
-  std::optional<model::offset> clean_offset,
-  model::producer_id highest_pid,
-  ss::lowres_clock::time_point deadline,
-  ss::abort_source& as,
-  segment_validated is_validated) {
+  segment_validated is_validated,
+  emit_read_write_fence rw_fence) {
     auto holder = _gate.hold();
-    {
-        auto now = ss::lowres_clock::now();
-        auto timeout = now < deadline ? deadline - now : 0ms;
-        if (!co_await do_sync(timeout, &as)) {
-            co_return errc::timeout;
-        }
-    }
-
-    as.check();
-
-    if (add_segments.empty()) {
+    if (segments.empty()) {
         co_return errc::success;
     }
 
-    storage::record_batch_builder b(
-      model::record_batch_type::archival_metadata, model::offset(0));
-    for (auto& meta : add_segments) {
-        iobuf key_buf = serde::to_iobuf(add_segment_cmd::key);
-        if (meta.ntp_revision == model::initial_revision_id{}) {
-            meta.ntp_revision = _manifest->get_revision_id();
-        }
-        auto record_val = add_segment_cmd::value{segment_from_meta(meta)};
-        record_val.is_validated = is_validated;
-        iobuf val_buf = serde::to_iobuf(std::move(record_val));
-        b.add_raw_kv(std::move(key_buf), std::move(val_buf));
+    auto builder = batch_start(deadline, as);
+    if (rw_fence.has_value()) {
+        // The fence should be added first because it can only
+        // affect commands which are following it in the same record
+        // batch.
+        vlog(
+          _logger.debug,
+          "add_segments, read-write fence: {}",
+          rw_fence.value());
+        builder.read_write_fence(rw_fence.value());
     }
+    // Add actual segments
+    builder.add_segments(segments, is_validated);
 
+    // Update metadata
     if (clean_offset.has_value()) {
-        iobuf key_buf = serde::to_iobuf(
-          archival_metadata_stm::mark_clean_cmd::key);
-        iobuf val_buf = serde::to_iobuf(clean_offset.value());
-        b.add_raw_kv(std::move(key_buf), std::move(val_buf));
+        builder.mark_clean(clean_offset.value());
     }
-
     if (highest_pid != model::producer_id{}) {
-        iobuf key_buf = serde::to_iobuf(
-          archival_metadata_stm::update_highest_producer_id_cmd::key);
-        iobuf val_buf = serde::to_iobuf(highest_pid());
-        b.add_raw_kv(std::move(key_buf), std::move(val_buf));
+        builder.update_highest_producer_id(highest_pid);
     }
 
-    auto batch = std::move(b).build();
-    auto ec = co_await do_replicate_commands(std::move(batch), as);
+    // Replicate and log new metadata
+    auto ec = co_await builder.replicate();
     if (ec) {
         co_return ec;
     }
 
-    for (const auto& meta : add_segments) {
+    for (const auto& meta : segments) {
         auto name = cloud_storage::generate_local_segment_name(
           meta.base_offset, meta.segment_term);
         vlog(
@@ -1334,7 +1292,8 @@ archival_metadata_stm::take_local_snapshot(ssx::semaphore_units apply_units) {
       .last_partition_scrub = _manifest->last_partition_scrub(),
       .last_scrubbed_offset = _manifest->last_scrubbed_offset(),
       .detected_anomalies = _manifest->detected_anomalies(),
-      .highest_producer_id = _manifest->highest_producer_id()});
+      .highest_producer_id = _manifest->highest_producer_id(),
+      .applied_offset = _manifest->get_applied_offset()});
     auto snapshot_offset = last_applied_offset();
     apply_units.return_all();
 
@@ -1402,30 +1361,6 @@ void archival_metadata_stm::maybe_notify_waiter(std::exception_ptr e) noexcept {
 
 void archival_metadata_stm::apply_add_segment(const segment& segment) {
     auto meta = segment.meta;
-    bool disable_safe_add
-      = config::shard_local_cfg()
-          .cloud_storage_disable_metadata_consistency_checks.value();
-    if (
-      !disable_safe_add && segment.is_validated == segment_validated::yes
-      && !_manifest->safe_segment_meta_to_add(meta)) {
-        // We're only validating segment metadata records if they're validated.
-        // It goes like this
-        // - npt_archiver_service validates segment_meta instances before
-        //   replication
-        // - replicated add_segment commands have 'is_validated' field set to
-        //   'yes'
-        // - old records in the log have 'is_validated' field set to 'no'
-        // - the 'apply_add_segment' will only validate new commands and add old
-        //   ones unconditionally
-        auto last = _manifest->last_segment();
-        vlog(
-          _logger.error,
-          "Can't add segment: {}, previous segment: {}",
-          meta,
-          last);
-        maybe_notify_waiter(errc::inconsistent_stm_update);
-        return;
-    }
     if (meta.ntp_revision == model::initial_revision_id{}) {
         // metadata serialized by old versions of redpanda doesn't have the
         // ntp_revision field.

@@ -2372,13 +2372,15 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
   , cloud_storage_disable_metadata_consistency_checks(
+      *this, "cloud_storage_disable_metadata_consistency_checks")
+  , cloud_storage_disable_archival_stm_rw_fence(
       *this,
-      "cloud_storage_disable_metadata_consistency_checks",
-      "Disable all metadata consistency checks. This will allow redpanda to "
-      "replay logs with inconsistent tiered-storage metadata. Normally, this "
-      "option should be disabled.",
+      "cloud_storage_disable_archival_stm_rw_fence",
+      "Disable concurrency control mechanism in the Tiered-Storage. This could "
+      "potentially break the metadata consistency and shouldn't be used in "
+      "production systems. It should only be used for testing.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      true)
+      false)
   , cloud_storage_hydration_timeout_ms(
       *this,
       "cloud_storage_hydration_timeout_ms",

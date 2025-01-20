@@ -50,6 +50,7 @@ class command_batch_builder_accessor;
 class archival_metadata_stm;
 
 using segment_validated = ss::bool_class<struct segment_validated_tag>;
+using emit_read_write_fence = std::optional<model::offset>;
 
 /// Batch builder allows to combine different archival_metadata_stm commands
 /// together in a single record batch
@@ -147,7 +148,8 @@ public:
       model::producer_id highest_pid,
       ss::lowres_clock::time_point deadline,
       ss::abort_source&,
-      segment_validated is_validated);
+      segment_validated is_validated,
+      emit_read_write_fence rw_fence = std::nullopt);
 
     /// Truncate local snapshot by moving start_offset forward
     ///
@@ -290,14 +292,6 @@ public:
 private:
     ss::future<bool>
     do_sync(model::timeout_clock::duration timeout, ss::abort_source* as);
-
-    ss::future<std::error_code> do_add_segments(
-      std::vector<cloud_storage::segment_meta>,
-      std::optional<model::offset> clean_offset,
-      model::producer_id highest_pid,
-      ss::lowres_clock::time_point deadline,
-      ss::abort_source&,
-      segment_validated is_validated);
 
     // Replicate commands in a batch and wait for their application.
     // Should be called under _lock to ensure linearisability

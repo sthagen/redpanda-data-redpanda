@@ -70,7 +70,7 @@ enum class feature : std::uint64_t {
     datalake_iceberg = 1ULL << 54U,
     raft_symmetric_reconfiguration_cancel = 1ULL << 55U,
     datalake_iceberg_ga = 1ULL << 56U,
-
+    cloud_storage_metadata_rw_fence = 1ULL << 57U,
     // Dummy features for testing only
     test_alpha = 1ULL << 61U,
     test_bravo = 1ULL << 62U,
