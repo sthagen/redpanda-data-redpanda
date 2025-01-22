@@ -708,13 +708,7 @@ consensus::linearizable_barrier(model::timeout_clock::time_point deadline) {
         }
         // prepare empty request
         append_entries_request req(
-          _self,
-          target,
-          meta(),
-          model::make_memory_record_batch_reader(
-            ss::circular_buffer<model::record_batch>{}),
-          0,
-          flush_after_append::yes);
+          _self, target, meta(), {}, 0, flush_after_append::yes);
         auto seq = next_follower_sequence(target);
         sequences.emplace(target, seq);
 
@@ -1999,7 +1993,7 @@ consensus::do_append_entries(append_entries_request&& r) {
     // section 1
     // For an entry to fit into our log, it must not leave a gap.
     if (request_metadata.prev_log_index > last_log_offset) {
-        if (!r.batches().is_end_of_stream()) {
+        if (!r.batches().empty()) {
             vlog(
               _ctxlog.debug,
               "Rejecting append entries. Would leave gap in log, last log "
@@ -2060,34 +2054,22 @@ consensus::do_append_entries(append_entries_request&& r) {
         // the request was delayed/duplicated). In this case we don't want to
         // truncate, otherwise we might lose already committed data.
 
-        struct find_mismatch_consumer {
-            const consensus& parent;
-            model::offset last_log_offset;
-            model::offset last_matched;
-
-            ss::future<ss::stop_iteration>
-            operator()(const model::record_batch& b) {
-                model::offset last_batch_offset
-                  = last_matched
-                    + model::offset(b.header().last_offset_delta + 1);
-                if (
-                  last_batch_offset > last_log_offset
-                  || parent.get_term(last_batch_offset) != b.term()) {
-                    co_return ss::stop_iteration::yes;
-                }
-                last_matched = last_batch_offset;
-                co_return ss::stop_iteration::no;
+        model::offset last_matched = adjusted_prev_log_index;
+        auto it = r.batches().begin();
+        for (; it != r.batches().end(); ++it) {
+            model::offset last_batch_offset
+              = last_matched
+                + model::offset(it->header().last_offset_delta + 1);
+            if (
+              last_batch_offset > last_log_offset
+              || get_term(last_batch_offset) != it->term()) {
+                break;
             }
-
-            model::offset end_of_stream() { return last_matched; }
-        };
-
-        model::offset last_matched = co_await r.batches().peek_each_ref(
-          find_mismatch_consumer{
-            .parent = *this,
-            .last_log_offset = last_log_offset,
-            .last_matched = adjusted_prev_log_index},
-          model::no_timeout); // no_timeout as the batches are already in memory
+            last_matched = last_batch_offset;
+        }
+        chunked_vector<model::record_batch> batches;
+        batches.reserve(std::distance(it, r.batches().end()));
+        std::move(it, r.batches().end(), std::back_inserter(batches));
         if (last_matched != adjusted_prev_log_index) {
             vlog(
               _ctxlog.info,
@@ -2098,12 +2080,13 @@ consensus::do_append_entries(append_entries_request&& r) {
               meta());
             adjusted_prev_log_index = last_matched;
         }
+        r.batches() = std::move(batches);
     }
 
     // special case for heartbeats and batches without new records.
     // we need to handle it early (before executing truncation)
     // as timeouts are asynchronous to append calls and can have stall data
-    if (r.batches().is_end_of_stream()) {
+    if (r.batches().empty()) {
         if (adjusted_prev_log_index < last_log_offset) {
             // do not truncate on heartbeat just response with false
             reply.result = reply_result::failure;
@@ -2692,18 +2675,17 @@ ss::future<std::error_code> consensus::replicate_configuration(
       _bg, [this, u = std::move(u), cfg = std::move(cfg)]() mutable {
           try_updating_configuration_version(cfg);
 
-          auto batches = details::serialize_configuration_as_batches(
+          auto batch = details::serialize_configuration_as_batch(
             std::move(cfg));
           size_t batches_size{0};
-          for (auto& b : batches) {
-              batches_size += b.size_bytes();
-              b.set_term(model::term_id(_term));
-          }
+          batches_size += batch.size_bytes();
+          batch.set_term(model::term_id(_term));
+
           auto seqs = next_followers_request_seq();
           append_entries_request req(
             _self,
             meta(),
-            model::make_memory_record_batch_reader(std::move(batches)),
+            chunked_vector<model::record_batch>::single(std::move(batch)),
             batches_size);
           /**
            * We use dispatch_replicate directly as we already hold the
@@ -2866,7 +2848,7 @@ void consensus::maybe_schedule_flush() {
 }
 
 ss::future<storage::append_result> consensus::disk_append(
-  model::record_batch_reader&& reader,
+  chunked_vector<model::record_batch> batches,
   update_last_quorum_index should_update_last_quorum_idx) {
     using ret_t = storage::append_result;
     auto cfg = storage::log_append_config{
@@ -2894,7 +2876,8 @@ ss::future<storage::append_result> consensus::disk_append(
 
     return details::for_each_ref_extract_configuration(
              _log->offsets().dirty_offset,
-             std::move(reader),
+             model::make_fragmented_memory_record_batch_reader(
+               std::move(batches)),
              consumer(_log->make_appender(cfg)),
              cfg.timeout)
       .then([this, should_update_last_quorum_idx](
@@ -4106,8 +4089,7 @@ ss::future<full_heartbeat_reply> consensus::full_heartbeat(
         .last_visible_index = hb_data.last_visible_index,
         .dirty_offset = hb_data.prev_log_index,
       },
-      model::make_memory_record_batch_reader(
-        ss::circular_buffer<model::record_batch>{}),
+      {},
       0,
       flush_after_append::no));
 

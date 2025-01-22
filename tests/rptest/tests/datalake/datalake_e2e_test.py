@@ -156,6 +156,47 @@ class DatalakeE2ETests(RedpandaTest):
             assert count_after_produce == count, f"{count_after_produce} rows, expected {count}"
 
     @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=supported_storage_types())
+    def test_remove_expired_snapshots(self, cloud_storage_type):
+        table_name = f"redpanda.{self.topic_name}"
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              filesystem_catalog_mode=True,
+                              include_query_engines=[QueryEngineType.SPARK
+                                                     ]) as dl:
+            dl.create_iceberg_enabled_topic(self.topic_name, partitions=1)
+            count = 0
+            records_per_round = 100
+            num_rounds = 5
+            for _ in range(num_rounds):
+                count += records_per_round
+                dl.produce_to_topic(self.topic_name, 1024, records_per_round)
+
+                # Waiting for rows to be visible here ensures that at least one
+                # new snapshot is written in each round.
+                dl.wait_for_translation(self.topic_name, count)
+
+            spark = dl.spark()
+            snapshots_out = spark.run_query_fetch_all(
+                f"select * from {table_name}.snapshots")
+            assert len(
+                snapshots_out
+            ) >= num_rounds, f"Expected >={num_rounds} snapshots, got {len(snapshots_out)}: {snapshots_out}"
+
+            spark.make_client().cursor().execute(
+                f"alter table {table_name} "
+                "set tblproperties ('history.expire.max-snapshot-age-ms'='1000')"
+            )
+
+            def has_one_snapshot():
+                snapshots_out = spark.run_query_fetch_all(
+                    f"select * from {table_name}.snapshots")
+                return len(snapshots_out) == 1
+
+            wait_until(has_one_snapshot, timeout_sec=30, backoff_sec=1)
+            dl.wait_for_translation(self.topic_name, count)
+
+    @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
             filesystem_catalog_mode=[True, False])
     def test_topic_lifecycle(self, cloud_storage_type,

@@ -70,6 +70,44 @@ public:
         return std::filesystem::path(v.value());
     }
 
+    // Deletes the given files in object storage.
+    ss::future<checked<std::nullopt_t, metadata_io::errc>> delete_files(
+      chunked_vector<std::filesystem::path> files_to_delete,
+      retry_chain_node& retry_parent) {
+        chunked_vector<cloud_storage_clients::object_key> keys;
+        keys.reserve(files_to_delete.size());
+        std::transform(
+          files_to_delete.begin(),
+          files_to_delete.end(),
+          std::back_inserter(keys),
+          [](std::filesystem::path path) {
+              return cloud_storage_clients::object_key{std::move(path)};
+          });
+        auto delete_fut = co_await ss::coroutine::as_future(io_.delete_objects(
+          bucket_, std::move(keys), retry_parent, [](size_t) {}));
+        if (delete_fut.failed()) {
+            auto eptr = delete_fut.get_exception();
+            auto is_shutdown = ssx::is_shutdown_exception(eptr);
+            auto log_lvl = is_shutdown ? ss::log_level::debug
+                                       : ss::log_level::warn;
+            vlogl(
+              log, log_lvl, "Exception thrown while deleting files: {}", eptr);
+            co_return is_shutdown ? metadata_io::errc::shutting_down
+                                  : metadata_io::errc::failed;
+        }
+        switch (delete_fut.get()) {
+            using enum cloud_io::upload_result;
+        case success:
+            co_return std::nullopt;
+        case cancelled:
+            co_return errc::shutting_down;
+        case timedout:
+            co_return errc::timedout;
+        case failed:
+            co_return errc::failed;
+        }
+    }
+
 protected:
     template<typename T>
     ss::future<checked<T, errc>> download_object(

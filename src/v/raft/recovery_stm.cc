@@ -243,7 +243,8 @@ recovery_stm::required_snapshot_type recovery_stm::get_required_snapshot_type(
     return required_snapshot_type::none;
 }
 
-ss::future<std::optional<std::tuple<model::record_batch_reader, size_t>>>
+ss::future<
+  std::optional<std::tuple<chunked_vector<model::record_batch>, size_t>>>
 recovery_stm::read_range_for_recovery(
   model::offset start_offset,
   ss::io_priority_class iopc,
@@ -284,7 +285,8 @@ recovery_stm::read_range_for_recovery(
         }
         vlog(
           _ctxlog.trace,
-          "Read batches in range [{},{}] for recovery",
+          "Read {} batches in range [{},{}] for recovery",
+          gap_filled_batches.size(),
           gap_filled_batches.front().base_offset(),
           gap_filled_batches.back().last_offset());
 
@@ -313,10 +315,7 @@ recovery_stm::read_range_for_recovery(
               });
         }
 
-        co_return std::make_tuple(
-          model::make_foreign_fragmented_memory_record_batch_reader(
-            std::move(gap_filled_batches)),
-          size);
+        co_return std::make_tuple(std::move(gap_filled_batches), size);
     } catch (const ss::timed_out_error& e) {
         vlog(
           _ctxlog.error,
@@ -526,7 +525,7 @@ recovery_stm::take_on_demand_snapshot(model::offset last_included_offset) {
 }
 
 ss::future<> recovery_stm::replicate(
-  model::record_batch_reader&& reader,
+  chunked_vector<model::record_batch> batches,
   flush_after_append flush,
   ssx::semaphore_units mem_units,
   size_t range_size) {
@@ -570,7 +569,7 @@ ss::future<> recovery_stm::replicate(
         .dirty_offset = lstats.dirty_offset,
         .prev_log_delta = _ptr->get_offset_delta(lstats, prev_log_idx),
       },
-      std::move(reader),
+      std::move(batches),
       range_size,
       flush);
     auto meta = get_follower_meta();

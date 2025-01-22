@@ -52,9 +52,7 @@ struct simple_record_fixture {
     }
     model::record_batch
     config_batch(raft::group_configuration::version_t version) {
-        auto batches = details::serialize_configuration_as_batches(
-          rand_config(version));
-        return std::move(batches.front());
+        return details::serialize_configuration_as_batch(rand_config(version));
     }
 
     iobuf rand_iobuf() const {

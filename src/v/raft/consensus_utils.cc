@@ -12,7 +12,6 @@
 #include "base/likely.h"
 #include "base/vassert.h"
 #include "bytes/iostream.h"
-#include "container/fragmented_vector.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_utils.h"
@@ -20,22 +19,17 @@
 #include "raft/group_configuration.h"
 #include "raft/logger.h"
 #include "raft/types.h"
-#include "random/generators.h"
 #include "reflection/adl.h"
 #include "resource_mgmt/io_priority.h"
 #include "serde/peek.h"
 #include "serde/rw/rw.h"
-#include "ssx/future-util.h"
 #include "storage/api.h"
-#include "storage/fs_utils.h"
 #include "storage/kvstore.h"
 #include "storage/ntp_config.h"
 #include "storage/offset_translator.h"
 #include "storage/offset_translator_state.h"
 #include "storage/record_batch_builder.h"
-#include "storage/record_batch_utils.h"
 #include "storage/segment_utils.h"
-#include "storage/version.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/coroutine.hh>
@@ -49,7 +43,6 @@
 #include <seastar/util/defer.hh>
 
 #include <cstring>
-#include <exception>
 #include <filesystem>
 // delete
 #include <seastar/core/future-util.hh>
@@ -59,7 +52,6 @@
 
 #include <algorithm>
 #include <iterator>
-#include <limits>
 #include <vector>
 
 namespace raft::details {
@@ -176,18 +168,12 @@ iobuf serialize_configuration(group_configuration cfg) {
     return reflection::to_iobuf(std::move(cfg));
 }
 
-ss::circular_buffer<model::record_batch>
-serialize_configuration_as_batches(group_configuration cfg) {
-    auto batch
-      = std::move(
-          storage::record_batch_builder(
-            model::record_batch_type::raft_configuration, model::offset(0))
-            .add_raw_kv(iobuf(), serialize_configuration(std::move(cfg))))
-          .build();
-    ss::circular_buffer<model::record_batch> batches;
-    batches.reserve(1);
-    batches.push_back(std::move(batch));
-    return batches;
+model::record_batch serialize_configuration_as_batch(group_configuration cfg) {
+    return std::move(
+             storage::record_batch_builder(
+               model::record_batch_type::raft_configuration, model::offset(0))
+               .add_raw_kv(iobuf(), serialize_configuration(std::move(cfg))))
+      .build();
 }
 
 ss::future<> persist_snapshot(

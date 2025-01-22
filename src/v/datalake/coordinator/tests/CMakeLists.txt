@@ -31,6 +31,7 @@ rp_test(
   BINARY_NAME coordinator_iceberg
   SOURCES
     iceberg_file_committer_test.cc
+    iceberg_snapshot_remover_test.cc
   LIBRARIES
     Boost::iostreams
     v::cloud_io

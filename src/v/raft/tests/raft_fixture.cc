@@ -134,10 +134,10 @@ ss::future<> channel::do_dispatch_message(msg msg) {
             break;
         }
         case msg_type::append_entries: {
-            auto req = co_await serde::read_async<append_entries_request>(
-              req_parser);
-            auto resp = co_await get_service().append_entries(
-              std::move(req), ctx);
+            auto req_w = co_await serde::read_async<
+              append_entries_request_serde_wrapper>(req_parser);
+            auto resp = co_await get_service().append_entries_full_serde(
+              std::move(req_w), ctx);
             iobuf resp_buf;
             co_await serde::write_async(resp_buf, std::move(resp));
             msg.resp_data.set_value(std::move(resp_buf));
@@ -238,7 +238,9 @@ template<typename ReqT>
 static constexpr msg_type map_msg_type() {
     if constexpr (std::is_same_v<ReqT, vote_request>) {
         return msg_type::vote;
-    } else if constexpr (std::is_same_v<ReqT, append_entries_request>) {
+    } else if constexpr (
+      std::is_same_v<ReqT, append_entries_request_serde_wrapper>
+      || std::is_same_v<ReqT, append_entries_request>) {
         return msg_type::append_entries;
     } else if constexpr (std::is_same_v<ReqT, heartbeat_request>) {
         return msg_type::heartbeat;
@@ -307,8 +309,10 @@ ss::future<result<vote_reply>> in_memory_test_protocol::vote(
 ss::future<result<append_entries_reply>>
 in_memory_test_protocol::append_entries(
   model::node_id id, append_entries_request req, rpc::client_opts opts) {
-    return dispatch<append_entries_request, append_entries_reply>(
-      id, std::move(req), std::move(opts));
+    return dispatch<append_entries_request_serde_wrapper, append_entries_reply>(
+      id,
+      append_entries_request_serde_wrapper(std::move(req)),
+      std::move(opts));
 };
 
 ss::future<result<heartbeat_reply>> in_memory_test_protocol::heartbeat(

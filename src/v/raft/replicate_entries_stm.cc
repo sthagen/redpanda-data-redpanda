@@ -25,6 +25,7 @@
 #include "raft/raftgen_service.h"
 #include "raft/types.h"
 #include "rpc/types.h"
+#include "ssx/async_algorithm.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/semaphore.hh>
@@ -36,18 +37,16 @@
 namespace raft {
 using namespace std::chrono_literals;
 
-ss::future<model::record_batch_reader> replicate_entries_stm::share_batches() {
+ss::future<chunked_vector<model::record_batch>>
+replicate_entries_stm::share_batches() {
     // one extra copy is needed for retries
-    auto u = co_await _share_mutex.get_units();
+    chunked_vector<model::record_batch> batches;
+    batches.reserve(_batches->size());
+    co_await ssx::async_for_each(*_batches, [&batches](model::record_batch& b) {
+        batches.push_back(b.share());
+    });
 
-    auto readers = co_await details::foreign_share_n(
-      std::move(_batches.value()), 2);
-
-    // keep a copy around until the end
-    _batches = std::move(readers.back());
-    readers.pop_back();
-
-    co_return std::move(readers.back());
+    co_return batches;
 }
 
 ss::future<> replicate_entries_stm::flush_log() {
@@ -65,7 +64,7 @@ clock_type::time_point replicate_entries_stm::append_entries_timeout() {
 
 ss::future<result<append_entries_reply>>
 replicate_entries_stm::send_append_entries_request(
-  vnode n, model::record_batch_reader batches) {
+  vnode n, chunked_vector<model::record_batch> batches) {
     _ptr->update_node_append_timestamp(n);
 
     vlog(_ctxlog.trace, "Sending append entries request {} to {}", _meta, n);
@@ -119,7 +118,7 @@ ss::future<> replicate_entries_stm::dispatch_remote_append_entries(vnode id) {
       "Incorrect remote entries dispatch for local node: {}",
       id);
     return share_batches()
-      .then([this, id](model::record_batch_reader batches) mutable {
+      .then([this, id](chunked_vector<model::record_batch> batches) mutable {
           return send_append_entries_request(id, std::move(batches));
       })
       .then([this, id](result<append_entries_reply> reply) {
@@ -143,7 +142,7 @@ ss::future<> replicate_entries_stm::dispatch_remote_append_entries(vnode id) {
 ss::future<result<storage::append_result>>
 replicate_entries_stm::append_to_self() {
     return share_batches()
-      .then([this](model::record_batch_reader batches) mutable {
+      .then([this](chunked_vector<model::record_batch> batches) mutable {
           vlog(_ctxlog.trace, "Self append entries - {}", _meta);
 
           _ptr->_last_write_flushed = _is_flush_required;
@@ -370,7 +369,8 @@ replicate_entries_stm::replicate_entries_stm(
   , _meta(r.metadata())
   , _is_flush_required(r.is_flush_required())
   , _batches_size(r.batches_size())
-  , _batches(std::move(r).release_batches())
+  , _batches(std::make_unique<chunked_vector<model::record_batch>>(
+      std::move(r).release_batches()))
   , _followers_seq(std::move(seqs))
   , _ctxlog(_ptr->_ctxlog) {}
 

@@ -16,6 +16,7 @@
 #include "datalake/coordinator/catalog_factory.h"
 #include "datalake/coordinator/coordinator.h"
 #include "datalake/coordinator/iceberg_file_committer.h"
+#include "datalake/coordinator/iceberg_snapshot_remover.h"
 #include "datalake/coordinator/state_machine.h"
 #include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
@@ -54,6 +55,8 @@ ss::future<> coordinator_manager::start() {
     catalog_ = co_await catalog_factory_->create_catalog();
     schema_mgr_ = std::make_unique<catalog_schema_manager>(*catalog_);
     file_committer_ = std::make_unique<iceberg_file_committer>(
+      *catalog_, manifest_io_);
+    snapshot_remover_ = std::make_unique<iceberg_snapshot_remover>(
       *catalog_, manifest_io_);
 
     manage_notifications_ = pm_.register_manage_notification(
@@ -123,6 +126,7 @@ void coordinator_manager::start_managing(cluster::partition& p) {
           return remove_tombstone(t, rev);
       },
       *file_committer_,
+      *snapshot_remover_,
       config::shard_local_cfg().iceberg_catalog_commit_interval_ms.bind());
     if (p.is_leader()) {
         crd->notify_leadership(self_);

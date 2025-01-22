@@ -15,6 +15,7 @@
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
+#include "model/offset_interval.h"
 #include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
@@ -25,6 +26,7 @@
 #include "storage/compacted_offset_list.h"
 #include "storage/compaction_reducers.h"
 #include "storage/disk_log_appender.h"
+#include "storage/exceptions.h"
 #include "storage/fwd.h"
 #include "storage/key_offset_map.h"
 #include "storage/kvstore.h"
@@ -162,6 +164,12 @@ size_t disk_log_impl::compute_max_segment_size() {
 
 ss::future<> disk_log_impl::remove() {
     vassert(!_closed, "Invalid double closing of log - {}", *this);
+
+    // To prevent racing with a new segment being rolled, obtain the mutex here,
+    // and indicate it as broken for any future waiters.
+    auto roll_lock_holder = co_await _segments_rolling_lock.get_units();
+    _segments_rolling_lock.broken();
+
     _closed = true;
     // wait for compaction to finish
     _compaction_as.request_abort();
@@ -209,6 +217,12 @@ disk_log_impl::start(std::optional<truncate_prefix_config> truncate_cfg) {
 
 ss::future<std::optional<ss::sstring>> disk_log_impl::close() {
     vassert(!_closed, "Invalid double closing of log - {}", *this);
+
+    // To prevent racing with a new segment being rolled, obtain the mutex here,
+    // and indicate it as broken for any future waiters.
+    auto roll_lock_holder = co_await _segments_rolling_lock.get_units();
+    _segments_rolling_lock.broken();
+
     vlog(stlog.debug, "closing log {}", *this);
     _closed = true;
     if (
@@ -646,9 +660,14 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
                             ? dynamic_cast<key_offset_map&>(*cfg.hash_key_map)
                             : dynamic_cast<key_offset_map&>(*simple_map);
     model::offset idx_start_offset;
+    bool needs_chunked_sliding_window_compact = false;
     try {
         idx_start_offset = co_await build_offset_map(
           cfg, segs, _stm_manager, _manager.resources(), *_probe, map);
+    } catch (const zero_segments_indexed_exception&) {
+        // We failed to index even one segment (the last entry of the segs set).
+        // Perform chunked compaction on it.
+        needs_chunked_sliding_window_compact = true;
     } catch (...) {
         auto eptr = std::current_exception();
         if (ssx::is_shutdown_exception(eptr)) {
@@ -666,6 +685,11 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
         _last_compaction_window_start_offset.reset();
         co_return false;
     }
+
+    if (needs_chunked_sliding_window_compact) {
+        co_return co_await chunked_sliding_window_compact(cfg, segs, map);
+    }
+
     vlog(
       gclog.debug,
       "[{}] built offset map with {} keys (max allowed {}), min segment fully "
@@ -698,147 +722,15 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
         if (cfg.asrc) {
             cfg.asrc->check();
         }
+
         // A segment is considered "clean" if it has been fully indexed (all
         // keys are de-duplicated)
+        const bool is_finished_window_compaction = true;
         const bool is_clean_compacted = seg->offsets().get_base_offset()
                                         >= idx_start_offset;
-        if (seg->offsets().get_base_offset() > map.max_offset()) {
-            // The map was built from newest to oldest segments within this
-            // sliding range. If we see a new segment whose offsets are all
-            // higher than those indexed, it may be because the segment is
-            // entirely comprised of non-data batches. Mark it as compacted so
-            // we can progress through compactions.
-            co_await internal::mark_segment_as_finished_window_compaction(
-              seg, is_clean_compacted, *_probe);
 
-            vlog(
-              gclog.debug,
-              "[{}] treating segment as compacted, offsets fall above highest "
-              "indexed key {}, likely because they are non-data batches: {}",
-              config().ntp(),
-              map.max_offset(),
-              seg->filename());
-            continue;
-        }
-        if (!seg->may_have_compactible_records()) {
-            // All data records are already compacted away. Skip to avoid a
-            // needless rewrite.
-            co_await internal::mark_segment_as_finished_window_compaction(
-              seg, is_clean_compacted, *_probe);
-
-            vlog(
-              gclog.trace,
-              "[{}] treating segment as compacted, either all non-data "
-              "records or the only record is a data record: {}",
-              config().ntp(),
-              seg->filename());
-            continue;
-        }
-
-        // TODO: implement a segment replacement strategy such that each term
-        // tries to write only one segment (or more if the term had a large
-        // amount of data), rather than replacing N segments with N segments.
-        const auto tmpname = seg->reader().path().to_compaction_staging();
-        const auto cmp_idx_tmpname = tmpname.to_compacted_index();
-        auto staging_to_clean = scoped_file_tracker{
-          cfg.files_to_cleanup, {tmpname, cmp_idx_tmpname}};
-
-        auto appender = co_await internal::make_segment_appender(
-          tmpname,
-          segment_appender::write_behind_memory
-            / internal::chunks().chunk_size(),
-          std::nullopt,
-          cfg.iopc,
-          resources(),
-          cfg.sanitizer_config);
-
-        auto cmp_idx_name = seg->path().to_compacted_index();
-        auto compacted_idx_writer = make_file_backed_compacted_index(
-          cmp_idx_tmpname, cfg.iopc, true, resources(), cfg.sanitizer_config);
-
-        vlog(
-          gclog.debug,
-          "[{}] Deduplicating data from segment {} to {}: {}",
-          config().ntp(),
-          seg->path(),
-          tmpname,
-          seg);
-        auto initial_generation_id = seg->get_generation_id();
-        std::exception_ptr eptr;
-        index_state new_idx;
-        try {
-            new_idx = co_await deduplicate_segment(
-              cfg,
-              map,
-              seg,
-              *appender,
-              compacted_idx_writer,
-              *_probe,
-              storage::internal::should_apply_delta_time_offset(_feature_table),
-              _feature_table);
-
-        } catch (...) {
-            eptr = std::current_exception();
-        }
-        // We must close the segment apender
-        co_await compacted_idx_writer.close();
-        co_await appender->close();
-        if (eptr) {
-            std::rethrow_exception(eptr);
-        }
-
-        vlog(
-          gclog.debug,
-          "[{}] Replacing segment {} with {}",
-          config().ntp(),
-          seg->path(),
-          tmpname);
-
-        auto rdr_holder = co_await _readers_cache->evict_segment_readers(seg);
-        auto write_lock = co_await seg->write_lock();
-        if (initial_generation_id != seg->get_generation_id()) {
-            throw std::runtime_error(fmt::format(
-              "Aborting compaction of segment: {}, segment was mutated "
-              "while compacting",
-              seg->path()));
-        }
-        if (seg->is_closed()) {
-            throw segment_closed_exception();
-        }
-        const auto size_before = seg->size_bytes();
-        const auto size_after = appender->file_byte_offset();
-
-        // Clear our indexes before swapping the data files (note, the new
-        // compaction index was opened with the truncate option above).
-        co_await seg->index().drop_all_data();
-
-        // Rename the data file.
-        co_await internal::do_swap_data_file_handles(
-          tmpname, seg, cfg, *_probe);
-
-        // Persist the state of our indexes in their new names.
-        seg->index().swap_index_state(std::move(new_idx));
-        seg->force_set_commit_offset_from_index();
-        seg->release_batch_cache_index();
-
-        // Mark the segment as completed window compaction, and possibly set the
-        // clean_compact_timestamp in it's index.
-        co_await internal::mark_segment_as_finished_window_compaction(
-          seg, is_clean_compacted, *_probe);
-
-        co_await seg->index().flush();
-        co_await ss::rename_file(
-          cmp_idx_tmpname.string(), cmp_idx_name.string());
-        _probe->segment_compacted();
-        _probe->add_compaction_removed_bytes(
-          ssize_t(size_before) - ssize_t(size_after));
-
-        compaction_result res(size_before, size_after);
-        _compaction_ratio.update(res.compaction_ratio());
-        seg->advance_generation();
-        staging_to_clean.clear();
-        vlog(
-          gclog.debug, "[{}] Final compacted segment {}", config().ntp(), seg);
+        co_await rewrite_segment_with_offset_map(
+          cfg, seg, map, is_finished_window_compaction, is_clean_compacted);
     }
 
     _last_compaction_window_start_offset = next_window_start_offset;
@@ -1321,6 +1213,243 @@ ss::future<> disk_log_impl::do_compact(
         // segment compaction.
         co_await compact_adjacent_segments(compact_cfg);
     }
+}
+
+ss::future<bool> disk_log_impl::chunked_sliding_window_compact(
+  const compaction_config& compact_cfg,
+  const segment_set& segs,
+  key_offset_map& map) {
+    // The last segment in the segment set is the first segment we attempted and
+    // failed to index (the "unindexed" segment)
+    auto seg = segs.back();
+    vlog(
+      gclog.debug,
+      "Unable to fully index segment with max allowed keys {}. Performing "
+      "chunked sliding window compaction for segment {}",
+      map.capacity(),
+      seg);
+
+    auto last_indexed_offset = model::offset{};
+    bool segment_fully_indexed = false;
+
+    // Hold the segment rewrite lock for the entirety of the chunked compaction
+    // routine. index_chunk_of_segment_for_map() will repeatedly obtain and
+    // release a seg->read_lock(), and rewriting of each segment in the window
+    // happens multiple times in the below while() loop
+    auto segment_modify_lock = co_await _segment_rewrite_lock.get_units();
+
+    // The key offset map will be repeatedly built from "chunks" of the
+    // unindexed segment and used to rewrite the segments in the sliding window
+    // until the entirety of the unindexed segment has been indexed
+    while (!segment_fully_indexed) {
+        if (compact_cfg.asrc) {
+            compact_cfg.asrc->check();
+        }
+
+        // Build up the key offset map for a chunk of the unindexed segment,
+        // starting from the last_indexed_offset
+        segment_fully_indexed = co_await index_chunk_of_segment_for_map(
+          compact_cfg, seg, map, *_probe, std::ref(last_indexed_offset));
+
+        // Deduplicate all of the segments in the sliding window using the key
+        // offset map built from the current chunk of the unindexed segment
+        for (auto& s : segs) {
+            if (compact_cfg.asrc) {
+                compact_cfg.asrc->check();
+            }
+
+            // Neither of these flags are true until chunked compaction is
+            // complete
+            static const bool is_finished_window_compaction = false;
+            static const bool is_clean_compacted = false;
+            co_await rewrite_segment_with_offset_map(
+              compact_cfg,
+              s,
+              map,
+              is_finished_window_compaction,
+              is_clean_compacted);
+        }
+    }
+
+    // Segments can now be marked as finished window compaction
+    for (auto& s : segs) {
+        co_await internal::mark_segment_as_finished_window_compaction(
+          s, false, *_probe);
+    }
+
+    // We can also mark the last segment as cleanly compacted now
+    co_await internal::mark_segment_as_finished_window_compaction(
+      seg, true, *_probe);
+
+    _last_compaction_window_start_offset = seg->offsets().get_base_offset();
+    _probe->add_chunked_compaction_run();
+
+    // It is possible that chunked compaction on the last segment in the set
+    // resulted in all of the segments with compactible records being cleanly
+    // compacted. In this case, we need to reset the
+    // _last_compaction_window_start_offset.
+    const bool sliding_window_round_complete = std::ranges::all_of(
+      segs, [](const auto& s) {
+          if (!s->may_have_compactible_records()) {
+              return true;
+          }
+          return s->index().has_clean_compact_timestamp();
+      });
+
+    if (sliding_window_round_complete) {
+        _probe->add_sliding_window_round_complete();
+        _last_compaction_window_start_offset.reset();
+    }
+
+    vlog(
+      gclog.trace,
+      "Finished chunked sliding window compaction for segment {}",
+      seg);
+
+    co_return true;
+}
+
+ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
+  const compaction_config& cfg,
+  ss::lw_shared_ptr<segment> seg,
+  key_offset_map& map,
+  bool is_finished_window_compaction,
+  bool is_clean_compacted) {
+    if (seg->offsets().get_base_offset() > map.max_offset()) {
+        // The map was built from newest to oldest segments within this
+        // sliding range. If we see a new segment whose offsets are all
+        // higher than those indexed, it may be because the segment is
+        // entirely comprised of non-data batches. Mark it as compacted so
+        // we can progress through compactions.
+        co_await internal::mark_segment_as_finished_window_compaction(
+          seg, is_clean_compacted, *_probe);
+
+        vlog(
+          gclog.debug,
+          "[{}] treating segment as compacted, offsets fall above highest "
+          "indexed key {}, likely because they are non-data batches: {}",
+          config().ntp(),
+          map.max_offset(),
+          seg->filename());
+        co_return;
+    }
+    if (!seg->may_have_compactible_records()) {
+        // All data records are already compacted away. Skip to avoid a
+        // needless rewrite.
+        co_await internal::mark_segment_as_finished_window_compaction(
+          seg, is_clean_compacted, *_probe);
+
+        vlog(
+          gclog.trace,
+          "[{}] treating segment as compacted, either all non-data "
+          "records or the only record is a data record: {}",
+          config().ntp(),
+          seg->filename());
+        co_return;
+    }
+
+    // TODO: implement a segment replacement strategy such that each term
+    // tries to write only one segment (or more if the term had a large
+    // amount of data), rather than replacing N segments with N segments.
+    const auto tmpname = seg->reader().path().to_compaction_staging();
+    const auto cmp_idx_tmpname = tmpname.to_compacted_index();
+    auto staging_to_clean = scoped_file_tracker{
+      cfg.files_to_cleanup, {tmpname, cmp_idx_tmpname}};
+
+    auto appender = co_await internal::make_segment_appender(
+      tmpname,
+      segment_appender::write_behind_memory / internal::chunks().chunk_size(),
+      std::nullopt,
+      cfg.iopc,
+      resources(),
+      cfg.sanitizer_config);
+
+    auto cmp_idx_name = seg->path().to_compacted_index();
+    auto compacted_idx_writer = make_file_backed_compacted_index(
+      cmp_idx_tmpname, cfg.iopc, true, resources(), cfg.sanitizer_config);
+
+    vlog(
+      gclog.debug,
+      "[{}] Deduplicating data from segment {} to {}: {}",
+      config().ntp(),
+      seg->path(),
+      tmpname,
+      seg);
+    auto initial_generation_id = seg->get_generation_id();
+    std::exception_ptr eptr;
+    index_state new_idx;
+    try {
+        new_idx = co_await deduplicate_segment(
+          cfg,
+          map,
+          seg,
+          *appender,
+          compacted_idx_writer,
+          *_probe,
+          storage::internal::should_apply_delta_time_offset(_feature_table),
+          _feature_table);
+
+    } catch (...) {
+        eptr = std::current_exception();
+    }
+    // We must close the segment apender
+    co_await compacted_idx_writer.close();
+    co_await appender->close();
+    if (eptr) {
+        std::rethrow_exception(eptr);
+    }
+
+    vlog(
+      gclog.debug,
+      "[{}] Replacing segment {} with {}",
+      config().ntp(),
+      seg->path(),
+      tmpname);
+
+    auto rdr_holder = co_await _readers_cache->evict_segment_readers(seg);
+    auto write_lock = co_await seg->write_lock();
+    if (initial_generation_id != seg->get_generation_id()) {
+        throw std::runtime_error(fmt::format(
+          "Aborting compaction of segment: {}, segment was mutated "
+          "while compacting",
+          seg->path()));
+    }
+    if (seg->is_closed()) {
+        throw segment_closed_exception();
+    }
+    const auto size_before = seg->size_bytes();
+    const auto size_after = appender->file_byte_offset();
+
+    // Clear our indexes before swapping the data files (note, the new
+    // compaction index was opened with the truncate option above).
+    co_await seg->index().drop_all_data();
+
+    // Rename the data file.
+    co_await internal::do_swap_data_file_handles(tmpname, seg, cfg, *_probe);
+
+    // Persist the state of our indexes in their new names.
+    seg->index().swap_index_state(std::move(new_idx));
+    seg->force_set_commit_offset_from_index();
+    seg->release_batch_cache_index();
+
+    if (is_finished_window_compaction) {
+        // Mark the segment as completed window compaction, and possibly set the
+        // clean_compact_timestamp in it's index.
+        co_await internal::mark_segment_as_finished_window_compaction(
+          seg, is_clean_compacted, *_probe);
+    }
+
+    co_await seg->index().flush();
+    co_await ss::rename_file(cmp_idx_tmpname.string(), cmp_idx_name.string());
+    _probe->segment_compacted();
+    _probe->add_compaction_removed_bytes(
+      ssize_t(size_before) - ssize_t(size_after));
+
+    compaction_result res(size_before, size_after);
+    _compaction_ratio.update(res.compaction_ratio());
+    seg->advance_generation();
+    staging_to_clean.clear();
+    vlog(gclog.debug, "[{}] Final compacted segment {}", config().ntp(), seg);
 }
 
 ss::future<> disk_log_impl::gc(gc_config cfg) {
@@ -1981,12 +2110,23 @@ ss::future<size_t> disk_log_impl::get_file_offset(
 ss::future<std::optional<log::offset_range_size_result_t>>
 disk_log_impl::offset_range_size(
   model::offset first, model::offset last, ss::io_priority_class io_priority) {
+    auto log_offsets = offsets();
     vlog(
       stlog.debug,
       "Offset range size, first: {}, last: {}, lstat: {}",
       first,
       last,
-      offsets());
+      log_offsets);
+    auto log_interval = model::bounded_offset_interval::optional(
+      log_offsets.start_offset, log_offsets.committed_offset);
+    if (!log_interval.has_value()) {
+        vlog(stlog.debug, "Log is empty, returning early");
+        co_return std::nullopt;
+    }
+    if (!log_interval->contains(first) || !log_interval->contains(last)) {
+        vlog(stlog.debug, "Log does not include entire range");
+        co_return std::nullopt;
+    }
 
     // build the collection
     const auto segments = [&] {
@@ -2141,13 +2281,25 @@ disk_log_impl::offset_range_size(
   model::offset first,
   offset_range_size_requirements_t target,
   ss::io_priority_class io_priority) {
+    auto log_offsets = offsets();
     vlog(
       stlog.debug,
       "Offset range size, first: {}, target size: {}/{}, lstat: {}",
       first,
       target.target_size,
       target.min_size,
-      offsets());
+      log_offsets);
+    auto log_interval = model::bounded_offset_interval::optional(
+      log_offsets.start_offset, log_offsets.committed_offset);
+    if (!log_interval.has_value()) {
+        vlog(stlog.debug, "Log is empty, returning early");
+        co_return std::nullopt;
+    }
+    if (!log_interval->contains(first)) {
+        vlog(stlog.debug, "Log does not include offset {}", first);
+        co_return std::nullopt;
+    }
+
     auto base_it = _segs.lower_bound(first);
 
     // Invariant: 'first' offset should be present in the log. If the segment is

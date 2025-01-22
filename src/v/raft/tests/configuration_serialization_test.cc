@@ -99,10 +99,9 @@ SEASTAR_THREAD_TEST_CASE(roundtrip_raft_configuration_entry) {
         cfg.set_version(v);
 
         // serialize to entry
-        auto batches = raft::details::serialize_configuration_as_batches(cfg);
+        auto batch = raft::details::serialize_configuration_as_batch(cfg);
         // extract from entry
-        iobuf_parser parser(
-          batches.begin()->copy_records().begin()->release_value());
+        iobuf_parser parser(batch.copy_records().begin()->release_value());
         auto new_cfg = raft::details::deserialize_configuration(parser);
 
         BOOST_REQUIRE_EQUAL(new_cfg, cfg);
@@ -140,20 +139,24 @@ SEASTAR_THREAD_TEST_CASE(test_config_extracting_reader) {
     // serialize to batches
     // use adl
     cfg_1.set_version(raft::group_configuration::v_5);
-    auto cfg_batch_1 = raft::details::serialize_configuration_as_batches(cfg_1);
+    auto cfg_batch_1 = raft::details::serialize_configuration_as_batch(cfg_1);
+    ss::circular_buffer<model::record_batch> cfg_batches_1;
+    cfg_batches_1.push_back(std::move(cfg_batch_1));
     // use serde
     cfg_2.set_version(raft::group_configuration::v_6);
-    auto cfg_batch_2 = raft::details::serialize_configuration_as_batches(cfg_2);
+    auto cfg_batch_2 = raft::details::serialize_configuration_as_batch(cfg_2);
+    ss::circular_buffer<model::record_batch> cfg_batches_2;
+    cfg_batches_2.push_back(std::move(cfg_batch_2));
     auto batches
       = model::test::make_random_batches(model::offset(0), 10, true).get();
 
     std::vector<batches_t> ranges;
     ranges.reserve(4);
     // interleave config batches with data batches
-    ranges.push_back(std::move(cfg_batch_1));
+    ranges.push_back(std::move(cfg_batches_1));
     ranges.push_back(
       model::test::make_random_batches(model::offset(0), 10, true).get());
-    ranges.push_back(std::move(cfg_batch_2));
+    ranges.push_back(std::move(cfg_batches_2));
     ranges.push_back(
       model::test::make_random_batches(model::offset(0), 10, true).get());
 

@@ -15,6 +15,8 @@
 #include "model/record_batch_types.h"
 #include "model/record_utils.h"
 #include "random/generators.h"
+#include "storage/compacted_index.h"
+#include "storage/compaction.h"
 #include "storage/index_state.h"
 #include "storage/logger.h"
 #include "storage/parser_utils.h"
@@ -22,6 +24,7 @@
 #include "storage/segment_utils.h"
 
 #include <seastar/core/future.hh>
+#include <seastar/core/loop.hh>
 
 #include <absl/algorithm/container.h>
 #include <boost/range/irange.hpp>
@@ -441,6 +444,57 @@ ss::future<ss::stop_iteration> tx_reducer::operator()(model::record_batch&& b) {
         }
     }
     co_return co_await _delegate(std::move(b));
+}
+
+ss::future<ss::stop_iteration> map_building_reducer::maybe_index_record_in_map(
+  const model::record& r,
+  model::offset base_offset,
+  model::record_batch_type type,
+  bool is_control,
+  bool& fully_indexed_batch) {
+    auto offset = base_offset + model::offset_delta(r.offset_delta());
+    if (offset < _start_offset) {
+        co_return ss::stop_iteration::no;
+    }
+
+    auto key_view = iobuf_to_bytes(r.key());
+    auto key = enhance_key(type, is_control, key_view);
+    bool success = co_await _map->put(key, offset);
+
+    if (success) {
+        co_return ss::stop_iteration::no;
+    }
+
+    fully_indexed_batch = false;
+    co_return ss::stop_iteration::yes;
+}
+
+ss::future<ss::stop_iteration>
+map_building_reducer::operator()(model::record_batch batch) {
+    bool fully_indexed_batch = true;
+    // There is no point to indexing records in uncompactible batches, since
+    // their inclusion in the segment post compaction is irrespective of the map
+    // state (see copy_data_segment_reducer::filter()).
+    if (!is_compactible(batch)) {
+        co_return ss::stop_iteration::no;
+    }
+    auto b = co_await decompress_batch(std::move(batch));
+    co_await b.for_each_record_async(
+      [this,
+       &fully_indexed_batch,
+       base_offset = b.base_offset(),
+       type = b.header().type,
+       is_control = b.header().attrs.is_control()](
+        const model::record& r) -> ss::future<ss::stop_iteration> {
+          return maybe_index_record_in_map(
+            r, base_offset, type, is_control, fully_indexed_batch);
+      });
+
+    if (fully_indexed_batch) {
+        co_return ss::stop_iteration::no;
+    }
+    _fully_indexed_segment = false;
+    co_return ss::stop_iteration::yes;
 }
 
 } // namespace storage::internal

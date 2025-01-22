@@ -14,7 +14,6 @@
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "model/fundamental.h"
-#include "model/record_batch_reader.h"
 #include "raft/consensus.h"
 #include "raft/fwd.h"
 #include "raft/logger.h"
@@ -96,14 +95,14 @@ public:
     ss::future<> wait_for_shutdown();
 
 private:
-    ss::future<model::record_batch_reader> share_batches();
+    ss::future<chunked_vector<model::record_batch>> share_batches();
 
     ss::future<> dispatch_one(vnode);
     ss::future<> dispatch_remote_append_entries(vnode);
     ss::future<> flush_log();
 
     ss::future<result<append_entries_reply>>
-      send_append_entries_request(vnode, model::record_batch_reader);
+      send_append_entries_request(vnode, chunked_vector<model::record_batch>);
 
     result<replicate_result>
       process_result(raft::errc, model::offset, model::term_id);
@@ -119,11 +118,10 @@ private:
     protocol_metadata _meta;
     flush_after_append _is_flush_required;
     size_t _batches_size;
-    std::optional<model::record_batch_reader> _batches;
+    std::unique_ptr<chunked_vector<model::record_batch>> _batches;
     absl::flat_hash_map<vnode, follower_req_seq> _followers_seq;
     absl::flat_hash_map<vnode, consensus::inflight_appends_guard>
       _inflight_appends;
-    mutex _share_mutex{"replicate_entries_stm::share"};
     ssx::semaphore _dispatch_sem{0, "raft/repl-dispatch"};
     ss::gate _req_bg;
     ctx_log _ctxlog;

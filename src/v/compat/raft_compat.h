@@ -520,11 +520,9 @@ compat_copy(raft::append_entries_request r) {
     auto source_node = r.source_node();
     auto flush = r.is_flush_required();
     auto sz = r.batches_size();
-    auto a_batches = model::consume_reader_to_memory(
-                       std::move(r).release_batches(), model::no_timeout)
-                       .get();
+    auto a_batches = std::move(r).release_batches();
 
-    ss::circular_buffer<model::record_batch> b_batches;
+    chunked_vector<model::record_batch> b_batches;
     for (const auto& batch : a_batches) {
         b_batches.emplace_back(batch.copy());
     }
@@ -533,17 +531,12 @@ compat_copy(raft::append_entries_request r) {
       source_node,
       target_node,
       metadata,
-      model::make_memory_record_batch_reader(std::move(a_batches)),
+      chunked_vector<model::record_batch>(std::move(a_batches)),
       sz,
       flush);
 
     raft::append_entries_request b(
-      source_node,
-      target_node,
-      metadata,
-      model::make_memory_record_batch_reader(std::move(b_batches)),
-      sz,
-      flush);
+      source_node, target_node, metadata, std::move(b_batches), sz, flush);
 
     return {std::move(a), std::move(b)};
 }
@@ -565,9 +558,7 @@ struct compat_check<raft::append_entries_request> {
         json::write_member(wr, "target_node_id", obj.target_node());
         json::write_member(wr, "meta", obj.metadata());
         json::write_member(wr, "flush", obj.is_flush_required());
-        auto batches = model::consume_reader_to_memory(
-                         std::move(obj).release_batches(), model::no_timeout)
-                         .get();
+        auto batches = std::move(obj).release_batches();
         json::write_member(wr, "batches", batches);
     }
 
@@ -588,7 +579,7 @@ struct compat_check<raft::append_entries_request> {
           node,
           target,
           meta,
-          model::make_memory_record_batch_reader(std::move(batches)),
+          chunked_vector<model::record_batch>(std::move(batches)),
           0,
           flush};
     }
@@ -631,15 +622,9 @@ struct compat_check<raft::append_entries_request> {
               decoded.is_flush_required()));
         }
 
-        auto decoded_batches = model::consume_reader_to_memory(
-                                 std::move(decoded).release_batches(),
-                                 model::no_timeout)
-                                 .get();
+        auto decoded_batches = std::move(decoded).release_batches();
 
-        auto expected_batches = model::consume_reader_to_memory(
-                                  std::move(expected).release_batches(),
-                                  model::no_timeout)
-                                  .get();
+        auto expected_batches = std::move(expected).release_batches();
 
         if (decoded_batches.size() != expected_batches.size()) {
             throw compat_error(fmt::format(

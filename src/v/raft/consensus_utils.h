@@ -37,8 +37,7 @@ ss::future<std::vector<model::record_batch_reader>>
 foreign_share_n(model::record_batch_reader&&, std::size_t);
 
 /// serialize group configuration as config-type batch
-ss::circular_buffer<model::record_batch>
-serialize_configuration_as_batches(group_configuration cfg);
+model::record_batch serialize_configuration_as_batch(group_configuration cfg);
 
 iobuf serialize_configuration(group_configuration cfg);
 void write_configuration(group_configuration cfg, iobuf& out);

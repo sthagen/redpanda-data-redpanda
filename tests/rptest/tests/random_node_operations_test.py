@@ -27,6 +27,7 @@ from rptest.services.redpanda import CHAOS_LOG_ALLOW_LIST, PREV_VERSION_LOG_ALLO
 from rptest.services.redpanda_installer import RedpandaInstaller
 from rptest.utils.mode_checks import cleanup_on_early_exit, skip_debug_mode, skip_fips_mode
 from rptest.utils.node_operations import FailureInjectorBackgroundThread, NodeOpsExecutor, generate_random_workload, verify_offset_translator_state_consistent
+from rptest.services.redpanda import MetricsEndpoint
 
 from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.tests.datalake.utils import supported_storage_types
@@ -71,7 +72,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                     'storage-gc': 'warn',
                     'raft': 'debug',
                     'cluster': 'debug',
-                    'datalake': 'debug',
+                    'datalake': 'trace',
                 }),
             *args,
             **kwargs)
@@ -154,7 +155,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
         )
 
     def _start_redpanda(self, mixed_versions, with_tiered_storage,
-                        with_iceberg):
+                        with_iceberg, with_chunked_compaction):
 
         if with_tiered_storage or with_iceberg:
             # since this test is deleting topics we must tolerate missing manifests
@@ -175,6 +176,16 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                 "iceberg_rest_catalog_client_secret":
                 "panda-secret",
             })
+
+        if with_chunked_compaction:
+            # This may not be recognized on certain nodes in mixed-version run.
+            environment = {
+                "__REDPANDA_TEST_DISABLE_BOUNDED_PROPERTY_CHECKS": "ON"
+            }
+            self.redpanda.set_environment(environment)
+            # Use 3 KiB of memory for compaction map, which should force chunked compaction.
+            self.redpanda.add_extra_rp_conf(
+                {"storage_compaction_key_map_memory": 3 * 1024})
 
         self.redpanda.set_seed_servers(self.redpanda.nodes)
         if mixed_versions:
@@ -274,6 +285,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                 nodes=self.nodes,
                 debug_logs=with_logs,
                 trace_logs=with_logs,
+                compacted=self.compaction_enabled,
                 tolerate_data_loss=self.tolerate_data_loss)
 
             self.consumer.start(clean=False)
@@ -326,10 +338,11 @@ class RandomNodeOperationsTest(PreallocNodesTest):
             mixed_versions=[True, False],
             with_tiered_storage=[True, False],
             with_iceberg=[True, False],
+            with_chunked_compaction=[True, False],
             cloud_storage_type=get_cloud_storage_type())
     def test_node_operations(self, enable_failures, mixed_versions,
                              with_tiered_storage, with_iceberg,
-                             cloud_storage_type):
+                             with_chunked_compaction, cloud_storage_type):
         # In order to reduce the number of parameters and at the same time cover
         # as many use cases as possible this test uses 3 topics which 3 separate
         # producer/consumer pairs:
@@ -384,7 +397,8 @@ class RandomNodeOperationsTest(PreallocNodesTest):
         # start redpanda process
         self._start_redpanda(mixed_versions,
                              with_tiered_storage=with_tiered_storage,
-                             with_iceberg=with_iceberg)
+                             with_iceberg=with_iceberg,
+                             with_chunked_compaction=with_chunked_compaction)
 
         self.redpanda.set_cluster_config(
             {"controller_snapshot_max_age_sec": 1})

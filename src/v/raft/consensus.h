@@ -601,8 +601,8 @@ private:
 
     ss::future<result<replicate_result>> chain_stages(replicate_stages);
 
-    ss::future<storage::append_result>
-    disk_append(model::record_batch_reader&&, update_last_quorum_index);
+    ss::future<storage::append_result> disk_append(
+      chunked_vector<model::record_batch>, update_last_quorum_index);
 
     using success_reply = ss::bool_class<struct successfull_reply_tag>;
 

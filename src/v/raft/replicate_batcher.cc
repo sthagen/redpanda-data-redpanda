@@ -200,7 +200,7 @@ ss::future<> replicate_batcher::flush(
 
         auto meta = _ptr->meta();
         const auto term = model::term_id(meta.term);
-        ss::circular_buffer<model::record_batch> data;
+        chunked_vector<model::record_batch> data;
         std::vector<item_ptr> notifications;
         ssx::semaphore_units item_memory_units(_max_batch_size_sem, 0);
         auto force_flush_requested = false;
@@ -251,7 +251,7 @@ ss::future<> replicate_batcher::flush(
         append_entries_request req(
           _ptr->_self,
           meta,
-          model::make_memory_record_batch_reader(std::move(data)),
+          std::move(data),
           item_memory_units.count(),
           needs_flush);
 

@@ -36,42 +36,42 @@
 #include <cstdint>
 #include <vector>
 
-struct checking_consumer {
-    using batches_t = ss::circular_buffer<model::record_batch>;
-
-    checking_consumer(ss::circular_buffer<model::record_batch> exp)
-      : expected(std::move(exp)) {}
-
-    ss::future<ss::stop_iteration> operator()(model::record_batch batch) {
-        auto current_batch = std::move(expected.front());
-        expected.pop_front();
-        BOOST_REQUIRE_EQUAL(current_batch.base_offset(), batch.base_offset());
-        BOOST_REQUIRE_EQUAL(current_batch.last_offset(), batch.last_offset());
-        BOOST_REQUIRE_EQUAL(current_batch.header().crc, batch.header().crc);
-        BOOST_REQUIRE_EQUAL(current_batch.compressed(), batch.compressed());
-        BOOST_REQUIRE_EQUAL(current_batch.header().type, batch.header().type);
-        BOOST_REQUIRE_EQUAL(current_batch.size_bytes(), batch.size_bytes());
-        BOOST_REQUIRE_EQUAL(current_batch.record_count(), batch.record_count());
-        BOOST_REQUIRE_EQUAL(current_batch.term(), batch.term());
-        return ss::make_ready_future<ss::stop_iteration>(
-          ss::stop_iteration::no);
+void verify_batches(
+  const chunked_vector<model::record_batch>& expected,
+  const chunked_vector<model::record_batch>& current) {
+    BOOST_REQUIRE_EQUAL(expected.size(), current.size());
+    for (size_t i = 0; i < expected.size(); ++i) {
+        auto& current_batch = current[i];
+        auto& expected_batch = current[i];
+        BOOST_REQUIRE_EQUAL(
+          current_batch.base_offset(), expected_batch.base_offset());
+        BOOST_REQUIRE_EQUAL(
+          current_batch.last_offset(), expected_batch.last_offset());
+        BOOST_REQUIRE_EQUAL(
+          current_batch.header().crc, expected_batch.header().crc);
+        BOOST_REQUIRE_EQUAL(
+          current_batch.compressed(), expected_batch.compressed());
+        BOOST_REQUIRE_EQUAL(
+          current_batch.header().type, expected_batch.header().type);
+        BOOST_REQUIRE_EQUAL(
+          current_batch.size_bytes(), expected_batch.size_bytes());
+        BOOST_REQUIRE_EQUAL(
+          current_batch.record_count(), expected_batch.record_count());
+        BOOST_REQUIRE_EQUAL(current_batch.term(), expected_batch.term());
     }
-
-    void end_of_stream() { BOOST_REQUIRE(expected.empty()); }
-
-    batches_t expected;
-};
+}
 
 SEASTAR_THREAD_TEST_CASE(append_entries_requests) {
-    auto batches
-      = model::test::make_random_batches(model::offset(1), 3, false).get();
+    chunked_vector<model::record_batch> batches{
+      model::test::make_random_batches(model::offset(1), 3, false).get()};
+
+    chunked_vector<model::record_batch> reference_batches;
 
     for (auto& b : batches) {
         b.set_term(model::term_id(123));
+        reference_batches.push_back(b.share());
     }
 
-    auto rdr = model::make_memory_record_batch_reader(std::move(batches));
-    auto readers = raft::details::share_n(std::move(rdr), 2).get();
     auto meta = raft::protocol_metadata{
       .group = raft::group_id(1),
       .commit_index = model::offset(100),
@@ -85,10 +85,9 @@ SEASTAR_THREAD_TEST_CASE(append_entries_requests) {
       raft::vnode(model::node_id(1), model::revision_id(10)),
       raft::vnode(model::node_id(10), model::revision_id(101)),
       meta,
-      std::move(readers.back()),
+      std::move(batches),
       0);
 
-    readers.pop_back();
     const auto target_node_id = req.target_node();
 
     iobuf buf;
@@ -108,13 +107,7 @@ SEASTAR_THREAD_TEST_CASE(append_entries_requests) {
       d.metadata().last_visible_index, meta.last_visible_index);
     BOOST_REQUIRE_EQUAL(d.metadata().dirty_offset, meta.dirty_offset);
 
-    auto batches_result = model::consume_reader_to_memory(
-                            std::move(readers.back()), model::no_timeout)
-                            .get();
-    std::move(d)
-      .release_batches()
-      .consume(checking_consumer(std::move(batches_result)), model::no_timeout)
-      .get();
+    verify_batches(reference_batches, d.batches());
 }
 
 model::broker create_test_broker() {
@@ -558,16 +551,13 @@ SEASTAR_THREAD_TEST_CASE(snapshot_metadata_backward_compatibility) {
 }
 
 SEASTAR_THREAD_TEST_CASE(append_entries_request_serde_wrapper_serde) {
-    auto batches
-      = model::test::make_random_batches(model::offset(1), 3, false).get();
-
+    chunked_vector<model::record_batch> batches{
+      model::test::make_random_batches(model::offset(1), 3, false).get()};
+    chunked_vector<model::record_batch> reference_batches;
     for (auto& b : batches) {
         b.set_term(model::term_id(123));
+        reference_batches.push_back(b.share());
     }
-
-    auto rdr = model::make_memory_record_batch_reader(std::move(batches));
-    // share readers to have a copy of data to compare
-    auto readers = raft::details::share_n(std::move(rdr), 2).get();
 
     auto meta = raft::protocol_metadata{
       .group = raft::group_id(1),
@@ -582,10 +572,8 @@ SEASTAR_THREAD_TEST_CASE(append_entries_request_serde_wrapper_serde) {
       raft::vnode(model::node_id(1), model::revision_id(10)),
       raft::vnode(model::node_id(10), model::revision_id(101)),
       meta,
-      std::move(readers.back()),
+      std::move(batches),
       0);
-
-    readers.pop_back();
 
     const auto src_node = req.source_node();
     const auto target_node = req.target_node();
@@ -613,11 +601,5 @@ SEASTAR_THREAD_TEST_CASE(append_entries_request_serde_wrapper_serde) {
       decoded_req.metadata().last_visible_index, meta.last_visible_index);
     BOOST_REQUIRE_EQUAL(decoded_req.metadata().dirty_offset, meta.dirty_offset);
 
-    auto batches_result = model::consume_reader_to_memory(
-                            std::move(readers.back()), model::no_timeout)
-                            .get();
-    std::move(decoded_req)
-      .release_batches()
-      .consume(checking_consumer(std::move(batches_result)), model::no_timeout)
-      .get();
+    verify_batches(reference_batches, decoded_req.batches());
 }

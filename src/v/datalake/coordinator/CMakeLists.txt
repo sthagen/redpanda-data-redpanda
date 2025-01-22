@@ -14,6 +14,7 @@ v_cc_library(
         coordinator_manager.cc
         data_file.cc
         iceberg_file_committer.cc
+        iceberg_snapshot_remover.cc
         frontend.cc
         service.cc
         state.cc
