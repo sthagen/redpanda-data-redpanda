@@ -83,6 +83,7 @@ redpanda_cc_library(
         "//src/v/wasm:api",
         "//src/v/wasm:cache",
         "//src/v/wasm:impl",
+        "//src/v/crash_tracker",
         "@abseil-cpp//absl/log:globals",
         "@boost//:program_options",
         "@fmt",

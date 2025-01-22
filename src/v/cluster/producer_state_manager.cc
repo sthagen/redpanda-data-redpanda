@@ -119,6 +119,6 @@ producer_state_manager::post_eviction_hook::post_eviction_hook(
 void producer_state_manager::post_eviction_hook::operator()(
   producer_state& state) const noexcept {
     _state_manger._eviction_counter++;
-    return state._post_eviction_hook();
+    return state._post_eviction_hook(state.id());
 }
 }; // namespace cluster::tx

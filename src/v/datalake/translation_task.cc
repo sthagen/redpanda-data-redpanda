@@ -34,6 +34,29 @@ translation_task::errc map_error_code(cloud_data_io::errc errc) {
     }
 }
 
+ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
+  cloud_data_io& _cloud_io,
+  const local_file_metadata& lf_meta,
+  const remote_path& remote_path_prefix,
+  retry_chain_node& parent_rcn,
+  lazy_abort_source& lazy_as) {
+    auto remote_path = calculate_remote_path(lf_meta.path, remote_path_prefix);
+    auto result = co_await _cloud_io.upload_data_file(
+      lf_meta, remote_path, parent_rcn, lazy_as);
+    if (result.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "error uploading file {} to {} - {}",
+          lf_meta,
+          remote_path,
+          result.error());
+
+        co_return map_error_code(result.error());
+    }
+
+    co_return remote_path;
+}
+
 ss::future<checked<std::nullopt_t, translation_task::errc>>
 delete_local_data_files(
   const chunked_vector<partitioning_writer::partitioned_file>& files) {
@@ -53,6 +76,100 @@ delete_local_data_files(
           vlog(datalake_log.warn, "error deleting local data files - {}", e);
           return ret_t(translation_task::errc::file_io_error);
       });
+}
+
+ss::future<
+  checked<chunked_vector<coordinator::data_file>, translation_task::errc>>
+upload_files(
+  cloud_data_io& _cloud_io,
+  const chunked_vector<partitioning_writer::partitioned_file>& files,
+  translation_task::custom_partitioning_enabled is_custom_partitioning_enabled,
+  const remote_path& remote_path_prefix,
+  retry_chain_node& rcn,
+  lazy_abort_source& lazy_as) {
+    chunked_vector<coordinator::data_file> ret;
+    ret.reserve(files.size());
+
+    std::optional<translation_task::errc> upload_error;
+    for (auto& file : files) {
+        auto r = co_await execute_single_upload(
+          _cloud_io, file.local_file, remote_path_prefix, rcn, lazy_as);
+
+        if (r.has_error()) {
+            vlog(
+              datalake_log.warn,
+              "error uploading file {} to object store - {}",
+              file.local_file,
+              r.error());
+            upload_error = r.error();
+            /**
+             * For now we value simplicity, therefore in case of cloud error we
+             * invalidate the whole translation i.e. we are going to cleanup all
+             * the local data files and remote files that were already
+             * successfully uploaded. Coordinator will simply retry translating
+             * the same range
+             */
+            break;
+        }
+
+        chunked_vector<std::optional<bytes>> pk_fields;
+        pk_fields.reserve(file.partition_key.val->fields.size());
+        for (const auto& field : file.partition_key.val->fields) {
+            if (field) {
+                pk_fields.emplace_back(value_to_bytes(field.value()));
+            } else {
+                pk_fields.emplace_back(std::nullopt);
+            }
+        }
+
+        coordinator::data_file uploaded{
+          .remote_path = r.value()().string(),
+          .row_count = file.local_file.row_count,
+          .file_size_bytes = file.local_file.size_bytes,
+          .table_schema_id = file.schema_id,
+          .partition_spec_id = file.partition_spec_id,
+          .partition_key = std::move(pk_fields),
+        };
+
+        if (!is_custom_partitioning_enabled) {
+            // Upgrade is still in progress, write out the hour value for old
+            // versions.
+            uploaded.hour_deprecated = get_hour(file.partition_key);
+        }
+
+        ret.push_back(std::move(uploaded));
+    }
+
+    auto delete_result = co_await delete_local_data_files(files);
+    // for now we simply ignore the local deletion failures
+    if (delete_result.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "error deleting local data files - {}",
+          delete_result.error());
+    }
+
+    if (upload_error) {
+        // in this case we delete any successfully uploaded remote files before
+        // returning a result
+        chunked_vector<remote_path> files_to_delete;
+        for (auto& data_file : ret) {
+            files_to_delete.emplace_back(data_file.remote_path);
+        }
+        // TODO: add mechanism for cleaning up orphaned files that may be left
+        // behind when delete operation failed or was aborted.
+        auto remote_del_result = co_await _cloud_io.delete_data_files(
+          std::move(files_to_delete), rcn);
+        if (remote_del_result.has_error()) {
+            vlog(
+              datalake_log.warn,
+              "error deleting remote data files - {}",
+              remote_del_result.error());
+        }
+        co_return *upload_error;
+    }
+
+    co_return ret;
 }
 
 } // namespace
@@ -113,111 +230,19 @@ translation_task::translate(
       .start_offset = write_result.start_offset,
       .last_offset = write_result.last_offset,
     };
-    ret.files.reserve(write_result.data_files.size());
-
-    std::optional<errc> upload_error;
-    // TODO: parallelize uploads
-    for (auto& file : write_result.data_files) {
-        auto r = co_await execute_single_upload(
-          file.local_file, remote_path_prefix, rcn, lazy_as);
-        if (r.has_error()) {
-            vlog(
-              datalake_log.warn,
-              "error uploading file {} to object store - {}",
-              file.local_file,
-              r.error());
-            upload_error = r.error();
-            /**
-             * For now we value simplicity, therefore in case of cloud error we
-             * invalidate the whole translation i.e. we are going to cleanup all
-             * the local data files and remote files that were already
-             * successfully uploaded. Coordinator will simply retry translating
-             * the same range
-             */
-            break;
-        }
-
-        chunked_vector<std::optional<bytes>> pk_fields;
-        pk_fields.reserve(file.partition_key.val->fields.size());
-        for (const auto& field : file.partition_key.val->fields) {
-            if (field) {
-                pk_fields.emplace_back(value_to_bytes(field.value()));
-            } else {
-                pk_fields.emplace_back(std::nullopt);
-            }
-        }
-
-        coordinator::data_file uploaded{
-          .remote_path = r.value()().string(),
-          .row_count = file.local_file.row_count,
-          .file_size_bytes = file.local_file.size_bytes,
-          .table_schema_id = file.schema_id,
-          .partition_spec_id = file.partition_spec_id,
-          .partition_key = std::move(pk_fields),
-        };
-
-        if (!is_custom_partitioning_enabled) {
-            // Upgrade is still in progress, write out the hour value for old
-            // versions.
-            uploaded.hour_deprecated = get_hour(file.partition_key);
-        }
-
-        ret.files.push_back(std::move(uploaded));
+    auto upload_res = co_await upload_files(
+      *_cloud_io,
+      write_result.data_files,
+      is_custom_partitioning_enabled,
+      remote_path_prefix,
+      rcn,
+      lazy_as);
+    if (upload_res.has_error()) {
+        co_return upload_res.error();
     }
-
-    auto delete_result = co_await delete_local_data_files(
-      write_result.data_files);
-    // for now we simply ignore the local deletion failures
-    if (delete_result.has_error()) {
-        vlog(
-          datalake_log.warn,
-          "error deleting local data files - {}",
-          delete_result.error());
-    }
-
-    if (upload_error) {
-        // in this case we delete any successfully uploaded remote files before
-        // returning a result
-        chunked_vector<remote_path> files_to_delete;
-        for (auto& data_file : ret.files) {
-            files_to_delete.emplace_back(data_file.remote_path);
-        }
-        // TODO: add mechanism for cleaning up orphaned files that may be left
-        // behind when delete operation failed or was aborted.
-        auto remote_del_result = co_await _cloud_io->delete_data_files(
-          std::move(files_to_delete), rcn);
-        if (remote_del_result.has_error()) {
-            vlog(
-              datalake_log.warn,
-              "error deleting remote data files - {}",
-              remote_del_result.error());
-        }
-        co_return *upload_error;
-    }
+    ret.files = std::move(upload_res.value());
 
     co_return ret;
-}
-ss::future<checked<remote_path, translation_task::errc>>
-translation_task::execute_single_upload(
-  const local_file_metadata& lf_meta,
-  const remote_path& remote_path_prefix,
-  retry_chain_node& parent_rcn,
-  lazy_abort_source& lazy_as) {
-    auto remote_path = calculate_remote_path(lf_meta.path, remote_path_prefix);
-    auto result = co_await _cloud_io->upload_data_file(
-      lf_meta, remote_path, parent_rcn, lazy_as);
-    if (result.has_error()) {
-        vlog(
-          datalake_log.warn,
-          "error uploading file {} to {} - {}",
-          lf_meta,
-          remote_path,
-          result.error());
-
-        co_return map_error_code(result.error());
-    }
-
-    co_return remote_path;
 }
 
 std::ostream& operator<<(std::ostream& o, translation_task::errc ec) {

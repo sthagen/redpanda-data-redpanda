@@ -101,6 +101,16 @@ log_hist<number_of_buckets, first_bucket_upper_bound>::
     return seastar_histogram_logform<client_quota_config>();
 }
 
+template<int number_of_buckets, uint64_t first_bucket_upper_bound>
+seastar::metrics::histogram
+log_hist<number_of_buckets, first_bucket_upper_bound>::
+  batch_size_histogram_logform() const {
+    using batch_size_config
+      = logform_config<1l, first_bucket_upper_bound, number_of_buckets>;
+
+    return seastar_histogram_logform<batch_size_config>();
+}
+
 template<
   class duration_t,
   int number_of_buckets,
@@ -145,6 +155,8 @@ latency_log_hist<duration_t, number_of_buckets, first_bucket_upper_bound>::
     return _histo.client_quota_histogram_logform();
 }
 
+// Explicit instantiation for batch_size_hist
+template class log_hist<16, 32>;
 // Explicit instantiation for log_hist_public
 template class latency_log_hist<std::chrono::microseconds, 18, 256ul>;
 // Explicit instantiation for log_hist_internal

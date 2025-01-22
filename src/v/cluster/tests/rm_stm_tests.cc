@@ -928,7 +928,8 @@ FIXTURE_TEST(test_concurrent_producer_evictions, rm_stm_test_fixture) {
               auto maybe_replicate_f
                 = maybe_create_producer(model::producer_identity{counter++, 0})
                     .then([&, this](auto result) {
-                        auto producer = result.first;
+                        BOOST_REQUIRE(result.has_value());
+                        auto producer = result.value().first;
                         if (
                           gate.get_count() < max_replication_fibers
                           && tests::random_bool()) {

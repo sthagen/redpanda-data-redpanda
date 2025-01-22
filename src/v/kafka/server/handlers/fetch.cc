@@ -28,7 +28,7 @@
 #include "kafka/server/handlers/fetch/fetch_plan_executor.h"
 #include "kafka/server/handlers/fetch/fetch_planner.h"
 #include "kafka/server/handlers/fetch/replica_selector.h"
-#include "kafka/server/latency_probe.h"
+#include "kafka/server/kafka_probe.h"
 #include "kafka/server/read_distribution_probe.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"

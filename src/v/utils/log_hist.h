@@ -125,10 +125,21 @@ public:
      */
     seastar::metrics::histogram client_quota_histogram_logform() const;
 
+    /*
+     * Histogram type used for the Kafka client quota distribution. Going from
+     * 128 bytes to 1MiB.
+     */
+    seastar::metrics::histogram batch_size_histogram_logform() const;
+
 private:
     std::array<uint64_t, number_of_buckets> _counts;
     uint64_t _sample_sum{0};
 };
+
+/*
+ * Histogram for kafka batch sizes - see kafka_probe
+ */
+using batch_size_hist = log_hist<16, 32>;
 
 template<
   class duration_t,

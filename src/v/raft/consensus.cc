@@ -1937,6 +1937,7 @@ ss::future<vote_reply> consensus::do_vote(vote_request r) {
 ss::future<append_entries_reply>
 consensus::append_entries(append_entries_request&& r) {
     return with_gate(_bg, [this, r = std::move(r)]() mutable {
+        _probe->append_request();
         return _append_requests_buffer.enqueue(std::move(r));
     });
 }
@@ -1955,8 +1956,6 @@ consensus::do_append_entries(append_entries_request&& r) {
     reply.result = reply_result::failure;
     reply.may_recover = _follower_recovery_state
                         && _follower_recovery_state->is_active();
-
-    _probe->append_request();
 
     if (unlikely(is_request_target_node_invalid("append_entries", r))) {
         co_return reply;
@@ -3251,7 +3250,7 @@ std::ostream& operator<<(std::ostream& o, const consensus& c) {
     return o;
 }
 
-group_configuration consensus::config() const {
+const group_configuration& consensus::config() const {
     return _configuration_manager.get_latest();
 }
 

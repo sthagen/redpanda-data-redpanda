@@ -57,12 +57,6 @@ public:
 private:
     friend std::ostream& operator<<(std::ostream&, errc);
 
-    ss::future<checked<remote_path, errc>> execute_single_upload(
-      const local_file_metadata& lf_meta,
-      const remote_path& remote_path_prefix,
-      retry_chain_node& parent_rcn,
-      lazy_abort_source& lazy_as);
-
     ss::future<errc> delete_remote_files(
       chunked_vector<remote_path>, retry_chain_node& parent_rcn);
 

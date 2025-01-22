@@ -71,7 +71,8 @@ struct test_fixture {
     producer_state_manager& manager() { return *_psm; }
 
     producer_ptr new_producer(
-      ss::noncopyable_function<void()> f = [] {},
+      ss::noncopyable_function<void(model::producer_identity)> f =
+        [](model::producer_identity) {},
       std::optional<model::vcluster_id> vcluster = std::nullopt) {
         auto p = ss::make_lw_shared<producer_state>(
           ctx_logger,
@@ -229,14 +230,16 @@ FIXTURE_TEST(test_eviction_max_pids, test_fixture) {
     std::vector<producer_ptr> producers;
     producers.reserve(default_max_producers);
     for (unsigned i = 0; i < default_max_producers; i++) {
-        producers.push_back(new_producer([&] { evicted_so_far++; }));
+        producers.push_back(
+          new_producer([&](model::producer_identity) { evicted_so_far++; }));
     }
     BOOST_REQUIRE_EQUAL(evicted_so_far, 0);
 
     // we are already at the limit, add a few more producers
     size_t extra_producers = 5;
     for (unsigned i = 0; i < extra_producers; i++) {
-        producers.push_back(new_producer([&] { evicted_so_far++; }));
+        producers.push_back(
+          new_producer([&](model::producer_identity) { evicted_so_far++; }));
     }
 
     validate_producer_count(default_max_producers);
@@ -278,7 +281,9 @@ FIXTURE_TEST(test_state_management_with_multiple_namespaces, test_fixture) {
     producers.reserve(default_max_producers);
 
     auto new_vcluster_producer = [&](model::vcluster_id& vcluster) {
-        auto p = new_producer([&] { evicted_producers[vcluster]++; }, vcluster);
+        auto p = new_producer(
+          [&](model::producer_identity) { evicted_producers[vcluster]++; },
+          vcluster);
         producers.push_back(
           vcluster_producer{.vcluster = vcluster, .producer = p});
     };

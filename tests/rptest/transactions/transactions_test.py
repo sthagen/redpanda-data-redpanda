@@ -29,6 +29,7 @@ import confluent_kafka as ck
 
 from rptest.services.admin import Admin
 from rptest.clients.rpk import RpkTool
+from rptest.services.metrics_check import MetricCheck
 
 
 class TransactionsTest(RedpandaTest, TransactionsMixin):
@@ -825,6 +826,60 @@ class TransactionsTest(RedpandaTest, TransactionsMixin):
         assert len(producers_after) < len(
             producers_before
         ), f"Incorrect number of producers restored from snapshot {len(producers_after)}"
+
+    @cluster(num_nodes=3)
+    def check_progress_with_fencing_and_eviction_test(self):
+        """Ensures a fenced producer can make progress with eviction running in the background."""
+        def one_tx(tx_id: str, keep_open: bool = False):
+            producer = ck.Producer({
+                'bootstrap.servers': self.redpanda.brokers(),
+                'transactional.id': tx_id,
+                'transaction.timeout.ms': 15 * 60 * 1000,
+            })
+            producer.init_transactions()
+            producer.begin_transaction()
+            producer.produce(self.input_t.name, "test", "test")
+            producer.flush()
+            if keep_open:
+                return
+            producer.commit_transaction()
+
+        metric = "vectorized_cluster_producer_state_manager_producer_manager_total_active_producers"
+        rpk = RpkTool(self.redpanda)
+        topic_leader = self.redpanda.partitions(self.input_t.name)[0].leader
+        active_producers_metric = MetricCheck(self.redpanda.logger,
+                                              self.redpanda,
+                                              topic_leader, [metric],
+                                              reduce=sum)
+
+        def wait_for_active_producers(count: int):
+            wait_until(
+                lambda: active_producers_metric.evaluate([(
+                    metric, lambda _, val: val == count)]),
+                timeout_sec=30,
+                backoff_sec=5,
+                err_msg=
+                f"Timed out waiting for active producers to reach: {count}")
+
+        def evict_all_producers():
+            rpk.cluster_config_set("max_concurrent_producer_ids", 1)
+            wait_for_active_producers(1)
+            rpk.cluster_config_set("max_concurrent_producer_ids", 1000000)
+
+        # Hack to workaround max_concurrent_producer_ids to be atleast 1
+        one_tx(tx_id="producer_cannot_remove", keep_open=True)
+
+        # Each iteration fences the old producer from previous iteration by running
+        # init transactions
+        # Seed some producers
+        tx_id = "fence_test"
+        for _ in range(5):
+            one_tx(tx_id)
+
+        # Evict all producers in each iteration and ensure the fencing can still make progress
+        for _ in range(5):
+            evict_all_producers()
+            one_tx(tx_id)
 
     @cluster(num_nodes=3)
     def check_progress_after_fencing_test(self):

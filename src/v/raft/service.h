@@ -17,6 +17,7 @@
 #include "raft/consensus.h"
 #include "raft/raftgen_service.h"
 #include "raft/types.h"
+#include "ssx/async_algorithm.h"
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
@@ -137,16 +138,24 @@ public:
           = co_await ss::when_all_succeed(futures.begin(), futures.end());
 
         heartbeat_reply_v2 reply(_self, source);
-
+        ssx::async_counter cnt;
         // flatten responses
         for (shard_heartbeat_replies& shard_replies : replies) {
-            for (const auto& lw_reply : shard_replies.lw_replies) {
-                reply.add(lw_reply.group, lw_reply.result);
-            }
-            for (const auto& full_reply : shard_replies.full_heartbeats) {
-                reply.add(full_reply.group, full_reply.result, full_reply.data);
-            }
-            co_await ss::coroutine::maybe_yield();
+            co_await ssx::async_for_each_counter(
+              cnt,
+              shard_replies.lw_replies.begin(),
+              shard_replies.lw_replies.end(),
+              [&reply](lw_reply& lw_reply) {
+                  reply.add(lw_reply.group, lw_reply.result);
+              });
+            co_await ssx::async_for_each_counter(
+              cnt,
+              shard_replies.full_heartbeats.begin(),
+              shard_replies.full_heartbeats.end(),
+              [&reply](full_heartbeat_reply& full_reply) {
+                  reply.add(
+                    full_reply.group, full_reply.result, full_reply.data);
+              });
         }
 
         for (auto& m : group_missing_replies) {
@@ -169,6 +178,7 @@ public:
     }
 
     [[gnu::always_inline]] ss::future<append_entries_reply>
+
     append_entries(append_entries_request r, rpc::streaming_context&) final {
         return _probe.append_entries().then([this, r = std::move(r)]() mutable {
             auto gr = r.target_group();
@@ -424,20 +434,24 @@ private:
       model::node_id target_node,
       shard_heartbeats reqs) {
         shard_heartbeat_replies replies;
+        replies.lw_replies.reserve(reqs.lw_heartbeats.size());
+        replies.full_heartbeats.reserve(reqs.full_heartbeats.size());
         /**
          * Dispatch lightweight heartbeats
          */
-        for (const auto& gr : reqs.lw_heartbeats) {
-            auto c = m.consensus_for(gr);
-            if (unlikely(!c)) {
-                replies.lw_replies.emplace_back(
-                  gr, reply_result::group_unavailable);
-                continue;
-            }
-            auto result = c->lightweight_heartbeat(source_node, target_node);
-            replies.lw_replies.emplace_back(gr, result);
-            co_await ss::coroutine::maybe_yield();
-        }
+        co_await ssx::async_for_each(
+          reqs.lw_heartbeats.begin(),
+          reqs.lw_heartbeats.end(),
+          [&m, &replies, source_node, target_node](group_id gr) {
+              auto c = m.consensus_for(gr);
+              if (unlikely(!c)) {
+                  replies.lw_replies.emplace_back(
+                    gr, reply_result::group_unavailable);
+                  return;
+              }
+              auto result = c->lightweight_heartbeat(source_node, target_node);
+              replies.lw_replies.emplace_back(gr, result);
+          });
 
         std::vector<ss::future<full_heartbeat_reply>> futures;
         const auto timeout = clock_type::now() + _heartbeat_interval;

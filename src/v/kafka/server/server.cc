@@ -182,7 +182,7 @@ server::server(
         cfg->local().max_service_memory_per_core
         * config::shard_local_cfg().kafka_memory_share_for_fetch()),
       "kafka/server-mem-fetch")
-  , _probe(std::make_unique<class latency_probe>())
+  , _probe(std::make_unique<class kafka_probe>())
   , _sasl_probe(std::make_unique<class sasl_probe>())
   , _read_dist_probe(std::make_unique<read_distribution_probe>())
   , _thread_worker(tw)

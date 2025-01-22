@@ -92,6 +92,7 @@ ss::future<> append_entries_buffer::do_flush(
     bool needs_flush = false;
     reply_list_t replies;
     auto f = ss::now();
+    _consensus._probe->append_entries_buffer_flush();
     {
         ssx::semaphore_units op_lock_units = std::move(u);
         replies.reserve(requests.size());

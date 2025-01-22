@@ -353,6 +353,7 @@ static partition_produce_stages produce_topic_partition(
     auto dispatch = std::make_unique<ss::promise<>>();
     auto dispatch_f = dispatch->get_future();
     auto m = octx.rctx.probe().auto_produce_measurement();
+    octx.rctx.probe().record_batch(batch_size);
     auto timeout = octx.request.data.timeout_ms;
     if (timeout < 0ms) {
         static constexpr std::chrono::milliseconds max_timeout{

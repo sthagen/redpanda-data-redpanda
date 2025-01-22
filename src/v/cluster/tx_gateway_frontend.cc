@@ -1402,7 +1402,8 @@ ss::future<add_partitions_tx_reply> tx_gateway_frontend::do_add_partition_to_tx(
                                || br.ec == tx::errc::shard_not_found
                                || br.ec == tx::errc::stale
                                || br.ec == tx::errc::timeout
-                               || br.ec == tx::errc::partition_not_exists;
+                               || br.ec == tx::errc::partition_not_exists
+                               || br.ec == tx::errc::producer_creation_error;
             should_abort = should_abort
                            || (br.ec != tx::errc::none && !expected_ec);
             should_retry = should_retry || expected_ec;

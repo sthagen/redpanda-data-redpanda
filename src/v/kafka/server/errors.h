@@ -132,6 +132,7 @@ constexpr error_code map_tx_errc(cluster::tx::errc ec) {
     case cluster::tx::errc::partition_not_exists:
     case cluster::tx::errc::not_coordinator:
     case cluster::tx::errc::stale:
+    case cluster::tx::errc::producer_creation_error:
         return error_code::not_coordinator;
     case cluster::tx::errc::coordinator_not_available:
         return error_code::coordinator_not_available;

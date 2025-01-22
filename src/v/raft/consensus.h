@@ -205,7 +205,7 @@ public:
     protocol_metadata meta() const;
     raft::group_id group() const { return _group; }
     model::term_id term() const { return _term; }
-    group_configuration config() const;
+    const group_configuration& config() const;
     const model::ntp& ntp() const { return _log->config().ntp(); }
     clock_type::time_point last_heartbeat() const { return _hbeat; };
     clock_type::time_point became_leader_at() const {

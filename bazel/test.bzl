@@ -384,6 +384,8 @@ def redpanda_cc_bench(
     if duration != None:
         binary_args.append("--duration={}".format(duration))
 
+    tags = tags + ["bench"]
+
     native.cc_binary(
         name = name,
         srcs = srcs,

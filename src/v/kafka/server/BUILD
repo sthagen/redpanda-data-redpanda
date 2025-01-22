@@ -137,7 +137,7 @@ redpanda_cc_library(
         "handlers/topics/types.h",
         "handlers/topics/validators.h",
         "handlers/txn_offset_commit.h",
-        "latency_probe.h",
+        "kafka_probe.h",
         "logger.h",
         "member.h",
         "protocol_utils.h",

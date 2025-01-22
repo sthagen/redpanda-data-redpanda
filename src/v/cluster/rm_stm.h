@@ -240,7 +240,7 @@ private:
     // for the first time from the incoming request.
     using producer_previously_known
       = ss::bool_class<struct new_producer_created_tag>;
-    std::pair<tx::producer_ptr, producer_previously_known>
+    checked<std::pair<tx::producer_ptr, producer_previously_known>, tx::errc>
       maybe_create_producer(model::producer_identity);
     void cleanup_producer_state(model::producer_identity) noexcept;
     ss::future<> cleanup_evicted_producers();

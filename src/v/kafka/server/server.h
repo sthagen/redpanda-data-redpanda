@@ -22,7 +22,7 @@
 #include "kafka/server/fwd.h"
 #include "kafka/server/handlers/fetch/replica_selector.h"
 #include "kafka/server/handlers/handler_probe.h"
-#include "kafka/server/latency_probe.h"
+#include "kafka/server/kafka_probe.h"
 #include "kafka/server/queue_depth_monitor.h"
 #include "kafka/server/queue_depth_monitor_config.h"
 #include "kafka/server/read_distribution_probe.h"
@@ -182,7 +182,7 @@ public:
         return _gssapi_principal_mapper;
     }
 
-    latency_probe& latency_probe() { return *_probe; }
+    kafka_probe& kafka_probe() { return *_probe; }
 
     sasl_probe& sasl_probe() { return *_sasl_probe; }
 
@@ -262,7 +262,7 @@ private:
 
     handler_probe_manager _handler_probes;
     metrics::internal_metric_groups _metrics;
-    std::unique_ptr<class latency_probe> _probe;
+    std::unique_ptr<class kafka_probe> _probe;
     std::unique_ptr<class sasl_probe> _sasl_probe;
     std::unique_ptr<read_distribution_probe> _read_dist_probe;
     ssx::singleton_thread_worker& _thread_worker;

@@ -168,6 +168,11 @@ void probe::setup_metrics(const model::ntp& ntp) {
           sm::description("Number of append entries requests that failed the "
                           "offset translator consistency check"),
           labels),
+        sm::make_counter(
+          "append_entries_buffer_flushes",
+          [this] { return _append_entries_buffer_flush; },
+          sm::description("Number of append entries buffer flushes"),
+          labels),
       },
       {},
       {sm::shard_label, sm::label("partition")});

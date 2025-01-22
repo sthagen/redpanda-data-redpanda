@@ -50,6 +50,10 @@ enum class errc {
     concurrent_transactions,
     // invalid timeout requested by the client.
     invalid_timeout,
+    // internal error when the state machine cannot create a working producer.
+    // used in cases when the cache is full which does not permit new producers
+    // or the producer has been evicted but has not yet been removed.
+    producer_creation_error
 };
 
 std::ostream& operator<<(std::ostream& o, errc err);

@@ -19,18 +19,19 @@
 #include <seastar/core/metrics.hh>
 
 #include <chrono>
+#include <cstdint>
 
 namespace kafka {
-class latency_probe {
+class kafka_probe {
 public:
     using hist_t = log_hist_internal;
 
-    latency_probe() = default;
-    latency_probe(const latency_probe&) = delete;
-    latency_probe& operator=(const latency_probe&) = delete;
-    latency_probe(latency_probe&&) = delete;
-    latency_probe& operator=(latency_probe&&) = delete;
-    ~latency_probe() = default;
+    kafka_probe() = default;
+    kafka_probe(const kafka_probe&) = delete;
+    kafka_probe& operator=(const kafka_probe&) = delete;
+    kafka_probe(kafka_probe&&) = delete;
+    kafka_probe& operator=(kafka_probe&&) = delete;
+    ~kafka_probe() = default;
 
     void setup_metrics() {
         namespace sm = ss::metrics;
@@ -55,6 +56,19 @@ public:
               sm::description("Produce Latency"),
               labels,
               [this] { return _produce_latency.internal_histogram_logform(); }),
+          },
+          {},
+          {sm::shard_label});
+
+        _metrics.add_group(
+          "kafka",
+          {
+            sm::make_histogram(
+              "batch_size",
+              sm::description(
+                "Batch size across all topics measured at the kafka layer."),
+              labels,
+              [this] { return _batch_size.batch_size_histogram_logform(); }),
           },
           {},
           {sm::shard_label});
@@ -92,9 +106,13 @@ public:
         _fetch_latency.record(micros.count());
     }
 
+    void record_batch(uint64_t size) { _batch_size.record(size); }
+
 private:
     hist_t _produce_latency;
     hist_t _fetch_latency;
+    // non partition or topic related as that is too expensive for histograms
+    batch_size_hist _batch_size;
     metrics::internal_metric_groups _metrics;
     metrics::public_metric_groups _public_metrics;
 };

@@ -203,7 +203,7 @@ inline cluster::tx::producer_ptr random_producer_state(prefix_logger& logger) {
         random_generators::get_int<int64_t>(),
         random_generators::get_int<int16_t>()},
       random_named_int<raft::group_id>(),
-      ss::noncopyable_function<void()>{});
+      ss::noncopyable_function<void(model::producer_identity)>{});
 }
 
 inline cluster::partition_balancer_status random_balancer_status() {
