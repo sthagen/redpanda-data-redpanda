@@ -20,6 +20,7 @@
 #include "features/enterprise_feature_messages.h"
 #include "features/feature_table.h"
 #include "kafka/protocol/errors.h"
+#include "kafka/protocol/produce.h"
 #include "kafka/protocol/schemata/list_groups_response.h"
 #include "kafka/server/connection_context.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
@@ -118,6 +119,7 @@ server::server(
   ss::sharded<net::server_configuration>* cfg,
   ss::smp_service_group smp,
   ss::scheduling_group fetch_sg,
+  ss::scheduling_group produce_sg,
   ss::sharded<cluster::metadata_cache>& meta,
   ss::sharded<cluster::topics_frontend>& tf,
   ss::sharded<cluster::config_frontend>& cf,
@@ -144,6 +146,7 @@ server::server(
   : net::server(cfg, klog)
   , _smp_group(smp)
   , _fetch_scheduling_group(fetch_sg)
+  , _produce_scheduling_group(produce_sg)
   , _topics_frontend(tf)
   , _config_frontend(cf)
   , _feature_table(ft)
@@ -224,6 +227,12 @@ void server::setup_metrics() {
 ss::scheduling_group server::fetch_scheduling_group() const {
     return config::shard_local_cfg().use_fetch_scheduler_group()
              ? _fetch_scheduling_group
+             : ss::default_scheduling_group();
+}
+
+ss::scheduling_group server::produce_scheduling_group() const {
+    return config::shard_local_cfg().use_produce_scheduler_group()
+             ? _produce_scheduling_group
              : ss::default_scheduling_group();
 }
 

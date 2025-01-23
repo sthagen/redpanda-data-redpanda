@@ -19,7 +19,8 @@ namespace kafka {
 seastar::future<> server_app::init(
   seastar::sharded<net::server_configuration>* conf,
   seastar::smp_service_group smp,
-  seastar::scheduling_group sched,
+  seastar::scheduling_group fetch_sched,
+  seastar::scheduling_group prod_sched,
   seastar::sharded<cluster::metadata_cache>& mdc,
   seastar::sharded<cluster::topics_frontend>& tf,
   seastar::sharded<cluster::config_frontend>& cf,
@@ -46,7 +47,8 @@ seastar::future<> server_app::init(
     return _server.start(
       conf,
       smp,
-      sched,
+      fetch_sched,
+      prod_sched,
       std::ref(mdc),
       std::ref(tf),
       std::ref(cf),

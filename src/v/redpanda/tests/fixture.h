@@ -150,6 +150,7 @@ public:
             &configs,
             app.smp_service_groups.kafka_smp_sg(),
             app.sched_groups.fetch_sg(),
+            app.sched_groups.produce_sg(),
             std::ref(app.metadata_cache),
             std::ref(app.controller->get_topics_frontend()),
             std::ref(app.controller->get_config_frontend()),

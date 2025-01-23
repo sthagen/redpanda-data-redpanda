@@ -27,7 +27,7 @@ clap = { version = "4.0.32", features = ["derive"] }
 tokio-util = "0.7.4"
 xxhash-rust = { version = "0.8.6", features = ["xxh32"] }
 #object_store = { version = "0.5.5", features = ["aws", "azure", "gcp"] }
-object_store = { git = "https://github.com/jcsp/arrow-rs.git", rev = "96e62d8f", features = ["aws", "azure", "gcp"] }
+object_store = { git = "https://github.com/redpanda-data/arrow-rs.git", rev = "96e62d8f", features = ["aws", "azure", "gcp"] }
 bytes = "1.4.0"
 tokio-stream = "0.1.14"
 async-stream = "0.3.5"

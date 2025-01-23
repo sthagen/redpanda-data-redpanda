@@ -10,7 +10,12 @@
 from rptest.services.admin import Admin
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.services.cluster import cluster
+from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.clients.types import TopicSpec
+
+from collections import Counter
+import time
+import random
 
 
 class PartitionStateAPItest(RedpandaTest):
@@ -129,3 +134,68 @@ class PartitionStateAPItest(RedpandaTest):
             leader_state = leaders[0]["raft_state"]
             assert "followers" in leader_state.keys() and len(
                 leader_state["followers"]) == 4
+
+    @cluster(num_nodes=5)
+    def test_local_summary(self):
+        admin = Admin(self.redpanda)
+        n_topics = 100
+        # allow for a couple of system partitions
+        tolerance = 2 * len(self.redpanda.nodes)
+
+        def produce():
+            kafka_tools = KafkaCliTools(self.redpanda)
+            for t in self.topics:
+                kafka_tools.produce(t.name, 1, 1, acks=1)
+
+        def sumsum_eventually(**expected):
+            self.logger.debug(f"{expected=}")
+
+            def check():
+                summaries = [
+                    Counter(admin.get_partitions_local_summary(n))
+                    for n in self.redpanda.started_nodes()
+                ]
+                self.logger.debug(f"{summaries=}")
+                ss = sum(summaries, Counter())
+                for k, v in expected.items():
+                    if ss[k] < v or ss[k] > v + tolerance:
+                        return False
+                return True
+
+            self.redpanda.wait_until(check, 30, 2,
+                                     "Unexpected local partition summaries")
+
+            time.sleep(5)
+            assert check()
+
+        def stop_one():
+            node_to_stop = random.choice(self.redpanda.started_nodes())
+            self.logger.debug(
+                f"Stopping node {self.redpanda.idx(node_to_stop)}")
+            self.redpanda.stop_node(node_to_stop)
+
+        self.topics = [
+            TopicSpec(partition_count=1,
+                      replication_factor=len(self.redpanda.nodes))
+            for _ in range(n_topics)
+        ]
+        self._create_initial_topics()
+
+        # all 5 nodes live
+        produce()
+        sumsum_eventually(count=5 * n_topics, leaderless=0, under_replicated=0)
+
+        # 3 out of 5 nodes to remain live
+        stop_one()
+        stop_one()
+        produce()
+        sumsum_eventually(count=3 * n_topics,
+                          leaderless=0,
+                          under_replicated=n_topics)
+
+        # 2 out of 5 nodes to remain live
+        produce()  # after stop we won't be able to produce into leaderless
+        stop_one()
+        sumsum_eventually(count=2 * n_topics,
+                          leaderless=2 * n_topics,
+                          under_replicated=0)

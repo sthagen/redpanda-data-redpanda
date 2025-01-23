@@ -56,6 +56,7 @@ public:
       ss::sharded<net::server_configuration>*,
       ss::smp_service_group,
       ss::scheduling_group,
+      ss::scheduling_group,
       ss::sharded<cluster::metadata_cache>&,
       ss::sharded<cluster::topics_frontend>&,
       ss::sharded<cluster::config_frontend>&,
@@ -101,6 +102,8 @@ public:
      * them with most other tasks in the default scheduling group.
      */
     ss::scheduling_group fetch_scheduling_group() const;
+
+    ss::scheduling_group produce_scheduling_group() const;
 
     cluster::topics_frontend& topics_frontend() {
         return _topics_frontend.local();
@@ -228,6 +231,7 @@ private:
 
     ss::smp_service_group _smp_group;
     ss::scheduling_group _fetch_scheduling_group;
+    ss::scheduling_group _produce_scheduling_group;
     ss::sharded<cluster::topics_frontend>& _topics_frontend;
     ss::sharded<cluster::config_frontend>& _config_frontend;
     ss::sharded<features::feature_table>& _feature_table;

@@ -835,6 +835,12 @@ configuration::configuration()
       "Use a separate scheduler group for fetch processing.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       true)
+  , use_produce_scheduler_group(
+      *this,
+      "use_produce_scheduler_group",
+      "Use a separate scheduler group for kafka produce requests processing.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      true)
   , metadata_status_wait_timeout_ms(
       *this,
       "metadata_status_wait_timeout_ms",

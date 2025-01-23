@@ -756,105 +756,126 @@ produce_handler::handle(request_context ctx, ss::smp_service_group ssg) {
       error_code::invalid_topic_exception,
       resp);
     request.data.topics.erase_to_end(migrated_it);
-
+    auto sg = ctx.server().local().produce_scheduling_group();
     ss::promise<> dispatched_promise;
     auto dispatched_f = dispatched_promise.get_future();
-    auto produced_f = ss::do_with(
-      produce_ctx(std::move(ctx), std::move(request), std::move(resp), ssg),
-      [dispatched_promise = std::move(dispatched_promise)](
-        produce_ctx& octx) mutable {
-          // dispatch produce requests for each topic
-          auto stages = produce_topics(octx);
-          std::vector<ss::future<>> dispatched;
-          std::vector<ss::future<produce_response::topic>> produced;
-          dispatched.reserve(stages.size());
-          produced.reserve(stages.size());
+    auto produced_f = ss::with_scheduling_group(
+      sg,
+      [ctx = std::move(ctx),
+       resp = std::move(resp),
+       ssg,
+       request = std::move(request),
+       dispatched_promise = std::move(dispatched_promise)]() mutable {
+          return ss::do_with(
+            produce_ctx(
+              std::move(ctx), std::move(request), std::move(resp), ssg),
+            [dispatched_promise = std::move(dispatched_promise)](
+              produce_ctx& octx) mutable {
+                // dispatch produce requests for each topic
+                auto stages = produce_topics(octx);
+                std::vector<ss::future<>> dispatched;
+                std::vector<ss::future<produce_response::topic>> produced;
+                dispatched.reserve(stages.size());
+                produced.reserve(stages.size());
 
-          for (auto& s : stages) {
-              dispatched.push_back(std::move(s.dispatched));
-              produced.push_back(std::move(s.produced));
-          }
-          return seastar::when_all_succeed(dispatched.begin(), dispatched.end())
-            .then_wrapped([&octx,
-                           dispatched_promise = std::move(dispatched_promise),
-                           produced = std::move(produced)](
-                            ss::future<> f) mutable {
-                try {
-                    f.get();
-                    dispatched_promise.set_value();
-                    // collect topic responses
-                    return when_all_succeed(produced.begin(), produced.end())
-                      .then(
-                        [&octx](std::vector<produce_response::topic> topics) {
-                            std::move(
-                              topics.begin(),
-                              topics.end(),
-                              std::back_inserter(octx.response.data.responses));
-                        })
-                      .then([&octx] {
-                          // send response immediately
-                          if (octx.request.data.acks != 0) {
-                              return octx.rctx.respond(
-                                std::move(octx.response));
-                          }
-
-                          // acks = 0 is handled separately. first, check for
-                          // errors
-                          bool has_error = false;
-                          for (const auto& topic :
-                               octx.response.data.responses) {
-                              for (const auto& p : topic.partitions) {
-                                  if (p.error_code != error_code::none) {
-                                      has_error = true;
-                                      break;
-                                  }
-                              }
-                          }
-
-                          // in the absence of errors, acks = 0 results in the
-                          // response being dropped, as the client does not
-                          // expect a response. here we mark the response as
-                          // noop, but let it flow back so that it can be
-                          // accounted for in quota and stats tracking. it is
-                          // dropped later during processing.
-                          if (!has_error) {
-                              return octx.rctx.respond(std::move(octx.response))
-                                .then([](response_ptr resp) {
-                                    resp->mark_noop();
-                                    return resp;
-                                });
-                          }
-
-                          // errors in a response from an acks=0 produce request
-                          // result in the connection being dropped to signal an
-                          // issue to the client
-                          return ss::make_exception_future<response_ptr>(
-                            std::runtime_error(fmt::format(
-                              "Closing connection due to error in produce "
-                              "response: {}",
-                              octx.response)));
-                      });
-                } catch (...) {
-                    /*
-                     * if the first stage failed then we cannot resolve the
-                     * current future (do_with holding octx) immediately,
-                     * otherwise octx will be destroyed and all of the second
-                     * stage futures (which have a reference to octx) will be
-                     * backgrounded. logging about the second stage return value
-                     * is handled in connection_context handler.
-                     */
-                    dispatched_promise.set_exception(std::current_exception());
-                    return when_all_succeed(produced.begin(), produced.end())
-                      .discard_result()
-                      .then([] {
-                          return ss::make_exception_future<response_ptr>(
-                            std::runtime_error("First stage produce failed but "
-                                               "second stage succeeded."));
-                      })
-                      .handle_exception([](std::exception_ptr e) {
-                          return ss::make_exception_future<response_ptr>(e);
-                      });
+                for (auto& s : stages) {
+                    dispatched.push_back(std::move(s.dispatched));
+                    produced.push_back(std::move(s.produced));
                 }
+                return seastar::when_all_succeed(
+                         dispatched.begin(), dispatched.end())
+                  .then_wrapped([&octx,
+                                 dispatched_promise = std::move(
+                                   dispatched_promise),
+                                 produced = std::move(produced)](
+                                  ss::future<> f) mutable {
+                      try {
+                          f.get();
+                          dispatched_promise.set_value();
+                          // collect topic responses
+                          return when_all_succeed(
+                                   produced.begin(), produced.end())
+                            .then(
+                              [&octx](
+                                std::vector<produce_response::topic> topics) {
+                                  std::move(
+                                    topics.begin(),
+                                    topics.end(),
+                                    std::back_inserter(
+                                      octx.response.data.responses));
+                              })
+                            .then([&octx] {
+                                // send response immediately
+                                if (octx.request.data.acks != 0) {
+                                    return octx.rctx.respond(
+                                      std::move(octx.response));
+                                }
+
+                                // acks = 0 is handled separately. first, check
+                                // for errors
+                                bool has_error = false;
+                                for (const auto& topic :
+                                     octx.response.data.responses) {
+                                    for (const auto& p : topic.partitions) {
+                                        if (p.error_code != error_code::none) {
+                                            has_error = true;
+                                            break;
+                                        }
+                                    }
+                                }
+
+                                // in the absence of errors, acks = 0 results in
+                                // the response being dropped, as the client
+                                // does not expect a response. here we mark the
+                                // response as noop, but let it flow back so
+                                // that it can be accounted for in quota and
+                                // stats tracking. it is dropped later during
+                                // processing.
+                                if (!has_error) {
+                                    return octx.rctx
+                                      .respond(std::move(octx.response))
+                                      .then([](response_ptr resp) {
+                                          resp->mark_noop();
+                                          return resp;
+                                      });
+                                }
+
+                                // errors in a response from an acks=0 produce
+                                // request result in the connection being
+                                // dropped to signal an issue to the client
+                                return ss::make_exception_future<
+                                  response_ptr>(std::runtime_error(fmt::format(
+                                  "Closing connection due to error in produce "
+                                  "response: {}",
+                                  octx.response)));
+                            });
+                      } catch (...) {
+                          /*
+                           * if the first stage failed then we cannot resolve
+                           * the current future (do_with holding octx)
+                           * immediately, otherwise octx will be destroyed and
+                           * all of the second stage futures (which have a
+                           * reference to octx) will be backgrounded. logging
+                           * about the second stage return value is handled in
+                           * connection_context handler.
+                           */
+                          dispatched_promise.set_exception(
+                            std::current_exception());
+                          return when_all_succeed(
+                                   produced.begin(), produced.end())
+                            .discard_result()
+                            .then([] {
+                                return ss::make_exception_future<response_ptr>(
+                                  std::runtime_error(
+                                    "First stage produce failed but "
+                                    "second stage succeeded."));
+                            })
+                            .handle_exception([](std::exception_ptr e) {
+                                return ss::make_exception_future<response_ptr>(
+                                  e);
+                            });
+                      }
+                  });
             });
       });
 

@@ -94,38 +94,29 @@ def check_verify_reassign_partitions(lines: list[str], reassignments: dict,
     #        - An InvalidConfigurationException because the kafka script attempts to alter broker configs
     #          on a per-node basis which Redpanda does not support
 
-    lines.reverse()
-
-    # First line is an exact string
-    assert lines.pop().strip() == "Status of partition reassignment:"
+    assert lines[0].strip() == "Status of partition reassignment:"
+    if lines[-1].strip() == "":
+        lines.pop()
 
     # Then there is one line for each topic partition
-    tp_re_complete = re.compile(
-        r"^Reassignment of partition (?P<topic>[a-z\-]+?)-(?P<pid>[0-9]+?) is complete.$"
-    )
-    tp_re_no_active = re.compile(
-        r"^There is no active reassignment of partition (?P<topic>[a-z\-]+?)-(?P<pid>[0-9]+?), but replica set is.*$"
-    )
-
     def re_match(line):
-        m = tp_re_complete.match(line)
-        if m is not None:
-            return m
+        tp_re_complete = re.compile(
+            r"^Reassignment of partition (?P<topic>[a-z\-]+)-(?P<pid>[0-9]+) is completed.$"
+        )
+        tp_re_no_active = re.compile(
+            r"^There is no active reassignment of partition (?P<topic>[a-z\-]+)-(?P<pid>[0-9]+), but replica set is .*$"
+        )
+        return tp_re_complete.match(line) or tp_re_no_active.match(line)
 
-        return tp_re_no_active.match(line)
-
-    line = lines.pop().strip()
-    tp_match = re_match(line)
-    logger.debug(f"topic partition match: {line} {tp_match}")
-    while tp_match is not None:
-        assert tp_match.group("topic") in topic_names
-        assert int(tp_match.group("pid")) in partition_idxs
-        line = lines.pop().strip()
+    for line_no in range(1, len(lines)):
+        line = lines[line_no].strip()
         tp_match = re_match(line)
-        logger.debug(f"topic partition match: {line} {tp_match}")
-
-    if len(lines) != 0:
-        raise RuntimeError(f"Unexpected output: {lines}")
+        if tp_match:
+            assert tp_match.group("topic") in topic_names
+            assert int(tp_match.group("pid")) in partition_idxs
+        else:
+            raise RuntimeError(
+                f"Unexpected output on line {line_no}: {line}\n{lines=}")
 
 
 def check_cancel_reassign_partitions(lines: list[str], reassignments: dict,
@@ -313,7 +304,6 @@ class PartitionReassignmentsTest(RedpandaTest):
         return kafka_tools.reassign_partitions(
             reassignments=reassignments, operation="cancel").splitlines()
 
-    @ignore  # https://redpandadata.atlassian.net/browse/CORE-8735
     @cluster(num_nodes=6)
     def test_reassignments_kafka_cli(self):
         initial_assignments, all_node_idx, producers = self.initial_setup_steps(
