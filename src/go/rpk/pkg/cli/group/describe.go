@@ -24,7 +24,7 @@ import (
 )
 
 func NewDescribeCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	var summary, commitsOnly, lagPerTopic, re bool
+	var summary, commitsOnly, lagPerTopic, re, useInstanceID bool
 	cmd := &cobra.Command{
 		Use:   "describe [GROUPS...]",
 		Short: "Describe group offset status & lag",
@@ -81,13 +81,14 @@ Describe any one-character group:
 				printDescribedSummary(lags)
 				return
 			}
-			printDescribed(commitsOnly, lags)
+			printDescribed(commitsOnly, lags, useInstanceID)
 		},
 	}
 	cmd.Flags().BoolVarP(&lagPerTopic, "print-lag-per-topic", "t", false, "Print the aggregated lag per topic")
 	cmd.Flags().BoolVarP(&summary, "print-summary", "s", false, "Print only the group summary section")
 	cmd.Flags().BoolVarP(&commitsOnly, "print-commits", "c", false, "Print only the group commits section")
 	cmd.Flags().BoolVarP(&re, "regex", "r", false, "Parse arguments as regex; describe any group that matches any input group expression")
+	cmd.Flags().BoolVarP(&useInstanceID, "instance-ID", "i", false, "Include each group member's instance ID")
 	cmd.MarkFlagsMutuallyExclusive("print-summary", "print-commits")
 	cmd.MarkFlagsMutuallyExclusive("print-lag-per-topic", "print-commits")
 	return cmd
@@ -113,10 +114,10 @@ type describeRow struct {
 	err            string
 }
 
-func printDescribed(commitsOnly bool, lags kadm.DescribedGroupLags) {
+func printDescribed(commitsOnly bool, lags kadm.DescribedGroupLags, useInstanceID bool) {
 	for i, group := range lags.Sorted() {
 		var rows []describeRow
-		var useInstanceID, useErr bool
+		var useErr bool
 		for _, l := range group.Lag.Sorted() {
 			row := describeRow{
 				topic:     l.Topic,

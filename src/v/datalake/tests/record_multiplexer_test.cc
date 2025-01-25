@@ -214,15 +214,14 @@ public:
 
 TEST_P(RecordMultiplexerParamTest, TestNoSchema) {
     auto start_offset = model::offset{0};
-    auto res = mux(
-      start_offset,
-      [](storage::record_batch_builder& b) {
-          b.add_raw_kv(std::nullopt, iobuf::from("foobar"));
-      },
-      true);
-    ASSERT_FALSE(res.has_value());
+    auto res = mux(start_offset, [](storage::record_batch_builder& b) {
+        b.add_raw_kv(std::nullopt, iobuf::from("foobar"));
+    });
+    ASSERT_TRUE(res.has_value());
+    EXPECT_EQ(res.value().data_files.size(), 0);
 
     assert_dlq_table(ntp.tp.topic, true);
+    EXPECT_EQ(res.value().dlq_files.size(), GetParam().hrs);
 }
 
 TEST_P(RecordMultiplexerParamTest, TestSimpleAvroRecords) {
@@ -356,19 +355,18 @@ TEST_F(RecordMultiplexerTest, TestAvroRecordsWithRedpandaField) {
 TEST_F(RecordMultiplexerTest, TestMissingSchema) {
     auto start_offset = model::offset{0};
     auto res = mux(
-      default_param,
-      start_offset,
-      [](storage::record_batch_builder& b) {
+      default_param, start_offset, [](storage::record_batch_builder& b) {
           iobuf buf;
           // Append data with a magic 0 byte that doesn't actually correspond to
           // anything.
           buf.append("\0\0\0\0\0\0\0", 7);
           b.add_raw_kv(std::nullopt, std::move(buf));
-      },
-      true);
-    ASSERT_FALSE(res.has_value());
+      });
+    ASSERT_TRUE(res.has_value());
+    EXPECT_EQ(res.value().data_files.size(), 0);
 
     assert_dlq_table(ntp.tp.topic, true);
+    EXPECT_EQ(res.value().dlq_files.size(), default_param.hrs);
 }
 
 TEST_F(RecordMultiplexerTest, TestBadData) {
@@ -379,19 +377,18 @@ TEST_F(RecordMultiplexerTest, TestBadData) {
 
     auto start_offset = model::offset{0};
     auto res = mux(
-      default_param,
-      start_offset,
-      [](storage::record_batch_builder& b) {
+      default_param, start_offset, [](storage::record_batch_builder& b) {
           iobuf buf;
           // Append data with a magic bytes that corresponds to the actual
           // schema.
           buf.append("\0\0\0\0\0\1\0", 7);
           b.add_raw_kv(std::nullopt, std::move(buf));
-      },
-      true);
-    ASSERT_FALSE(res.has_value());
+      });
+    ASSERT_TRUE(res.has_value());
+    EXPECT_EQ(res.value().data_files.size(), 0);
 
     assert_dlq_table(ntp.tp.topic, true);
+    EXPECT_EQ(res.value().dlq_files.size(), default_param.hrs);
 }
 
 TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
@@ -428,18 +425,21 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
 
     // Now try writing with an incompatible schema.
     res = mux(
-      default_param,
-      start_offset,
-      [&gen](storage::record_batch_builder& b) {
+      default_param, start_offset, [&gen](storage::record_batch_builder& b) {
           auto res
             = gen.add_random_avro_record(b, "incompat", std::nullopt).get();
           ASSERT_FALSE(res.has_error());
-      },
-      true);
+      });
 
-    // This should successfully write the binary records but not update the
-    // schema.
-    ASSERT_FALSE(res.has_value());
+    // No new files should have been written to the main table.
+    ASSERT_TRUE(res.has_value());
+    EXPECT_EQ(res.value().data_files.size(), 0);
+
+    // The DLQ table should have the invalid records.
+    assert_dlq_table(ntp.tp.topic, true);
+    EXPECT_EQ(res.value().dlq_files.size(), default_param.hrs);
+
+    // The schema for the main table should not have changed.
     schema = get_current_schema();
     EXPECT_EQ(schema->highest_field_id(), 10);
 }

@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 from enum import IntEnum
+from typing import List
 import json
 import random
 import socket
@@ -336,13 +337,10 @@ class SaslPlainTest(BaseScramTest):
                              extra_node_conf={'developer_mode': True})
 
     def _enable_plain_authn(self):
-        self.logger.debug("Enabling SASL PLAIN and disabling SCRAM")
+        self.logger.debug("Enabling SASL PLAIN")
         admin = Admin(self.redpanda)
-        # PLAIN cannot be on by itself, so we will enable OAUTHBEARER as well
-        # but keep SCRAM disabled to ensure we are validating the PLAIN authentication
-        # mechanism
         admin.patch_cluster_config(
-            upsert={'sasl_mechanisms': ['PLAIN', 'OAUTHBEARER']})
+            upsert={'sasl_mechanisms': ['PLAIN', 'SCRAM']})
 
     def _make_client(
         self,
@@ -518,22 +516,26 @@ class SaslPlainConfigTest(BaseScramTest):
         super().setUp()
 
     @cluster(num_nodes=3)
-    def test_cannot_enable_only_plain(self):
+    def test_cannot_enable_plain_without_scram(self):
         """
-        This test verifies that a user cannot select PLAIN as the only
-        sasl_mechanism
+        This test verifies that when enabling PLAIN you must also enable SCRAM
         """
         self._start_cluster(enable_tls=False)
         admin = Admin(self.redpanda)
-        try:
-            admin.patch_cluster_config(upsert={'sasl_mechanisms': ['PLAIN']})
-            assert False, "Should not be able to enable only PLAIN"
-        except HTTPError as e:
-            assert e.response.status_code == 400, f"Expected 400, got {e.response.status_code}"
-            response = json.loads(e.response.text)
-            assert 'sasl_mechanisms' in response, f'Response missing "sasl_mechanisms": {response}'
-            assert "When PLAIN is enabled, at least one other mechanism must be enabled" == response[
-                'sasl_mechanisms'], f"Invalid message in response: {response['sasl_mechanisms']}"
+
+        def validate_sasl_plain_mech(mechs: List[str]):
+            try:
+                admin.patch_cluster_config(upsert={'sasl_mechanisms': mechs})
+                assert False, f"Should not have been able to set {mechs}"
+            except HTTPError as e:
+                assert e.response.status_code == 400, f"Expected 400, got {e.response.status_code}"
+                response = json.loads(e.response.text)
+                assert 'sasl_mechanisms' in response, f'Response missing "sasl_mechanisms": {response}'
+                assert "SCRAM mechanism must be enabled if PLAIN is enabled" == response[
+                    'sasl_mechanisms'], f"Invalid message in response: {response['sasl_mechansisms']}"
+
+        validate_sasl_plain_mech(['PLAIN'])
+        validate_sasl_plain_mech(['PLAIN', 'GSSAPI'])
 
     @cluster(num_nodes=3, log_allow_list=[re.compile('SASL/PLAIN is enabled')])
     @parametrize(enable_tls=True)

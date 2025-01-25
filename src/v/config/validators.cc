@@ -12,6 +12,7 @@
 #include "config/validators.h"
 
 #include "config/configuration.h"
+#include "datalake/partition_spec_parser.h"
 #include "model/namespace.h"
 #include "model/validation.h"
 #include "serde/rw/chrono.h"
@@ -94,9 +95,12 @@ validate_sasl_mechanisms(const std::vector<ss::sstring>& mechanisms) {
         }
     }
 
-    if (mechanisms.size() == 1 && mechanisms[0] == "PLAIN") {
-        return "When PLAIN is enabled, at least one other mechanism must be "
-               "enabled";
+    const auto contains = [&mechanisms](const std::string_view& s) {
+        return absl::c_find(mechanisms, s) != mechanisms.end();
+    };
+
+    if (contains("PLAIN") && !contains("SCRAM")) {
+        return "SCRAM mechanism must be enabled if PLAIN is enabled";
     }
 
     return std::nullopt;
@@ -255,6 +259,22 @@ std::optional<ss::sstring> validate_tombstone_retention_ms(
         }
     }
 
+    return std::nullopt;
+}
+
+std::optional<ss::sstring>
+validate_iceberg_partition_spec(const ss::sstring& value) {
+    auto parsed = datalake::parse_partition_spec(value);
+    if (parsed.has_error()) {
+        return fmt::format(
+          "couldn't parse iceberg partition spec `{}': {}",
+          value,
+          parsed.error());
+    }
+    if (!parsed.value().is_valid_for_default_spec()) {
+        return fmt::format(
+          "partition spec `{}' can't be used as a default spec", value);
+    }
     return std::nullopt;
 }
 

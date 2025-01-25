@@ -14,5 +14,6 @@ redpanda_test_cc_library(
         "//src/v/redpanda:application",
         "//src/v/storage/tests:disk_log_builder",
         "//src/v/test_utils:fixture",
+        "//src/v/test_utils:logs",
     ],
 )

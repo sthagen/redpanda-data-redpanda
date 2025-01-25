@@ -62,6 +62,7 @@ v_cc_library(
     v::bytes
     v::rpc
     v::cluster
+    v::datalake_partition_spec_parser
     v::kafka_partition_proxy
     v::kafka_protocol
     v::security

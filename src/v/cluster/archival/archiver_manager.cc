@@ -11,10 +11,6 @@
 #include "cluster/archival/archiver_manager.h"
 
 #include "cloud_storage/cache_service.h"
-#include "cluster/archival/archiver_operations_api.h"
-#include "cluster/archival/archiver_operations_impl.h"
-#include "cluster/archival/archiver_scheduler_api.h"
-#include "cluster/archival/archiver_scheduler_impl.h"
 #include "cluster/archival/logger.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/archival/upload_housekeeping_service.h"
@@ -519,9 +515,7 @@ public:
       ss::lw_shared_ptr<const archival::configuration> config,
       cloud_storage::remote& remote,
       cloud_storage::cache& cache,
-      archival::upload_housekeeping_service& housekeeping,
-      ss::shared_ptr<archiver_operations_api> ops,
-      ss::shared_ptr<archiver_scheduler_api<>> sc)
+      archival::upload_housekeeping_service& housekeeping)
       : _ntp(std::move(ntp))
       , _self_id(broker_id)
       , _part(std::move(part))
@@ -531,11 +525,9 @@ public:
       , _upload_housekeeping(housekeeping)
       , _rtc(_as)
       , _ctxlog(
-          archival_log, _rtc, ssx::sformat("{} node-{}", _ntp.path(), _self_id))
-      , _ops(std::move(ops))
-      , _sch(std::move(sc))
-
-    {
+          archival_log,
+          _rtc,
+          ssx::sformat("{} node-{}", _ntp.path(), _self_id)) {
         vlog(_ctxlog.debug, "created disposing managed_partition");
     }
 
@@ -588,12 +580,7 @@ private:
               _remote,
               _cache,
               *_part.get(),
-              manifest_view,
-              // constructing with non-null operations and scheduler api
-              // objects means that the archiver will use new background
-              // loop that will use these objects to schedule uploads.
-              _ops,
-              _sch);
+              manifest_view);
 
             if (!ntp_config.is_read_replica_mode_enabled()) {
                 _upload_housekeeping.register_jobs(
@@ -614,7 +601,6 @@ private:
 
         auto archiver = maybe_construct_archiver();
 
-        co_await _sch->create_ntp_state(archiver->get_ntp());
         co_await archiver->start();
         co_return archiver;
     }
@@ -623,7 +609,6 @@ private:
     ss::future<> stop_and_dispose_archiver(
       ss::lw_shared_ptr<ntp_archiver> archiver) noexcept {
         co_await archiver->stop();
-        co_await _sch->dispose_ntp_state(archiver->get_ntp());
     }
 
     model::ntp _ntp;
@@ -644,9 +629,6 @@ private:
     std::optional<ss::future<>> _bg_operation;
     // barrier is used by stop method
     std::optional<ss::promise<>> _barrier;
-
-    ss::shared_ptr<archiver_operations_api> _ops;
-    ss::shared_ptr<archiver_scheduler_api<>> _sch;
 };
 
 struct managed_partition : public managed_partition_fsm::state_machine_t {
@@ -657,9 +639,7 @@ struct managed_partition : public managed_partition_fsm::state_machine_t {
       ss::lw_shared_ptr<const archival::configuration> config,
       cloud_storage::remote& remote,
       cloud_storage::cache& cache,
-      archival::upload_housekeeping_service& housekeeping,
-      ss::shared_ptr<archiver_operations_api> ops,
-      ss::shared_ptr<archiver_scheduler_api<>> sch)
+      archival::upload_housekeeping_service& housekeeping)
       : managed_partition_fsm::state_machine_t(
           ntp,
           broker_id,
@@ -667,9 +647,7 @@ struct managed_partition : public managed_partition_fsm::state_machine_t {
           std::move(config),
           remote,
           cache,
-          housekeeping,
-          ops,
-          sch)
+          housekeeping)
       , _ntp(ntp)
       , _node_id(broker_id) {}
 
@@ -731,26 +709,6 @@ private:
     model::node_id _node_id;
 };
 
-namespace {
-
-static size_t get_max_data_rate() {
-    constexpr size_t top_limit = 10_GiB;
-    auto max_tput = config::shard_local_cfg()
-                      .cloud_storage_max_throughput_per_shard()
-                      .value_or(top_limit);
-    return max_tput;
-}
-
-static size_t get_max_requests_rate() {
-    constexpr size_t small_segment_size = 1_MiB;
-    const auto max_data_rate = get_max_data_rate();
-    // This is roughly 1000 rps if 'cloud_storage_max_throughput_per_shard' is
-    // not set and 100 rps if it's set to 1GiB
-    return max_data_rate / small_segment_size;
-}
-
-} // namespace
-
 class archiver_manager::impl {
 public:
     impl(
@@ -768,10 +726,6 @@ public:
       , _cache(cache)
       , _upload_housekeeping(upload_housekeeping)
       , _config(std::move(config))
-      , _ops(make_archiver_operations_api(
-          api, pm, _config->bucket_name, _config->upload_scheduling_group))
-      , _sch(ss::make_shared<archiver_scheduler<>>(
-          get_max_data_rate(), get_max_requests_rate()))
       , _rtc(_as)
       , _logger(archival_log, _rtc, ssx::sformat("node-{}", node_id)) {
         vlog(_logger.info, "Create archiver_manager");
@@ -879,9 +833,7 @@ public:
           _config,
           _remote.local(),
           _cache.local(),
-          _upload_housekeeping.local(),
-          _ops,
-          _sch);
+          _upload_housekeeping.local());
 
         vlog(
           _logger.info,
@@ -1005,9 +957,6 @@ public:
     std::optional<cluster::notification_id_type> _unmanage_notifications;
     std::optional<raft::group_manager_notification_id>
       _leadership_notifications;
-
-    ss::shared_ptr<archiver_operations_api> _ops;
-    ss::shared_ptr<archiver_scheduler_api<>> _sch;
 
     ss::abort_source _as;
     retry_chain_node _rtc;

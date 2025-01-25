@@ -568,7 +568,7 @@ struct property_update<tristate<T>>
 struct incremental_topic_updates
   : serde::envelope<
       incremental_topic_updates,
-      serde::version<7>,
+      serde::version<8>,
       serde::compat_version<0>> {
     static constexpr int8_t version_with_data_policy = -1;
     static constexpr int8_t version_with_shadow_indexing = -3;
@@ -641,6 +641,7 @@ struct incremental_topic_updates
       leaders_preference;
     property_update<tristate<std::chrono::milliseconds>> delete_retention_ms;
     property_update<std::optional<bool>> iceberg_delete;
+    property_update<std::optional<ss::sstring>> iceberg_partition_spec;
 
     // To allow us to better control use of the deprecated shadow_indexing
     // field, use getters and setters instead.
@@ -680,7 +681,8 @@ struct incremental_topic_updates
           remote_read,
           remote_write,
           delete_retention_ms,
-          iceberg_delete);
+          iceberg_delete,
+          iceberg_partition_spec);
     }
 
     friend std::ostream&

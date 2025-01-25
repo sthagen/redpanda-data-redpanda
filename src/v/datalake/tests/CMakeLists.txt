@@ -208,6 +208,18 @@ rp_test(
 )
 
 rp_test(
+  UNIT_TEST
+  GTEST
+  BINARY_NAME partition_spec_parser
+  SOURCES partition_spec_parser_test.cc
+  LIBRARIES
+    v::gtest_main
+    v::datalake_partition_spec_parser
+  LABELS datalake
+  ARGS "-- -c 1"
+)
+
+rp_test(
   BENCHMARK_TEST
   BINARY_NAME record_multiplexer
   SOURCES record_multiplexer_bench.cc

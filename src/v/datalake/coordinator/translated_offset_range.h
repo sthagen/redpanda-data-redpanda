@@ -22,14 +22,19 @@ namespace datalake::coordinator {
 struct translated_offset_range
   : serde::envelope<
       translated_offset_range,
-      serde::version<0>,
+      serde::version<1>,
       serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(start_offset, last_offset, files); }
+    auto serde_fields() {
+        return std::tie(start_offset, last_offset, files, dlq_files);
+    }
     // First Kafka offset (inclusive) represented in this range.
     kafka::offset start_offset;
     // Last Kafka offset (inclusive) represented in this range.
     kafka::offset last_offset;
+    // Files for main table.
     chunked_vector<data_file> files;
+    // Files for dead-letter queue table.
+    chunked_vector<data_file> dlq_files;
 
     translated_offset_range copy() const {
         translated_offset_range range;
@@ -38,6 +43,10 @@ struct translated_offset_range
         range.files.reserve(files.size());
         for (const auto& f : files) {
             range.files.push_back(f.copy());
+        }
+        range.dlq_files.reserve(dlq_files.size());
+        for (const auto& f : dlq_files) {
+            range.dlq_files.push_back(f.copy());
         }
         return range;
     }

@@ -84,7 +84,13 @@ class ConfigProfileVerifyTest(RedpandaCloudTest):
             '--query="Reservations[0].Instances[*].InstanceType"'
         ]
         res = subprocess.check_output(cmd)
-        resd = json.loads(res)
+        try:
+            resd = json.loads(res)
+        except json.JSONDecodeError as e:
+            self.logger.error(
+                f"Failed to parse AWS describe-instances response: {res}")
+            raise ValueError(
+                f"Failed to parse AWS describe-instances response: {e}")
 
         self.logger.debug(
             "asserting nodes_count: expected: {}, actual: {}".format(
@@ -107,6 +113,13 @@ class ConfigProfileVerifyTest(RedpandaCloudTest):
         output = subprocess.check_output(cmd)
         self.logger.debug(f'nodes: {output}')
         nodes = json.loads(output)
+        try:
+            nodes = json.loads(nodes)
+        except json.JSONDecodeError as e:
+            self.logger.error(
+                f"Failed to parse kubectl get nodes response: {nodes}")
+            raise ValueError(
+                f"Failed to parse kubectl get nodes response: {e}")
 
         config_nodes_count = self._configProfile['nodes_count']
         actual_nodes_count = len(nodes)
@@ -123,7 +136,13 @@ class ConfigProfileVerifyTest(RedpandaCloudTest):
                 self._clusterId), '--format="json(name,machineType,disks)"'
         ]
         res = subprocess.check_output(cmd)
-        resd = json.loads(res)
+        try:
+            resd = json.loads(res)
+        except json.JSONDecodeError as e:
+            self.logger.error(
+                f"Failed to parse gcloud compute instances response: {res}")
+            raise ValueError(
+                f"Failed to parse gcloud compute instances response: {e}")
 
         self.logger.debug(
             "asserting machineType: expected: {}, actual: {}".format(

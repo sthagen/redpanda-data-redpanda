@@ -51,9 +51,6 @@ public:
     drop_table(const iceberg::table_identifier&) const final;
 
 private:
-    ss::future<checked<iceberg::table_metadata, errc>>
-    load_table(const iceberg::table_identifier&) const;
-
     // Must outlive this committer.
     iceberg::catalog& catalog_;
     iceberg::manifest_io& io_;

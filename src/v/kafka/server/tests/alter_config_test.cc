@@ -749,7 +749,6 @@ FIXTURE_TEST(
       "redpanda.iceberg.mode",
       "redpanda.leaders.preference",
       "delete.retention.ms",
-      "redpanda.iceberg.delete",
     };
 
     // All properties_request

@@ -11,22 +11,6 @@
 
 namespace iceberg {
 
-std::ostream&
-operator<<(std::ostream& o, const unresolved_partition_spec::field& f) {
-    fmt::print(
-      o,
-      "{{source_name: {}, transform: {}, name: {}}}",
-      f.source_name,
-      f.transform,
-      f.name);
-    return o;
-}
-
-std::ostream& operator<<(std::ostream& o, const unresolved_partition_spec& ps) {
-    fmt::print(o, "{{fields: {}}}", ps.fields);
-    return o;
-}
-
 std::ostream& operator<<(std::ostream& o, const partition_field& f) {
     fmt::print(
       o,

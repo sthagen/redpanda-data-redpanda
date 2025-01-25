@@ -59,20 +59,43 @@ public:
 
         for (auto& [id, node] : nodes()) {
             if (id == leader.get_vnode().id()) {
-                node->on_dispatch(
-                  [](model::node_id, raft::msg_type) { return ss::sleep(3s); });
+                node->on_dispatch([](model::node_id, raft::msg_type mt) {
+                    /**
+                     * Drop all append entries messages from the leader to
+                     * followers
+                     */
+                    if (mt == raft::msg_type::append_entries) {
+                        throw std::runtime_error("dropping append entries");
+                    }
+                    return ss::now();
+                });
             }
         }
 
-        std::vector<ss::future<result<replicate_result>>> replicate_f;
-        replicate_f.reserve(num_waiters());
+        std::vector<ss::future<>> enqueued;
+        std::vector<ss::future<result<raft::replicate_result>>> replicated;
+
         for (size_t i = 0; i < num_waiters(); i++) {
-            replicate_f.push_back(raft->replicate(
+            auto stages = raft->replicate_in_stages(
               make_batches({{"k", "v"}}),
-              replicate_options{raft::consistency_level::quorum_ack}));
+              replicate_options{raft::consistency_level::quorum_ack});
+            enqueued.push_back(std::move(stages.request_enqueued));
+            replicated.push_back(std::move(stages.replicate_finished));
         }
+        auto enqueue_results = co_await ss::when_all(
+          enqueued.begin(), enqueued.end());
+        /**
+         * block new leadership and step down, this forces one of the other
+         * replicas to become a leader, since the current leader was not able to
+         * deliver any append entries messages to the replicas its log must be
+         * truncated by the new leader when it will try to replicate messages.
+         */
+
+        raft->block_new_leadership();
+        co_await raft->step_down(model::term_id(2), "test");
+
         auto repl_results = co_await ss::when_all(
-          replicate_f.begin(), replicate_f.end());
+          replicated.begin(), replicated.end());
         for (auto& r : repl_results) {
             auto res = r.get();
             ASSERT_TRUE_CORO(res.has_error());

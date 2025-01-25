@@ -768,7 +768,20 @@ class ManyPartitionsTest(PreallocNodesTest):
             self.redpanda,
             replication_factor=3,
             mib_per_partition=DEFAULT_MIB_PER_PARTITION,
-            topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD)
+            topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
+            partition_memory_reserve_percentage=
+            DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
+        )
+
+        self.redpanda.add_extra_rp_conf({
+            'topic_partitions_per_shard':
+            DEFAULT_PARTITIONS_PER_SHARD,
+            'topic_memory_per_partition':
+            DEFAULT_MIB_PER_PARTITION * 1024 * 1024,
+            'topic_partitions_memory_allocation_percent':
+            DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
+        })
+
         self.redpanda.start()
 
         # We have other OMB benchmark tests, but this one runs at the

@@ -154,7 +154,6 @@ iobuf serialize_avro(const manifest& m) {
               entry_struct, entry_schema.root());
             writer.write(entry_datum);
         }
-        writer.flush();
         writer.close();
 
         // NOTE: ~DataFileWriter does a final sync which may write to the

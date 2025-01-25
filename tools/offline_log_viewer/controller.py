@@ -144,6 +144,10 @@ def read_topic_properties_serde(rdr: Reader, version):
             'delete_retention_ms': rdr.read_tristate(Reader.read_int64),
             'iceberg_delete': rdr.read_optional(Reader.read_bool),
         }
+    if version >= 11:
+        topic_properties |= {
+            'iceberg_partition_spec': rdr.read_optional(Reader.read_string),
+        }
 
     return topic_properties
 
@@ -307,6 +311,11 @@ def read_incremental_topic_update_serde(rdr: Reader):
                 'leaders_preference':
                 rdr.read_optional(read_leaders_preference),
                 'iceberg_delete': rdr.read_optional(Reader.read_bool),
+            }
+        if version >= 8:
+            incr_obj |= {
+                'iceberg_partition_spec':
+                rdr.read_optional(Reader.read_string),
             }
 
         return incr_obj

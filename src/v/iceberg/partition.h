@@ -11,28 +11,12 @@
 #include "container/fragmented_vector.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/transform.h"
+#include "iceberg/unresolved_partition_spec.h"
 #include "utils/named_type.h"
 
 #include <seastar/core/sstring.hh>
 
 namespace iceberg {
-
-struct unresolved_partition_spec {
-    struct field {
-        // Components of the nested source field name, in increasing depth
-        // order.
-        std::vector<ss::sstring> source_name;
-        transform transform;
-        ss::sstring name;
-
-        friend std::ostream& operator<<(std::ostream&, const field&);
-    };
-
-    chunked_vector<field> fields;
-
-    friend std::ostream&
-    operator<<(std::ostream&, const unresolved_partition_spec&);
-};
 
 struct partition_field {
     using id_t = named_type<int32_t, struct field_id_tag>;

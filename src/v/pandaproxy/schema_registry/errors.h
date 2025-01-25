@@ -195,4 +195,10 @@ inline error_info mode_is_readonly(const std::optional<subject>& sub) {
         "Subject {} is in read-only mode", sub.value_or(subject{"null"}))};
 }
 
+inline error_info versions_exhausted(const subject& sub) {
+    return error_info{
+      error_code::version_exhausted,
+      fmt::format("Versions exhausted for subject {}", sub())};
+}
+
 } // namespace pandaproxy::schema_registry

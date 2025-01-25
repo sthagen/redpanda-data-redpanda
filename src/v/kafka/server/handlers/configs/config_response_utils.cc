@@ -978,19 +978,34 @@ config_response_container_t make_topic_configs(
         "Preferred location (e.g. rack) for partition leaders of this topic."),
       &describe_as_string<config::leaders_preference>);
 
-    add_topic_config_if_requested(
-      config_keys,
-      result,
-      config::shard_local_cfg().iceberg_delete.name(),
-      config::shard_local_cfg().iceberg_delete(),
-      topic_property_iceberg_delete,
-      topic_properties.iceberg_delete,
-      include_synonyms,
-      maybe_make_documentation(
-        include_documentation,
-        "If true, delete the corresponding Iceberg table when deleting the "
-        "topic."),
-      &describe_as_string<bool>);
+    if (topic_properties.iceberg_mode != model::iceberg_mode::disabled) {
+        add_topic_config_if_requested(
+          config_keys,
+          result,
+          config::shard_local_cfg().iceberg_delete.name(),
+          config::shard_local_cfg().iceberg_delete(),
+          topic_property_iceberg_delete,
+          topic_properties.iceberg_delete,
+          include_synonyms,
+          maybe_make_documentation(
+            include_documentation,
+            "If true, delete the corresponding Iceberg table when deleting the "
+            "topic."),
+          &describe_as_string<bool>);
+
+        add_topic_config_if_requested(
+          config_keys,
+          result,
+          config::shard_local_cfg().iceberg_default_partition_spec.name(),
+          config::shard_local_cfg().iceberg_default_partition_spec(),
+          topic_property_iceberg_partition_spec,
+          topic_properties.iceberg_partition_spec,
+          include_synonyms,
+          maybe_make_documentation(
+            include_documentation,
+            "Partition spec of the corresponding Iceberg table."),
+          &describe_as_string<ss::sstring>);
+    }
 
     return result;
 }

@@ -5,7 +5,6 @@ redpanda_test_cc_library(
     hdrs = [
         "async.h",
         "fixture.h",
-        "logs.h",
         "test_macros.h",
         "tmp_dir.h",
     ],
@@ -13,8 +12,8 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/model",
-        "//src/v/storage",
+        "//src/v/model:timeout_clock",
+        "//src/v/ssx:sformat",
         "@seastar//:testing",
     ],
 )
@@ -29,7 +28,6 @@ redpanda_test_cc_library(
         "async.h",
         "fixture.h",
         "gtest_utils.h",
-        "logs.h",
         "test.h",
         "test_macros.h",
         "tmp_dir.h",
@@ -54,7 +52,6 @@ redpanda_test_cc_library(
     hdrs = [
         "async.h",
         "fixture.h",
-        "logs.h",
         "test_macros.h",
         "tmp_dir.h",
     ],
@@ -155,6 +152,21 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/reflection:adl",
         "//src/v/serde",
+    ],
+)
+
+redpanda_test_cc_library(
+    name = "logs",
+    hdrs = [
+        "logs.h",
+    ],
+    include_prefix = "test_utils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/model",
+        "//src/v/storage",
+        "@seastar",
     ],
 )
 

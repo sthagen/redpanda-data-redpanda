@@ -41,9 +41,11 @@ class DatalakeVerifier():
                  redpanda: RedpandaService,
                  topic: str,
                  query_engine: QueryEngineBase,
-                 compacted: bool = False):
+                 compacted: bool = False,
+                 table_override: Optional[str] = None):
         self.redpanda = redpanda
         self.topic = topic
+        self.table = table_override or topic
         self.logger = redpanda.logger
         # Map from partition id to list of messages consumed
         # by from the partition
@@ -145,7 +147,7 @@ class DatalakeVerifier():
 
     def _get_query(self, partition, last_queried_offset, max_consumed_offset):
         return f"\
-        SELECT redpanda.offset, redpanda.key FROM redpanda.{self._query.escape_identifier(self.topic)} \
+        SELECT redpanda.offset, redpanda.key FROM redpanda.{self._query.escape_identifier(self.table)} \
         WHERE redpanda.partition={partition} \
         AND redpanda.offset>{last_queried_offset} \
         AND redpanda.offset<={max_consumed_offset} \

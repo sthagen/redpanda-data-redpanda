@@ -40,6 +40,8 @@ public:
         // vector containing a list of files that were written during
         // translation.
         chunked_vector<partitioning_writer::partitioned_file> data_files;
+        // files with invalid records
+        chunked_vector<partitioning_writer::partitioned_file> dlq_files;
     };
     explicit record_multiplexer(
       const model::ntp& ntp,
@@ -78,7 +80,7 @@ private:
       record_schema_components,
       std::unique_ptr<partitioning_writer>>
       _writers;
-    bool _invalid_record_writer{};
+    std::unique_ptr<partitioning_writer> _invalid_record_writer;
 
     std::optional<writer_error> _error;
     std::optional<write_result> _result;

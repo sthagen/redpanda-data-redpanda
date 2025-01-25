@@ -17,8 +17,6 @@
 #include "cloud_storage/remote_segment_index.h"
 #include "cloud_storage/types.h"
 #include "cluster/archival/archival_policy.h"
-#include "cluster/archival/archiver_operations_api.h"
-#include "cluster/archival/archiver_scheduler_api.h"
 #include "cluster/archival/probe.h"
 #include "cluster/archival/scrubber.h"
 #include "cluster/archival/types.h"
@@ -157,9 +155,7 @@ public:
       cloud_storage::remote& remote,
       cloud_storage::cache& c,
       cluster::partition& parent,
-      ss::shared_ptr<cloud_storage::async_manifest_view> amv,
-      ss::shared_ptr<archiver_operations_api> ops = nullptr,
-      ss::shared_ptr<archiver_scheduler_api<ss::lowres_clock>> sched = nullptr);
+      ss::shared_ptr<cloud_storage::async_manifest_view> amv);
 
     /// Spawn background fibers, which depending on the mode (read replica or
     /// not) will either do uploads, or periodically read back the manifest.
@@ -634,11 +630,10 @@ private:
     /// from local storage to remote storage until our term changes or
     /// our abort source fires.
     ss::future<> upload_until_term_change_legacy();
-    ss::future<> upload_until_term_change();
 
     /// Outer loop to keep invoking upload_until_term_change until our
     /// abort source fires.
-    ss::future<> upload_until_abort(bool legacy_mode);
+    ss::future<> upload_until_abort();
 
     bool manifest_upload_required() const;
 
@@ -715,12 +710,6 @@ private:
     ss::abort_source _as;
     retry_chain_node _rtcnode;
     retry_chain_logger _rtclog;
-
-    // This interface is used by the new background upload loop
-    ss::shared_ptr<archiver_operations_api> _ops;
-    // This object coordinates throttling and backoff in the new
-    // upload loop
-    ss::shared_ptr<archiver_scheduler_api<ss::lowres_clock>> _sched;
 
     // Ensures that operations on the archival state are only performed by a
     // single driving fiber (archiver loop, housekeeping job, etc) at a time.

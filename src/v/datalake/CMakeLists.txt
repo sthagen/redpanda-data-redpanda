@@ -26,6 +26,14 @@ v_cc_library(
 )
 
 v_cc_library(
+  NAME datalake_partition_spec_parser
+  SRCS
+    partition_spec_parser.cc
+  DEPS
+    v::iceberg_unresolved_partition_spec
+)
+
+v_cc_library(
   NAME datalake_writer
   SRCS
     catalog_schema_manager.cc

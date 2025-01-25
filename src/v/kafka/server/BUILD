@@ -173,6 +173,7 @@ redpanda_cc_library(
         "//src/v/container:chunked_hash_map",
         "//src/v/container:fragmented_vector",
         "//src/v/container:intrusive",
+        "//src/v/datalake:partition_spec_parser",
         "//src/v/features",
         "//src/v/hashing:jump_consistent",
         "//src/v/hashing:xx",

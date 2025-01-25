@@ -301,6 +301,12 @@ class DescribeTopicsTest(RedpandaTest):
                 doc_string=
                 "If true, delete the corresponding Iceberg table when deleting the topic."
             ),
+            "redpanda.iceberg.partition.spec":
+            ConfigProperty(
+                config_type="STRING",
+                value="",
+                doc_string="Partition spec of the corresponding Iceberg table."
+            ),
         }
 
         tp_spec = TopicSpec()

@@ -13,6 +13,7 @@ v_cc_library(
     node_overrides.cc
     leaders_preference.cc
   DEPS
+    v::datalake_partition_spec_parser
     v::json
     v::model
     v::security_config

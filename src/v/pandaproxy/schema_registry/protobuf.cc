@@ -198,6 +198,20 @@ struct fmt::formatter<google::protobuf::FieldOptions::JSType>
         return ctx.out();
     }
 };
+template<>
+struct fmt::formatter<google::protobuf::ExtensionRangeOptions_VerificationState>
+  : indent_formatter {
+    auto format(
+      const google::protobuf::ExtensionRangeOptions_VerificationState& state,
+      format_context& ctx) const {
+        fmt::format_to(
+          ctx.out(),
+          "{}",
+          google::protobuf::ExtensionRangeOptions_VerificationState_Name(
+            state));
+        return ctx.out();
+    }
+};
 
 namespace pandaproxy::schema_registry {
 
@@ -556,7 +570,7 @@ struct protobuf_schema_definition::impl {
         if (is_normalized) {
             pb::FileDescriptorProto tmp_fdp;
             fd->CopyTo(&tmp_fdp);
-            copy_uninterpreted_options(fdp, tmp_fdp);
+            copy_custom_options(fdp, tmp_fdp);
             render_proto(osb.ostream(), tmp_fdp, *fd);
         } else {
             render_proto(osb.ostream(), fdp, *fd);
@@ -602,96 +616,124 @@ struct protobuf_schema_definition::impl {
     };
 
     template<typename Proto>
-    void copy_options(const Proto& from, Proto& to) const {
+    void do_copy_custom_options(const Proto& from, Proto& to) const {
         if (!from.has_options()) {
             return;
         }
-        to.mutable_options()->CopyFrom(from.options());
+        const auto& opts_from = from.options();
+        if (opts_from.uninterpreted_option_size() == 0) {
+            return;
+        }
+        const auto& uopts_from = opts_from.uninterpreted_option();
+
+        const auto is_custom_option = [](const pb::UninterpretedOption& opt) {
+            const auto& name = opt.name();
+            return std::ranges::any_of(name, [](const auto& np) {
+                return np.has_is_extension() && np.is_extension();
+            });
+        };
+        std::ranges::copy_if(
+          uopts_from,
+          RepeatedPtrFieldBackInserter(
+            to.mutable_options()->mutable_uninterpreted_option()),
+          is_custom_option);
     }
 
-    void copy_uninterpreted_options(
+    void copy_custom_options(
       const pb::DescriptorProto& from, pb::DescriptorProto& to) const {
-        copy_options(from, to);
+        do_copy_custom_options(from, to);
 
         for (auto&& [field_from, field_to] :
              boost::combine(from.field(), *to.mutable_field())) {
-            copy_uninterpreted_options(field_from, field_to);
+            copy_custom_options(field_from, field_to);
         }
 
         // oneof decl
         for (auto&& [oneof_from, oneof_to] :
              boost::combine(from.oneof_decl(), *to.mutable_oneof_decl())) {
-            copy_options(oneof_from, oneof_to);
+            do_copy_custom_options(oneof_from, oneof_to);
         }
 
         // nested messages
         for (auto&& [nested_from, nested_to] :
              boost::combine(from.nested_type(), *to.mutable_nested_type())) {
-            copy_uninterpreted_options(nested_from, nested_to);
+            copy_custom_options(nested_from, nested_to);
         }
 
         // nested enums
         for (auto&& [enum_from, enum_to] :
              boost::combine(from.enum_type(), *to.mutable_enum_type())) {
-            copy_uninterpreted_options(enum_from, enum_to);
+            copy_custom_options(enum_from, enum_to);
         }
 
         // nested extentions
         for (auto&& [extension_from, extension_to] :
              boost::combine(from.extension(), *to.mutable_extension())) {
-            copy_uninterpreted_options(extension_from, extension_to);
+            copy_custom_options(extension_from, extension_to);
+        }
+
+        // extentions ranges
+        for (auto&& [extension_from, extension_to] : boost::combine(
+               from.extension_range(), *to.mutable_extension_range())) {
+            copy_custom_options(extension_from, extension_to);
         }
     }
 
-    void copy_uninterpreted_options(
+    void copy_custom_options(
       const pb::EnumDescriptorProto& from, pb::EnumDescriptorProto& to) const {
-        copy_options(from, to);
+        do_copy_custom_options(from, to);
 
         for (auto&& [value_from, value_to] :
              boost::combine(from.value(), *to.mutable_value())) {
-            copy_options(value_from, value_to);
+            do_copy_custom_options(value_from, value_to);
         }
     }
 
-    void copy_uninterpreted_options(
+    void copy_custom_options(
       const pb::ServiceDescriptorProto& from,
       pb::ServiceDescriptorProto& to) const {
-        copy_options(from, to);
+        do_copy_custom_options(from, to);
 
         for (auto&& [method_from, method_to] :
              boost::combine(from.method(), *to.mutable_method())) {
-            copy_options(method_from, method_to);
+            do_copy_custom_options(method_from, method_to);
         }
     }
 
-    void copy_uninterpreted_options(
+    void copy_custom_options(
       const pb::FieldDescriptorProto& from,
       pb::FieldDescriptorProto& to) const {
-        copy_options(from, to);
+        do_copy_custom_options(from, to);
     }
 
-    void copy_uninterpreted_options(
+    void copy_custom_options(
+      const pb::DescriptorProto_ExtensionRange& from,
+      pb::DescriptorProto_ExtensionRange& to) const {
+        do_copy_custom_options(from, to);
+    }
+
+    void copy_custom_options(
       const pb::FileDescriptorProto& from, pb::FileDescriptorProto& to) const {
-        copy_options(from, to);
+        do_copy_custom_options(from, to);
 
         for (auto&& [message_from, message_to] :
              boost::combine(from.message_type(), *to.mutable_message_type())) {
-            copy_uninterpreted_options(message_from, message_to);
+            copy_custom_options(message_from, message_to);
         }
 
         for (auto&& [enum_from, enum_to] :
              boost::combine(from.enum_type(), *to.mutable_enum_type())) {
-            copy_uninterpreted_options(enum_from, enum_to);
+            copy_custom_options(enum_from, enum_to);
         }
 
         for (auto&& [extension_from, extension_to] :
              boost::combine(from.extension(), *to.mutable_extension())) {
-            copy_uninterpreted_options(extension_from, extension_to);
+            copy_custom_options(extension_from, extension_to);
         }
 
         for (auto&& [service_from, service_to] :
              boost::combine(from.service(), *to.mutable_service())) {
-            copy_uninterpreted_options(service_from, service_to);
+            copy_custom_options(service_from, service_to);
         }
     }
 
@@ -945,6 +987,103 @@ struct protobuf_schema_definition::impl {
         }
     }
 
+    void render_extension_range(
+      std::ostream& os,
+      const pb::DescriptorProto_ExtensionRange& range,
+      int indent) const {
+        fmt::print(
+          os,
+          "{:{}}extensions {} to {}",
+          "",
+          indent,
+          range.start(),
+          range.end() - 1);
+
+        if (range.has_options()) {
+            const auto& options = range.options();
+            size_t count = [&options]() {
+                return static_cast<size_t>(options.declaration_size())
+                       + static_cast<size_t>(options.has_verification())
+                       + static_cast<size_t>(
+                         options.uninterpreted_option_size());
+            }();
+
+            bool first = true;
+            auto maybe_print_seperator = [&]() {
+                if (count > 1) {
+                    const auto prefix = first ? " [" : ",";
+                    fmt::print(os, "{}\n{:{}}", prefix, "", indent + 2);
+                    first = false;
+                } else if (first) {
+                    fmt::print(os, " [");
+                }
+            };
+
+            const int decl_indent = count > 1 ? indent + 2 : indent;
+            for (const auto& decl : options.declaration()) {
+                maybe_print_seperator();
+                render_declaration(os, decl, decl_indent);
+            }
+            if (options.has_verification()) {
+                maybe_print_seperator();
+                fmt::print(os, "verification = {}", options.verification());
+            }
+            auto uninterpreted_options = maybe_sorted_uninterpreted_options(
+              options.uninterpreted_option());
+            for (const auto& option : uninterpreted_options) {
+                maybe_print_seperator();
+                fmt::print(os, "{}", option);
+            }
+
+            if (count > 1 && !first) {
+                fmt::print(os, "\n{:{}}]", "", indent);
+            } else if (count == 1) {
+                fmt::print(os, "]");
+            }
+        }
+
+        fmt::print(os, ";\n");
+    }
+
+    void render_declaration(
+      std::ostream& os,
+      const pb::ExtensionRangeOptions_Declaration& decl,
+      int indent) const {
+        fmt::print(os, "declaration = {{");
+
+        // declarations need to have at least 'full_name' and 'type'
+        // set. This means that always "count >= 2".
+        bool first = true;
+        auto maybe_print_seperator = [&]() {
+            const auto prefix = first ? "" : ",";
+            fmt::print(os, "{}\n{:{}}", prefix, "", indent + 2);
+            first = false;
+        };
+
+        if (decl.has_full_name()) {
+            maybe_print_seperator();
+            fmt::print(os, "{}: \"{}\"", "full_name", decl.full_name());
+        }
+        if (decl.has_type()) {
+            maybe_print_seperator();
+            fmt::print(os, "{}: \"{}\"", "type", decl.type());
+        }
+        if (decl.has_number()) {
+            maybe_print_seperator();
+            fmt::print(os, "{}: {}", "number", decl.number());
+        }
+        if (decl.has_reserved()) {
+            maybe_print_seperator();
+            fmt::print(os, "{}: {}", "reserved", decl.reserved());
+        }
+        if (decl.has_repeated()) {
+            maybe_print_seperator();
+            fmt::print(os, "{}: {}", "repeated", decl.repeated());
+        }
+
+        fmt::print(os, "}}");
+    }
+
     // Render a message, including nested messages
     void render_nested(
       std::ostream& os,
@@ -1076,13 +1215,7 @@ struct protobuf_schema_definition::impl {
 
         // Render extension ranges
         for (const auto& range : message.extension_range()) {
-            fmt::print(
-              os,
-              "{:{}}extensions {} to {};\n",
-              "",
-              indent + 2,
-              range.start(),
-              range.end() - 1);
+            render_extension_range(os, range, indent + 2);
         }
 
         render_extensions(
@@ -1184,6 +1317,7 @@ struct protobuf_schema_definition::impl {
                     first_option = false;
                 };
                 if (value.options().has_deprecated()) {
+                    maybe_print_comma();
                     fmt::print(
                       os, "deprecated = {}", value.options().deprecated());
                 }

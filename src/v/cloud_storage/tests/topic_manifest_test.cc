@@ -484,6 +484,7 @@ SEASTAR_THREAD_TEST_CASE(test_topic_manifest_serde_feature_table) {
       false,
       tristate<std::chrono::milliseconds>{},
       std::nullopt,
+      std::nullopt,
     };
 
     auto random_initial_revision_id

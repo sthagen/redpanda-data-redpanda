@@ -14,6 +14,7 @@
 #include "bytes/bytes.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
+#include "ssx/async_algorithm.h"
 #include "storage/compacted_index.h"
 #include "storage/compacted_index_writer.h"
 #include "storage/logger.h"
@@ -88,6 +89,69 @@ ss::future<> spill_key_index::index(
     });
 }
 
+ss::future<>
+spill_key_index::spill_some(size_t entry_size, size_t min_index_size) {
+    auto stop_cond = [this, entry_size, min_index_size] {
+        size_t total_mem = idx_mem_usage() + _keys_mem_usage + entry_size;
+
+        // Instance-local capacity check
+        bool local_ok = total_mem < _max_mem;
+
+        // Shard-wide capacity check
+        bool global_ok = _resources.compaction_index_bytes_available()
+                         || total_mem < min_index_size;
+
+        // Stop condition: none of our size thresholds must be violated
+        return _midx.empty() || (local_ok && global_ok);
+    };
+
+    /*
+     * Collect keys to spill in a buffer until the stop condition is met and
+     * then dump all of them at once into the backing file. A periodic yield is
+     * introduced to reduce the chance of a reactor stall.
+     *
+     * In order to avoid creating hot erase spots we start removal at the
+     * location immediately after the last inserted key. The exact last inserted
+     * key is skipped to maintain good hit locality, and the next key should not
+     * have any temporal correlation to recent inserts.
+     *
+     * The amount of randomness this introduces is highly dependent on the
+     * workload, but it is better than always erasing at begin(). One may want
+     * to explore storing the last N inserted unique keys and randomly selecting
+     * from this set.
+     */
+    ssize_t yield_count = 0;
+    spill_payload payload;
+
+    auto it = _midx.find(_last_key_indexed);
+    if (it == _midx.end() || (++it == _midx.end())) {
+        it = _midx.begin();
+    }
+
+    while (!stop_cond()) {
+        // `next` might be end(), so don't dereference
+        auto next = std::next(it);
+        release_entry_memory(it->first);
+        append_to_spill_payload(
+          payload, compacted_index::entry_type::key, it->first, it->second);
+        _midx.erase(it);
+        if (next == _midx.end()) {
+            next = _midx.begin();
+        }
+        // `it` is guaranteed to not be end() provided that _midx is not empty.
+        // if it is empty, then stop_cond() will stop the next loop iteration.
+        it = next;
+        if (++yield_count >= ssx::async_algo_traits::interval) {
+            co_await ss::coroutine::maybe_yield();
+            yield_count = 0;
+        }
+    }
+
+    if (!payload.data.empty()) {
+        co_await spill(std::move(payload));
+    }
+}
+
 ss::future<> spill_key_index::add_key(compaction_key b, value_type v) {
     auto f = ss::now();
     const auto entry_size = entry_mem_usage(b);
@@ -108,36 +172,7 @@ ss::future<> spill_key_index::add_key(compaction_key b, value_type v) {
     if (
       (take_result.checkpoint_hint && expected_size > min_index_size)
       || expected_size >= _max_mem) {
-        f = ss::do_until(
-          [this, entry_size, min_index_size] {
-              size_t total_mem = idx_mem_usage() + _keys_mem_usage + entry_size;
-
-              // Instance-local capacity check
-              bool local_ok = total_mem < _max_mem;
-
-              // Shard-wide capacity check
-              bool global_ok = _resources.compaction_index_bytes_available()
-                               || total_mem < min_index_size;
-
-              // Stop condition: none of our size thresholds must be violated
-              return _midx.empty() || (local_ok && global_ok);
-          },
-          [this] {
-              /**
-               * Evict first entry, we use hash function that guarante good
-               * randomness so evicting first entry is actually evicting a
-               * pseudo random elemnent
-               */
-              auto node = _midx.extract(_midx.begin());
-
-              return ss::do_with(
-                node.key(),
-                node.mapped(),
-                [this](const bytes& k, value_type o) {
-                    release_entry_memory(k);
-                    return spill(compacted_index::entry_type::key, k, o);
-                });
-          });
+        f = spill_some(entry_size, min_index_size);
     }
 
     return f.then([this, entry_size, b = std::move(b), v]() mutable {
@@ -147,6 +182,7 @@ ss::future<> spill_key_index::add_key(compaction_key b, value_type v) {
         // No update to _mem_units here: we already took units at top
         // of add_key before starting the write.
 
+        _last_key_indexed = b;
         _midx.insert({std::move(b), v});
     });
 }
@@ -197,53 +233,67 @@ ss::future<> spill_key_index::index(
       delta);
 }
 
+ss::future<> spill_key_index::spill(
+  compacted_index::entry_type type, bytes_view b, value_type v) {
+    spill_payload payload;
+    append_to_spill_payload(payload, type, b, v);
+    co_await spill(std::move(payload));
+}
+
+ss::future<> spill_key_index::spill(spill_payload payload) {
+    _footer.keys += payload.keys;
+    _footer.keys_deprecated += payload.keys;
+    _footer.size += payload.data.size_bytes();
+    _footer.size_deprecated = _footer.size;
+    for (auto& f : payload.data) {
+        // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+        _crc.extend(reinterpret_cast<const uint8_t*>(f.get()), f.size());
+    }
+    // Append to the file
+    co_await maybe_open();
+    co_await _appender->append(payload.data);
+}
+
 /// format is:
 /// INT16 BYTE VINT VINT []BYTE
 ///
-ss::future<> spill_key_index::spill(
-  compacted_index::entry_type type, bytes_view b, value_type v) {
+void spill_key_index::append_to_spill_payload(
+  spill_payload& payload,
+  compacted_index::entry_type type,
+  bytes_view b,
+  value_type v) {
     constexpr size_t size_reservation = sizeof(uint16_t);
-    ++_footer.keys;
-    ++_footer.keys_deprecated;
-    iobuf payload;
+    ++payload.keys;
+    const auto payload_start_size = payload.data.size_bytes();
     // INT16
-    auto ph = payload.reserve(size_reservation);
+    auto ph = payload.data.reserve(size_reservation);
     // BYTE
-    payload.append(reinterpret_cast<const uint8_t*>(&type), 1);
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    payload.data.append(reinterpret_cast<const uint8_t*>(&type), 1);
     // VINT
     {
         auto x = vint::to_bytes(v.base_offset);
-        payload.append(x.data(), x.size());
+        payload.data.append(x.data(), x.size());
     }
     // VINT
     {
         auto x = vint::to_bytes(v.delta);
-        payload.append(x.data(), x.size());
+        payload.data.append(x.data(), x.size());
     }
     // []BYTE
     {
         size_t key_size = std::min(max_key_size, b.size());
-
-        payload.append(b.data(), key_size);
+        payload.data.append(b.data(), key_size);
     }
-    const size_t size = payload.size_bytes() - size_reservation;
+    const auto payload_size = payload.data.size_bytes() - payload_start_size;
+    const size_t size = payload_size - size_reservation;
     const size_t size_le = ss::cpu_to_le(size); // downcast
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
     ph.write(reinterpret_cast<const char*>(&size_le), size_reservation);
-
-    // update internal state
-    _footer.size += payload.size_bytes();
-    _footer.size_deprecated = _footer.size;
-    for (auto& f : payload) {
-        // NOLINTNEXTLINE
-        _crc.extend(reinterpret_cast<const uint8_t*>(f.get()), f.size());
-    }
     vassert(
-      payload.size_bytes() <= compacted_index::max_entry_size,
+      payload_size <= compacted_index::max_entry_size,
       "Entries cannot be bigger than uint16_t::max(): {}",
-      payload);
-    // Append to the file
-    co_await maybe_open();
-    co_await _appender->append(payload);
+      payload.data);
 }
 
 ss::future<> spill_key_index::append(compacted_index::entry e) {

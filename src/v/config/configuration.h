@@ -720,6 +720,7 @@ struct configuration final : public config_store {
     property<std::optional<ss::sstring>> iceberg_rest_catalog_prefix;
 
     property<bool> iceberg_delete;
+    property<ss::sstring> iceberg_default_partition_spec;
 
     configuration();
 

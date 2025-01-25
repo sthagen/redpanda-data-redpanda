@@ -21,7 +21,8 @@ from rptest.services.redpanda import (
 )
 from rptest.services.serde_client import SerdeClient
 from rptest.tests.datalake.datalake_services import DatalakeServices
-from rptest.tests.datalake.query_engine_base import QueryEngineBase, QueryEngineType
+from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
+from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.tests.redpanda_test import RedpandaTest
 
@@ -139,6 +140,7 @@ class DatalakeDLQTest(RedpandaTest):
         is compatible. I.e. the `~` character is accepted.
         """
         dlq_table_name = f"{self.topic_name}~dlq"
+        num_records = 10
 
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
@@ -147,9 +149,10 @@ class DatalakeDLQTest(RedpandaTest):
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")
 
-            dl.produce_to_topic(self.topic_name, 1, 1)
-
-            dl.wait_for_iceberg_table("redpanda", dlq_table_name, 30, 5)
+            dl.produce_to_topic(self.topic_name, 1, num_records)
+            dl.wait_for_translation(self.topic_name,
+                                    num_records,
+                                    table_override=dlq_table_name)
 
             # Only the DLQ table got created.
             assert dl.num_tables() == 1, "Expected only 1 table in catalog"
@@ -179,6 +182,13 @@ class DatalakeDLQTest(RedpandaTest):
                 )
                 assert spark_describe_out == spark_expected_out, str(
                     spark_describe_out)
+
+            verifier = DatalakeVerifier(self.redpanda,
+                                        self.topic_name,
+                                        dl.query_engine(query_engine),
+                                        table_override=dlq_table_name)
+            verifier.start()
+            verifier.wait()
 
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
@@ -217,12 +227,8 @@ class DatalakeDLQTest(RedpandaTest):
             dl.wait_for_translation(self.topic_name,
                                     num_valid_per_iter * num_iter, 30, 5)
 
-            dl.wait_for_iceberg_table("redpanda", f"{self.topic_name}~dlq", 30,
-                                      5)
-
-            qc = dl.service(query_engine)
-            assert isinstance(qc, QueryEngineBase)
-
-            # TODO(iceberg-dlq): Count the number of records in the DLQ table
-            # after we implement writing.
-            assert qc.count_table("redpanda", f"{self.topic_name}~dlq") == 0
+            dl.wait_for_translation(self.topic_name,
+                                    num_invalid_per_iter * num_iter,
+                                    30,
+                                    5,
+                                    table_override=f"{self.topic_name}~dlq")

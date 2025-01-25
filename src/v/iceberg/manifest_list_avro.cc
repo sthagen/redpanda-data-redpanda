@@ -160,7 +160,6 @@ iobuf serialize_avro(const manifest_list& m) {
         for (const auto& f : m.files) {
             writer.write(file_to_avro(f));
         }
-        writer.flush();
         writer.close();
 
         // NOTE: ~DataFileWriter does a final sync which may write to the

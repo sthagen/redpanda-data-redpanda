@@ -76,6 +76,8 @@ struct error_category final : std::error_category {
                    "FORWARD_TRANSITIVE, and FULL_TRANSITIVE";
         case error_code::mode_invalid:
             return "Invalid mode. Valid values are READWRITE, READONLY";
+        case error_code::version_exhausted:
+            return "Versions exhausted, maximum 2147483647 reached";
         }
         return "(unrecognized error)";
     }
@@ -128,6 +130,8 @@ struct error_category final : std::error_category {
             return reply_error_code::compatibility_level_invalid; // 42203
         case error_code::mode_invalid:
             return reply_error_code::mode_invalid; // 42204
+        case error_code::version_exhausted:
+            return reply_error_code::internal_server_error; // 500
         }
         return {};
     }

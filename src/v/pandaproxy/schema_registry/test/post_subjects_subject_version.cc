@@ -15,17 +15,46 @@
 #include "pandaproxy/test/pandaproxy_fixture.h"
 #include "pandaproxy/test/utils.h"
 
+#include <seastar/util/bool_class.hh>
+
+#include <limits>
+#include <optional>
+
 namespace pp = pandaproxy;
 namespace ppj = pp::json;
 namespace pps = pp::schema_registry;
 
+using make_values_unsigned = ss::bool_class<struct make_values_unsigned_tag>;
+
 struct request {
     pps::canonical_schema schema;
+    std::optional<pps::schema_id> id = std::nullopt;
+    std::optional<pps::schema_version> version = std::nullopt;
+    // If the below is set to true, then cast id and version to an unsigned int
+    // This validates testing the unsigned handling path in JSON deserializing
+    make_values_unsigned values_unsigned = make_values_unsigned::no;
 };
 
 template<typename Buffer>
 void rjson_serialize(::json::iobuf_writer<Buffer>& w, const request& r) {
     w.StartObject();
+    if (r.id.has_value()) {
+        w.Key("id");
+        if (r.values_unsigned) {
+            ::json::rjson_serialize(w, static_cast<unsigned int>(r.id.value()));
+        } else {
+            ::json::rjson_serialize(w, r.id.value());
+        }
+    }
+    if (r.version.has_value()) {
+        w.Key("version");
+        if (r.values_unsigned) {
+            ::json::rjson_serialize(
+              w, static_cast<unsigned int>(r.version.value()));
+        } else {
+            ::json::rjson_serialize(w, r.version.value());
+        }
+    }
     w.Key("schema");
     ::json::rjson_serialize(w, r.schema.def().raw());
     if (r.schema.type() != pps::schema_type::avro) {
@@ -581,4 +610,252 @@ FIXTURE_TEST(schema_registry_post_avro_references, pandaproxy_test_fixture) {
     BOOST_REQUIRE_EQUAL(
       res.headers.at(boost::beast::http::field::content_type),
       to_header_value(ppj::serialization_format::schema_registry_v1_json));
+}
+
+FIXTURE_TEST(
+  schema_registry_post_subjects_subject_id_smaller_than_one,
+  pandaproxy_test_fixture) {
+    using namespace std::chrono_literals;
+
+    const auto simple_req_id_0 = request{
+      pps::canonical_schema{
+        pps::subject{"simple-value"},
+        pps::canonical_schema_definition(
+          R"({
+"namespace": "com.redpanda",
+  "type": "record",
+  "name": "employee",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    }
+]
+  })",
+          pps::schema_type::avro)},
+      pps::schema_id{0}};
+
+    const auto simple_req_id_minus_1 = request{
+      pps::canonical_schema{
+        pps::subject{"simple-value"},
+        pps::canonical_schema_definition(
+          R"({
+"namespace": "com.redpanda",
+  "type": "record",
+  "name": "employee",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    },
+    {
+      "name": "id2",
+      "type": "string",
+      "default": ""
+    }
+]
+  })",
+          pps::schema_type::avro)},
+      pps::schema_id{-1}};
+
+    info("Connecting client");
+    auto client = make_schema_reg_client();
+    info("Post simple schema (expect schema_id=0)");
+    auto res = post_schema(
+      client,
+      simple_req_id_0.schema.sub(),
+      ppj::rjson_serialize_str(simple_req_id_0));
+    BOOST_REQUIRE_EQUAL(res.body, R"({"id":0})");
+    BOOST_REQUIRE_EQUAL(
+      res.headers.at(boost::beast::http::field::content_type),
+      to_header_value(ppj::serialization_format::schema_registry_v1_json));
+
+    info("Post simple schema with id=-1 (expect schema_id=1)");
+    res = post_schema(
+      client,
+      simple_req_id_minus_1.schema.sub(),
+      ppj::rjson_serialize_str(simple_req_id_minus_1));
+    BOOST_REQUIRE_EQUAL(res.body, R"({"id":1})");
+    BOOST_REQUIRE_EQUAL(
+      res.headers.at(boost::beast::http::field::content_type),
+      to_header_value(ppj::serialization_format::schema_registry_v1_json));
+}
+
+FIXTURE_TEST(
+  schema_registry_post_subjects_subject_id_too_big, pandaproxy_test_fixture) {
+    using namespace std::chrono_literals;
+
+    const auto simple_req_id_invalid = request{
+      pps::canonical_schema{
+        pps::subject{"simple-value"},
+        pps::canonical_schema_definition(
+          R"({
+"namespace": "com.redpanda",
+  "type": "record",
+  "name": "employee",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    }
+]
+  })",
+          pps::schema_type::avro)},
+      pps::schema_id{std::numeric_limits<int>::min()},
+      std::nullopt,
+      make_values_unsigned::yes};
+
+    info("Connecting client");
+    auto client = make_schema_reg_client();
+    info("Post simple schema (expect error)");
+    auto res = post_schema(
+      client,
+      simple_req_id_invalid.schema.sub(),
+      ppj::rjson_serialize_str(simple_req_id_invalid));
+    BOOST_REQUIRE_EQUAL(
+      res.headers.result(), boost::beast::http::status::unprocessable_entity);
+    BOOST_REQUIRE(std::string_view(res.body).starts_with(
+      R"({"error_code":422,"message":")"));
+}
+
+FIXTURE_TEST(
+  schema_registry_post_subjects_version_zero, pandaproxy_test_fixture) {
+    const auto simple_req_first = request{
+      pps::canonical_schema{
+        pps::subject{"simple-value"},
+        pps::canonical_schema_definition(
+          R"({
+"namespace": "com.redpanda",
+  "type": "record",
+  "name": "employee",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    }
+]
+  })",
+          pps::schema_type::avro)},
+      std::nullopt,
+      pps::schema_version{0}};
+
+    const auto simple_req_second = request{
+      pps::canonical_schema{
+        pps::subject{"simple-value"},
+        pps::canonical_schema_definition(
+          R"({
+"namespace": "com.redpanda",
+  "type": "record",
+  "name": "employee",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    },
+    {
+      "name": "id2",
+      "type": "string",
+      "default": ""
+    }
+]
+  })",
+          pps::schema_type::avro)},
+      std::nullopt,
+      pps::schema_version{0}};
+
+    info("Connecting client");
+    auto client = make_schema_reg_client();
+    info("Post simple schema first (expect schema_id=1)");
+    auto res = post_schema(
+      client,
+      simple_req_first.schema.sub(),
+      ppj::rjson_serialize_str(simple_req_first));
+    BOOST_REQUIRE_EQUAL(res.body, R"({"id":1})");
+    BOOST_REQUIRE_EQUAL(
+      res.headers.at(boost::beast::http::field::content_type),
+      to_header_value(ppj::serialization_format::schema_registry_v1_json));
+
+    info("Post simple schema second (expect schema_id=2)");
+    res = post_schema(
+      client,
+      simple_req_second.schema.sub(),
+      ppj::rjson_serialize_str(simple_req_second));
+    BOOST_REQUIRE_EQUAL(res.body, R"({"id":2})");
+    BOOST_REQUIRE_EQUAL(
+      res.headers.at(boost::beast::http::field::content_type),
+      to_header_value(ppj::serialization_format::schema_registry_v1_json));
+
+    info("Getting versions, expect ([1,2])");
+    res = get_subject_versions(client, pps::subject{"simple-value"});
+    BOOST_REQUIRE_EQUAL(res.headers.result(), boost::beast::http::status::ok);
+    BOOST_REQUIRE_EQUAL(res.body, R"([1,2])");
+    BOOST_REQUIRE_EQUAL(
+      res.headers.at(boost::beast::http::field::content_type),
+      to_header_value(ppj::serialization_format::schema_registry_v1_json));
+}
+FIXTURE_TEST(
+  schema_registry_post_subjects_version_exhausted, pandaproxy_test_fixture) {
+    const auto simple_req_first = request{
+      pps::canonical_schema{
+        pps::subject{"simple-value"},
+        pps::canonical_schema_definition(
+          R"({
+"namespace": "com.redpanda",
+  "type": "record",
+  "name": "employee",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    }
+]
+  })",
+          pps::schema_type::avro)},
+      std::nullopt,
+      pps::schema_version{std::numeric_limits<int>::max()}};
+
+    const auto simple_req_second = request{
+      pps::canonical_schema{
+        pps::subject{"simple-value"},
+        pps::canonical_schema_definition(
+          R"({
+"namespace": "com.redpanda",
+  "type": "record",
+  "name": "employee",
+  "fields": [
+    {
+      "name": "id",
+      "type": "string"
+    },
+    {
+      "name": "id2",
+      "type": "string",
+      "default": ""
+    }
+]
+  })",
+          pps::schema_type::avro)},
+      std::nullopt,
+      pps::schema_version{0}};
+    info("Connecting client");
+    auto client = make_schema_reg_client();
+    info("Post simple schema first (expect schema_id=1)");
+    auto res = post_schema(
+      client,
+      simple_req_first.schema.sub(),
+      ppj::rjson_serialize_str(simple_req_first));
+    BOOST_REQUIRE_EQUAL(res.body, R"({"id":1})");
+    BOOST_REQUIRE_EQUAL(
+      res.headers.at(boost::beast::http::field::content_type),
+      to_header_value(ppj::serialization_format::schema_registry_v1_json));
+
+    info("Post simple schema second (expect error)");
+    res = post_schema(
+      client,
+      simple_req_second.schema.sub(),
+      ppj::rjson_serialize_str(simple_req_second));
+    BOOST_REQUIRE_EQUAL(
+      res.headers.result(), boost::beast::http::status::internal_server_error);
+    BOOST_REQUIRE(std::string_view(res.body).starts_with(
+      R"({"error_code":500,"message":")"));
 }

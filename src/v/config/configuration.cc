@@ -489,7 +489,7 @@ configuration::configuration()
       "cannot change. When the total size of cached requests reaches the set "
       "limit, back pressure is applied to throttle producers.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      5_MiB,
+      0,
       {.min = 0, .max = 100_MiB})
   , enable_usage(
       *this,
@@ -1498,7 +1498,8 @@ configuration::configuration()
       std::vector<ss::sstring>{"GSSAPI", "OAUTHBEARER"},
       "sasl_mechanisms",
       "A list of supported SASL mechanisms. Accepted values: `SCRAM`, "
-      "`GSSAPI`, `OAUTHBEARER`, `PLAIN`.",
+      "`GSSAPI`, `OAUTHBEARER`, `PLAIN`.  Note that in order to enable PLAIN, "
+      "you must also enable SCRAM.",
       meta{
         .needs_restart = needs_restart::no,
         .visibility = visibility::user,
@@ -3799,6 +3800,15 @@ configuration::configuration()
       "the topic.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       true)
+  , iceberg_default_partition_spec(
+      *this,
+      "iceberg_default_partition_spec",
+      "Default value for the redpanda.iceberg.partition.spec topic property "
+      "that determines the partition spec for the Iceberg table corresponding "
+      "to the topic.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      "(hour(redpanda.timestamp))",
+      &validate_iceberg_partition_spec)
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

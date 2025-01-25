@@ -185,7 +185,7 @@ public:
     }
 
     ss::future<> upload_until_abort(archival::ntp_archiver& archiver) {
-        return archiver.upload_until_abort(true);
+        return archiver.upload_until_abort();
     }
 
     void broadcast_flush_condition_variable(archival::ntp_archiver& archiver) {

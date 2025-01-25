@@ -16,7 +16,7 @@ from rptest.services.kgo_verifier_services import KgoVerifierProducer
 from rptest.services.redpanda import RedpandaService
 from rptest.services.spark_service import SparkService
 from rptest.services.trino_service import TrinoService
-from rptest.tests.datalake.query_engine_base import QueryEngineType
+from rptest.tests.datalake.query_engine_base import QueryEngineBase, QueryEngineType
 from rptest.services.redpanda_connect import RedpandaConnectService
 from rptest.tests.datalake.query_engine_factory import get_query_engine_by_type
 
@@ -84,6 +84,13 @@ class DatalakeServices():
 
     def __exit__(self, *args, **kwargs):
         self.tearDown()
+
+    def query_engine(self, type: QueryEngineType) -> QueryEngineBase:
+        for e in self.query_engines:
+            assert isinstance(e, QueryEngineBase)
+            if e.engine_name() == type:
+                return e
+        raise Exception(f"Query engine {type} not found")
 
     def trino(self) -> TrinoService:
         trino = self.service(QueryEngineType.TRINO)
@@ -213,16 +220,23 @@ class DatalakeServices():
                              topic,
                              msg_count,
                              timeout=30,
-                             backoff_sec=5):
-        self.wait_for_iceberg_table("redpanda", topic, timeout, backoff_sec)
+                             backoff_sec=5,
+                             table_override=None):
+        table_name = topic
+        if table_override:
+            table_name = table_override
+
+        self.wait_for_iceberg_table("redpanda", table_name, timeout,
+                                    backoff_sec)
 
         def translation_done():
             counts = dict(
                 map(
                     lambda e:
-                    (e.engine_name(), e.count_table("redpanda", topic)),
+                    (e.engine_name(), e.count_table("redpanda", table_name)),
                     self.query_engines))
-            self.redpanda.logger.debug(f"Current counts: {counts}")
+            self.redpanda.logger.debug(
+                f"Current counts for {table_name}: {counts}")
             return all([c == msg_count for _, c in counts.items()])
 
         wait_until(

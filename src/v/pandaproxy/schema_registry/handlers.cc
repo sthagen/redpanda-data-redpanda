@@ -466,6 +466,17 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
     auto unparsed = co_await ppj::rjson_parse(
       std::move(rq.req), post_subject_versions_request_handler<>{sub});
 
+    // If presented with a non-positive integer for version, set it to
+    // invalid_schema_version so that the version number can be projected
+    if (unparsed.version.has_value() && unparsed.version.value() < 1) {
+        unparsed.version = invalid_schema_version;
+    }
+
+    // Upstream permits IDs of 0 on 'import'
+    if (unparsed.id.has_value() && unparsed.id.value() < 0) {
+        unparsed.id = invalid_schema_id;
+    }
+
     subject_schema schema{
       co_await rq.service().schema_store().make_canonical_schema(
         std::move(unparsed.def), norm),

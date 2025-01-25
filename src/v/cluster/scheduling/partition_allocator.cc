@@ -157,11 +157,10 @@ std::error_code partition_allocator::check_memory_limits(
     if (proposed_total_partitions > memory_limit) {
         vlog(
           clusterlog.warn,
-          "Refusing to create {} new partitions as total partition count "
-          "{} "
-          "would exceed memory limit of {} partitions. Cluster partition "
-          "memory: {} - "
-          "required memory per partition: {} - memory group aware: {}",
+          "Refusing to create {} new partition replicas as total partition "
+          "replica count {} would exceed memory limit of {} partition "
+          "replicas. Cluster partition memory: {} - "
+          "required memory per partition replica: {} - memory group aware: {}",
           new_partitions_replicas_requested,
           proposed_total_partitions,
           memory_limit,

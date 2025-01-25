@@ -230,17 +230,36 @@ translation_task::translate(
       .start_offset = write_result.start_offset,
       .last_offset = write_result.last_offset,
     };
-    auto upload_res = co_await upload_files(
-      *_cloud_io,
-      write_result.data_files,
-      is_custom_partitioning_enabled,
-      remote_path_prefix,
-      rcn,
-      lazy_as);
-    if (upload_res.has_error()) {
-        co_return upload_res.error();
+
+    // Data files.
+    {
+        auto upload_res = co_await upload_files(
+          *_cloud_io,
+          write_result.data_files,
+          is_custom_partitioning_enabled,
+          remote_path_prefix,
+          rcn,
+          lazy_as);
+        if (upload_res.has_error()) {
+            co_return upload_res.error();
+        }
+        ret.files = std::move(upload_res.value());
     }
-    ret.files = std::move(upload_res.value());
+
+    // DLQ files.
+    {
+        auto dlq_upload_res = co_await upload_files(
+          *_cloud_io,
+          write_result.dlq_files,
+          is_custom_partitioning_enabled,
+          remote_path_prefix,
+          rcn,
+          lazy_as);
+        if (dlq_upload_res.has_error()) {
+            co_return dlq_upload_res.error();
+        }
+        ret.dlq_files = std::move(dlq_upload_res.value());
+    }
 
     co_return ret;
 }

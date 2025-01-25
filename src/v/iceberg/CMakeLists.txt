@@ -25,6 +25,17 @@ foreach (schema ${schemas})
 endforeach()
 
 v_cc_library(
+  NAME iceberg_unresolved_partition_spec
+  SRCS
+    transform.cc
+    unresolved_partition_spec.cc
+  DEPS
+    Seastar::seastar
+    v::base
+    v::container
+)
+
+v_cc_library(
   NAME iceberg
   SRCS
     ${avro_hdrs}
@@ -67,7 +78,6 @@ v_cc_library(
     time_transform_visitor.cc
     table_identifier.cc
     transaction.cc
-    transform.cc
     transform_json.cc
     transform_utils.cc
     update_schema_action.cc
@@ -86,6 +96,7 @@ v_cc_library(
     v::bytes
     v::cloud_io
     v::container
+    v::iceberg_unresolved_partition_spec
     v::json
     v::strings
     v::utils

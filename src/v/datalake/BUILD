@@ -201,6 +201,22 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "partition_spec_parser",
+    srcs = [
+        "partition_spec_parser.cc",
+    ],
+    hdrs = [
+        "partition_spec_parser.h",
+    ],
+    include_prefix = "datalake",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/iceberg:unresolved_partition_spec",
+    ],
+)
+
+redpanda_cc_library(
     name = "translation_task",
     srcs = [
         "translation_task.cc",

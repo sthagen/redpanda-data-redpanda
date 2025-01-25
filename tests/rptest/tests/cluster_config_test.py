@@ -606,6 +606,10 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         # Don't modify oidc_principal mapping, the value is complex and tested elsewhere.
         exclude_settings.add('oidc_principal_mapping')
 
+        # Don't modify iceberg_default_partition_spec, it has its own syntax
+        # and is tested elsewhere.
+        exclude_settings.add('iceberg_default_partition_spec')
+
         # List of settings that must be odd
         odd_settings = [
             'default_topic_replications', 'minimum_topic_replications'

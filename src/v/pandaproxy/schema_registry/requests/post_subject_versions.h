@@ -135,36 +135,13 @@ public:
         return false;
     }
 
-    bool Uint(int i) {
-        switch (_state) {
-        case state::id: {
-            result.id = schema_id{i};
-            _state = state::record;
-            return true;
-        }
-        case state::version: {
-            result.version = schema_version{i};
-            _state = state::record;
-            return true;
-        }
-        case state::reference_version: {
-            _schema.refs.back().version = schema_version{i};
-            _state = state::reference;
-            return true;
-        }
-        case state::empty:
-        case state::record:
-        case state::schema:
-        case state::metadata:
-        case state::ruleset:
-        case state::schema_type:
-        case state::references:
-        case state::reference:
-        case state::reference_name:
-        case state::reference_subject:
+    bool Int(int i) { return set_integer_value(i); }
+
+    bool Uint(unsigned i) {
+        if (i > std::numeric_limits<int>::max()) {
             return false;
         }
-        return false;
+        return set_integer_value(static_cast<int>(i));
     }
 
     bool String(const Ch* str, ::json::SizeType len, bool) {
@@ -272,6 +249,39 @@ public:
 
     bool EndArray(::json::SizeType) {
         return std::exchange(_state, state::record) == state::references;
+    }
+
+private:
+    bool set_integer_value(int i) {
+        switch (_state) {
+        case state::id: {
+            result.id = schema_id{i};
+            _state = state::record;
+            return true;
+        }
+        case state::version: {
+            result.version = schema_version{i};
+            _state = state::record;
+            return true;
+        }
+        case state::reference_version: {
+            _schema.refs.back().version = schema_version{i};
+            _state = state::reference;
+            return true;
+        }
+        case state::empty:
+        case state::record:
+        case state::schema:
+        case state::metadata:
+        case state::ruleset:
+        case state::schema_type:
+        case state::references:
+        case state::reference:
+        case state::reference_name:
+        case state::reference_subject:
+            return false;
+        }
+        return false;
     }
 };
 

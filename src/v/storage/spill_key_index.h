@@ -97,7 +97,7 @@ private:
         return debug::AllocatedByteSize(_midx);
     }
 
-    size_t entry_mem_usage(const bytes& k) const {
+    static size_t entry_mem_usage(const bytes& k) {
         // One entry in a node hash map: key and value
         // are allocated together, and the key is a basic_sstring with
         // internal buffer that may be spilled if key was longer.
@@ -119,7 +119,27 @@ private:
     ss::future<> open();
     ss::future<> drain_all_keys();
     ss::future<> add_key(compaction_key, value_type);
+    // called during add_key if the index should have keys spilled into the
+    // backing file in order to free up capacity for new keys. see function for
+    // details on the exact spill policy.
+    ss::future<> spill_some(size_t entry_size, size_t min_index_size);
     ss::future<> spill(compacted_index::entry_type, bytes_view, value_type);
+
+    // a buffer to collect multiple spilled keys
+    struct spill_payload {
+        iobuf data;
+        uint32_t keys{0};
+    };
+
+    // append a spilled key into the payload buffer
+    static void append_to_spill_payload(
+      spill_payload& payload,
+      compacted_index::entry_type type,
+      bytes_view b,
+      value_type v);
+
+    // append all the keys added to the given payload
+    ss::future<> spill(spill_payload);
 
     std::optional<ntp_sanitizer_config> _sanitizer_config;
     storage_resources& _resources;
@@ -127,6 +147,7 @@ private:
     bool _truncate;
     std::optional<segment_appender> _appender;
     underlying_t _midx;
+    bytes _last_key_indexed;
 
     // Max memory we'll use for _midx, although we may spill earlier
     // if hinted to by storage_resources

@@ -283,6 +283,9 @@ ss::future<> append_entries_queue::do_dispatch(
   request_entry entry, ssx::semaphore_units inflight_units) {
     auto sent_ts = clock_type::now();
     _last_sent_timestamp = sent_ts;
+    // update timeout not to account for the time in a queue
+    entry.opts.timeout = rpc::timeout_spec::from_now(
+      entry.opts.timeout.timeout_period);
     return _base_protocol
       .append_entries(
         _target_node, std::move(entry.request), std::move(entry.opts))

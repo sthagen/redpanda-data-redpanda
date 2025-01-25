@@ -210,6 +210,20 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "partition_spec_parser_test",
+    timeout = "short",
+    srcs = [
+        "partition_spec_parser_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/datalake:partition_spec_parser",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "partitioning_writer_test",
     timeout = "short",
     srcs = [

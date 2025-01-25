@@ -655,6 +655,7 @@ struct instance_generator<cluster::topic_properties> {
           std::nullopt,
           false,
           tristate<std::chrono::milliseconds>{disable_tristate},
+          std::nullopt,
           std::nullopt};
     }
 

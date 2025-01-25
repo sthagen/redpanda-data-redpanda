@@ -258,6 +258,19 @@ record_multiplexer::end_of_stream() {
         std::move(
           files.begin(), files.end(), std::back_inserter(_result->data_files));
     }
+    if (_invalid_record_writer) {
+        auto writer = std::move(_invalid_record_writer);
+        auto res = co_await std::move(*writer).finish();
+        if (res.has_error()) {
+            _error = res.error();
+        } else {
+            auto& files = res.value();
+            std::move(
+              files.begin(),
+              files.end(),
+              std::back_inserter(_result->dlq_files));
+        }
+    }
     if (_error) {
         co_return *_error;
     }
@@ -267,13 +280,13 @@ record_multiplexer::end_of_stream() {
 ss::future<result<std::nullopt_t, writer_error>>
 record_multiplexer::handle_invalid_record(
   kafka::offset offset,
-  std::optional<iobuf>,
-  std::optional<iobuf>,
-  model::timestamp,
-  chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>) {
-    vlog(_log.debug, "Dropping invalid record at offset {}", offset);
+  std::optional<iobuf> key,
+  std::optional<iobuf> val,
+  model::timestamp ts,
+  chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>
+    headers) {
+    vlog(_log.debug, "Writing to DLQ invalid record at offset {}", offset);
     // TODO: add a metric!
-    // TODO: dead-letter table?
 
     if (!_invalid_record_writer) {
         auto ensure_res = co_await _table_creator.ensure_dlq_table(
@@ -295,7 +308,75 @@ record_multiplexer::handle_invalid_record(
             }
         }
 
-        _invalid_record_writer = true;
+        auto table_id = table_id_provider::dlq_table_id(_ntp.tp.topic);
+        auto load_res = co_await _schema_mgr.get_table_info(table_id);
+        if (load_res.has_error()) {
+            auto e = load_res.error();
+            switch (e) {
+            case schema_manager::errc::not_supported:
+            case schema_manager::errc::failed:
+                vlog(
+                  _log.warn,
+                  "Error getting table info for record {}: {}",
+                  offset,
+                  load_res.error());
+                [[fallthrough]];
+            case schema_manager::errc::shutting_down:
+                co_return writer_error::parquet_conversion_error;
+            }
+        }
+
+        _invalid_record_writer = std::make_unique<partitioning_writer>(
+          *_writer_factory,
+          load_res.value().schema.schema_id,
+          key_value_translator{}.build_type(std::nullopt).type,
+          std::move(load_res.value().partition_spec));
+    }
+
+    int64_t estimated_size = (key ? key->size_bytes() : 0)
+                             + (val ? val->size_bytes() : 0);
+
+    auto invalid_record_type_resolver = binary_type_resolver{};
+    auto resolved_buf_type
+      = co_await invalid_record_type_resolver.resolve_buf_type(std::move(val));
+
+    auto record_data_res = co_await key_value_translator{}.translate_data(
+      _ntp.tp.partition,
+      offset,
+      std::move(key),
+      resolved_buf_type.value().type,
+      std::move(resolved_buf_type.value().parsable_buf),
+      ts,
+      headers);
+    if (record_data_res.has_error()) {
+        vlog(
+          _log.debug,
+          "Error translating DLQ data for record {}: {}",
+          offset,
+          record_data_res.error());
+        co_return writer_error::parquet_conversion_error;
+    }
+
+    if (!_result.has_value()) {
+        _result = write_result{
+          .start_offset = offset,
+        };
+    }
+
+    _result.value().last_offset = offset;
+
+    auto add_data_err = co_await _invalid_record_writer->add_data(
+      std::move(record_data_res.value()), estimated_size);
+
+    if (add_data_err != writer_error::ok) {
+        vlog(
+          _log.warn,
+          "Error adding data to DLQ writer for record {}: {}",
+          offset,
+          add_data_err);
+        // If a write fails, the writer is left in an indeterminate state,
+        // we cannot continue in this case.
+        co_return add_data_err;
     }
 
     co_return std::nullopt;

@@ -1101,6 +1101,9 @@ topic_properties topic_table::update_topic_properties(
       updated_properties.delete_retention_ms, overrides.delete_retention_ms);
     incremental_update(
       updated_properties.iceberg_delete, overrides.iceberg_delete);
+    incremental_update(
+      updated_properties.iceberg_partition_spec,
+      overrides.iceberg_partition_spec);
     return updated_properties;
 }
 

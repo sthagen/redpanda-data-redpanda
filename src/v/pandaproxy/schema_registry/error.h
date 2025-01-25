@@ -38,6 +38,7 @@ enum class error_code {
     topic_parse_error,
     compatibility_level_invalid,
     mode_invalid,
+    version_exhausted,
 };
 
 std::error_code make_error_code(error_code);

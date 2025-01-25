@@ -90,3 +90,16 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "timeout_clock",
+    hdrs = [
+        "timeout_clock.h",
+    ],
+    include_prefix = "model",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "@seastar",
+    ],
+)

@@ -513,6 +513,7 @@ redpanda_cc_library(
     deps = [
         ":datatypes",
         ":transform",
+        ":unresolved_partition_spec",
         "//src/v/container:fragmented_vector",
         "//src/v/utils:named_type",
         "@seastar",
@@ -1033,6 +1034,23 @@ redpanda_cc_library(
         ":time_transform_visitor",
         ":transform",
         ":values",
+    ],
+)
+
+redpanda_cc_library(
+    name = "unresolved_partition_spec",
+    srcs = [
+        "unresolved_partition_spec.cc",
+    ],
+    hdrs = [
+        "unresolved_partition_spec.h",
+    ],
+    include_prefix = "iceberg",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":transform",
+        "//src/v/container:fragmented_vector",
+        "@seastar",
     ],
 )
 

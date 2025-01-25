@@ -55,4 +55,7 @@ validate_api_endpoint(const std::optional<ss::sstring>& os);
 std::optional<ss::sstring> validate_tombstone_retention_ms(
   const std::optional<std::chrono::milliseconds>& ms);
 
+std::optional<ss::sstring>
+validate_iceberg_partition_spec(const ss::sstring& spec);
+
 }; // namespace config

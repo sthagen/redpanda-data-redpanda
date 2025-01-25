@@ -272,6 +272,9 @@ to_cluster_type(const creatable_topic& t) {
     cfg.properties.iceberg_delete = get_bool_value(
       config_entries, topic_property_iceberg_delete);
 
+    cfg.properties.iceberg_partition_spec = get_string_value(
+      config_entries, topic_property_iceberg_partition_spec);
+
     schema_id_validation_config_parser schema_id_validation_config_parser{
       cfg.properties};
 

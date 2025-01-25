@@ -390,7 +390,7 @@ partition_translator::checkpoint_translated_data(
   retry_chain_node& rcn,
   kafka::offset reader_begin_offset,
   coordinator::translated_offset_range translated_range) {
-    if (translated_range.files.empty()) {
+    if (translated_range.files.empty() && translated_range.dlq_files.empty()) {
         co_return checkpoint_result::yes;
     }
     if (reader_begin_offset != translated_range.start_offset) {

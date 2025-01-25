@@ -15,6 +15,7 @@
 #include "container/fragmented_vector.h"
 #include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
+#include "pandaproxy/logger.h"
 #include "pandaproxy/schema_registry/errors.h"
 #include "pandaproxy/schema_registry/types.h"
 
@@ -388,6 +389,11 @@ public:
             } else {
                 maxver = std::max(maxver, v.version);
             }
+        }
+
+        // Once we have hit the maximum version number, we can't continue on
+        if (maxver == std::numeric_limits<schema_version::type>::max()) {
+            throw as_exception(versions_exhausted(sub));
         }
 
         return maxver + 1;

@@ -11,6 +11,7 @@
 
 #pragma once
 #include "config/configuration.h"
+#include "datalake/partition_spec_parser.h"
 #include "kafka/protocol/schemata/create_topics_request.h"
 #include "kafka/protocol/schemata/create_topics_response.h"
 #include "kafka/server/handlers/topics/types.h"
@@ -276,22 +277,37 @@ struct iceberg_config_validator {
     static constexpr error_code ec = error_code::invalid_config;
 
     static bool is_valid(const creatable_topic& c) {
-        auto it = std::find_if(
+        model::iceberg_mode parsed_mode = model::iceberg_mode::disabled;
+
+        auto mode_it = std::find_if(
           c.configs.begin(),
           c.configs.end(),
           [](const createable_topic_config& cfg) {
               return cfg.name == topic_property_iceberg_mode;
           });
-        if (it == c.configs.end() || !it->value.has_value()) {
-            return true;
+        if (mode_it != c.configs.end() && mode_it->value.has_value()) {
+            try {
+                parsed_mode = boost::lexical_cast<model::iceberg_mode>(
+                  mode_it->value.value());
+            } catch (...) {
+                return false;
+            }
         }
-        model::iceberg_mode parsed_mode;
-        try {
-            parsed_mode = boost::lexical_cast<model::iceberg_mode>(
-              it->value.value());
-        } catch (...) {
-            return false;
+
+        auto pspec_it = std::find_if(
+          c.configs.begin(),
+          c.configs.end(),
+          [](const createable_topic_config& cfg) {
+              return cfg.name == topic_property_iceberg_partition_spec;
+          });
+        if (pspec_it != c.configs.end() && pspec_it->value.has_value()) {
+            auto parsed = datalake::parse_partition_spec(
+              pspec_it->value.value());
+            if (!parsed.has_value()) {
+                return false;
+            }
         }
+
         // If iceberg is enabled at the cluster level, the topic can
         // be created with any override. If it is disabled
         // at the cluster level, it cannot be enabled with a topic

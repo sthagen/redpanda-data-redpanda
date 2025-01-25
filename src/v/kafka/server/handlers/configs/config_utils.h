@@ -17,6 +17,7 @@
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "container/fragmented_vector.h"
+#include "datalake/partition_spec_parser.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fwd.h"
 #include "kafka/server/handlers/topics/types.h"
@@ -499,6 +500,20 @@ struct delete_retention_ms_validator {
                   "[1, {}]",
                   serde::max_serializable_ms);
             }
+        }
+        return std::nullopt;
+    }
+};
+
+struct iceberg_partition_spec_validator {
+    std::optional<ss::sstring>
+    operator()(const ss::sstring& /*raw*/, const ss::sstring& value) {
+        auto parsed = datalake::parse_partition_spec(value);
+        if (parsed.has_error()) {
+            return fmt::format(
+              "couldn't parse iceberg partition spec `{}': {}",
+              value,
+              parsed.error());
         }
         return std::nullopt;
     }
