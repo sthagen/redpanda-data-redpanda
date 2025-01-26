@@ -4,6 +4,7 @@
 #include "datalake/logger.h"
 #include "datalake/schema_parquet.h"
 #include "datalake/values_parquet.h"
+#include "version/version.h"
 
 namespace datalake {
 
@@ -37,7 +38,12 @@ ss::future<writer_error> serde_parquet_writer::finish() {
 ss::future<std::unique_ptr<parquet_ostream>>
 serde_parquet_writer_factory::create_writer(
   const iceberg::struct_type& schema, ss::output_stream<char> out) {
-    serde::parquet::writer::options opts{.schema = schema_to_parquet(schema)};
+    serde::parquet::writer::options opts{
+      .schema = schema_to_parquet(schema),
+      .version = ss::sstring(redpanda_git_version()),
+      .build = ss::sstring(redpanda_git_revision()),
+      .compress = true,
+    };
     serde::parquet::writer writer(std::move(opts), std::move(out));
     co_await writer.init();
     co_return std::make_unique<serde_parquet_writer>(std::move(writer));
