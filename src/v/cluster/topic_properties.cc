@@ -42,8 +42,9 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       "remote_label: {}, iceberg_mode: {}, "
       "leaders_preference: {}, "
       "delete_retention_ms: {}, "
-      "iceberg_delete: {}, ",
-      "iceberg_partition_spec: {}",
+      "iceberg_delete: {}, "
+      "iceberg_partition_spec: {}, "
+      "iceberg_invalid_record_action: {}",
       properties.compression,
       properties.cleanup_policy_bitflags,
       properties.compaction_strategy,
@@ -81,7 +82,8 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       properties.leaders_preference,
       properties.delete_retention_ms,
       properties.iceberg_delete,
-      properties.iceberg_partition_spec);
+      properties.iceberg_partition_spec,
+      properties.iceberg_invalid_record_action);
 
     if (config::shard_local_cfg().development_enable_cloud_topics()) {
         fmt::print(
@@ -127,7 +129,8 @@ bool topic_properties::has_overrides() const {
         || flush_bytes.has_value() || remote_label.has_value()
         || (iceberg_mode != storage::ntp_config::default_iceberg_mode)
         || leaders_preference.has_value() || delete_retention_ms.is_engaged()
-        || iceberg_delete.has_value() || iceberg_partition_spec.has_value();
+        || iceberg_delete.has_value() || iceberg_partition_spec.has_value()
+        || iceberg_invalid_record_action.has_value();
 
     if (config::shard_local_cfg().development_enable_cloud_topics()) {
         return overrides
@@ -262,6 +265,7 @@ adl<cluster::topic_properties>::from(iobuf_parser& parser) {
       std::nullopt,
       false,
       tristate<std::chrono::milliseconds>{disable_tristate},
+      std::nullopt,
       std::nullopt,
       std::nullopt,
     };

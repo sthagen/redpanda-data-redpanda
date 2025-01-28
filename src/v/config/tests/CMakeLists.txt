@@ -32,3 +32,13 @@ rp_test(
     v::config
     v::gtest_main
 )
+
+rp_test(
+  UNIT_TEST
+  GTEST
+  BINARY_NAME test_configuration_gtest
+  SOURCES  configuration_test.cc
+  LIBRARIES
+    v::config
+    v::gtest_main
+)

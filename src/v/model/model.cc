@@ -608,6 +608,30 @@ std::istream& operator>>(std::istream& is, iceberg_mode& mode) {
     return is;
 }
 
+std::ostream&
+operator<<(std::ostream& os, const iceberg_invalid_record_action& a) {
+    switch (a) {
+    case iceberg_invalid_record_action::drop:
+        return os << "drop";
+    case iceberg_invalid_record_action::dlq_table:
+        return os << "dlq_table";
+    }
+}
+
+std::istream& operator>>(std::istream& is, iceberg_invalid_record_action& a) {
+    using enum iceberg_invalid_record_action;
+    ss::sstring s;
+    is >> s;
+    try {
+        a = string_switch<iceberg_invalid_record_action>(s)
+              .match("drop", drop)
+              .match("dlq_table", dlq_table);
+    } catch (const std::runtime_error&) {
+        is.setstate(std::ios::failbit);
+    }
+    return is;
+}
+
 std::ostream& operator<<(std::ostream& os, const fips_mode_flag& f) {
     return os << to_string_view(f);
 }

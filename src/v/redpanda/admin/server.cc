@@ -3262,6 +3262,17 @@ admin_server::cancel_all_partitions_reconfigs_handler(
       co_await map_partition_results(std::move(res.value())));
 }
 
+ss::future<ss::json::json_return_type>
+admin_server::get_metrics_uuid(std::unique_ptr<ss::http::request>) {
+    vlog(adminlog.debug, "Requested metrics UUID");
+    ss::httpd::cluster_json::metrics_uuid ret;
+    ret.uuid = co_await _controller->get_controller_stm().invoke_on(
+      0, ([](cluster::controller_stm& s) {
+          return s.get_metrics_reporter_cluster_info().uuid;
+      }));
+    co_return ss::json::json_return_type(std::move(ret));
+}
+
 static json::validator make_post_cluster_partitions_validator() {
     const std::string schema = R"(
 {
@@ -3692,6 +3703,12 @@ void admin_server::register_cluster_routes() {
               return ss::json::json_return_type(std::move(ret));
           }
           return ss::json::json_return_type(ss::json::json_void());
+      });
+
+    register_route<publik>(
+      ss::httpd::cluster_json::get_metrics_uuid,
+      [this](std::unique_ptr<ss::http::request> req) {
+          return get_metrics_uuid(std::move(req));
       });
 
     register_cluster_partitions_routes();

@@ -18,6 +18,8 @@
 #include "serde/rw/envelope.h"
 #include "serde/rw/sstring.h"
 
+#include <ostream>
+
 namespace crash_tracker {
 
 enum class crash_type {
@@ -26,6 +28,38 @@ enum class crash_type {
     segfault,
     abort,
     illegal_instruction
+};
+
+/// reserved_string is a simple wrapper around ss::sstring that allows
+/// pre-allocating a string of a certain size with trailing '\0's and allows
+/// safer access to the populated part of the string.
+struct reserved_string
+  : serde::
+      envelope<reserved_string, serde::version<0>, serde::compat_version<0>> {
+    reserved_string() = default;
+    // NOLINTNEXTLINE(hicpp-explicit-conversions)
+    reserved_string(ss::sstring other) noexcept
+      : _str(std::move(other)) {};
+
+    explicit reserved_string(size_t n)
+      : _str(n, '\0') {}
+
+    char* begin() { return _str.begin(); }
+    const char* c_str() const noexcept { return _str.c_str(); }
+
+    /// The length of the populated, non-'\0' prefix of the string.
+    size_t length() const noexcept { return strlen(_str.c_str()); }
+
+    /// The full capacity of the string, including the all-'\0' suffix.
+    size_t capacity() const noexcept { return _str.size(); }
+
+    void serde_write(iobuf& out) { serde::write(out, std::move(_str)); }
+    void serde_read(iobuf_parser& in, const serde::header& h) {
+        _str = serde::read_nested<ss::sstring>(in, h._bytes_left_limit);
+    }
+
+private:
+    ss::sstring _str;
 };
 
 struct crash_description
@@ -41,25 +75,27 @@ struct crash_description
 
     crash_type type{};
     model::timestamp crash_time;
-    ss::sstring crash_message;
-    ss::sstring stacktrace;
+    reserved_string crash_message;
+    reserved_string stacktrace;
 
     /// Extension to the crash_message. It can be used to add further
     /// information about the crash that is useful for debugging but is too
     /// verbose for telemetry.
     /// Eg. top-N allocations
-    ss::sstring addition_info;
+    reserved_string addition_info;
 
     crash_description()
       : crash_time{}
-      , crash_message(string_buffer_reserve, '\0')
-      , stacktrace(string_buffer_reserve, '\0')
-      , addition_info(string_buffer_reserve, '\0') {}
+      , crash_message(string_buffer_reserve)
+      , stacktrace(string_buffer_reserve)
+      , addition_info(string_buffer_reserve) {}
 
     auto serde_fields() {
         return std::tie(
           type, crash_time, crash_message, stacktrace, addition_info);
     }
+
+    friend std::ostream& operator<<(std::ostream&, const crash_description&);
 };
 
 struct crash_tracker_metadata

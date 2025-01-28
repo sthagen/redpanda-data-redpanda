@@ -97,6 +97,7 @@ v_cc_library(
     topic_configuration.cc
     topic_properties.cc
   DEPS
+    v::config
     v::model
     v::reflection
     v::serde

@@ -74,3 +74,22 @@ class UUIDFormatTest(RedpandaTest):
         # try to decode cluster_uuid and compare the result to the input, since UUID ignores {}-
         assert str(uuid.UUID(cluster_uuid)) == cluster_uuid.lower(), \
                 f"get_cluster_uuid response '{cluster_uuid}' is not formatted properly"
+
+    @cluster(num_nodes=1)
+    def test_metrics_uuid_format(self):
+        """
+        test that GET get_metrics_uuid returns a correctly formatted uuid
+        """
+        admin = Admin(self.redpanda)
+        admin.await_stable_leader(
+            topic="controller",
+            partition=0,
+            namespace="redpanda",
+            hosts=[n.account.hostname for n in self.redpanda._started],
+            timeout_s=30,
+            backoff_s=1)
+        metrics_uuid = admin.get_metrics_uuid()
+        assert metrics_uuid is not None, "expected metrics uuid from cluster"
+        self.logger.debug(f'metrics_uuid: {metrics_uuid}')
+        assert str(uuid.UUID(metrics_uuid)) == metrics_uuid.lower(), \
+                f"get_metrics_uuid response '{metrics_uuid}' is not formatted properly"

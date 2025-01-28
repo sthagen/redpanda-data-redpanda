@@ -19,6 +19,7 @@
 #include "http/client.h"
 #include "model/metadata.h"
 #include "security/fwd.h"
+#include "storage/fwd.h"
 #include "utils/prefix_logger.h"
 #include "utils/unresolved_address.h"
 
@@ -66,6 +67,7 @@ public:
         static constexpr int16_t version = 1;
 
         ss::sstring cluster_uuid;
+        ss::sstring storage_uuid;
         uint64_t cluster_creation_epoch{0};
         uint32_t topic_count{0};
         uint32_t partition_count{0};
@@ -108,6 +110,7 @@ public:
       ss::sharded<security::role_store>& role_store,
       ss::sharded<plugin_table>*,
       ss::sharded<feature_manager>*,
+      ss::sharded<storage::api>*,
       ss::sharded<ss::abort_source>&);
 
     ss::future<> start();
@@ -134,6 +137,7 @@ private:
     ss::sharded<security::role_store>& _role_store;
     ss::sharded<plugin_table>* _plugin_table;
     ss::sharded<feature_manager>* _feature_manager;
+    ss::sharded<storage::api>* _storage;
     ss::sharded<ss::abort_source>& _as;
     prefix_logger _logger;
     ss::timer<> _tick_timer;

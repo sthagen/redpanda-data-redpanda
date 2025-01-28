@@ -1451,6 +1451,33 @@ class Admin:
         if len(r.text) > 0:
             return r.json()["cluster_uuid"]
 
+    def get_metrics_uuid(self, node=None) -> str | None:
+        """
+        Returns the concents of the `/v1/cluster/metrics_uuid` endpoint.
+
+        Parameters
+        ----------
+        node: ClusterNode
+            The node to query the endpoint on. If None, a random node will be
+            chosen.
+
+        Returns
+        -------
+        str
+            The Metrics UUID
+
+        None
+            If the endpoint returns a 404 status code.
+        """
+        try:
+            r = self._request("GET", "cluster/metrics_uuid", node=node)
+        except HTTPError as ex:
+            if ex.response.status_code == 404:
+                return None
+            raise
+        if len(r.text) > 0:
+            return r.json()["uuid"]
+
     def initiate_topic_scan_and_recovery(self,
                                          payload: Optional[dict] = None,
                                          force_acquire_lock: bool = False,

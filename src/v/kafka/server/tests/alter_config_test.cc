@@ -1375,6 +1375,46 @@ FIXTURE_TEST(test_iceberg_property, alter_config_test_fixture) {
     }
 }
 
+FIXTURE_TEST(test_describe_iceberg_properties, alter_config_test_fixture) {
+    std::vector<ss::sstring> iceberg_properties = {
+      "redpanda.iceberg.delete",
+      "redpanda.iceberg.partition.spec",
+      "redpanda.iceberg.invalid.record.action"};
+
+    {
+        model::topic test_tp{"topic-1"};
+        create_topic(test_tp, 1);
+        auto all_describe_resp = describe_configs(test_tp);
+        // Iceberg mode is present.
+        assert_property_presented(
+          test_tp, "redpanda.iceberg.mode", all_describe_resp, true);
+        // Everything else is not present because iceberg is disabled.
+        for (const auto& property : iceberg_properties) {
+            assert_property_presented(
+              test_tp, property, all_describe_resp, false);
+        }
+    }
+
+    {
+        scoped_config config;
+        config.get("iceberg_enabled").set_value(true);
+        model::topic test_tp{"topic-2"};
+        BOOST_REQUIRE(
+          !create_topic(test_tp, {{"redpanda.iceberg.mode", "key_value"}})
+             .data.errored());
+        auto all_describe_resp = describe_configs(test_tp);
+        // Iceberg mode is present.
+        assert_property_presented(
+          test_tp, "redpanda.iceberg.mode", all_describe_resp, true);
+        // Additional iceberg properties are present because iceberg is enabled
+        // for this topic.
+        for (const auto& property : iceberg_properties) {
+            assert_property_presented(
+              test_tp, property, all_describe_resp, true);
+        }
+    }
+}
+
 FIXTURE_TEST(test_shadow_indexing_alter_configs, alter_config_test_fixture) {
     model::topic test_tp{"topic-1"};
     create_topic(test_tp, 6);

@@ -1208,11 +1208,13 @@ ss::future<> disk_log_impl::do_compact(
         std::rethrow_exception(eptr);
     }
     bool compacted = did_compact_fut.get();
-    if (!compacted) {
-        // If sliding window compaction did not occur, we fall back to adjacent
-        // segment compaction.
-        co_await compact_adjacent_segments(compact_cfg);
-    }
+    vlog(
+      gclog.debug,
+      "Sliding compaction of {} did {}compact data, proceeding to adjacent "
+      "segment compaction",
+      config().ntp(),
+      compacted ? "" : "not ");
+    co_await compact_adjacent_segments(compact_cfg);
 }
 
 ss::future<bool> disk_log_impl::chunked_sliding_window_compact(

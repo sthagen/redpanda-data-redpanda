@@ -674,4 +674,17 @@ struct convert<config::datalake_catalog_type> {
     }
 };
 
+template<>
+struct convert<model::iceberg_invalid_record_action> {
+    using type = model::iceberg_invalid_record_action;
+
+    static Node encode(const type& rhs) { return Node(fmt::format("{}", rhs)); }
+
+    static bool decode(const Node& node, type& rhs) {
+        auto value = node.as<std::string>();
+        rhs = boost::lexical_cast<type>(value);
+        return true;
+    }
+};
+
 } // namespace YAML

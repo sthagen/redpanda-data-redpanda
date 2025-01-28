@@ -17,6 +17,7 @@
 #include "kafka/server/handlers/configs/config_utils.h"
 #include "model/compression.h"
 #include "model/fundamental.h"
+#include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/timestamp.h"
 #include "pandaproxy/schema_registry/subject_name_strategy.h"
@@ -274,6 +275,10 @@ to_cluster_type(const creatable_topic& t) {
 
     cfg.properties.iceberg_partition_spec = get_string_value(
       config_entries, topic_property_iceberg_partition_spec);
+
+    cfg.properties.iceberg_invalid_record_action
+      = get_enum_value<model::iceberg_invalid_record_action>(
+        config_entries, topic_property_iceberg_invalid_record_action);
 
     schema_id_validation_config_parser schema_id_validation_config_parser{
       cfg.properties};

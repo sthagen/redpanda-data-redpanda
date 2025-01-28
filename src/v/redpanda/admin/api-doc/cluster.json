@@ -68,6 +68,29 @@
             ]
         },
         {
+            "path": "/v1/cluster/metrics_uuid",
+            "operations": [
+                {
+                    "method": "GET",
+                    "summary": "Get the UUID used by the metrics reporting system that identifies this cluster",
+                    "type": "get_metrics_uuid",
+                    "nickname": "get_metrics_uuid",
+                    "produces": [
+                        "application/json"
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "OK",
+                            "schema": {
+                                "$ref": "#/models/metrics_uuid"
+                            }
+                        }
+                    },
+                    "parameters": []
+                }
+            ]
+        },
+        {
             "path": "/v1/cluster/partitions",
             "operations": [
                 {
@@ -315,6 +338,14 @@
             "id": "uuid",
             "properties": {
                 "cluster_uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "metrics_uuid": {
+            "id": "metrics_uuid",
+            "properties": {
+                "uuid": {
                     "type": "string"
                 }
             }

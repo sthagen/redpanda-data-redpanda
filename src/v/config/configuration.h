@@ -721,6 +721,8 @@ struct configuration final : public config_store {
 
     property<bool> iceberg_delete;
     property<ss::sstring> iceberg_default_partition_spec;
+    enum_property<model::iceberg_invalid_record_action>
+      iceberg_invalid_record_action;
 
     configuration();
 

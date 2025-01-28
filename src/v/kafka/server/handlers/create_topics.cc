@@ -77,7 +77,8 @@ bool is_supported(std::string_view name) {
        topic_property_leaders_preference,
        topic_property_delete_retention_ms,
        topic_property_iceberg_delete,
-       topic_property_iceberg_partition_spec});
+       topic_property_iceberg_partition_spec,
+       topic_property_iceberg_invalid_record_action});
 
     if (std::any_of(
           supported_configs.begin(),
@@ -119,6 +120,7 @@ using validators = make_validator_types<
   vcluster_id_validator,
   write_caching_configs_validator,
   iceberg_config_validator,
+  iceberg_invalid_record_action_validator,
   cloud_topic_config_validator,
   delete_retention_ms_validator>;
 

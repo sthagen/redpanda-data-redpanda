@@ -207,13 +207,13 @@ filegroup(
     http_archive(
         name = "x86_64_sysroot",
         build_file_content = sysroot_build_file,
-        sha256 = "b7544f6931531eababde47d8723362bc9b3c9de8ef7d9a5d1d62d2e614904d5b",
-        urls = ["http://redpanda-core-toolchain.s3-website-us-east-1.amazonaws.com/sysroot-ubuntu-22.04-x86_64-2025-01-03.tar.gz"],
+        sha256 = "7639199d529a2aee4b0007a2c55f6178235e732782ca47795a3022342e7ad985",
+        urls = ["http://redpanda-core-toolchain.s3-website-us-east-1.amazonaws.com/sysroot-ubuntu-22.04-x86_64-2025-01-26.tar.gz"],
     )
 
     http_archive(
         name = "aarch64_sysroot",
         build_file_content = sysroot_build_file,
-        sha256 = "a2d8c3ce82c70f884281db846e756f5877f2c77964cbfb1ba6b954e1f759e2ed",
-        urls = ["http://redpanda-core-toolchain.s3-website-us-east-1.amazonaws.com/sysroot-ubuntu-22.04-aarch64-2025-01-03.tar.gz"],
+        sha256 = "536cc7a4e0eb41418239da62f7f8d7205f1006fa5670f4ab8fab4a8db86de087",
+        urls = ["http://redpanda-core-toolchain.s3-website-us-east-1.amazonaws.com/sysroot-ubuntu-22.04-aarch64-2025-01-26.tar.gz"],
     )

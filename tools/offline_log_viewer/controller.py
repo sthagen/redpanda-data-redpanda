@@ -146,7 +146,10 @@ def read_topic_properties_serde(rdr: Reader, version):
         }
     if version >= 11:
         topic_properties |= {
-            'iceberg_partition_spec': rdr.read_optional(Reader.read_string),
+            'iceberg_partition_spec':
+            rdr.read_optional(Reader.read_string),
+            'iceberg_invalid_record_action':
+            rdr.read_optional(Reader.read_serde_enum),
         }
 
     return topic_properties

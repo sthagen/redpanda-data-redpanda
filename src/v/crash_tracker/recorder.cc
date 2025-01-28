@@ -16,6 +16,7 @@
 #include "crash_tracker/types.h"
 #include "model/timestamp.h"
 #include "random/generators.h"
+#include "utils/file_io.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/core/seastar.hh>
@@ -80,14 +81,14 @@ namespace {
 void record_backtrace(crash_description& cd) {
     size_t pos = 0;
     ss::backtrace([&cd, &pos](ss::frame f) {
-        if (pos >= cd.stacktrace.size()) {
+        if (pos >= cd.stacktrace.capacity()) {
             return; // Prevent buffer overflow
         }
 
         const bool first = pos == 0;
         auto result = fmt::format_to_n(
           cd.stacktrace.begin() + pos,
-          cd.stacktrace.size() - pos,
+          cd.stacktrace.capacity() - pos,
           "{}{:#x}",
           first ? "" : " ",
           f.addr);
@@ -126,11 +127,49 @@ void recorder::record_crash_exception(std::exception_ptr eptr) {
     auto& format_buf = cd.crash_message;
     fmt::format_to_n(
       format_buf.begin(),
-      format_buf.size(),
+      format_buf.capacity(),
       "Failure during startup: {}",
       eptr);
 
     _writer.write();
+}
+
+ss::future<std::vector<recorder::recorded_crash>>
+recorder::get_recorded_crashes() const {
+    auto result = std::vector<recorded_crash>{};
+    auto crash_report_dir = config::node().crash_report_dir_path();
+    if (!co_await ss::file_exists(crash_report_dir.string())) {
+        co_return result;
+    }
+
+    for (const auto& entry :
+         std::filesystem::directory_iterator(crash_report_dir)) {
+        if (!entry.path().string().ends_with(crash_report_suffix)) {
+            // Filter only for crash files
+            continue;
+        }
+
+        auto buf = co_await read_fully(entry.path());
+        try {
+            auto crash_desc = serde::from_iobuf<crash_description>(
+              std::move(buf));
+            result.emplace_back(std::move(crash_desc));
+        } catch (const serde::serde_exception&) {
+            vlog(
+              ctlog.warn,
+              "Ignoring malformed crash report file {}",
+              entry.path());
+        }
+    }
+
+    std::sort(
+      result.begin(),
+      result.end(),
+      [](const recorded_crash& a, const recorded_crash& b) {
+          return a.crash.crash_time < b.crash.crash_time;
+      });
+
+    co_return result;
 }
 
 ss::future<> recorder::stop() { co_await _writer.release(); }

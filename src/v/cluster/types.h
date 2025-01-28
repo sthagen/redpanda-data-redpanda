@@ -642,6 +642,8 @@ struct incremental_topic_updates
     property_update<tristate<std::chrono::milliseconds>> delete_retention_ms;
     property_update<std::optional<bool>> iceberg_delete;
     property_update<std::optional<ss::sstring>> iceberg_partition_spec;
+    property_update<std::optional<model::iceberg_invalid_record_action>>
+      iceberg_invalid_record_action;
 
     // To allow us to better control use of the deprecated shadow_indexing
     // field, use getters and setters instead.
@@ -682,7 +684,8 @@ struct incremental_topic_updates
           remote_write,
           delete_retention_ms,
           iceberg_delete,
-          iceberg_partition_spec);
+          iceberg_partition_spec,
+          iceberg_invalid_record_action);
     }
 
     friend std::ostream&

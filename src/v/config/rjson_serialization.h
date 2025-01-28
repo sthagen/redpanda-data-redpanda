@@ -22,6 +22,7 @@
 #include "json/json.h"
 #include "json/stringbuffer.h"
 #include "json/writer.h"
+#include "model/metadata.h"
 #include "pandaproxy/schema_registry/schema_id_validation.h"
 
 #include <seastar/core/sstring.hh>
@@ -136,5 +137,9 @@ void rjson_serialize(
 
 void rjson_serialize(
   json::Writer<json::StringBuffer>&, config::datalake_catalog_type);
+
+void rjson_serialize(
+  json::Writer<json::StringBuffer>&,
+  const model::iceberg_invalid_record_action&);
 
 } // namespace json

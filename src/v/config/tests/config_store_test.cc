@@ -26,7 +26,7 @@
 
 namespace {
 
-ss::logger lg("config test"); // NOLINT
+ss::logger lg("config_test"); // NOLINT
 
 struct test_config : public config::config_store {
     config::property<int> optional_int;

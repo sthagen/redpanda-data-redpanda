@@ -1104,6 +1104,9 @@ topic_properties topic_table::update_topic_properties(
     incremental_update(
       updated_properties.iceberg_partition_spec,
       overrides.iceberg_partition_spec);
+    incremental_update(
+      updated_properties.iceberg_invalid_record_action,
+      overrides.iceberg_invalid_record_action);
     return updated_properties;
 }
 

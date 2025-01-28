@@ -253,3 +253,29 @@ rp_test(
   ARGS "-- -c 4"
   LABELS cluster
 )
+
+rp_test(
+  UNIT_TEST
+  GTEST
+  BINARY_NAME topic_properties_test
+  SOURCES
+     topic_properties_test.cc
+  LIBRARIES
+    v::gtest_main
+    v::cluster_topic_properties
+  ARGS "-- -c 1"
+  LABELS cluster
+)
+
+rp_test(
+  UNIT_TEST
+  GTEST
+  BINARY_NAME types_test
+  SOURCES
+     types_test.cc
+  LIBRARIES
+    v::gtest_main
+    v::cluster
+  ARGS "-- -c 1"
+  LABELS cluster
+)

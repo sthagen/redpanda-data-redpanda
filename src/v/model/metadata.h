@@ -607,6 +607,17 @@ enum class iceberg_mode : uint8_t {
 std::ostream& operator<<(std::ostream&, const iceberg_mode&);
 std::istream& operator>>(std::istream&, iceberg_mode&);
 
+// How to handle invalid records during Iceberg translation.
+enum class iceberg_invalid_record_action : uint8_t {
+    // Drop invalid records.
+    drop = 0,
+    // Write invalid records to a dead letter queue table.
+    dlq_table = 1,
+};
+
+std::ostream& operator<<(std::ostream&, const iceberg_invalid_record_action&);
+std::istream& operator>>(std::istream&, iceberg_invalid_record_action&);
+
 } // namespace model
 
 template<>

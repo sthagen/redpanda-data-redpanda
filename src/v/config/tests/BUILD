@@ -236,3 +236,17 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "configuration_test",
+    timeout = "short",
+    srcs = [
+        "configuration_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/config",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

@@ -147,6 +147,7 @@ metrics_reporter::metrics_reporter(
   ss::sharded<security::role_store>& role_store,
   ss::sharded<plugin_table>* pt,
   ss::sharded<feature_manager>* fm,
+  ss::sharded<storage::api>* storage,
   ss::sharded<ss::abort_source>& as)
   : _raft0(std::move(raft0))
   , _cluster_info(controller_stm.local().get_metrics_reporter_cluster_info())
@@ -159,6 +160,7 @@ metrics_reporter::metrics_reporter(
   , _role_store(role_store)
   , _plugin_table(pt)
   , _feature_manager(fm)
+  , _storage(storage)
   , _as(as)
   , _logger(logger, "metrics-reporter") {}
 
@@ -207,6 +209,10 @@ metrics_reporter::build_metrics_snapshot() {
     metrics_snapshot snapshot;
 
     snapshot.cluster_uuid = _cluster_info.uuid;
+    const auto& uuid = _storage->local().get_cluster_uuid();
+    if (uuid.has_value()) {
+        snapshot.storage_uuid = fmt::to_string(uuid.value());
+    }
     snapshot.cluster_creation_epoch = _cluster_info.creation_timestamp.value();
 
     absl::node_hash_map<model::node_id, node_metrics> metrics_map;
@@ -563,6 +569,8 @@ void rjson_serialize(
 
     w.Key("cluster_uuid");
     w.String(snapshot.cluster_uuid);
+    w.Key("storage_uuid");
+    w.String(snapshot.storage_uuid);
     w.Key("cluster_created_ts");
     w.Uint64(snapshot.cluster_creation_epoch);
     w.Key("topic_count");

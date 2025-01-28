@@ -317,6 +317,32 @@ struct iceberg_config_validator {
     }
 };
 
+struct iceberg_invalid_record_action_validator {
+    static constexpr const char* error_message = "Invalid property value.";
+
+    static constexpr error_code ec = error_code::invalid_config;
+
+    static bool is_valid(const creatable_topic& c) {
+        auto it = std::find_if(
+          c.configs.begin(),
+          c.configs.end(),
+          [](const createable_topic_config& cfg) {
+              return cfg.name == topic_property_iceberg_invalid_record_action;
+          });
+        if (it == c.configs.end() || !it->value.has_value()) {
+            return true;
+        }
+        try {
+            std::ignore
+              = boost::lexical_cast<model::iceberg_invalid_record_action>(
+                it->value.value());
+        } catch (const boost::bad_lexical_cast&) {
+            return false;
+        }
+        return true;
+    }
+};
+
 /*
  * it's an error to set the cloud topic property if cloud topics development
  * feature hasn't been enabled.

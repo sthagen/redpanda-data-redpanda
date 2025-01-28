@@ -358,6 +358,10 @@ struct compat_check<cluster::topic_properties> {
         json_write(flush_ms);
         json_write(flush_bytes);
         json_write(remote_topic_namespace_override);
+        json::write_exceptional_member_type(
+          wr,
+          "iceberg_invalid_record_action",
+          obj.iceberg_invalid_record_action);
     }
 
     static cluster::topic_properties from_json(json::Value& rd) {
@@ -394,6 +398,7 @@ struct compat_check<cluster::topic_properties> {
         json_read(flush_ms);
         json_read(flush_bytes);
         json_read(remote_topic_namespace_override);
+        json_read(iceberg_invalid_record_action);
         return obj;
     }
 
@@ -425,6 +430,7 @@ struct compat_check<cluster::topic_properties> {
         obj.flush_bytes = std::nullopt;
         obj.flush_ms = std::nullopt;
         obj.remote_topic_namespace_override = std::nullopt;
+        obj.iceberg_invalid_record_action = std::nullopt;
 
         if (reply != obj) {
             throw compat_error(fmt::format(
@@ -509,6 +515,8 @@ struct compat_check<cluster::topic_configuration> {
         obj.properties.flush_ms = std::nullopt;
 
         obj.properties.mpx_virtual_cluster_id = std::nullopt;
+
+        obj.properties.iceberg_invalid_record_action = std::nullopt;
 
         // ADL will always squash is_migrated to false
         obj.is_migrated = false;

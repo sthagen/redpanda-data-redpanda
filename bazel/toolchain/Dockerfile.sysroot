@@ -26,6 +26,7 @@ RUN mkdir -p /output/pkgs/{usr/,}lib/$(uname -m)-linux-gnu /output/pkgs/usr/incl
     && cp -r /usr/lib/*-linux-gnu/libgcc_s.so* /output/pkgs/usr/lib/$(uname -m)-linux-gnu/ \
     && cp -r /usr/lib/*-linux-gnu/*crt*.o /output/pkgs/usr/lib/$(uname -m)-linux-gnu/ \
     && cp -r /usr/lib/*-linux-gnu/libatomic.so* /output/pkgs/usr/lib/$(uname -m)-linux-gnu/ \
+    && cp -r /usr/lib/*-linux-gnu/libresolv.{a,so}* /output/pkgs/usr/lib/$(uname -m)-linux-gnu/ \
     && cp -r /usr/lib/gcc/*-linux-gnu/12/*.o /output/pkgs/usr/lib/$(uname -m)-linux-gnu/ \
     && cp -r /usr/lib/gcc/*-linux-gnu/12/libgcc*.{a,so}* /output/pkgs/usr/lib/$(uname -m)-linux-gnu/ \
     && cp -r /usr/include/* /output/pkgs/usr/include/

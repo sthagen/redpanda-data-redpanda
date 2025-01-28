@@ -307,6 +307,12 @@ class DescribeTopicsTest(RedpandaTest):
                 value="",
                 doc_string="Partition spec of the corresponding Iceberg table."
             ),
+            "redpanda.iceberg.invalid.record.action":
+            ConfigProperty(
+                config_type="STRING",
+                value="dlq_table",
+                doc_string=
+                "Action to take when an invalid record is encountered."),
         }
 
         tp_spec = TopicSpec()
@@ -345,11 +351,11 @@ class DescribeTopicsTest(RedpandaTest):
             self.logger.debug(
                 f"name: {name}, type: {config_type}, value: {value}, src: {source_type}"
             )
-            assert name in properties
+            assert name in properties, f"{name} not in {properties.keys()}"
             prop = properties[name]
-            assert config_type == prop.config_type
-            assert value == prop.value
-            assert source_type == prop.source_type
+            assert config_type == prop.config_type, f"{config_type=} != {prop.config_type=}"
+            assert value == prop.value, f"{value=} != {prop.value=}"
+            assert source_type == prop.source_type, f"{source_type=} != {prop.source_type=}"
 
         # The first empty line is where the table ends and the doc section begins
         assert last_pos is not None, "Something went wrong with property match"

@@ -3809,6 +3809,17 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       "(hour(redpanda.timestamp))",
       &validate_iceberg_partition_spec)
+  , iceberg_invalid_record_action(
+      *this,
+      "iceberg_invalid_record_action",
+      "Default value for the redpanda.iceberg.invalid.record.action topic "
+      "property.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      model::iceberg_invalid_record_action::dlq_table,
+      {
+        model::iceberg_invalid_record_action::drop,
+        model::iceberg_invalid_record_action::dlq_table,
+      })
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

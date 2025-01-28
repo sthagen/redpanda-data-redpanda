@@ -564,6 +564,8 @@ private:
     ss::future<ss::json::json_return_type>
       cancel_all_partitions_reconfigs_handler(
         std::unique_ptr<ss::http::request>);
+    ss::future<ss::json::json_return_type>
+      get_metrics_uuid(std::unique_ptr<ss::http::request>);
 
     /// Cluster partition routes
     ss::future<ss::json::json_return_type>

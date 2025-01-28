@@ -22,12 +22,52 @@
 #include <seastar/core/seastar.hh>
 #include <seastar/core/sleep.hh>
 
+#include <fmt/chrono.h>
+
 using namespace std::chrono_literals;
 
 namespace crash_tracker {
 
 // Crash tracking resets every 1h.
 static constexpr model::timestamp_clock::duration crash_reset_duration{1h};
+
+namespace impl {
+
+std::string
+describe_crashes(const std::vector<recorder::recorded_crash>& crashes) {
+    if (crashes.empty()) {
+        return "(No crash files have been recorded.)";
+    }
+
+    constexpr auto format_time = [](model::timestamp ts_model) {
+        auto ts_chrono = model::to_time_point(ts_model);
+        return fmt::format("{:%Y-%m-%d %T} UTC", fmt::gmtime(ts_chrono));
+    };
+
+    std::stringstream ss;
+    ss << "The following crashes have been recorded:";
+    for (size_t i = 0; i < crashes.size(); ++i) {
+        // Show up to 5 oldest and newest crashes with ... in between
+        const size_t crashes_to_show_each_side = 5;
+        const size_t maybe_jump_to = crashes.size() - crashes_to_show_each_side;
+        if (i == crashes_to_show_each_side && i < maybe_jump_to) {
+            ss << "\n    ...";
+            i = maybe_jump_to;
+        }
+
+        const auto& crash = crashes[i].crash;
+        fmt::print(
+          ss,
+          "\nCrash #{} at {} - {}",
+          i + 1,
+          format_time(crash.crash_time),
+          crash);
+    }
+
+    return ss.str();
+}
+
+} // namespace impl
 
 ss::future<> limiter::check_for_crash_loop(ss::abort_source& as) const {
     if (config::node().developer_mode()) {
@@ -76,16 +116,19 @@ ss::future<> limiter::check_for_crash_loop(ss::abort_source& as) const {
                              || tracking_reset;
 
         if (!ok_to_proceed) {
+            auto crashes = co_await _recorder.get_recorded_crashes();
             vlog(
               ctlog.error,
               "Crash loop detected. Too many consecutive crashes {}, exceeded "
               "{} configured value {}. To recover Redpanda from this state, "
               "manually remove file at path {}. Crash loop automatically "
-              "resets 1h after last crash or with node configuration changes.",
+              "resets 1h after last crash or with node configuration changes. "
+              "{}",
               crash_md.crash_count,
               config::node().crash_loop_limit.name(),
               limit.value(),
-              file_path);
+              file_path,
+              impl::describe_crashes(crashes));
 
             const auto crash_loop_sleep_val
               = config::node().crash_loop_sleep_sec.value();

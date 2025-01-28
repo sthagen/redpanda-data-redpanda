@@ -25,15 +25,16 @@ struct bazel_result_handler_for_boost {
     bazel_result_handler_for_boost() {
         using namespace boost::unit_test;
         if (auto xml_path = std::getenv("XML_OUTPUT_FILE")) {
-            _out = std::ofstream(xml_path);
-            // use fixed format to avoid scientific notation as a work-around
-            // to https://github.com/bazelbuild/bazel/issues/24605
-            _out << std::fixed << std::setprecision(6);
+            // use fixed format to avoid scientific notation as a
+            // work-around to
+            // https://github.com/bazelbuild/bazel/issues/24605
+            _out = std::ofstream(xml_path)
+                   << std::fixed << std::setprecision(6);
             unit_test_log.add_format(OF_JUNIT);
-            unit_test_log.set_stream(OF_JUNIT, _out);
+            unit_test_log.set_stream(OF_JUNIT, *_out);
         }
     }
-    std::ofstream _out;
+    static inline std::optional<std::ofstream> _out;
 };
 
 BOOST_TEST_GLOBAL_CONFIGURATION(bazel_result_handler_for_boost);

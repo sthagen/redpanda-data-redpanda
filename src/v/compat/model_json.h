@@ -11,6 +11,7 @@
 #pragma once
 
 #include "compat/json.h"
+#include "model/metadata.h"
 #include "model/record.h"
 
 namespace json {
@@ -290,6 +291,14 @@ inline void rjson_serialize_exceptional_type(
 inline void rjson_serialize_exceptional_type(
   json::Writer<json::StringBuffer>& w, const model::write_caching_mode& m) {
     using underlying_t = std::underlying_type_t<model::write_caching_mode>;
+    rjson_serialize(w, static_cast<underlying_t>(m));
+}
+
+inline void rjson_serialize_exceptional_type(
+  json::Writer<json::StringBuffer>& w,
+  const model::iceberg_invalid_record_action& m) {
+    using underlying_t
+      = std::underlying_type_t<model::iceberg_invalid_record_action>;
     rjson_serialize(w, static_cast<underlying_t>(m));
 }
 

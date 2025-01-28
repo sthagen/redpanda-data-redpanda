@@ -11,6 +11,7 @@
 
 #include "config/tls_config.h"
 #include "config/types.h"
+#include "model/metadata.h"
 
 namespace json {
 
@@ -265,4 +266,11 @@ void rjson_serialize(
   json::Writer<json::StringBuffer>& w, config::datalake_catalog_type ct) {
     stringize(w, ct);
 }
+
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w,
+  const model::iceberg_invalid_record_action& v) {
+    stringize(w, v);
+}
+
 } // namespace json

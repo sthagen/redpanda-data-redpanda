@@ -140,7 +140,7 @@ class CrashLoopChecksTest(RedpandaTest):
             broker, "Sleeping for 3 seconds before terminating...")
 
     @cluster(num_nodes=1, log_allow_list=CRASH_LOOP_LOG + HOSTNAME_ERRORS)
-    def test_crash_report_file_create(self):
+    def test_crash_report_with_startup_exception(self):
         broker = self.redpanda.nodes[0]
 
         def expect_crash_count(expected):
@@ -171,4 +171,8 @@ class CrashLoopChecksTest(RedpandaTest):
                                  expect_fail=True)
         assert self.redpanda.search_log_node(broker,
                                              "Too many consecutive crashes")
+        assert self.redpanda.search_log_node(
+            broker,
+            "Crash #4 at 20.* UTC - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found) Backtrace: 0x.*"
+        )
         expect_crash_count(1 + CrashLoopChecksTest.CRASH_LOOP_LIMIT + 1)

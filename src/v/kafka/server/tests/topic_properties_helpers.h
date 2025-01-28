@@ -58,7 +58,7 @@ public:
           });
     }
 
-    kafka::create_topics_response create_topic(
+    [[nodiscard]] kafka::create_topics_response create_topic(
       const model::topic& tp,
       const absl::flat_hash_map<ss::sstring, ss::sstring>& properties,
       int num_partitions = 1,

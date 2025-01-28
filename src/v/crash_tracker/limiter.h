@@ -41,4 +41,9 @@ private:
     const recorder& _recorder [[maybe_unused]];
 };
 
+namespace impl {
+std::string
+describe_crashes(const std::vector<recorder::recorded_crash>& crashes);
+}
+
 } // namespace crash_tracker

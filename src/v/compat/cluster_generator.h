@@ -13,6 +13,7 @@
 #include "cluster/errc.h"
 #include "cluster/types.h"
 #include "compat/model_generator.h"
+#include "model/metadata.h"
 #include "model/tests/randoms.h"
 #include "random/generators.h"
 #include "test_utils/randoms.h"
@@ -656,7 +657,12 @@ struct instance_generator<cluster::topic_properties> {
           false,
           tristate<std::chrono::milliseconds>{disable_tristate},
           std::nullopt,
-          std::nullopt};
+          std::nullopt,
+          tests::random_optional([] {
+              return random_generators::random_choice(
+                {model::iceberg_invalid_record_action::drop,
+                 model::iceberg_invalid_record_action::dlq_table});
+          })};
     }
 
     static std::vector<cluster::topic_properties> limits() { return {}; }

@@ -13,6 +13,24 @@
 
 namespace crash_tracker {
 
+std::ostream& operator<<(std::ostream& os, const crash_description& cd) {
+    fmt::print(os, "{}", cd.crash_message.c_str());
+
+    const auto opt_stacktrace = cd.stacktrace.c_str();
+    const auto has_stacktrace = strlen(opt_stacktrace) > 0;
+    if (has_stacktrace) {
+        fmt::print(os, " Backtrace: {}.", opt_stacktrace);
+    }
+
+    const auto opt_add_info = cd.addition_info.c_str();
+    const auto has_add_info = strlen(opt_add_info) > 0;
+    if (has_add_info) {
+        fmt::print(os, " {}", opt_add_info);
+    }
+
+    return os;
+}
+
 bool is_crash_loop_limit_reached(std::exception_ptr eptr) {
     try {
         std::rethrow_exception(eptr);

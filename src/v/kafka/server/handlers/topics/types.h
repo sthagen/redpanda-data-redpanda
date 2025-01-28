@@ -111,6 +111,9 @@ inline constexpr std::string_view topic_property_iceberg_delete
 inline constexpr std::string_view topic_property_iceberg_partition_spec
   = "redpanda.iceberg.partition.spec";
 
+inline constexpr std::string_view topic_property_iceberg_invalid_record_action
+  = "redpanda.iceberg.invalid.record.action";
+
 // Kafka topic properties that is not relevant for Redpanda
 // Or cannot be altered with kafka alter handler
 inline constexpr std::array<std::string_view, 20> allowlist_topic_noop_confs = {

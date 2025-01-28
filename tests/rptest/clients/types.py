@@ -41,6 +41,7 @@ class TopicSpec:
     PROPERTY_FLUSH_BYTES = "flush.bytes"
     PROPERTY_ICEBERG_MODE = "redpanda.iceberg.mode"
     PROPERTY_DELETE_RETENTION_MS = "delete.retention.ms"
+    PROPERTY_ICEBERG_INVALID_RECORD_ACTION = "redpanda.iceberg.invalid.record.action"
 
     class CompressionTypes(str, Enum):
         """

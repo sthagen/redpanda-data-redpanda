@@ -293,6 +293,7 @@ func saveClusterAdminAPICalls(ctx context.Context, ps *stepParams, fs afero.Fs, 
 			func() error { return requestAndSave(ctx, ps, "admin/reconfigurations.json", cl.Reconfigurations) },
 			func() error { return requestAndSave(ctx, ps, "admin/features.json", cl.GetFeatures) },
 			func() error { return requestAndSave(ctx, ps, "admin/uuid.json", cl.ClusterUUID) },
+			func() error { return requestAndSave(ctx, ps, "admin/metrics_uuid.json", cl.MetricsUUID) },
 			func() error {
 				return requestAndSave(ctx, ps, "admin/automated_recovery.json", cl.PollAutomatedRecoveryStatus)
 			},

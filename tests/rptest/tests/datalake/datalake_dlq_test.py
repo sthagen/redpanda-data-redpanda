@@ -7,10 +7,12 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from enum import Enum
 from typing import Optional
 
 from ducktape.mark import matrix
 
+from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.serde_client_utils import SchemaType, SerdeClientType
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
@@ -25,6 +27,109 @@ from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.util import expect_exception
+
+
+class IcebergInvalidRecordAction(str, Enum):
+    DROP = "drop"
+    DLQ_TABLE = "dlq_table"
+
+    def __str__(self):
+        return self.value
+
+
+class DatalakeDLQPropertiesTest(RedpandaTest):
+    def __init__(self, test_context):
+        super(DatalakeDLQPropertiesTest,
+              self).__init__(test_context=test_context,
+                             num_brokers=1,
+                             extra_rp_conf={
+                                 "iceberg_enabled": "true",
+                             },
+                             si_settings=SISettings(test_context=test_context))
+
+        self.rpk = RpkTool(self.redpanda)
+
+    def set_cluster_config(self, key: str, value):
+        self.rpk.cluster_config_set(key, value)
+
+    def set_topic_properties(self, key: str, value):
+        self.rpk.alter_topic_config(self.topic_name, key, value)
+
+    def validate_topic_configs(self, action: IcebergInvalidRecordAction):
+        configs = self.rpk.describe_topic_configs(self.topic_name)
+        assert configs[
+            TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION][0] == str(
+                action
+            ), f"Expected {action} but got {configs[TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION]}"
+
+    @cluster(num_nodes=1)
+    def test_properties(self):
+        action_conf = "iceberg_invalid_record_action"
+
+        self.admin = self.redpanda._admin
+
+        # Topic with custom properties at creation.
+        topic = TopicSpec()
+        self.topic_name = topic.name
+        self.rpk.create_topic(
+            topic=topic.name,
+            config={
+                # Enable iceberg to make the iceberg.invalid.record.action property visible.
+                TopicSpec.PROPERTY_ICEBERG_MODE:
+                "key_value",
+                TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION:
+                "drop",
+            })
+
+        self.validate_topic_configs(IcebergInvalidRecordAction.DROP)
+
+        # New topic with defaults
+        topic = TopicSpec()
+        self.topic_name = topic.name
+        self.rpk.create_topic(
+            topic=topic.name,
+            config={
+                # Enable iceberg to make the iceberg.invalid.record.action property visible.
+                TopicSpec.PROPERTY_ICEBERG_MODE:
+                "key_value",
+            })
+
+        # Validate cluster defaults
+        self.validate_topic_configs(IcebergInvalidRecordAction.DLQ_TABLE)
+
+        # Changing cluster level configs
+        self.set_cluster_config(action_conf, IcebergInvalidRecordAction.DROP)
+        self.validate_topic_configs(IcebergInvalidRecordAction.DROP)
+
+        # Change topic property
+        self.set_topic_properties(
+            TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION,
+            IcebergInvalidRecordAction.DLQ_TABLE)
+        self.validate_topic_configs(IcebergInvalidRecordAction.DLQ_TABLE)
+
+    @cluster(num_nodes=1)
+    def test_create_bad_properties(self):
+        topic = TopicSpec()
+
+        with expect_exception(
+                RpkException, lambda e: "Invalid property value." in e.msg and
+                "INVALID_CONFIG" in e.msg):
+            self.rpk.create_topic(
+                topic=topic.name,
+                config={
+                    TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION: "asd",
+                })
+
+        # Create the topic with default property and alter to invalid value
+        self.rpk.create_topic(topic=topic.name)
+        with expect_exception(
+                RpkException, lambda e:
+                "unable to parse property redpanda.iceberg.invalid.record.action value"
+                in e.msg and "INVALID_CONFIG" in e.msg):
+            self.rpk.alter_topic_config(
+                topic.name, TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION,
+                "asd")
 
 
 class DatalakeDLQTest(RedpandaTest):
