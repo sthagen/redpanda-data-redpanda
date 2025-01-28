@@ -422,6 +422,12 @@ inline constexpr std::array feature_schema{
     feature::datalake_iceberg_ga,
     feature_spec::available_policy::always,
     feature_spec::prepare_policy::always},
+  feature_spec{
+    release_version::v25_1_1,
+    "cloud_storage_read_write_fence",
+    feature::cloud_storage_metadata_rw_fence,
+    feature_spec::available_policy::always,
+    feature_spec::prepare_policy::always},
 };
 
 std::string_view to_string_view(feature);

@@ -69,6 +69,8 @@
 
 #include <algorithm>
 #include <charconv>
+#include <concepts>
+#include <cstdint>
 #include <functional>
 #include <optional>
 #include <ranges>
@@ -130,10 +132,18 @@ struct fmt::formatter<google::protobuf::UninterpretedOption>
       const google::protobuf::UninterpretedOption& option,
       format_context& ctx) const {
         const auto fmt = [&](const auto& val) {
-            if (option.has_string_value()) {
-                return fmt::format_to(
-                  ctx.out(), "{} = \"{}\"", fmt::join(option.name(), "."), val);
-            } else if (option.has_aggregate_value()) {
+            if constexpr (std::convertible_to<
+                            std::decay_t<decltype(val)>,
+                            std::string_view>) {
+                if (option.has_string_value()) {
+                    return fmt::format_to(
+                      ctx.out(),
+                      "{} = {:?}",
+                      fmt::join(option.name(), "."),
+                      val);
+                }
+            }
+            if (option.has_aggregate_value()) {
                 return fmt::format_to(
                   ctx.out(),
                   "{} = {{{}\n{:{}}}}",
@@ -242,6 +252,10 @@ auto field_options() {
         "packed", &pb::FieldOptions::has_packed, &pb::FieldOptions::packed},
       field_option{
         "lazy", &pb::FieldOptions::has_lazy, &pb::FieldOptions::lazy},
+      field_option{
+        "unverified_lazy",
+        &pb::FieldOptions::has_unverified_lazy,
+        &pb::FieldOptions::unverified_lazy},
       field_option{
         "weak", &pb::FieldOptions::has_weak, &pb::FieldOptions::weak},
       field_option{
@@ -906,7 +920,7 @@ struct protobuf_schema_definition::impl {
         }
         if (field.has_json_name()) {
             maybe_print_seperator();
-            fmt::print(os, "json_name = \"{}\"", field.json_name());
+            fmt::print(os, "json_name = {:?}", field.json_name());
         }
         if (field.has_options()) {
             const auto& options = field.options();
@@ -1062,11 +1076,11 @@ struct protobuf_schema_definition::impl {
 
         if (decl.has_full_name()) {
             maybe_print_seperator();
-            fmt::print(os, "{}: \"{}\"", "full_name", decl.full_name());
+            fmt::print(os, "{}: {:?}", "full_name", decl.full_name());
         }
         if (decl.has_type()) {
             maybe_print_seperator();
-            fmt::print(os, "{}: \"{}\"", "type", decl.type());
+            fmt::print(os, "{}: {:?}", "type", decl.type());
         }
         if (decl.has_number()) {
             maybe_print_seperator();
@@ -1148,12 +1162,16 @@ struct protobuf_schema_definition::impl {
         }
         auto reserved_names = maybe_sorted(message.reserved_name());
         if (!reserved_names.empty()) {
+            const auto to_debug_string = [](const std::string_view strv) {
+                return fmt::format("{:?}", strv);
+            };
             fmt::print(
               os,
-              "{:{}}reserved \"{}\";\n",
+              "{:{}}reserved {};\n",
               "",
               indent + 2,
-              fmt::join(reserved_names, "\", \""));
+              fmt::join(
+                reserved_names | std::views::transform(to_debug_string), ", "));
         }
         if (!reserved_range.empty() || !reserved_names.empty()) {
             fmt::print(os, "\n");
@@ -1274,7 +1292,7 @@ struct protobuf_schema_definition::impl {
             fmt::print(os, ";\n");
         }
         for (const auto& value : maybe_sorted(enum_proto.reserved_name())) {
-            fmt::print(os, "{:{}}reserved \"{}\";\n", "", indent + 2, value);
+            fmt::print(os, "{:{}}reserved {:?};\n", "", indent + 2, value);
         }
         if (enum_proto.options().has_allow_alias()) {
             fmt::print(
@@ -1297,14 +1315,16 @@ struct protobuf_schema_definition::impl {
         for (const auto& option : uninterpreted_options) {
             fmt::print(os, "{:{}}option {};\n", "", indent + 2, option);
         }
-        std::optional<std::decay_t<decltype(enum_proto.value())>> values;
-        if (is_normalized) {
-            values = enum_proto.value();
-            std::ranges::sort(values.value(), std::less{}, [](const auto& v) {
-                return std::pair<int, std::string_view>{v.number(), v.name()};
-            });
-        }
-        for (const auto& value : values.value_or(enum_proto.value())) {
+        const auto values = maybe_sorted(
+          enum_proto.value(), std::less{}, [](const auto& v) {
+              // In proto3, enums are open and open enums need to
+              // have the first field being equal to zero. By casting
+              // to an unsigned integer for sorting, all the negative
+              // fields will be at the end, after all the positives.
+              return std::pair<uint32_t, std::string_view>{
+                static_cast<uint32_t>(v.number()), v.name()};
+          });
+        for (const auto& value : values) {
             fmt::print(
               os, "{:{}}{} = {}", "", indent + 2, value.name(), value.number());
             if (value.has_options()) {
@@ -1414,7 +1434,7 @@ struct protobuf_schema_definition::impl {
             first_option = false;
         };
         auto prints = [&](std::string_view name, const auto& val) {
-            fmt::print(os, "option {} = \"{}\";\n", name, val);
+            fmt::print(os, "option {} = {:?};\n", name, val);
             first_option = false;
         };
         if (options.has_cc_enable_arenas()) {
@@ -1531,7 +1551,7 @@ struct protobuf_schema_definition::impl {
 
         auto print_deps = [&](const auto& view, std::string_view type) {
             for (const auto& dep : view) {
-                fmt::print(os, "import {}\"{}\";\n", type, dep);
+                fmt::print(os, "import {}{:?};\n", type, dep);
             }
         };
 
@@ -1549,9 +1569,9 @@ struct protobuf_schema_definition::impl {
             auto syntax = fdp.has_syntax() ? fdp.syntax() : "proto2";
             edition = syntax == "proto3" ? pb::Edition::EDITION_PROTO3
                                          : pb::Edition::EDITION_PROTO2;
-            fmt::print(os, "syntax = \"{}\";\n", syntax);
+            fmt::print(os, "syntax = {:?};\n", syntax);
         } else {
-            fmt::print(os, "edition = \"{}\";\n", Edition_Name(fdp.edition()));
+            fmt::print(os, "edition = {:?};\n", Edition_Name(fdp.edition()));
         }
 
         if (fdp.has_package() && !fdp.package().empty()) {

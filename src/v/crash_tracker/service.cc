@@ -23,8 +23,12 @@ service::service() noexcept
 
 ss::future<> service::start(ss::abort_source& as) {
     co_await _limiter.check_for_crash_loop(as);
+    co_await get_recorder().start();
 }
 
-ss::future<> service::stop() { co_await _limiter.record_clean_shutdown(); }
+ss::future<> service::stop() {
+    co_await _limiter.record_clean_shutdown();
+    co_await get_recorder().stop();
+}
 
 } // namespace crash_tracker

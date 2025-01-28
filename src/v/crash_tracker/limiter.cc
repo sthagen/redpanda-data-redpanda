@@ -97,7 +97,7 @@ ss::future<> limiter::check_for_crash_loop(ss::abort_source& as) const {
                 co_await ss::sleep_abortable(*crash_loop_sleep_val, as);
             }
 
-            throw std::runtime_error("Crash loop detected, aborting startup.");
+            throw crash_loop_limit_reached();
         }
 
         vlog(

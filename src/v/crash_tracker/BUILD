@@ -5,12 +5,15 @@ redpanda_cc_library(
     srcs = [
         "limiter.cc",
         "logger.cc",
+        "prepared_writer.cc",
         "recorder.cc",
         "service.cc",
+        "types.cc",
     ],
     hdrs = [
         "limiter.h",
         "logger.h",
+        "prepared_writer.h",
         "recorder.h",
         "service.h",
         "types.h",

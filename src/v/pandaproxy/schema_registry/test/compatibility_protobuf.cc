@@ -1513,6 +1513,7 @@ option go_package = "foo.example.com/fooservice";
 option cc_enable_arenas = true;
 option objc_class_prefix = "FS";
 option csharp_namespace = "Foo.FooService";
+option php_namespace = "my_php\ns";
 
 
 // public should come last
@@ -1529,6 +1530,8 @@ message Baz {
 
 enum Numbers {
   ZERO=0;
+  MINUS_ONE =-1;
+  MINUS_TWO =-2;
   TWO = 2;
   ONE=1;
   ALIAS = 1 [deprecated = true, debug_redact = false];
@@ -1615,6 +1618,7 @@ option go_package = "foo.example.com/fooservice";
 option cc_enable_arenas = true;
 option objc_class_prefix = "FS";
 option csharp_namespace = "Foo.FooService";
+option php_namespace = "my_php\ns";
 
 message Baz {
   .google.protobuf.Any any = 1;
@@ -1677,6 +1681,8 @@ enum Numbers {
   reserved "SIX";
   option allow_alias = true;
   ZERO = 0;
+  MINUS_ONE = -1;
+  MINUS_TWO = -2;
   TWO = 2;
   ONE = 1;
   ALIAS = 1 [deprecated = true, debug_redact = false];
@@ -1703,6 +1709,7 @@ option java_outer_classname = "FooService";
 option java_package = "com.example.foo";
 option objc_class_prefix = "FS";
 option optimize_for = SPEED;
+option php_namespace = "my_php\ns";
 
 message Baz {
   .google.protobuf.Any any = 1;
@@ -1768,6 +1775,8 @@ enum Numbers {
   ALIAS = 1 [deprecated = true, debug_redact = false];
   ONE = 1;
   TWO = 2;
+  MINUS_TWO = -2;
+  MINUS_ONE = -1;
 }
 
 service FooService {

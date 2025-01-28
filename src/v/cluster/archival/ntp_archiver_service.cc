@@ -38,6 +38,7 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/record.h"
+#include "net/connection.h"
 #include "raft/fundamental.h"
 #include "ssx/future-util.h"
 #include "storage/disk_log_impl.h"
@@ -80,16 +81,25 @@ constexpr auto housekeeping_jit = 5ms;
 
 namespace archival {
 
+/// Return true if the exception is a shutdown error or a network error (e.g.
+/// Broken pipe)
+static bool is_shutdown_or_disconnect(const std::exception_ptr& e) {
+    return ssx::is_shutdown_exception(e) || net::is_disconnect_exception(e);
+}
+
 static bool is_nested_shutdown_exception(const ss::nested_exception& ex) {
     // During shutdown we could potentially get a 'shutdown' exception. If the
     // 'finally' continuation is used it will be invoked and if it touches the
     // gate or abort source it will also trigger a 'shutdown' exception. The
     // 'finally' continuation is invoked even for the exceptional future. In
     // this case we will get the nested_exception. If both exceptions are
-    // actually exceptions we can safely conclude that the shutdown is in
-    // progress (somewhat safely).
-    return ssx::is_shutdown_exception(ex.inner)
-           && ssx::is_shutdown_exception(ex.outer);
+    // shutdown exceptions we can safely conclude that the shutdown is in
+    // progress (somewhat safely). If one of the exceptions is a shutdown
+    // exception and another is a network disconnect exception we can also
+    // conclude that the shutdown is in progress.
+    return (is_shutdown_or_disconnect(ex.inner)
+            && is_shutdown_or_disconnect(ex.outer))
+           && (ssx::is_shutdown_exception(ex.inner) || ssx::is_shutdown_exception(ex.outer));
 }
 
 static bool segment_meta_matches_stats(

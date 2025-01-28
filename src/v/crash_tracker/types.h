@@ -31,7 +31,15 @@ enum class crash_type {
 struct crash_description
   : serde::
       envelope<crash_description, serde::version<0>, serde::compat_version<0>> {
-    crash_type type;
+    // We pre-allocate the memory necessary for the buffers needed to fill a
+    // crash_description and overestimate its serialized size to be able to
+    // pre-allocate a sufficiently large iobuf to write it to
+    constexpr static size_t string_buffer_reserve = 4096;
+    constexpr static size_t overhead_overestimate = 1024;
+    constexpr static size_t serde_size_overestimate
+      = overhead_overestimate + 3 * string_buffer_reserve;
+
+    crash_type type{};
     model::timestamp crash_time;
     ss::sstring crash_message;
     ss::sstring stacktrace;
@@ -41,6 +49,12 @@ struct crash_description
     /// verbose for telemetry.
     /// Eg. top-N allocations
     ss::sstring addition_info;
+
+    crash_description()
+      : crash_time{}
+      , crash_message(string_buffer_reserve, '\0')
+      , stacktrace(string_buffer_reserve, '\0')
+      , addition_info(string_buffer_reserve, '\0') {}
 
     auto serde_fields() {
         return std::tie(
@@ -61,5 +75,13 @@ struct crash_tracker_metadata
         return std::tie(crash_count, config_checksum, last_start_ts);
     }
 };
+
+class crash_loop_limit_reached : public std::runtime_error {
+public:
+    explicit crash_loop_limit_reached()
+      : std::runtime_error("Crash loop detected, aborting startup.") {}
+};
+
+bool is_crash_loop_limit_reached(std::exception_ptr);
 
 } // namespace crash_tracker

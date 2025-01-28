@@ -180,6 +180,7 @@ rm_stm::maybe_create_producer(model::producer_identity pid) {
             return std::make_pair(producer, producer_previously_known::yes);
         }
     }
+    vlog(_ctx_log.trace, "creating producer for pid: {}", pid);
     auto producer = ss::make_lw_shared<producer_state>(
       _ctx_log, pid, _raft->group(), [this](model::producer_identity pid) {
           cleanup_producer_state(pid);
@@ -238,6 +239,7 @@ void rm_stm::cleanup_producer_state(model::producer_identity pid) noexcept {
 };
 
 ss::future<> rm_stm::reset_producers() {
+    vlog(_ctx_log.trace, "reseting producers");
     // note: must always be called under exlusive write lock to
     // avoid concurrrent state changes to _producers.
     co_await ss::max_concurrent_for_each(
@@ -1676,6 +1678,7 @@ void rm_stm::apply_fence(model::producer_identity pid, model::record_batch b) {
 }
 
 ss::future<> rm_stm::do_apply(const model::record_batch& b) {
+    auto holder = _gate.hold();
     const auto& hdr = b.header();
     const auto bid = model::batch_identity::from(hdr);
 

@@ -12,6 +12,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "crash_tracker/prepared_writer.h"
 #include "crash_tracker/types.h"
 
 namespace crash_tracker {
@@ -41,6 +42,8 @@ public:
 private:
     recorder() = default;
     ~recorder() = default;
+
+    prepared_writer _writer;
 
     friend recorder& get_recorder();
 };
