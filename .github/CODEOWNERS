@@ -31,7 +31,7 @@ licenses           @emaxerrno
 #
 # rpk
 #
-/src/go/rpk        @r-vasquez @redpanda-data/ux-rpk @Deflaimun
+/src/go/rpk        @r-vasquez @redpanda-data/ux-rpk @kbatuigas
 # There are now two copies goreleaser.yaml in the interim `rpk connect` arch
 # Adding devprod to code owners to review any changes (e.g. they should stay in sync)
 /src/go/.goreleaser.yaml @r-vasquez @redpanda-data/ux-rpk @redpanda-data/devprod

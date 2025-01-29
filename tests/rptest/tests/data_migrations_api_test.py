@@ -46,7 +46,7 @@ def make_namespaced_topic(topic: str) -> NamespacedTopic:
 
 
 def now():
-    return round(time.time() * 1000)
+    return int(time.time() * 1000)
 
 
 class TransferLeadersBackgroundThread:
@@ -130,6 +130,12 @@ class DataMigrationsApiTest(RedpandaTest):
         self.admin = Admin(self.redpanda)
         self.last_producer_id = 0
         self.last_consumer_id = 0
+
+    def validate_timing(self, time_before, happened_at):
+        time_now = now()
+        self.logger.debug(f"{time_before=}, {happened_at=}, {time_now=}")
+        err_ms = 5  # allow for ntp error across nodes
+        assert time_before - err_ms <= happened_at <= time_now + err_ms
 
     def get_topic_initial_revision(self, topic_name):
         anomalies = self.admin.get_cloud_storage_anomalies(namespace="kafka",
@@ -228,10 +234,8 @@ class DataMigrationsApiTest(RedpandaTest):
             if m is None:
                 return False
             completed_at = m.get("completed_timestamp")
-            self.logger.debug(
-                f"{assure_completed_after=}, {completed_at=}, {now()=}")
             if m["state"] in ("finished", "cancelled"):
-                assert assure_completed_after <= completed_at <= now()
+                self.validate_timing(assure_completed_after, completed_at)
             else:
                 assert "completed_timestamp" not in m
             return m["state"] in states
@@ -256,10 +260,7 @@ class DataMigrationsApiTest(RedpandaTest):
         def migration_present_on_node(m):
             if m is None:
                 return False
-            self.logger.debug(
-                f"{assure_created_after=}, {m['created_timestamp']=}, {now()=}"
-            )
-            assert assure_created_after <= m['created_timestamp'] <= now()
+            self.validate_timing(assure_created_after, m['created_timestamp'])
             return True
 
         def migration_is_present(id: int):
