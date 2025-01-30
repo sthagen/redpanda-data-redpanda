@@ -9,10 +9,10 @@
  */
 
 #include "bytes/iostream.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/async_manifest_view.h"
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/tests/cloud_storage_fixture.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "cloud_storage/tests/util.h"
 #include "cloud_storage/types.h"
 #include "model/fundamental.h"

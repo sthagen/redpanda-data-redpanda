@@ -9,8 +9,8 @@
  */
 
 #include "cloud_io/remote.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "iceberg/table_io.h"
 #include "iceberg/table_metadata.h"
 #include "iceberg/table_metadata_json.h"

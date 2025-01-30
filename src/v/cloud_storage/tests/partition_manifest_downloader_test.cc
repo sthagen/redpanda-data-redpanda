@@ -9,11 +9,11 @@
 
 #include "bytes/iostream.h"
 #include "bytes/streambuf.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/partition_manifest_downloader.h"
 #include "cloud_storage/partition_path_utils.h"
 #include "cloud_storage/remote.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "cloud_storage_clients/client_pool.h"
 #include "model/fundamental.h"
 

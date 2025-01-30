@@ -234,9 +234,11 @@ class DatalakeDLQTest(RedpandaTest):
 
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
-            query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO])
+            query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
+            filesystem_catalog_mode=[True, False])
     def test_dlq_table_for_invalid_records(self, cloud_storage_type,
-                                           query_engine):
+                                           query_engine,
+                                           filesystem_catalog_mode):
         """
         Produce records with no schema to `value_schema_id_prefix` mode topic.
         These records will fail translate and should be written to DLQ table.
@@ -249,7 +251,7 @@ class DatalakeDLQTest(RedpandaTest):
 
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=True,
+                              filesystem_catalog_mode=filesystem_catalog_mode,
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")
@@ -297,17 +299,23 @@ class DatalakeDLQTest(RedpandaTest):
 
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
-            query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO])
+            query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
+            filesystem_catalog_mode=[True, False])
     def test_dlq_table_for_mixed_records(self, cloud_storage_type,
-                                         query_engine):
+                                         query_engine,
+                                         filesystem_catalog_mode):
         """
         Produce a mix of valid and invalid records to a `value_schema_id_prefix`
         mode topic. Valid records should be written to the main table and
         invalid records should be written to the DLQ table.
+
+        It is important to test with both filesystem catalog mode and w/o
+        because their behavior in assigning field ids is different and was
+        found to cause translation issues.
         """
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=True,
+                              filesystem_catalog_mode=filesystem_catalog_mode,
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")

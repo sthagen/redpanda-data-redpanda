@@ -7,35 +7,6 @@ load(
 )
 
 redpanda_test_cc_library(
-    name = "s3_imposter",
-    srcs = [
-        "s3_imposter.cc",
-    ],
-    hdrs = [
-        "s3_imposter.h",
-    ],
-    implementation_deps = [
-        "//src/v/base",
-        "//src/v/bytes:iobuf",
-        "//src/v/bytes:iobuf_parser",
-    ],
-    include_prefix = "cloud_storage/tests",
-    visibility = ["//visibility:public"],
-    deps = [
-        "//src/v/cloud_storage_clients",
-        "//src/v/config",
-        "//src/v/http/tests:utils",
-        "//src/v/test_utils:fixture",
-        "//src/v/utils:uuid",
-        "@abseil-cpp//absl/container:flat_hash_set",
-        "@boost//:algorithm",
-        "@boost//:core",
-        "@boost//:property_tree",
-        "@seastar",
-    ],
-)
-
-redpanda_test_cc_library(
     name = "read_replica_e2e_fixture",
     hdrs = [
         "read_replica_e2e_fixture.h",
@@ -44,7 +15,7 @@ redpanda_test_cc_library(
     ],
     include_prefix = "cloud_storage/tests",
     deps = [
-        "//src/v/cloud_storage/tests:s3_imposter",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/redpanda/tests:fixture",
         "//src/v/test_utils:scoped_config",
     ],
@@ -63,11 +34,11 @@ redpanda_test_cc_library(
     ],
     include_prefix = "cloud_storage/tests",
     deps = [
-        ":s3_imposter",
         "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cluster",
         "//src/v/cluster/cloud_metadata/tests:manual_mixin",
@@ -202,8 +173,8 @@ redpanda_cc_btest(
     ],
     deps = [
         ":common",
-        ":s3_imposter",
         "//src/v/bytes:iostream",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/model",
         "//src/v/test_utils:seastar_boost",
@@ -258,7 +229,7 @@ redpanda_cc_gtest(
     cpu = 1,
     tags = ["exclusive"],
     deps = [
-        ":s3_imposter",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage_clients",
         "//src/v/cluster:topic_configuration",
@@ -370,9 +341,9 @@ redpanda_cc_btest(
     tags = ["exclusive"],
     deps = [
         "//src/v/bytes:iostream",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage/tests:common",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:lazy_abort_source",
         "@boost//:test",
@@ -420,9 +391,9 @@ redpanda_cc_btest(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage/tests:common",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/cloud_storage_clients",
         "//src/v/config",
         "//src/v/model",
@@ -446,9 +417,9 @@ redpanda_cc_btest(
     tags = ["exclusive"],
     deps = [
         "//src/v/bytes:iostream",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage/tests:common",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/model",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:retry_chain_node",
@@ -492,8 +463,8 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/cloud_storage_clients",
         "//src/v/model",
         "//src/v/test_utils:gtest",
@@ -516,9 +487,9 @@ redpanda_cc_gtest(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage/tests:common",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/cloud_storage_clients",
         "//src/v/config",
         "//src/v/model",
@@ -544,8 +515,8 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/cloud_storage_clients",
         "//src/v/model",
         "//src/v/test_utils:gtest",
@@ -564,9 +535,9 @@ redpanda_cc_gtest(
     cpu = 1,
     tags = ["exclusive"],
     deps = [
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage/tests:common",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/cluster",
         "//src/v/cluster/tests:topic_properties_generator",
         "//src/v/config",
@@ -592,9 +563,9 @@ redpanda_cc_btest(
     cpu = 1,
     tags = ["exclusive"],
     deps = [
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage/tests:common",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/model",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",

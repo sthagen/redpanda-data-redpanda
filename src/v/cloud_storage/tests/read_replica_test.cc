@@ -9,10 +9,10 @@
  * by the Apache License, Version 2.0
  */
 
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/tests/produce_utils.h"
 #include "cloud_storage/tests/read_replica_e2e_fixture.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "cloud_storage/types.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/ntp_archiver_service.h"

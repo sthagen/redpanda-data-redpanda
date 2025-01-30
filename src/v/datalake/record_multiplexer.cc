@@ -326,10 +326,22 @@ record_multiplexer::handle_invalid_record(
             }
         }
 
+        auto record_type = key_value_translator{}.build_type(std::nullopt);
+        if (!load_res.value().fill_registered_ids(record_type.type)) {
+            // This shouldn't happen because we ensured the schema with the
+            // call to table_creator. Probably someone managed to change the
+            // table between two calls.
+            vlog(
+              _log.warn,
+              "expected to successfully fill field IDs for record {}",
+              offset);
+            co_return writer_error::parquet_conversion_error;
+        }
+
         _invalid_record_writer = std::make_unique<partitioning_writer>(
           *_writer_factory,
           load_res.value().schema.schema_id,
-          key_value_translator{}.build_type(std::nullopt).type,
+          std::move(record_type.type),
           std::move(load_res.value().partition_spec));
     }
 

@@ -1,0 +1,24 @@
+"patch_cluster_config_request": {
+    "description": "Request body of patch cluster config request",
+    "type": "object",
+    "properties": {
+        "upsert": {
+            "description": "Cluster configuration property key-value pairs to add or update.",
+            "type": "object",
+            "additionalProperties": {
+                "type": "string"
+            }
+        },
+        "remove": {
+            "description": "Cluster configuration property keys to reset to their default.",
+            "type": "array",
+            "items": {
+                "type": "string"
+            }
+        }
+    },
+    "required": [
+        "upsert",
+        "remove"
+    ]
+}

@@ -8,8 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/recovery_request.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "cluster/cloud_metadata/tests/manual_mixin.h"
 #include "cluster/topic_recovery_service.h"
 #include "redpanda/tests/fixture.h"

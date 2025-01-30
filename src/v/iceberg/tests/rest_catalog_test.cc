@@ -9,8 +9,8 @@
  */
 
 #include "bytes/iobuf_parser.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "iceberg/json_writer.h"
 #include "iceberg/rest_catalog.h"
 #include "iceberg/rest_client/catalog_client.h"

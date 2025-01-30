@@ -10,7 +10,7 @@ redpanda_test_cc_library(
     include_prefix = "redpanda/tests",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/cloud_storage/tests:s3_imposter",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/redpanda:application",
         "//src/v/storage/tests:disk_log_builder",
         "//src/v/test_utils:fixture",

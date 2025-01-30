@@ -14,6 +14,9 @@ seastar_cc_swagger_library(
 seastar_cc_swagger_library(
     name = "cluster_config",
     src = "api-doc/cluster_config.json",
+    definitions = [
+        "api-doc/cluster_config.def.json",
+    ],
 )
 
 seastar_cc_swagger_library(

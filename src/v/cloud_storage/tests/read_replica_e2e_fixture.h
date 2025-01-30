@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
-#include "cloud_storage/tests/s3_imposter.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/scoped_config.h"
 

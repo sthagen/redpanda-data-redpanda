@@ -9,8 +9,8 @@
 
 #include "bytes/iostream.h"
 #include "bytes/streambuf.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/remote.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "cloud_storage/topic_manifest.h"
 #include "cloud_storage/topic_manifest_downloader.h"
 #include "cloud_storage/topic_path_utils.h"

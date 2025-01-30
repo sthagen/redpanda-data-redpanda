@@ -73,9 +73,9 @@ def data_dependency():
     http_archive(
         name = "krb5",
         build_file = "//bazel/thirdparty:krb5.BUILD",
-        sha256 = "ec3861c3bec29aa8da9281953c680edfdab1754d1b1db8761c1d824e4b25496a",
-        strip_prefix = "krb5-krb5-1.20.1-final",
-        url = "https://vectorized-public.s3.us-west-2.amazonaws.com/dependencies/krb5-krb5-1.20.1-final.tar.gz",
+        sha256 = "2157d92020d408ed63ebcd886a92d1346a1383b0f91123a0473b4f69b4a24861",
+        strip_prefix = "krb5-krb5-1.21.3-final",
+        url = "https://github.com/krb5/krb5/archive/refs/tags/krb5-1.21.3-final.tar.gz",
     )
 
     http_archive(

@@ -8,9 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/tests/produce_utils.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "config/configuration.h"

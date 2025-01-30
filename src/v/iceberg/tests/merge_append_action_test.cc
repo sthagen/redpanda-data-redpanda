@@ -8,8 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "cloud_io/remote.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_io.h"
 #include "iceberg/merge_append_action.h"

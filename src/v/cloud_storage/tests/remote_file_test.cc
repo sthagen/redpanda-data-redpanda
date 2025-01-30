@@ -9,12 +9,12 @@
  */
 
 #include "bytes/iostream.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/cache_service.h"
 #include "cloud_storage/download_exception.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_file.h"
 #include "cloud_storage/tests/cache_test_fixture.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "test_utils/fixture.h"
 #include "utils/lazy_abort_source.h"
 

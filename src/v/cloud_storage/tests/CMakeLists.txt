@@ -1,24 +1,8 @@
-v_cc_library(
-  NAME
-    s3_imposter
-  HDRS
-    "s3_imposter.h"
-  SRCS
-    "s3_imposter.cc"
-  DEPS
-    v::config
-    v::http
-    v::http_test_utils
-    v::model
-    v::cloud_storage_clients
-)
-
 # Regular unit tests that don't open ports and run on a single core
 rp_test(
   UNIT_TEST
   BINARY_NAME cloud_storage
   SOURCES
-    s3_imposter.cc
     directory_walker_test.cc
     partition_manifest_test.cc
     tx_range_manifest_test.cc
@@ -28,7 +12,7 @@ rp_test(
     segment_chunk_test.cc
     materialized_manifest_cache_test.cc
   DEFINITIONS BOOST_TEST_DYN_LINK
-  LIBRARIES v::seastar_testing_main Boost::unit_test_framework v::cloud_storage v::storage_test_utils v::cloud_roles v::raft
+  LIBRARIES v::seastar_testing_main Boost::unit_test_framework v::cloud_storage v::storage_test_utils v::cloud_roles v::raft v::s3_imposter
   ARGS "-- -c 1"
   LABELS cloud_storage
 )
@@ -68,7 +52,6 @@ rp_test(
   BINARY_NAME cloud_storage
   SOURCES
     util.cc
-    s3_imposter.cc
     remote_file_test.cc
     remote_segment_test.cc
     remote_partition_test.cc
@@ -88,6 +71,7 @@ rp_test(
     v::application
     v::kafka_test_utils
     v::http_test_utils
+    v::s3_imposter
   ARGS "-- -c 1"
   LABELS cloud_storage
 )
@@ -102,7 +86,6 @@ rp_test(
     partition_manifest_downloader_test.cc
     remote_path_provider_test.cc
     remote_test.cc
-    s3_imposter.cc
     topic_manifest_downloader_test.cc
     topic_namespace_override_recovery_test.cc
     topic_mount_handler_test.cc
@@ -116,6 +99,7 @@ rp_test(
     v::application
     v::kafka_test_utils
     v::http_test_utils
+    v::s3_imposter
   ARGS "-- -c 1"
   LABELS cloud_storage
 )
@@ -125,7 +109,6 @@ rp_test(
   BINARY_NAME cloud_storage_fuzzy
   SOURCES
     util.cc
-    s3_imposter.cc
     remote_partition_fuzz_test.cc
   DEFINITIONS BOOST_TEST_DYN_LINK
   LIBRARIES
@@ -135,6 +118,7 @@ rp_test(
     v::storage_test_utils
     v::cloud_roles
     v::application
+    v::s3_imposter
   ARGS "-- -c 1"
   LABELS cloud_storage
 )

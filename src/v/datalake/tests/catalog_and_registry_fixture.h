@@ -10,8 +10,8 @@
 #pragma once
 
 #include "cloud_io/remote.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "iceberg/filesystem_catalog.h"
 #include "schema/tests/fake_registry.h"
 

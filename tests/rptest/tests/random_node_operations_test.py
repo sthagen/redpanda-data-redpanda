@@ -73,6 +73,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                     'raft': 'debug',
                     'cluster': 'debug',
                     'datalake': 'trace',
+                    'cloud_storage': 'debug',
                 }),
             *args,
             **kwargs)

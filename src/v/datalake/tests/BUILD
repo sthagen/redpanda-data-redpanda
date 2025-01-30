@@ -58,8 +58,8 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cloud_io:remote",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/iceberg:filesystem_catalog",
         "//src/v/schema/tests:fake_registry",
     ],
@@ -169,8 +169,8 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         "//src/v/cloud_io:remote",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/iceberg:datatypes",
         "//src/v/iceberg:field_collecting_visitor",

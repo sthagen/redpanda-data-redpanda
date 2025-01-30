@@ -9,9 +9,9 @@
  */
 
 #include "cloud_io/remote.h"
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "cloud_io/transfer_details.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "iceberg/manifest_io.h"
 #include "iceberg/manifest_list.h"
 #include "iceberg/tests/test_schemas.h"

@@ -29,6 +29,13 @@
               "schema": {"type": "integer"},
               "required": false,
               "description": "If nonzero, do not apply any changes (but still do validation and return 400 on errors)"
+            },
+            {
+              "in": "body",
+              "required": true,
+              "schema": {
+                "$ref": "#/definitions/patch_cluster_config_request"
+              }
             }
           ],
           "responses": {

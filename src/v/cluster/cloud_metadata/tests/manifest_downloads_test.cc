@@ -8,8 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/remote.h"
-#include "cloud_storage/tests/s3_imposter.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
 #include "cluster/cloud_metadata/key_utils.h"

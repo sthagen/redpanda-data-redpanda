@@ -10,4 +10,17 @@ v_cc_library(
     v::cloud_storage_clients
 )
 
-
+v_cc_library(
+  NAME
+    s3_imposter
+  HDRS
+    "s3_imposter.h"
+  SRCS
+    "s3_imposter.cc"
+  DEPS
+    v::config
+    v::http
+    v::http_test_utils
+    v::model
+    v::cloud_storage_clients
+)

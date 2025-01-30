@@ -61,8 +61,8 @@ redpanda_cc_gtest(
     deps = [
         ":state_test_utils",
         "//src/v/cloud_io:remote",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:logger",
         "//src/v/datalake:table_definition",
@@ -90,8 +90,8 @@ redpanda_cc_gtest(
     tags = ["exclusive"],
     deps = [
         "//src/v/cloud_io:remote",
+        "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
-        "//src/v/cloud_storage/tests:s3_imposter",
         "//src/v/cloud_storage_clients",
         "//src/v/datalake:table_definition",
         "//src/v/datalake/coordinator:iceberg_snapshot_remover",
