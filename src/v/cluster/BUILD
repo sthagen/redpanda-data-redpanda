@@ -708,6 +708,7 @@ redpanda_cc_library(
         "//src/v/ssx:sformat",
         "//src/v/ssx:single_sharded",
         "//src/v/ssx:sleep_abortable",
+        "//src/v/ssx:when_all",
         "//src/v/storage",
         "//src/v/storage:parser_utils",
         "//src/v/storage:record_batch_builder",

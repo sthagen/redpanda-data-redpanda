@@ -133,15 +133,25 @@ logger:
                     metrics[family.name] = family_metrics
         return metrics
 
-    def stop_stream(self, name: str, wait_to_finish=True, timeout_sec=60):
+    def stop_stream(self,
+                    name: str,
+                    should_finish: bool | None = True,
+                    timeout_sec=60):
         """
-        Optionally waits for the stream to finish and then removes the stream
+        Optionally makse waits for the stream to finish and then removes the stream
+
+        should_finish semantics:
+            - True: wait for the stream to finish
+            - False: make sure the stream has NOT finished when removed
+            - None: just remove
         """
         def _finished():
             streams = self._request("GET", f"streams").json()
             return name not in streams or streams[name]["active"] == False
 
-        if wait_to_finish:
+        if should_finish == False:
+            assert not _finished()
+        if should_finish:
             wait_until(_finished,
                        timeout_sec=timeout_sec,
                        backoff_sec=0.5,

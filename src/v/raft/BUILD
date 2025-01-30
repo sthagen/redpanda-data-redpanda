@@ -53,7 +53,6 @@ redpanda_cc_library(
         "heartbeat_manager.cc",
         "heartbeats.cc",
         "logger.cc",
-        "offset_monitor.cc",
         "persisted_stm.cc",
         "probe.cc",
         "recovery_memory_quota.cc",

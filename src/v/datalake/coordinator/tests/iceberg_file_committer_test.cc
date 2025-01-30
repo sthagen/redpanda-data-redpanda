@@ -14,6 +14,7 @@
 #include "datalake/coordinator/iceberg_file_committer.h"
 #include "datalake/coordinator/tests/state_test_utils.h"
 #include "datalake/table_definition.h"
+#include "datalake/tests/test_utils.h"
 #include "iceberg/filesystem_catalog.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_io.h"

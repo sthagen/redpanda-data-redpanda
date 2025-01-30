@@ -9,8 +9,6 @@
  */
 #include "datalake/table_definition.h"
 
-#include "iceberg/transform.h"
-
 namespace datalake {
 using namespace iceberg;
 struct_type schemaless_struct_type() {
@@ -51,18 +49,6 @@ schema default_schema() {
       .schema_struct = schemaless_struct_type(),
       .schema_id = iceberg::schema::id_t{0},
       .identifier_field_ids = {},
-    };
-}
-
-unresolved_partition_spec hour_partition_spec() {
-    chunked_vector<unresolved_partition_spec::field> fields;
-    fields.push_back({
-      .source_name = {"redpanda", "timestamp"},
-      .transform = hour_transform{},
-      .name = "redpanda_timestamp_hour",
-    });
-    return {
-      .fields = std::move(fields),
     };
 }
 

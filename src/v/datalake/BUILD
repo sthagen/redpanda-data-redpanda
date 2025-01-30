@@ -251,13 +251,9 @@ redpanda_cc_library(
     hdrs = [
         "table_definition.h",
     ],
-    implementation_deps = [
-        "//src/v/iceberg:transform",
-    ],
     include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
-        "//src/v/iceberg:partition",
         "//src/v/iceberg:schema",
     ],
 )

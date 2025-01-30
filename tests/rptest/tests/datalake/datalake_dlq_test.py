@@ -8,6 +8,7 @@
 # by the Apache License, Version 2.0
 
 from enum import Enum
+import time
 from typing import Optional
 
 from ducktape.mark import matrix
@@ -345,3 +346,145 @@ class DatalakeDLQTest(RedpandaTest):
                                     30,
                                     5,
                                     table_override=f"{self.topic_name}~dlq")
+
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            query_engine=[QueryEngineType.SPARK],
+            use_topic_property=[True, False],
+            action=[
+                IcebergInvalidRecordAction.DROP,
+                IcebergInvalidRecordAction.DLQ_TABLE
+            ])
+    def test_invalid_record_action(self, cloud_storage_type, query_engine,
+                                   use_topic_property, action):
+
+        topic_config = {}
+        if use_topic_property:
+            # Topic property.
+            topic_config[
+                TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION] = str(action)
+        else:
+            # Cluster default.
+            self.redpanda.add_extra_rp_conf(
+                {"iceberg_invalid_record_action": str(action)})
+
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              filesystem_catalog_mode=True,
+                              include_query_engines=[query_engine]) as dl:
+            dl.create_iceberg_enabled_topic(
+                self.topic_name,
+                iceberg_mode="value_schema_id_prefix",
+                config=topic_config)
+
+            num_valid_per_iter = 7
+            num_invalid_per_iter = 5
+            num_iter = 3
+
+            for _ in range(num_iter):
+                # Produce valid records.
+                avro_serde_client = self._get_serde_client(
+                    SchemaType.AVRO, SerdeClientType.Golang, self.topic_name,
+                    num_valid_per_iter)
+                avro_serde_client.start()
+                avro_serde_client.wait()
+                avro_serde_client.free()
+
+                # Produce invalid records.
+                dl.produce_to_topic(self.topic_name, 1, num_invalid_per_iter)
+
+            # Wait for valid records to be written to the table.
+            dl.wait_for_translation(self.topic_name,
+                                    num_valid_per_iter * num_iter, 30, 5)
+
+            if action == IcebergInvalidRecordAction.DROP:
+                # Only the main table should be created if invalid records are dropped.
+                assert dl.num_tables(
+                ) == 1, "Expected only 1 table in catalog as invalid records were dropped"
+            elif action == IcebergInvalidRecordAction.DLQ_TABLE:
+                dl.wait_for_translation(
+                    self.topic_name,
+                    num_invalid_per_iter * num_iter,
+                    30,
+                    5,
+                    table_override=f"{self.topic_name}~dlq")
+            else:
+                assert False, f"Unhandled action: {action}"
+
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            query_engine=[QueryEngineType.SPARK],
+            use_topic_property=[True, False])
+    def test_invalid_record_action_runtime_change(self, cloud_storage_type,
+                                                  query_engine,
+                                                  use_topic_property):
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              filesystem_catalog_mode=True,
+                              include_query_engines=[query_engine]) as dl:
+            dl.create_iceberg_enabled_topic(
+                self.topic_name, iceberg_mode="value_schema_id_prefix")
+
+            num_valid_per_iter = 7
+            num_invalid_per_iter = 5
+            num_iter = 3
+
+            for _ in range(num_iter):
+                # Produce valid records.
+                avro_serde_client = self._get_serde_client(
+                    SchemaType.AVRO, SerdeClientType.Golang, self.topic_name,
+                    num_valid_per_iter)
+                avro_serde_client.start()
+                avro_serde_client.wait()
+                avro_serde_client.free()
+
+                # Produce invalid records.
+                dl.produce_to_topic(self.topic_name, 1, num_invalid_per_iter)
+
+            # Wait for valid records to be written to the table.
+            dl.wait_for_translation(self.topic_name,
+                                    num_valid_per_iter * num_iter, 30, 5)
+
+            # Wait for invalid records to be written to the DLQ table.
+            dl.wait_for_translation(self.topic_name,
+                                    num_invalid_per_iter * num_iter,
+                                    30,
+                                    5,
+                                    table_override=f"{self.topic_name}~dlq")
+
+            rpk = RpkTool(self.redpanda)
+            if use_topic_property:
+                # Topic property.
+                rpk.alter_topic_config(
+                    self.topic_name,
+                    TopicSpec.PROPERTY_ICEBERG_INVALID_RECORD_ACTION,
+                    str(IcebergInvalidRecordAction.DROP))
+            else:
+                rpk.cluster_config_set("iceberg_invalid_record_action",
+                                       str(IcebergInvalidRecordAction.DROP))
+
+            # Wait a bit for the change to take effect. This is a bit hacky but
+            # allows the test to be simpler.
+            time.sleep(5)
+
+            # Produce more invalid records and observe that they are drooped
+            # but valid records are still written.
+            for _ in range(num_iter):
+                # Produce valid records.
+                avro_serde_client = self._get_serde_client(
+                    SchemaType.AVRO, SerdeClientType.Golang, self.topic_name,
+                    num_valid_per_iter)
+                avro_serde_client.start()
+                avro_serde_client.wait()
+                avro_serde_client.free()
+
+                # Produce invalid records.
+                dl.produce_to_topic(self.topic_name, 1, num_invalid_per_iter)
+
+            # Wait for valid records to be written to the table.
+            dl.wait_for_translation(self.topic_name,
+                                    2 * num_valid_per_iter * num_iter, 30, 5)
+
+            dlq_count = dl.query_engine(query_engine).count_table(
+                "redpanda", f"{self.topic_name}~dlq")
+            assert dlq_count == num_iter * num_invalid_per_iter, f"Didn't expect additional records in DLQ table: Expected {num_iter * num_invalid_per_iter} but got {dlq_count}"

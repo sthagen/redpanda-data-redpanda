@@ -11,6 +11,7 @@
 #include "datalake/partitioning_writer.h"
 #include "datalake/table_definition.h"
 #include "datalake/tests/test_data_writer.h"
+#include "datalake/tests/test_utils.h"
 #include "iceberg/tests/test_schemas.h"
 #include "iceberg/tests/value_generator.h"
 #include "model/timestamp.h"

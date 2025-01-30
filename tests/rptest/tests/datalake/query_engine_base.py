@@ -32,6 +32,7 @@ class QueryEngineBase(ABC):
     def run_query(self, query):
         client = self.make_client()
         assert client
+        self.logger.debug(f"running query: {query}")
         try:
             try:
                 cursor = client.cursor()
@@ -48,7 +49,9 @@ class QueryEngineBase(ABC):
 
     def run_query_fetch_all(self, query):
         with self.run_query(query) as cursor:
-            return cursor.fetchall()
+            result = cursor.fetchall()
+            self.logger.debug(f"query result: {result}")
+            return result
 
     def count_table(self, namespace, table) -> int:
         query = f"select count(*) from {namespace}.{self.escape_identifier(table)}"

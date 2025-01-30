@@ -44,10 +44,13 @@ redpanda_cc_library(
     deps = [
         ":model",
         ":utils",
+        "//src/v/base",
         "//src/v/cluster:state_machine_registry",
         "//src/v/datalake:logger",
+        "//src/v/model",
         "//src/v/raft",
         "//src/v/serde",
+        "@seastar",
     ],
 )
 
@@ -67,6 +70,7 @@ redpanda_cc_library(
         ":utils",
         "//src/v/base",
         "//src/v/cluster",
+        "//src/v/cluster:notification",
         "//src/v/datalake:cloud_data_io",
         "//src/v/datalake:local_parquet_file_writer",
         "//src/v/datalake:logger",

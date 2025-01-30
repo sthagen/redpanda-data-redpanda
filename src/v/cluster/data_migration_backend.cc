@@ -628,36 +628,29 @@ ss::future<errc> backend::create_topic(
     if (!maybe_cfg) {
         co_return errc::topic_invalid_config;
     }
+
     cluster::topic_configuration topic_to_create_cfg(
       local_nt.ns,
       local_nt.tp,
       maybe_cfg->partition_count,
       maybe_cfg->replication_factor);
     auto& topic_properties = topic_to_create_cfg.properties;
-    auto manifest_props = maybe_cfg->properties;
 
-    topic_properties.compression = manifest_props.compression;
-    topic_properties.cleanup_policy_bitflags
-      = manifest_props.cleanup_policy_bitflags;
-    topic_properties.compaction_strategy = manifest_props.compaction_strategy;
+    // copy all properties
+    topic_properties = maybe_cfg->properties;
 
-    topic_properties.retention_bytes = manifest_props.retention_bytes;
-    topic_properties.retention_duration = manifest_props.retention_duration;
-    topic_properties.retention_local_target_bytes
-      = manifest_props.retention_local_target_bytes;
-
-    topic_properties.remote_topic_namespace_override
-      = manifest_props.remote_topic_namespace_override
-          ? manifest_props.remote_topic_namespace_override
-          : original_nt;
-
+    // override specific ones
+    topic_to_create_cfg.is_migrated = true;
+    if (!topic_properties.remote_topic_namespace_override) {
+        topic_properties.remote_topic_namespace_override = original_nt;
+    }
     topic_properties.remote_topic_properties.emplace(
       tm.get_revision(), maybe_cfg->partition_count);
-    topic_properties.shadow_indexing = {model::shadow_indexing_mode::full};
+    topic_properties.shadow_indexing = model::shadow_indexing_mode::full;
     topic_properties.recovery = true;
-    topic_properties.remote_label = manifest_props.remote_label;
+    topic_properties.read_replica = {};
+    topic_properties.read_replica_bucket = {};
 
-    topic_to_create_cfg.is_migrated = true;
     custom_assignable_topic_configuration_vector cfg_vector;
     cfg_vector.push_back(
       custom_assignable_topic_configuration(std::move(topic_to_create_cfg)));

@@ -35,7 +35,16 @@ public:
           "raft_learner_recovery", 50);
         _archival_upload = co_await ss::create_scheduling_group(
           "archival_upload", 100);
-        _node_status = co_await ss::create_scheduling_group("node_status", 50);
+        /**
+         * Raft group to run the raft heartbeats in. This group has the highest
+         * priority to make sure Raft failure detector is not starved even in
+         * highly loaded clusters.
+         */
+        _raft_heartbeats = co_await ss::create_scheduling_group(
+          "raft_hb", 1500);
+        /**
+         * Group used to schedule a self test.
+         */
         _self_test = co_await ss::create_scheduling_group("self_test", 100);
         _fetch = co_await ss::create_scheduling_group("fetch", 1000);
         _transforms = co_await ss::create_scheduling_group("transforms", 100);
@@ -52,7 +61,7 @@ public:
         co_await destroy_scheduling_group(_compaction);
         co_await destroy_scheduling_group(_raft_learner_recovery);
         co_await destroy_scheduling_group(_archival_upload);
-        co_await destroy_scheduling_group(_node_status);
+        co_await destroy_scheduling_group(_raft_heartbeats);
         co_await destroy_scheduling_group(_self_test);
         co_await destroy_scheduling_group(_fetch);
         co_await destroy_scheduling_group(_transforms);
@@ -73,7 +82,7 @@ public:
         return _raft_learner_recovery;
     }
     ss::scheduling_group archival_upload() { return _archival_upload; }
-    ss::scheduling_group node_status() { return _node_status; }
+    ss::scheduling_group raft_heartbeats() { return _raft_heartbeats; }
     ss::scheduling_group self_test_sg() { return _self_test; }
     ss::scheduling_group transforms_sg() { return _transforms; }
     ss::scheduling_group datalake_sg() { return _datalake; }
@@ -108,7 +117,7 @@ public:
           std::cref(_compaction),
           std::cref(_raft_learner_recovery),
           std::cref(_archival_upload),
-          std::cref(_node_status),
+          std::cref(_raft_heartbeats),
           std::cref(_self_test),
           std::cref(_fetch),
           std::cref(_transforms),
@@ -127,7 +136,7 @@ private:
     ss::scheduling_group _compaction;
     ss::scheduling_group _raft_learner_recovery;
     ss::scheduling_group _archival_upload;
-    ss::scheduling_group _node_status;
+    ss::scheduling_group _raft_heartbeats;
     ss::scheduling_group _self_test;
     ss::scheduling_group _fetch;
     ss::scheduling_group _transforms;

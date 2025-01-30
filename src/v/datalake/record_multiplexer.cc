@@ -17,6 +17,7 @@
 #include "datalake/record_translator.h"
 #include "datalake/table_creator.h"
 #include "datalake/table_id_provider.h"
+#include "model/metadata.h"
 #include "model/record.h"
 #include "storage/parser_utils.h"
 
@@ -32,6 +33,7 @@ record_multiplexer::record_multiplexer(
   type_resolver& type_resolver,
   record_translator& record_translator,
   table_creator& table_creator,
+  model::iceberg_invalid_record_action invalid_record_action,
   lazy_abort_source& as)
   : _log(datalake_log, fmt::format("{}", ntp))
   , _ntp(ntp)
@@ -41,6 +43,7 @@ record_multiplexer::record_multiplexer(
   , _type_resolver(type_resolver)
   , _record_translator(record_translator)
   , _table_creator(table_creator)
+  , _invalid_record_action(invalid_record_action)
   , _as(as) {}
 
 ss::future<ss::stop_iteration>
@@ -285,112 +288,128 @@ record_multiplexer::handle_invalid_record(
   model::timestamp ts,
   chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>
     headers) {
-    vlog(_log.debug, "Writing to DLQ invalid record at offset {}", offset);
     // TODO: add a metric!
+    switch (_invalid_record_action) {
+    case model::iceberg_invalid_record_action::drop:
+        vlog(_log.debug, "Dropping invalid record at offset {}", offset);
 
-    if (!_invalid_record_writer) {
-        auto ensure_res = co_await _table_creator.ensure_dlq_table(
-          _ntp.tp.topic, _topic_revision);
+        // Advance processed offset.
+        if (!_result.has_value()) {
+            _result = write_result{
+              .start_offset = offset,
+            };
+        }
+        _result.value().last_offset = offset;
 
-        if (ensure_res.has_error()) {
-            auto e = ensure_res.error();
-            switch (e) {
-            case table_creator::errc::incompatible_schema:
-                [[fallthrough]];
-            case table_creator::errc::failed:
-                [[fallthrough]];
-            case table_creator::errc::shutting_down:
+        co_return std::nullopt;
+
+    case model::iceberg_invalid_record_action::dlq_table:
+        vlog(_log.debug, "Writing to DLQ invalid record at offset {}", offset);
+
+        if (!_invalid_record_writer) {
+            auto ensure_res = co_await _table_creator.ensure_dlq_table(
+              _ntp.tp.topic, _topic_revision);
+
+            if (ensure_res.has_error()) {
+                auto e = ensure_res.error();
+                switch (e) {
+                case table_creator::errc::incompatible_schema:
+                    [[fallthrough]];
+                case table_creator::errc::failed:
+                    [[fallthrough]];
+                case table_creator::errc::shutting_down:
+                    vlog(
+                      _log.warn,
+                      "Error ensuring DLQ table schema for invalid record {}",
+                      offset);
+                    co_return writer_error::parquet_conversion_error;
+                }
+            }
+
+            auto table_id = table_id_provider::dlq_table_id(_ntp.tp.topic);
+            auto load_res = co_await _schema_mgr.get_table_info(table_id);
+            if (load_res.has_error()) {
+                auto e = load_res.error();
+                switch (e) {
+                case schema_manager::errc::not_supported:
+                case schema_manager::errc::failed:
+                    vlog(
+                      _log.warn,
+                      "Error getting table info for record {}: {}",
+                      offset,
+                      load_res.error());
+                    [[fallthrough]];
+                case schema_manager::errc::shutting_down:
+                    co_return writer_error::parquet_conversion_error;
+                }
+            }
+
+            auto record_type = key_value_translator{}.build_type(std::nullopt);
+            if (!load_res.value().fill_registered_ids(record_type.type)) {
+                // This shouldn't happen because we ensured the schema with the
+                // call to table_creator. Probably someone managed to change the
+                // table between two calls.
                 vlog(
                   _log.warn,
-                  "Error ensuring DLQ table schema for invalid record {}",
+                  "expected to successfully fill field IDs for record {}",
                   offset);
                 co_return writer_error::parquet_conversion_error;
             }
+
+            _invalid_record_writer = std::make_unique<partitioning_writer>(
+              *_writer_factory,
+              load_res.value().schema.schema_id,
+              std::move(record_type.type),
+              std::move(load_res.value().partition_spec));
         }
 
-        auto table_id = table_id_provider::dlq_table_id(_ntp.tp.topic);
-        auto load_res = co_await _schema_mgr.get_table_info(table_id);
-        if (load_res.has_error()) {
-            auto e = load_res.error();
-            switch (e) {
-            case schema_manager::errc::not_supported:
-            case schema_manager::errc::failed:
-                vlog(
-                  _log.warn,
-                  "Error getting table info for record {}: {}",
-                  offset,
-                  load_res.error());
-                [[fallthrough]];
-            case schema_manager::errc::shutting_down:
-                co_return writer_error::parquet_conversion_error;
-            }
-        }
+        int64_t estimated_size = (key ? key->size_bytes() : 0)
+                                 + (val ? val->size_bytes() : 0);
 
-        auto record_type = key_value_translator{}.build_type(std::nullopt);
-        if (!load_res.value().fill_registered_ids(record_type.type)) {
-            // This shouldn't happen because we ensured the schema with the
-            // call to table_creator. Probably someone managed to change the
-            // table between two calls.
+        auto invalid_record_type_resolver = binary_type_resolver{};
+        auto resolved_buf_type = co_await invalid_record_type_resolver
+                                   .resolve_buf_type(std::move(val));
+
+        auto record_data_res = co_await key_value_translator{}.translate_data(
+          _ntp.tp.partition,
+          offset,
+          std::move(key),
+          resolved_buf_type.value().type,
+          std::move(resolved_buf_type.value().parsable_buf),
+          ts,
+          headers);
+        if (record_data_res.has_error()) {
             vlog(
-              _log.warn,
-              "expected to successfully fill field IDs for record {}",
-              offset);
+              _log.debug,
+              "Error translating DLQ data for record {}: {}",
+              offset,
+              record_data_res.error());
             co_return writer_error::parquet_conversion_error;
         }
 
-        _invalid_record_writer = std::make_unique<partitioning_writer>(
-          *_writer_factory,
-          load_res.value().schema.schema_id,
-          std::move(record_type.type),
-          std::move(load_res.value().partition_spec));
+        if (!_result.has_value()) {
+            _result = write_result{
+              .start_offset = offset,
+            };
+        }
+
+        _result.value().last_offset = offset;
+
+        auto add_data_err = co_await _invalid_record_writer->add_data(
+          std::move(record_data_res.value()), estimated_size);
+
+        if (add_data_err != writer_error::ok) {
+            vlog(
+              _log.warn,
+              "Error adding data to DLQ writer for record {}: {}",
+              offset,
+              add_data_err);
+            // If a write fails, the writer is left in an indeterminate state,
+            // we cannot continue in this case.
+            co_return add_data_err;
+        }
+
+        co_return std::nullopt;
     }
-
-    int64_t estimated_size = (key ? key->size_bytes() : 0)
-                             + (val ? val->size_bytes() : 0);
-
-    auto invalid_record_type_resolver = binary_type_resolver{};
-    auto resolved_buf_type
-      = co_await invalid_record_type_resolver.resolve_buf_type(std::move(val));
-
-    auto record_data_res = co_await key_value_translator{}.translate_data(
-      _ntp.tp.partition,
-      offset,
-      std::move(key),
-      resolved_buf_type.value().type,
-      std::move(resolved_buf_type.value().parsable_buf),
-      ts,
-      headers);
-    if (record_data_res.has_error()) {
-        vlog(
-          _log.debug,
-          "Error translating DLQ data for record {}: {}",
-          offset,
-          record_data_res.error());
-        co_return writer_error::parquet_conversion_error;
-    }
-
-    if (!_result.has_value()) {
-        _result = write_result{
-          .start_offset = offset,
-        };
-    }
-
-    _result.value().last_offset = offset;
-
-    auto add_data_err = co_await _invalid_record_writer->add_data(
-      std::move(record_data_res.value()), estimated_size);
-
-    if (add_data_err != writer_error::ok) {
-        vlog(
-          _log.warn,
-          "Error adding data to DLQ writer for record {}: {}",
-          offset,
-          add_data_err);
-        // If a write fails, the writer is left in an indeterminate state,
-        // we cannot continue in this case.
-        co_return add_data_err;
-    }
-
-    co_return std::nullopt;
 }
 } // namespace datalake

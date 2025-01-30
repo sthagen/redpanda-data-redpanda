@@ -163,7 +163,12 @@ private:
 
 TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
     datalake::translation_task task(
-      cloud_io, *schema_mgr, *schema_resolver, *translator, *t_creator);
+      cloud_io,
+      *schema_mgr,
+      *schema_resolver,
+      *translator,
+      *t_creator,
+      model::iceberg_invalid_record_action::dlq_table);
 
     auto result = task
                     .translate(
@@ -193,7 +198,12 @@ TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
 
 TEST_F(TranslateTaskTest, TestDataFileMissing) {
     datalake::translation_task task(
-      cloud_io, *schema_mgr, *schema_resolver, *translator, *t_creator);
+      cloud_io,
+      *schema_mgr,
+      *schema_resolver,
+      *translator,
+      *t_creator,
+      model::iceberg_invalid_record_action::dlq_table);
     // create deleting task to cause local io error
     deleter del(tmp_dir.get_path().string());
     del.start();
@@ -216,7 +226,12 @@ TEST_F(TranslateTaskTest, TestDataFileMissing) {
 
 TEST_F(TranslateTaskTest, TestUploadError) {
     datalake::translation_task task(
-      cloud_io, *schema_mgr, *schema_resolver, *translator, *t_creator);
+      cloud_io,
+      *schema_mgr,
+      *schema_resolver,
+      *translator,
+      *t_creator,
+      model::iceberg_invalid_record_action::dlq_table);
     // fail all PUT requests
     fail_request_if(
       [](const http_test_utils::request_info& req) -> bool {

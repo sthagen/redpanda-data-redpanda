@@ -333,6 +333,7 @@ private:
           _type_resolver,
           _translator,
           _table_creator,
+          model::iceberg_invalid_record_action::dlq_table,
           _as);
     }
 

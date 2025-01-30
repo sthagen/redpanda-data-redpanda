@@ -11,6 +11,7 @@
 #include "datalake/translation/partition_translator.h"
 
 #include "cluster/archival/types.h"
+#include "cluster/notification.h"
 #include "cluster/partition.h"
 #include "datalake/coordinator/frontend.h"
 #include "datalake/coordinator/translated_offset_range.h"
@@ -24,11 +25,19 @@
 #include "datalake/translation/state_machine.h"
 #include "datalake/translation_task.h"
 #include "kafka/utils/txn_reader.h"
+#include "model/fundamental.h"
+#include "model/metadata.h"
+#include "model/timeout_clock.h"
 #include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 #include "utils/lazy_abort_source.h"
 
+#include <seastar/core/abort_source.hh>
+#include <seastar/core/future.hh>
 #include <seastar/coroutine/as_future.hh>
+
+#include <functional>
+#include <optional>
 
 namespace datalake::translation {
 
@@ -125,12 +134,28 @@ private:
     coordinator::frontend& coordinator_fe_;
 };
 
+ss::future<cluster::errc> wait_stm_translated(
+  ss::shared_ptr<translation_stm> stm,
+  model::offset o,
+  model::timeout_clock::time_point deadline,
+  std::optional<std::reference_wrapper<ss::abort_source>> as) {
+    try {
+        co_await stm->wait_translated(model::prev_offset(o), deadline, as);
+    } catch (const ss::abort_requested_exception&) {
+        co_return cluster::errc::shutting_down;
+    } catch (const ss::timed_out_error&) {
+        co_return cluster::errc::timeout;
+    }
+    co_return cluster::errc::success;
+}
+
 } // namespace
 
 static constexpr std::chrono::milliseconds translation_jitter{500};
 constexpr ::model::timeout_clock::duration wait_timeout = 5s;
 
 partition_translator::~partition_translator() = default;
+
 partition_translator::partition_translator(
   ss::lw_shared_ptr<cluster::partition> partition,
   ss::sharded<coordinator::frontend>* frontend,
@@ -142,12 +167,15 @@ partition_translator::partition_translator(
   std::chrono::milliseconds translation_interval,
   ss::scheduling_group sg,
   size_t reader_max_bytes,
-  std::unique_ptr<ssx::semaphore>* parallel_translations)
+  std::unique_ptr<ssx::semaphore>* parallel_translations,
+  model::iceberg_invalid_record_action invalid_record_action)
   : _term(partition->raft()->term())
   , _partition(std::move(partition))
   , _stm(_partition->raft()
            ->stm_manager()
            ->get<datalake::translation::translation_stm>())
+  , _partition_flush_subscription(_partition->register_flush_hook(
+      std::bind_front(&wait_stm_translated, _stm)))
   , _frontend(frontend)
   , _features(features)
   , _cloud_io(cloud_io)
@@ -161,6 +189,7 @@ partition_translator::partition_translator(
   , _jitter{translation_interval, translation_jitter}
   , _max_bytes_per_reader(reader_max_bytes)
   , _parallel_translations(parallel_translations)
+  , _invalid_record_action(invalid_record_action)
   , _writer_scratch_space(std::filesystem::temp_directory_path())
   , _logger(prefix_logger{
       datalake_log, fmt::format("{}-term-{}", _partition->ntp(), _term)}) {
@@ -199,11 +228,24 @@ void partition_translator::reset_translation_interval(
       _jitter.base_duration());
 }
 
+model::iceberg_invalid_record_action
+partition_translator::invalid_record_action() const {
+    return _invalid_record_action;
+}
+
+void partition_translator::reset_invalid_record_action(
+  model::iceberg_invalid_record_action new_action) {
+    vlog(
+      _logger.info, "Iceberg invalid record action reset to: {}", new_action);
+    _invalid_record_action = new_action;
+}
+
 ss::future<> partition_translator::stop() {
     vlog(_logger.debug, "stopping partition translator in term {}", _term);
     auto f = _gate.close();
     _as.request_abort();
     co_await std::move(f);
+    _partition->unregister_flush_hook(_partition_flush_subscription);
 }
 
 kafka::offset partition_translator::min_offset_for_translation() const {
@@ -242,7 +284,9 @@ partition_translator::do_translation_for_range(
       *_schema_mgr,
       *_type_resolver,
       *_record_translator,
-      *_table_creator};
+      *_table_creator,
+      _invalid_record_action,
+    };
     const auto& ntp = _partition->ntp();
     auto remote_path_prefix = remote_path{
       fmt::format("{}/{}/{}", iceberg_file_path_prefix, ntp.path(), _term)};

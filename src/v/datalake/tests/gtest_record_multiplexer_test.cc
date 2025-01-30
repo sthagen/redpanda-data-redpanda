@@ -20,6 +20,7 @@
 #include "datalake/tests/test_utils.h"
 #include "iceberg/filesystem_catalog.h"
 #include "model/fundamental.h"
+#include "model/metadata.h"
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "storage/record_batch_builder.h"
@@ -55,6 +56,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
       bin_resolver,
       translator,
       t_creator,
+      model::iceberg_invalid_record_action::dlq_table,
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -97,6 +99,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
       bin_resolver,
       translator,
       t_creator,
+      model::iceberg_invalid_record_action::dlq_table,
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -139,6 +142,7 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
       bin_resolver,
       translator,
       t_creator,
+      model::iceberg_invalid_record_action::dlq_table,
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -258,6 +262,7 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
       type_resolver,
       translator,
       t_creator,
+      model::iceberg_invalid_record_action::dlq_table,
       as);
     auto res = reader.consume(std::move(mux), model::no_timeout).get();
     ASSERT_FALSE(res.has_error()) << res.error();

@@ -531,7 +531,7 @@ namespace kafka {
 /// The purpose of this function is to mark every place where we converting
 /// from kafka offset to model::offset. This is done in places where the kafka
 /// offset is represetnted as an instance of the model::offset. Once we convert
-/// every such field to kafka::delta_offset we will be able to depricate and
+/// every such field to kafka::delta_offset we will be able to deprecate and
 /// remove this function.
 inline constexpr model::offset offset_cast(kafka::offset k) {
     return model::offset{k()};

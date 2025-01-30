@@ -38,6 +38,7 @@ rp_test(
     v::cloud_io_utils
     v::datalake_coordinator
     v::datalake_coordinator_test_utils
+    v::datalake_test_utils
     v::gtest_main
     v::iceberg
     v::raft_fixture

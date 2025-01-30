@@ -65,7 +65,7 @@ struct partition_properties_stm_fixture : raft::raft_fixture {
     }
 
     ss::future<> disable_writes() {
-        co_await retry_with_leader(
+        std::ignore = co_await retry_with_leader(
           raft::default_timeout(),
           2s,
           [](raft::raft_node_instance& leader_node) {
@@ -74,7 +74,7 @@ struct partition_properties_stm_fixture : raft::raft_fixture {
     }
 
     ss::future<> enable_writes() {
-        co_await retry_with_leader(
+        std::ignore = co_await retry_with_leader(
           raft::default_timeout(),
           2s,
           [](raft::raft_node_instance& leader_node) {

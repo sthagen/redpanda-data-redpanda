@@ -1436,6 +1436,7 @@ void application::wire_up_redpanda_services(
       .start(
         node_id,
         sched_groups.raft_sg(),
+        sched_groups.raft_heartbeats(),
         [] {
             return raft::group_manager::configuration{
               .heartbeat_interval
@@ -2893,6 +2894,7 @@ void application::start_runtime_services(
                                            cluster::shard_table>>(
                 sched_groups.raft_sg(),
                 smp_service_groups.raft_smp_sg(),
+                sched_groups.raft_heartbeats(),
                 partition_manager,
                 shard_table.local(),
                 config::shard_local_cfg().raft_heartbeat_interval_ms(),
@@ -2972,6 +2974,7 @@ void application::start_runtime_services(
                                            cluster::shard_table>>(
                 sched_groups.raft_sg(),
                 smp_service_groups.raft_smp_sg(),
+                sched_groups.raft_heartbeats(),
                 partition_manager,
                 shard_table.local(),
                 config::shard_local_cfg().raft_heartbeat_interval_ms(),
@@ -3006,13 +3009,13 @@ void application::start_runtime_services(
 
           runtime_services.push_back(
             std::make_unique<cluster::node_status_rpc_handler>(
-              sched_groups.node_status(),
+              sched_groups.raft_heartbeats(),
               smp_service_groups.cluster_smp_sg(),
               std::ref(node_status_backend)));
 
           runtime_services.push_back(
             std::make_unique<cluster::self_test_rpc_handler>(
-              sched_groups.node_status(),
+              sched_groups.raft_heartbeats(),
               smp_service_groups.cluster_smp_sg(),
               std::ref(self_test_backend)));
 

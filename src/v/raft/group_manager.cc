@@ -28,6 +28,7 @@ namespace raft {
 group_manager::group_manager(
   model::node_id self,
   ss::scheduling_group raft_sg,
+  ss::scheduling_group raft_heartbeats_sched_group,
   group_manager::config_provider_fn cfg,
   recovery_memory_quota::config_provider_fn recovery_mem_cfg,
   ss::sharded<rpc::connection_cache>& clients,
@@ -42,6 +43,7 @@ group_manager::group_manager(
       _configuration.max_inflight_requests_per_node,
       _configuration.max_buffered_bytes_per_node))
   , _heartbeats(
+      raft_heartbeats_sched_group,
       _configuration.heartbeat_interval,
       consensus_client_protocol(_buffered_protocol),
       _self,

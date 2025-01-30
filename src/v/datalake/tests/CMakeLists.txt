@@ -50,6 +50,7 @@ rp_test(
     v::bytes
     v::utils
     v::gtest_main
+    v::datalake_test_utils
     v::datalake_writer
     v::iceberg_test_utils
     v::schema

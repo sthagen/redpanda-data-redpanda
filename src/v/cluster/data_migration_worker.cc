@@ -27,6 +27,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sleep.hh>
+#include <seastar/coroutine/all.hh>
 
 #include <fmt/ostream.h>
 
@@ -248,16 +249,21 @@ ss::future<errc> worker::do_work(
 
     switch (sought_state) {
     case state::prepared:
-        co_return co_await flush(partition);
+        co_return co_await partition->flush_archiver();
     case state::executed: {
         auto block_res = co_await block(partition, true);
-        if (block_res != errc::success) {
-            co_return block_res;
+        if (!block_res.has_value()) {
+            co_return block_res.error();
         }
-        co_return co_await flush(partition);
+        auto block_offset = block_res.value();
+
+        auto deadline = model::timeout_clock::now() + 5s;
+        co_return co_await partition->flush(block_offset, deadline, _as);
     }
-    case state::cancelled:
-        co_return co_await block(partition, false);
+    case state::cancelled: {
+        auto res = co_await block(partition, false);
+        co_return res.has_value() ? errc::success : res.error();
+    }
     default:
         vassert(
           false,
@@ -267,36 +273,15 @@ ss::future<errc> worker::do_work(
     }
 }
 
-ss::future<errc>
+ss::future<result<model::offset, errc>>
 worker::block(ss::lw_shared_ptr<partition> partition, bool block) {
     auto res = co_await partition->set_writes_disabled(
       partition_properties_stm::writes_disabled{block},
       model::timeout_clock::now() + 5s);
-    co_return map_update_interruption_error_code(res);
-}
-
-ss::future<errc> worker::flush(ss::lw_shared_ptr<partition> partition) {
-    // todo: check ntp_config cloud storage writes enabled?
-    auto maybe_archiver = partition->archiver();
-    if (!maybe_archiver) {
-        co_return errc::invalid_partition_operation;
+    if (res.has_value()) {
+        co_return res.value();
     }
-    auto& archiver = maybe_archiver->get();
-    auto flush_res = archiver.flush();
-    if (flush_res.response != archival::flush_response::accepted) {
-        co_return errc::partition_operation_failed;
-    }
-    switch (co_await archiver.wait(*flush_res.offset)) {
-    case archival::wait_result::not_in_progress:
-        // is partition concurrently flushed/waited by smth else?
-        vassert(false, "Freshly accepted flush cannot be waited for");
-    case archival::wait_result::lost_leadership:
-        co_return errc::leadership_changed;
-    case archival::wait_result::failed:
-        co_return errc::partition_operation_failed;
-    case archival::wait_result::complete:
-        co_return errc::success;
-    }
+    co_return map_update_interruption_error_code(res.error());
 }
 
 void worker::spawn_work_if_leader(managed_ntp_it it) {

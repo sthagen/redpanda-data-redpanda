@@ -13,6 +13,7 @@
 #include "cluster/partition_manager.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
+#include "config/configuration.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/cloud_data_io.h"
 #include "datalake/coordinator/catalog_factory.h"
@@ -99,7 +100,9 @@ datalake_manager::datalake_manager(
   , _effective_max_translator_buffered_data(
       std::min(memory_limit, max_translator_buffered_data))
   , _iceberg_commit_interval(
-      config::shard_local_cfg().iceberg_catalog_commit_interval_ms.bind()) {
+      config::shard_local_cfg().iceberg_catalog_commit_interval_ms.bind())
+  , _iceberg_invalid_record_action(
+      config::shard_local_cfg().iceberg_invalid_record_action.bind()) {
     vassert(memory_limit > 0, "Memory limit must be greater than 0");
     auto max_parallel = static_cast<size_t>(
       std::floor(memory_limit / _effective_max_translator_buffered_data));
@@ -146,7 +149,8 @@ ss::future<> datalake_manager::start() {
             }
         });
 
-    // Handle topic properties changes (iceberg_mode)
+    // Handle topic properties changes (iceberg_mode,
+    // iceberg_invalid_record_action)
     auto topic_properties_registration
       = _topic_table->local().register_ntp_delta_notification(
         [this](cluster::topic_table::ntp_delta_range_t range) {
@@ -182,6 +186,18 @@ ss::future<> datalake_manager::start() {
                 on_group_notification(group);
             }
         });
+    });
+    _iceberg_invalid_record_action.watch([this] {
+        // Copy the keys to avoid iterator invalidation.
+        chunked_vector<model::ntp> ntps;
+        ntps.reserve(_translators.size());
+        for (const auto& [ntp, _] : _translators) {
+            ntps.push_back(ntp);
+        }
+
+        for (const auto& ntp : ntps) {
+            on_group_notification(ntp);
+        }
     });
     _schema_cache->start();
 }
@@ -226,21 +242,43 @@ void datalake_manager::on_group_notification(const model::ntp& ntp) {
         }
         return;
     }
+
     // By now we know the partition is a leader and iceberg is enabled, so
     // there has to be a translator, spin one up if it doesn't already exist.
     if (it == _translators.end()) {
-        start_translator(partition, topic_cfg->properties.iceberg_mode);
+        start_translator(
+          partition,
+          topic_cfg->properties.iceberg_mode,
+          topic_cfg->properties.iceberg_invalid_record_action.value_or(
+            config::shard_local_cfg().iceberg_invalid_record_action.value()));
     } else {
         // check if translation interval changed.
         auto target_interval = translation_interval_ms();
         if (it->second->translation_interval() != target_interval) {
             it->second->reset_translation_interval(target_interval);
         }
+
+        // check if invalid record action changed.
+        auto target_action
+          = topic_cfg->properties.iceberg_invalid_record_action.value_or(
+            config::shard_local_cfg().iceberg_invalid_record_action.value());
+
+        vlog(
+          datalake_log.warn,
+          "Invalid record action: {} vs {}",
+          target_action,
+          it->second->invalid_record_action());
+
+        if (it->second->invalid_record_action() != target_action) {
+            it->second->reset_invalid_record_action(target_action);
+        }
     }
 }
 
 void datalake_manager::start_translator(
-  ss::lw_shared_ptr<cluster::partition> partition, model::iceberg_mode mode) {
+  ss::lw_shared_ptr<cluster::partition> partition,
+  model::iceberg_mode mode,
+  model::iceberg_invalid_record_action invalid_record_action) {
     auto it = _translators.find(partition->ntp());
     vassert(
       it == _translators.end(),
@@ -259,7 +297,8 @@ void datalake_manager::start_translator(
       translation_interval_ms(),
       _sg,
       _effective_max_translator_buffered_data,
-      &_parallel_translations);
+      &_parallel_translations,
+      invalid_record_action);
     _translators.emplace(partition->ntp(), std::move(translator));
 }
 

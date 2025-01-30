@@ -15,8 +15,8 @@
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/coordinator/state_update.h"
 #include "datalake/logger.h"
+#include "datalake/partition_spec_parser.h"
 #include "datalake/record_translator.h"
-#include "datalake/table_definition.h"
 #include "datalake/table_id_provider.h"
 #include "model/fundamental.h"
 #include "ssx/future-util.h"
@@ -249,11 +249,26 @@ checked<ss::gate::holder, coordinator::errc> coordinator::maybe_gate() {
     return gate_.hold();
 }
 
+struct coordinator::table_schema_provider {
+    virtual iceberg::table_identifier get_table_id(const model::topic&) const
+      = 0;
+
+    virtual ss::future<checked<iceberg::struct_type, coordinator::errc>>
+      get_record_type(record_schema_components) const = 0;
+
+    virtual ss::sstring get_partition_spec(const cluster::topic_metadata&) const
+      = 0;
+
+    virtual ~table_schema_provider() = default;
+};
+
 ss::future<checked<std::nullopt_t, coordinator::errc>>
-coordinator::sync_ensure_table_exists(
+coordinator::do_ensure_table_exists(
   model::topic topic,
   model::revision_id topic_revision,
-  record_schema_components comps) {
+  record_schema_components comps,
+  std::string_view method_name,
+  const table_schema_provider& schema_provider) {
     auto gate = maybe_gate();
     if (gate.has_error()) {
         co_return gate.error();
@@ -261,7 +276,8 @@ coordinator::sync_ensure_table_exists(
 
     vlog(
       datalake_log.debug,
-      "Sync ensure table exists requested, topic: {} rev: {}",
+      "{} requested, topic: {} rev: {}",
+      method_name,
       topic,
       topic_revision);
 
@@ -272,6 +288,35 @@ coordinator::sync_ensure_table_exists(
 
     // TODO: add mutex to protect against the thundering herd problem
 
+    auto topic_md = topic_table_.get_topic_metadata_ref(
+      model::topic_namespace_view{model::kafka_namespace, topic});
+    if (!topic_md || topic_md->get().get_revision() != topic_revision) {
+        vlog(
+          datalake_log.debug,
+          "Rejecting {} for {} rev {}, topic table revision {}",
+          method_name,
+          topic,
+          topic_revision,
+          topic_md ? std::optional{topic_md->get().get_revision()}
+                   : std::nullopt);
+        co_return errc::revision_mismatch;
+    }
+
+    auto partition_spec_str = schema_provider.get_partition_spec(
+      topic_md->get());
+    auto partition_spec = parse_partition_spec(partition_spec_str);
+    if (!partition_spec.has_value()) {
+        vlog(
+          datalake_log.warn,
+          "{} failed, couldn't parse partition spec {} for {} rev {}: {}",
+          method_name,
+          partition_spec_str,
+          topic,
+          topic_revision,
+          partition_spec.error());
+        co_return errc::failed;
+    }
+
     topic_lifecycle_update update{
       .topic = topic,
       .revision = topic_revision,
@@ -281,15 +326,14 @@ coordinator::sync_ensure_table_exists(
     if (check_res.has_error()) {
         vlog(
           datalake_log.debug,
-          "Rejecting ensure_table_exist for {} rev {}: {}",
+          "Rejecting {} for {} rev {}: {}",
+          method_name,
           topic,
           topic_revision,
           check_res.error());
         co_return errc::revision_mismatch;
     }
 
-    // Will skip the STM update if the topic is already live.
-    // But will still ensure the DLQ table schema.
     if (check_res.value()) {
         // update is non-trivial
         storage::record_batch_builder builder(
@@ -306,21 +350,16 @@ coordinator::sync_ensure_table_exists(
 
     // TODO: verify stm state after replication
 
-    auto table_id = table_id_provider::table_id(topic);
+    auto table_id = schema_provider.get_table_id(topic);
 
-    std::optional<resolved_type> val_type;
-    if (comps.val_identifier) {
-        auto type_res = co_await type_resolver_.resolve_identifier(
-          comps.val_identifier.value());
-        if (type_res.has_error()) {
-            co_return errc::failed;
-        }
-        val_type = std::move(type_res.value());
+    auto record_type = co_await schema_provider.get_record_type(
+      std::move(comps));
+    if (!record_type.has_value()) {
+        co_return errc::failed;
     }
 
-    auto record_type = default_translator{}.build_type(std::move(val_type));
     auto ensure_res = co_await schema_mgr_.ensure_table_schema(
-      table_id, record_type.type, hour_partition_spec());
+      table_id, record_type.value(), partition_spec.value());
     if (ensure_res.has_error()) {
         switch (ensure_res.error()) {
         case schema_manager::errc::not_supported:
@@ -335,77 +374,86 @@ coordinator::sync_ensure_table_exists(
     co_return std::nullopt;
 }
 
+struct coordinator::main_table_schema_provider
+  : public coordinator::table_schema_provider {
+    explicit main_table_schema_provider(coordinator& parent)
+      : parent(parent) {}
+
+    iceberg::table_identifier
+    get_table_id(const model::topic& topic) const final {
+        return table_id_provider::table_id(topic);
+    }
+
+    ss::future<checked<iceberg::struct_type, coordinator::errc>>
+    get_record_type(record_schema_components comps) const final {
+        std::optional<resolved_type> val_type;
+        if (comps.val_identifier) {
+            auto type_res = co_await parent.type_resolver_.resolve_identifier(
+              comps.val_identifier.value());
+            if (type_res.has_error()) {
+                co_return errc::failed;
+            }
+            val_type = std::move(type_res.value());
+        }
+
+        auto record_type = default_translator{}.build_type(std::move(val_type));
+        co_return std::move(record_type.type);
+    }
+
+    ss::sstring
+    get_partition_spec(const cluster::topic_metadata& topic_md) const final {
+        return topic_md.get_configuration()
+          .properties.iceberg_partition_spec.value_or(
+            parent.default_partition_spec_());
+    }
+
+    const coordinator& parent;
+};
+
+ss::future<checked<std::nullopt_t, coordinator::errc>>
+coordinator::sync_ensure_table_exists(
+  model::topic topic,
+  model::revision_id topic_revision,
+  record_schema_components comps) {
+    co_return co_await do_ensure_table_exists(
+      topic,
+      topic_revision,
+      std::move(comps),
+      "sync_ensure_table_exists",
+      main_table_schema_provider{*this});
+}
+
+struct coordinator::dlq_table_schema_provider
+  : public coordinator::table_schema_provider {
+    explicit dlq_table_schema_provider(coordinator& parent)
+      : parent(parent) {}
+
+    iceberg::table_identifier
+    get_table_id(const model::topic& topic) const final {
+        return table_id_provider::dlq_table_id(topic);
+    }
+
+    ss::future<checked<iceberg::struct_type, coordinator::errc>>
+    get_record_type(record_schema_components) const final {
+        co_return key_value_translator{}.build_type(std::nullopt).type;
+    }
+
+    ss::sstring get_partition_spec(const cluster::topic_metadata&) const final {
+        return parent.default_partition_spec_();
+    }
+
+    const coordinator& parent;
+};
+
 ss::future<checked<std::nullopt_t, coordinator::errc>>
 coordinator::sync_ensure_dlq_table_exists(
   model::topic topic, model::revision_id topic_revision) {
-    auto gate = maybe_gate();
-    if (gate.has_error()) {
-        co_return gate.error();
-    }
-
-    vlog(
-      datalake_log.debug,
-      "Sync ensure dlq table exists requested, topic: {} rev: {}",
+    co_return co_await do_ensure_table_exists(
       topic,
-      topic_revision);
-
-    auto sync_res = co_await stm_->sync(10s);
-    if (sync_res.has_error()) {
-        co_return convert_stm_errc(sync_res.error());
-    }
-
-    // TODO: add mutex to protect against the thundering herd problem
-
-    topic_lifecycle_update update{
-      .topic = topic,
-      .revision = topic_revision,
-      .new_state = topic_state::lifecycle_state_t::live,
-    };
-    auto check_res = update.can_apply(stm_->state());
-    if (check_res.has_error()) {
-        vlog(
-          datalake_log.debug,
-          "Rejecting ensure_dlq_table_exist for {} rev {}: {}",
-          topic,
-          topic_revision,
-          check_res.error());
-        co_return errc::revision_mismatch;
-    }
-
-    // Will skip the STM update if the topic is already live.
-    // But will still ensure the DLQ table schema.
-    if (check_res.value()) {
-        // update is non-trivial
-        storage::record_batch_builder builder(
-          model::record_batch_type::datalake_coordinator, model::offset{0});
-        builder.add_raw_kv(
-          serde::to_iobuf(topic_lifecycle_update::key),
-          serde::to_iobuf(std::move(update)));
-        auto repl_res = co_await stm_->replicate_and_wait(
-          sync_res.value(), std::move(builder).build(), as_);
-        if (repl_res.has_error()) {
-            co_return convert_stm_errc(repl_res.error());
-        }
-    }
-
-    // TODO: verify stm state after replication
-
-    auto dlq_table_id = table_id_provider::dlq_table_id(topic);
-    auto record_type = key_value_translator{}.build_type(std::nullopt);
-    auto ensure_res = co_await schema_mgr_.ensure_table_schema(
-      dlq_table_id, record_type.type, hour_partition_spec());
-    if (ensure_res.has_error()) {
-        switch (ensure_res.error()) {
-        case schema_manager::errc::not_supported:
-            co_return errc::incompatible_schema;
-        case schema_manager::errc::failed:
-            co_return errc::failed;
-        case schema_manager::errc::shutting_down:
-            co_return errc::shutting_down;
-        }
-    }
-
-    co_return std::nullopt;
+      topic_revision,
+      record_schema_components{},
+      "sync_ensure_dlq_table_exists",
+      dlq_table_schema_provider{*this});
 }
 
 ss::future<checked<std::nullopt_t, coordinator::errc>>

@@ -218,7 +218,10 @@ class DatalakeE2ETests(RedpandaTest):
                                    "false")
             rpk.delete_topic(self.topic_name)
 
-            # table is not deleted, it will contain messages from both topic instances
+            # table is not deleted, it will contain messages
+            dl.wait_for_translation(self.topic_name, msg_count=count)
+
+            # recreate topic, it will contain messages from both topic instances
             dl.create_iceberg_enabled_topic(self.topic_name, partitions=15)
             dl.produce_to_topic(self.topic_name, 1024, count)
             dl.wait_for_translation(self.topic_name, msg_count=2 * count)

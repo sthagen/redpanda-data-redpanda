@@ -194,7 +194,7 @@ class SchemaEvolutionTest(RedpandaTest):
                                          topic_name, schema, mapping=mapping))
 
                 verifier.start()
-                connect.stop_stream("ducky_stream", wait_to_finish=True)
+                connect.stop_stream("ducky_stream")
                 verifier.wait()
 
             run_verifier("schema_avro",

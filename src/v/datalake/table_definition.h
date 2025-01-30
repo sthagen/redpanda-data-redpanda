@@ -9,7 +9,6 @@
  */
 #pragma once
 
-#include "iceberg/partition.h"
 #include "iceberg/schema.h"
 
 namespace datalake {
@@ -21,8 +20,5 @@ namespace datalake {
 iceberg::struct_type schemaless_struct_type();
 iceberg::schema default_schema();
 inline constexpr std::string_view rp_struct_name = "redpanda";
-
-// Hourly partitioning on the timestamp of a schema with the above fields.
-iceberg::unresolved_partition_spec hour_partition_spec();
 
 } // namespace datalake

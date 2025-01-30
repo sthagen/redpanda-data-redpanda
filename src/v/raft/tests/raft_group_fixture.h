@@ -211,6 +211,7 @@ struct raft_node {
               s.register_service<raft::service<test_raft_manager, raft_node>>(
                 ss::default_scheduling_group(),
                 ss::default_smp_service_group(),
+                ss::default_scheduling_group(),
                 raft_manager,
                 *this,
                 heartbeat_interval,
@@ -219,6 +220,7 @@ struct raft_node {
           .get();
         server.invoke_on_all(&rpc::rpc_server::start).get();
         hbeats = std::make_unique<raft::heartbeat_manager>(
+          ss::default_scheduling_group(),
           config::mock_binding<std::chrono::milliseconds>(
             std::chrono::milliseconds(heartbeat_interval)),
           raft::make_rpc_client_protocol(broker.id(), cache),

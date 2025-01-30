@@ -46,7 +46,8 @@ public:
       remove_tombstone_f remove_tombstone,
       file_committer& file_committer,
       snapshot_remover& snapshot_remover,
-      config::binding<std::chrono::milliseconds> commit_interval)
+      config::binding<std::chrono::milliseconds> commit_interval,
+      config::binding<ss::sstring> default_partition_spec)
       : stm_(std::move(stm))
       , topic_table_(topics)
       , type_resolver_(type_resolver)
@@ -54,7 +55,8 @@ public:
       , remove_tombstone_(std::move(remove_tombstone))
       , file_committer_(file_committer)
       , snapshot_remover_(snapshot_remover)
-      , commit_interval_(std::move(commit_interval)) {}
+      , commit_interval_(std::move(commit_interval))
+      , default_partition_spec_(std::move(default_partition_spec)) {}
 
     void start();
     ss::future<> stop_and_wait();
@@ -100,6 +102,16 @@ private:
     ss::future<checked<ss::stop_iteration, errc>>
     update_lifecycle_state(const model::topic&, model::term_id);
 
+    struct table_schema_provider;
+    struct main_table_schema_provider;
+    struct dlq_table_schema_provider;
+    ss::future<checked<std::nullopt_t, errc>> do_ensure_table_exists(
+      model::topic,
+      model::revision_id topic_revision,
+      record_schema_components,
+      std::string_view method_name,
+      const table_schema_provider&);
+
     ss::shared_ptr<coordinator_stm> stm_;
     cluster::topic_table& topic_table_;
     type_resolver& type_resolver_;
@@ -108,6 +120,7 @@ private:
     file_committer& file_committer_;
     snapshot_remover& snapshot_remover_;
     config::binding<std::chrono::milliseconds> commit_interval_;
+    config::binding<ss::sstring> default_partition_spec_;
 
     ss::gate gate_;
     ss::abort_source as_;

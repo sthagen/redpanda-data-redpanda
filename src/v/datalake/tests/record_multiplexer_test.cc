@@ -141,6 +141,7 @@ public:
           type_resolver,
           translator,
           t_creator,
+          model::iceberg_invalid_record_action::dlq_table,
           as);
         auto res = reader.consume(std::move(mux), model::no_timeout).get();
         if (expect_error) {

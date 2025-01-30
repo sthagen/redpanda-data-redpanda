@@ -374,29 +374,15 @@ static cluster::topic_configuration make_topic_config(
       topic_config->tp_ns.tp,
       topic_config->partition_count,
       topic_config->replication_factor);
-
     auto& topic_properties = topic_to_create_cfg.properties;
-    auto manifest_props = topic_config->properties;
 
-    topic_properties.compression = manifest_props.compression;
-    topic_properties.cleanup_policy_bitflags
-      = manifest_props.cleanup_policy_bitflags;
-    topic_properties.compaction_strategy = manifest_props.compaction_strategy;
+    // copy all properties
+    topic_properties = topic_config->properties;
 
-    topic_properties.retention_bytes = manifest_props.retention_bytes;
-    topic_properties.retention_duration = manifest_props.retention_duration;
-
+    // override specific ones
     topic_properties.retention_local_target_bytes = tristate<size_t>{
       config::shard_local_cfg()
         .cloud_storage_recovery_temporary_retention_bytes_default};
-
-    topic_properties.segment_size = manifest_props.segment_size;
-    topic_properties.timestamp_type = manifest_props.timestamp_type;
-    topic_properties.shadow_indexing = model::shadow_indexing_mode::full;
-    topic_properties.recovery = true;
-    topic_properties.mpx_virtual_cluster_id
-      = manifest_props.mpx_virtual_cluster_id;
-
     if (request.retention_bytes().has_value()) {
         topic_properties.retention_local_target_bytes = tristate<size_t>{
           request.retention_bytes()};
@@ -406,6 +392,14 @@ static cluster::topic_configuration make_topic_config(
           = tristate<std::chrono::milliseconds>{request.retention_ms()};
         topic_properties.retention_local_target_bytes = {};
     }
+    topic_properties.shadow_indexing = model::shadow_indexing_mode::full;
+    topic_properties.recovery = true;
+    topic_properties.read_replica = {};
+    topic_properties.read_replica_bucket = {};
+    // these will be populated in topics_frontend::do_create_topic
+    // via remote_topic_configuration_source::set_remote_properties_in_config
+    topic_properties.remote_label = {};
+    topic_properties.remote_topic_properties = {};
 
     return topic_to_create_cfg;
 }

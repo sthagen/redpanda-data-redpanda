@@ -746,8 +746,7 @@ ss::future<topic_result> topics_frontend::do_create_topic(
               static_cast<bool>(
                 assignable_config.cfg.properties.remote_topic_properties),
               "remote_topic_properties not set after successful download of "
-              "valid "
-              "topic manifest");
+              "valid topic manifest");
         }
         auto validation_map = co_await maybe_validate_recovery_topic(
           assignable_config, bucket, _cloud_storage_api.local(), _as.local());

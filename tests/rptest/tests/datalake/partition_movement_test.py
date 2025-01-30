@@ -99,7 +99,7 @@ class PartitionMovementTest(PartitionMovementMixin, RedpandaTest):
                 # Make sure the stream is not stuck
                 ensure_stream_progress(counter_before + 500)
 
-            connect.stop_stream(name=stream, wait_to_finish=False)
+            connect.stop_stream(name=stream, should_finish=None)
 
             total_row_count = total_records_ingested()
             dl.wait_for_translation_until_offset(topic, total_row_count - 1)

@@ -23,7 +23,6 @@ v_cc_library(
     rpc_client_protocol.cc
     group_manager.cc
     probe.cc
-    offset_monitor.cc
     event_manager.cc
     state_machine.cc
     configuration_manager.cc

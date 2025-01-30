@@ -11,9 +11,9 @@ from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor
 import random
 import threading
-from time import time, sleep
-from typing import Optional
-from rptest.clients.rpk import RpkTool
+from time import sleep
+from typing import List, Optional
+from rptest.clients.rpk import RpkPartition, RpkTool
 from rptest.services.redpanda import RedpandaService
 from rptest.tests.datalake.query_engine_base import QueryEngineBase
 from rptest.util import wait_until
@@ -34,6 +34,11 @@ class DatalakeVerifier():
 
      - second thread executes a per partition query that fetches the messages
        from the iceberg table
+
+    If requested to go into offline mode the first thread is forced to stop
+    early, with necessary info saved. No interactions with the cluster is
+    performed after. Querying thread continues as normal. From offline mode
+    there is no way back.
     """
 
     #TODO: add an ability to pass lambda to verify the message content
@@ -80,6 +85,13 @@ class DatalakeVerifier():
         # map of last queried offset for each partition
         self._max_queried_offsets = {}
         self._last_checkpoint = {}
+        self._received_first_iceberg_message = threading.Event()
+        # offline mode: query only, as RP topic may be deleted or unmounted
+        self._offline_mode_requested = threading.Event()
+        self._consumer_stopped = threading.Event()
+        self._offline_mode_established = False
+        self._consumer_positions = None  # set iff in offline mode
+        self._partition_hwms = None  # set iff in offline mode
 
         self._compacted = compacted
         # When consuming from a compacted topic, there may be records in the
@@ -104,6 +116,10 @@ class DatalakeVerifier():
         return c
 
     def update_and_get_fetch_positions(self):
+        if self._offline_mode_established:
+            assert self._consumer_positions is not None
+            return self._consumer_positions
+
         with self._lock:
             partitions = [
                 TopicPartition(topic=self.topic, partition=p)
@@ -113,37 +129,63 @@ class DatalakeVerifier():
             for p in positions:
                 if p.error is not None:
                     self.logger.warning(
-                        f"Erorr querying position for partition {p.partition}")
+                        f"Error querying position for partition {p.partition}")
                 else:
                     self.logger.debug(
                         f"next position for {p.partition} is {p.offset}")
                     self._next_positions[p.partition] = p.offset
             return self._next_positions.copy()
 
-    def _consumer_thread(self):
-        self.logger.info("Starting consumer thread")
-        while not self._stop.is_set():
-            self._msg_semaphore.acquire()
-            if self._stop.is_set():
-                break
-            msg = self._consumer.poll(1.0)
-            if msg is None:
-                continue
-            if msg.error():
-                self.logger.error(f"Consumer error: {msg.error()}")
-                continue
+    def partition_hwms(self) -> List[RpkPartition]:
+        if self._offline_mode_established:
+            assert self._partition_hwms is not None
+            return self._partition_hwms
+        return list(self._rpk.describe_topic(self.topic))
 
-            with self._lock:
-                self._num_msgs_pending_verification += 1
-                self._consumed_messages[msg.partition()].append(msg)
-                if self._num_msgs_pending_verification >= self._query_batch_size:
-                    with self._msgs_batched:
-                        self._msgs_batched.notify()
-                self._max_consumed_offsets[msg.partition()] = max(
-                    self._max_consumed_offsets.get(msg.partition(), -1),
-                    msg.offset())
-                if len(self._errors) > 0:
-                    return
+    # to be called no more than once
+    def go_offline(self):
+        assert not self._offline_mode_requested.is_set()
+        self._offline_mode_requested.set()
+        self._consumer_stopped.wait()
+        # todo: send consumer thread stop, remember positions when it stopped
+        self._consumer_positions = self.update_and_get_fetch_positions()
+        self.logger.debug(f"remembered {self._consumer_positions=}")
+        self._partition_hwms = self.partition_hwms()
+        self.logger.debug(f"remembered {self._partition_hwms=}")
+        self._consumer.close()
+        self._consumer = None
+        self._offline_mode_established = True
+
+    def _consumer_thread(self):
+        try:
+            self.logger.info("Starting consumer thread")
+            while not self._stop.is_set() \
+              and not self._offline_mode_requested.is_set():
+                self._msg_semaphore.acquire()
+                if self._stop.is_set():
+                    break
+                msg = self._consumer.poll(1.0)
+                if msg is None:
+                    continue
+                if msg.error():
+                    self.logger.error(f"Consumer error: {msg.error()}")
+                    continue
+
+                with self._lock:
+                    self._num_msgs_pending_verification += 1
+                    self._consumed_messages[msg.partition()].append(msg)
+                    if self._num_msgs_pending_verification >= self._query_batch_size:
+                        with self._msgs_batched:
+                            self._msgs_batched.notify()
+                    self._max_consumed_offsets[msg.partition()] = max(
+                        self._max_consumed_offsets.get(msg.partition(), -1),
+                        msg.offset())
+                    self.logger.debug(
+                        f"Max consumed offsets: {self._max_consumed_offsets}")
+                    if len(self._errors) > 0:
+                        return
+        finally:
+            self._consumer_stopped.set()
 
     def _get_query(self, partition, last_queried_offset, max_consumed_offset):
         return f"\
@@ -156,7 +198,7 @@ class DatalakeVerifier():
     def _verify_next_message(self, partition, iceberg_offset, iceberg_key):
         if partition not in self._consumed_messages:
             self._errors.append(
-                f"Partition {partition} returned from Iceberg query  not found in consumed messages"
+                f"Partition {partition} returned from Iceberg query not found in consumed messages"
             )
 
         p_messages = self._consumed_messages[partition]
@@ -177,7 +219,8 @@ class DatalakeVerifier():
                 f"Duplicate entry detected at offset {iceberg_offset} for partition {partition} "
             )
             return
-
+        if not self._max_queried_offsets:
+            self._received_first_iceberg_message.set()
         self._max_queried_offsets[partition] = iceberg_offset
 
         if consumer_offset != iceberg_offset:
@@ -230,6 +273,9 @@ class DatalakeVerifier():
                                         f"violations detected: {self._errors}, stopping verifier"
                                     )
                                     return
+                                self.logger.debug(
+                                    f"verified message on {partition=} offset={row[0]}"
+                                )
 
                     if len(self._max_queried_offsets) > 0:
                         self.logger.debug(
@@ -240,14 +286,16 @@ class DatalakeVerifier():
                 self.logger.error(f"Error querying iceberg table: {e}")
                 sleep(2)
 
-    def start(self):
+    def start(self, wait_first_iceberg_msg=False):
         self._executor.submit(self._consumer_thread)
         self._executor.submit(self._query_thread)
+        if wait_first_iceberg_msg:
+            self._received_first_iceberg_message.wait()
 
     def _all_offsets_translated(self):
-        partitions = self._rpk.describe_topic(self.topic)
+        partition_hwms = self.partition_hwms()
         with self._lock:
-            for p in partitions:
+            for p in partition_hwms:
                 if p.id not in self._max_queried_offsets:
                     self.logger.debug(
                         f"partition {p.id} not found in max offsets: {self._max_queried_offsets}"
@@ -269,6 +317,8 @@ class DatalakeVerifier():
     def _made_progress(self):
         progress = False
         with self._lock:
+            self.logger.debug(f"{self._max_queried_offsets=}")
+            self.logger.debug(f"{self._last_checkpoint=}")
             for partition, offset in self._max_queried_offsets.items():
                 if offset > self._last_checkpoint.get(partition, -1):
                     progress = True
@@ -290,7 +340,9 @@ class DatalakeVerifier():
                 assert len(
                     self._errors
                 ) == 0, f"Topic {self.topic} validation errors: {self._errors}"
-
+            self.logger.debug(f"No errors around waiting")
+        except Exception as e:
+            self.logger.error(f"Error around waiting: {e}")
         finally:
             self.stop()
 
@@ -313,4 +365,5 @@ class DatalakeVerifier():
                 self._expected_compacted_keys
             ) == 0, f"Some keys which were compacted away were not seen later in the consumer's log"
         finally:
-            self._consumer.close()
+            if self._consumer:
+                self._consumer.close()

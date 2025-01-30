@@ -11,12 +11,23 @@
 #include "datalake/tests/test_utils.h"
 
 #include "datalake/record_translator.h"
-#include "datalake/table_definition.h"
 #include "datalake/table_id_provider.h"
 
 #include <optional>
 
 namespace datalake {
+
+iceberg::unresolved_partition_spec hour_partition_spec() {
+    chunked_vector<iceberg::unresolved_partition_spec::field> fields;
+    fields.push_back({
+      .source_name = {"redpanda", "timestamp"},
+      .transform = iceberg::hour_transform{},
+      .name = "redpanda.timestamp_hour",
+    });
+    return {
+      .fields = std::move(fields),
+    };
+}
 
 direct_table_creator::direct_table_creator(
   type_resolver& tr, schema_manager& sm)

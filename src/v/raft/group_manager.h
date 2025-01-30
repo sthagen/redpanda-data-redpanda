@@ -57,6 +57,7 @@ public:
     group_manager(
       model::node_id self,
       ss::scheduling_group raft_scheduling_group,
+      ss::scheduling_group raft_heartbeats_sched_group,
       config_provider_fn,
       recovery_memory_quota::config_provider_fn recovery_mem_cfg,
       ss::sharded<rpc::connection_cache>& clients,

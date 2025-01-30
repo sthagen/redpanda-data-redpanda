@@ -470,7 +470,7 @@ public:
     size_t get_follower_count() const;
     bool has_followers() const { return _fstats.size() > 0; }
 
-    offset_monitor& visible_offset_monitor() {
+    offset_monitor<model::offset>& visible_offset_monitor() {
         return _consumable_offset_monitor;
     }
 
@@ -916,7 +916,7 @@ private:
     model::offset _last_quorum_replicated_index_with_flush;
     model::offset _last_leader_visible_offset;
     flush_after_append _last_write_flushed;
-    offset_monitor _consumable_offset_monitor;
+    offset_monitor<model::offset> _consumable_offset_monitor;
     ss::condition_variable _follower_reply;
     append_entries_buffer _append_requests_buffer;
     std::optional<state_machine_manager> _stm_manager;

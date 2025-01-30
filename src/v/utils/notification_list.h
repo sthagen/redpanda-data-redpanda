@@ -12,6 +12,7 @@
 #pragma once
 
 #include <algorithm>
+#include <type_traits>
 #include <vector>
 
 /**
@@ -52,9 +53,20 @@ public:
      * Call `f` on all registered callbacks
      */
     template<typename... Args>
-    void notify(Args&&... args) const {
-        for (auto& [_, cb] : _notifications) {
-            cb(args...);
+    auto notify(Args&&... args) const {
+        using ret_type = std::invoke_result_t<C, Args...>;
+
+        if constexpr (std::is_void_v<ret_type>) {
+            for (auto& [_, cb] : _notifications) {
+                cb(args...);
+            }
+        } else {
+            std::vector<ret_type> ret;
+            ret.reserve(_notifications.size());
+            for (auto& [_, cb] : _notifications) {
+                ret.push_back(cb(args...));
+            }
+            return ret;
         }
     }
 

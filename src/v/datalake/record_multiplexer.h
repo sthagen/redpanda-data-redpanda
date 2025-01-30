@@ -51,6 +51,7 @@ public:
       type_resolver& type_resolver,
       record_translator& record_translator,
       table_creator&,
+      model::iceberg_invalid_record_action,
       lazy_abort_source& as);
 
     ss::future<ss::stop_iteration> operator()(model::record_batch batch);
@@ -75,6 +76,7 @@ private:
     type_resolver& _type_resolver;
     record_translator& _record_translator;
     table_creator& _table_creator;
+    model::iceberg_invalid_record_action _invalid_record_action;
     lazy_abort_source& _as;
     chunked_hash_map<
       record_schema_components,

@@ -13,7 +13,7 @@
 #include <seastar/testing/thread_test_case.hh>
 
 SEASTAR_THREAD_TEST_CASE(wait) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
 
     auto f0 = mon.wait(model::offset(0), model::no_timeout, std::nullopt);
     auto f1 = mon.wait(model::offset(1), model::no_timeout, std::nullopt);
@@ -34,7 +34,7 @@ SEASTAR_THREAD_TEST_CASE(wait) {
 }
 
 SEASTAR_THREAD_TEST_CASE(wait_multi) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
 
     auto f0_1 = mon.wait(model::offset(0), model::no_timeout, std::nullopt);
     auto f0_2 = mon.wait(model::offset(0), model::no_timeout, std::nullopt);
@@ -59,7 +59,7 @@ SEASTAR_THREAD_TEST_CASE(wait_multi) {
 }
 
 SEASTAR_THREAD_TEST_CASE(stop) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
     ss::abort_source as;
 
     std::vector<ss::future<>> fs;
@@ -100,7 +100,7 @@ SEASTAR_THREAD_TEST_CASE(stop) {
 }
 
 SEASTAR_THREAD_TEST_CASE(notify_abort) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
     ss::abort_source as;
 
     std::vector<ss::future<>> fs;
@@ -141,7 +141,7 @@ SEASTAR_THREAD_TEST_CASE(notify_abort) {
 }
 
 SEASTAR_THREAD_TEST_CASE(wait_timeout) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
 
     auto f0 = mon.wait(
       model::offset(0), model::timeout_clock::now(), std::nullopt);
@@ -154,7 +154,7 @@ SEASTAR_THREAD_TEST_CASE(wait_timeout) {
 }
 
 SEASTAR_THREAD_TEST_CASE(wait_abort_source) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
     ss::abort_source as;
 
     auto f0 = mon.wait(model::offset(0), model::no_timeout, as);
@@ -170,7 +170,7 @@ SEASTAR_THREAD_TEST_CASE(wait_abort_source) {
 }
 
 SEASTAR_THREAD_TEST_CASE(wait_abort_source_already_aborted) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
     ss::abort_source as;
 
     as.request_abort();
@@ -182,7 +182,7 @@ SEASTAR_THREAD_TEST_CASE(wait_abort_source_already_aborted) {
 }
 
 SEASTAR_THREAD_TEST_CASE(wait_abort_source_with_timeout_first) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
     ss::abort_source as;
 
     auto f0 = mon.wait(model::offset(0), model::timeout_clock::now(), as);
@@ -197,7 +197,7 @@ SEASTAR_THREAD_TEST_CASE(wait_abort_source_with_timeout_first) {
 }
 
 SEASTAR_THREAD_TEST_CASE(wait_abort_source_with_timeout_abort_first) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
     ss::abort_source as;
 
     as.request_abort();
@@ -214,7 +214,7 @@ SEASTAR_THREAD_TEST_CASE(wait_abort_source_with_timeout_abort_first) {
 }
 
 SEASTAR_THREAD_TEST_CASE(wait_abort_source_with_timeout_abort_before_timeout) {
-    raft::offset_monitor mon;
+    raft::offset_monitor<model::offset> mon;
     ss::abort_source as;
 
     auto f0 = mon.wait(

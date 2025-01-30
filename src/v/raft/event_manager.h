@@ -57,7 +57,7 @@ private:
     consensus* _consensus;
     ss::gate _gate;
     ss::condition_variable _cond;
-    offset_monitor _commit_index;
+    offset_monitor<model::offset> _commit_index;
 };
 
 } // namespace raft

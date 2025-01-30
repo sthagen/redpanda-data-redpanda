@@ -126,7 +126,7 @@ protected:
     friend class state_machine_manager;
 
 private:
-    mutable offset_monitor _waiters;
+    mutable offset_monitor<model::offset> _waiters;
     model::offset _next{0};
 };
 

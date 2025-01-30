@@ -33,6 +33,7 @@
 #include "raft/fundamental.h"
 #include "raft/fwd.h"
 #include "raft/state_machine_manager.h"
+#include "ssx/when_all.h"
 #include "storage/ntp_config.h"
 #include "utils/rwlock.h"
 
@@ -544,12 +545,22 @@ ss::future<> partition::start(
         _dl_stm_api = ss::make_shared<experimental::cloud_topics::dl_stm_api>(
           clusterlog, std::move(dl_stm));
     }
+
+    _archiver_flush_subscription = register_flush_hook(
+      [this](
+        model::offset,
+        model::timeout_clock::time_point,
+        std::optional<std::reference_wrapper<ss::abort_source>>) {
+          return flush_archiver();
+      });
 }
 
 ss::future<> partition::stop() {
     auto partition_ntp = ntp();
     vlog(clusterlog.debug, "Stopping partition: {}", partition_ntp);
     _as.request_abort();
+
+    unregister_flush_hook(_archiver_flush_subscription);
 
     {
         // `partition_manager::do_shutdown` (caller of stop) will assert
@@ -1699,7 +1710,7 @@ partition::force_abort_replica_set_update(model::revision_id rev) {
 }
 consensus_ptr partition::raft() const { return _raft; }
 
-ss::future<std::error_code> partition::set_writes_disabled(
+ss::future<result<model::offset>> partition::set_writes_disabled(
   partition_properties_stm::writes_disabled disable,
   model::timeout_clock::time_point deadline) {
     ssx::rwlock::holder holder;
@@ -1718,15 +1729,67 @@ ss::future<std::error_code> partition::set_writes_disabled(
     if (_partition_properties_stm == nullptr) {
         co_return errc::invalid_partition_operation;
     }
+
+    // abort active transactions
     if (disable && _rm_stm) {
         auto res = co_await _rm_stm->abort_all_txes();
         if (res != tx::errc::none) {
             co_return res;
         }
     }
+
     auto method = disable ? &partition_properties_stm::disable_writes
                           : &partition_properties_stm::enable_writes;
     co_return co_await (*_partition_properties_stm.*method)();
+}
+
+partition_flush_hook_id partition::register_flush_hook(flush_hook&& cb) {
+    return _flush_hooks.register_cb(std::move(cb));
+}
+
+void partition::unregister_flush_hook(partition_flush_hook_id id) {
+    _flush_hooks.unregister_cb(id);
+}
+
+ss::future<errc> partition::flush(
+  model::offset offset,
+  model::timeout_clock::time_point deadline,
+  ss::abort_source& as) {
+    // non-leader may lack some flush hooks
+    if (!is_leader()) {
+        co_return errc::not_leader;
+    }
+
+    vlog(clusterlog.info, "[{}] flushing offset {}", ntp(), offset);
+    auto futures = _flush_hooks.notify(offset, deadline, as);
+    using errs = std::vector<errc>;
+    errs results = co_await ssx::when_all_succeed<errs>(std::move(futures));
+    vlog(clusterlog.info, "[{}] flushed offset {}", ntp(), offset);
+    co_return *std::ranges::max_element(results);
+}
+
+ss::future<errc> partition::flush_archiver() {
+    vlog(clusterlog.debug, "[{}] flushing archiver", ntp());
+    if (!_archiver) {
+        co_return errc::invalid_partition_operation;
+    }
+    auto flush_res = _archiver->flush();
+    if (flush_res.response != archival::flush_response::accepted) {
+        co_return errc::partition_operation_failed;
+    }
+    auto res = co_await _archiver->wait(*flush_res.offset);
+    vlog(clusterlog.debug, "[{}] flushed archiver: {}", ntp(), res);
+    switch (res) {
+    case archival::wait_result::not_in_progress:
+        // is partition concurrently flushed/waited by smth else?
+        vassert(false, "Freshly accepted flush cannot be waited for");
+    case archival::wait_result::lost_leadership:
+        co_return errc::leadership_changed;
+    case archival::wait_result::failed:
+        co_return errc::partition_operation_failed;
+    case archival::wait_result::complete:
+        co_return errc::success;
+    }
 }
 
 ss::future<result<ssx::rwlock_unit>> partition::hold_writes_enabled() {

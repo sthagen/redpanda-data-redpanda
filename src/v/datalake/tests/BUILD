@@ -152,7 +152,7 @@ redpanda_test_cc_library(
         "//src/v/datalake:table_id_provider",
     ],
     include_prefix = "datalake/tests",
-    visibility = [":__subpackages__"],
+    visibility = ["//visibility:public"],
     deps = [
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:record_schema_resolver",
@@ -231,6 +231,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_data_writer",
+        ":test_utils",
         "//src/v/bytes",
         "//src/v/datalake:partitioning_writer",
         "//src/v/datalake:table_definition",

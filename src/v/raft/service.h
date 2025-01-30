@@ -25,6 +25,7 @@
 #include <seastar/core/timed_out_error.hh>
 #include <seastar/core/with_timeout.hh>
 #include <seastar/coroutine/maybe_yield.hh>
+#include <seastar/coroutine/switch_to.hh>
 
 #include <absl/container/flat_hash_map.h>
 
@@ -52,11 +53,13 @@ public:
     service(
       ss::scheduling_group sc,
       ss::smp_service_group ssg,
+      ss::scheduling_group hb_sg,
       ss::sharded<ConsensusManager>& mngr,
       ShardLookup& tbl,
       clock_type::duration heartbeat_interval,
       model::node_id self)
       : raftgen_service(sc, ssg)
+      , _hb_sg(hb_sg)
       , _group_manager(mngr)
       , _shard_table(tbl)
       , _heartbeat_interval(heartbeat_interval)
@@ -111,6 +114,7 @@ public:
 
     ss::future<heartbeat_reply_v2>
     heartbeat_v2(heartbeat_request_v2 r, rpc::streaming_context&) final {
+        co_await ss::coroutine::switch_to(_hb_sg);
         const auto source = r.source();
         const auto target = r.target();
         auto grouped = group_hbeats_by_shard(std::move(r));
@@ -550,7 +554,7 @@ private:
         co_return co_await c->full_heartbeat(
           req.group, source_node, target_node, req.data);
     }
-
+    ss::scheduling_group _hb_sg;
     failure_probes _probe;
     ss::sharded<ConsensusManager>& _group_manager;
     ShardLookup& _shard_table;

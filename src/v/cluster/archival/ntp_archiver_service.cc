@@ -2907,6 +2907,8 @@ flush_result ntp_archiver::flush() {
 }
 
 ss::future<wait_result> ntp_archiver::wait(model::offset o) {
+    ss::gate::holder holder(_gate);
+
     if (_parent.is_read_replica_mode_enabled()) {
         vlog(
           _rtclog.debug,

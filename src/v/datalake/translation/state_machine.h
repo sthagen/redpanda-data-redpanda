@@ -11,6 +11,7 @@
 #pragma once
 
 #include "cluster/state_machine_registry.h"
+#include "model/fundamental.h"
 #include "raft/persisted_stm.h"
 
 namespace datalake::translation {
@@ -20,8 +21,11 @@ namespace datalake::translation {
 class translation_stm final : public raft::persisted_stm<> {
 public:
     static constexpr std::string_view name = "datalake_translation_stm";
+    using base = raft::persisted_stm<>;
 
     explicit translation_stm(ss::logger&, raft::consensus*);
+
+    ss::future<> stop() override;
 
     ss::future<> do_apply(const model::record_batch&) override;
     model::offset max_collectible_offset() override;
@@ -35,6 +39,18 @@ public:
     ss::future<iobuf> take_snapshot(model::offset) final;
 
     raft::consensus* raft() const { return _raft; }
+
+    // wait until at least offset is translated
+    ss::future<> wait_translated(
+      kafka::offset,
+      model::timeout_clock::time_point,
+      std::optional<std::reference_wrapper<ss::abort_source>> as
+      = std::nullopt) const;
+    ss::future<> wait_translated(
+      model::offset,
+      model::timeout_clock::time_point,
+      std::optional<std::reference_wrapper<ss::abort_source>> as
+      = std::nullopt) const;
 
     ss::future<std::optional<kafka::offset>>
     highest_translated_offset(model::timeout_clock::duration timeout);
@@ -51,7 +67,11 @@ private:
         kafka::offset highest_translated_offset;
         auto serde_fields() { return std::tie(highest_translated_offset); }
     };
+
+    void update_highest_translated_offset(kafka::offset new_offset);
+
     kafka::offset _highest_translated_offset{};
+    mutable raft::offset_monitor<kafka::offset> _waiters_for_translated;
 };
 
 class stm_factory : public cluster::state_machine_factory {

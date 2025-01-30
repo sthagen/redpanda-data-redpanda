@@ -19,6 +19,7 @@
 #include "datalake/record_schema_resolver.h"
 #include "datalake/translation/partition_translator.h"
 #include "features/fwd.h"
+#include "model/metadata.h"
 #include "pandaproxy/schema_registry/fwd.h"
 #include "raft/fwd.h"
 #include "ssx/semaphore.h"
@@ -75,7 +76,9 @@ private:
     std::chrono::milliseconds translation_interval_ms() const;
     void on_group_notification(const model::ntp&);
     void start_translator(
-      ss::lw_shared_ptr<cluster::partition>, model::iceberg_mode);
+      ss::lw_shared_ptr<cluster::partition>,
+      model::iceberg_mode,
+      model::iceberg_invalid_record_action);
     void stop_translator(const model::ntp&);
 
     model::node_id _self;
@@ -104,6 +107,8 @@ private:
     using deferred_action = ss::deferred_action<std::function<void()>>;
     std::vector<deferred_action> _deregistrations;
     config::binding<std::chrono::milliseconds> _iceberg_commit_interval;
+    config::binding<model::iceberg_invalid_record_action>
+      _iceberg_invalid_record_action;
 
     // Translation requires buffering data batches in memory for efficient
     // output representation, this controls the maximum bytes buffered in memory

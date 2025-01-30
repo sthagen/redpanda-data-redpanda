@@ -213,13 +213,15 @@ bool heartbeat_manager::needs_full_heartbeat(
 }
 
 heartbeat_manager::heartbeat_manager(
+  ss::scheduling_group sched_group,
   config::binding<std::chrono::milliseconds> interval,
   consensus_client_protocol proto,
   model::node_id self,
   config::binding<std::chrono::milliseconds> heartbeat_timeout,
   config::binding<bool> enable_lw_heartbeat,
   features::feature_table& ft)
-  : _heartbeat_interval(std::move(interval))
+  : _scheduling_group(sched_group)
+  , _heartbeat_interval(std::move(interval))
   , _heartbeat_timeout(std::move(heartbeat_timeout))
   , _client_protocol(std::move(proto))
   , _self(self)
