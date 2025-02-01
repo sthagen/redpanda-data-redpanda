@@ -16,6 +16,7 @@
 #include "cluster/notification.h"
 #include "datalake/errors.h"
 #include "datalake/fwd.h"
+#include "datalake/location.h"
 #include "features/fwd.h"
 #include "kafka/data/partition_proxy.h"
 #include "model/metadata.h"
@@ -73,6 +74,7 @@ public:
       ss::sharded<coordinator::frontend>* frontend,
       ss::sharded<features::feature_table>* features,
       std::unique_ptr<datalake::cloud_data_io>* cloud_io,
+      location_provider location_provider,
       schema_manager* schema_mgr,
       std::unique_ptr<type_resolver> type_resolver,
       std::unique_ptr<record_translator> record_translator,
@@ -132,6 +134,7 @@ private:
     ss::sharded<coordinator::frontend>* _frontend;
     ss::sharded<features::feature_table>* _features;
     std::unique_ptr<datalake::cloud_data_io>* _cloud_io;
+    location_provider _location_provider;
     schema_manager* _schema_mgr;
     std::unique_ptr<type_resolver> _type_resolver;
     std::unique_ptr<record_translator> _record_translator;

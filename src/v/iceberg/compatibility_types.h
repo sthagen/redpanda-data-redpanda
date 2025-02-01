@@ -62,6 +62,8 @@ using schema_transform_result
 
 using schema_changed = ss::bool_class<struct schema_changed_tag>;
 using schema_evolution_result = checked<schema_changed, schema_evolution_errc>;
+using ids_filled = ss::bool_class<struct ids_filled_tag>;
+using fill_ids_result = checked<ids_filled, schema_evolution_errc>;
 
 } // namespace iceberg
 

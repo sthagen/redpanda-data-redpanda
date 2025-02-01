@@ -250,6 +250,48 @@ class DatalakeE2ETests(RedpandaTest):
             dl.produce_to_topic(self.topic_name, 1024, count)
             dl.wait_for_translation(self.topic_name, msg_count=count)
 
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            filesystem_catalog_mode=[False, True])
+    def test_iceberg_files_location(self, cloud_storage_type,
+                                    filesystem_catalog_mode):
+        """
+        Test that redpanda writes data files to the correct location
+        as directed by the catalog.
+        """
+        count = 100
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              filesystem_catalog_mode=filesystem_catalog_mode,
+                              include_query_engines=[QueryEngineType.SPARK
+                                                     ]) as dl:
+            dl.create_iceberg_enabled_topic(self.topic_name, partitions=2)
+            dl.produce_to_topic(self.topic_name, 1024, count)
+            dl.wait_for_translation(self.topic_name, msg_count=count)
+
+            table = dl.catalog_client().load_table(
+                f"redpanda.{self.topic_name}")
+
+            spark = dl.spark()
+            table_name = f"redpanda.{self.topic_name}"
+
+            def assert_location_prefix(rows, prefix: str):
+                assert len(
+                    rows
+                ) > 0, "Expected at least one row to be able to validate the location prefix invariant"
+
+                for row in rows:
+                    assert row[0].startswith(
+                        prefix), f"Expected {row[0]} to start with {prefix}"
+
+            files = spark.run_query_fetch_all(
+                f"select file_path from {table_name}.files")
+            assert_location_prefix(files, table.location())
+
+            manifests = spark.run_query_fetch_all(
+                f"select path from {table_name}.manifests")
+            assert_location_prefix(manifests, table.location())
+
 
 class DatalakeMetricsTest(RedpandaTest):
 

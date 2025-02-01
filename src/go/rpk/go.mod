@@ -11,8 +11,10 @@ require (
 	buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.35.1-20240917150400-3f349e63f44a.1
 	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.17.0-20241112225414-3759fedba3f3.1
 	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.35.1-20241112225414-3759fedba3f3.1
+	buf.build/gen/go/redpandadata/gatekeeper/connectrpc/go v1.18.0-20241209180130-05cf059c71c1.1
+	buf.build/gen/go/redpandadata/gatekeeper/protocolbuffers/go v1.36.2-20241209180130-05cf059c71c1.1
 	cloud.google.com/go/compute/metadata v0.5.2
-	connectrpc.com/connect v1.17.0
+	connectrpc.com/connect v1.18.0
 	github.com/AlecAivazis/survey/v2 v2.3.7
 	github.com/avast/retry-go v3.0.0+incompatible
 	github.com/aws/aws-sdk-go v1.55.5
@@ -61,7 +63,7 @@ require (
 	golang.org/x/sync v0.8.0
 	golang.org/x/sys v0.28.0
 	golang.org/x/term v0.25.0
-	google.golang.org/protobuf v1.35.1
+	google.golang.org/protobuf v1.36.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.31.2
 	k8s.io/apimachinery v0.31.2
@@ -69,7 +71,7 @@ require (
 )
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.35.1-20240920164238-5a7b106cbb87.1 // indirect
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.2-20240920164238-5a7b106cbb87.1 // indirect
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.35.1-20240617172850-a48fcebcf8f1.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20230124172434-306776ec8161 // indirect
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect

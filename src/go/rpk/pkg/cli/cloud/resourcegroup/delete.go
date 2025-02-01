@@ -43,15 +43,13 @@ func deleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			cfg, err := p.Load(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			priorProfile := cfg.ActualProfile()
-			_, authVir, clearedProfile, _, err := oauth.LoadFlow(cmd.Context(), fs, cfg, auth0.NewClient(cfg.DevOverrides()), false, false, cfg.DevOverrides().CloudAPIURL)
+			_, authVir, clearedProfile, _, err := oauth.LoadFlow(cmd.Context(), fs, cfg, auth0.NewClient(cfg.DevOverrides()), false, false)
 			out.MaybeDie(err, "unable to authenticate with Redpanda Cloud: %v", err)
 
 			oauth.MaybePrintSwapMessage(clearedProfile, priorProfile, authVir)
 			authToken := authVir.AuthToken
 
-			cl, err := publicapi.NewControlPlaneClientSet(cfg.DevOverrides().PublicAPIURL, authToken)
-			out.MaybeDie(err, "unable to create the public api client: %v", err)
-
+			cl := publicapi.NewCloudClientSet(cfg.DevOverrides().PublicAPIURL, authToken)
 			name := args[0]
 			listed, err := cl.ResourceGroup.ListResourceGroups(cmd.Context(), connect.NewRequest(&controlplanev1beta2.ListResourceGroupsRequest{
 				Filter: &controlplanev1beta2.ListResourceGroupsRequest_Filter{Name: name},

@@ -39,6 +39,7 @@ public:
         iceberg::table_identifier id;
         iceberg::schema schema;
         iceberg::partition_spec partition_spec;
+        iceberg::uri location;
 
         // Fills the field IDs of the given type with those in the current
         // schema. Returns true on success.
@@ -54,6 +55,10 @@ public:
 // Used in unit tests
 class simple_schema_manager : public schema_manager {
 public:
+    explicit simple_schema_manager(iceberg::uri table_location_prefix = {})
+      : table_location_prefix_(std::move(table_location_prefix)) {}
+
+public:
     ss::future<checked<std::nullopt_t, schema_manager::errc>>
     ensure_table_schema(
       const iceberg::table_identifier&,
@@ -64,6 +69,7 @@ public:
     get_table_info(const iceberg::table_identifier&) override;
 
 private:
+    iceberg::uri table_location_prefix_;
     chunked_hash_map<iceberg::table_identifier, table_info> table_info_by_id;
 };
 

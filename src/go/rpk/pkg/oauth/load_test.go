@@ -4,16 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
+	iamv1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1beta2"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 )
-
-func init() {
-	inTests = true
-}
 
 func TestLoadFlow(t *testing.T) {
 	tests := []struct {
@@ -93,9 +94,28 @@ func TestLoadFlow(t *testing.T) {
 					"cloud.client_secret=" + tt.clientSecret,
 				},
 			}
+			handler := func() http.HandlerFunc {
+				return func(w http.ResponseWriter, r *http.Request) {
+					if strings.Contains(r.URL.Path, "GetCurrentOrganization") {
+						resp := &iamv1beta2.GetCurrentOrganizationResponse{
+							Organization: &iamv1beta2.Organization{
+								Id:   "no-url-org-id",
+								Name: "no-url-org",
+							},
+						}
+						marshal, err := proto.Marshal(resp)
+						require.NoError(t, err)
+						w.Header().Set("Content-Type", "application/proto")
+						w.Write(marshal)
+					}
+				}
+			}
+			ts := httptest.NewServer(handler())
+			t.Setenv("RPK_PUBLIC_API_URL", ts.URL)
+
 			cfg, err := p.Load(fs)
 			require.NoError(t, err)
-			authVir, _, _, _, err := LoadFlow(context.Background(), fs, cfg, &m, false, false, "")
+			authVir, _, _, _, err := LoadFlow(context.Background(), fs, cfg, &m, false, false)
 			if tt.expErr {
 				require.Error(t, err)
 				return

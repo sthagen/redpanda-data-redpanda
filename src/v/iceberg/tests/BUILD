@@ -497,8 +497,11 @@ redpanda_cc_gtest(
     tags = ["exclusive"],
     deps = [
         ":test_schemas",
+        "//src/v/iceberg:compatibility_utils",
+        "//src/v/iceberg:datatypes",
         "//src/v/iceberg:transaction",
         "//src/v/test_utils:gtest",
+        "@fmt",
         "@googletest//:gtest",
     ],
 )

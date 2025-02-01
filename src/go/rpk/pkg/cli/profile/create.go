@@ -16,15 +16,11 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"time"
 
 	controlplanev1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1beta2"
-
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	container "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cloudapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/httpapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/out"
@@ -340,14 +336,10 @@ func createCloudProfile(ctx context.Context, yAuthVir *config.RpkCloudAuth, cfg 
 	if expired {
 		return CloudClusterOutputs{}, errors.New("current cloud auth has expired, please re-login with 'rpk cloud login'")
 	}
-	cl := cloudapi.NewClient(overrides.CloudAPIURL, yAuthVir.AuthToken, httpapi.ReqTimeout(10*time.Second))
 
-	cpCl, err := publicapi.NewControlPlaneClientSet(cfg.DevOverrides().PublicAPIURL, yAuthVir.AuthToken)
-	if err != nil {
-		return CloudClusterOutputs{}, fmt.Errorf("unable to create public API client: %v", err)
-	}
+	cpCl := publicapi.NewCloudClientSet(cfg.DevOverrides().PublicAPIURL, yAuthVir.AuthToken)
 	if clusterIDOrName == "prompt" {
-		return PromptCloudClusterProfile(ctx, yAuthVir, cl, cpCl)
+		return PromptCloudClusterProfile(ctx, yAuthVir, cpCl)
 	}
 
 	var (
@@ -358,7 +350,7 @@ func createCloudProfile(ctx context.Context, yAuthVir *config.RpkCloudAuth, cfg 
 nameLookup:
 	_, err = xid.FromString(clusterIDOrName)
 	if err != nil || forceNameLookup {
-		clusterID, err = clusterNameToID(ctx, cl, clusterIDOrName)
+		clusterID, err = clusterNameToID(ctx, cpCl, clusterIDOrName)
 		if err != nil {
 			if forceNameLookup {
 				// It is possible that an API call failed, but odds are *at this point*
@@ -378,7 +370,7 @@ nameLookup:
 	// cluster ID, we do a final namespace lookup and map the cluster's
 	// namespace UUID to the namespace name.
 
-	vc, err := cl.VirtualCluster(ctx, clusterID)
+	sc, err := cpCl.ServerlessClusterForID(ctx, clusterID)
 	if err != nil { // if we fail for a vcluster, we try again for a normal cluster
 		cluster, err := cpCl.ClusterForID(ctx, clusterID)
 		if err != nil {
@@ -402,34 +394,34 @@ nameLookup:
 		}
 		return fromCloudCluster(yAuthVir, rg, cluster), nil
 	}
-	rg, err := cpCl.ResourceGroupForID(ctx, vc.NamespaceUUID)
+	rg, err := cpCl.ResourceGroupForID(ctx, sc.ResourceGroupId)
 	if err != nil {
 		return CloudClusterOutputs{}, err
 	}
-	return fromVirtualCluster(yAuthVir, rg, vc), nil
+	return fromVirtualCluster(yAuthVir, rg, sc), nil
 }
 
-func clusterNameToID(ctx context.Context, cl *cloudapi.Client, name string) (string, error) {
-	_, nss, vcs, cs, err := cl.OrgNamespacesClusters(ctx)
+func clusterNameToID(ctx context.Context, cl *publicapi.CloudClientSet, name string) (string, error) {
+	_, rgs, scs, cs, err := cl.OrgResourceGroupsClusters(ctx)
 	if err != nil {
 		return "", fmt.Errorf("unable to request organization, namespace, or cluster details: %w", err)
 	}
-	candidates := findNamedCluster(name, nss, vcs, cs)
+	candidates := findNamedCluster(name, rgs, scs, cs)
 
 	switch len(candidates) {
 	case 0:
 		return "", fmt.Errorf("no cluster found with name %q", name)
 	case 1:
 		for _, nc := range candidates {
-			if nc.IsVCluster {
-				return nc.VCluster.ID, nil
+			if nc.isServerlessCluster {
+				return nc.sCluster.Id, nil
 			} else {
-				return nc.Cluster.ID, nil
+				return nc.cluster.Id, nil
 			}
 		}
 		panic("unreachable")
 	default:
-		ncs := combineClusterNames(nss, vcs, cs)
+		ncs := combineClusterNames(rgs, scs, cs)
 		names := ncs.names()
 
 		idx, err := out.PickIndex(names, "Multiple clusters found with the requested name, please select one:")
@@ -442,31 +434,35 @@ func clusterNameToID(ctx context.Context, cl *cloudapi.Client, name string) (str
 
 // Iterates across vcs and cs and returns all clusters that match the given
 // name.
-func findNamedCluster(name string, nss []cloudapi.Namespace, vcs []cloudapi.VirtualCluster, cs []cloudapi.Cluster) map[string]cloudapi.NamespacedCluster {
-	ret := make(map[string]cloudapi.NamespacedCluster)
-	namespaceIDs := make(map[string]cloudapi.Namespace, len(nss))
+func findNamedCluster(name string, nss []*controlplanev1beta2.ResourceGroup, vcs []*controlplanev1beta2.ServerlessCluster, cs []*controlplanev1beta2.Cluster) map[string]resourceGroupCluster {
+	ret := make(map[string]resourceGroupCluster)
+	namespaceIDs := make(map[string]*controlplanev1beta2.ResourceGroup, len(nss))
 	for _, ns := range nss {
-		namespaceIDs[ns.ID] = ns
+		namespaceIDs[ns.Id] = ns
 	}
 	for _, vc := range vcs {
-		if name != vc.Name && name != fmt.Sprintf("%s/%s", namespaceIDs[vc.NamespaceUUID].Name, vc.Name) {
-			continue
-		}
-		ns := namespaceIDs[vc.NamespaceUUID]
-		ret[vc.Name] = cloudapi.NamespacedCluster{
-			Namespace:  ns,
-			VCluster:   vc,
-			IsVCluster: true,
+		if vc != nil {
+			if name != vc.Name && name != fmt.Sprintf("%s/%s", namespaceIDs[vc.ResourceGroupId].Name, vc.Name) {
+				continue
+			}
+			ns := namespaceIDs[vc.ResourceGroupId]
+			ret[vc.Name] = resourceGroupCluster{
+				resourceGroup:       ns,
+				sCluster:            vc,
+				isServerlessCluster: true,
+			}
 		}
 	}
 	for _, c := range cs {
-		if name != c.Name && name != fmt.Sprintf("%s/%s", namespaceIDs[c.NamespaceUUID].Name, c.Name) {
-			continue
-		}
-		ns := namespaceIDs[c.NamespaceUUID]
-		ret[c.Name] = cloudapi.NamespacedCluster{
-			Namespace: ns,
-			Cluster:   c,
+		if c != nil {
+			if name != c.Name && name != fmt.Sprintf("%s/%s", namespaceIDs[c.ResourceGroupId].Name, c.Name) {
+				continue
+			}
+			ns := namespaceIDs[c.ResourceGroupId]
+			ret[c.Name] = resourceGroupCluster{
+				resourceGroup: ns,
+				cluster:       c,
+			}
 		}
 	}
 	return ret
@@ -515,29 +511,29 @@ func fromCloudCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.Resour
 	}
 }
 
-func fromVirtualCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.ResourceGroup, vc cloudapi.VirtualCluster) CloudClusterOutputs {
+func fromVirtualCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.ResourceGroup, sc *controlplanev1beta2.ServerlessCluster) CloudClusterOutputs {
 	p := config.RpkProfile{
-		Name:      vc.Name,
+		Name:      sc.Name,
 		FromCloud: true,
 		KafkaAPI: config.RpkKafkaAPI{
-			Brokers: vc.Status.Listeners.SeedAddresses,
+			Brokers: sc.KafkaApi.SeedBrokers,
 			TLS:     new(config.TLS),
 			SASL: &config.SASL{
 				Mechanism: adminapi.CloudOIDC,
 			},
 		},
 		AdminAPI: config.RpkAdminAPI{
-			Addresses: []string{vc.Status.Listeners.ConsoleURL},
+			Addresses: []string{sc.ConsoleUrl},
 			TLS:       new(config.TLS),
 		},
 		SR: config.RpkSchemaRegistryAPI{
-			Addresses: vc.Status.Listeners.SchemaRegistryURL,
+			Addresses: []string{sc.SchemaRegistry.Url},
 			TLS:       new(config.TLS),
 		},
 		CloudCluster: config.RpkCloudCluster{
 			ResourceGroup: rg.Name,
-			ClusterID:     vc.ID,
-			ClusterName:   vc.Name,
+			ClusterID:     sc.Id,
+			ClusterName:   sc.Name,
 			AuthOrgID:     yAuth.OrgID,
 			AuthKind:      yAuth.Kind,
 			ClusterType:   publicapi.ServerlessClusterType, // Virtual clusters do not include a type in the response yet.
@@ -547,8 +543,8 @@ func fromVirtualCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.Reso
 	return CloudClusterOutputs{
 		Profile:           p,
 		ResourceGroupName: rg.Name,
-		ClusterName:       vc.Name,
-		ClusterID:         vc.ID,
+		ClusterName:       sc.Name,
+		ClusterID:         sc.Id,
 		MessageMTLS:       false, // we do not need to print any required message; we generate the config in full
 		MessageSASL:       false, // same
 	}
@@ -618,17 +614,17 @@ func (o CloudClusterOutputs) FullName() string {
 // user. If their cloud account has only one cluster, a profile is created for
 // it automatically. This returns ErrNoCloudClusters if the user has no cloud
 // clusters.
-func PromptCloudClusterProfile(ctx context.Context, yAuth *config.RpkCloudAuth, cl *cloudapi.Client, cpCl *publicapi.ControlPlaneClientSet) (CloudClusterOutputs, error) {
-	org, nss, vcs, cs, err := cl.OrgNamespacesClusters(ctx)
+func PromptCloudClusterProfile(ctx context.Context, yAuth *config.RpkCloudAuth, cl *publicapi.CloudClientSet) (CloudClusterOutputs, error) {
+	org, rgs, scs, cs, err := cl.OrgResourceGroupsClusters(ctx)
 	if err != nil {
 		return CloudClusterOutputs{}, err
 	}
-	if len(cs) == 0 && len(vcs) == 0 {
+	if len(cs) == 0 && len(scs) == 0 {
 		return CloudClusterOutputs{}, ErrNoCloudClusters
 	}
 
 	// Always prompt, even if there is only one option.
-	ncs := combineClusterNames(nss, vcs, cs)
+	ncs := combineClusterNames(rgs, scs, cs)
 	names := ncs.names()
 	if len(names) == 0 {
 		return CloudClusterOutputs{}, ErrNoCloudClusters
@@ -640,47 +636,51 @@ func PromptCloudClusterProfile(ctx context.Context, yAuth *config.RpkCloudAuth, 
 	selected := ncs[idx]
 
 	var o CloudClusterOutputs
-	// We have a cluster selected, but the list response does not return
-	// all information we need. We need to now directly request this
-	// cluster's information.
 	if selected.c != nil {
-		cluster, err := cpCl.ClusterForID(ctx, selected.c.ID)
+		// We have a selected cluster, but the list response does not return
+		// all the information we need.
+		c, err := cl.ClusterForID(ctx, selected.c.Id)
 		if err != nil {
 			return CloudClusterOutputs{}, err
 		}
-		rg, err := cpCl.ResourceGroupForID(ctx, cluster.GetResourceGroupId())
-		if err != nil {
-			return CloudClusterOutputs{}, err
+		rg := findResourceGroupByID(rgs, c.GetResourceGroupId())
+		if rg == nil {
+			return CloudClusterOutputs{}, fmt.Errorf("unable to find resource group %q", c.GetResourceGroupId())
 		}
-		o = fromCloudCluster(yAuth, rg, cluster)
+		o = fromCloudCluster(yAuth, rg, c)
 	} else {
-		vc, err := cl.VirtualCluster(ctx, selected.vc.ID)
-		if err != nil {
-			return CloudClusterOutputs{}, fmt.Errorf("unable to get cluster %q information: %w", vc.ID, err)
+		rg := findResourceGroupByID(rgs, selected.sc.GetResourceGroupId())
+		if rg == nil {
+			return CloudClusterOutputs{}, fmt.Errorf("unable to find resource group %q", selected.sc.GetResourceGroupId())
 		}
-		rg, err := cpCl.ResourceGroupForID(ctx, vc.NamespaceUUID)
-		if err != nil {
-			return CloudClusterOutputs{}, err
-		}
-		o = fromVirtualCluster(yAuth, rg, vc)
+		o = fromVirtualCluster(yAuth, rg, selected.sc)
 	}
 	o.Profile.Description = fmt.Sprintf("%s %q", org.Name, selected.name)
 	return o, nil
+}
+
+func findResourceGroupByID(rgs []*controlplanev1beta2.ResourceGroup, id string) *controlplanev1beta2.ResourceGroup {
+	for _, r := range rgs {
+		if r.Id == id {
+			return r
+		}
+	}
+	return nil
 }
 
 // nameAndCluster describes a cluster name in the form of
 // <namespace>/<cluster-name> and the cluster type (virtual, normal).
 type nameAndCluster struct {
 	name string
-	c    *cloudapi.Cluster
-	vc   *cloudapi.VirtualCluster
+	c    *controlplanev1beta2.Cluster
+	sc   *controlplanev1beta2.ServerlessCluster
 }
 
 func (nc *nameAndCluster) clusterID() string {
 	if nc.c != nil {
-		return nc.c.ID
+		return nc.c.Id
 	}
-	return nc.vc.ID
+	return nc.sc.Id
 }
 
 type namesAndClusters []nameAndCluster
@@ -696,43 +696,56 @@ func (ncs namesAndClusters) names() []string {
 // combineClusterNames combines the names of Virtual Clusters and Clusters,
 // sorted alphabetically, and returns a list of nameAndCluster structs
 // representing the combined clusters (VClusters first, then Clusters).
-func combineClusterNames(nss cloudapi.Namespaces, vcs []cloudapi.VirtualCluster, cs []cloudapi.Cluster) namesAndClusters {
-	nsIDToName := make(map[string]string, len(nss))
-	for _, n := range nss {
-		nsIDToName[n.ID] = n.Name
+func combineClusterNames(rgs []*controlplanev1beta2.ResourceGroup, scs []*controlplanev1beta2.ServerlessCluster, cs []*controlplanev1beta2.Cluster) namesAndClusters {
+	rgIDToName := make(map[string]string, len(rgs))
+	for _, rg := range rgs {
+		if rg != nil {
+			rgIDToName[rg.Id] = rg.Name
+		}
 	}
 
-	// First we display the Virtual Clusters
-	var vNameAndCs []nameAndCluster
-	for _, vc := range vcs {
-		vc := vc
-		if strings.ToLower(vc.State) != cloudapi.ClusterStateReady {
-			continue
+	// First we display the Serverless Clusters
+	var sNameAndCs []nameAndCluster
+	for _, sc := range scs {
+		if sc != nil {
+			sc := sc
+			if sc.State != controlplanev1beta2.ServerlessCluster_STATE_READY {
+				continue
+			}
+			sNameAndCs = append(sNameAndCs, nameAndCluster{
+				name: fmt.Sprintf("%s/%s", rgIDToName[sc.ResourceGroupId], sc.Name),
+				sc:   sc,
+			})
 		}
-		vNameAndCs = append(vNameAndCs, nameAndCluster{
-			name: fmt.Sprintf("%s/%s", nsIDToName[vc.NamespaceUUID], vc.Name),
-			vc:   &vc,
-		})
 	}
-	sort.Slice(vNameAndCs, func(i, j int) bool {
-		return vNameAndCs[i].name < vNameAndCs[j].name
+	sort.Slice(sNameAndCs, func(i, j int) bool {
+		return sNameAndCs[i].name < sNameAndCs[j].name
 	})
 
 	// Then we append the cluster names
 	var nameAndCs []nameAndCluster
 	for _, c := range cs {
 		c := c
-		if strings.ToLower(c.State) != cloudapi.ClusterStateReady {
+		if c.State != controlplanev1beta2.Cluster_STATE_READY {
 			continue
 		}
 		nameAndCs = append(nameAndCs, nameAndCluster{
-			name: fmt.Sprintf("%s/%s", nsIDToName[c.NamespaceUUID], c.Name),
-			c:    &c,
+			name: fmt.Sprintf("%s/%s", rgIDToName[c.ResourceGroupId], c.Name),
+			c:    c,
 		})
 	}
 	sort.Slice(nameAndCs, func(i, j int) bool {
 		return nameAndCs[i].name < nameAndCs[j].name
 	})
 
-	return append(vNameAndCs, nameAndCs...)
+	return append(sNameAndCs, nameAndCs...)
+}
+
+// resourceGroupCluster ties a cluster or serverless cluster to its resource
+// group.
+type resourceGroupCluster struct {
+	resourceGroup       *controlplanev1beta2.ResourceGroup
+	cluster             *controlplanev1beta2.Cluster
+	sCluster            *controlplanev1beta2.ServerlessCluster
+	isServerlessCluster bool
 }

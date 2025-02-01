@@ -17,6 +17,7 @@
 #include "datalake/values_avro.h"
 #include "datalake/values_protobuf.h"
 #include "iceberg/avro_utils.h"
+#include "iceberg/compatibility_utils.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/values.h"
 #include "model/fundamental.h"
@@ -188,6 +189,16 @@ structured_data_translator::build_type(std::optional<resolved_type> val_type) {
     if (val_type.has_value()) {
         val_id = std::move(val_type->id);
         auto& struct_type = std::get<iceberg::struct_type>(val_type->type);
+        // The various schema languages differ significantly in their semantics
+        // and best practices around required fields, and Iceberg has its own.
+        // By forcing all schema fields to non-required, we provide a maximally
+        // permissive allowance for schema evolution which is certainly a
+        // superset superset of what any particular schema language allows.
+        // TODO(iceberg): this behavior could be made configurable
+        std::ignore = iceberg::for_each_field(
+          struct_type, [](iceberg::nested_field* f) {
+              f->required = iceberg::field_required::no;
+          });
         for (auto& field : struct_type.fields) {
             if (field->name == rp_struct_name) {
                 // To avoid collisions, move user fields named "redpanda" into

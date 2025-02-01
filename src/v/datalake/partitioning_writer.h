@@ -34,12 +34,14 @@ public:
       parquet_file_writer_factory& factory,
       iceberg::schema::id_t schema_id,
       iceberg::struct_type type,
-      iceberg::partition_spec spec)
+      iceberg::partition_spec spec,
+      remote_path remote_prefix)
       : writer_factory_(factory)
       , schema_id_(schema_id)
       , type_(std::move(type))
       , accessors_(iceberg::struct_accessor::from_struct_type(type_))
-      , spec_(std::move(spec)) {}
+      , spec_(std::move(spec))
+      , remote_prefix_(std::move(remote_prefix)) {}
 
     // Adds the given value to the writer corresponding to the value's
     // partition key.
@@ -50,6 +52,7 @@ public:
 
     struct partitioned_file {
         local_file_metadata local_file;
+        remote_path table_location;
         iceberg::schema::id_t schema_id;
         iceberg::partition_spec::id_t partition_spec_id;
         iceberg::partition_key partition_key;
@@ -72,6 +75,7 @@ private:
     const iceberg::struct_type type_;
     iceberg::struct_accessor::ids_accessor_map_t accessors_;
     iceberg::partition_spec spec_;
+    remote_path remote_prefix_;
 
     // Map of partition keys to their corresponding data file writers.
     chunked_hash_map<

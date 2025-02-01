@@ -8,8 +8,10 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
+#include "cloud_io/provider.h"
 #include "container/fragmented_vector.h"
 #include "datalake/catalog_schema_manager.h"
+#include "datalake/location.h"
 #include "datalake/record_multiplexer.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
@@ -334,6 +336,8 @@ private:
           _translator,
           _table_creator,
           model::iceberg_invalid_record_action::dlq_table,
+          datalake::location_provider(
+            scoped_remote->remote.local().provider(), bucket_name),
           _as);
     }
 

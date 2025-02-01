@@ -48,6 +48,7 @@ public:
         while (!to_visit.empty()) {
             auto* f = to_visit.back();
             f->id = nested_field::id_t{0};
+            f->meta = std::nullopt;
             to_visit.pop_back();
             std::visit(reverse_field_collecting_visitor{to_visit}, f->type);
         }
@@ -247,19 +248,19 @@ TEST_F(CatalogSchemaManagerTest, TestFillSupersetSubtype) {
 TEST_F(CatalogSchemaManagerTest, TestOptionalMismatch) {
     struct_type type;
     type.fields.emplace_back(
-      nested_field::create(0, "required", field_required::yes, int_type{}));
+      nested_field::create(1, "required", field_required::yes, int_type{}));
     type.fields.emplace_back(
-      nested_field::create(0, "optional", field_required::no, int_type{}));
+      nested_field::create(2, "optional", field_required::no, int_type{}));
     create_table(type);
 
-    // Make the destinations both optional.
+    // Make the destinations both optional. This is fine.
     type.fields[0]->required = field_required::no;
     auto res
       = schema_mgr.ensure_table_schema(table_ident, type, empty_pspec).get();
-    ASSERT_TRUE(res.has_error());
-    EXPECT_EQ(res.error(), schema_manager::errc::not_supported);
+    ASSERT_FALSE(res.has_error());
 
-    // Make the destinations both required.
+    // Make the destinations both required. We don't support upgrading optional
+    // fields to required (though it is allowed by the iceberg spec).
     type.fields[0]->required = field_required::yes;
     type.fields[1]->required = field_required::yes;
     res = schema_mgr.ensure_table_schema(table_ident, type, empty_pspec).get();
@@ -272,12 +273,24 @@ TEST_F(CatalogSchemaManagerTest, TestTypeMismatch) {
 
     auto type = std::get<struct_type>(test_nested_schema_type());
     reset_field_ids(type);
-    std::swap(type.fields.front(), type.fields.back());
+    std::swap(type.fields.front()->type, type.fields.back()->type);
 
     auto res
       = schema_mgr.ensure_table_schema(table_ident, type, empty_pspec).get();
     ASSERT_TRUE(res.has_error());
     EXPECT_EQ(res.error(), schema_manager::errc::not_supported);
+}
+
+TEST_F(CatalogSchemaManagerTest, TestReorderFields) {
+    create_nested_table();
+
+    auto type = std::get<struct_type>(test_nested_schema_type());
+    reset_field_ids(type);
+    std::swap(type.fields.front(), type.fields.back());
+
+    auto res
+      = schema_mgr.ensure_table_schema(table_ident, type, empty_pspec).get();
+    ASSERT_FALSE(res.has_error());
 }
 
 TEST_F(CatalogSchemaManagerTest, AcceptsValidTypePromotion) {
@@ -329,6 +342,7 @@ TEST_F(CatalogSchemaManagerTest, RejectsInvalidTypePromotion) {
     ASSERT_FALSE(load_res.value().fill_registered_ids(type));
 
     // check that the table still holds the original schema
+    load_res = schema_mgr.get_table_info(table_ident).get();
     reset_field_ids(original_type);
     ASSERT_TRUE(load_res.value().fill_registered_ids(original_type));
 

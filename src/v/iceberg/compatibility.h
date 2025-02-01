@@ -113,4 +113,25 @@ schema_transform_result validate_schema_transform(struct_type& dest);
 schema_evolution_result
 evolve_schema(const struct_type& source, struct_type& dest);
 
+/**
+ * try_fill_field_ids - Try to fill all dest fields with IDs from source.
+ *
+ * Operates similarly to evolve_schema, annotating both structs and evaluating
+ * for correctness, differing only in the semantics of the returned result.
+ * Preconditions:
+ *   - Both input structs are un-annotated. That is, none of their
+ *     fields have the optional ::meta filled in.
+ *
+ * Postconditions:
+ *   - Either each field in dest is assigned a unique ID carried over
+ *     from source, or function returns ids_filled::no (or an error).
+ *
+ * @param source - The source (i.e original) schema
+ * @param dest   - The schema to fill
+ *
+ * @return Whether all fields got an ID, or an error
+ */
+fill_ids_result
+try_fill_field_ids(const struct_type& source, struct_type& dest);
+
 } // namespace iceberg

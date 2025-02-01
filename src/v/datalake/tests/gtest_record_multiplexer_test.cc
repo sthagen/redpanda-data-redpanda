@@ -7,6 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
+#include "cloud_io/provider.h"
 #include "datalake/base_types.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/local_parquet_file_writer.h"
@@ -32,7 +33,7 @@
 
 using namespace datalake;
 namespace {
-simple_schema_manager simple_schema_mgr;
+simple_schema_manager simple_schema_mgr(iceberg::uri("s3://bucket/test"));
 binary_type_resolver bin_resolver;
 direct_table_creator t_creator{bin_resolver, simple_schema_mgr};
 const model::ntp
@@ -57,6 +58,9 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
       translator,
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
+      location_provider(
+        cloud_io::s3_compat_provider{"s3"},
+        cloud_storage_clients::bucket_name{"bucket"}),
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -100,6 +104,9 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
       translator,
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
+      location_provider(
+        cloud_io::s3_compat_provider{"s3"},
+        cloud_storage_clients::bucket_name{"bucket"}),
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -143,6 +150,9 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
       translator,
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
+      location_provider(
+        cloud_io::s3_compat_provider{"s3"},
+        cloud_storage_clients::bucket_name{"bucket"}),
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -263,6 +273,7 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
       translator,
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
+      location_provider(scoped_remote->remote.local().provider(), bucket_name),
       as);
     auto res = reader.consume(std::move(mux), model::no_timeout).get();
     ASSERT_FALSE(res.has_error()) << res.error();

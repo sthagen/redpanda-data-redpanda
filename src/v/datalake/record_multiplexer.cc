@@ -12,6 +12,7 @@
 #include "base/vlog.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/data_writer_interface.h"
+#include "datalake/location.h"
 #include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
@@ -34,6 +35,7 @@ record_multiplexer::record_multiplexer(
   record_translator& record_translator,
   table_creator& table_creator,
   model::iceberg_invalid_record_action invalid_record_action,
+  location_provider location_provider,
   lazy_abort_source& as)
   : _log(datalake_log, fmt::format("{}", ntp))
   , _ntp(ntp)
@@ -44,6 +46,7 @@ record_multiplexer::record_multiplexer(
   , _record_translator(record_translator)
   , _table_creator(table_creator)
   , _invalid_record_action(invalid_record_action)
+  , _location_provider(std::move(location_provider))
   , _as(as) {}
 
 ss::future<ss::stop_iteration>
@@ -202,13 +205,27 @@ record_multiplexer::operator()(model::record_batch batch) {
                 co_return ss::stop_iteration::yes;
             }
 
+            auto table_remote_path = _location_provider.from_uri(
+              load_res.value().location);
+            if (!table_remote_path) {
+                vlog(
+                  _log.warn,
+                  "Error getting location prefix for {} while creating writer "
+                  "at offset {}",
+                  load_res.value().location,
+                  offset);
+                _error = writer_error::parquet_conversion_error;
+                co_return ss::stop_iteration::yes;
+            }
+
             auto [iter, _] = _writers.emplace(
               record_type.comps,
               std::make_unique<partitioning_writer>(
                 *_writer_factory,
                 load_res.value().schema.schema_id,
                 std::move(record_type.type),
-                std::move(load_res.value().partition_spec)));
+                std::move(load_res.value().partition_spec),
+                std::move(table_remote_path.value())));
             writer_iter = iter;
         }
 
@@ -356,11 +373,24 @@ record_multiplexer::handle_invalid_record(
                 co_return writer_error::parquet_conversion_error;
             }
 
+            auto table_remote_path = _location_provider.from_uri(
+              load_res.value().location);
+            if (!table_remote_path) {
+                vlog(
+                  _log.warn,
+                  "Error getting location prefix for {} while creating writer "
+                  "at offset {}",
+                  load_res.value().location,
+                  offset);
+                co_return writer_error::parquet_conversion_error;
+            }
+
             _invalid_record_writer = std::make_unique<partitioning_writer>(
               *_writer_factory,
               load_res.value().schema.schema_id,
               std::move(record_type.type),
-              std::move(load_res.value().partition_spec));
+              std::move(load_res.value().partition_spec),
+              std::move(table_remote_path.value()));
         }
 
         int64_t estimated_size = (key ? key->size_bytes() : 0)

@@ -576,9 +576,19 @@ cc_library(
     }) + select({
         ":with_debug": [
             "SEASTAR_DEBUG",
+            "SEASTAR_DEBUG_PROMISE",
             "SEASTAR_DEBUG_SHARED_PTR",
+            "SEASTAR_TYPE_ERASE_MORE",
         ],
         "//conditions:default": [],
+    }) + select({
+        # This isn't the best way to check this, but is the only way I can
+        # currently think of to replicate this behavior in Bazel. In CMake
+        # seastar only enables this if CMAKE_BUILD_SHARED_LIBS is enabled.
+        "@//bazel:optimized_build": [],
+        "//conditions:default": [
+            "SEASTAR_BUILD_SHARED_LIBS",
+        ],
     }),
     includes = [
         "include",

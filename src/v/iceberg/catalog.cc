@@ -58,7 +58,9 @@ catalog::load_or_create_table(
       .schema_id = schema::unassigned_id,
       .identifier_field_ids = {},
     };
-    schema.assign_fresh_ids();
+    if (auto schm_res = schema.assign_fresh_ids(); schm_res.has_error()) {
+        co_return errc::unexpected_state;
+    }
     auto resolved_spec = partition_spec::resolve(spec, schema.schema_struct);
     if (!resolved_spec) {
         vlog(

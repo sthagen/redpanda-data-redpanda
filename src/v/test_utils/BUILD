@@ -69,13 +69,17 @@ redpanda_test_cc_library(
     srcs = [
         "boost_result_redirect.cc",
     ],
-    include_prefix = "test_utils",
-    visibility = ["//visibility:public"],
-    deps = [
+    implementation_deps = [
+        "//src/v/thirdparty/libxml2",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
         "@boost//:config",
         "@boost//:core",
         "@boost//:test",
     ],
+    include_prefix = "test_utils",
+    visibility = ["//visibility:public"],
 )
 
 redpanda_test_cc_library(

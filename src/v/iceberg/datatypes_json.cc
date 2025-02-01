@@ -178,6 +178,9 @@ void rjson_serialize(iceberg::json_writer& w, const iceberg::nested_field& f) {
     w.Bool(bool(f.required));
     w.Key("type");
     rjson_serialize(w, f.type);
+    // TODO(iceberg): when/if we add support for required fields,
+    // 'initial-default' and 'write-default' should be written here See
+    // https://iceberg.apache.org/spec/#default-values for requirements
     w.EndObject();
 }
 

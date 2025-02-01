@@ -18,11 +18,6 @@
 #include <seastar/core/seastar.hh>
 namespace datalake {
 namespace {
-remote_path calculate_remote_path(
-  const local_path& local_file_path, const remote_path& remote_path_prefix) {
-    auto f_name = local_file_path().filename();
-    return remote_path{remote_path_prefix() / f_name};
-}
 
 translation_task::errc map_error_code(cloud_data_io::errc errc) {
     switch (errc) {
@@ -36,25 +31,28 @@ translation_task::errc map_error_code(cloud_data_io::errc errc) {
 
 ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
   cloud_data_io& _cloud_io,
-  const local_file_metadata& lf_meta,
+  const partitioning_writer::partitioned_file& file,
   const remote_path& remote_path_prefix,
   retry_chain_node& parent_rcn,
   lazy_abort_source& lazy_as) {
-    auto remote_path = calculate_remote_path(lf_meta.path, remote_path_prefix);
+    auto file_remote_path = remote_path{
+      file.table_location / remote_path_prefix
+      / file.local_file.path().filename()};
+
     auto result = co_await _cloud_io.upload_data_file(
-      lf_meta, remote_path, parent_rcn, lazy_as);
+      file.local_file, file_remote_path, parent_rcn, lazy_as);
     if (result.has_error()) {
         vlog(
           datalake_log.warn,
           "error uploading file {} to {} - {}",
-          lf_meta,
-          remote_path,
+          file.local_file,
+          file_remote_path,
           result.error());
 
         co_return map_error_code(result.error());
     }
 
-    co_return remote_path;
+    co_return file_remote_path;
 }
 
 ss::future<checked<std::nullopt_t, translation_task::errc>>
@@ -93,7 +91,7 @@ upload_files(
     std::optional<translation_task::errc> upload_error;
     for (auto& file : files) {
         auto r = co_await execute_single_upload(
-          _cloud_io, file.local_file, remote_path_prefix, rcn, lazy_as);
+          _cloud_io, file, remote_path_prefix, rcn, lazy_as);
 
         if (r.has_error()) {
             vlog(
@@ -179,13 +177,15 @@ translation_task::translation_task(
   type_resolver& type_resolver,
   record_translator& record_translator,
   table_creator& table_creator,
-  model::iceberg_invalid_record_action invalid_record_action)
+  model::iceberg_invalid_record_action invalid_record_action,
+  location_provider location_provider)
   : _cloud_io(&cloud_io)
   , _schema_mgr(&schema_mgr)
   , _type_resolver(&type_resolver)
   , _record_translator(&record_translator)
   , _table_creator(&table_creator)
-  , _invalid_record_action(invalid_record_action) {}
+  , _invalid_record_action(invalid_record_action)
+  , _location_provider(std::move(location_provider)) {}
 
 ss::future<
   checked<coordinator::translated_offset_range, translation_task::errc>>
@@ -207,6 +207,7 @@ translation_task::translate(
       *_record_translator,
       *_table_creator,
       _invalid_record_action,
+      _location_provider,
       lazy_as);
     // Write local files
     auto mux_result = co_await std::move(reader).consume(

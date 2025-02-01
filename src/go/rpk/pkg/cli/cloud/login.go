@@ -69,7 +69,7 @@ token and client ID is always synced.
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
 			p := yAct.Profile(yAct.CurrentProfile)
-			authAct, authVir, clearedProfile, _, err := oauth.LoadFlow(cmd.Context(), fs, cfg, auth0.NewClient(cfg.DevOverrides()), noBrowser, true, cfg.DevOverrides().CloudAPIURL)
+			authAct, authVir, clearedProfile, _, err := oauth.LoadFlow(cmd.Context(), fs, cfg, auth0.NewClient(cfg.DevOverrides()), noBrowser, true)
 			if err != nil {
 				fmt.Printf("Unable to login to Redpanda Cloud (%v).\n", err)
 				if e := (*oauth.BadClientTokenError)(nil); errors.As(err, &e) && authVir != nil && authVir.HasClientCredentials() {

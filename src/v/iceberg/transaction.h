@@ -53,6 +53,14 @@ public:
     const table_metadata& table() const { return table_; }
     const updates_and_reqs& updates() const { return updates_; }
 
+    // Construct a transaction object but immediately set error_ to non-nullopt.
+    // Only useful for testing.
+    static transaction make_with_error(table_metadata table, action::errc err) {
+        transaction tx{std::move(table)};
+        tx.error_ = err;
+        return tx;
+    }
+
 private:
     // Applies the given action to `table_`.
     ss::future<txn_outcome> apply(std::unique_ptr<action>);

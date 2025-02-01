@@ -12,6 +12,7 @@
 #include "container/chunked_hash_map.h"
 #include "datalake/data_writer_interface.h"
 #include "datalake/fwd.h"
+#include "datalake/location.h"
 #include "datalake/partitioning_writer.h"
 #include "datalake/schema_identifier.h"
 #include "model/record.h"
@@ -52,6 +53,7 @@ public:
       record_translator& record_translator,
       table_creator&,
       model::iceberg_invalid_record_action,
+      location_provider,
       lazy_abort_source& as);
 
     ss::future<ss::stop_iteration> operator()(model::record_batch batch);
@@ -77,6 +79,7 @@ private:
     record_translator& _record_translator;
     table_creator& _table_creator;
     model::iceberg_invalid_record_action _invalid_record_action;
+    location_provider _location_provider;
     lazy_abort_source& _as;
     chunked_hash_map<
       record_schema_components,

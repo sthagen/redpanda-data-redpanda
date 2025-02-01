@@ -16,6 +16,7 @@
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
 #include "datalake/fwd.h"
+#include "datalake/location.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/translation/partition_translator.h"
 #include "features/fwd.h"
@@ -91,6 +92,7 @@ private:
     ss::sharded<features::feature_table>* _features;
     ss::sharded<coordinator::frontend>* _coordinator_frontend;
     std::unique_ptr<datalake::cloud_data_io> _cloud_data_io;
+    location_provider _location_provider;
     std::unique_ptr<schema::registry> _schema_registry;
     std::unique_ptr<coordinator::catalog_factory> _catalog_factory;
     std::unique_ptr<iceberg::catalog> _catalog;

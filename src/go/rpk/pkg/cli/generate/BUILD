@@ -7,6 +7,7 @@ go_library(
         "autocomplete.go",
         "generate.go",
         "grafana.go",
+        "license.go",
         "prometheus.go",
     ],
     embedsrcs = [
@@ -26,6 +27,9 @@ go_library(
         "//src/go/rpk/pkg/kafka",
         "//src/go/rpk/pkg/os",
         "//src/go/rpk/pkg/out",
+        "//src/go/rpk/pkg/publicapi",
+        "@build_buf_gen_go_redpandadata_gatekeeper_protocolbuffers_go//redpanda/api/gatekeeper/v1alpha1",
+        "@com_connectrpc_connect//:connect",
         "@com_github_prometheus_client_model//go",
         "@com_github_prometheus_common//expfmt",
         "@com_github_spf13_afero//:afero",

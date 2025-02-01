@@ -25,6 +25,7 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	cmd.AddCommand(
 		newAppCmd(fs, p),
 		newGrafanaDashboardCmd(p),
+		newLicenseCommand(fs, p),
 		newPrometheusConfigCmd(fs, p),
 		newShellCompletionCommand(),
 	)

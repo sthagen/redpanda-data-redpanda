@@ -412,23 +412,44 @@ schema_transform_result validate_schema_transform(struct_type& dest) {
     return state;
 }
 
-schema_evolution_result
-evolve_schema(const struct_type& source, struct_type& dest) {
-    bool any_change = false;
+namespace {
+schema_transform_result
+do_visit_schemas(const struct_type& source, struct_type& dest) {
+    schema_transform_state result;
     if (auto annotate_res = annotate_schema_transform(source, dest);
         annotate_res.has_error()) {
         return annotate_res.error();
     } else {
-        any_change = any_change || annotate_res.value().total() > 0;
+        result += annotate_res.value();
     }
 
     if (auto validate_res = validate_schema_transform(dest);
         validate_res.has_error()) {
         return validate_res.error();
     } else {
-        any_change = any_change || validate_res.value().total() > 0;
+        result += validate_res.value();
     }
-    return schema_changed{any_change};
+    return result;
+}
+} // namespace
+
+schema_evolution_result
+evolve_schema(const struct_type& source, struct_type& dest) {
+    if (auto res = do_visit_schemas(source, dest); res.has_error()) {
+        return res.error();
+    } else {
+        return schema_changed{res.value().total() > 0};
+    }
+}
+
+fill_ids_result
+try_fill_field_ids(const struct_type& source, struct_type& dest) {
+    if (auto res = do_visit_schemas(source, dest); res.has_error()) {
+        return res.error();
+    } else {
+        // All we care about here is that every field got an ID
+        return ids_filled{res.value().n_added == 0};
+    }
 }
 
 } // namespace iceberg

@@ -3,17 +3,15 @@ package oauth
 import (
 	"context"
 	"fmt"
-	"time"
 
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cloudapi"
+	iamv1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1beta2"
+	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/httpapi"
 	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 )
-
-var inTests bool
 
 // LoadFlow loads or creates a config at default path, and validates and
 // refreshes or creates an auth token using the given authentication provider.
@@ -24,7 +22,7 @@ var inTests bool
 // This function is expected to be called at the start of most commands, and it
 // saves the token and client ID to the passed cloud config. This returns the
 // *actual* currently selected auth.
-func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, noUI, forceReload bool, cloudAPIURL string) (authAct, authVir *config.RpkCloudAuth, clearedProfile, isNewAuth bool, err error) {
+func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, noUI, forceReload bool) (authAct, authVir *config.RpkCloudAuth, clearedProfile, isNewAuth bool, err error) {
 	// We want to avoid creating a root owned file. If the file exists, we
 	// just chmod with rpkos.ReplaceFile and keep old perms even with sudo.
 	// If the file does not exist, we will always be creating it to write
@@ -71,27 +69,23 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 	}
 
 	var (
-		org     cloudapi.Organization
+		org     *iamv1beta2.Organization
 		orgErr  error
 		orgOnce bool
-		getOrg  = func() (cloudapi.Organization, error) {
+		getOrg  = func() (*iamv1beta2.Organization, error) {
 			if orgOnce {
 				return org, orgErr
 			}
 			orgOnce = true
 
-			if inTests {
-				zap.L().Sugar().Debug("returning fake organization because cloudAPIURL is empty")
-				return cloudapi.Organization{NameID: cloudapi.NameID{
-					ID:   "no-url-org-id",
-					Name: "no-url-org",
-				}}, nil
-			}
+			cl := publicapi.NewCloudClientSet(cfg.DevOverrides().PublicAPIURL, tok.AccessToken)
 
-			org, orgErr = cloudapi.NewClient(cloudAPIURL, tok.AccessToken, httpapi.ReqTimeout(10*time.Second)).Organization(ctx)
+			var resp *connect.Response[iamv1beta2.GetCurrentOrganizationResponse]
+			resp, orgErr = cl.Organization.GetCurrentOrganization(ctx, connect.NewRequest(&iamv1beta2.GetCurrentOrganizationRequest{}))
 			if orgErr != nil {
-				return org, fmt.Errorf("unable to retrieve the organization for this token: %w", orgErr)
+				return nil, fmt.Errorf("unable to retrieve the organization for this token: %w", orgErr)
 			}
+			org = resp.Msg.GetOrganization()
 			return org, orgErr
 		}
 	)
@@ -105,7 +99,7 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 		if orgErr != nil {
 			return nil, authVir, false, false, orgErr
 		}
-		if org.ID != pAuthAct.OrgID || pAuthAct.Kind != authKind {
+		if org.Id != pAuthAct.OrgID || pAuthAct.Kind != authKind {
 			clearedProfile = true
 			yAct.CurrentProfile = ""
 			yVir.CurrentProfile = ""
@@ -124,7 +118,7 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 		if orgErr != nil {
 			return nil, authVir, false, false, orgErr
 		}
-		if org.ID != yAuthAct.OrgID || yAuthAct.Kind != authKind {
+		if org.Id != yAuthAct.OrgID || yAuthAct.Kind != authKind {
 			yAct.CurrentCloudAuthOrgID = ""
 			yVir.CurrentCloudAuthOrgID = ""
 			yAct.CurrentCloudAuthKind = ""
@@ -256,7 +250,7 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 				var dropped bool
 				for i := range y.CloudAuths {
 					a := &y.CloudAuths[i]
-					if a.OrgID == org.ID && a.Kind == authKind {
+					if a.OrgID == org.Id && a.Kind == authKind {
 						y.DropAuth(*newAuth)
 						dropped = true
 						break
@@ -270,7 +264,7 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 				}
 				for i := range y.CloudAuths {
 					a := &y.CloudAuths[i]
-					if a.OrgID == org.ID && a.Kind == authKind {
+					if a.OrgID == org.Id && a.Kind == authKind {
 						*newAuth = a
 						y.MakeAuthCurrent(newAuth)
 						return
@@ -289,16 +283,16 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 		authVir.Organization = org.Name
 		authAct.Organization = org.Name
 
-		authVir.OrgID = org.ID
-		authAct.OrgID = org.ID
+		authVir.OrgID = org.Id
+		authAct.OrgID = org.Id
 
 		name := fmt.Sprintf("%s-%s %s", authVir.OrgID, authVir.Kind, authVir.Organization)
 
 		authVir.Name = name
 		authAct.Name = name
 
-		yVir.CurrentCloudAuthOrgID = org.ID
-		yAct.CurrentCloudAuthOrgID = org.ID
+		yVir.CurrentCloudAuthOrgID = org.Id
+		yAct.CurrentCloudAuthOrgID = org.Id
 
 		yVir.CurrentCloudAuthKind = authVir.Kind
 		yAct.CurrentCloudAuthKind = authVir.Kind // we use the virtual kind here -- clientID is updated below

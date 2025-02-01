@@ -50,40 +50,44 @@ enum class fill_errc {
 checked<std::nullopt_t, fill_errc>
 fill_field_ids(iceberg::struct_type& dest, const iceberg::struct_type& source) {
     using namespace iceberg;
-    chunked_vector<nested_field*> dest_stack;
-    dest_stack.reserve(dest.fields.size());
-    for (auto& f : std::ranges::reverse_view(dest.fields)) {
-        dest_stack.emplace_back(f.get());
-    }
-    chunked_vector<nested_field*> source_stack;
-    source_stack.reserve(source.fields.size());
-    for (auto& f : std::ranges::reverse_view(source.fields)) {
-        source_stack.emplace_back(f.get());
-    }
-    bool has_primitive_type_promotion{false};
-    while (!source_stack.empty() && !dest_stack.empty()) {
-        auto* dst = dest_stack.back();
-        auto* src = source_stack.back();
-        if (auto compatibility = check_types(src->type, dst->type);
-            dst->name != src->name || dst->required != src->required
-            || compatibility.has_error()) {
-            return fill_errc::invalid_schema;
-        } else if (compatibility.value() == type_promoted::yes) {
-            has_primitive_type_promotion = true;
-        }
-
-        dst->id = src->id;
-        dest_stack.pop_back();
-        source_stack.pop_back();
-        std::visit(reverse_field_collecting_visitor(dest_stack), dst->type);
-        std::visit(reverse_field_collecting_visitor(source_stack), src->type);
-    }
-
-    if (!dest_stack.empty() || has_primitive_type_promotion) {
-        // There are more fields to fill.
+    if (auto fill_res = try_fill_field_ids(source, dest);
+        fill_res.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "Schema compatibility error: '{}'\n",
+          fill_res.error());
+        return fill_errc::invalid_schema;
+    } else if (!fill_res.value()) {
+        // Some fields left without IDs
         return fill_errc::schema_evolution_needed;
     }
     // We successfully filled all the fields in the destination.
+    return std::nullopt;
+}
+
+// Performs a simultaneous, depth-first iteration through fields of the two
+// schemas, filling dest's field IDs with those from the source and checking
+// compatibility between the two schemas along the way. Returns successfully if
+// the schemas are identical. An error indicates that the schemas differ, in
+// which case the errc indicates whether they are compatible. source can be
+// correctly evolved to dest.
+// NOTE: Post processing is required to assign IDs to any destination fields not
+// found in source (i.e. new fields).
+checked<std::nullopt_t, fill_errc> check_schema_compat(
+  iceberg::struct_type& dest, const iceberg::struct_type& source) {
+    using namespace iceberg;
+    if (auto evo_res = evolve_schema(source, dest); evo_res.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "Schema compatibility error: '{}'\n",
+          evo_res.error());
+        return fill_errc::invalid_schema;
+    } else if (evo_res.value()) {
+        // The schemas are compatible but table metadata needs updating to
+        // reflect dest
+        return fill_errc::schema_evolution_needed;
+    }
+    // The schemas are identical
     return std::nullopt;
 }
 } // namespace
@@ -115,7 +119,9 @@ simple_schema_manager::ensure_table_schema(
       .schema_id = {},
       .identifier_field_ids = {},
     };
-    s.assign_fresh_ids();
+    if (auto schm_res = s.assign_fresh_ids(); schm_res.has_error()) {
+        co_return errc::failed;
+    }
 
     auto resolve_res = iceberg::partition_spec::resolve(
       partition_spec, s.schema_struct);
@@ -130,6 +136,11 @@ simple_schema_manager::ensure_table_schema(
         .id = table_id.copy(),
         .schema = std::move(s),
         .partition_spec = std::move(resolve_res.value()),
+        .location = iceberg::uri(fmt::format(
+          "{}/{}",
+          table_location_prefix_(),
+          fmt::join(table_id.ns, "/"),
+          table_id.table)),
       });
 
     co_return std::nullopt;
@@ -146,6 +157,7 @@ simple_schema_manager::get_table_info(
       .id = it->second.id.copy(),
       .schema = it->second.schema.copy(),
       .partition_spec = it->second.partition_spec.copy(),
+      .location = it->second.location,
     };
 }
 
@@ -173,11 +185,11 @@ catalog_schema_manager::ensure_table_schema(
         co_return std::nullopt;
     }
 
-    // The current table schema is a prefix of the desired schema. Add the
-    // schema to the table.
+    // The desired schema is backwards compatible with the current table schema.
+    // Add the schema to the table.
     iceberg::transaction txn(std::move(load_res.value()));
     auto update_res = co_await txn.set_schema(iceberg::schema{
-      .schema_struct = desired_type.copy(),
+      .schema_struct = std::move(type_copy),
       .schema_id = iceberg::schema::unassigned_id,
       .identifier_field_ids = {},
     });
@@ -242,6 +254,7 @@ catalog_schema_manager::get_table_info(
       .id = table_id.copy(),
       .schema = cur_schema->copy(),
       .partition_spec = cur_spec->copy(),
+      .location = table.location,
     };
 }
 
@@ -262,9 +275,10 @@ catalog_schema_manager::get_ids_from_table_meta(
           table_id);
         return errc::failed;
     }
-    auto fill_res = fill_field_ids(dest_type, schema_iter->schema_struct);
-    if (fill_res.has_error()) {
-        switch (fill_res.error()) {
+    auto compat_res = check_schema_compat(
+      dest_type, schema_iter->schema_struct);
+    if (compat_res.has_error()) {
+        switch (compat_res.error()) {
         case fill_errc::invalid_schema:
             vlog(datalake_log.warn, "Type mismatch with table {}", table_id);
             return errc::not_supported;

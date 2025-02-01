@@ -54,6 +54,9 @@ build:sanitizer --copt -O1
 build:sanitizer --//bazel:has_sanitizers=True
 # seastar has to be run with system allocator when using sanitizers
 build:sanitizer --@seastar//:system_allocator=True
+# This is currently required to get ASAN to work, but ideally in the future we can get
+# the sanitizers working in release mode
+build:sanitizer --@seastar//:debug=true
 # krb5 is a foreign cc build and needs explicit list of sanitizers to build the shared library
 build:sanitizer --@krb5//:sanitizers=address,undefined,vptr,function
 
@@ -125,5 +128,12 @@ test --test_output=errors
 
 # warn if a timeout is much longer than actual runtime
 test --test_verbose_timeout_warnings
+
+# Use --config=lldb to run a test under lldb
+# to connect run `gdb-remote 7654` in an lldb session
+test:lldb --run_under='@llvm_18_toolchain_llvm//:bin/lldb-server g :7654 --'
+# Bump timeout to 1h
+test:lldb --test_timeout=3600
+test:lldb --strategy=TestRunner=local
 
 try-import %workspace%/user.bazelrc

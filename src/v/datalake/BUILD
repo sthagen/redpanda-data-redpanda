@@ -177,6 +177,7 @@ redpanda_cc_library(
     deps = [
         ":catalog_schema_manager",
         ":cloud_data_io",
+        ":location",
         ":logger",
         ":record_translator",
         ":types",
@@ -228,6 +229,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":cloud_data_io",
+        ":location",
         ":logger",
         ":record_multiplexer",
         ":types",
@@ -366,6 +368,7 @@ redpanda_cc_library(
     include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
+        ":location",
         ":partitioning_writer",
         ":schema_identifier",
         ":types",
@@ -424,6 +427,7 @@ redpanda_cc_library(
         ":values_avro",
         ":values_protobuf",
         "//src/v/iceberg:avro_utils",
+        "//src/v/iceberg:compatibility_utils",
         "//src/v/iceberg:values",
         "@avro",
         "@protobuf",
@@ -581,6 +585,20 @@ redpanda_cc_library(
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/iceberg:table_identifier",
+        "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
+    name = "location",
+    hdrs = [
+        "location.h",
+    ],
+    include_prefix = "datalake",
+    visibility = [":__subpackages__"],
+    deps = [
+        ":base_types",
+        "//src/v/iceberg:uri",
         "//src/v/model",
     ],
 )

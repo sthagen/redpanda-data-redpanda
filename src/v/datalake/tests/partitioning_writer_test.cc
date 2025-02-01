@@ -76,7 +76,11 @@ TEST_P(PartitioningWriterExtraColumnsTest, TestSchemaHappyPath) {
     auto pspec = partition_spec::resolve(hour_partition_spec(), default_type);
     ASSERT_TRUE(pspec.has_value());
     partitioning_writer writer(
-      *writer_factory, schema_id, default_type.copy(), pspec.value().copy());
+      *writer_factory,
+      schema_id,
+      default_type.copy(),
+      pspec.value().copy(),
+      {});
 
     static constexpr int num_hrs = 5;
     static constexpr int records_per_hr = 5;
@@ -119,7 +123,11 @@ TEST(PartitioningWriterTest, TestWriterError) {
     auto pspec = partition_spec::resolve(hour_partition_spec(), default_type);
     ASSERT_TRUE(pspec.has_value());
     partitioning_writer writer(
-      *writer_factory, schema_id, default_type.copy(), pspec.value().copy());
+      *writer_factory,
+      schema_id,
+      default_type.copy(),
+      pspec.value().copy(),
+      {});
     auto err = writer
                  .add_data(
                    val_with_timestamp(field, model::timestamp::now()),
@@ -135,7 +143,7 @@ TEST(PartitioningWriterTest, TestUnexpectedSchema) {
     auto pspec = partition_spec::resolve(hour_partition_spec(), schema_type);
     ASSERT_TRUE(pspec.has_value());
     partitioning_writer writer(
-      *writer_factory, schema_id, schema_type.copy(), pspec.value().copy());
+      *writer_factory, schema_id, schema_type.copy(), pspec.value().copy(), {});
     auto unexpected_field_type = test_nested_schema_type();
     auto err = writer
                  .add_data(
@@ -154,7 +162,7 @@ TEST(PartitioningWriterTest, TestEmptyKey) {
     auto spec_id = partition_spec::id_t{123};
     partition_spec empty_spec{.spec_id = spec_id};
     partitioning_writer writer(
-      *writer_factory, schema_id, default_type.copy(), empty_spec.copy());
+      *writer_factory, schema_id, default_type.copy(), empty_spec.copy(), {});
 
     static constexpr auto num_hrs = 10;
     static constexpr auto records_per_hr = 5;
@@ -200,7 +208,7 @@ TEST(PartitioningWriterTest, TestCompositeKey) {
     ASSERT_TRUE(spec.has_value());
 
     partitioning_writer writer(
-      *writer_factory, schema_id, schema_type.copy(), spec.value().copy());
+      *writer_factory, schema_id, schema_type.copy(), spec.value().copy(), {});
 
     static constexpr auto num_hrs = 10;
     static constexpr auto records_per_hr = 5;

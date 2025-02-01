@@ -2,6 +2,7 @@ cc_library(
     name = "libxml2",
     hdrs = [
         "parser.h",
+        "xmlwriter.h",
     ],
     include_prefix = "thirdparty/libxml2",
     visibility = ["//visibility:public"],

@@ -380,4 +380,22 @@ nested_field_ptr nested_field::copy() const {
     return nested_field::create(id, name, required, make_copy(type), meta);
 };
 
+void nested_field::set_evolution_metadata(evolution_metadata v) const {
+    vassert(
+      !has_evolution_metadata(),
+      "Evolution metadata should not be overwritten");
+    meta = v;
+}
+
+bool nested_field::has_evolution_metadata() const {
+    return !std::holds_alternative<std::nullopt_t>(meta);
+}
+
+bool nested_field::is_add() const {
+    return !has_evolution_metadata() || std::holds_alternative<is_new>(meta);
+}
+bool nested_field::is_drop() const {
+    return std::holds_alternative<removed>(meta) && std::get<removed>(meta);
+}
+
 } // namespace iceberg

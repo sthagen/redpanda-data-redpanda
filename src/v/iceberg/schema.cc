@@ -95,8 +95,9 @@ std::optional<nested_field::id_t> schema::highest_field_id() const {
     return highest;
 }
 
-void schema::assign_fresh_ids() {
-    int next_id = 1;
+auto schema::assign_fresh_ids(std::optional<nested_field::id_t> next_available)
+  -> schema_outcome {
+    nested_field::id_t next_id = next_available.value_or(nested_field::id_t{1});
     chunked_vector<nested_field*> to_visit_stack;
     for (auto& f : std::ranges::reverse_view(schema_struct.fields)) {
         to_visit_stack.push_back(f.get());
@@ -105,12 +106,19 @@ void schema::assign_fresh_ids() {
         auto* field = to_visit_stack.back();
         to_visit_stack.pop_back();
         if (!field) {
-            continue;
+            return errc::null_field;
+        } else if (field->is_add()) {
+            field->id = next_id++;
         }
+        if (field->id == 0) {
+            // TODO(oren): logger?
+            return errc::missing_id;
+        }
+
         auto& type = field->type;
-        field->id = nested_field::id_t{next_id++};
         std::visit(reverse_field_collecting_visitor{to_visit_stack}, type);
     }
+    return std::nullopt;
 }
 
 } // namespace iceberg

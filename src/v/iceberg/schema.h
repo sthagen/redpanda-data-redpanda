@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/outcome.h"
 #include "container/chunked_hash_map.h"
 #include "iceberg/datatypes.h"
 #include "utils/named_type.h"
@@ -18,6 +19,11 @@
 namespace iceberg {
 
 struct schema {
+    enum class errc {
+        missing_id,
+        null_field,
+    };
+    using schema_outcome = checked<std::nullopt_t, errc>;
     using id_t = named_type<int32_t, struct schema_id_tag>;
     static constexpr id_t unassigned_id{-1};
     using ids_types_map_t
@@ -35,10 +41,13 @@ struct schema {
       ids_to_types(chunked_hash_set<nested_field::id_t> = {}) const;
     std::optional<nested_field::id_t> highest_field_id() const;
 
-    // Assigns new IDs to each field. Field IDs are assigned depth first in
+    // Assigns new IDs to new fields. Field IDs are assigned depth first in
     // each field: a parent field is assigned an ID, and then each child is
-    // assigned IDs, before moving onto the next parent field.
-    void assign_fresh_ids();
+    // assigned IDs, before moving onto the next parent field. Note tha
+    // fields annotated with an ID from a compatibility pass are left alone.
+    // Returns an error outcome if some field was null or didn't receive an ID
+    schema_outcome assign_fresh_ids(
+      std::optional<nested_field::id_t> next_available = std::nullopt);
 
     schema copy() const {
         return schema{

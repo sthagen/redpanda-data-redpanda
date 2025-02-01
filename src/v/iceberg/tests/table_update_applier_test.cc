@@ -75,9 +75,14 @@ TEST_F(UpdateApplyingVisitorTest, TestAddSchema) {
     ASSERT_EQ(table.schemas.size(), 3);
     ASSERT_EQ(table.schemas.back().schema_id(), 2);
 
-    // Last column id should only goes up.
+    // Last column id should only go up. If a request includes last column
+    // ID which is less than the one stored in table metadata, we accept the
+    // request, but the higher of the two IDs takes precedence.
+    auto before_update = table.last_column_id();
+    ASSERT_GT(before_update, 90);
     outcome = table_update::apply(make_update(3, 90), table);
-    ASSERT_EQ(outcome, table_update::outcome::unexpected_state);
+    ASSERT_EQ(outcome, table_update::outcome::success);
+    ASSERT_EQ(table.last_column_id(), before_update);
 
     // Can't add a schema whose id already exists.
     outcome = table_update::apply(make_update(0, 90), table);

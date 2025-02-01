@@ -35,16 +35,13 @@ struct update_applying_visitor {
         }
         if (update.last_column_id.has_value()) {
             auto new_last_col_id = update.last_column_id.value();
-            if (new_last_col_id < meta.last_column_id) {
-                vlog(
-                  log.error,
-                  "Expected new last column id to be >= previous last column "
-                  "id: {} < {}",
-                  new_last_col_id,
-                  meta.last_column_id);
-                return outcome::unexpected_state;
-            }
-            meta.last_column_id = new_last_col_id;
+            // NOTE: we can drop fields, so new_last_col_id could be less
+            // than meta.last_column_id (e.g. if some field was dropped and
+            // no new fields were added). we should still enforce that
+            // meta.last_column_id is always increasing monotonically to avoid
+            // reusing column IDs on subsequent schema updates
+            meta.last_column_id = std::max(
+              meta.last_column_id, new_last_col_id);
         }
         meta.schemas.emplace_back(update.schema.copy());
         return outcome::success;

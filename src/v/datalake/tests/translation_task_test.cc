@@ -13,11 +13,14 @@
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/cloud_data_io.h"
 #include "datalake/local_parquet_file_writer.h"
+#include "datalake/location.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
 #include "datalake/serde_parquet_writer.h"
+#include "datalake/table_creator.h"
 #include "datalake/tests/test_utils.h"
 #include "datalake/translation_task.h"
+#include "iceberg/uri.h"
 #include "model/record_batch_reader.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/tmp_dir.h"
@@ -31,11 +34,8 @@ using namespace std::chrono_literals;
 using namespace testing;
 using namespace datalake;
 namespace {
-auto schema_mgr = std::make_unique<simple_schema_manager>();
 auto schema_resolver = std::make_unique<binary_type_resolver>();
 auto translator = std::make_unique<default_translator>();
-auto t_creator = std::make_unique<direct_table_creator>(
-  *schema_resolver, *schema_mgr);
 const auto ntp = model::ntp{};
 const auto rev = model::revision_id{123};
 } // namespace
@@ -49,7 +49,13 @@ public:
       : sr(cloud_io::scoped_remote::create(/*pool_size=*/10, conf))
       , tmp_dir("translation_task_test")
       , test_rcn(as, 10s, 1s)
-      , cloud_io(sr->remote.local(), bucket_name) {
+      , cloud_io(sr->remote.local(), bucket_name)
+      , schema_mgr(std::make_unique<simple_schema_manager>(
+          iceberg::uri_converter(sr->remote.local().provider())
+            .to_uri(bucket_name, "test")))
+      , t_creator(
+          std::make_unique<direct_table_creator>(*schema_resolver, *schema_mgr))
+      , location_provider(sr->remote.local().provider(), bucket_name) {
         set_expectations_and_listen({});
     }
 
@@ -131,6 +137,9 @@ public:
     temporary_dir tmp_dir;
     retry_chain_node test_rcn;
     datalake::cloud_data_io cloud_io;
+    std::unique_ptr<simple_schema_manager> schema_mgr;
+    std::unique_ptr<table_creator> t_creator;
+    datalake::location_provider location_provider;
 };
 
 struct deleter {
@@ -168,7 +177,8 @@ TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
       *schema_resolver,
       *translator,
       *t_creator,
-      model::iceberg_invalid_record_action::dlq_table);
+      model::iceberg_invalid_record_action::dlq_table,
+      location_provider);
 
     auto result = task
                     .translate(
@@ -203,7 +213,8 @@ TEST_F(TranslateTaskTest, TestDataFileMissing) {
       *schema_resolver,
       *translator,
       *t_creator,
-      model::iceberg_invalid_record_action::dlq_table);
+      model::iceberg_invalid_record_action::dlq_table,
+      location_provider);
     // create deleting task to cause local io error
     deleter del(tmp_dir.get_path().string());
     del.start();
@@ -231,7 +242,8 @@ TEST_F(TranslateTaskTest, TestUploadError) {
       *schema_resolver,
       *translator,
       *t_creator,
-      model::iceberg_invalid_record_action::dlq_table);
+      model::iceberg_invalid_record_action::dlq_table,
+      location_provider);
     // fail all PUT requests
     fail_request_if(
       [](const http_test_utils::request_info& req) -> bool {

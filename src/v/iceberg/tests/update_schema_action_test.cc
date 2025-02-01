@@ -8,6 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "iceberg/compatibility_utils.h"
+#include "iceberg/datatypes.h"
 #include "iceberg/tests/test_schemas.h"
 #include "iceberg/transaction.h"
 
@@ -184,25 +186,44 @@ TEST_F(UpdateSchemaActionTest, TestNewMultipleSchemas) {
       0);
 }
 
-TEST_F(UpdateSchemaActionTest, TestInvalidSchema) {
-    // Removing columns is not yet supported.
-    transaction tx(create_table());
-    auto new_schema = make_schema(12345);
-    new_schema.schema_struct.fields.pop_back();
+TEST_F(UpdateSchemaActionTest, TestErroredTransaction) {
+    auto tx = transaction::make_with_error(
+      create_table(), action::errc::unexpected_state);
 
-    auto res = tx.set_schema(std::move(new_schema)).get();
-    ASSERT_TRUE(res.has_error());
-    ASSERT_TRUE(tx.error().has_value());
-
-    // Adding a new schema after attempting a bad update also fails.
-    auto new_new_schema = make_schema(12345, 1);
-    res = tx.set_schema(std::move(new_new_schema)).get();
+    // Adding a new schema on an already errored transaction will fail
+    auto res = tx.set_schema(make_schema(12345)).get();
     ASSERT_TRUE(res.has_error());
     ASSERT_TRUE(tx.error().has_value());
 }
 
-TEST_F(UpdateSchemaActionTest, TestAssignFieldIds) {
+TEST_F(UpdateSchemaActionTest, TestRemoveColumn) {
+    // Removing columns is allowed
     transaction tx(create_table());
+    auto initial_last_col_id = tx.table().last_column_id;
+
+    // generate an identical schema to the one created with the table and drop
+    // the last field
+    auto new_schema = make_schema(12345);
+    new_schema.schema_struct.fields.pop_back();
+    auto new_schema_highest_id = new_schema.highest_field_id();
+    EXPECT_TRUE(new_schema_highest_id.has_value());
+    EXPECT_LT(new_schema_highest_id, initial_last_col_id);
+
+    std::ignore = for_each_field(new_schema.schema_struct, [](nested_field* f) {
+        f->set_evolution_metadata(
+          nested_field::src_info{.id = f->id, .required = f->required});
+    });
+
+    auto res = tx.set_schema(std::move(new_schema)).get();
+    ASSERT_FALSE(res.has_error());
+    ASSERT_FALSE(tx.error().has_value());
+    EXPECT_EQ(tx.table().last_column_id, initial_last_col_id);
+}
+
+TEST_F(UpdateSchemaActionTest, TestAssignFieldIds) {
+    auto t = create_table();
+    auto old_last_col = t.last_column_id;
+    transaction tx(std::move(t));
     auto new_schema = make_schema(12345, 10);
     auto new_schema_len = new_schema.schema_struct.fields.size();
     auto res = tx.set_schema(std::move(new_schema)).get();
@@ -213,5 +234,7 @@ TEST_F(UpdateSchemaActionTest, TestAssignFieldIds) {
 
     auto highest_field = add_update.schema.highest_field_id();
     ASSERT_TRUE(highest_field.has_value());
-    ASSERT_EQ(27, highest_field.value()());
+    // Check that the IDs assigned to the new schema increase from the last
+    // assigned to the original schema
+    ASSERT_EQ(old_last_col + 27, highest_field.value()());
 }

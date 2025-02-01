@@ -196,6 +196,8 @@ use_repo(
     "build_buf_gen_go_redpandadata_common_protocolbuffers_go",
     "build_buf_gen_go_redpandadata_dataplane_connectrpc_go",
     "build_buf_gen_go_redpandadata_dataplane_protocolbuffers_go",
+    "build_buf_gen_go_redpandadata_gatekeeper_connectrpc_go",
+    "build_buf_gen_go_redpandadata_gatekeeper_protocolbuffers_go",
     "com_connectrpc_connect",
     "com_github_actgardner_gogen_avro_v10",
     "com_github_alecaivazis_survey_v2",

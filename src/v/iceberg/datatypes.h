@@ -163,16 +163,10 @@ struct nested_field {
       = std::variant<std::nullopt_t, src_info, is_new, removed>;
     mutable evolution_metadata meta{std::nullopt};
 
-    void set_evolution_metadata(evolution_metadata v) const {
-        vassert(
-          !has_evolution_metadata(),
-          "Evolution metadata should not be overwritten");
-        meta = v;
-    }
-
-    bool has_evolution_metadata() const {
-        return !std::holds_alternative<std::nullopt_t>(meta);
-    }
+    void set_evolution_metadata(evolution_metadata v) const;
+    bool has_evolution_metadata() const;
+    bool is_add() const;
+    bool is_drop() const;
 
     static nested_field_ptr create(
       int32_t id,

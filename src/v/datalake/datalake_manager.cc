@@ -85,8 +85,9 @@ datalake_manager::datalake_manager(
   , _shards(shards)
   , _features(features)
   , _coordinator_frontend(frontend)
-  , _cloud_data_io(std::make_unique<cloud_data_io>(
-      cloud_io->local(), std::move(bucket_name)))
+  , _cloud_data_io(
+      std::make_unique<cloud_data_io>(cloud_io->local(), bucket_name))
+  , _location_provider(cloud_io->local().provider(), bucket_name)
   , _schema_registry(schema::registry::make_default(sr_api))
   , _catalog_factory(std::move(catalog_factory))
   , _type_resolver(std::make_unique<record_schema_resolver>(*_schema_registry))
@@ -291,6 +292,7 @@ void datalake_manager::start_translator(
       _coordinator_frontend,
       _features,
       &_cloud_data_io,
+      _location_provider,
       _schema_mgr.get(),
       make_type_resolver(mode, *_schema_registry, *_schema_cache),
       make_record_translator(mode),

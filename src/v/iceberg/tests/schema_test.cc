@@ -116,7 +116,7 @@ TEST(SchemaTest, TestAssignFreshFieldIds) {
 
     // Reassign the IDs and ensure that they match the original, which are hard
     // coded to match what is expected by Iceberg.
-    s.assign_fresh_ids();
+    ASSERT_FALSE(s.assign_fresh_ids().has_error());
     ASSERT_EQ(17, s.highest_field_id().value()());
     ASSERT_EQ(
       s.schema_struct, std::get<struct_type>(test_nested_schema_type()));

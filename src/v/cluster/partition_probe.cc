@@ -140,6 +140,11 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
           [this] { return _records_produced; },
           sm::description("Total number of records produced"),
           labels),
+        sm::make_gauge(
+          "batches_produced",
+          [this] { return _batches_produced; },
+          sm::description("Total number of batches produced"),
+          labels),
         sm::make_counter(
           "records_fetched",
           [this] { return _records_fetched; },

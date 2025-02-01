@@ -142,6 +142,8 @@ public:
           translator,
           t_creator,
           model::iceberg_invalid_record_action::dlq_table,
+          location_provider(
+            scoped_remote->remote.local().provider(), bucket_name),
           as);
         auto res = reader.consume(std::move(mux), model::no_timeout).get();
         if (expect_error) {
@@ -397,8 +399,7 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
         "type": "record",
         "name": "RootRecord",
         "fields": [
-            { "name": "wrongname", "doc": "mylong field doc.", "type": "long" },
-            { "name": "wrongname2", "doc": "mylong field doc.", "type": "long" }
+            { "name": "mylong", "doc": "bad type promotion.", "type": "string" }
         ]
     })";
     tests::record_generator gen(&registry);

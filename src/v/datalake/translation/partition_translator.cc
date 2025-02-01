@@ -46,7 +46,7 @@ namespace {
 // A simple utility to conditionally retry with backoff on failures.
 static constexpr std::chrono::milliseconds initial_backoff{300};
 static constexpr std::chrono::milliseconds max_translation_task_timeout{3min};
-static constexpr std::string_view iceberg_file_path_prefix = "datalake-iceberg";
+static constexpr std::string_view iceberg_data_path_prefix = "data";
 template<
   typename Func,
   typename ShouldRetry,
@@ -161,6 +161,7 @@ partition_translator::partition_translator(
   ss::sharded<coordinator::frontend>* frontend,
   ss::sharded<features::feature_table>* features,
   std::unique_ptr<cloud_data_io>* cloud_io,
+  location_provider location_provider,
   schema_manager* schema_mgr,
   std::unique_ptr<type_resolver> type_resolver,
   std::unique_ptr<record_translator> record_translator,
@@ -179,6 +180,7 @@ partition_translator::partition_translator(
   , _frontend(frontend)
   , _features(features)
   , _cloud_io(cloud_io)
+  , _location_provider(std::move(location_provider))
   , _schema_mgr(schema_mgr)
   , _type_resolver(std::move(type_resolver))
   , _record_translator(std::move(record_translator))
@@ -286,10 +288,11 @@ partition_translator::do_translation_for_range(
       *_record_translator,
       *_table_creator,
       _invalid_record_action,
+      _location_provider,
     };
     const auto& ntp = _partition->ntp();
     auto remote_path_prefix = remote_path{
-      fmt::format("{}/{}/{}", iceberg_file_path_prefix, ntp.path(), _term)};
+      fmt::format("{}/{}/{}", iceberg_data_path_prefix, ntp.path(), _term)};
     lazy_abort_source las{[this] {
         return can_continue() ? std::nullopt
                               : std::make_optional("translator stopping");

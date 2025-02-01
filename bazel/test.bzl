@@ -9,7 +9,7 @@ running tests, like setting a reasonable number of cores and amount of memory.
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load(":internal.bzl", "redpanda_copts")
 
-def has_flags(args, *flags):
+def _has_flags(args, *flags):
     """
     Check if flags are present in a set of arguments.
 
@@ -26,7 +26,7 @@ def has_flags(args, *flags):
                 return True
     return False
 
-def parse_bytes(value):
+def _parse_bytes(value):
     """
     Convert a string into bytes number. Does not respect SI standard.
 
@@ -48,10 +48,25 @@ def parse_bytes(value):
             break
     return int(value) * factor
 
-# TODO(bazel)
-# - Make log level configurable (e.g. CI)
-# - Set --overprovisioned in CI context
-# - Other ASAN settings used in cmake_test.py
+def _test_options():
+    data = [
+        "//:ubsan_suppressions",
+        "//:lsan_suppressions",
+        "@llvm_18_toolchain//:llvm-symbolizer",
+    ]
+    env = {
+        "BOOST_TEST_LOG_LEVEL": "test_suite",
+        "BOOST_TEST_COLOR_OUTPUT": "0",
+        "BOOST_TEST_CATCH_SYSTEM_ERRORS": "no",
+        "BOOST_TEST_REPORT_LEVEL": "no",
+        "BOOST_LOGGER": "HRF,test_suite",
+        "ASAN_OPTIONS": "disable_coredump=0:abort_on_error=1",
+        "ASAN_SYMBOLIZER_PATH": "$(rootpath @llvm_18_toolchain//:llvm-symbolizer)",
+        "LSAN_OPTIONS": "suppressions=$(rootpath //:lsan_suppressions)",
+        "UBSAN_OPTIONS": "halt_on_error=1:abort_on_error=1:report_error_type=1:suppressions=$(rootpath //:ubsan_suppressions)",
+    }
+    return data, env
+
 def _redpanda_cc_test(
         name,
         timeout,
@@ -96,9 +111,9 @@ def _redpanda_cc_test(
 
     args = common_args + extra_args + custom_args
 
-    if has_flags(args, "-m", "--memory"):
+    if _has_flags(args, "-m", "--memory"):
         fail("Use `memory=\"XGiB\"` test parameter instead of -m/--memory")
-    if has_flags(args, "-c", "--smp"):
+    if _has_flags(args, "-c", "--smp"):
         fail("Use `cpu=N` test parameter instead of -c/--smp")
 
     args.append("-m{}".format(memory))
@@ -106,12 +121,14 @@ def _redpanda_cc_test(
     resource_tags = [
         "resources:cpu:{}".format(cpu),
         # This is always defined in MiB for Bazel
-        "resources:memory:{}".format(parse_bytes(memory) / (1 << 20)),
+        "resources:memory:{}".format(_parse_bytes(memory) / (1 << 20)),
     ]
 
     # Google test / benchmarks don't understand the "--" protocol
     if args and dash_dash_protocol:
         args = ["--"] + args
+
+    test_data, test_env = _test_options()
 
     native.cc_test(
         name = name,
@@ -125,9 +142,9 @@ def _redpanda_cc_test(
             "layering_check",
         ],
         tags = resource_tags + tags,
-        env = env,
+        env = env | test_env,
         target_compatible_with = target_compatible_with,
-        data = data,
+        data = data + test_data,
         local_defines = local_defines,
     )
 
@@ -284,7 +301,7 @@ def redpanda_cc_btest_no_seastar(
         timeout = timeout,
         tags = [
             "resources:cpu:{}".format(cpu),
-            "resources:memory:{}".format(parse_bytes(memory) / (2 << 20)),
+            "resources:memory:{}".format(_parse_bytes(memory) / (2 << 20)),
         ],
         srcs = srcs,
         defines = defines,
@@ -361,13 +378,13 @@ def redpanda_cc_bench(
         "--abort-on-seastar-bad-alloc",
     ] + args
 
-    if has_flags(args, "-m", "--memory"):
+    if _has_flags(args, "-m", "--memory"):
         fail("Use `memory=\"XGiB\"` test parameter instead of -m/--memory")
-    if has_flags(args, "-c", "--smp"):
+    if _has_flags(args, "-c", "--smp"):
         fail("Use `cpu=N` test parameter instead of -c/--smp")
-    if has_flags(args, "--runs"):
+    if _has_flags(args, "--runs"):
         fail("Use `runs=N` test parameter instead of --runs")
-    if has_flags(args, "--duration"):
+    if _has_flags(args, "--duration"):
         fail("Use `duration=N` test parameter instead of --duration")
 
     args.append("-m{}".format(memory))
@@ -375,7 +392,7 @@ def redpanda_cc_bench(
     resource_tags = [
         "resources:cpu:{}".format(cpu),
         # This is always defined in MiB for Bazel
-        "resources:memory:{}".format(parse_bytes(memory) / (1 << 20)),
+        "resources:memory:{}".format(_parse_bytes(memory) / (1 << 20)),
     ]
 
     binary_args = []

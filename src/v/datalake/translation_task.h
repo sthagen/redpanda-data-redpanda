@@ -14,6 +14,7 @@
 #include "datalake/coordinator/translated_offset_range.h"
 #include "datalake/data_writer_interface.h"
 #include "datalake/fwd.h"
+#include "datalake/location.h"
 #include "model/metadata.h"
 #include "model/record_batch_reader.h"
 #include "utils/lazy_abort_source.h"
@@ -32,7 +33,8 @@ public:
       type_resolver& type_resolver,
       record_translator& record_translator,
       table_creator&,
-      model::iceberg_invalid_record_action);
+      model::iceberg_invalid_record_action,
+      location_provider);
     enum class errc {
         file_io_error,
         cloud_io_error,
@@ -69,5 +71,6 @@ private:
     record_translator* _record_translator;
     table_creator* _table_creator;
     model::iceberg_invalid_record_action _invalid_record_action;
+    location_provider _location_provider;
 };
 } // namespace datalake
