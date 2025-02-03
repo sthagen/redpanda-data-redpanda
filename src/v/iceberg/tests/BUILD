@@ -433,6 +433,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_table_metadata",
+        "//src/v/iceberg:compatibility_utils",
         "//src/v/iceberg:json_writer",
         "//src/v/iceberg:table_metadata",
         "//src/v/iceberg:table_metadata_json",

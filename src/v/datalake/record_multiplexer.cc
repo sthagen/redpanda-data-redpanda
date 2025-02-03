@@ -175,7 +175,8 @@ record_multiplexer::operator()(model::record_batch batch) {
             }
 
             auto table_id = table_id_provider::table_id(_ntp.tp.topic);
-            auto load_res = co_await _schema_mgr.get_table_info(table_id);
+            auto load_res = co_await _schema_mgr.get_table_info(
+              table_id, record_type.type);
             if (load_res.has_error()) {
                 auto e = load_res.error();
                 switch (e) {

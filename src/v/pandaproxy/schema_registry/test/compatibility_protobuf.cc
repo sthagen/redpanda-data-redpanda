@@ -1380,6 +1380,63 @@ message HasGoogleMap {
 )"));
 }
 
+SEASTAR_THREAD_TEST_CASE(test_protobuf_normalize_legacy_map) {
+    auto schema = R"(syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Value {
+   string string = 1;
+}
+
+message HasMap {
+  repeated PropertiesEntry properties = 1;
+  repeated TimestampsEntry timestamps = 2;
+
+  message PropertiesEntry {
+    option map_entry = true;
+    string key = 1;
+    Value value = 2;
+  }
+  message TimestampsEntry {
+    option map_entry = true;
+    string key = 1;
+    google.protobuf.Timestamp value = 2;
+  }
+}
+)";
+
+    BOOST_CHECK_EQUAL(
+      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
+      (R"(syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Value {
+  string string = 1;
+}
+message HasMap {
+  map<string, Value> properties = 1;
+  map<string, google.protobuf.Timestamp> timestamps = 2;
+}
+
+)"));
+    BOOST_CHECK_EQUAL(
+      normalize(schema, pps::protobuf_renderer_v2::yes), (R"(syntax = "proto3";
+
+import "google/protobuf/timestamp.proto";
+
+message Value {
+  string string = 1;
+}
+message HasMap {
+  map<string, Value> properties = 1;
+  map<string, google.protobuf.Timestamp> timestamps = 2;
+}
+
+)"));
+}
+
 SEASTAR_THREAD_TEST_CASE(test_protobuf_normalize_group) {
     auto schema = R"(syntax = "proto2";
 message SearchResponse {

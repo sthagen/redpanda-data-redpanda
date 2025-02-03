@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.services.cluster import cluster
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.services.redpanda import RedpandaService
@@ -176,3 +177,23 @@ class CrashLoopChecksTest(RedpandaTest):
             "Crash #4 at 20.* UTC - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found) Backtrace: 0x.*"
         )
         expect_crash_count(1 + CrashLoopChecksTest.CRASH_LOOP_LIMIT + 1)
+
+    @cluster(num_nodes=1, log_allow_list=CRASH_LOOP_LOG + HOSTNAME_ERRORS)
+    def test_crash_report_parser(self):
+        broker = self.redpanda.nodes[0]
+        self.redpanda.signal_redpanda(broker)
+
+        invalid_conf = dict(
+            kafka_api=dict(address="unreachable_host.com", port=9092))
+        self.redpanda.start_node(broker,
+                                 override_cfg_params=invalid_conf,
+                                 expect_fail=True)
+
+        viewer = OfflineLogViewer(self.redpanda)
+        crash_reports = viewer.read_crash_reports(broker)
+        self.logger.debug(f'Crash reports: {crash_reports}')
+        assert len(crash_reports) > 0, "No crash reports found"
+        report = next(iter(crash_reports.values()))
+        self.logger.debug(f'First report: {report}')
+        assert 'Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found)' == report[
+            'crash_message'], f'Unexpected crash message: {report["crash_message"]}'

@@ -161,4 +161,11 @@ schema_errc_result for_each_field(
       s, fn, [](const nested_field*) { return true; });
 }
 
+/**
+ * schemas_equivalent - returns whether the two input structs are identical
+ * in structure and type *with the exception of field IDs*. The purpose is
+ * to check equivalence before assigning IDs to the fields in dest.
+ */
+bool schemas_equivalent(const struct_type& source, const struct_type& dest);
+
 } // namespace iceberg

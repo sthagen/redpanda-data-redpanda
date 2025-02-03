@@ -31,10 +31,13 @@ TEST_F(LimiterTest, TestDescribeCrashes) {
       = ss::bool_class<struct with_additional_info_tag>;
     auto make_crash = [](with_additional_info wai) {
         auto res = crash_description{};
-        res.crash_message = ss::sstring{"Assertion error"};
-        res.stacktrace = ss::sstring{"0xaaaaaaaa 0xbbbbbbbb"};
+        res.crash_message = crash_description::reserved_string_t{
+          "Assertion error"};
+        res.stacktrace = crash_description::reserved_string_t{
+          "0xaaaaaaaa 0xbbbbbbbb"};
         if (wai) {
-            res.addition_info = ss::sstring{"false != true at example.cc:123"};
+            res.addition_info = crash_description::reserved_string_t{
+              "false != true at example.cc:123"};
         }
         return res;
     };

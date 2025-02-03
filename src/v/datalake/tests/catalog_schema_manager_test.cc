@@ -389,3 +389,48 @@ TEST_F(CatalogSchemaManagerTest, CustomPartitionSpec) {
     };
     ASSERT_EQ(*pspec, expected);
 }
+
+TEST_F(CatalogSchemaManagerTest, GetTableInfo) {
+    struct_type first{};
+    first.fields.emplace_back(
+      nested_field::create(1, "foo", field_required::no, int_type{}));
+
+    auto second = first.copy();
+    second.fields.emplace_back(
+      nested_field::create(2, "bar", field_required::no, string_type{}));
+
+    // set schema to 'first'
+    auto ensure_res
+      = schema_mgr.ensure_table_schema(table_ident, first, empty_pspec).get();
+    ASSERT_FALSE(ensure_res.has_error());
+
+    // get_table_info returns current schema by default
+    auto info_res = schema_mgr.get_table_info(table_ident).get();
+    ASSERT_FALSE(info_res.has_error());
+    ASSERT_EQ(info_res.value().schema.schema_struct, first);
+
+    // we can also retrieve 'first' by equivalence match
+    info_res = schema_mgr.get_table_info(table_ident, first).get();
+    ASSERT_FALSE(info_res.has_error());
+    ASSERT_EQ(info_res.value().schema.schema_struct, first);
+
+    // set schema to 'second'
+    ensure_res
+      = schema_mgr.ensure_table_schema(table_ident, second, empty_pspec).get();
+    ASSERT_FALSE(ensure_res.has_error());
+
+    // 'second' is current, so get_table_info returns this by default
+    info_res = schema_mgr.get_table_info(table_ident).get();
+    ASSERT_FALSE(info_res.has_error());
+    ASSERT_EQ(info_res.value().schema.schema_struct, second);
+
+    // or by equivalence match, as before
+    info_res = schema_mgr.get_table_info(table_ident, second).get();
+    ASSERT_FALSE(info_res.has_error());
+    ASSERT_EQ(info_res.value().schema.schema_struct, second);
+
+    // but now we can retrieve 'first' as well
+    info_res = schema_mgr.get_table_info(table_ident, first).get();
+    ASSERT_FALSE(info_res.has_error());
+    ASSERT_EQ(info_res.value().schema.schema_struct, first);
+}

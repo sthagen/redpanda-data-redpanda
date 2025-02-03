@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "iceberg/compatibility_utils.h"
 #include "iceberg/json_writer.h"
 #include "iceberg/table_metadata.h"
 #include "iceberg/table_metadata_json.h"
@@ -94,4 +95,23 @@ TEST(TableMetadataJsonSerde, TestTableMetadataNoOptionals) {
     const auto roundtrip = parse_table_meta(parsed_roundtrip_json);
 
     ASSERT_EQ(roundtrip, parsed);
+}
+
+TEST(TableMetadataJsonSerde, TestSchemaLookup) {
+    const auto test_str = test_table_meta_json;
+    json::Document parsed_orig_json;
+    parsed_orig_json.Parse(test_str);
+    const auto parsed = parse_table_meta(parsed_orig_json);
+    ASSERT_EQ(format_version::v2, parsed.format_version);
+
+    auto* schema_by_id = parsed.get_schema(parsed.current_schema_id);
+    ASSERT_NE(schema_by_id, nullptr);
+
+    auto* schema_by_struct = parsed.get_equivalent_schema(
+      schema_by_id->schema_struct);
+    ASSERT_NE(schema_by_struct, nullptr);
+
+    EXPECT_EQ(*schema_by_id, *schema_by_struct);
+    EXPECT_TRUE(iceberg::schemas_equivalent(
+      schema_by_id->schema_struct, schema_by_struct->schema_struct));
 }

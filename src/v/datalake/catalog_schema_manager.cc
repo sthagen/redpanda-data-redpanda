@@ -71,10 +71,13 @@ fill_field_ids(iceberg::struct_type& dest, const iceberg::struct_type& source) {
 // the schemas are identical. An error indicates that the schemas differ, in
 // which case the errc indicates whether they are compatible. source can be
 // correctly evolved to dest.
+// NOTE: pass the source struct by value to create a clear barrier between the
+// traversal and whatever (probably cached) metadata the source struct was
+// pulled from.
 // NOTE: Post processing is required to assign IDs to any destination fields not
 // found in source (i.e. new fields).
-checked<std::nullopt_t, fill_errc> check_schema_compat(
-  iceberg::struct_type& dest, const iceberg::struct_type& source) {
+checked<std::nullopt_t, fill_errc>
+check_schema_compat(iceberg::struct_type& dest, iceberg::struct_type source) {
     using namespace iceberg;
     if (auto evo_res = evolve_schema(source, dest); evo_res.has_error()) {
         vlog(
@@ -148,7 +151,8 @@ simple_schema_manager::ensure_table_schema(
 
 ss::future<checked<schema_manager::table_info, schema_manager::errc>>
 simple_schema_manager::get_table_info(
-  const iceberg::table_identifier& table_id) {
+  const iceberg::table_identifier& table_id,
+  std::optional<std::reference_wrapper<iceberg::struct_type>>) {
     auto it = table_info_by_id.find(table_id);
     if (it == table_info_by_id.end()) {
         co_return errc::failed;
@@ -181,7 +185,7 @@ catalog_schema_manager::ensure_table_schema(
         co_return get_res.error();
     }
     if (get_res.value()) {
-        // Success! Schema already matches what we need.
+        // Success! The desired schema matches one already in the table.
         co_return std::nullopt;
     }
 
@@ -220,7 +224,8 @@ catalog_schema_manager::ensure_table_schema(
 
 ss::future<checked<schema_manager::table_info, schema_manager::errc>>
 catalog_schema_manager::get_table_info(
-  const iceberg::table_identifier& table_id) {
+  const iceberg::table_identifier& table_id,
+  std::optional<std::reference_wrapper<iceberg::struct_type>> desired_type) {
     auto load_res = co_await catalog_.load_table(table_id);
     if (load_res.has_error()) {
         co_return log_and_convert_catalog_err(
@@ -230,7 +235,10 @@ catalog_schema_manager::get_table_info(
     }
     const auto& table = load_res.value();
 
-    auto cur_schema = table.get_schema(table.current_schema_id);
+    const auto* cur_schema = desired_type.has_value()
+                               ? table.get_equivalent_schema(
+                                   desired_type->get())
+                               : table.get_schema(table.current_schema_id);
     if (!cur_schema) {
         vlog(
           datalake_log.error,
@@ -263,11 +271,17 @@ catalog_schema_manager::get_ids_from_table_meta(
   const iceberg::table_identifier& table_id,
   const iceberg::table_metadata& table_meta,
   iceberg::struct_type& dest_type) {
-    auto schema_iter = std::ranges::find(
-      table_meta.schemas,
-      table_meta.current_schema_id,
-      &iceberg::schema::schema_id);
-    if (schema_iter == table_meta.schemas.end()) {
+    const auto* schema = table_meta.get_equivalent_schema(dest_type);
+    if (schema != nullptr) {
+        vlog(
+          datalake_log.debug,
+          "Found exact match schema: ID {}",
+          schema->schema_id);
+        return true;
+    }
+
+    schema = table_meta.get_schema(table_meta.current_schema_id);
+    if (schema == nullptr) {
         vlog(
           datalake_log.error,
           "Cannot find current schema {} in table {}",
@@ -275,8 +289,9 @@ catalog_schema_manager::get_ids_from_table_meta(
           table_id);
         return errc::failed;
     }
+
     auto compat_res = check_schema_compat(
-      dest_type, schema_iter->schema_struct);
+      dest_type, schema->schema_struct.copy());
     if (compat_res.has_error()) {
         switch (compat_res.error()) {
         case fill_errc::invalid_schema:

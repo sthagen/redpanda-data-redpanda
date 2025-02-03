@@ -41,6 +41,7 @@ single_version_override(
     # this patch is in upstream protobuf, so should be in an upcoming release.
     patches = [
         "//bazel/thirdparty:protobuf_capture_warning.patch",
+        "//bazel/thirdparty:0001-protobuf-handle-map-entry.patch",
     ],
 )
 

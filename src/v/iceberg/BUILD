@@ -141,7 +141,9 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "compatibility_utils",
-    srcs = [],
+    srcs = [
+        "compatibility_utils.cc",
+    ],
     hdrs = [
         "compatibility_utils.h",
     ],
@@ -791,17 +793,23 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "table_metadata",
+    srcs = [
+        "table_metadata.cc",
+    ],
     hdrs = [
         "table_metadata.h",
     ],
     include_prefix = "iceberg",
     visibility = ["//visibility:public"],
     deps = [
+        ":compatibility_utils",
+        ":datatypes",
         ":manifest",
         ":manifest_entry",
         ":partition",
         ":schema",
         ":snapshot",
+        ":transform",
         ":uri",
         "//src/v/container:fragmented_vector",
         "//src/v/model",

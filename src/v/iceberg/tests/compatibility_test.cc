@@ -1123,3 +1123,14 @@ TEST_P(StructEvoCompatibilityTest, CanEvolveStructsAndDetectErrors) {
     ASSERT_TRUE(validator(original_schema_struct, type)) << fmt::format(
       "Original: {}\nEvolved: {}", original_schema_struct, evolve_res.value());
 }
+
+TEST_P(StructEvoCompatibilityTest, CanCheckEquivalence) {
+    auto original = generator();
+
+    EXPECT_TRUE(schemas_equivalent(original, original));
+
+    auto next = update(original);
+
+    EXPECT_FALSE(schemas_equivalent(original, next));
+    EXPECT_FALSE(schemas_equivalent(next, original));
+}

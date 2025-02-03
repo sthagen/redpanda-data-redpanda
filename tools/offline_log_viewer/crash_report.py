@@ -1,0 +1,13 @@
+from reader import Reader
+from typing import Any
+
+
+def decode_crash_report(path: str) -> dict[str, Any]:
+    return Reader(open(path, 'rb')).read_envelope(
+        lambda rdr, _: {
+            'type': rdr.read_int32(),
+            'timestamp': rdr.read_int64(),
+            'crash_message': rdr.read_string(),
+            'stacktrace': rdr.read_string(),
+            'additional_info': rdr.read_string()
+        })

@@ -1877,8 +1877,15 @@ std::optional<model::node_id> rack_aware_replica_selector::select_replica(
         if (
           node_it->second.broker.rack() == c_info.rack_id
           && replica.log_end_offset >= c_info.fetch_offset) {
+            /**
+             * Select replica with highest high watermark in requested rack. If
+             * there is more than one use random choice to break the tie.
+             */
             if (replica.high_watermark >= highest_hw) {
-                highest_hw = replica.high_watermark;
+                if (replica.high_watermark > highest_hw) {
+                    highest_hw = replica.high_watermark;
+                    rack_replicas.clear();
+                }
                 rack_replicas.push_back(replica);
             }
         }

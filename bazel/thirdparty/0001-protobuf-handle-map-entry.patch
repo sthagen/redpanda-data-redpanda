@@ -1,0 +1,42 @@
+diff --git a/src/google/protobuf/compiler/parser.cc b/src/google/protobuf/compiler/parser.cc
+index bc17e7a70..5404bf5ce 100644
+--- a/src/google/protobuf/compiler/parser.cc
++++ b/src/google/protobuf/compiler/parser.cc
+@@ -552,21 +552,14 @@ void Parser::SkipRestOfBlock() {
+ 
+ // ===================================================================
+ 
+-bool Parser::ValidateMessage(const DescriptorProto* proto) {
++bool Parser::ValidateMessage(DescriptorProto* proto) {
+   for (int i = 0; i < proto->options().uninterpreted_option_size(); i++) {
+     const UninterpretedOption& option =
+         proto->options().uninterpreted_option(i);
+     if (option.name_size() > 0 && !option.name(0).is_extension() &&
+         option.name(0).name_part() == "map_entry") {
+-      int line = -1, col = 0;  // indicates line and column not known
+-      if (source_location_table_ != nullptr) {
+-        source_location_table_->Find(
+-            &option, DescriptorPool::ErrorCollector::OPTION_NAME, &line, &col);
+-      }
+-      RecordError(line, col,
+-                  "map_entry should not be set explicitly. "
+-                  "Use map<KeyType, ValueType> instead.");
+-      return false;
++      proto->mutable_options()->set_map_entry(true);
++      return true;
+     }
+   }
+   return true;
+diff --git a/src/google/protobuf/compiler/parser.h b/src/google/protobuf/compiler/parser.h
+index f1e709d1b..0d70f091a 100644
+--- a/src/google/protobuf/compiler/parser.h
++++ b/src/google/protobuf/compiler/parser.h
+@@ -549,7 +549,7 @@ class PROTOBUF_EXPORT Parser final {
+     return syntax_identifier_ == "proto3";
+   }
+ 
+-  bool ValidateMessage(const DescriptorProto* proto);
++  bool ValidateMessage(DescriptorProto* proto);
+   bool ValidateEnum(const EnumDescriptorProto* proto);
+ 
+   // =================================================================

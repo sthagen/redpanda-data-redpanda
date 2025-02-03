@@ -6,6 +6,7 @@ from os.path import join
 from controller import ControllerLog, ControllerSnapshot
 from consumer_groups import GroupsLog
 from consumer_offsets import OffsetsLog
+from crash_report import decode_crash_report
 from topic_manifest import decode_topic_manifest, decode_topic_manifest_to_legacy_v1_json
 from tx_coordinator import TxLog
 
@@ -125,6 +126,37 @@ def print_tx_coordinator(store):
     logger.info("")
 
 
+def print_crash_report(path: str) -> None:
+    """
+    Parses either a specific crash report or the all crashes in the crash_reports directory
+    """
+    if not os.path.exists(path):
+        logger.error(f'Crash file {path} does not exist')
+        sys.exit(1)
+
+    if os.path.isdir(path):
+        crash_reports_dir = os.path.join(path, "crash_reports")
+        if not os.path.isdir(crash_reports_dir):
+            logger.error(f'Could not find crash_reports directory in {path}')
+            sys.exit(1)
+        crash_files = [
+            f for f in os.listdir(crash_reports_dir) if f.endswith(".crash")
+        ]
+        if not crash_files:
+            logger.error(f'No crash reports found in {crash_reports_dir}')
+            sys.exit(1)
+        res = {}
+        for f in crash_files:
+            try:
+                res[f] = decode_crash_report(join(crash_reports_dir, f))
+            except:
+                # Ignore errors when parsing files - there may be empty ones that fail to be decoded
+                pass
+    else:
+        res = decode_crash_report(path)
+    print(json.dumps(res, indent=2))
+
+
 def validate_path(options):
     path = options.path
     if not os.path.exists(path):
@@ -171,7 +203,7 @@ def main():
                                 'consumer_offsets', 'legacy-group',
                                 'kafka_records', 'tx_coordinator',
                                 'topic_manifest', 'topic_manifest_legacy',
-                                'controller_snapshot'
+                                'controller_snapshot', 'crash_report'
                             ],
                             required=True,
                             help='operation to execute')
@@ -196,6 +228,9 @@ def main():
     if options.type in ["topic_manifest", "topic_manifest_legacy"]:
         print_topic_manifest(
             options.path, legacy_json=options.type == "topic_manifest_legacy")
+        sys.exit(0)
+    elif options.type in ["crash_report"]:
+        print_crash_report(options.path)
         sys.exit(0)
 
     if options.verbose:

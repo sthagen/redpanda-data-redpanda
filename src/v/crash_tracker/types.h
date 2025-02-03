@@ -30,37 +30,74 @@ enum class crash_type {
     illegal_instruction
 };
 
-/// reserved_string is a simple wrapper around ss::sstring that allows
+/// reserved_string is a simple wrapper around a std::array that allows
 /// pre-allocating a string of a certain size with trailing '\0's and allows
 /// safer access to the populated part of the string.
-struct reserved_string
-  : serde::
-      envelope<reserved_string, serde::version<0>, serde::compat_version<0>> {
+template<size_t Size>
+struct reserved_string {
+    static_assert(Size > 0, "Size must be greater than 0");
+    // Add an extra byte for the trailing '\0'
+    using underlying_t = std::array<char, Size + 1>;
+    using type = underlying_t::value_type;
+
     reserved_string() = default;
-    // NOLINTNEXTLINE(hicpp-explicit-conversions)
-    reserved_string(ss::sstring other) noexcept
-      : _str(std::move(other)) {};
+    explicit reserved_string(ss::sstring other) noexcept {
+        vassert(
+          other.size() <= Size,
+          "String size {} exceeds reserved size {}",
+          other.size(),
+          Size);
+        std::copy(other.begin(), other.end(), _str.begin());
+    };
 
-    explicit reserved_string(size_t n)
-      : _str(n, '\0') {}
+    type* begin() { return _str.begin(); }
+    const type* c_str() const noexcept { return _str.data(); }
 
-    char* begin() { return _str.begin(); }
-    const char* c_str() const noexcept { return _str.c_str(); }
+    type& operator[](size_t i) { return _str[i]; }
+    const type& operator[](size_t i) const { return _str[i]; }
 
     /// The length of the populated, non-'\0' prefix of the string.
-    size_t length() const noexcept { return strlen(_str.c_str()); }
+    size_t length() const noexcept { return strlen(_str.data()); }
 
     /// The full capacity of the string, including the all-'\0' suffix.
-    size_t capacity() const noexcept { return _str.size(); }
-
-    void serde_write(iobuf& out) { serde::write(out, std::move(_str)); }
-    void serde_read(iobuf_parser& in, const serde::header& h) {
-        _str = serde::read_nested<ss::sstring>(in, h._bytes_left_limit);
-    }
+    size_t capacity() const noexcept { return Size; }
 
 private:
-    ss::sstring _str;
+    underlying_t _str{};
 };
+
+template<std::size_t Size>
+void tag_invoke(
+  serde::tag_t<serde::write_tag>, iobuf& out, reserved_string<Size> t) {
+    static_assert(Size <= std::numeric_limits<serde::serde_size_t>::max());
+    serde::write(out, static_cast<serde::serde_size_t>(t.length()));
+    auto begin = t.begin();
+    // Note: we only serialize the first `length()` characters of the string and
+    // not the full `capacity()`
+    for (size_t i = 0; i < t.length(); ++i) {
+        serde::write(out, *(begin++));
+    }
+}
+
+template<std::size_t Size>
+void tag_invoke(
+  serde::tag_t<serde::read_tag>,
+  iobuf_parser& in,
+  reserved_string<Size>& t,
+  const std::size_t bytes_left_limit) {
+    using Type = typename reserved_string<Size>::type;
+    const auto size = serde::read_nested<serde::serde_size_t>(
+      in, bytes_left_limit);
+    if (unlikely(size >= t.capacity())) {
+        throw serde::serde_exception(fmt::format(
+          "reading reserved_string, size {} exceeds reserved size {}",
+          size,
+          t.capacity()));
+    }
+    for (auto i = 0U; i < size; ++i) {
+        t[i] = serde::read_nested<Type>(in, bytes_left_limit);
+    }
+}
 
 struct crash_description
   : serde::
@@ -72,23 +109,20 @@ struct crash_description
     constexpr static size_t overhead_overestimate = 1024;
     constexpr static size_t serde_size_overestimate
       = overhead_overestimate + 3 * string_buffer_reserve;
+    using reserved_string_t = reserved_string<string_buffer_reserve>;
 
     crash_type type{};
     model::timestamp crash_time;
-    reserved_string crash_message;
-    reserved_string stacktrace;
+    reserved_string_t crash_message;
+    reserved_string_t stacktrace;
 
     /// Extension to the crash_message. It can be used to add further
     /// information about the crash that is useful for debugging but is too
     /// verbose for telemetry.
     /// Eg. top-N allocations
-    reserved_string addition_info;
+    reserved_string_t addition_info;
 
-    crash_description()
-      : crash_time{}
-      , crash_message(string_buffer_reserve)
-      , stacktrace(string_buffer_reserve)
-      , addition_info(string_buffer_reserve) {}
+    crash_description() = default;
 
     auto serde_fields() {
         return std::tie(
