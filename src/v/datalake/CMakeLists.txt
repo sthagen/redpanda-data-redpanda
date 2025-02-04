@@ -15,6 +15,7 @@ v_cc_library(
   NAME datalake_manager
   SRCS
     datalake_manager.cc
+    backlog_controller.cc
   DEPS
     v::datalake_translation
     v::datalake_coordinator

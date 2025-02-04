@@ -14,6 +14,7 @@
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "datalake/backlog_controller.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/cloud_data_io.h"
 #include "datalake/coordinator/catalog_factory.h"
@@ -120,6 +121,26 @@ datalake_manager::datalake_manager(
 }
 datalake_manager::~datalake_manager() = default;
 
+double datalake_manager::average_translation_backlog() {
+    size_t total_lag = 0;
+    size_t translators_with_backlog = 0;
+    for (const auto& [_, translator] : _translators) {
+        auto backlog_size = translator->translation_backlog();
+        // skip over translators that are not yet ready to report anything
+        if (!backlog_size) {
+            continue;
+        }
+        total_lag += backlog_size.value();
+        translators_with_backlog++;
+    }
+
+    if (translators_with_backlog == 0) {
+        return 0;
+    }
+
+    return total_lag / translators_with_backlog;
+}
+
 ss::future<> datalake_manager::start() {
     _catalog = co_await _catalog_factory->create_catalog();
     _schema_mgr = std::make_unique<catalog_schema_manager>(*_catalog);
@@ -201,10 +222,14 @@ ss::future<> datalake_manager::start() {
         }
     });
     _schema_cache->start();
+    _backlog_controller = std::make_unique<backlog_controller>(
+      [this] { return average_translation_backlog(); }, _sg);
+    co_await _backlog_controller->start();
 }
 
 ss::future<> datalake_manager::stop() {
     auto f = _gate.close();
+    co_await _backlog_controller->stop();
     _deregistrations.clear();
     co_await ss::max_concurrent_for_each(
       _translators, 32, [](auto& entry) mutable {

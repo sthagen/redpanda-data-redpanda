@@ -59,7 +59,6 @@ class DatalakeVerifierTest(RedpandaTest):
         topic_name = "ducky_topic"
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=False,
                               include_query_engines=[QueryEngineType.TRINO
                                                      ]) as dl:
             self._prepare_test_data(topic_name, dl)
@@ -81,7 +80,6 @@ class DatalakeVerifierTest(RedpandaTest):
         topic_name = "ducky_topic"
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=False,
                               include_query_engines=[QueryEngineType.TRINO
                                                      ]) as dl:
             self._prepare_test_data(topic_name, dl)

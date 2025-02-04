@@ -55,7 +55,6 @@ class PartitionMovementTest(PartitionMovementMixin, RedpandaTest):
 
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=False,
                               include_query_engines=[QueryEngineType.TRINO
                                                      ]) as dl:
             dl.create_iceberg_enabled_topic(topic)

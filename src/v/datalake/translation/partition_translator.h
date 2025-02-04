@@ -91,6 +91,11 @@ public:
 
     std::chrono::milliseconds translation_interval() const;
     void reset_translation_interval(std::chrono::milliseconds new_base);
+    /**
+     * Returns the number of bytes that are ready to be translated.
+     * If no translation happened yet, this will return a negative value.
+     */
+    std::optional<size_t> translation_backlog() const;
 
     model::iceberg_invalid_record_action invalid_record_action() const;
     void reset_invalid_record_action(
@@ -140,6 +145,10 @@ private:
     std::unique_ptr<record_translator> _record_translator;
     std::unique_ptr<table_creator> _table_creator;
     std::unique_ptr<kafka::partition_proxy> _partition_proxy;
+    /**
+     * The offset is tracked for calculating the translation backlog.
+     * */
+    std::optional<model::offset> _last_translated_log_offset;
     using jitter_t
       = simple_time_jitter<ss::lowres_clock, std::chrono::milliseconds>;
     jitter_t _jitter;

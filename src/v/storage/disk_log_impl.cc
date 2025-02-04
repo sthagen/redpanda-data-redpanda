@@ -1845,8 +1845,21 @@ uint64_t disk_log_impl::size_bytes_after_offset(model::offset o) const {
     uint64_t size = 0;
     for (size_t i = _segs.size(); i-- > 0;) {
         auto& seg = _segs[i];
-        if (seg->offsets().get_base_offset() < o) {
-            break;
+        auto& offsets = seg->offsets();
+        if (offsets.get_base_offset() < o) {
+            if (offsets.get_dirty_offset() <= o) {
+                return size;
+            }
+            // use an index to find the approximate size of the segment data
+            // that are followed by the requested offset.
+            //
+            // NOTE: this is an approximation with the accuracy of the index
+            // entry buffer size which is currently equal to 32KiB.
+            auto entry = seg->index().find_nearest(o);
+            if (entry) {
+                size += seg->size_bytes() - entry->filepos;
+            }
+            return size;
         }
 
         size += seg->size_bytes();

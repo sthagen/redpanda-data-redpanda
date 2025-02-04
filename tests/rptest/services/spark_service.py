@@ -15,6 +15,8 @@ from pyhive import hive
 
 from rptest.context import cloud_storage
 from rptest.tests.datalake.query_engine_base import QueryEngineBase, QueryEngineType
+from rptest.services.catalog_service import CatalogType
+from rptest.services.nessie_catalog import NessieCatalog
 
 
 class SparkService(Service, QueryEngineBase):
@@ -26,9 +28,17 @@ class SparkService(Service, QueryEngineBase):
 
     logs = {"spark_sql_logs": {"path": LOGS_DIR, "collect_default": True}}
 
-    def __init__(self, ctx, iceberg_catalog_rest_uri: str):
+    def __init__(self,
+                 ctx,
+                 iceberg_catalog_uri: str,
+                 default_warehouse_dir: str,
+                 catalog_type: CatalogType,
+                 catalog_name: str = 'spark-catalog'):
         super(SparkService, self).__init__(ctx, num_nodes=1)
-        self.iceberg_catalog_rest_uri = iceberg_catalog_rest_uri
+        self.iceberg_catalog_uri = iceberg_catalog_uri
+        self.default_warehouse_dir = default_warehouse_dir
+        self.catalog_type = catalog_type
+        self.catalog_name = catalog_name
 
         self.credentials = cloud_storage.Credentials.from_context(ctx)
         self.spark_host: Optional[SparkService] = None
@@ -57,48 +67,69 @@ class SparkService(Service, QueryEngineBase):
         return " ".join([f"{k}={v}" for k, v in env.items()])
 
     def start_cmd(self):
-        conf_args: dict[str, Optional[str | bool]] = {
+        conf_args: dict[str, Optional[str | bool]] = {}
+
+        conf_args.update({
             "spark.sql.extensions":
             "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions",
-            "spark.sql.defaultCatalog":
-            "redpanda-iceberg-catalog",
-            "spark.sql.catalog.redpanda-iceberg-catalog":
+            f"spark.sql.catalog.{self.catalog_name}":
             "org.apache.iceberg.spark.SparkCatalog",
-            "spark.sql.catalog.redpanda-iceberg-catalog.type":
-            "rest",
-            "spark.sql.catalog.redpanda-iceberg-catalog.cache-enabled":
+            f"spark.sql.catalog.{self.catalog_name}.cache-enabled":
             False,
-            "spark.sql.catalog.redpanda-iceberg-catalog.uri":
-            self.iceberg_catalog_rest_uri,
-        }
+            f"spark.sql.catalog.{self.catalog_name}.uri":
+            self.iceberg_catalog_uri,
+            "spark.sql.defaultCatalog":
+            f"{self.catalog_name}",
+        })
+
+        if self.catalog_type == CatalogType.NESSIE:
+            conf_args.update({
+                "spark.jars.packages":
+                f"org.apache.iceberg:iceberg-spark-runtime-3.5_2.12:1.6.1,org.projectnessie.nessie-integrations:nessie-spark-extensions-3.5_2.12:{NessieCatalog.NESSIE_VERSION}",
+                "spark.sql.extensions":
+                "org.apache.iceberg.spark.extensions.IcebergSparkSessionExtensions,org.projectnessie.spark.extensions.NessieSparkSessionExtensions",
+                f"spark.sql.catalog.{self.catalog_name}.catalog-impl":
+                "org.apache.iceberg.nessie.NessieCatalog",
+                f"spark.sql.catalog.{self.catalog_name}.ref":
+                "main",
+                f"spark.sql.catalog.{self.catalog_name}.authentication.type":
+                "NONE",
+                f"spark.sql.catalog.{self.catalog_name}.warehouse":
+                self.default_warehouse_dir,
+            })
+        else:
+            conf_args.update({
+                f"spark.sql.catalog.{self.catalog_name}.type":
+                "rest",
+            })
 
         if isinstance(self.credentials, cloud_storage.S3Credentials):
             conf_args.update({
-                "spark.sql.catalog.redpanda-iceberg-catalog.io-impl":
+                f"spark.sql.catalog.{self.catalog_name}.io-impl":
                 "org.apache.iceberg.aws.s3.S3FileIO",
-                "spark.sql.catalog.redpanda-iceberg-catalog.s3.endpoint":
+                f"spark.sql.catalog.{self.catalog_name}.s3.endpoint":
                 self.credentials.endpoint,
             })
         elif isinstance(self.credentials,
                         cloud_storage.AWSInstanceMetadataCredentials):
             conf_args.update({
-                "spark.sql.catalog.redpanda-iceberg-catalog.io-impl":
+                f"spark.sql.catalog.{self.catalog_name}.io-impl":
                 "org.apache.iceberg.aws.s3.S3FileIO",
             })
         elif isinstance(self.credentials,
                         cloud_storage.GCPInstanceMetadataCredentials):
             conf_args.update({
-                "spark.sql.catalog.redpanda-iceberg-catalog.io-impl":
+                f"spark.sql.catalog.{self.catalog_name}.io-impl":
                 "org.apache.iceberg.gcp.gcs.GCSFileIO",
             })
         elif isinstance(self.credentials,
                         cloud_storage.ABSSharedKeyCredentials):
             conf_args.update({
-                "spark.sql.catalog.redpanda-iceberg-catalog.io-impl":
+                f"spark.sql.catalog.{self.catalog_name}.io-impl":
                 "org.apache.iceberg.azure.adlsv2.ADLSFileIO",
-                "spark.sql.catalog.redpanda-iceberg-catalog.adls.auth.shared-key.account.name":
+                f"spark.sql.catalog.{self.catalog_name}.adls.auth.shared-key.account.name":
                 self.credentials.account_name,
-                "spark.sql.catalog.redpanda-iceberg-catalog.adls.auth.shared-key.account.key":
+                f"spark.sql.catalog.{self.catalog_name}.adls.auth.shared-key.account.key":
                 self.credentials.account_key,
             })
         else:
@@ -151,7 +182,9 @@ class SparkService(Service, QueryEngineBase):
 
     def make_client(self):
         assert self.spark_host
-        return hive.connect(host=self.spark_host, port=self.spark_port)
+        return hive.connect(host=self.spark_host,
+                            port=self.spark_port,
+                            database=self.catalog_name)
 
     @staticmethod
     def dict_to_conf_args(conf: dict[str, Optional[str | bool]]) -> str:

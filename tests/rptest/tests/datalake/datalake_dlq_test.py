@@ -27,6 +27,7 @@ from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
+from rptest.tests.datalake.catalog_service_factory import filesystem_catalog_type, supported_catalog_types
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import expect_exception
 
@@ -191,7 +192,7 @@ class DatalakeDLQTest(RedpandaTest):
         """
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=True,
+                              catalog_type=filesystem_catalog_type(),
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")
@@ -221,7 +222,7 @@ class DatalakeDLQTest(RedpandaTest):
         """
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=True,
+                              catalog_type=filesystem_catalog_type(),
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(self.topic_name,
                                             iceberg_mode="key_value")
@@ -236,10 +237,9 @@ class DatalakeDLQTest(RedpandaTest):
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
             query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
-            filesystem_catalog_mode=[True, False])
+            catalog_type=supported_catalog_types())
     def test_dlq_table_for_invalid_records(self, cloud_storage_type,
-                                           query_engine,
-                                           filesystem_catalog_mode):
+                                           query_engine, catalog_type):
         """
         Produce records with no schema to `value_schema_id_prefix` mode topic.
         These records will fail translate and should be written to DLQ table.
@@ -252,7 +252,7 @@ class DatalakeDLQTest(RedpandaTest):
 
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=filesystem_catalog_mode,
+                              catalog_type=catalog_type,
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")
@@ -301,10 +301,9 @@ class DatalakeDLQTest(RedpandaTest):
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
             query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
-            filesystem_catalog_mode=[True, False])
+            catalog_type=supported_catalog_types())
     def test_dlq_table_for_mixed_records(self, cloud_storage_type,
-                                         query_engine,
-                                         filesystem_catalog_mode):
+                                         query_engine, catalog_type):
         """
         Produce a mix of valid and invalid records to a `value_schema_id_prefix`
         mode topic. Valid records should be written to the main table and
@@ -316,7 +315,7 @@ class DatalakeDLQTest(RedpandaTest):
         """
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=filesystem_catalog_mode,
+                              catalog_type=filesystem_catalog_type(),
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")
@@ -370,7 +369,7 @@ class DatalakeDLQTest(RedpandaTest):
 
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=True,
+                              catalog_type=filesystem_catalog_type(),
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name,
@@ -420,7 +419,7 @@ class DatalakeDLQTest(RedpandaTest):
                                                   use_topic_property):
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=True,
+                              catalog_type=filesystem_catalog_type(),
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")

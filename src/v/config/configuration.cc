@@ -3792,6 +3792,25 @@ configuration::configuration()
       {.visibility = visibility::user},
       std::nullopt,
       &validate_non_empty_string_opt)
+  , iceberg_backlog_controller_p_coeff(
+      *this,
+      "iceberg_backlog_controller_p_coeff",
+      "Proportional coefficient for the Iceberg backlog controller. Number of "
+      "shares assigned to the datalake scheduling group will be proportional "
+      "to the backlog size error. More negative value means larger and faster "
+      "changes in the number of shares in the datalake scheduling group.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      -0.0003)
+  , iceberg_target_backlog_size(
+      *this,
+      "iceberg_target_backlog_size",
+      "Average size of the datalake translation backlog, per partition, that "
+      "the backlog controller will try to maintain. When a backlog size is "
+      "larger than the setpoint a backlog controller will increase the "
+      "translation scheduling group priority.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      5_MiB,
+      {.min = 0, .max = std::numeric_limits<uint32_t>::max()})
   , iceberg_delete(
       *this,
       "iceberg_delete",

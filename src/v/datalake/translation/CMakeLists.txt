@@ -3,6 +3,8 @@ v_cc_library(
     SRCS
         partition_translator.cc
         state_machine.cc
+        scheduling_policies.cc
+        scheduling.cc
 	utils.cc
     DEPS
         v::cluster

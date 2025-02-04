@@ -123,7 +123,6 @@ class RedpandaConnectIcebergTest(RedpandaTest, DataMigrationTestMixin):
                                                  scenario):
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=False,
                               include_query_engines=[
                                   QueryEngineType.SPARK,
                               ]) as datalake:

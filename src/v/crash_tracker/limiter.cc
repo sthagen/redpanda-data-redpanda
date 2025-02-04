@@ -24,6 +24,8 @@
 
 #include <fmt/chrono.h>
 
+#include <chrono>
+
 using namespace std::chrono_literals;
 
 namespace crash_tracker {
@@ -39,10 +41,10 @@ describe_crashes(const std::vector<recorder::recorded_crash>& crashes) {
         return "(No crash files have been recorded.)";
     }
 
-    constexpr auto format_time = [](model::timestamp ts_model) {
-        auto ts_chrono = model::to_time_point(ts_model);
-        return fmt::format("{:%Y-%m-%d %T} UTC", fmt::gmtime(ts_chrono));
-    };
+    constexpr auto format_time =
+      [](std::chrono::system_clock::time_point ts_chrono) {
+          return fmt::format("{:%Y-%m-%d %T} UTC", fmt::gmtime(ts_chrono));
+      };
 
     std::stringstream ss;
     ss << "The following crashes have been recorded:";
@@ -60,8 +62,8 @@ describe_crashes(const std::vector<recorder::recorded_crash>& crashes) {
           ss,
           "\nCrash #{} at {} - {}",
           i + 1,
-          format_time(crash.crash_time),
-          crash);
+          format_time(crashes[i].timestamp()),
+          crash ? fmt::format("{}", *crash) : "Crash reason not recorded");
     }
 
     return ss.str();

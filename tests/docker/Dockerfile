@@ -239,6 +239,13 @@ RUN /ocsf-server && rm /ocsf-server
 FROM base AS polaris
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/polaris /
 RUN /polaris && rm /polaris
+
+#################################
+
+FROM base AS nessie
+COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/nessie /
+RUN /nessie && rm /nessie
+
 #################################
 
 FROM base AS iceberg-rest
@@ -351,6 +358,7 @@ COPY --from=wasi-transforms /opt/transforms/ /opt/transforms/
 COPY --from=ocsf /opt/ocsf-schema/ /opt/ocsf-schema/
 COPY --from=ocsf /opt/ocsf-server/ /opt/ocsf-server/
 COPY --from=polaris /opt/polaris/ /opt/polaris/
+COPY --from=nessie /opt/nessie/ /opt/nessie/
 COPY --from=flink /opt/flink/ /opt/flink/
 COPY --from=iceberg-rest /opt/iceberg-rest-catalog /opt/iceberg-rest-catalog
 COPY --from=trino /opt/trino /opt/trino

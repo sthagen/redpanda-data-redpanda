@@ -54,6 +54,11 @@
       <artifactId>iceberg-gcp-bundle</artifactId>
       <version>${iceberg.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.projectnessie.nessie-integrations</groupId>
+      <artifactId>nessie-spark-extensions-3.5_2.12</artifactId>
+      <version>0.102.2</version>
+    </dependency>
   </dependencies>
   <build>
     <plugins>

@@ -54,6 +54,7 @@ setup(
         "thrift==0.21.0",
         "thrift-sasl==0.4.3",
         "pyhive==0.7.0",
+        "pynessie",
     ],
     scripts=[],
 )

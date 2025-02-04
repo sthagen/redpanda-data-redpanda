@@ -16,6 +16,21 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "recorder_test",
+    timeout = "short",
+    srcs = [
+        "recorder_test.cc",
+    ],
+    deps = [
+        "//src/v/config",
+        "//src/v/crash_tracker",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_binary(
     name = "crash_report_generator",
     srcs = ["report_generator.cc"],

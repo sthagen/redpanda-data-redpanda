@@ -32,6 +32,31 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "scheduler",
+    srcs = [
+        "scheduling.cc",
+        "scheduling_policies.cc",
+    ],
+    hdrs = [
+        "scheduling.h",
+        "scheduling_policies.h",
+    ],
+    include_prefix = "datalake/translation",
+    visibility = [":__subpackages__"],
+    deps = [
+        "//src/v/container:chunked_hash_map",
+        "//src/v/container:fragmented_vector",
+        "//src/v/datalake:logger",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "//src/v/ssx:future_util",
+        "//src/v/ssx:semaphore",
+        "//src/v/utils:to_string",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "stm",
     srcs = [
         "state_machine.cc",

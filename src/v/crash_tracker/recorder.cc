@@ -24,6 +24,7 @@
 #include <seastar/util/print_safe.hh>
 
 #include <chrono>
+#include <filesystem>
 
 using namespace std::chrono_literals;
 
@@ -36,8 +37,9 @@ recorder& get_recorder() {
     return inst;
 }
 
-ss::future<> recorder::start() {
-    // Ensure that the crash report directory exists
+recorder get_test_recorder() { return recorder{}; }
+
+ss::future<> recorder::ensure_crashdir_exists() const {
     auto crash_report_dir = config::node().crash_report_dir_path();
     if (!co_await ss::file_exists(crash_report_dir.string())) {
         vlog(
@@ -50,6 +52,10 @@ ss::future<> recorder::start() {
           "Successfully created crash report directory {}",
           crash_report_dir.string());
     }
+}
+
+ss::future<std::filesystem::path> recorder::generate_crashfile_name() const {
+    auto crash_report_dir = config::node().crash_report_dir_path();
 
     // Loop a few times to avoid (very unlikely) collisions in the filename
     std::optional<std::filesystem::path> crash_file_name{};
@@ -64,16 +70,34 @@ ss::future<> recorder::start() {
             continue;
         }
 
-        crash_file_name = try_name;
-        break;
-    }
-    if (!crash_file_name) {
-        // The anti-collision above should ensure that we never reach this
-        throw std::runtime_error(
-          "Failed to create a unique crash recorder file");
+        co_return try_name;
     }
 
-    co_await _writer.initialize(*crash_file_name);
+    // The anti-collision above should ensure that we never reach this
+    throw std::runtime_error("Failed to create a unique crash recorder file");
+}
+
+ss::future<> recorder::remove_old_crashfiles() const {
+    auto crash_files = co_await get_recorded_crashes(
+      recorder::include_malformed_files::yes);
+
+    if (crash_files.size() > crash_files_to_keep) {
+        // Delete the oldest crash reports to avoid filling up the disc with
+        // crash report files
+        for (size_t i = 0; i < crash_files.size() - crash_files_to_keep; ++i) {
+            const auto& fpath = crash_files[i].file_path.string();
+            vlog(ctlog.debug, "Deleting old crash report file {}", fpath);
+            co_await ss::remove_file(fpath);
+        }
+    }
+
+    co_return;
+}
+
+ss::future<> recorder::start() {
+    co_await ensure_crashdir_exists();
+    co_await remove_old_crashfiles();
+    co_await _writer.initialize(co_await generate_crashfile_name());
 }
 
 namespace {
@@ -134,8 +158,23 @@ void recorder::record_crash_exception(std::exception_ptr eptr) {
     _writer.write();
 }
 
+std::chrono::system_clock::time_point
+recorder::recorded_crash::timestamp() const {
+    auto recorded_timestamp_opt = crash
+                                    ? std::make_optional(
+                                        model::to_time_point(crash->crash_time))
+                                    : std::nullopt;
+    auto lwt_sys_timepoint = std::chrono::system_clock::time_point{
+      std::chrono::duration_cast<std::chrono::system_clock::duration>(
+        last_write_time.time_since_epoch())};
+
+    // Prefer the recorded timestamp, fall back to the last write time
+    return recorded_timestamp_opt.value_or(lwt_sys_timepoint);
+}
+
 ss::future<std::vector<recorder::recorded_crash>>
-recorder::get_recorded_crashes() const {
+recorder::get_recorded_crashes(
+  recorder::include_malformed_files incl_malformed) const {
     auto result = std::vector<recorded_crash>{};
     auto crash_report_dir = config::node().crash_report_dir_path();
     if (!co_await ss::file_exists(crash_report_dir.string())) {
@@ -153,12 +192,18 @@ recorder::get_recorded_crashes() const {
         try {
             auto crash_desc = serde::from_iobuf<crash_description>(
               std::move(buf));
-            result.emplace_back(std::move(crash_desc));
+            result.emplace_back(
+              entry.path(), std::move(crash_desc), entry.last_write_time());
         } catch (const serde::serde_exception&) {
-            vlog(
-              ctlog.warn,
-              "Ignoring malformed crash report file {}",
-              entry.path());
+            if (incl_malformed) {
+                result.emplace_back(
+                  entry.path(), std::nullopt, entry.last_write_time());
+            } else {
+                vlog(
+                  ctlog.warn,
+                  "Ignoring malformed crash report file {}",
+                  entry.path());
+            }
         }
     }
 
@@ -166,7 +211,7 @@ recorder::get_recorded_crashes() const {
       result.begin(),
       result.end(),
       [](const recorded_crash& a, const recorded_crash& b) {
-          return a.crash.crash_time < b.crash.crash_time;
+          return a.timestamp() < b.timestamp();
       });
 
     co_return result;

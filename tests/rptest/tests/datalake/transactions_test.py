@@ -75,7 +75,6 @@ class DatalakeTransactionTests(RedpandaTest):
         min_num_records = 1000
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=False,
                               include_query_engines=[QueryEngineType.TRINO
                                                      ]) as dl:
             topic_config = dict()

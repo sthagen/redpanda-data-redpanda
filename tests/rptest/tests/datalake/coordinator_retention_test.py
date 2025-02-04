@@ -90,6 +90,5 @@ class CoordinatorRetentionTest(RedpandaTest):
     def test_retention(self, cloud_storage_type):
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=False,
                               include_query_engines=[]) as dl:
             self.do_test_retention(dl)

@@ -30,7 +30,9 @@ class SparkSmokeTest(IcebergRESTCatalogTest):
     def setUp(self):
         super().setUp()
         self.spark = SparkService(self.test_ctx,
-                                  self.catalog_service.catalog_url)
+                                  self.catalog_service.catalog_url,
+                                  self.catalog_service.cloud_storage_warehouse,
+                                  self.catalog_service.catalog_type())
         self.spark.start()
 
     def tearDown(self):

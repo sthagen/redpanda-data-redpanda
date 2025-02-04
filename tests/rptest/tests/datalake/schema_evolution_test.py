@@ -24,6 +24,7 @@ from rptest.services.redpanda_connect import RedpandaConnectService
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
+from rptest.tests.datalake.catalog_service_factory import filesystem_catalog_type
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.util import expect_exception
@@ -393,8 +394,10 @@ class SchemaEvolutionE2ETests(RedpandaTest):
                        compat_level: str = "NONE"):
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=True,
-                              include_query_engines=[query_engine]) as dl:
+                              catalog_type=filesystem_catalog_type(),
+                              include_query_engines=[
+                                  query_engine,
+                              ]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name,
                 iceberg_mode="value_schema_id_prefix",

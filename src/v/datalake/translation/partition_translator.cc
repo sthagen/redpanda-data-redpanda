@@ -340,6 +340,32 @@ partition_translator::do_translation_for_range(
     co_return std::move(result.value());
 }
 
+std::optional<size_t> partition_translator::translation_backlog() const {
+    if (!_last_translated_log_offset.has_value()) {
+        return std::nullopt;
+    }
+
+    auto size_after_translated = _partition->log()->size_bytes_after_offset(
+      _last_translated_log_offset.value());
+
+    auto size_after_max_translatable
+      = _partition->log()->size_bytes_after_offset(
+        _partition->last_stable_offset());
+
+    if (size_after_translated < size_after_max_translatable) {
+        vlog(
+          _logger.error,
+          "Expected size after translated offset({}) {} to be greater than or "
+          "equal to the size of log after max translatable offset({}): {}",
+          _last_translated_log_offset,
+          size_after_translated,
+          _partition->last_stable_offset());
+        return std::nullopt;
+    }
+
+    return size_after_translated - size_after_max_translatable;
+}
+
 ss::future<partition_translator::translation_success>
 partition_translator::do_translate_once(retry_chain_node& parent_rcn) {
     if (
@@ -399,6 +425,9 @@ partition_translator::do_translate_once(retry_chain_node& parent_rcn) {
               read_begin_offset,
               std::move(translation_result.value()))) {
             max_translated_offset = last_translated_offset;
+            _last_translated_log_offset
+              = _partition->get_offset_translator_state()->to_log_offset(
+                kafka::offset_cast(max_translated_offset));
             result = translation_success::yes;
         }
     }

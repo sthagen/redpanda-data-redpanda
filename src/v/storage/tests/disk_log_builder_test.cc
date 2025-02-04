@@ -92,6 +92,42 @@ FIXTURE_TEST(size_bytes_after_offset, log_builder_fixture) {
           b.get_disk_log_impl().size_bytes_after_offset(model::offset::max()),
           0);
     }
+
+    BOOST_TEST_CONTEXT("In the middle of the segment") {
+        b | start() | add_segment(0)
+          | add_random_batches(
+            model::offset(0), 2000, maybe_compress_batches::no);
+
+        auto next = model::next_offset(b.get_log()->offsets().dirty_offset);
+        b | add_segment(next)
+          | add_random_batches(next, 2000, maybe_compress_batches::no);
+
+        auto _ = ss::defer([&] { b | stop(); });
+        disk_log_impl& d_log = b.get_disk_log_impl();
+        BOOST_CHECK_EQUAL(get_stats().get().seg_count, 2);
+        auto& s0 = d_log.segments()[0];
+        auto& s1 = d_log.segments()[1];
+        // all data
+        BOOST_CHECK_EQUAL(
+          d_log.size_bytes_after_offset(model::offset(0)),
+          s0->size_bytes() + s1->size_bytes());
+        // somewhere in the middle of the first segment
+        auto offset = model::offset(s0->offsets().get_committed_offset()() / 2);
+        BOOST_CHECK_GT(d_log.size_bytes_after_offset(offset), s1->size_bytes());
+
+        // somewhere in the middle of the second segment
+        auto offset_2 = s1->offsets().get_base_offset()
+                        + model::offset(
+                          s1->offsets().get_committed_offset()
+                          - s1->offsets().get_base_offset() / 2);
+        BOOST_CHECK_LT(
+          d_log.size_bytes_after_offset(offset_2), s1->size_bytes());
+
+        // only the second segment
+        BOOST_CHECK_EQUAL(
+          d_log.size_bytes_after_offset(s0->offsets().get_committed_offset()),
+          s1->size_bytes());
+    }
 }
 
 static void do_write_zeroes(ss::sstring name) {

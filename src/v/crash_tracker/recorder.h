@@ -15,6 +15,10 @@
 #include "crash_tracker/prepared_writer.h"
 #include "crash_tracker/types.h"
 
+#include <seastar/util/bool_class.hh>
+
+#include <chrono>
+
 namespace crash_tracker {
 
 /// Thread-safe global singleton crash recorder
@@ -22,12 +26,23 @@ namespace crash_tracker {
 /// handlers which have to be static functions (/non-capturing lambdas).
 class recorder {
 public:
+    static constexpr auto crash_files_to_keep = 50;
+
     struct recorded_crash {
-        crash_description crash;
+        std::filesystem::path file_path;
+        std::optional<crash_description> crash;
+        std::filesystem::file_time_type last_write_time;
 
         ss::future<bool> is_uploaded() const;
         ss::future<> mark_uploaded() const;
+        std::chrono::system_clock::time_point timestamp() const;
     };
+
+    using include_malformed_files
+      = ss::bool_class<struct include_malformed_files_tag>;
+
+    /// Visible for testing
+    ~recorder() = default;
 
     ss::future<> start();
     ss::future<> stop();
@@ -38,18 +53,27 @@ public:
     void record_crash_exception(std::exception_ptr eptr);
 
     /// Returns the list of recorded crashes in increasing crash_time order
-    ss::future<std::vector<recorded_crash>> get_recorded_crashes() const;
+    ss::future<std::vector<recorded_crash>> get_recorded_crashes(
+      include_malformed_files incl_malformed
+      = include_malformed_files::no) const;
 
 private:
     recorder() = default;
-    ~recorder() = default;
+
+    ss::future<> ensure_crashdir_exists() const;
+    ss::future<std::filesystem::path> generate_crashfile_name() const;
+    ss::future<> remove_old_crashfiles() const;
 
     prepared_writer _writer;
 
     friend recorder& get_recorder();
+    friend recorder get_test_recorder();
 };
 
 /// Singleton access to global static recorder
 recorder& get_recorder();
+
+/// Make a test instance of the recorder that is not a static singleton
+recorder get_test_recorder();
 
 } // namespace crash_tracker

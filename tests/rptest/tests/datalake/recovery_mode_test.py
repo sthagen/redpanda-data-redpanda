@@ -22,6 +22,7 @@ from rptest.tests.redpanda_test import RedpandaTest
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
+from rptest.tests.datalake.catalog_service_factory import supported_catalog_types
 
 
 class DatalakeRecoveryModeTest(RedpandaTest):
@@ -43,11 +44,11 @@ class DatalakeRecoveryModeTest(RedpandaTest):
 
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
-            filesystem_catalog_mode=[True, False])
-    def test_recovery_mode(self, cloud_storage_type, filesystem_catalog_mode):
+            catalog_type=supported_catalog_types())
+    def test_recovery_mode(self, cloud_storage_type, catalog_type):
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=filesystem_catalog_mode,
+                              catalog_type=catalog_type,
                               include_query_engines=[QueryEngineType.SPARK
                                                      ]) as dl:
             count = 1000
@@ -90,12 +91,11 @@ class DatalakeRecoveryModeTest(RedpandaTest):
 
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
-            filesystem_catalog_mode=[True, False])
-    def test_disabled_partitions(self, cloud_storage_type,
-                                 filesystem_catalog_mode):
+            catalog_type=supported_catalog_types())
+    def test_disabled_partitions(self, cloud_storage_type, catalog_type):
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
-                              filesystem_catalog_mode=filesystem_catalog_mode,
+                              catalog_type=catalog_type,
                               include_query_engines=[QueryEngineType.SPARK
                                                      ]) as dl:
 

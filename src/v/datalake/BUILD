@@ -175,6 +175,7 @@ redpanda_cc_library(
     include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
+        ":backlog_controller",
         ":catalog_schema_manager",
         ":cloud_data_io",
         ":location",
@@ -600,5 +601,25 @@ redpanda_cc_library(
         ":base_types",
         "//src/v/iceberg:uri",
         "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
+    name = "backlog_controller",
+    srcs = [
+        "backlog_controller.cc",
+    ],
+    hdrs = [
+        "backlog_controller.h",
+    ],
+    include_prefix = "datalake",
+    visibility = [":__subpackages__"],
+    deps = [
+        ":logger",
+        "//src/v/base",
+        "//src/v/config",
+        "//src/v/metrics",
+        "//src/v/model",
+        "@seastar",
     ],
 )

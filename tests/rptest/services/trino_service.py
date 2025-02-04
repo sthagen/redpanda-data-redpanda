@@ -18,6 +18,8 @@ from pyhive import trino
 from rptest.context import cloud_storage
 from rptest.services.spark_service import QueryEngineBase
 from rptest.tests.datalake.query_engine_base import QueryEngineType
+from rptest.services.catalog_service import CatalogType, catalog_type_to_config_string
+from rptest.services.nessie_catalog import NessieCatalog
 
 
 class TrinoService(Service, QueryEngineBase):
@@ -33,14 +35,24 @@ class TrinoService(Service, QueryEngineBase):
     REDPANDA_CATALOG_PATH = "/opt/trino/etc/catalog/redpanda.properties"
     REDPANDA_CATALOG_CONF = jinja2.Template("""
 connector.name=iceberg
-iceberg.catalog.type=rest
-iceberg.rest-catalog.uri={{ catalog_rest_uri }}
-{{extra_conf}}
+iceberg.catalog.type={{ catalog_type }}
+iceberg.{{ catalog_type }}-catalog.uri={{ catalog_uri }}
+{{cloud_storage_conf}}
+{{ extra_connector_conf }}
 """)
 
-    def __init__(self, ctx, iceberg_catalog_rest_uri: str):
+    def __init__(self,
+                 ctx,
+                 iceberg_catalog_uri: str,
+                 default_warehouse_dir: str,
+                 catalog_type: CatalogType,
+                 catalog_name: str = 'trino-catalog'):
         super(TrinoService, self).__init__(ctx, num_nodes=1)
-        self.iceberg_catalog_rest_uri = iceberg_catalog_rest_uri
+        self.iceberg_catalog_uri = iceberg_catalog_uri
+        self.default_warehouse_dir = default_warehouse_dir
+        self.catalog_type = catalog_type
+        self.catalog_name = catalog_name
+
         self.credentials = cloud_storage.Credentials.from_context(ctx)
         self.trino_host: Optional[str] = None
         self.trino_port = 8083
@@ -49,9 +61,9 @@ iceberg.rest-catalog.uri={{ catalog_rest_uri }}
         node.account.ssh(f"mkdir -p {TrinoService.PERSISTENT_ROOT}")
         node.account.ssh(f"rm -f {TrinoService.REDPANDA_CATALOG_PATH}")
 
-        extra_conf = ""
+        cloud_storage_conf = ""
         if isinstance(self.credentials, cloud_storage.S3Credentials):
-            extra_conf = self.dict_to_conf({
+            cloud_storage_conf = self.dict_to_conf({
                 "fs.native-s3.enabled":
                 True,
                 "s3.region":
@@ -67,13 +79,15 @@ iceberg.rest-catalog.uri={{ catalog_rest_uri }}
             })
         elif isinstance(self.credentials,
                         cloud_storage.AWSInstanceMetadataCredentials):
-            extra_conf = self.dict_to_conf({"fs.native-s3.enabled": True})
+            cloud_storage_conf = self.dict_to_conf(
+                {"fs.native-s3.enabled": True})
         elif isinstance(self.credentials,
                         cloud_storage.GCPInstanceMetadataCredentials):
-            extra_conf = self.dict_to_conf({"fs.native-gcs.enabled": True})
+            cloud_storage_conf = self.dict_to_conf(
+                {"fs.native-gcs.enabled": True})
         elif isinstance(self.credentials,
                         cloud_storage.ABSSharedKeyCredentials):
-            extra_conf = self.dict_to_conf({
+            cloud_storage_conf = self.dict_to_conf({
                 "fs.native-azure.enabled":
                 True,
                 "azure.auth-type":
@@ -85,8 +99,21 @@ iceberg.rest-catalog.uri={{ catalog_rest_uri }}
             raise NotImplementedError(
                 f"Unsupported cloud storage credentials: {self.credentials}")
 
-        connector_config = dict(catalog_rest_uri=self.iceberg_catalog_rest_uri,
-                                extra_conf=extra_conf)
+        extra_connector_conf = ""
+        if self.catalog_type == CatalogType.NESSIE:
+            # https://trino.io/docs/current/object-storage/metastores.html#nessie-catalog
+            extra_connector_conf = self.dict_to_conf({
+                f"iceberg.nessie-catalog.default-warehouse-dir":
+                self.default_warehouse_dir,
+                f"iceberg.nessie-catalog.client-api-version":
+                NessieCatalog.NESSIE_API_VERSION
+            })
+
+        connector_config = dict(catalog_uri=self.iceberg_catalog_uri,
+                                catalog_type=catalog_type_to_config_string(
+                                    self.catalog_type),
+                                cloud_storage_conf=cloud_storage_conf,
+                                extra_connector_conf=extra_connector_conf)
         config_str = TrinoService.REDPANDA_CATALOG_CONF.render(
             connector_config)
         self.logger.debug(f"Using connector config: {config_str}")

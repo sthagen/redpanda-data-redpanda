@@ -15,6 +15,7 @@
 #include "cluster/fwd.h"
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
+#include "datalake/backlog_controller.h"
 #include "datalake/fwd.h"
 #include "datalake/location.h"
 #include "datalake/record_schema_resolver.h"
@@ -81,7 +82,7 @@ private:
       model::iceberg_mode,
       model::iceberg_invalid_record_action);
     void stop_translator(const model::ntp&);
-
+    double average_translation_backlog();
     model::node_id _self;
     ss::sharded<raft::group_manager>* _group_mgr;
     ss::sharded<cluster::partition_manager>* _partition_mgr;
@@ -99,6 +100,7 @@ private:
     std::unique_ptr<datalake::schema_manager> _schema_mgr;
     std::unique_ptr<datalake::type_resolver> _type_resolver;
     std::unique_ptr<datalake::schema_cache> _schema_cache;
+    std::unique_ptr<backlog_controller> _backlog_controller;
     ss::sharded<ss::abort_source>* _as;
     ss::scheduling_group _sg;
     ss::gate _gate;
