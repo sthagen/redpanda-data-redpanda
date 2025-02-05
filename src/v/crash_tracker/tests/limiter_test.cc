@@ -40,7 +40,7 @@ TEST_F(LimiterTest, TestDescribeCrashes) {
               "false != true at example.cc:123"};
         }
         return recorder::recorded_crash{
-          "", res, std::chrono::file_clock::time_point{}};
+          "", std::move(res), std::chrono::file_clock::time_point{}};
     };
 
     crashes.emplace_back(make_crash(with_additional_info::no));

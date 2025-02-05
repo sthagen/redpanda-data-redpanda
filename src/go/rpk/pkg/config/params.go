@@ -1595,6 +1595,7 @@ func (c *Config) fixSchemePorts() error {
 		if port == "" {
 			port = strconv.Itoa(DefaultKafkaPort)
 		}
+		host = normalizeHost(host)
 		c.redpandaYaml.Rpk.KafkaAPI.Brokers[i] = net.JoinHostPort(host, port)
 	}
 	for i, a := range c.redpandaYaml.Rpk.AdminAPI.Addresses {
@@ -1602,6 +1603,7 @@ func (c *Config) fixSchemePorts() error {
 		if err != nil {
 			return fmt.Errorf("unable to fix admin address %v: %w", a, err)
 		}
+		host = normalizeHost(host)
 		switch scheme {
 		case "":
 			if port == "" {
@@ -1614,52 +1616,85 @@ func (c *Config) fixSchemePorts() error {
 			return fmt.Errorf("unable to fix admin address %v: unsupported scheme %q", a, scheme)
 		}
 	}
-	p := c.rpkYaml.Profile(c.rpkYaml.CurrentProfile)
-	for i, k := range p.KafkaAPI.Brokers {
-		_, host, port, err := rpknet.SplitSchemeHostPort(k)
-		if err != nil {
-			return fmt.Errorf("unable to fix broker address %v: %w", k, err)
-		}
-		if port == "" {
-			port = strconv.Itoa(DefaultKafkaPort)
-		}
-		p.KafkaAPI.Brokers[i] = net.JoinHostPort(host, port)
-	}
-	for i, a := range p.AdminAPI.Addresses {
-		scheme, host, port, err := rpknet.SplitSchemeHostPort(a)
-		if err != nil {
-			return fmt.Errorf("unable to fix admin address %v: %w", a, err)
-		}
-		switch scheme {
-		case "":
-			if port == "" {
-				port = strconv.Itoa(DefaultAdminPort)
-			}
-			p.AdminAPI.Addresses[i] = net.JoinHostPort(host, port)
-		case "http", "https":
-			continue // keep whatever port exists; empty ports will default to 80 or 443
-		default:
-			return fmt.Errorf("unable to fix admin address %v: unsupported scheme %q", a, scheme)
-		}
-	}
-	for i, a := range p.SR.Addresses {
+	for i, a := range c.redpandaYaml.Rpk.SR.Addresses {
 		scheme, host, port, err := rpknet.SplitSchemeHostPort(a)
 		if err != nil {
 			return fmt.Errorf("unable to fix schema registry address %v: %w", a, err)
 		}
+		host = normalizeHost(host)
 		switch scheme {
 		case "":
 			if port == "" {
 				port = strconv.Itoa(DefaultSchemaRegPort)
 			}
-			p.SR.Addresses[i] = net.JoinHostPort(host, port)
+			c.redpandaYaml.Rpk.SR.Addresses[i] = net.JoinHostPort(host, port)
 		case "http", "https":
 			continue // keep whatever port exists; empty ports will default to 80 or 443
 		default:
 			return fmt.Errorf("unable to fix schema registry address %v: unsupported scheme %q", a, scheme)
 		}
 	}
+
+	p := c.rpkYaml.Profile(c.rpkYaml.CurrentProfile)
+	if p != nil {
+		for i, k := range p.KafkaAPI.Brokers {
+			_, host, port, err := rpknet.SplitSchemeHostPort(k)
+			if err != nil {
+				return fmt.Errorf("unable to fix broker address %v: %w", k, err)
+			}
+			host = normalizeHost(host)
+			if port == "" {
+				port = strconv.Itoa(DefaultKafkaPort)
+			}
+			p.KafkaAPI.Brokers[i] = net.JoinHostPort(host, port)
+		}
+		for i, a := range p.AdminAPI.Addresses {
+			scheme, host, port, err := rpknet.SplitSchemeHostPort(a)
+			if err != nil {
+				return fmt.Errorf("unable to fix admin address %v: %w", a, err)
+			}
+			host = normalizeHost(host)
+			switch scheme {
+			case "":
+				if port == "" {
+					port = strconv.Itoa(DefaultAdminPort)
+				}
+				p.AdminAPI.Addresses[i] = net.JoinHostPort(host, port)
+			case "http", "https":
+				continue // keep whatever port exists; empty ports will default to 80 or 443
+			default:
+				return fmt.Errorf("unable to fix admin address %v: unsupported scheme %q", a, scheme)
+			}
+		}
+		for i, a := range p.SR.Addresses {
+			scheme, host, port, err := rpknet.SplitSchemeHostPort(a)
+			if err != nil {
+				return fmt.Errorf("unable to fix schema registry address %v: %w", a, err)
+			}
+			host = normalizeHost(host)
+			switch scheme {
+			case "":
+				if port == "" {
+					port = strconv.Itoa(DefaultSchemaRegPort)
+				}
+				p.SR.Addresses[i] = net.JoinHostPort(host, port)
+			case "http", "https":
+				continue // keep whatever port exists; empty ports will default to 80 or 443
+			default:
+				return fmt.Errorf("unable to fix schema registry address %v: unsupported scheme %q", a, scheme)
+			}
+		}
+	}
 	return nil
+}
+
+// normalizeHost remove surrounding brackets if present for ipv6,
+// net.JoinHostPort will add them back.
+func normalizeHost(host string) string {
+	if strings.HasPrefix(host, "[") && strings.HasSuffix(host, "]") {
+		return host[1 : len(host)-1]
+	}
+	return host
 }
 
 func (c *Config) addConfigToProfiles() {

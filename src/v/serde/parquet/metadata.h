@@ -34,7 +34,6 @@
 
 #include <seastar/core/sstring.hh>
 
-#include <cmath>
 #include <cstdint>
 #include <variant>
 

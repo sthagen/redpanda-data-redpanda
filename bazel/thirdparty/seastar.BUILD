@@ -719,3 +719,17 @@ cc_library(
         ":testing",
     ],
 )
+
+cc_binary(
+    name = "iotune",
+    srcs = [
+        "apps/iotune/iotune.cc",
+    ],
+    deps = [
+        ":seastar",
+        "@boost//:program_options",
+        "@boost//:range",
+        "@fmt",
+        "@yaml-cpp",
+    ],
+)

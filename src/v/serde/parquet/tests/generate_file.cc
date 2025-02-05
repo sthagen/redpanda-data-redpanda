@@ -346,12 +346,13 @@ ss::future<iobuf> serialize_testcase(size_t test_case) {
     co_await w.init();
     auto schema = all_types_schema();
     std::vector<value> rows;
-    for (size_t i = 0; i < test_case; ++i) {
+    size_t num_rows = test_case * 100;
+    for (size_t i = 0; i < num_rows; ++i) {
         auto v = generate_value(schema);
         rows.push_back(copy(v));
         co_await w.write_row(std::get<group_value>(std::move(v)));
-        // Create multiple row groups and make sure it works
-        if (i % 32 == 0) {
+        // Create lots of small row groups for certain files
+        if (test_case % 8 == 0 && i % 32 == 0) {
             co_await w.flush_row_group();
         }
     }
@@ -383,6 +384,7 @@ int main(int argc, char** argv) {
     // Use a small footprint to generate this single file.
     seastar_config.smp_opts.smp.set_value(1);
     seastar_config.smp_opts.memory_allocator = ss::memory_allocator::standard;
+    seastar_config.reactor_opts.blocked_reactor_notify_ms.set_value(10000.0);
     seastar_config.reactor_opts.overprovisioned.set_value();
     seastar_config.log_opts.default_log_level.set_value(ss::log_level::warn);
     ss::app_template app(std::move(seastar_config));

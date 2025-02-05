@@ -11,9 +11,10 @@
 
 #include "serde/parquet/column_writer.h"
 
-#include "column_stats_collector.h"
 #include "compression/compression.h"
+#include "container/fragmented_vector.h"
 #include "hashing/crc32.h"
+#include "serde/parquet/column_stats_collector.h"
 #include "serde/parquet/encoding.h"
 
 #include <seastar/util/variant_utils.hh>
@@ -39,8 +40,10 @@ public:
     impl& operator=(impl&&) noexcept = default;
     virtual ~impl() noexcept = default;
 
-    virtual incremental_column_stats add(value, rep_level, def_level) = 0;
-    virtual ss::future<data_page> flush_page() = 0;
+    virtual ss::future<> add(value, rep_level, def_level) = 0;
+    virtual size_t memory_usage() const = 0;
+    virtual size_t total_rows() const = 0;
+    virtual ss::future<flushed_pages> flush_pages() = 0;
 };
 
 namespace {
@@ -66,16 +69,20 @@ public:
       , _max_def_level(schema_element.max_definition_level)
       , _opts(opts) {}
 
-    incremental_column_stats
-    add(value val, rep_level rl, def_level dl) override {
-        ++_num_values;
+    ss::future<> add(value val, rep_level rl, def_level dl) override {
         // A repetition level of zero means that it's the start of a new row and
         // not a repeated value within the same row.
         if (rl == rep_level(0)) {
+            // We can ONLY flush on row boundaries, so make sure this is the
+            // first thing we do.
+            if (_current_buffer_size > _opts.page_buffer_size) {
+                co_await flush_page();
+            }
             ++_num_rows;
         }
+        ++_num_values;
 
-        uint64_t value_memory_usage = 0;
+        int64_t value_memory_usage = 0;
 
         ss::visit(
           std::move(val),
@@ -85,13 +92,13 @@ public:
               } else {
                   value_memory_usage = sizeof(value_type);
               }
-              _stats.record_value(v);
+              _current_page_stats.record_value(v);
               _value_buffer.push_back(std::move(v));
           },
           [this](null_value&) {
               // null values are valid, but are not encoded in the actual data,
               // they are encoded in the defintion levels.
-              _stats.record_null();
+              _current_page_stats.record_null();
           },
           [](auto& v) {
               throw std::runtime_error(fmt::format(
@@ -105,13 +112,28 @@ public:
         // always use the full capacity in our value buffer, and eagerly
         // accounting that usage might cause callers to overagressively
         // flush pages/row groups.
-        return {
-          .memory_usage = value_memory_usage + sizeof(rep_level)
-                          + sizeof(def_level),
-        };
+        _current_buffer_size += value_memory_usage
+                                + static_cast<int64_t>(
+                                  sizeof(rep_level) + sizeof(def_level));
     }
 
-    ss::future<data_page> flush_page() override {
+    size_t memory_usage() const override {
+        size_t size = _current_buffer_size;
+        for (const auto& page : _flushed_pages) {
+            size += page.serialized.size_bytes();
+        }
+        return size;
+    }
+
+    size_t total_rows() const override {
+        size_t total = _num_rows;
+        for (const auto& page : _flushed_pages) {
+            total += std::get<data_page_header>(page.header.type).num_rows;
+        }
+        return total;
+    }
+
+    ss::future<> flush_page() {
         iobuf encoded_def_levels;
         // If the max level is 0 then we don't write levels at all.
         if (_max_def_level > def_level(0)) {
@@ -145,29 +167,41 @@ public:
         size_t compressed_page_size = encoded_def_levels.size_bytes()
                                       + encoded_rep_levels.size_bytes()
                                       + encoded_data.size_bytes();
+        std::optional<statistics::bound> max_bound;
+        if (auto max = _current_page_stats.take_max()) {
+            // TODO: consider truncating large values instead of writing them
+            // (is_exact=false)
+            max_bound.emplace(
+              /*value=*/encode_for_stats(*max),
+              /*is_exact=*/true);
+            _flushed_stats.record_value(*max);
+        }
+        std::optional<statistics::bound> min_bound;
+        if (auto min = _current_page_stats.take_min()) {
+            // TODO: consider truncating large values instead of writing them
+            // (is_exact=false)
+            min_bound.emplace(
+              /*value=*/encode_for_stats(*min),
+              /*is_exact=*/true);
+            _flushed_stats.record_value(*min);
+        }
+        _flushed_stats.record_null(_current_page_stats.null_count());
         page_header header{
           .uncompressed_page_size = static_cast<int32_t>(uncompressed_page_size),
           .compressed_page_size = static_cast<int32_t>(compressed_page_size),
           .crc = compute_crc32(encoded_rep_levels, encoded_def_levels, encoded_data),
           .type = data_page_header{
             .num_values = std::exchange(_num_values, 0),
-            .num_nulls = static_cast<int32_t>(_stats.null_count()),
+            .num_nulls = static_cast<int32_t>(_current_page_stats.null_count()),
             .num_rows = std::exchange(_num_rows, 0),
             .data_encoding = encoding::plain,
             .definition_levels_byte_length = static_cast<int32_t>(encoded_def_levels.size_bytes()),
             .repetition_levels_byte_length = static_cast<int32_t>(encoded_rep_levels.size_bytes()),
             .is_compressed = _opts.compress,
             .stats = statistics{
-              .null_count = _stats.null_count(),
-              // TODO: consider truncating large values instead of writing them (is_exact=false)
-              .max = _stats.max() ? std::make_optional<statistics::bound>(
-                 /*value=*/encode_for_stats(*_stats.max()),
-                 /*is_exact=*/true
-              ) : std::nullopt,
-              .min = _stats.min() ? std::make_optional<statistics::bound>(
-                /*value=*/encode_for_stats(*_stats.min()),
-                /*is_exact=*/true
-              ) : std::nullopt,
+              .null_count = _current_page_stats.null_count(),
+              .max = std::move(max_bound),
+              .min = std::move(min_bound),
             },
           },
         };
@@ -176,19 +210,50 @@ public:
         full_page_data.append(std::move(encoded_rep_levels));
         full_page_data.append(std::move(encoded_def_levels));
         full_page_data.append(std::move(encoded_data));
-        _stats.reset();
-        co_return data_page{
+        _current_page_stats.reset();
+        _current_buffer_size = 0;
+        _flushed_pages.push_back(data_page{
           .header = std::move(header),
           .serialized_header_size = header_size,
           .serialized = std::move(full_page_data),
+        });
+    }
+
+    ss::future<flushed_pages> flush_pages() override {
+        if (_current_buffer_size > 0) {
+            co_await flush_page();
+        }
+
+        statistics full_stats{
+          .null_count = _flushed_stats.null_count(),
+          .max = {},
+          .min = {},
+        };
+        if (auto max = _flushed_stats.take_max()) {
+            full_stats.max.emplace(
+              /*value=*/encode_for_stats(*max),
+              /*is_exact=*/true);
+        }
+        if (auto min = _flushed_stats.take_min()) {
+            full_stats.min.emplace(
+              /*value=*/encode_for_stats(*min),
+              /*is_exact=*/true);
+        }
+        _flushed_stats.reset();
+        co_return flushed_pages{
+          .pages = std::exchange(_flushed_pages, {}),
+          .stats = std::move(full_stats),
         };
     }
 
 private:
-    column_stats_collector<value_type, comparator> _stats;
+    column_stats_collector<value_type, comparator> _current_page_stats;
+    column_stats_collector<value_type, comparator> _flushed_stats;
+    size_t _current_buffer_size = 0;
     chunked_vector<value_type> _value_buffer;
     chunked_vector<def_level> _def_levels;
     chunked_vector<rep_level> _rep_levels;
+    chunked_vector<data_page> _flushed_pages;
     int32_t _num_rows = 0;
     int32_t _num_values = 0;
     rep_level _max_rep_level;
@@ -279,13 +344,16 @@ column_writer::column_writer(column_writer&&) noexcept = default;
 column_writer& column_writer::operator=(column_writer&&) noexcept = default;
 column_writer::~column_writer() noexcept = default;
 
-incremental_column_stats
+ss::future<>
 column_writer::add(value val, rep_level rep_level, def_level def_level) {
     return _impl->add(std::move(val), rep_level, def_level);
 }
 
-ss::future<data_page> column_writer::flush_page() {
-    return _impl->flush_page();
+size_t column_writer::memory_usage() const { return _impl->memory_usage(); }
+size_t column_writer::total_rows() const { return _impl->total_rows(); }
+
+ss::future<flushed_pages> column_writer::flush_pages() {
+    return _impl->flush_pages();
 }
 
 } // namespace serde::parquet

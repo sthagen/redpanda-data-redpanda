@@ -18,6 +18,7 @@
 #include "serde/rw/envelope.h"
 #include "serde/rw/sstring.h"
 
+#include <memory>
 #include <ostream>
 
 namespace crash_tracker {
@@ -47,23 +48,23 @@ struct reserved_string {
           "String size {} exceeds reserved size {}",
           other.size(),
           Size);
-        std::copy(other.begin(), other.end(), _str.begin());
+        std::copy(other.begin(), other.end(), _str->begin());
     };
 
-    type* begin() { return _str.begin(); }
-    const type* c_str() const noexcept { return _str.data(); }
+    type* begin() { return _str->begin(); }
+    const type* c_str() const noexcept { return _str->data(); }
 
-    type& operator[](size_t i) { return _str[i]; }
-    const type& operator[](size_t i) const { return _str[i]; }
+    type& operator[](size_t i) { return (*_str)[i]; }
+    const type& operator[](size_t i) const { return (*_str)[i]; }
 
     /// The length of the populated, non-'\0' prefix of the string.
-    size_t length() const noexcept { return strlen(_str.data()); }
+    size_t length() const noexcept { return strlen(_str->data()); }
 
     /// The full capacity of the string, including the all-'\0' suffix.
     size_t capacity() const noexcept { return Size; }
 
 private:
-    underlying_t _str{};
+    std::unique_ptr<underlying_t> _str{std::make_unique<underlying_t>()};
 };
 
 template<std::size_t Size>

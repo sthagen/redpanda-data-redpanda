@@ -20,3 +20,13 @@ go_binary(
         "ldLibraryPath": "/opt/redpanda/lib",
     },
 )
+
+go_binary(
+    name = "iotune",
+    srcs = ["main.go"],
+    visibility = ["//bazel/packaging:__pkg__"],
+    x_defs = {
+        "binaryPath": "/opt/redpanda/libexec/iotune",
+        "ldLibraryPath": "/opt/redpanda/lib",
+    },
+)

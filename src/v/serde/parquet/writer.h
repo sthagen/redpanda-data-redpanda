@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/units.h"
 #include "container/fragmented_vector.h"
 #include "serde/parquet/schema.h"
 #include "serde/parquet/value.h"
@@ -23,7 +24,7 @@ namespace serde::parquet {
 //
 // These are mainly provided to limit memory usage.
 struct row_group_stats {
-    int64_t rows = 0;
+    uint64_t rows = 0;
     uint64_t memory_usage = 0;
 };
 
@@ -32,7 +33,7 @@ struct file_stats {
     // Note these are only the number of rows flushed
     // to the output stream (so does not include the number
     // in the current row group)
-    int64_t rows = 0;
+    uint64_t rows = 0;
 
     // The size of the file flushed to the output stream - does not include the
     // current row group buffered in memory, nor the footer (until close is
@@ -57,7 +58,12 @@ public:
         ss::sstring build = "dev";
         // If true, compress the parquet column chunks using zstd compression
         bool compress = false;
-        // TODO(parquet): add settings around buffer settings, etc.
+        // The target size for how much data within *each* column we buffer
+        // before flushing/encoding/compressing the data before a row group
+        // being flushed (since columns can have multiple pages within a row
+        // group). Ecosystem libraries tend to default between 256Kib-1MiB
+        static constexpr size_t default_page_size = 512_KiB;
+        size_t page_buffer_size = default_page_size;
     };
 
     // Create a new parquet file writer using the given options that

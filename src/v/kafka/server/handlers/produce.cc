@@ -10,8 +10,6 @@
 #include "kafka/server/handlers/produce.h"
 
 #include "base/likely.h"
-#include "base/vlog.h"
-#include "bytes/iobuf.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/partition_manager.h"
 #include "cluster/shard_table.h"
@@ -22,14 +20,10 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
-#include "model/record_batch_reader.h"
-#include "model/timeout_clock.h"
 #include "model/timestamp.h"
 #include "pandaproxy/schema_registry/validation.h"
 #include "raft/errc.h"
 #include "ssx/future-util.h"
-#include "utils/remote.h"
-#include "utils/to_string.h"
 
 #include <seastar/core/execution_stage.hh>
 #include <seastar/core/future.hh>
@@ -40,17 +34,11 @@
 #include <boost/container_hash/extensions.hpp>
 #include <fmt/ostream.h>
 
-#include <chrono>
-#include <cstdint>
-#include <memory>
-#include <ranges>
-#include <string_view>
-
 namespace kafka {
-
+namespace {
 static constexpr auto despam_interval = std::chrono::minutes(5);
 
-static void fill_response_with_errors(
+void fill_response_with_errors(
   produce_request::topic_cit topics_begin,
   produce_request::topic_cit topics_end,
   error_code error,
@@ -70,20 +58,6 @@ static void fill_response_with_errors(
     }
 }
 
-produce_response produce_request::make_error_response(error_code error) const {
-    produce_response response;
-    fill_response_with_errors(
-      data.topics.cbegin(), data.topics.cend(), error, response);
-    return response;
-}
-
-produce_response produce_request::make_full_disk_response() const {
-    auto resp = make_error_response(error_code::broker_not_available);
-    // TODO set a field in response to signal to quota manager to throttle the
-    // client
-    return resp;
-}
-
 struct topic_produce_stages {
     ss::future<> dispatched;
     ss::future<produce_response::topic> produced;
@@ -97,7 +71,7 @@ partition_produce_stages make_ready_stage(produce_response::partition p) {
     };
 }
 
-static raft::replicate_options
+raft::replicate_options
 acks_to_replicate_options(int16_t acks, std::chrono::milliseconds timeout) {
     switch (acks) {
     case -1:
@@ -111,7 +85,7 @@ acks_to_replicate_options(int16_t acks, std::chrono::milliseconds timeout) {
     };
 }
 
-static error_code map_produce_error_code(std::error_code ec) {
+error_code map_produce_error_code(std::error_code ec) {
     if (ec.category() == raft::error_category()) {
         switch (static_cast<raft::errc>(ec.value())) {
         case raft::errc::not_leader:
@@ -161,7 +135,7 @@ static error_code map_produce_error_code(std::error_code ec) {
  * Caller is expected to catch errors that may be thrown while the kafka
  * batch is being deserialized (see reader_from_kafka_batch).
  */
-static partition_produce_stages partition_append(
+partition_produce_stages partition_append(
   model::partition_id id,
   ss::lw_shared_ptr<replicated_partition> partition,
   model::batch_identity bid,
@@ -221,7 +195,7 @@ ss::future<produce_response::partition> finalize_request_with_error_code(
  * to the broker's time. returns the new timestamp to set as max_timestamp to
  * the batch, if present
  */
-static auto validate_batch_timestamps(
+auto validate_batch_timestamps(
   const model::ntp& ntp,
   const model::record_batch_header& header,
   model::timestamp_type timestamp_type,
@@ -293,14 +267,19 @@ static auto validate_batch_timestamps(
         return std::nullopt;
     }
 }
-
+struct topic_configuration_context {
+    size_t batch_max_bytes;
+    model::timestamp_type timestamp_type;
+    const cluster::topic_properties* properties;
+};
 /**
  * \brief handle writing to a single topic partition.
  */
-static partition_produce_stages produce_topic_partition(
+partition_produce_stages produce_topic_partition(
   produce_ctx& octx,
   produce_request::topic& topic,
-  produce_request::partition& part) {
+  produce_request::partition& part,
+  const topic_configuration_context& cfg_ctx) {
     auto ntp = model::ntp(
       model::kafka_namespace, topic.name, part.partition_index);
 
@@ -320,24 +299,13 @@ static partition_produce_stages produce_topic_partition(
     auto batch = std::make_unique<model::record_batch>(
       std::move(part.records->adapter.batch.value()));
 
-    auto topic_cfg = octx.rctx.metadata_cache().get_topic_cfg(
-      model::topic_namespace_view(model::kafka_namespace, topic.name));
-
-    if (!topic_cfg) {
-        return make_ready_stage(produce_response::partition{
-          .partition_index = ntp.tp.partition,
-          .error_code = error_code::unknown_topic_or_partition});
-    }
-
-    const auto timestamp_type = topic_cfg->properties.timestamp_type.value_or(
-      octx.rctx.metadata_cache().get_default_timestamp_type());
-    const auto batch_max_bytes = topic_cfg->properties.batch_max_bytes.value_or(
-      octx.rctx.metadata_cache().get_default_batch_max_bytes());
-
     // validate the batch timestamps by checking skew against broker time
     if (
       auto new_timestamp = validate_batch_timestamps(
-        ntp, batch->header(), timestamp_type, octx.rctx.server_probe())) {
+        ntp,
+        batch->header(),
+        cfg_ctx.timestamp_type,
+        octx.rctx.server_probe())) {
         batch->set_max_timestamp(
           model::timestamp_type::append_time, new_timestamp.value());
     }
@@ -348,7 +316,7 @@ static partition_produce_stages produce_topic_partition(
     auto num_records = batch->record_count();
     auto validator
       = pandaproxy::schema_registry::maybe_make_schema_id_validator(
-        octx.rctx.schema_registry(), topic.name, topic_cfg->properties);
+        octx.rctx.schema_registry(), topic.name, *cfg_ctx.properties);
     auto start = std::chrono::steady_clock::now();
 
     auto dispatch = std::make_unique<ss::promise<>>();
@@ -375,7 +343,7 @@ static partition_produce_stages produce_topic_partition(
              batch_size,
              bid,
              acks = octx.request.data.acks,
-             batch_max_bytes,
+             batch_max_bytes = cfg_ctx.batch_max_bytes,
              timeout,
              source_shard = ss::this_shard_id()](
               cluster::partition_manager& mgr) mutable {
@@ -474,29 +442,83 @@ static partition_produce_stages produce_topic_partition(
     };
 }
 
-namespace testing {
-partition_produce_stages produce_single_partition(
-  produce_ctx& octx,
-  produce_request::topic& topic,
-  produce_request::partition& part) {
-    return produce_topic_partition(octx, topic, part);
+/**
+ * Fill topic partition produce response with errors
+ */
+topic_produce_stages
+topic_produce_error(const produce_request::topic& topic, error_code error) {
+    std::vector<produce_response::partition> partitions_produced;
+    partitions_produced.reserve(topic.partitions.size());
+
+    for (const auto& topic_partition : topic.partitions) {
+        partitions_produced.push_back(produce_response::partition{
+          .partition_index = topic_partition.partition_index,
+          .error_code = error});
+    }
+
+    return topic_produce_stages{
+      .dispatched = ss::now(),
+      .produced = ss::make_ready_future<produce_response::topic>(
+        produce_response::topic{
+          .name = topic.name, .partitions = std::move(partitions_produced)}),
+    };
 }
-} // namespace testing
 
 /**
  * \brief Dispatch and collect topic partition produce responses
  */
-static topic_produce_stages
+topic_produce_stages
 produce_topic(produce_ctx& octx, produce_request::topic& topic) {
-    std::vector<ss::future<produce_response::partition>> partitions_produced;
-    std::vector<ss::future<>> partitions_dispatched;
-    partitions_produced.reserve(topic.partitions.size());
-    partitions_dispatched.reserve(topic.partitions.size());
-
     const auto* disabled_set
       = octx.rctx.metadata_cache().get_topic_disabled_set(
         model::topic_namespace_view{model::kafka_namespace, topic.name});
 
+    const bool is_transform_logs_topic = topic.name
+                                         == model::transform_log_internal_topic;
+
+    const auto& kafka_noproduce_topics
+      = config::shard_local_cfg().kafka_noproduce_topics();
+
+    const bool is_noproduce_topic = is_transform_logs_topic
+                                    || std::find(
+                                         kafka_noproduce_topics.begin(),
+                                         kafka_noproduce_topics.end(),
+                                         topic.name)
+                                         != kafka_noproduce_topics.end();
+
+    const bool audit_produce_restricted
+      = !octx.rctx.authorized_auditor()
+        && topic.name == model::kafka_audit_logging_topic();
+
+    // Need to make an exception here in case the audit log topic is in the
+    // noproduce topics list
+    const bool is_audit_produce = octx.rctx.authorized_auditor()
+                                  && topic.name
+                                       == model::kafka_audit_logging_topic();
+    if ((is_noproduce_topic || audit_produce_restricted) && !is_audit_produce) {
+        return topic_produce_error(
+          topic, error_code::topic_authorization_failed);
+    }
+    const auto& topic_md = octx.rctx.metadata_cache().get_topic_metadata_ref(
+      model::topic_namespace_view{model::kafka_namespace, topic.name});
+
+    if (!topic_md) {
+        return topic_produce_error(
+          topic, error_code::unknown_topic_or_partition);
+    }
+    const auto& topic_cfg = topic_md->get().get_configuration();
+    topic_configuration_context cfg_ctx{
+      .batch_max_bytes = topic_cfg.properties.batch_max_bytes.value_or(
+        octx.rctx.metadata_cache().get_default_batch_max_bytes()),
+      .timestamp_type = topic_cfg.properties.timestamp_type.value_or(
+        octx.rctx.metadata_cache().get_default_timestamp_type()),
+      .properties = &topic_cfg.properties,
+    };
+
+    std::vector<ss::future<produce_response::partition>> partitions_produced;
+    std::vector<ss::future<>> partitions_dispatched;
+    partitions_produced.reserve(topic.partitions.size());
+    partitions_dispatched.reserve(topic.partitions.size());
     for (auto& part : topic.partitions) {
         auto push_error_response = [&](error_code errc) {
             partitions_dispatched.push_back(ss::now());
@@ -506,42 +528,6 @@ produce_topic(produce_ctx& octx, produce_request::topic& topic) {
                   .partition_index = part.partition_index,
                   .error_code = errc}));
         };
-
-        const bool is_transform_logs_topic
-          = topic.name == model::transform_log_internal_topic;
-
-        const auto& kafka_noproduce_topics
-          = config::shard_local_cfg().kafka_noproduce_topics();
-
-        const bool is_noproduce_topic = is_transform_logs_topic
-                                        || std::find(
-                                             kafka_noproduce_topics.begin(),
-                                             kafka_noproduce_topics.end(),
-                                             topic.name)
-                                             != kafka_noproduce_topics.end();
-
-        const bool audit_produce_restricted
-          = !octx.rctx.authorized_auditor()
-            && topic.name == model::kafka_audit_logging_topic();
-
-        // Need to make an exception here in case the audit log topic is in the
-        // noproduce topics list
-        const bool is_audit_produce
-          = octx.rctx.authorized_auditor()
-            && topic.name == model::kafka_audit_logging_topic();
-        if (
-          (is_noproduce_topic || audit_produce_restricted)
-          && !is_audit_produce) {
-            push_error_response(error_code::topic_authorization_failed);
-            continue;
-        }
-
-        if (!octx.rctx.metadata_cache().contains(
-              model::topic_namespace_view(model::kafka_namespace, topic.name),
-              part.partition_index)) {
-            push_error_response(error_code::unknown_topic_or_partition);
-            continue;
-        }
 
         if (unlikely(
               disabled_set
@@ -580,8 +566,7 @@ produce_topic(produce_ctx& octx, produce_request::topic& topic) {
             push_error_response(error_code::invalid_record);
             continue;
         }
-
-        auto pr = produce_topic_partition(octx, topic, part);
+        auto pr = produce_topic_partition(octx, topic, part, cfg_ctx);
         partitions_produced.push_back(std::move(pr.produced));
         partitions_dispatched.push_back(std::move(pr.dispatched));
     }
@@ -606,7 +591,7 @@ produce_topic(produce_ctx& octx, produce_request::topic& topic) {
 /**
  * \brief Dispatch and collect topic produce responses
  */
-static std::vector<topic_produce_stages> produce_topics(produce_ctx& octx) {
+std::vector<topic_produce_stages> produce_topics(produce_ctx& octx) {
     std::vector<topic_produce_stages> topics;
     topics.reserve(octx.request.data.topics.size());
 
@@ -616,7 +601,39 @@ static std::vector<topic_produce_stages> produce_topics(produce_ctx& octx) {
 
     return topics;
 }
+} // namespace
 
+produce_response produce_request::make_error_response(error_code error) const {
+    produce_response response;
+    fill_response_with_errors(
+      data.topics.cbegin(), data.topics.cend(), error, response);
+    return response;
+}
+
+produce_response produce_request::make_full_disk_response() const {
+    auto resp = make_error_response(error_code::broker_not_available);
+    // TODO set a field in response to signal to quota manager to throttle the
+    // client
+    return resp;
+}
+namespace testing {
+partition_produce_stages produce_single_partition(
+  produce_ctx& octx,
+  produce_request::topic& topic,
+  produce_request::partition& part) {
+    const auto& topic_md = octx.rctx.metadata_cache().get_topic_metadata_ref(
+      model::topic_namespace_view{model::kafka_namespace, topic.name});
+    const auto& topic_cfg = topic_md->get().get_configuration();
+    topic_configuration_context cfg_ctx{
+      .batch_max_bytes = topic_cfg.properties.batch_max_bytes.value_or(
+        octx.rctx.metadata_cache().get_default_batch_max_bytes()),
+      .timestamp_type = topic_cfg.properties.timestamp_type.value_or(
+        octx.rctx.metadata_cache().get_default_timestamp_type()),
+      .properties = &topic_cfg.properties,
+    };
+    return produce_topic_partition(octx, topic, part, cfg_ctx);
+}
+} // namespace testing
 template<>
 process_result_stages
 produce_handler::handle(request_context ctx, ss::smp_service_group ssg) {

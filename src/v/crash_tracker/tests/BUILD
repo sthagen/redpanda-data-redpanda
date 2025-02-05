@@ -33,6 +33,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_binary(
     name = "crash_report_generator",
+    testonly = True,
     srcs = ["report_generator.cc"],
     deps = [
         "//src/v/base",

@@ -128,6 +128,12 @@ void prepared_writer::write() {
 
 bool prepared_writer::try_write_crash() {
     bool success = true;
+
+    static_assert(
+      sizeof(crash_description) < 200,
+      "Sanity check to prevent overflowing the stack. Even though "
+      "crash_description may contain a large amount of pre-allocated data, it "
+      "should remain relatively small on the stack.");
     serde::write(_serde_output, std::move(_prepared_cd));
 
     for (const auto& frag : _serde_output) {

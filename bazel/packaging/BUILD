@@ -8,6 +8,7 @@ redpanda_package(
     bin_wrappers = [
         "//bazel/packaging/bin_wrapper:redpanda",
         "//bazel/packaging/bin_wrapper:rpk",
+        "//bazel/packaging/bin_wrapper:iotune",
     ],
     default_yaml_config = "//conf:redpanda.yaml",
     include_sysroot_libs = True,

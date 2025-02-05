@@ -55,20 +55,16 @@ fixed_byte_array_value copy(fixed_byte_array_value&);
 // it in the metadata for query engine performance.
 template<typename value_type, auto comparator>
 class column_stats_collector {
+public:
     using ref_type = std::conditional_t<
       std::is_trivially_copyable_v<value_type>,
       value_type,
       value_type&>;
-    using const_ref_type = std::conditional_t<
-      std::is_trivially_copyable_v<value_type>,
-      const value_type,
-      const value_type&>;
     using bound_ref_type = std::conditional_t<
       std::is_trivially_copyable_v<value_type>,
       std::optional<value_type>,
       const std::optional<value_type>&>;
 
-public:
     // Record a value in the collector
     void record_value(ref_type v) {
         if constexpr (std::is_floating_point_v<decltype(v.val)>) {
@@ -85,7 +81,7 @@ public:
     }
 
     // Record a null in the collector
-    void record_null() { ++_null_count; }
+    void record_null(int64_t n = 1) { _null_count += n; }
 
     // Merge another stats collector into this one.
     void merge(column_stats_collector<value_type, comparator>& other) {
@@ -109,28 +105,32 @@ public:
     }
 
     int64_t null_count() const { return _null_count; }
-    bound_ref_type min() const {
-        // According to the rules for stats, a zero floating point value is
-        // always written as negative.
-        if constexpr (std::is_floating_point_v<decltype(_min->val)>) {
-            if (_min && _min->val == 0.0) {
-                return std::make_optional<value_type>(-0.0);
-            }
-        }
-        return _min;
-    }
-    bound_ref_type max() const {
-        // According to the rules for stats, a zero floating point value is
-        // always written as positive.
-        if constexpr (std::is_floating_point_v<decltype(_max->val)>) {
-            if (_max && _max->val == 0.0) {
-                return std::make_optional<value_type>(0.0);
-            }
-        }
-        return _max;
-    }
+
+    bound_ref_type min() const { return view(_min, true); }
+    std::optional<value_type> take_min() { return take(_min, true); }
+    bound_ref_type max() const { return view(_max, false); }
+    std::optional<value_type> take_max() { return take(_max, false); }
 
 private:
+    bound_ref_type view(const std::optional<value_type>& v, bool min) const {
+        if constexpr (std::is_floating_point_v<decltype(v->val)>) {
+            // min floats are always written as -0 and max as 0
+            if (v && v->val == 0.0) {
+                return std::make_optional<value_type>(min ? -0.0 : 0.0);
+            }
+        }
+        return v;
+    }
+    std::optional<value_type> take(std::optional<value_type>& v, bool min) {
+        if constexpr (std::is_floating_point_v<decltype(v->val)>) {
+            // min floats are always written as -0 and max as 0
+            if (v && v->val == 0.0) {
+                return std::make_optional<value_type>(min ? -0.0 : 0.0);
+            }
+        }
+        return std::exchange(v, {});
+    }
+
     std::optional<value_type> _min;
     std::optional<value_type> _max;
     int64_t _null_count = 0;
