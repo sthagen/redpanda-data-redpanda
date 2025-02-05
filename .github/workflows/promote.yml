@@ -24,5 +24,5 @@ jobs:
           buildkite_api_access_token: ${{ env.BUILDKITE_TOKEN }}
           pipeline: "redpanda/redpanda"
           branch: dev
-          message: ":github: Promote redpanda packages"
+          message: ":github: Promote redpanda ${{ github.ref_name }} packages"
           build_env_vars: '{"PROMOTE_REDPANDA_FROM_STAGING": "1", "TARGET_VERSION": "${{ github.ref_name }}"}'

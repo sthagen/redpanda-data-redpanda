@@ -82,6 +82,18 @@ struct handler_interface {
     handle(request_context&&, ss::smp_service_group) const
       = 0;
 
+    /**
+     * @brief Returns a seastar scheduling group override for the handler.
+     *
+     * The scheduling group override is used to specify a different scheduling
+     * group for processing of the particular request type. Currently separate
+     * scheduling groups are used for Produce and Fetch requests. When the
+     * method return an empty optional the default request processing scheduling
+     * group is used.
+     */
+    virtual std::optional<ss::scheduling_group>
+    scheduling_group_override(const connection_context&) const = 0;
+
     virtual ~handler_interface() = default;
 };
 

@@ -13,7 +13,6 @@
 #include "base/vassert.h"
 #include "io/page.h"
 #include "io/page_cache.h"
-#include "io/scheduler.h"
 
 #include <seastar/core/align.hh>
 #include <seastar/core/coroutine.hh>
@@ -27,19 +26,17 @@ pager::pager(
   std::filesystem::path file,
   size_t size,
   persistence* storage,
-  page_cache* cache,
-  scheduler* sched)
+  page_cache* cache)
   : file_(std::move(file))
   , size_(size)
   , cache_(cache)
-  , sched_(sched)
   , queue_(
       storage, file_, [](page& page) noexcept { handle_completion(page); }) {
-    sched_->add_queue(&queue_);
+    queue_.start();
 }
 
 seastar::future<> pager::close() noexcept {
-    co_await scheduler::remove_queue(&queue_);
+    co_await queue_.stop();
     for (const auto& page : pages_) {
         cache_->remove(*page);
     }
@@ -104,11 +101,12 @@ seastar::future<> pager::append(seastar::temporary_buffer<char> data) noexcept {
         std::copy_n(src.begin(), src.size(), dst.begin());
         data.trim_front(src.size());
         /*
-         * the scheduler does the right thing if pages are marked more than once
-         * as dirty and resubmitted for write-back.
+         * the queue does the right thing if pages are marked more than once
+         * as dirty and resubmitted for write-back by which the page is requeued
+         * for writing.
          */
         page->set_flag(page::flags::dirty);
-        sched_->submit_write(&queue_, page);
+        queue_.submit_write(*page);
         return src.size();
     };
 
@@ -211,7 +209,7 @@ pager::get_page(uint64_t offset) noexcept {
           page->offset(),
           page->size());
 
-        sched_->submit_read(&queue_, page.get());
+        queue_.submit_read(*page);
         co_await waiter->ready.get_future();
     }
 }

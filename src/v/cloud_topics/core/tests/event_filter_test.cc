@@ -63,6 +63,7 @@ get_serialized_size(const ss::circular_buffer<model::record_batch>& batches) {
 
 template<class Fn>
 ss::future<> do_until(Fn&& fn, int retries = 100) {
+    co_await ss::sleep(1ms);
     for (int i = 0; i < retries; i++) {
         if (fn()) {
             co_return;

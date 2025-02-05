@@ -75,21 +75,21 @@ public:
     }
 
     file_stats stats() const {
-        file_stats stats = _stats;
+        int64_t buffered = 0;
         for (const auto& [_, col] : _columns) {
-            // NOTE: total_rows is always the same for each column, as we push
-            // down NULLs to every column.
-            stats.current_row_group.rows = col.writer.total_rows();
-            stats.current_row_group.memory_usage += col.writer.memory_usage();
+            buffered += col.writer.memory_usage();
         }
-        return stats;
+        return {
+          .flushed_size = _flushed_bytes,
+          .buffered_size = buffered,
+        };
     }
 
     ss::future<> flush_row_group() {
         row_group rg{
           .total_byte_size = 0, // Computed incrementally below
           .num_rows = 0,        // computed below
-          .file_offset = static_cast<int64_t>(_stats.size),
+          .file_offset = _flushed_bytes,
           .total_compressed_size = 0, // Computed incrementally below
           .ordinal = static_cast<int16_t>(_row_groups.size()),
         };
@@ -108,7 +108,7 @@ public:
                   .total_uncompressed_size = 0, // computed below
                   .total_compressed_size = 0,   // computed below
                   .key_value_metadata = {},
-                  .data_page_offset = static_cast<int64_t>(_stats.size),
+                  .data_page_offset = _flushed_bytes,
                   .stats = std::move(flushed.stats),
                 },
             };
@@ -140,7 +140,6 @@ public:
         if (page_count == 0) {
             co_return;
         }
-        _stats.rows += rg.num_rows;
         _row_groups.push_back(std::move(rg));
     }
 
@@ -188,8 +187,8 @@ private:
     }
 
     ss::future<> write_iobuf(iobuf b) {
-        _stats.size += b.size_bytes();
-        co_await write_iobuf_to_output_stream(std::move(b), _output);
+        _flushed_bytes += static_cast<int64_t>(b.size_bytes());
+        return write_iobuf_to_output_stream(std::move(b), _output);
     }
 
     struct column {
@@ -201,7 +200,7 @@ private:
     ss::output_stream<char> _output;
     contiguous_range_map<int32_t, column> _columns;
     chunked_vector<row_group> _row_groups;
-    file_stats _stats;
+    int64_t _flushed_bytes = 0;
 };
 
 writer::writer(options opts, ss::output_stream<char> output)

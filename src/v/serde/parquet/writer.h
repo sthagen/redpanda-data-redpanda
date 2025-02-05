@@ -20,28 +20,16 @@
 
 namespace serde::parquet {
 
-// Statistics about the current row group.
-//
-// These are mainly provided to limit memory usage.
-struct row_group_stats {
-    uint64_t rows = 0;
-    uint64_t memory_usage = 0;
-};
-
 // Statistics about the current file being built.
 struct file_stats {
-    // Note these are only the number of rows flushed
-    // to the output stream (so does not include the number
-    // in the current row group)
-    uint64_t rows = 0;
-
     // The size of the file flushed to the output stream - does not include the
     // current row group buffered in memory, nor the footer (until close is
     // called).
-    uint64_t size = 0;
+    int64_t flushed_size = 0;
 
-    // Additional information about the current row group buffered in memory.
-    row_group_stats current_row_group;
+    // The amount of memory currently buffered in the current row group.
+    // When calling flush_row_group, this is reset to 0.
+    int64_t buffered_size = 0;
 };
 
 // A parquet file writer for seastar.
@@ -62,8 +50,8 @@ public:
         // before flushing/encoding/compressing the data before a row group
         // being flushed (since columns can have multiple pages within a row
         // group). Ecosystem libraries tend to default between 256Kib-1MiB
-        static constexpr size_t default_page_size = 512_KiB;
-        size_t page_buffer_size = default_page_size;
+        static constexpr int64_t default_page_size = 512_KiB;
+        int64_t page_buffer_size = default_page_size;
     };
 
     // Create a new parquet file writer using the given options that

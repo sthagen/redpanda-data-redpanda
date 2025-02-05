@@ -41,6 +41,8 @@ public:
     using include_malformed_files
       = ss::bool_class<struct include_malformed_files_tag>;
 
+    enum class recorded_signo { sigsegv, sigabrt, sigill };
+
     /// Visible for testing
     ~recorder() = default;
 
@@ -48,7 +50,7 @@ public:
     ss::future<> stop();
 
     /// Async-signal safe
-    void record_crash_sighandler(int signo);
+    void record_crash_sighandler(recorded_signo signo);
 
     void record_crash_exception(std::exception_ptr eptr);
 

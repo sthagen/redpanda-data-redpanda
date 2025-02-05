@@ -13,9 +13,7 @@
 #include "io/pager.h"
 #include "io/paging_data_source.h"
 #include "io/persistence.h"
-#include "io/scheduler.h"
 #include "io/tests/common.h"
-#include "test_utils/test.h"
 #include "utils/memory_data_source.h"
 
 #include <seastar/core/iostream.hh>
@@ -53,7 +51,7 @@ public:
         StorageTest::SetUp();
 
         /*
-         * the scheduler and pager do not create files.
+         * the pager does not create files.
          */
         add_cleanup_file(file_);
         storage()->create(file_.string()).get()->close().get();
@@ -62,9 +60,7 @@ public:
           .cache_size = 2_MiB, .small_size = 1_MiB};
         cache_ = std::make_unique<io::page_cache>(cache_config);
 
-        scheduler_ = std::make_unique<io::scheduler>(open_files());
-        pager_ = std::make_unique<io::pager>(
-          file_, 0, storage(), cache_.get(), scheduler_.get());
+        pager_ = std::make_unique<io::pager>(file_, 0, storage(), cache_.get());
     }
 
     void TearDown() override {
@@ -88,7 +84,6 @@ public:
 private:
     std::filesystem::path file_{"foo"};
     std::unique_ptr<io::page_cache> cache_;
-    std::unique_ptr<io::scheduler> scheduler_;
     std::unique_ptr<io::pager> pager_;
     std::vector<std::filesystem::path> cleanup_files_;
 };

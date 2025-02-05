@@ -12,7 +12,6 @@ redpanda_cc_library(
         "pager.cc",
         "paging_data_source.cc",
         "persistence.cc",
-        "scheduler.cc",
     ],
     hdrs = [
         "interval_map.h",
@@ -23,7 +22,6 @@ redpanda_cc_library(
         "pager.h",
         "paging_data_source.h",
         "persistence.h",
-        "scheduler.h",
     ],
     include_prefix = "io",
     visibility = ["//visibility:public"],

@@ -10,11 +10,10 @@
  */
 #include "io/page_set.h"
 
-#include <seastar/util/later.hh>
+#include <seastar/core/shared_ptr.hh>
+#include <seastar/core/temporary_buffer.hh>
 
 #include <gtest/gtest.h>
-
-#include <random>
 
 namespace io = experimental::io;
 
@@ -25,12 +24,12 @@ auto make_page(uint64_t offset, uint64_t size) {
 }
 } // namespace
 
-TEST(PageSet, EmptyBeginEnd) {
+TEST(PageSet, BeginEndEqualWhenEmpty) {
     const io::page_set set;
     EXPECT_EQ(set.begin(), set.end());
 }
 
-TEST(PageSet, EmptyFind) {
+TEST(PageSet, FindReturnsEndWhenEmpty) {
     const io::page_set set;
     EXPECT_EQ(set.find(0), set.end());
 }
@@ -38,44 +37,52 @@ TEST(PageSet, EmptyFind) {
 TEST(PageSet, InsertOne) {
     io::page_set set;
 
-    auto res = set.insert(make_page(0, 10));
+    const auto page = make_page(0, 10);
+    const auto res = set.insert(page);
     EXPECT_TRUE(res.second);
-    EXPECT_EQ(set.find(0), res.first);
-
+    EXPECT_EQ(res.first, set.find(0));
     EXPECT_NE(set.begin(), set.end());
+
+    // map any offset in a page to the containing page
     for (int i = 0; i < 10; ++i) {
-        auto it = set.find(i);
-        EXPECT_EQ((*it)->offset(), 0);
-        EXPECT_EQ((*it)->size(), 10);
-        EXPECT_EQ((*it)->data().size(), 10);
+        const auto it = set.find(i);
+        EXPECT_EQ((*it).get(), page.get());
     }
+
+    // end should be returned for an offset beyond the mapped range
     EXPECT_EQ(set.find(10), set.end());
 }
 
 TEST(PageSet, InsertOverlap) {
     io::page_set set;
 
-    auto res = set.insert(make_page(0, 10));
+    const auto res = set.insert(make_page(0, 10));
     EXPECT_TRUE(res.second);
-    EXPECT_EQ(set.find(0), res.first);
+    EXPECT_EQ(res.first, set.find(0));
 
-    auto res2 = set.insert(make_page(9, 10));
+    const auto res2 = set.insert(make_page(5, 10));
     EXPECT_FALSE(res2.second);
+
+    // res.first is the conflicting page
     EXPECT_EQ(res2.first, res.first);
 }
 
-TEST(PageSet, InsertEmpty) {
+TEST(PageSet, InsertZeroLengthPageRejected) {
     io::page_set set;
 
+    // zero length rejected
     auto res = set.insert(make_page(0, 0));
     EXPECT_FALSE(res.second);
     EXPECT_EQ(res.first, set.end());
     EXPECT_EQ(set.begin(), set.end());
 
+    // non-zero length accepted
     res = set.insert(make_page(0, 10));
     EXPECT_TRUE(res.second);
     EXPECT_EQ(set.find(0), res.first);
+    EXPECT_NE(set.begin(), set.end());
 
+    // still reject zero length
     res = set.insert(make_page(0, 0));
     EXPECT_FALSE(res.second);
     EXPECT_EQ(res.first, set.end());
@@ -84,20 +91,20 @@ TEST(PageSet, InsertEmpty) {
 TEST(PageSet, Erase) {
     io::page_set set;
 
-    // add two pages
+    // add two pages [0, 10) [20, 30)
     auto res = set.insert(make_page(0, 10));
     EXPECT_TRUE(res.second);
     res = set.insert(make_page(20, 10));
     EXPECT_TRUE(res.second);
     EXPECT_NE(set.begin(), set.end());
 
-    // remove one
+    // remove the first page. set is not empty
     set.erase(set.find(5));
     EXPECT_NE(set.begin(), set.end());
 
-    // remove the other
+    // remove the second
     set.erase(set.find(25));
 
-    // now its empty
+    // now the set is empty
     EXPECT_EQ(set.begin(), set.end());
 }

@@ -20,10 +20,17 @@
 namespace kafka {
 
 using memory_estimate_fn = size_t(size_t, connection_context&);
+using scheduling_group_provider_fn
+  = std::optional<ss::scheduling_group>(const connection_context&);
 
 constexpr size_t
 default_estimate_adaptor(size_t request_size, connection_context&) {
     return default_memory_estimate(request_size);
+}
+
+constexpr std::optional<ss::scheduling_group>
+default_scheduling_group_provider(const connection_context&) {
+    return std::nullopt;
 }
 
 /**
@@ -40,7 +47,8 @@ template<
   api_version::type MinSupported,
   api_version::type MaxSupported,
   typename HandleRetType,
-  memory_estimate_fn MemEstimator>
+  memory_estimate_fn MemEstimator,
+  scheduling_group_provider_fn SgProvider>
 struct handler_template {
     using api = RequestApi;
     static constexpr api_version min_supported = api_version(MinSupported);
@@ -55,6 +63,11 @@ struct handler_template {
     static size_t
     memory_estimate(size_t request_size, connection_context& conn_ctx) {
         return MemEstimator(request_size, conn_ctx);
+    }
+
+    static std::optional<ss::scheduling_group>
+    scheduling_group_override(const connection_context& conn_ctx) {
+        return SgProvider(conn_ctx);
     }
 
     static void log_request(
@@ -77,13 +90,15 @@ template<
   typename RequestApi,
   api_version::type MinSupported,
   api_version::type MaxSupported,
-  memory_estimate_fn MemEstimator = default_estimate_adaptor>
+  memory_estimate_fn MemEstimator = default_estimate_adaptor,
+  scheduling_group_provider_fn SgProvider = default_scheduling_group_provider>
 using single_stage_handler = handler_template<
   RequestApi,
   MinSupported,
   MaxSupported,
   ss::future<response_ptr>,
-  MemEstimator>;
+  MemEstimator,
+  SgProvider>;
 
 /**
  * A two-stage handler has an initial stage which happens before any other
@@ -96,13 +111,15 @@ template<
   typename RequestApi,
   api_version::type MinSupported,
   api_version::type MaxSupported,
-  memory_estimate_fn MemEstimator = default_estimate_adaptor>
+  memory_estimate_fn MemEstimator = default_estimate_adaptor,
+  scheduling_group_provider_fn SgProvider = default_scheduling_group_provider>
 using two_phase_handler = handler_template<
   RequestApi,
   MinSupported,
   MaxSupported,
   process_result_stages,
-  MemEstimator>;
+  MemEstimator,
+  SgProvider>;
 
 template<typename T>
 concept KafkaApiHandler

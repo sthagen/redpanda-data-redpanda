@@ -8,6 +8,7 @@ redpanda_cc_library(
         "prepared_writer.cc",
         "recorder.cc",
         "service.cc",
+        "signals.cc",
         "types.cc",
     ],
     hdrs = [
@@ -16,6 +17,7 @@ redpanda_cc_library(
         "prepared_writer.h",
         "recorder.h",
         "service.h",
+        "signals.h",
         "types.h",
     ],
     implementation_deps = [

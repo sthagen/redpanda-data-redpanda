@@ -315,7 +315,7 @@ class DatalakeDLQTest(RedpandaTest):
         """
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              catalog_type=filesystem_catalog_type(),
+                              catalog_type=catalog_type,
                               include_query_engines=[query_engine]) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")

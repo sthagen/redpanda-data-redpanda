@@ -27,17 +27,20 @@ struct handler_info {
       const char* name,
       api_version min_api,
       api_version max_api,
-      memory_estimate_fn* mem_estimate) noexcept
+      memory_estimate_fn* mem_estimate,
+      scheduling_group_provider_fn* sg_provider) noexcept
       : _key(key)
       , _name(name)
       , _min_api(min_api)
       , _max_api(max_api)
-      , _mem_estimate(mem_estimate) {}
+      , _mem_estimate(mem_estimate)
+      , _sg_provider(sg_provider) {}
 
     api_key _key;
     const char* _name;
     api_version _min_api, _max_api;
     memory_estimate_fn* _mem_estimate;
+    scheduling_group_provider_fn* _sg_provider;
 };
 
 /**
@@ -88,6 +91,11 @@ struct handler_base final : public handler_interface {
         }
     }
 
+    std::optional<ss::scheduling_group> scheduling_group_override(
+      const connection_context& conn_ctx) const override {
+        return _info._sg_provider(conn_ctx);
+    }
+
 private:
     handler_info _info;
     fn_type* _handle_fn;
@@ -109,7 +117,8 @@ struct handler_holder {
         H::api::name,
         H::min_supported,
         H::max_supported,
-        H::memory_estimate},
+        H::memory_estimate,
+        H::scheduling_group_override},
       H::handle};
 };
 

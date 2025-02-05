@@ -22,7 +22,6 @@
 
 namespace experimental::io {
 class page_cache;
-class scheduler;
 class pager;
 } // namespace experimental::io
 
@@ -83,9 +82,7 @@ public:
 
     // NOTE: defaults are for tests only and are not tuned for production.
     explicit file_manager(
-      size_t cache_size_bytes = 2_MiB,
-      size_t small_queue_size_bytes = 1_MiB,
-      size_t scheduler_num_files = 100);
+      size_t cache_size_bytes = 2_MiB, size_t small_queue_size_bytes = 1_MiB);
     ~file_manager();
 
     ss::future<std::unique_ptr<file>> create_file(std::filesystem::path);
@@ -101,9 +98,6 @@ private:
 
     // Page cache to buffer appends and cache recent pages.
     std::unique_ptr<::experimental::io::page_cache> cache_;
-
-    // Scheduling policy used to dispatch IOs.
-    std::unique_ptr<::experimental::io::scheduler> scheduler_;
 };
 
 } // namespace storage::experimental::mvlog

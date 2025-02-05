@@ -14,7 +14,15 @@
 
 namespace kafka {
 
-using produce_handler = two_phase_handler<produce_api, 0, 7>;
+std::optional<ss::scheduling_group>
+produce_scheduling_group_provider(const connection_context&);
+
+using produce_handler = two_phase_handler<
+  produce_api,
+  0,
+  7,
+  default_estimate_adaptor,
+  produce_scheduling_group_provider>;
 
 struct partition_produce_stages {
     ss::future<> dispatched;

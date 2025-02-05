@@ -42,6 +42,7 @@
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/core/with_timeout.hh>
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/switch_to.hh>
 
 #include <chrono>
 #include <cstdint>
@@ -355,6 +356,7 @@ ss::future<> connection_context::revoke_credentials(std::string_view name) {
 }
 
 ss::future<> connection_context::process() {
+    co_await ss::coroutine::switch_to(_server.get_request_handler_sg());
     while (true) {
         if (is_finished_parsing()) {
             break;
@@ -673,6 +675,16 @@ connection_context::reserve_request_units(api_key key, size_t size) {
     }
     return fut;
 }
+// Returns handler specific connection override if available.
+std::optional<ss::scheduling_group>
+connection_context::get_scheduling_group_override(api_key api_key) const {
+    auto handler = handler_for_key(api_key);
+    if (!handler) {
+        return std::nullopt;
+    }
+
+    return (*handler)->scheduling_group_override(*this);
+}
 
 ss::future<>
 connection_context::dispatch_method_once(request_header hdr, size_t size) {
@@ -682,6 +694,17 @@ connection_context::dispatch_method_once(request_header hdr, size_t size) {
                      ? std::make_optional<ss::sstring>(*hdr.client_id)
                      : std::nullopt,
     };
+
+    auto sg_override = get_scheduling_group_override(hdr.key);
+    // If handler provides an override, swith scheduling group
+    if (sg_override) {
+        co_await ss::coroutine::switch_to(*sg_override);
+    } else if (!_server.get_request_handler_sg().active()) {
+        // if a handler does not provide an override, check if the default
+        // scheduling group is active, and switch the group if needed
+        co_await ss::coroutine::switch_to(_server.get_request_handler_sg());
+    }
+
     auto sres_in = co_await throttle_request(std::move(r_data), size);
     if (abort_requested()) {
         // protect against shutdown behavior

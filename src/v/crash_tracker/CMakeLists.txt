@@ -6,6 +6,7 @@ v_cc_library(
     prepared_writer.cc
     recorder.cc
     service.cc
+    signals.cc
     types.cc
   DEPS
     Seastar::seastar

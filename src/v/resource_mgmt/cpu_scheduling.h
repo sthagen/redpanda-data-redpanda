@@ -23,16 +23,46 @@
 class scheduling_groups final {
 public:
     ss::future<> create_groups() {
+        /**
+         * Scheduling group to process requests received via the REST API of
+         * admin server.
+         */
         _admin = co_await ss::create_scheduling_group("admin", 100);
+        /**
+         * Main Raft scheduling group. Currently used for processing Raft
+         * requests on the receiver side of an RPC protocol. i.e. on the
+         * follower.
+         */
         _raft = co_await ss::create_scheduling_group("raft", 1000);
+        /**
+         * Kafka scheduling group. Used for parsing and processing Kafka
+         * requests.
+         */
         _kafka = co_await ss::create_scheduling_group("kafka", 1000);
+        /**
+         * Group used for handling cluster metadata.
+         */
         _cluster = co_await ss::create_scheduling_group("cluster", 300);
+        /**
+         * Batch cache background reclaimer works in this scheduling group.
+         */
         _cache_background_reclaim = co_await ss::create_scheduling_group(
           "cache_background_reclaim", 200);
+        /**
+         * Log compaction scheduling group. Dynamically adjustted by compaction
+         * backlog controller.
+         */
         _compaction = co_await ss::create_scheduling_group(
           "log_compaction", 100);
+        /**
+         * Special group to control the priority of learner recovery.
+         */
         _raft_learner_recovery = co_await ss::create_scheduling_group(
           "raft_learner_recovery", 50);
+        /**
+         * Group used to run the archival upload process. Controller dynamically
+         * based on the upload backlog.
+         */
         _archival_upload = co_await ss::create_scheduling_group(
           "archival_upload", 100);
         /**
@@ -46,9 +76,23 @@ public:
          * Group used to schedule a self test.
          */
         _self_test = co_await ss::create_scheduling_group("self_test", 100);
+        /**
+         * Group used to handle computational expensive fetch request processing
+         * part.
+         */
         _fetch = co_await ss::create_scheduling_group("fetch", 1000);
+        /**
+         * WASM transforms scheduling group.
+         */
         _transforms = co_await ss::create_scheduling_group("transforms", 100);
+        /**
+         * Group used to run datalake translation.
+         */
         _datalake = co_await ss::create_scheduling_group("datalake", 100);
+        /**
+         * Group used to handle Kafka produce requests, most of the Raft leader
+         * replication part is done in this scheduling group.
+         */
         _produce = co_await ss::create_scheduling_group("produce", 1000);
     }
 

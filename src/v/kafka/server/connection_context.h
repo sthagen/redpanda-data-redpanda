@@ -173,6 +173,8 @@ public:
 
     /// The instance of \ref kafka::server on the shard serving the connection
     server& server() { return _server; }
+
+    const class server& server() const { return _server; }
     ssx::sharded_abort_source& abort_source() { return _as; }
     bool abort_requested() const { return _as.abort_requested(); }
     const ss::sstring& listener() const { return conn->name(); }
@@ -279,6 +281,10 @@ private:
     bool is_first_request() const {
         return _protocol_state.is_first_request() && _virtual_states.empty();
     }
+
+    // Returns handler specific connection override if available.
+    std::optional<ss::scheduling_group>
+      get_scheduling_group_override(api_key) const;
 
     class ctx_log {
     public:

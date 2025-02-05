@@ -1394,6 +1394,10 @@ class RedpandaServiceBase(RedpandaServiceABC, Service):
         }
     }
 
+    # Thread name of shards to be used with redpanda_tid()
+    SHARD_0_THREAD_NAME = "redpanda"
+    SHARD_1_THREAD_NAME = "reactor-1"
+
     class FIPSMode(Enum):
         disabled = 0
         permissive = 1
@@ -2550,8 +2554,6 @@ class RedpandaService(RedpandaServiceBase):
         # which can kill redpanda nodes.
         # This is a number to allow multiple callers to set it.
         self.tolerate_not_running = 0
-        # Do not fail test on crashes including asserts. This is useful when
-        # running with redpanda's fault injection enabled.
         self._tolerate_crashes = False
         self._rpk_node_config = rpk_node_config
 
@@ -3131,12 +3133,20 @@ class RedpandaService(RedpandaServiceBase):
 
         return all(self.for_nodes(self._started, check_node))
 
-    def signal_redpanda(self, node, signal=signal.SIGKILL, idempotent=False):
+    def signal_redpanda(self,
+                        node,
+                        signal=signal.SIGKILL,
+                        idempotent=False,
+                        thread=None):
         """
         :param idempotent: if true, then kill-like signals are ignored if
                            the process is already gone.
+        :param thread: if set, then the signal is sent to the given thread
         """
-        pid = self.redpanda_pid(node)
+        if thread is None:
+            pid = self.redpanda_pid(node)
+        else:
+            pid = self.redpanda_tid(node, thread)
         if pid is None:
             if idempotent and signal in {signal.SIGKILL, signal.SIGTERM}:
                 return
@@ -4187,6 +4197,20 @@ class RedpandaService(RedpandaServiceBase):
                 return None
 
             raise e
+
+    def redpanda_tid(self, node, thread):
+        """Return the thread ID of the given thread"""
+        cmd = "ps -C redpanda -T"
+        for line in node.account.ssh_capture(cmd, timeout_sec=10):
+            # Example line:
+            #     PID    SPID TTY          TIME CMD
+            # 2662879 2662879 pts/16   00:00:02 redpanda
+            self.logger.debug(f"ps output: {line}")
+            parts = line.split()
+            thread_name = parts[4]
+            if thread == thread_name:
+                return int(parts[1])
+        return None
 
     def started_nodes(self) -> List[ClusterNode]:
         return list(self._started)
@@ -5341,6 +5365,13 @@ class RedpandaService(RedpandaServiceBase):
         self._log_config.enable_finject_logging()
 
         self.logger.info(f"Set up failure injection config for nodes: {nodes}")
+
+    def set_tolerate_crashes(self, tolerate_crashes: bool):
+        """
+        Do not fail test on crashes including asserts. This is useful when
+        running with redpanda's fault injection enabled.
+        """
+        self._tolerate_crashes = tolerate_crashes
 
     def validate_controller_log(self):
         """

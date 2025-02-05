@@ -14,6 +14,7 @@ import typing
 import time
 import itertools
 import os
+import tempfile
 from collections import namedtuple
 from typing import Any, Iterator, Optional
 from ducktape.cluster.cluster import ClusterNode
@@ -1653,6 +1654,15 @@ class RpkTool:
             cmd += ["--references", references]
 
         return self._run_registry(cmd)
+
+    def create_schema_from_str(self,
+                               subject: str,
+                               schema: str,
+                               schema_suffix="avro"):
+        with tempfile.NamedTemporaryFile(suffix=f".{schema_suffix}") as tf:
+            tf.write(bytes(schema, 'UTF-8'))
+            tf.flush()
+            self.create_schema(subject, tf.name)
 
     def get_schema(self,
                    subject=None,

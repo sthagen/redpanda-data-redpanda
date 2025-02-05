@@ -25,6 +25,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <string_view>
 
 using namespace std::chrono_literals;
 
@@ -127,7 +128,50 @@ void print_skipping() {
     ss::print_safe(skipping.data(), skipping.size());
 }
 
+void record_message(crash_description& cd, std::string_view msg) {
+    auto& format_buf = cd.crash_message;
+    fmt::format_to_n(
+      format_buf.begin(),
+      format_buf.capacity(),
+      "{} on shard {}.",
+      msg,
+      ss::this_shard_id());
+}
+
 } // namespace
+
+/// Async-signal safe
+void recorder::record_crash_sighandler(recorded_signo signo) {
+    auto* cd_opt = _writer.fill();
+    if (!cd_opt) {
+        // The writer has already been consumed by another crash
+        print_skipping();
+        return;
+    }
+    auto& cd = *cd_opt;
+
+    record_backtrace(cd);
+
+    switch (signo) {
+    case recorded_signo::sigsegv: {
+        cd.type = crash_type::segfault;
+        record_message(cd, "Segmentation fault");
+        break;
+    }
+    case recorded_signo::sigabrt: {
+        cd.type = crash_type::abort;
+        record_message(cd, "Aborting");
+        break;
+    }
+    case recorded_signo::sigill: {
+        cd.type = crash_type::illegal_instruction;
+        record_message(cd, "Illegal instruction");
+        break;
+    }
+    }
+
+    _writer.write();
+}
 
 void recorder::record_crash_exception(std::exception_ptr eptr) {
     if (is_crash_loop_limit_reached(eptr)) {

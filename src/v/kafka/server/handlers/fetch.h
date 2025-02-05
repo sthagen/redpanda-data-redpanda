@@ -27,7 +27,15 @@
 
 namespace kafka {
 
-using fetch_handler = single_stage_handler<fetch_api, 4, 11>;
+std::optional<ss::scheduling_group>
+fetch_scheduling_group_provider(const connection_context&);
+
+using fetch_handler = single_stage_handler<
+  fetch_api,
+  4,
+  11,
+  default_estimate_adaptor,
+  fetch_scheduling_group_provider>;
 
 /*
  * Fetch operation context

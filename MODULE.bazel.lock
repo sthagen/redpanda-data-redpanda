@@ -1,5 +1,5 @@
 {
-  "lockFileVersion": 11,
+  "lockFileVersion": 13,
   "registryFileHashes": {
     "https://bcr.bazel.build/bazel_registry.json": "8a28e4aff06ee60aed2a8c281907fb8bcbf3b753c91fb5a5c57da3215d5b3497",
     "https://bcr.bazel.build/modules/abseil-cpp/20210324.2/MODULE.bazel": "7cd0312e064fde87c8d1cd79ba06c876bd23630c83466e9500321be55c96ace2",
@@ -2502,7 +2502,7 @@
     },
     "@@rules_python~//python/extensions:pip.bzl%pip": {
       "general": {
-        "bzlTransitiveDigest": "WlH4eDDbIM6xLbNXP/vdObd+oj791q6TrnABVuaLDv8=",
+        "bzlTransitiveDigest": "oTzYUu3V08DRUl07DIEIxoP3bTFxvhG8NobuZ5MlAOI=",
         "usagesDigest": "w/4oKk2OAM/M7lcmdc7YdBkwIxjG2XrXTu3iGgs17Kk=",
         "recordedFileInputs": {
           "@@rules_python~//tools/publish/requirements_linux.txt": "8175b4c8df50ae2f22d1706961884beeb54e7da27bd2447018314a175981997d",
@@ -5573,7 +5573,7 @@
     },
     "@@rules_rust~//rust:extensions.bzl%rust": {
       "general": {
-        "bzlTransitiveDigest": "CILmbFT+SqDrQsN+vw/1IK15ku1PEmcYfkxJ53yyIvE=",
+        "bzlTransitiveDigest": "MRbV5/iOwfN4rsQY8bsSyHNR+vcnv15QvMRjglAgScM=",
         "usagesDigest": "glh6v9y4udxz+afNeq1OFjowZm/6CEnkLoGTAqunkKA=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -17850,7 +17850,7 @@
     "@@toolchains_llvm~//toolchain/extensions:llvm.bzl%llvm": {
       "general": {
         "bzlTransitiveDigest": "y9h5L2NtWbogyWSOJgqnUaU50MTPWAW+waelXSirMVg=",
-        "usagesDigest": "zvCu5vCx2QCye7gaA3ii4ndd+o35O4MDmegRrMm3Ogg=",
+        "usagesDigest": "hGO5fnF/ODuk341HkV0/ZN2pQDWVvxnaWC8MO4bIy00=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -17889,7 +17889,30 @@
             "attributes": {
               "absolute_paths": false,
               "archive_flags": {},
-              "compile_flags": {},
+              "compile_flags": {
+                "linux-aarch64": [
+                  "--target=aarch64-unknown-linux-gnu",
+                  "-march=armv8-a+crc+crypto",
+                  "-U_FORTIFY_SOURCE",
+                  "-fstack-protector",
+                  "-fno-omit-frame-pointer",
+                  "-fcolor-diagnostics",
+                  "-Wall",
+                  "-Wthread-safety",
+                  "-Wself-assign"
+                ],
+                "linux-x86_64": [
+                  "--target=x86_64-unknown-linux-gnu",
+                  "-march=westmere",
+                  "-U_FORTIFY_SOURCE",
+                  "-fstack-protector",
+                  "-fno-omit-frame-pointer",
+                  "-fcolor-diagnostics",
+                  "-Wall",
+                  "-Wthread-safety",
+                  "-Wself-assign"
+                ]
+              },
               "coverage_compile_flags": {},
               "coverage_link_flags": {},
               "cxx_builtin_include_directories": {},
@@ -17951,7 +17974,30 @@
             "attributes": {
               "absolute_paths": false,
               "archive_flags": {},
-              "compile_flags": {},
+              "compile_flags": {
+                "linux-aarch64": [
+                  "--target=aarch64-unknown-linux-gnu",
+                  "-march=armv8-a+crc+crypto",
+                  "-U_FORTIFY_SOURCE",
+                  "-fstack-protector",
+                  "-fno-omit-frame-pointer",
+                  "-fcolor-diagnostics",
+                  "-Wall",
+                  "-Wthread-safety",
+                  "-Wself-assign"
+                ],
+                "linux-x86_64": [
+                  "--target=x86_64-unknown-linux-gnu",
+                  "-march=westmere",
+                  "-U_FORTIFY_SOURCE",
+                  "-fstack-protector",
+                  "-fno-omit-frame-pointer",
+                  "-fcolor-diagnostics",
+                  "-Wall",
+                  "-Wthread-safety",
+                  "-Wself-assign"
+                ]
+              },
               "coverage_compile_flags": {},
               "coverage_link_flags": {},
               "cxx_builtin_include_directories": {},
@@ -17981,6 +18027,16 @@
           }
         },
         "recordedRepoMappingEntries": [
+          [
+            "",
+            "aarch64_sysroot",
+            "_main~non_module_dependencies~aarch64_sysroot"
+          ],
+          [
+            "",
+            "x86_64_sysroot",
+            "_main~non_module_dependencies~x86_64_sysroot"
+          ],
           [
             "toolchains_llvm~",
             "bazel_skylib",

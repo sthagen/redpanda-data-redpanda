@@ -91,6 +91,7 @@ struct write_pipeline_accessor {
 
 ss::future<> sleep(std::chrono::milliseconds delta, int retry_limit = 100) {
     ss::manual_clock::advance(delta);
+    co_await ss::sleep(1ms);
     for (int i = 0; i < retry_limit; i++) {
         co_await ss::yield();
     }
@@ -101,6 +102,7 @@ template<class Fn>
 ss::future<>
 sleep_until(std::chrono::milliseconds delta, Fn&& fn, int retry_limit = 100) {
     ss::manual_clock::advance(delta);
+    co_await ss::sleep(1ms);
     for (int i = 0; i < retry_limit; i++) {
         co_await ss::yield();
         if (fn()) {

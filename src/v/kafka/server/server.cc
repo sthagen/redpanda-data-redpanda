@@ -120,6 +120,7 @@ server::server(
   ss::smp_service_group smp,
   ss::scheduling_group fetch_sg,
   ss::scheduling_group produce_sg,
+  ss::scheduling_group handler_sg,
   ss::sharded<cluster::metadata_cache>& meta,
   ss::sharded<cluster::topics_frontend>& tf,
   ss::sharded<cluster::config_frontend>& cf,
@@ -147,6 +148,7 @@ server::server(
   , _smp_group(smp)
   , _fetch_scheduling_group(fetch_sg)
   , _produce_scheduling_group(produce_sg)
+  , _request_handler_scheduling_group(handler_sg)
   , _topics_frontend(tf)
   , _config_frontend(cf)
   , _feature_table(ft)
@@ -233,6 +235,12 @@ ss::scheduling_group server::fetch_scheduling_group() const {
 ss::scheduling_group server::produce_scheduling_group() const {
     return config::shard_local_cfg().use_produce_scheduler_group()
              ? _produce_scheduling_group
+             : ss::default_scheduling_group();
+}
+
+ss::scheduling_group server::get_request_handler_sg() const {
+    return config::shard_local_cfg().use_kafka_handler_scheduler_group()
+             ? _request_handler_scheduling_group
              : ss::default_scheduling_group();
 }
 

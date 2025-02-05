@@ -86,6 +86,7 @@
 #include "config/node_config.h"
 #include "config/seed_server.h"
 #include "config/types.h"
+#include "crash_tracker/signals.h"
 #include "crypto/ossl_context_service.h"
 #include "datalake/cloud_data_io.h"
 #include "datalake/coordinator/catalog_factory.h"
@@ -1028,6 +1029,7 @@ void application::check_environment() {
 void application::init_crashtracker(::stop_signal& app_signal) {
     _crash_tracker_service = std::make_unique<crash_tracker::service>();
     _crash_tracker_service->start(app_signal.abort_source()).get();
+    crash_tracker::install_sighandlers();
 }
 
 void application::schedule_crash_tracker_file_cleanup() {
@@ -2261,6 +2263,7 @@ void application::wire_up_redpanda_services(
         smp_service_groups.kafka_smp_sg(),
         sched_groups.fetch_sg(),
         sched_groups.produce_sg(),
+        sched_groups.kafka_sg(),
         std::ref(metadata_cache),
         std::ref(controller->get_topics_frontend()),
         std::ref(controller->get_config_frontend()),

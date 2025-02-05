@@ -25,6 +25,16 @@ namespace experimental::io {
  *
  *     [0000, 4096) -> Page0
  *     [4096, 8192) -> Page1
+ *
+ * Non-empty intervals are intervals in which the length is greater than zero.
+ * Non-overlapping means that intervals must be fully disjoint.
+ *
+ *     OK: [0, 10)
+ *     OK: [0, 10) [10, 20)
+ *     OK: [0, 10) [20, 30)
+ *    BAD: [0, 10) [5, N)
+ *
+ * This container only works with integral data types.
  */
 template<std::integral T, typename V>
 class interval_map {

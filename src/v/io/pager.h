@@ -10,8 +10,8 @@
  */
 #pragma once
 
+#include "io/io_queue.h"
 #include "io/page_set.h"
-#include "io/scheduler.h"
 #include "utils/s3_fifo.h"
 
 #include <seastar/core/future.hh>
@@ -40,12 +40,7 @@ public:
      * than or equal to \p size will not be visible and will be overwritten when
      * new data is appended.
      */
-    pager(
-      std::filesystem::path file,
-      size_t size,
-      persistence*,
-      page_cache*,
-      scheduler*);
+    pager(std::filesystem::path file, size_t size, persistence*, page_cache*);
 
     pager(const pager&) = delete;
     pager& operator=(const pager&) = delete;
@@ -115,9 +110,8 @@ private:
     /// Pages that contain data for this file.
     page_set pages_;
 
-    /// The IO scheduler and queue for IO operations on this file.
-    scheduler* sched_;
-    scheduler::queue queue_;
+    /// Manages I/O requests for this file.
+    io_queue queue_;
 };
 
 } // namespace experimental::io

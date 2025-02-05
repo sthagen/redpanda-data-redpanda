@@ -20,7 +20,20 @@
 namespace experimental::io {
 
 /**
- * A container holding non-overlapping pages.
+ * A container that manages non-overlapping pages.
+ *
+ * Note that the container manages one entry per page. One possible optimization
+ * is to collapse an offset range into a single entry in the container where the
+ * entry corresponds to a group of pages. For example, storing two pages:
+ *
+ *     [0000, 4096] -> Page0
+ *     [4096, 8192] -> Page1
+ *
+ * could instead be done with a single entry:
+ *
+ *     [0000, 8192] -> <Page0, Page1>
+ *
+ * which may potentially take pressure off of the index itself.
  */
 class page_set {
     using map_type = interval_map<uint64_t, seastar::lw_shared_ptr<page>>;

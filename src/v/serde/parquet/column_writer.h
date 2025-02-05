@@ -48,7 +48,7 @@ public:
         bool compress;
         // The target size for how much data we buffer before
         // flushing/encoding/compressing the data to a page.
-        size_t page_buffer_size;
+        int64_t page_buffer_size;
     };
 
     explicit column_writer(const schema_element&, options);
@@ -66,12 +66,12 @@ public:
     // nodes.
     //
     // Use `shred_record` to get the value and levels from an arbitrary value.
+    //
+    // Return the current information about the column after a value is written.
     ss::future<> add(value, rep_level, def_level);
 
-    // The current memory usage for this writer
-    size_t memory_usage() const;
-    // The current number of rows for this writer
-    size_t total_rows() const;
+    // The memory usage of this entire column.
+    int64_t memory_usage() const;
 
     // Flush the pages that have been accumulated so far in the column.
     //

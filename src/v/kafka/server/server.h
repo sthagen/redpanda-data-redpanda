@@ -55,8 +55,9 @@ public:
     server(
       ss::sharded<net::server_configuration>*,
       ss::smp_service_group,
-      ss::scheduling_group,
-      ss::scheduling_group,
+      ss::scheduling_group fetch_sg,
+      ss::scheduling_group produce_sg,
+      ss::scheduling_group handler_sg,
       ss::sharded<cluster::metadata_cache>&,
       ss::sharded<cluster::topics_frontend>&,
       ss::sharded<cluster::config_frontend>&,
@@ -226,12 +227,17 @@ public:
 
     ss::future<> revoke_credentials(std::string_view name);
 
+    // Returns a default scheduling group that is intended to be used for
+    // processing incoming requests.
+    ss::scheduling_group get_request_handler_sg() const;
+
 private:
     void setup_metrics();
 
     ss::smp_service_group _smp_group;
     ss::scheduling_group _fetch_scheduling_group;
     ss::scheduling_group _produce_scheduling_group;
+    ss::scheduling_group _request_handler_scheduling_group;
     ss::sharded<cluster::topics_frontend>& _topics_frontend;
     ss::sharded<cluster::config_frontend>& _config_frontend;
     ss::sharded<features::feature_table>& _feature_table;

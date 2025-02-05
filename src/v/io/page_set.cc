@@ -40,7 +40,8 @@ std::pair<page_set::const_iterator, bool>
 page_set::insert(seastar::lw_shared_ptr<page> page) {
     auto offset = page->offset();
     auto size = page->size();
-    auto res = pages_.insert({offset, size}, std::move(page));
+    auto res = pages_.insert(
+      {.start = offset, .length = size}, std::move(page));
     return {const_iterator(res.first), res.second};
 }
 

@@ -82,6 +82,7 @@ public:
       seastar::smp_service_group,
       seastar::scheduling_group,
       seastar::scheduling_group,
+      seastar::scheduling_group,
       seastar::sharded<cluster::metadata_cache>&,
       seastar::sharded<cluster::topics_frontend>&,
       seastar::sharded<cluster::config_frontend>&,

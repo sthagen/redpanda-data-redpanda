@@ -41,8 +41,7 @@ public:
     virtual ~impl() noexcept = default;
 
     virtual ss::future<> add(value, rep_level, def_level) = 0;
-    virtual size_t memory_usage() const = 0;
-    virtual size_t total_rows() const = 0;
+    virtual int64_t memory_usage() const = 0;
     virtual ss::future<flushed_pages> flush_pages() = 0;
 };
 
@@ -73,9 +72,7 @@ public:
         // A repetition level of zero means that it's the start of a new row and
         // not a repeated value within the same row.
         if (rl == rep_level(0)) {
-            // We can ONLY flush on row boundaries, so make sure this is the
-            // first thing we do.
-            if (_current_buffer_size > _opts.page_buffer_size) {
+            if (_page_memory_usage > _opts.page_buffer_size) {
                 co_await flush_page();
             }
             ++_num_rows;
@@ -112,25 +109,9 @@ public:
         // always use the full capacity in our value buffer, and eagerly
         // accounting that usage might cause callers to overagressively
         // flush pages/row groups.
-        _current_buffer_size += value_memory_usage
-                                + static_cast<int64_t>(
-                                  sizeof(rep_level) + sizeof(def_level));
-    }
-
-    size_t memory_usage() const override {
-        size_t size = _current_buffer_size;
-        for (const auto& page : _flushed_pages) {
-            size += page.serialized.size_bytes();
-        }
-        return size;
-    }
-
-    size_t total_rows() const override {
-        size_t total = _num_rows;
-        for (const auto& page : _flushed_pages) {
-            total += std::get<data_page_header>(page.header.type).num_rows;
-        }
-        return total;
+        _page_memory_usage += value_memory_usage
+                              + static_cast<int64_t>(
+                                sizeof(rep_level) + sizeof(def_level));
     }
 
     ss::future<> flush_page() {
@@ -211,7 +192,9 @@ public:
         full_page_data.append(std::move(encoded_def_levels));
         full_page_data.append(std::move(encoded_data));
         _current_page_stats.reset();
-        _current_buffer_size = 0;
+        _page_memory_usage = 0;
+        _total_memory_usage += static_cast<int32_t>(
+          full_page_data.size_bytes());
         _flushed_pages.push_back(data_page{
           .header = std::move(header),
           .serialized_header_size = header_size,
@@ -219,8 +202,12 @@ public:
         });
     }
 
+    int64_t memory_usage() const override {
+        return _total_memory_usage + _page_memory_usage;
+    }
+
     ss::future<flushed_pages> flush_pages() override {
-        if (_current_buffer_size > 0) {
+        if (_num_values > 0) {
             co_await flush_page();
         }
 
@@ -240,6 +227,7 @@ public:
               /*is_exact=*/true);
         }
         _flushed_stats.reset();
+        _total_memory_usage = 0;
         co_return flushed_pages{
           .pages = std::exchange(_flushed_pages, {}),
           .stats = std::move(full_stats),
@@ -249,7 +237,8 @@ public:
 private:
     column_stats_collector<value_type, comparator> _current_page_stats;
     column_stats_collector<value_type, comparator> _flushed_stats;
-    size_t _current_buffer_size = 0;
+    int64_t _page_memory_usage = 0;
+    int64_t _total_memory_usage = 0;
     chunked_vector<value_type> _value_buffer;
     chunked_vector<def_level> _def_levels;
     chunked_vector<rep_level> _rep_levels;
@@ -349,8 +338,7 @@ column_writer::add(value val, rep_level rep_level, def_level def_level) {
     return _impl->add(std::move(val), rep_level, def_level);
 }
 
-size_t column_writer::memory_usage() const { return _impl->memory_usage(); }
-size_t column_writer::total_rows() const { return _impl->total_rows(); }
+int64_t column_writer::memory_usage() const { return _impl->memory_usage(); }
 
 ss::future<flushed_pages> column_writer::flush_pages() {
     return _impl->flush_pages();
