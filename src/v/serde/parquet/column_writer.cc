@@ -40,8 +40,10 @@ public:
     impl& operator=(impl&&) noexcept = default;
     virtual ~impl() noexcept = default;
 
-    virtual ss::future<> add(value, rep_level, def_level) = 0;
+    virtual void add(value, rep_level, def_level) = 0;
     virtual int64_t memory_usage() const = 0;
+    virtual int64_t current_page_memory_usage() const = 0;
+    virtual ss::future<> next_page() = 0;
     virtual ss::future<flushed_pages> flush_pages() = 0;
 };
 
@@ -68,13 +70,10 @@ public:
       , _max_def_level(schema_element.max_definition_level)
       , _opts(opts) {}
 
-    ss::future<> add(value val, rep_level rl, def_level dl) override {
+    void add(value val, rep_level rl, def_level dl) override {
         // A repetition level of zero means that it's the start of a new row and
         // not a repeated value within the same row.
         if (rl == rep_level(0)) {
-            if (_page_memory_usage > _opts.page_buffer_size) {
-                co_await flush_page();
-            }
             ++_num_rows;
         }
         ++_num_values;
@@ -82,10 +81,10 @@ public:
         int64_t value_memory_usage = 0;
 
         ss::visit(
-          std::move(val),
+          val,
           [this, &value_memory_usage](value_type& v) {
               if constexpr (!std::is_trivially_copyable_v<value_type>) {
-                  value_memory_usage = v.val.size_bytes();
+                  value_memory_usage = v.val->size_bytes();
               } else {
                   value_memory_usage = sizeof(value_type);
               }
@@ -109,9 +108,9 @@ public:
         // always use the full capacity in our value buffer, and eagerly
         // accounting that usage might cause callers to overagressively
         // flush pages/row groups.
-        _page_memory_usage += value_memory_usage
-                              + static_cast<int64_t>(
-                                sizeof(rep_level) + sizeof(def_level));
+        _current_page_memory_usage += value_memory_usage
+                                      + static_cast<int64_t>(
+                                        sizeof(rep_level) + sizeof(def_level));
     }
 
     ss::future<> flush_page() {
@@ -148,8 +147,9 @@ public:
         size_t compressed_page_size = encoded_def_levels.size_bytes()
                                       + encoded_rep_levels.size_bytes()
                                       + encoded_data.size_bytes();
+        using bound_type = decltype(_flushed_stats)::bound_ref_type;
         std::optional<statistics::bound> max_bound;
-        if (auto max = _current_page_stats.take_max()) {
+        if (bound_type max = _current_page_stats.max()) {
             // TODO: consider truncating large values instead of writing them
             // (is_exact=false)
             max_bound.emplace(
@@ -158,7 +158,7 @@ public:
             _flushed_stats.record_value(*max);
         }
         std::optional<statistics::bound> min_bound;
-        if (auto min = _current_page_stats.take_min()) {
+        if (bound_type min = _current_page_stats.min()) {
             // TODO: consider truncating large values instead of writing them
             // (is_exact=false)
             min_bound.emplace(
@@ -192,7 +192,7 @@ public:
         full_page_data.append(std::move(encoded_def_levels));
         full_page_data.append(std::move(encoded_data));
         _current_page_stats.reset();
-        _page_memory_usage = 0;
+        _current_page_memory_usage = 0;
         _total_memory_usage += static_cast<int32_t>(
           full_page_data.size_bytes());
         _flushed_pages.push_back(data_page{
@@ -203,8 +203,14 @@ public:
     }
 
     int64_t memory_usage() const override {
-        return _total_memory_usage + _page_memory_usage;
+        return _total_memory_usage + _current_page_memory_usage;
     }
+
+    int64_t current_page_memory_usage() const override {
+        return _current_page_memory_usage;
+    }
+
+    ss::future<> next_page() override { return flush_page(); }
 
     ss::future<flushed_pages> flush_pages() override {
         if (_num_values > 0) {
@@ -216,12 +222,13 @@ public:
           .max = {},
           .min = {},
         };
-        if (auto max = _flushed_stats.take_max()) {
+        using bound_type = decltype(_flushed_stats)::bound_ref_type;
+        if (bound_type max = _flushed_stats.max()) {
             full_stats.max.emplace(
               /*value=*/encode_for_stats(*max),
               /*is_exact=*/true);
         }
-        if (auto min = _flushed_stats.take_min()) {
+        if (bound_type min = _flushed_stats.min()) {
             full_stats.min.emplace(
               /*value=*/encode_for_stats(*min),
               /*is_exact=*/true);
@@ -237,7 +244,7 @@ public:
 private:
     column_stats_collector<value_type, comparator> _current_page_stats;
     column_stats_collector<value_type, comparator> _flushed_stats;
-    int64_t _page_memory_usage = 0;
+    int64_t _current_page_memory_usage = 0;
     int64_t _total_memory_usage = 0;
     chunked_vector<value_type> _value_buffer;
     chunked_vector<def_level> _def_levels;
@@ -333,12 +340,16 @@ column_writer::column_writer(column_writer&&) noexcept = default;
 column_writer& column_writer::operator=(column_writer&&) noexcept = default;
 column_writer::~column_writer() noexcept = default;
 
-ss::future<>
-column_writer::add(value val, rep_level rep_level, def_level def_level) {
-    return _impl->add(std::move(val), rep_level, def_level);
+void column_writer::add(value val, rep_level rep_level, def_level def_level) {
+    _impl->add(std::move(val), rep_level, def_level);
 }
 
 int64_t column_writer::memory_usage() const { return _impl->memory_usage(); }
+int64_t column_writer::current_page_memory_usage() const {
+    return _impl->current_page_memory_usage();
+}
+
+ss::future<> column_writer::next_page() { return _impl->next_page(); }
 
 ss::future<flushed_pages> column_writer::flush_pages() {
     return _impl->flush_pages();

@@ -20,6 +20,11 @@
 
 namespace serde::parquet {
 namespace {
+
+byte_array_value make_binary_value(std::string_view b) {
+    return {std::make_unique<iobuf>(iobuf::from(b))};
+}
+
 template<typename... Args>
 schema_element
 group_node(ss::sstring name, field_repetition_type rep_type, Args... args) {
@@ -161,27 +166,27 @@ TEST(RecordShredding, ExampleFromDremelPaper) {
             /*Language*/
             record(
               /*Code*/
-              byte_array_value(iobuf::from("en-us")),
+              make_binary_value("en-us"),
               /*Country*/
-              byte_array_value(iobuf::from("us"))),
+              make_binary_value("us")),
             /*Language*/
-            record(byte_array_value(iobuf::from("en")), null_value())),
+            record(make_binary_value("en"), null_value())),
           /*Url*/
-          byte_array_value(iobuf::from("http://A"))),
+          make_binary_value("http://A")),
         /*Name*/
         record(
           list(),
           /*Url*/
-          byte_array_value(iobuf::from("http://B"))),
+          make_binary_value("http://B")),
         /*Name*/
         record(
           list(
             /*Language*/
             record(
               /*Code*/
-              byte_array_value(iobuf::from("en-gb")),
+              make_binary_value("en-gb"),
               /*Country*/
-              byte_array_value(iobuf::from("gb")))),
+              make_binary_value("gb"))),
           /*Url*/
           null_value())));
     group_value r2 = record(
@@ -195,7 +200,7 @@ TEST(RecordShredding, ExampleFromDremelPaper) {
         /*Language*/
         repeated_value(),
         /*Url*/
-        byte_array_value(iobuf::from("http://C")))));
+        make_binary_value("http://C"))));
     index_schema(document_schema);
     value_collector collector(document_schema);
     shred_record(document_schema, std::move(r1), collector).get();
@@ -241,9 +246,7 @@ TEST(RecordShredding, ListOfStrings) {
       field_repetition_type::required,
       leaf_node("list", field_repetition_type::repeated, byte_array_type{}));
     group_value r = record(list(
-      byte_array_value(iobuf::from("a")),
-      byte_array_value(iobuf::from("b")),
-      byte_array_value(iobuf::from("c"))));
+      make_binary_value("a"), make_binary_value("b"), make_binary_value("c")));
     index_schema(schema);
     value_collector collector(schema);
     shred_record(schema, std::move(r), collector).get();
@@ -264,12 +267,8 @@ TEST(RecordShredding, LogicalMap) {
         leaf_node(
           "value", field_repetition_type::optional, byte_array_type())));
     group_value r = record(list(
-      record(
-        byte_array_value(iobuf::from("AL")),
-        byte_array_value(iobuf::from("Alabama"))),
-      record(
-        byte_array_value(iobuf::from("AK")),
-        byte_array_value(iobuf::from("Alaska")))));
+      record(make_binary_value("AL"), make_binary_value("Alabama")),
+      record(make_binary_value("AK"), make_binary_value("Alaska"))));
     index_schema(schema);
     value_collector collector(schema);
     shred_record(schema, std::move(r), collector).get();
@@ -321,19 +320,17 @@ TEST(RecordShredding, RepetitionLevels) {
           "level2", field_repetition_type::repeated, byte_array_type())));
     group_value r1 = record(list(
       record(list(
-        byte_array_value(iobuf::from("a")),
-        byte_array_value(iobuf::from("b")),
-        byte_array_value(iobuf::from("c")))),
+        make_binary_value("a"),
+        make_binary_value("b"),
+        make_binary_value("c"))),
       record(list(
-        byte_array_value(iobuf::from("d")),
-        byte_array_value(iobuf::from("e")),
-        byte_array_value(iobuf::from("f")),
-        byte_array_value(iobuf::from("g"))))));
+        make_binary_value("d"),
+        make_binary_value("e"),
+        make_binary_value("f"),
+        make_binary_value("g")))));
     group_value r2 = record(list(
-      record(list(byte_array_value(iobuf::from("h")))),
-      record(list(
-        byte_array_value(iobuf::from("i")),
-        byte_array_value(iobuf::from("j"))))));
+      record(list(make_binary_value("h"))),
+      record(list(make_binary_value("i"), make_binary_value("j")))));
     index_schema(schema);
     value_collector collector(schema);
     shred_record(schema, std::move(r1), collector).get();
@@ -381,17 +378,15 @@ TEST(RecordShredding, AddressBookExample) {
           byte_array_type(),
           string_type())));
     group_value r1 = record(
-      byte_array_value(iobuf::from("Julien Le Dem")),
+      make_binary_value("Julien Le Dem"),
       list(
-        byte_array_value(iobuf::from("555 123 4567")),
-        byte_array_value(iobuf::from("555 666 1337"))),
+        make_binary_value("555 123 4567"), make_binary_value("555 666 1337")),
       list(
         record(
-          byte_array_value(iobuf::from("Dmitriy Ryaboy")),
-          byte_array_value(iobuf::from("555 987 6543"))),
-        record(byte_array_value(iobuf::from("Chris Anizczyk")), null_value())));
-    group_value r2 = record(
-      byte_array_value(iobuf::from("A. Nonymous")), list(), list());
+          make_binary_value("Dmitriy Ryaboy"),
+          make_binary_value("555 987 6543")),
+        record(make_binary_value("Chris Anizczyk"), null_value())));
+    group_value r2 = record(make_binary_value("A. Nonymous"), list(), list());
     index_schema(schema);
     value_collector collector(schema);
     shred_record(schema, std::move(r1), collector).get();

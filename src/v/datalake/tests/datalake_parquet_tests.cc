@@ -591,7 +591,12 @@ static constexpr auto parquet_type(const T&) {
     __builtin_unreachable();
 }
 const auto values_equal = [](const auto& expected, const auto& current) {
-    return expected.val == current.val;
+    if constexpr (std::
+                    is_same_v<decltype(current.val), std::unique_ptr<iobuf>>) {
+        return expected.val == *current.val;
+    } else {
+        return expected.val == current.val;
+    }
 };
 
 template<typename IcebergPrimitive, typename Predicate>
@@ -643,7 +648,7 @@ AssertionResult validate_parquet_optional_primitive_value(
 bool decimals_equal(
   const iceberg::decimal_value& expected,
   const serde::parquet::fixed_byte_array_value& current) {
-    iobuf_parser parser(current.val.copy());
+    iobuf_parser parser(current.val->copy());
     auto high_part = ss::be_to_cpu(parser.consume_type<int64_t>());
     auto low_part = ss::be_to_cpu(parser.consume_type<uint64_t>());
     return expected.val == absl::MakeInt128(high_part, low_part);
@@ -652,7 +657,7 @@ bool decimals_equal(
 bool uuids_equal(
   const iceberg::uuid_value& expected,
   const serde::parquet::fixed_byte_array_value& current_bytes) {
-    iobuf_parser parser(current_bytes.val.copy());
+    iobuf_parser parser(current_bytes.val->copy());
     auto bytes = parser.read_bytes(16);
     std::vector<uint8_t> uuid_bytes(bytes.begin(), bytes.end());
     uuid_t current_uuid(uuid_bytes);

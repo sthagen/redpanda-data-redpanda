@@ -40,18 +40,22 @@ struct primitive_value_converting_visitor {
         return serde::parquet::int64_value{.val = v.val};
     }
     parquet_conversion_outcome operator()(iceberg::string_value v) {
-        return serde::parquet::byte_array_value{.val = std::move(v.val)};
+        return serde::parquet::byte_array_value{
+          .val = std::make_unique<iobuf>(std::move(v.val))};
     }
     parquet_conversion_outcome operator()(iceberg::uuid_value v) {
         iobuf buffer;
         buffer.append(v.val.uuid().data, v.val.uuid().size());
-        return serde::parquet::fixed_byte_array_value{.val = std::move(buffer)};
+        return serde::parquet::fixed_byte_array_value{
+          .val = std::make_unique<iobuf>(std::move(buffer))};
     }
     parquet_conversion_outcome operator()(iceberg::fixed_value v) {
-        return serde::parquet::fixed_byte_array_value{.val = std::move(v.val)};
+        return serde::parquet::fixed_byte_array_value{
+          .val = std::make_unique<iobuf>(std::move(v.val))};
     }
     parquet_conversion_outcome operator()(iceberg::binary_value v) {
-        return serde::parquet::byte_array_value{.val = std::move(v.val)};
+        return serde::parquet::byte_array_value{
+          .val = std::make_unique<iobuf>(std::move(v.val))};
     }
     parquet_conversion_outcome operator()(iceberg::decimal_value v) {
         iobuf buffer;
@@ -63,7 +67,8 @@ struct primitive_value_converting_visitor {
         buffer.append(
           reinterpret_cast<const char*>(&low_part), sizeof(uint64_t));
 
-        return serde::parquet::fixed_byte_array_value{.val = std::move(buffer)};
+        return serde::parquet::fixed_byte_array_value{
+          .val = std::make_unique<iobuf>(std::move(buffer))};
     }
 };
 struct value_converting_visitor {

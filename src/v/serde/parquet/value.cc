@@ -21,10 +21,12 @@ value copy(const value& val) {
     return ss::visit(
       val,
       [](const byte_array_value& v) {
-          return value(byte_array_value(v.val.copy()));
+          return value(
+            byte_array_value(std::make_unique<iobuf>(v.val->copy())));
       },
       [](const fixed_byte_array_value& v) {
-          return value(fixed_byte_array_value(v.val.copy()));
+          return value(
+            fixed_byte_array_value(std::make_unique<iobuf>(v.val->copy())));
       },
       [](const group_value& v) {
           group_value clone;
@@ -71,7 +73,7 @@ auto fmt::formatter<serde::parquet::value>::format(
       },
       [&ctx](const byte_array_value& v) {
           auto out = ctx.out();
-          for (const auto& e : v.val) {
+          for (const auto& e : *v.val) {
               std::string_view s{e.get(), e.size()};
               out = fmt::format_to(out, "{}", absl::CEscape(s));
           }
@@ -79,7 +81,7 @@ auto fmt::formatter<serde::parquet::value>::format(
       },
       [&ctx](const fixed_byte_array_value& v) {
           auto out = ctx.out();
-          for (const auto& e : v.val) {
+          for (const auto& e : *v.val) {
               std::string_view s{e.get(), e.size()};
               out = fmt::format_to(out, "{}", absl::CEscape(s));
           }

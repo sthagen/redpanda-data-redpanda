@@ -168,7 +168,7 @@ redpanda_cc_gtest(
     cpu = 2,
     data = common_data_deps,
     defines = ["FIPS_MODULE_REQUIRED"],
-    env = common_env,
+    env = common_env | {"RP_FIXTURE_ENV": ""},
     deps = [
         ":crypto_test_utils",
         ":ossl_context_service_test_base",
@@ -192,7 +192,7 @@ redpanda_cc_gtest(
     cpu = 2,
     data = common_data_deps,
     defines = ["FIPS_MODULE_REQUIRED"],
-    env = common_env,
+    env = common_env | {"RP_FIXTURE_ENV": ""},
     deps = [
         ":crypto_test_utils",
         ":ossl_context_service_test_base",

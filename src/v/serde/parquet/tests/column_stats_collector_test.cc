@@ -67,10 +67,10 @@ TEST(ColumnStatsCollector, FloatingPoint) {
 
 TEST(ColumnStatsCollector, Binary) {
     column_stats_collector<byte_array_value, ordering::byte_array> collector;
-    auto empty = byte_array_value{iobuf::from("")};
-    auto bat = byte_array_value{iobuf::from("bat")};
-    auto cat = byte_array_value{iobuf::from("cat")};
-    auto zzzz = byte_array_value{iobuf::from("zzzz")};
+    auto empty = byte_array_value{std::make_unique<iobuf>(iobuf::from(""))};
+    auto bat = byte_array_value{std::make_unique<iobuf>(iobuf::from("bat"))};
+    auto cat = byte_array_value{std::make_unique<iobuf>(iobuf::from("cat"))};
+    auto zzzz = byte_array_value{std::make_unique<iobuf>(iobuf::from("zzzz"))};
     collector.record_value(bat);
     EXPECT_THAT(collector.min(), Optional(std::ref(bat)));
     EXPECT_THAT(collector.max(), Optional(std::ref(bat)));
@@ -86,13 +86,14 @@ TEST(ColumnStatsCollector, Binary) {
 TEST(ColumnStatsCollector, Decimal128) {
     column_stats_collector<fixed_byte_array_value, ordering::int128_be>
       collector;
-    auto negative_five = fixed_byte_array_value{iobuf::from(
-      {"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFE",
-       16})};
-    auto one = fixed_byte_array_value{
-      iobuf::from({"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1", 16})};
-    auto fourty_two = fixed_byte_array_value{
-      iobuf::from({"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x2A", 16})};
+    auto negative_five = fixed_byte_array_value{
+      std::make_unique<iobuf>(iobuf::from(
+        {"\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFF\xFE",
+         16}))};
+    auto one = fixed_byte_array_value{std::make_unique<iobuf>(
+      iobuf::from({"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\1", 16}))};
+    auto fourty_two = fixed_byte_array_value{std::make_unique<iobuf>(
+      iobuf::from({"\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\x2A", 16}))};
     collector.record_value(one);
     EXPECT_THAT(collector.min(), Optional(std::ref(one)));
     EXPECT_THAT(collector.max(), Optional(std::ref(one)));

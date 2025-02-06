@@ -42,6 +42,8 @@ build --incompatible_strict_action_env
 
 # Add stack guards by default for better debugging, we disable them in release builds
 build --@seastar//:stack_guards=True
+# Debug mode by default. Disabled in release builds.
+build --@seastar//:debug=True
 
 # =================================
 # Sanitizer
@@ -54,9 +56,6 @@ build:sanitizer --copt -O1
 build:sanitizer --//bazel:has_sanitizers=True
 # seastar has to be run with system allocator when using sanitizers
 build:sanitizer --@seastar//:system_allocator=True
-# This is currently required to get ASAN to work, but ideally in the future we can get
-# the sanitizers working in release mode
-build:sanitizer --@seastar//:debug=true
 # krb5 is a foreign cc build and needs explicit list of sanitizers to build the shared library
 build:sanitizer --@krb5//:sanitizers=address,undefined,vptr,function
 
@@ -97,7 +96,7 @@ build:secure --config=relro
 build:release --compilation_mode opt
 build:release --config=secure
 build:release --copt -mllvm --copt -inline-threshold=2500
-build:release --@seastar//:stack_guards=False
+build:release --@seastar//:stack_guards=False --@seastar//:debug=False
 build:release --//src/v/redpanda:lto=True
 build:release --copt -flto=thin --copt -ffat-lto-objects
 

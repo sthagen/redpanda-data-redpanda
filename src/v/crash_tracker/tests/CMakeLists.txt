@@ -14,7 +14,7 @@ rp_test(
   BINARY_NAME recorder_test
   SOURCES
     recorder_test.cc
-  LIBRARIES v::gtest_main v::config v::crash_tracker
+  LIBRARIES v::gtest_main v::config v::crash_tracker Seastar::seastar
   ARGS "-- -c 1"
 )
 

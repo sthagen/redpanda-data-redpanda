@@ -63,7 +63,7 @@ public:
     using bound_ref_type = std::conditional_t<
       std::is_trivially_copyable_v<value_type>,
       std::optional<value_type>,
-      const std::optional<value_type>&>;
+      std::optional<value_type>&>;
 
     // Record a value in the collector
     void record_value(ref_type v) {
@@ -106,13 +106,11 @@ public:
 
     int64_t null_count() const { return _null_count; }
 
-    bound_ref_type min() const { return view(_min, true); }
-    std::optional<value_type> take_min() { return take(_min, true); }
-    bound_ref_type max() const { return view(_max, false); }
-    std::optional<value_type> take_max() { return take(_max, false); }
+    bound_ref_type min() { return normalize(_min, true); }
+    bound_ref_type max() { return normalize(_max, false); }
 
 private:
-    bound_ref_type view(const std::optional<value_type>& v, bool min) const {
+    bound_ref_type normalize(bound_ref_type v, bool min) {
         if constexpr (std::is_floating_point_v<decltype(v->val)>) {
             // min floats are always written as -0 and max as 0
             if (v && v->val == 0.0) {
@@ -120,15 +118,6 @@ private:
             }
         }
         return v;
-    }
-    std::optional<value_type> take(std::optional<value_type>& v, bool min) {
-        if constexpr (std::is_floating_point_v<decltype(v->val)>) {
-            // min floats are always written as -0 and max as 0
-            if (v && v->val == 0.0) {
-                return std::make_optional<value_type>(min ? -0.0 : 0.0);
-            }
-        }
-        return std::exchange(v, {});
     }
 
     std::optional<value_type> _min;

@@ -16,7 +16,6 @@
 #include "json/iobuf_writer.h"
 #include "random/generators.h"
 #include "serde/parquet/schema.h"
-#include "serde/parquet/value.h"
 #include "serde/parquet/writer.h"
 #include "utils/base64.h"
 
@@ -31,6 +30,10 @@ using json_writer = json::iobuf_writer<json::chunked_buffer>;
 
 namespace serde::parquet {
 namespace {
+
+byte_array_value make_binary_value(std::string_view b) {
+    return {std::make_unique<iobuf>(iobuf::from(b))};
+}
 
 void json(json_writer& w, const schema_element& schema, const value& v) {
     ss::visit(
@@ -49,9 +52,9 @@ void json(json_writer& w, const schema_element& schema, const value& v) {
           auto str = fmt::format("{:.8f}", v.val);
           w.RawValue(str.data(), str.size(), rapidjson::kNumberType);
       },
-      [&w](const byte_array_value& v) { w.String(iobuf_to_base64(v.val)); },
+      [&w](const byte_array_value& v) { w.String(iobuf_to_base64(*v.val)); },
       [&w](const fixed_byte_array_value& v) {
-          w.String(iobuf_to_base64(v.val));
+          w.String(iobuf_to_base64(*v.val));
       },
       [&w, &schema](const group_value& v) {
           w.StartObject();
@@ -183,27 +186,27 @@ std::vector<value> dremel_paper_values() {
             /*Language*/
             record(
               /*Code*/
-              byte_array_value(iobuf::from("en-us")),
+              make_binary_value("en-us"),
               /*Country*/
-              byte_array_value(iobuf::from("us"))),
+              make_binary_value("us")),
             /*Language*/
-            record(byte_array_value(iobuf::from("en")), null_value())),
+            record(make_binary_value("en"), null_value())),
           /*Url*/
-          byte_array_value(iobuf::from("http://A"))),
+          make_binary_value("http://A")),
         /*Name*/
         record(
           list(),
           /*Url*/
-          byte_array_value(iobuf::from("http://B"))),
+          make_binary_value("http://B")),
         /*Name*/
         record(
           list(
             /*Language*/
             record(
               /*Code*/
-              byte_array_value(iobuf::from("en-gb")),
+              make_binary_value("en-gb"),
               /*Country*/
-              byte_array_value(iobuf::from("gb")))),
+              make_binary_value("gb"))),
           /*Url*/
           null_value()))));
     values.emplace_back(record(
@@ -217,7 +220,7 @@ std::vector<value> dremel_paper_values() {
         /*Language*/
         repeated_value(),
         /*Url*/
-        byte_array_value(iobuf::from("http://C"))))));
+        make_binary_value("http://C")))));
     return values;
 }
 
@@ -279,12 +282,12 @@ value generate_required(const schema_element& root) {
       },
       [](const byte_array_type& t) -> value {
           if (t.fixed_length) {
-              return fixed_byte_array_value{iobuf::from(
-                random_generators::gen_alphanum_string(*t.fixed_length))};
+              return fixed_byte_array_value{std::make_unique<iobuf>(iobuf::from(
+                random_generators::gen_alphanum_string(*t.fixed_length)))};
           }
           auto size = random_generators::get_int<size_t>(64);
-          return byte_array_value{
-            iobuf::from(random_generators::gen_alphanum_string(size))};
+          return byte_array_value{std::make_unique<iobuf>(
+            iobuf::from(random_generators::gen_alphanum_string(size)))};
       });
 }
 

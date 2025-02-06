@@ -142,7 +142,7 @@ def _redpanda_cc_test(
             "layering_check",
         ],
         tags = resource_tags + tags,
-        env = env | test_env,
+        env = {"RP_FIXTURE_ENV": "1"} | env | test_env,
         target_compatible_with = target_compatible_with,
         data = data + test_data,
         local_defines = local_defines,

@@ -59,7 +59,6 @@ public:
                   element,
                   {
                     .compress = _opts.compress,
-                    .page_buffer_size = _opts.page_buffer_size,
                   }),
               });
         });
@@ -72,6 +71,12 @@ public:
           _opts.schema, std::move(row), [this](shredded_value sv) {
               return write_value(std::move(sv));
           });
+        for (auto& [_, col] : _columns) {
+            int64_t usage = col.writer.current_page_memory_usage();
+            if (usage > _opts.page_buffer_size) {
+                co_await col.writer.next_page();
+            }
+        }
     }
 
     file_stats stats() const {
@@ -183,7 +188,8 @@ private:
 
     ss::future<> write_value(shredded_value sv) {
         auto& col = _columns.at(sv.schema_element_position);
-        co_await col.writer.add(std::move(sv.val), sv.rep_level, sv.def_level);
+        col.writer.add(std::move(sv.val), sv.rep_level, sv.def_level);
+        return ss::now();
     }
 
     ss::future<> write_iobuf(iobuf b) {

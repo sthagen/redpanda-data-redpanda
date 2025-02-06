@@ -3726,7 +3726,7 @@ class RedpandaService(RedpandaServiceBase):
 
             crash_log = None
             for line in node.account.ssh_capture(
-                    f"grep -e SEGV -e Segmentation\\ fault -e [Aa]ssert -e Sanitizer {RedpandaService.STDOUT_STDERR_CAPTURE} || true",
+                    f"grep -e SEGV -e Segmentation\\ fault -e [Aa]ssert -e Sanitizer -e 'Aborting on shard' {RedpandaService.STDOUT_STDERR_CAPTURE} || true",
                     timeout_sec=30):
                 if 'SEGV' in line and any(
                     [h in line.lower() for h in cloud_header_strings]):

@@ -28,6 +28,7 @@ redpanda_cc_gtest(
         "//src/v/model",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
+        "@seastar",
     ],
 )
 

@@ -46,9 +46,6 @@ public:
     struct options {
         // If true, use zstd compression for the column data.
         bool compress;
-        // The target size for how much data we buffer before
-        // flushing/encoding/compressing the data to a page.
-        int64_t page_buffer_size;
     };
 
     explicit column_writer(const schema_element&, options);
@@ -68,10 +65,15 @@ public:
     // Use `shred_record` to get the value and levels from an arbitrary value.
     //
     // Return the current information about the column after a value is written.
-    ss::future<> add(value, rep_level, def_level);
+    void add(value, rep_level, def_level);
 
     // The memory usage of this entire column.
     int64_t memory_usage() const;
+
+    // The memory usage of the current page being built.
+    int64_t current_page_memory_usage() const;
+
+    ss::future<> next_page();
 
     // Flush the pages that have been accumulated so far in the column.
     //

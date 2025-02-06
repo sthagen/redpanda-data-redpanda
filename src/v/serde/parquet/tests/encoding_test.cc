@@ -146,7 +146,7 @@ template<typename T>
 chunked_vector<T> buffers(std::initializer_list<iobuf> buffers) {
     chunked_vector<T> v;
     for (auto& b : buffers) {
-        v.push_back(T{b.copy()});
+        v.push_back(T{std::make_unique<iobuf>(b.copy())});
     }
     return v;
 }

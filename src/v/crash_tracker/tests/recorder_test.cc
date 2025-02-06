@@ -12,6 +12,8 @@
 #include "crash_tracker/recorder.h"
 #include "test_utils/tmp_dir.h"
 
+#include <seastar/core/memory.hh>
+
 #include <gtest/gtest.h>
 
 #include <exception>
@@ -19,18 +21,25 @@
 
 namespace crash_tracker {
 
-class RecorderTest : public testing::Test {
+class RecorderTestHelper {
 public:
-    void SetUp() override {
-        config::node().data_directory.set_value(_dir.get_path());
-    }
-    void TearDown() override {
+    void SetUp() { config::node().data_directory.set_value(_dir.get_path()); }
+    void TearDown() {
         _dir.remove().get();
         config::node().data_directory.reset();
     }
 
 private:
     temporary_dir _dir{"recorder_test"};
+};
+
+class RecorderTest : public testing::Test {
+public:
+    void SetUp() override { _helper.SetUp(); }
+    void TearDown() override { _helper.TearDown(); }
+
+private:
+    RecorderTestHelper _helper;
 };
 
 TEST_F(RecorderTest, TestFileCleanup) {
@@ -54,5 +63,38 @@ TEST_F(RecorderTest, TestFileCleanup) {
     crashes = rec.get_recorded_crashes().get();
     ASSERT_EQ(crashes.size(), recorder::crash_files_to_keep);
 }
+
+class ParametrizedRecorderTest
+  : public testing::TestWithParam<recorder::recorded_signo> {
+public:
+    void SetUp() override { _helper.SetUp(); }
+    void TearDown() override { _helper.TearDown(); }
+
+private:
+    RecorderTestHelper _helper;
+};
+
+TEST_P(ParametrizedRecorderTest, TestNoAlloc) {
+    auto rec = get_test_recorder();
+    rec.start().get();
+
+    // Note: memory stats are only tracked in release mode
+    const auto stats = ss::memory::stats();
+    auto mallocs = [&]() {
+        return ss::memory::stats().mallocs() - stats.mallocs();
+    };
+
+    // Verify that writing out a crash report does not allocate
+    rec.record_crash_sighandler(GetParam());
+    ASSERT_EQ(mallocs(), 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  AllCrashSignals,
+  ParametrizedRecorderTest,
+  testing::Values(
+    recorder::recorded_signo::sigsegv,
+    recorder::recorded_signo::sigabrt,
+    recorder::recorded_signo::sigill));
 
 } // namespace crash_tracker

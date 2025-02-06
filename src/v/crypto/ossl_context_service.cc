@@ -364,7 +364,8 @@ is_fips_mode ossl_context_service::fips_mode() const {
 }
 
 bool ossl_context_service::in_rp_fixture_test() const {
-    return ::getenv("RP_FIXTURE_ENV") != nullptr;
+    char* val = ::getenv("RP_FIXTURE_ENV");
+    return val != nullptr && val == std::string{"1"};
 }
 
 } // namespace crypto
