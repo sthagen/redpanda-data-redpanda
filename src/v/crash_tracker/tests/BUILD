@@ -32,6 +32,20 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "types_test",
+    timeout = "short",
+    srcs = [
+        "types_test.cc",
+    ],
+    deps = [
+        "//src/v/crash_tracker",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_binary(
     name = "crash_report_generator",
     testonly = True,

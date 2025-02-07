@@ -197,6 +197,7 @@ redpanda_cc_library(
         "//src/v/schema:registry",
         "//src/v/serde",
         "//src/v/ssx:semaphore",
+        "//src/v/utils:directory_walker",
         "@fmt",
         "@seastar",
     ],

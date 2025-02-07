@@ -36,10 +36,25 @@ public:
     // schema id if it doesn't exist. Note, the schema id is ignored, and one
     // is assigned based on the state of the table.
     ss::future<txn_outcome> set_schema(schema);
+
+    // Adds the given data files to a new snapshot for the table, potentially
+    // merging manifests to reduce manifest list size.
+    //
+    // If supplied, the given snapshot properties are added to the resulting
+    // snapshot.
+    //
+    // If a tag name is supplied, a snapshot reference "tag" with the given
+    // reference expiration will be added to the table with the new snapshot.
+    // This will create the tag or replace an existing tag. As long as this tag
+    // is not expired, the snapshot is expected to not be removed by snapshot
+    // expiration. If no tag expiration is set, snapshot expiration will fall
+    // back on table-wide properties.
     ss::future<txn_outcome> merge_append(
       manifest_io&,
       chunked_vector<data_file>,
-      chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props = {});
+      chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props = {},
+      std::optional<ss::sstring> tag_name = std::nullopt,
+      std::optional<long> tag_expiration_ms = std::nullopt);
 
     // Removes expired snapshots from the table, computing expiration based on
     // the given timestamp. Note, this does not perform IO to delete any

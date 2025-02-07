@@ -72,9 +72,16 @@ ss::future<transaction::txn_outcome> transaction::set_schema(schema s) {
 ss::future<transaction::txn_outcome> transaction::merge_append(
   manifest_io& io,
   chunked_vector<data_file> files,
-  chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props) {
+  chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props,
+  std::optional<ss::sstring> tag_name,
+  std::optional<long> tag_expiration_ms) {
     auto a = std::make_unique<merge_append_action>(
-      io, table_, std::move(files), std::move(snapshot_props));
+      io,
+      table_,
+      std::move(files),
+      std::move(snapshot_props),
+      std::move(tag_name),
+      tag_expiration_ms);
     co_return co_await apply(std::move(a));
 }
 

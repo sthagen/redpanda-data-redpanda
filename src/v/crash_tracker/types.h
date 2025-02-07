@@ -89,7 +89,7 @@ void tag_invoke(
     using Type = typename reserved_string<Size>::type;
     const auto size = serde::read_nested<serde::serde_size_t>(
       in, bytes_left_limit);
-    if (unlikely(size >= t.capacity())) {
+    if (unlikely(size > t.capacity())) {
         throw serde::serde_exception(fmt::format(
           "reading reserved_string, size {} exceeds reserved size {}",
           size,

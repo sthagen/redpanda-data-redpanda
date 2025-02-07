@@ -52,6 +52,7 @@ redpanda_cc_library(
         "//src/v/ssx:future_util",
         "//src/v/ssx:semaphore",
         "//src/v/utils:to_string",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@seastar",
     ],
 )

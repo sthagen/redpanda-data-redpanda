@@ -31,6 +31,7 @@ redpanda_cc_library(
         "//src/v/cloud_storage",
         "//src/v/cluster",
         "//src/v/config",
+        "//src/v/datalake:manager",
         "//src/v/metrics",
         "//src/v/raft",
         "//src/v/ssx:semaphore",

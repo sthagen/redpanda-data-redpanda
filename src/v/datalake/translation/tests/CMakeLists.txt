@@ -2,6 +2,7 @@ set (srcs
     state_machine_test.cc
     scheduler_fixture.cc
     scheduler_tests.cc
+    fair_scheduling_policy_tests.cc
 )
 
 rp_test(

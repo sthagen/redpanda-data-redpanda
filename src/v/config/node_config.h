@@ -146,6 +146,10 @@ public:
         return data_directory().path / "cloud_storage_inventory";
     }
 
+    std::filesystem::path datalake_staging_path() const {
+        return data_directory().path / "datalake_staging";
+    }
+
     std::vector<model::broker_endpoint> advertised_kafka_api() const {
         if (_advertised_kafka_api().empty()) {
             std::vector<model::broker_endpoint> eps;

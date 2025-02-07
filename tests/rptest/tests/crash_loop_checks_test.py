@@ -90,6 +90,15 @@ class CrashLoopChecksTest(RedpandaTest):
             f"Redpanda processes did not terminate on {broker.name} in {timeout} sec"
         )
 
+    def read_first_crash_report(self):
+        viewer = OfflineLogViewer(self.redpanda)
+        crash_reports = viewer.read_crash_reports(self.broker)
+        self.logger.debug(f'Crash reports: {crash_reports}')
+        assert len(crash_reports) > 0, "No crash reports found"
+        report = next(iter(crash_reports.values()))
+        self.logger.debug(f'First report: {report}')
+        return report
+
     @cluster(num_nodes=1, log_allow_list=CRASH_LOOP_LOG)
     def test_crash_loop_checks_with_tracker_file(self):
         broker = self.redpanda.nodes[0]
@@ -196,7 +205,7 @@ class CrashLoopChecksTest(RedpandaTest):
                                              "Too many consecutive crashes")
         assert self.redpanda.search_log_node(
             broker,
-            "Crash #4 at 20.* UTC - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found) Backtrace: 0x.*"
+            "Crash #4 at 20.* UTC - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found) Backtrace: .*"
         )
         self.expect_crash_count(1 + CrashLoopChecksTest.CRASH_LOOP_LIMIT + 1)
 
@@ -211,14 +220,11 @@ class CrashLoopChecksTest(RedpandaTest):
                                  override_cfg_params=invalid_conf,
                                  expect_fail=True)
 
-        viewer = OfflineLogViewer(self.redpanda)
-        crash_reports = viewer.read_crash_reports(broker)
-        self.logger.debug(f'Crash reports: {crash_reports}')
-        assert len(crash_reports) > 0, "No crash reports found"
-        report = next(iter(crash_reports.values()))
-        self.logger.debug(f'First report: {report}')
+        report = self.read_first_crash_report()
         assert 'Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found)' == report[
             'crash_message'], f'Unexpected crash message: {report["crash_message"]}'
+        assert len(report['stacktrace']) > 0, \
+            f'Unexpected empty stacktrace for report: {report}'
 
     @cluster(num_nodes=1, log_allow_list=CRASH_LOOP_LOG + SIGNAL_CRASH_LOG)
     @matrix(signo=[signal.SIGSEGV, signal.SIGABRT, signal.SIGILL],
@@ -276,3 +282,7 @@ class CrashLoopChecksTest(RedpandaTest):
             broker,
             f"Crash #4 at 20.* - {signo_prefix()} on shard {signal_shard}. Backtrace: "
         )
+
+        report = self.read_first_crash_report()
+        assert len(report['stacktrace']) > 0, \
+            f'Unexpected empty stacktrace for report: {report}'

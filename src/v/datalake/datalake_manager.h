@@ -71,6 +71,14 @@ public:
     ss::future<> start();
     ss::future<> stop();
 
+    /*
+     * Return the amount of disk space currently in use by the datalake
+     * subsystem (e.g. staged translated data on disk, etc...).
+     *
+     * This interface computes a global value, rather than shard local.
+     */
+    static ss::future<uint64_t> disk_usage();
+
 private:
     using translator = std::unique_ptr<translation::partition_translator>;
     using translator_map = chunked_hash_map<model::ntp, translator>;
@@ -113,6 +121,7 @@ private:
     config::binding<std::chrono::milliseconds> _iceberg_commit_interval;
     config::binding<model::iceberg_invalid_record_action>
       _iceberg_invalid_record_action;
+    std::filesystem::path _writer_scratch_space;
 
     // Translation requires buffering data batches in memory for efficient
     // output representation, this controls the maximum bytes buffered in memory

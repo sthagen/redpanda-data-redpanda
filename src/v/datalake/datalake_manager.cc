@@ -14,6 +14,7 @@
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "config/node_config.h"
 #include "datalake/backlog_controller.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/cloud_data_io.h"
@@ -24,6 +25,7 @@
 #include "datalake/record_translator.h"
 #include "raft/group_manager.h"
 #include "schema/registry.h"
+#include "utils/directory_walker.h"
 
 #include <memory>
 
@@ -104,7 +106,8 @@ datalake_manager::datalake_manager(
   , _iceberg_commit_interval(
       config::shard_local_cfg().iceberg_catalog_commit_interval_ms.bind())
   , _iceberg_invalid_record_action(
-      config::shard_local_cfg().iceberg_invalid_record_action.bind()) {
+      config::shard_local_cfg().iceberg_invalid_record_action.bind())
+  , _writer_scratch_space(config::node().datalake_staging_path()) {
     vassert(memory_limit > 0, "Memory limit must be greater than 0");
     auto max_parallel = static_cast<size_t>(
       std::floor(memory_limit / _effective_max_translator_buffered_data));
@@ -142,6 +145,25 @@ double datalake_manager::average_translation_backlog() {
 }
 
 ss::future<> datalake_manager::start() {
+    /*
+     * Ensure that datalake scratch space directory exists. This is run on each
+     * core (as opposed to only on core-0) because shard initialization happens
+     * in parallel, but the race is handled by ignoring EEXIST.
+     */
+    try {
+        co_await ss::make_directory(
+          config::node().datalake_staging_path().string());
+    } catch (const std::filesystem::filesystem_error& e) {
+        if (e.code() != std::errc::file_exists) {
+            vlog(
+              datalake_log.error,
+              "Could not create datalake staging directory: {}: {}",
+              config::node().datalake_staging_path(),
+              e);
+            throw;
+        }
+    }
+
     _catalog = co_await _catalog_factory->create_catalog();
     _schema_mgr = std::make_unique<catalog_schema_manager>(*_catalog);
     // partition managed notification, this is particularly
@@ -325,7 +347,8 @@ void datalake_manager::start_translator(
       _sg,
       _effective_max_translator_buffered_data,
       &_parallel_translations,
-      invalid_record_action);
+      invalid_record_action,
+      _writer_scratch_space);
     _translators.emplace(partition->ntp(), std::move(translator));
 }
 
@@ -346,6 +369,53 @@ void datalake_manager::stop_translator(const model::ntp& ntp) {
         auto* t_ptr = t.get();
         return t_ptr->stop().finally([_ = std::move(t)] {});
     });
+}
+
+ss::future<uint64_t> datalake_manager::disk_usage() {
+    const auto path = config::node().datalake_staging_path();
+
+    if (!co_await ss::file_exists(path.string())) {
+        co_return 0;
+    }
+
+    chunked_vector<std::filesystem::path> files;
+    co_await directory_walker::walk(
+      path.string(), [&files, path](const ss::directory_entry& de) {
+          if (de.type == ss::directory_entry_type::regular) {
+              files.push_back(path / std::filesystem::path(de.name));
+          }
+          return ss::now();
+      });
+
+    uint64_t total = 0;
+    co_await ss::max_concurrent_for_each(
+      files.begin(),
+      files.end(),
+      config::shard_local_cfg().space_management_max_log_concurrency(),
+      [&total](const std::filesystem::path& path) {
+          return ss::file_size(path.string())
+            .then([&total](uint64_t size) { total += size; })
+            .handle_exception_type(
+              [path](const std::filesystem::filesystem_error& e) {
+                  if (e.code() == std::errc::no_such_file_or_directory) {
+                      vlog(
+                        datalake_log.debug,
+                        "Stat failed for path: {}: {}",
+                        path,
+                        e.code());
+                  }
+                  return ss::make_exception_future<>(e);
+              })
+            .handle_exception([path](std::exception_ptr eptr) {
+                vlog(
+                  datalake_log.warn,
+                  "Stat failed for path: {}: {}",
+                  path,
+                  eptr);
+            });
+      });
+
+    co_return total;
 }
 
 } // namespace datalake

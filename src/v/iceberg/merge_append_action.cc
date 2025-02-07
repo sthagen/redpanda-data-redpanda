@@ -314,6 +314,16 @@ ss::future<action::action_outcome> merge_append_action::build_updates() && {
             .type = snapshot_ref_type::branch,
           },
         });
+    if (tag_name_.has_value()) {
+        ret.updates.emplace_back(table_update::set_snapshot_ref{
+          .ref_name = tag_name_.value(),
+          .ref = snapshot_reference{
+            .snapshot_id = new_snap_id,
+            .type = snapshot_ref_type::tag,
+            .max_ref_age_ms = tag_expiration_ms_,
+          },
+        });
+    }
     ret.requirements.emplace_back(table_requirement::assert_ref_snapshot_id{
       .ref = "main",
       .snapshot_id = old_snap_id,

@@ -397,3 +397,115 @@ TEST_F(MergeAppendActionTest, TestBadFile) {
     ASSERT_TRUE(res.has_error());
     ASSERT_EQ(res.error(), action::errc::unexpected_state);
 }
+
+TEST_F(MergeAppendActionTest, TestTagSnapshot) {
+    transaction tx(create_table());
+    const auto& table = tx.table();
+    auto res
+      = tx.merge_append(
+            io, create_data_files("foo", 1, 1), /*snapshot_props=*/{}, "tag")
+          .get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    ASSERT_TRUE(table.current_snapshot_id.has_value());
+
+    auto snap_id = table.current_snapshot_id.value();
+    ASSERT_TRUE(table.refs.has_value());
+    ASSERT_TRUE(table.refs->contains("main"));
+    ASSERT_TRUE(table.refs->contains("tag"));
+
+    // Sanity check, main is always updated.
+    auto main_snap = table.refs->at("main");
+    ASSERT_EQ(snap_id, main_snap.snapshot_id);
+    ASSERT_EQ(main_snap.type, snapshot_ref_type::branch);
+
+    // Since we passed a tag, it should exist.
+    auto tag_snap = table.refs->at("tag");
+    ASSERT_EQ(snap_id, tag_snap.snapshot_id);
+    ASSERT_EQ(tag_snap.type, snapshot_ref_type::tag);
+
+    // Merge again with a tag.
+    res = tx.merge_append(
+              io, create_data_files("foo", 1, 1), /*snapshot_props=*/{}, "tag")
+            .get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    ASSERT_TRUE(table.current_snapshot_id.has_value());
+    snap_id = table.current_snapshot_id.value();
+
+    // The snapshot references should follow.
+    tag_snap = table.refs->at("tag");
+    ASSERT_EQ(snap_id, tag_snap.snapshot_id);
+    ASSERT_EQ(tag_snap.type, snapshot_ref_type::tag);
+
+    // Now merge with a different tag. The old tag shouldn't be affected.
+    res = tx.merge_append(
+              io,
+              create_data_files("foo", 1, 1),
+              /*snapshot_props=*/{},
+              /*tag_name=*/"other")
+            .get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    ASSERT_TRUE(table.current_snapshot_id.has_value());
+    auto old_snap_id = snap_id;
+    snap_id = table.current_snapshot_id.value();
+    ASSERT_NE(old_snap_id, snap_id);
+
+    // The new tag should have a new snapshot id.
+    auto other_snap = table.refs->at("other");
+    ASSERT_EQ(snap_id, other_snap.snapshot_id);
+    ASSERT_EQ(other_snap.type, snapshot_ref_type::tag);
+
+    // The old tag should refer to the last snapshot that was appended with it.
+    tag_snap = table.refs->at("tag");
+    ASSERT_EQ(old_snap_id, tag_snap.snapshot_id);
+    ASSERT_EQ(tag_snap.type, snapshot_ref_type::tag);
+}
+
+TEST_F(MergeAppendActionTest, TestTagWithExpiration) {
+    transaction tx(create_table());
+    const auto& table = tx.table();
+    chunked_hash_set<snapshot_id> snap_ids;
+    // Add a snapshot without an explicit tag expiration.
+    auto res
+      = tx.merge_append(
+            io, create_data_files("foo", 1, 1), /*snapshot_props=*/{}, "tag")
+          .get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    ASSERT_TRUE(table.current_snapshot_id.has_value());
+
+    auto snap_id = table.current_snapshot_id.value();
+    ASSERT_TRUE(table.refs.has_value());
+    ASSERT_TRUE(table.refs->contains("tag"));
+
+    // Sanity check, no snapshot reference properties are set.
+    auto tag_snap = table.refs->at("tag");
+    ASSERT_EQ(snap_id, tag_snap.snapshot_id);
+    ASSERT_EQ(tag_snap.type, snapshot_ref_type::tag);
+    ASSERT_FALSE(tag_snap.max_snapshot_age_ms.has_value());
+    ASSERT_FALSE(tag_snap.min_snapshots_to_keep.has_value());
+    ASSERT_FALSE(tag_snap.max_ref_age_ms.has_value());
+
+    // Now try again with a tag expiration.
+    auto long_max = std::numeric_limits<long>::max();
+    res = tx.merge_append(
+              io,
+              create_data_files("foo", 1, 1),
+              /*snapshot_props=*/{},
+              "tag",
+              /*tag_expiration_ms=*/long_max)
+            .get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    ASSERT_TRUE(table.current_snapshot_id.has_value());
+
+    snap_id = table.current_snapshot_id.value();
+    ASSERT_TRUE(table.refs.has_value());
+    ASSERT_TRUE(table.refs->contains("tag"));
+
+    // Sanity check, just the reference expiration is set.
+    tag_snap = table.refs->at("tag");
+    ASSERT_EQ(snap_id, tag_snap.snapshot_id);
+    ASSERT_EQ(tag_snap.type, snapshot_ref_type::tag);
+    ASSERT_FALSE(tag_snap.max_snapshot_age_ms.has_value());
+    ASSERT_FALSE(tag_snap.min_snapshots_to_keep.has_value());
+    ASSERT_TRUE(tag_snap.max_ref_age_ms.has_value());
+    ASSERT_EQ(long_max, tag_snap.max_ref_age_ms.value());
+}

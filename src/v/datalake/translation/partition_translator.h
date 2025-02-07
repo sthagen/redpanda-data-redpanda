@@ -82,7 +82,8 @@ public:
       ss::scheduling_group sg,
       size_t reader_max_bytes,
       std::unique_ptr<ssx::semaphore>* parallel_translations,
-      model::iceberg_invalid_record_action invalid_record_action);
+      model::iceberg_invalid_record_action invalid_record_action,
+      std::filesystem::path writer_scratch_space);
     ~partition_translator();
 
     void start_translation_in_background(ss::scheduling_group);

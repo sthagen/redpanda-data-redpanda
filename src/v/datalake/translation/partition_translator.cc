@@ -169,7 +169,8 @@ partition_translator::partition_translator(
   ss::scheduling_group sg,
   size_t reader_max_bytes,
   std::unique_ptr<ssx::semaphore>* parallel_translations,
-  model::iceberg_invalid_record_action invalid_record_action)
+  model::iceberg_invalid_record_action invalid_record_action,
+  std::filesystem::path writer_scratch_space)
   : _term(partition->raft()->term())
   , _partition(std::move(partition))
   , _stm(_partition->raft()
@@ -192,7 +193,7 @@ partition_translator::partition_translator(
   , _max_bytes_per_reader(reader_max_bytes)
   , _parallel_translations(parallel_translations)
   , _invalid_record_action(invalid_record_action)
-  , _writer_scratch_space(std::filesystem::temp_directory_path())
+  , _writer_scratch_space(writer_scratch_space)
   , _logger(prefix_logger{
       datalake_log, fmt::format("{}-term-{}", _partition->ntp(), _term)}) {
     vassert(_stm, "No translation stm found for {}", _partition->ntp());
@@ -251,6 +252,9 @@ ss::future<> partition_translator::stop() {
 }
 
 kafka::offset partition_translator::min_offset_for_translation() const {
+    if (_partition->is_read_replica_mode_enabled()) {
+        return model::offset_cast(_partition_proxy->start_offset());
+    }
     return model::offset_cast(_partition_proxy->local_start_offset());
 }
 

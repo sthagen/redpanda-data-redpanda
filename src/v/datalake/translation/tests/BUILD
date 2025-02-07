@@ -50,6 +50,24 @@ redpanda_cc_gtest(
     deps = [
         ":scheduler_fixture",
         "//src/v/datalake:logger",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "fair_scheduler_test",
+    timeout = "moderate",
+    srcs = [
+        "fair_scheduling_policy_tests.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":scheduler_fixture",
+        "//src/v/datalake:logger",
+        "//src/v/datalake/translation:scheduler",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:random",
         "@seastar",
     ],

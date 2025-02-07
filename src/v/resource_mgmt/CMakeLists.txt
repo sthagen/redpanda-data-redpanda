@@ -21,6 +21,7 @@ v_cc_library(
     Seastar::seastar
     v::cloud_storage
     v::cluster
+    v::datalake_manager
   )
 
 add_subdirectory(tests)

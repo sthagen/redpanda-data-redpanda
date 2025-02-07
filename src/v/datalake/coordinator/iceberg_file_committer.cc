@@ -62,6 +62,8 @@ log_and_convert_action_errc(iceberg::action::errc e, std::string_view msg) {
 }
 
 constexpr auto commit_meta_prop = "redpanda.commit-metadata";
+constexpr auto commit_tag_name = "redpanda.tag";
+
 // Look for the Redpanda commit property in the current snapshot, or the most
 // recent ancestor if none.
 checked<std::optional<model::offset>, parse_offset_error>
@@ -305,11 +307,17 @@ public:
           "Adding {} files to Iceberg table {}",
           icb_files_.size(),
           table_id_);
+        // NOTE: a non-expiring tag is added to the new snapshot to ensure that
+        // snapshot expiration doesn't clear this snapshot and its commit
+        // metadata properties. The tag ensures that we retain them e.g. in
+        // case of external table updates and low snapshot retention.
         iceberg::transaction txn(std::move(table_));
         auto icb_append_res = co_await txn.merge_append(
           io,
           std::move(icb_files_),
-          {{commit_meta_prop, to_json_str(commit_meta)}});
+          {{commit_meta_prop, to_json_str(commit_meta)}},
+          commit_tag_name,
+          /*tag_expiration_ms=*/std::numeric_limits<long>::max());
         if (icb_append_res.has_error()) {
             co_return log_and_convert_action_errc(
               icb_append_res.error(),

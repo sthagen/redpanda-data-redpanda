@@ -366,6 +366,7 @@ private:
     node::disk_space_info _data_disk_info{};
 
     ss::future<> manage_data_disk(uint64_t target_size);
+    ss::future<storage::usage_report> disk_usage();
     config::binding<std::optional<uint64_t>> _retention_target_capacity_bytes;
     config::binding<std::optional<double>> _retention_target_capacity_percent;
     config::binding<double> _disk_reservation_percent;
