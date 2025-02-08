@@ -8,33 +8,25 @@
 # by the Apache License, Version 2.0
 
 import math
-import json
 import time
-import random
-import sys
 import concurrent.futures
 from collections import Counter
 
-from confluent_kafka import KafkaError, KafkaException
-from ducktape.cluster.cluster_spec import ClusterSpec
-from ducktape.mark import matrix, parametrize
+from ducktape.mark import parametrize
 from ducktape.utils.util import wait_until, TimeoutError
 import numpy
 
 from rptest.services.cluster import cluster
-from rptest.clients.python_librdkafka import PythonLibrdkafka
 from rptest.clients.rpk import RpkTool, RpkException
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.utils.si_utils import nodes_report_cloud_segments
-from rptest.scale_tests.topic_scale_profiles import TopicScaleProfileManager
 from rptest.services.rpk_consumer import RpkConsumer
-from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, LoggingConfig, MetricsEndpoint
+from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, LoggingConfig
 from rptest.services.kgo_verifier_services import KgoVerifierProducer, KgoVerifierConsumerGroupConsumer, KgoVerifierRandomConsumer
-from rptest.services.kgo_repeater_service import KgoRepeaterService, repeater_traffic
+from rptest.services.kgo_repeater_service import repeater_traffic
 from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.openmessaging_benchmark_configs import OMBSampleConfigurations
 from rptest.utils.scale_parameters import ScaleParameters
-from rptest.util import inject_remote_script
 
 # An unreasonably large fetch request: we submit requests like this in the
 # expectation that the server will properly clamp the amount of data it
@@ -42,17 +34,18 @@ from rptest.util import inject_remote_script
 # franz-go default maxBrokerReadBytes -- --fetch-max-bytes may not exceed this
 BIG_FETCH = 104857600
 
-# How much memory to assign to redpanda per partition. Redpanda will be started
-# with (MIB_PER_PARTITION * PARTITIONS_PER_SHARD * CORE_COUNT) / (PARTITIONS_MEMORY_ALLOCATION_PERCENT / 100) memory
-DEFAULT_MIB_PER_PARTITION = 0.2
+# Redpanda will be started with (MIB_PER_PARTITION * PARTITIONS_PER_SHARD *
+# CORE_COUNT) / (PARTITIONS_MEMORY_ALLOCATION_PERCENT / 100) memory
+DEFAULT_MIB_PER_PARTITION = ScaleParameters.DEFAULT_MIB_PER_PARTITION
 
-# How many partitions we will create per shard: this is the primary scaling
-# factor that controls how many partitions a given cluster will get.
+# Currently we use 3000 instead of ScaleParameters.DEFAULT_PARTITIONS_PER_SHARD
 DEFAULT_PARTITIONS_PER_SHARD = 3000
 
-# How much memory is reserved for partitions
-# aka: topic_partitions_memory_allocation_percent config
-DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT = 15
+# How much memory is reserved for partitions for this test.
+# We use the 1.5x the default order to test higher than default density
+# (in a memory sense) and also to hit the per-shard max of 3,000 partitions
+DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT = int(
+    ScaleParameters.DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT * 1.5)
 
 # Large volume of data to write. If tiered storage is enabled this is the
 # amount of data to retain total. Otherwise, this can be used as a large volume
@@ -768,7 +761,7 @@ class ManyPartitionsTest(PreallocNodesTest):
             self.redpanda,
             replication_factor=3,
             mib_per_partition=DEFAULT_MIB_PER_PARTITION,
-            topic_partitions_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
+            topic_replicas_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
             partition_memory_reserve_percentage=
             DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
         )

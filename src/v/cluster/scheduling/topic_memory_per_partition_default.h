@@ -18,6 +18,8 @@ namespace cluster {
 
 // Default value for `topic_memory_per_partition`. In a constant here such that
 // it can easier be referred to.
+// This should be kept in sync with
+// scale_parameters.py::DEFAULT_MIB_PER_PARTITION
 inline constexpr size_t DEFAULT_TOPIC_MEMORY_PER_PARTITION = 200_KiB;
 
 // DO NOT CHANGE

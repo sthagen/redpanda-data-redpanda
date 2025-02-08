@@ -3,9 +3,19 @@ import re
 import time
 
 from abc import ABC, abstractmethod
-from typing import Generator, Optional
+from typing import Any, Generator, Optional
 
 from rptest.clients.kubectl import KubectlTool, KubeNodeShell
+
+
+def assert_int(v: Any) -> int:
+    assert isinstance(v, int), f"not an int: {v}"
+    return v
+
+
+def assert_int_or_none(v: Any) -> int | None:
+    assert v is None or isinstance(v, int), f"not an int or none: {v}"
+    return v
 
 
 class Stopwatch():

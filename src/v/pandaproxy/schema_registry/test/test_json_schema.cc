@@ -160,21 +160,6 @@ static const auto error_test_cases = std::to_array({
 {
   "$comment": "the root schema is valid but the bundled schema is not",
   "$defs": {
-      "$comment": "dialect is draft-04, but id key is '$id'",
-      "$id": "https://example.com/mismatch_id",
-      "$schema": "http://json-schema.org/draft-04/schema#"
-  }
-}
-)",
-    pps::error_info{
-      pps::error_code::schema_invalid,
-      "bundled schema with mismatched dialect "
-      "'http://json-schema.org/draft-04/schema#' for id key"}},
-  error_test_case{
-    R"(
-{
-  "$comment": "the root schema is valid but the bundled schema is not",
-  "$defs": {
       "$comment": "dialect is unkown",
       "$id": "https://example.com/mismatch_id",
       "$schema": "http://json-schema.org/draft-3000/schema#"
@@ -283,6 +268,18 @@ static constexpr auto valid_test_cases = std::to_array<std::string_view>({
   R"json({"$schema": "http://json-schema.org/draft-04/schema"})json",
   R"json({"$schema": "https://json-schema.org/draft/2019-09/schema"})json",
   R"json({"$schema": "https://json-schema.org/draft/2020-12/schema"})json",
+  // this is a valid schema, as it is treated as a draft202012 (latest)
+  // and "id" is not a restricted keyword
+  R"json(
+{
+  "type": "object",
+  "title": "notABundledSchema",
+  "properties": {
+    "id":{
+      "type":"string"
+    }
+  }
+})json",
 });
 SEASTAR_THREAD_TEST_CASE(test_make_valid_json_schema) {
     for (const auto& data : valid_test_cases) {

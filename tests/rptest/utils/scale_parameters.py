@@ -7,10 +7,34 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from rptest.services.redpanda import ResourceSettings, SISettings
+from rptest.services.redpanda import ResourceSettings, SISettings, RedpandaService
 
 
 class ScaleParameters:
+    """ScaleParameters helps tests size their workload as appropriate for the current environment.
+    Test will in general run on dedicated nodes (in CDT or cloud tests), or in docker containers
+    (in dev or CI), so the available memory, CPU and disk resources will be very different between
+    those environments. Many functional tests which only create a very modest number of partitions,
+    do a few operations and check the results will just work in any of these environments, but test
+    which are scale or performance tests, or which test some system limits need to be "scale aware"
+    and can use ScaleParameters for that purpose."""
+
+    # How much memory is required per partition (from the partition memory pool
+    # specified by DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT).
+    # Should be the same as cluster::DEFAULT_TOPIC_MEMORY_PER_PARTITION.
+    DEFAULT_MIB_PER_PARTITION = 200 / 1024  # 200 KiB
+
+    # The maximum number of partitions allowed per shard. The effective limit is
+    # the lowest of this limit, the partition memory limit, and a few other
+    # limits which usually do not apply in tests.
+    # Should be the same as topic_partitions_per_shard in configuration.cc
+    DEFAULT_PARTITIONS_PER_SHARD = 5000
+
+    # How much memory is reserved for partitions
+    # Should be the same as the default value for
+    # topic_partitions_memory_allocation_percent in configuration.cc
+    DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT = 10
+
     # Number of partitions to create when running in docker (i.e.
     # when dedicated_nodes=false).  This is independent of the
     # amount of RAM or CPU that the nodes claim to have, because
@@ -20,25 +44,39 @@ class ScaleParameters:
     # on the test.
     DOCKER_PARTITION_LIMIT = 128
 
-    def __init__(self,
-                 redpanda,
-                 replication_factor,
-                 mib_per_partition,
-                 topic_partitions_per_shard,
-                 tiered_storage_enabled=False,
-                 partition_memory_reserve_percentage=10):
+    def __init__(
+        self,
+        redpanda: RedpandaService,
+        replication_factor: int,
+        mib_per_partition=DEFAULT_MIB_PER_PARTITION,
+        topic_replicas_per_shard=DEFAULT_PARTITIONS_PER_SHARD,
+        tiered_storage_enabled=False,
+        partition_memory_reserve_percentage=DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT
+    ):
         self.redpanda = redpanda
         self.tiered_storage_enabled = tiered_storage_enabled
         self.partition_memory_reserve_percentage = partition_memory_reserve_percentage
 
-        node_count = len(self.redpanda.nodes)
+        self.node_count = node_count = len(self.redpanda.nodes)
 
-        node_memory = self.redpanda.get_node_memory_mb()
+        node_memory_mib = self.redpanda.get_node_memory_mb()
         self.node_cpus = self.redpanda.get_node_cpu_count()
         node_disk_free = self.redpanda.get_node_disk_free()
 
+        if self.redpanda.dedicated_nodes:
+            # Emulate seastar's policy for default reserved memory
+            reserved_memory = max(1536, int(0.07 * node_memory_mib) + 1)
+            effective_node_memory = node_memory_mib - reserved_memory
+        else:
+            reserved_memory = 0
+            # when in docker, we always end up passing --memory=node_memory
+            # explicitly, and this amount does not have the reserve subtracted
+            # from it, so we use the full amount. For details see:
+            # https://github.com/scylladb/seastar/issues/375#issuecomment-2530012089
+            effective_node_memory = node_memory_mib
+
         self.logger.info(
-            f"Nodes have {self.node_cpus} cores, {node_memory}MB memory, {node_disk_free / (1024 * 1024)}MB free disk"
+            f"Nodes have {self.node_cpus} cores, {node_memory_mib}MB memory, {effective_node_memory}MB available memory, {node_disk_free / (1024 * 1024)}MB free disk"
         )
 
         # On large nodes, reserve half of shard 0 to minimize interference
@@ -46,7 +84,7 @@ class ScaleParameters:
         # very large.
         shard0_reserve = None
         if self.node_cpus >= 8:
-            shard0_reserve = topic_partitions_per_shard / 2
+            shard0_reserve = topic_replicas_per_shard / 2
 
         # Reserve a few slots for internal partitions. This is a count of
         # partitions and we assume the replication factor is 'replication_factor'
@@ -60,21 +98,43 @@ class ScaleParameters:
         # Calculate how many partitions we will aim to create, based
         # on the size & count of nodes.  This enables running the
         # test on various instance sizes without explicitly adjusting.
-        self.partition_limit = int(
-            (node_count * self.node_cpus * topic_partitions_per_shard) /
-            replication_factor - internal_partition_slack)
+        shard_replicas_from_memory = (partition_memory_reserve_percentage /
+                                      100 * effective_node_memory //
+                                      self.node_cpus // mib_per_partition)
+
+        # the per-shard limit is the less of the "per shard" and "per memory" limits
+        shard_replicas_effective = min(shard_replicas_from_memory,
+                                       topic_replicas_per_shard)
+
+        self.logger.info(
+            f"shard_replicas_effective: {shard_replicas_effective} = "
+            f"min(topic_replicas_per_shard {topic_replicas_per_shard}, "
+            f"shard_replicas_from_memory {shard_replicas_from_memory})")
+
+        self.partition_limit = node_count * (
+            self.node_cpus * (shard_replicas_effective // replication_factor) -
+            internal_partition_slack)
+
+        self.logger.info(
+            f"Cluster partition limit is {self.partition_limit} = "
+            f"{node_count} * ({self.node_cpus} * ({shard_replicas_effective} // {replication_factor}) - {internal_partition_slack})"
+        )
+
         if shard0_reserve:
             self.partition_limit -= node_count * shard0_reserve
 
         if not self.redpanda.dedicated_nodes:
-            self.partition_limit = min(ScaleParameters.DOCKER_PARTITION_LIMIT,
-                                       self.partition_limit)
-
-        self.logger.info(f"Selected partition limit {self.partition_limit}")
-
-        # Emulate seastar's policy for default reserved memory
-        reserved_memory = max(1536, int(0.07 * node_memory) + 1)
-        effective_node_memory = node_memory - reserved_memory
+            docker_limit = ScaleParameters.DOCKER_PARTITION_LIMIT
+            _pl = min(docker_limit, self.partition_limit)
+            self.logger.info(
+                f"Selected partition limit {_pl} min({docker_limit}, {self.partition_limit})"
+            )
+            self.partition_limit = _pl
+        else:
+            self.logger.info(
+                f"Cluster partition limit is {self.partition_limit} = "
+                f"{node_count} * {self.node_cpus} * ({shard_replicas_effective} // {replication_factor}) "
+                f"- {node_count} * {shard0_reserve}")
 
         partition_replicas_per_node = int(self.partition_limit *
                                           replication_factor // node_count)
@@ -173,9 +233,16 @@ class ScaleParameters:
         # Not all internal partitions have rf=replication_factor so this
         # over-allocates but making it more accurate would be complicated.
         per_node_slack = internal_partition_slack * replication_factor / node_count
-        memory_setting = mib_per_partition * (
+        required_node_memory = mib_per_partition * (
             partition_replicas_per_node +
             per_node_slack) / (self.partition_memory_reserve_percentage / 100.)
+
+        rnm_message = (
+            f"required_node_memory:  {required_node_memory} MiB = {mib_per_partition} * ("
+            f"{partition_replicas_per_node} + {per_node_slack}) / "
+            f"({self.partition_memory_reserve_percentage} / 100.)")
+
+        self.logger.info(rnm_message)
 
         resource_settings_args = {}
         if not self.redpanda.dedicated_nodes:
@@ -183,13 +250,14 @@ class ScaleParameters:
             # real testing, so disable fsync to make test run faster.
             resource_settings_args['bypass_fsync'] = True
 
-            memory_setting = max(memory_setting, 500)
+            required_node_memory = max(required_node_memory,
+                                       ResourceSettings.DEFAULT_MEMORY_MB)
         else:
             # On dedicated nodes we will use an explicit reactor stall threshold
             # as a success condition.
             resource_settings_args['reactor_stall_threshold'] = 100
 
-        resource_settings_args['memory_mb'] = int(memory_setting)
+        resource_settings_args['memory_mb'] = int(required_node_memory)
 
         self.redpanda.set_resource_settings(
             ResourceSettings(**resource_settings_args))
@@ -200,10 +268,11 @@ class ScaleParameters:
 
         # Should not happen on the expected EC2 instance types where
         # the cores-RAM ratio is sufficient to meet our shards-per-core
-        if effective_node_memory < memory_setting:
+        if effective_node_memory < required_node_memory:
             raise RuntimeError(
-                f"Node memory is too small ({node_memory}MB - {reserved_memory}MB)"
-            )
+                f"Node memory is too small. Effective memory: {effective_node_memory}MB "
+                f"({node_memory_mib}MB node - {reserved_memory}MB reserved), "
+                f"required memory: {required_node_memory}MB, ({rnm_message})")
 
     @property
     def logger(self):

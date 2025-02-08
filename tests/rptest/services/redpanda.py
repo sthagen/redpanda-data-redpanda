@@ -387,7 +387,6 @@ class ResourceSettings:
     """
 
     DEFAULT_NUM_CPUS = 2
-    # Redpanda's default limit on memory per shard is 1GB
     DEFAULT_MEMORY_MB = 2048
 
     def __init__(self,
@@ -2716,7 +2715,7 @@ class RedpandaService(RedpandaServiceBase):
             memory_kb = int(line.strip().split()[1])
             return memory_kb / 1024
 
-    def get_node_cpu_count(self):
+    def get_node_cpu_count(self) -> int:
         if self._resource_settings.num_cpus is not None:
             self.logger.info(f"get_node_cpu_count: got from ResourceSettings")
             return self._resource_settings.num_cpus

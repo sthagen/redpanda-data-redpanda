@@ -23,14 +23,6 @@ from rptest.util import wait_until_result
 from ducktape.errors import TimeoutError
 from ducktape.mark import ignore
 
-# How much memory to assign to redpanda per partition. Redpanda will be started
-# with MIB_PER_PARTITION * PARTITIONS_PER_SHARD * CORE_COUNT memory
-DEFAULT_MIB_PER_PARTITION = 4
-
-# How many partitions we will create per shard: this is the primary scaling
-# factor that controls how many partitions a given cluster will get.
-PARTITIONS_PER_SHARD = 1000
-
 
 class AuditLogTestSecurityConfig(SecurityConfig):
     """
@@ -343,11 +335,7 @@ class AuditLogTest(RedpandaTest):
         # the partition_id isn't part of the audit message payload. We will want only the
         # number of partitions up until there is one per core in the entire cluster. To
         # scale further then that we want to increase the number of topics.
-        scale = ScaleParameters(
-            self.redpanda,
-            replication_factor=3,
-            mib_per_partition=DEFAULT_MIB_PER_PARTITION,
-            topic_partitions_per_shard=PARTITIONS_PER_SHARD)
+        scale = ScaleParameters(self.redpanda, replication_factor=3)
         partitions_per_topic = self.redpanda.get_node_cpu_count() * len(
             self.redpanda.nodes)
         total_topics = scale.partition_limit // partitions_per_topic

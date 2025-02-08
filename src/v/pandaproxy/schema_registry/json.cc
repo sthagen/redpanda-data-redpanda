@@ -2205,6 +2205,13 @@ void sort(json::Value& val) {
     }
 }
 
+constexpr const char* id_keyword(json_schema_dialect jsd) {
+    if (jsd == json_schema_dialect::draft4) {
+        return "id";
+    }
+    return "$id";
+}
+
 void collect_bundled_schemas_and_fix_refs(
   id_to_schema_pointer& bundled_schemas,
   jsoncons::uri base_uri,
@@ -2229,59 +2236,32 @@ void collect_bundled_schemas_and_fix_refs(
     //   "id"  | >draft4  |       no
     //   "id"  |  draft4  |       yes
 
-    auto maybe_draft4_id_it = this_obj.find("id");
-    auto maybe_id_it = this_obj.find("$id");
-    if (
-      maybe_id_it != this_obj.object_range().end()
-      || maybe_draft4_id_it != this_obj.object_range().end()) {
-        // we are visiting a bundled schema. the dialect has to be known and has
-        // to match the keyword used.
-        // try to extract the dialect from the $schema keyword, or use the
-        // parent dialect. empty means that "$schema" is present but the dialect
-        // is not known, and we should stop scanning this branch.
-        auto maybe_new_dialect = [&]() -> std::optional<json_schema_dialect> {
-            auto dialect_it = this_obj.find("$schema");
-            if (dialect_it == this_obj.object_range().end()) {
-                // If no $schema is declared in an embedded schema, it defaults
-                // to using the dialect of the parent schema. from
-                // https://json-schema.org/understanding-json-schema/structuring#bundling
-                return dialect;
-            }
-
-            // we have a $schema keyword, use this dialect if we find out that
-            // this_obj is a bundled schema
-            return from_uri(dialect_it->value().as_string_view());
-        }();
-
-        if (maybe_new_dialect.has_value() == false) {
-            // stop scanning this tree, we might be in a bundled schema but we
-            // don't know the dialect.
-            throw as_exception(invalid_schema(fmt::format(
-              "bundled schema without a known dialect: '{}'",
-              this_obj["$schema"].as_string_view())));
+    auto maybe_new_dialect = [&]() -> std::optional<json_schema_dialect> {
+        const auto dialect_it = this_obj.find("$schema");
+        if (dialect_it == this_obj.object_range().end()) {
+            // If no $schema is declared in an embedded schema, it defaults
+            // to using the dialect of the parent schema. from
+            // https://json-schema.org/understanding-json-schema/structuring#bundling
+            return dialect;
         }
 
-        // we are in a bundled schema and we know the dialect to use, now we
-        // know which keyword to use to get the base_uri
-        auto id_it = [&] {
-            switch (maybe_new_dialect.value()) {
-            case json_schema_dialect::draft4:
-                return maybe_draft4_id_it;
-            case json_schema_dialect::draft6:
-            case json_schema_dialect::draft7:
-            case json_schema_dialect::draft201909:
-            case json_schema_dialect::draft202012:
-                return maybe_id_it;
-            }
-        }();
+        // we have a $schema keyword, use this dialect if we find out that
+        // this_obj is a bundled schema
+        return from_uri(dialect_it->value().as_string_view());
+    }();
 
-        if (id_it == this_obj.object_range().end()) {
-            // stop scanning this branch, the keyword for base uri does not
-            // agree with schema dialect.
-            throw as_exception(invalid_schema(fmt::format(
-              "bundled schema with mismatched dialect '{}' for id key",
-              to_uri(maybe_new_dialect.value()))));
-        }
+    if (!maybe_new_dialect.has_value()) {
+        // stop scanning this tree, we might be in a bundled schema but we
+        // don't know the dialect.
+        throw as_exception(invalid_schema(fmt::format(
+          "bundled schema without a known dialect: '{}'",
+          this_obj["$schema"].as_string_view())));
+    }
+
+    const auto id_it = this_obj.find(id_keyword(maybe_new_dialect.value()));
+
+    if (id_it != this_obj.object_range().end()) {
+        // we are visiting a bundled schema.
 
         // run validation since we are not a guaranteed to be in proper schema
         if (auto validation = validate_json_schema(
@@ -2293,9 +2273,9 @@ void collect_bundled_schemas_and_fix_refs(
               validation.assume_error().message())));
         }
 
-        // base uri keyword agrees with the dialect, it's a validated schema, we
-        // can register this as a bundled schema and continue scanning.
-        // (run resolve because it could be relative to the parent schema).
+        // it's a validated schema. we can register this as a bundled schema and
+        // continue scanning. (run resolve because it could be relative to the
+        // parent schema).
         base_uri = jsoncons::uri{id_it->value().as_string()}.resolve(base_uri);
         dialect = maybe_new_dialect.value();
         bundled_schemas.insert_or_assign(
@@ -2343,8 +2323,7 @@ result<id_to_schema_pointer> collect_bundled_schema_and_fix_refs(
             return json_id_uri{""};
         }
 
-        auto id_it = doc.find(
-          dialect == json_schema_dialect::draft4 ? "id" : "$id");
+        auto id_it = doc.find(id_keyword(dialect));
         if (id_it == doc.object_range().end()) {
             // no explicit id, use the empty string
             return json_id_uri{""};

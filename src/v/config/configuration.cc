@@ -289,9 +289,13 @@ configuration::configuration()
   , topic_memory_per_partition(
       *this,
       "topic_memory_per_partition",
-      "Memory required per partition replica: topic creation is prevented if "
-      "it would result in the ratio of memory to partition replicas being "
-      "lower than this value.",
+      "Required memory in bytes per partition replica when creating or "
+      "altering topics. The total size of the memory pool for partitions is "
+      "the total memory available to Redpanda times "
+      "topic_partitions_memory_allocation_percent, and then each partition "
+      "created requires "
+      "topic_memory_per_partition bytes from that pool. If insufficent memory "
+      "is available, topic creation or alternation will fail.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       cluster::DEFAULT_TOPIC_MEMORY_PER_PARTITION,
       {
@@ -319,6 +323,8 @@ configuration::configuration()
       "it would result in the ratio of partition replicas to shards being "
       "higher than this value.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      // default value must be synced with
+      // scale_parameters.py::DEFAULT_PARTITIONS_PER_SHARD
       5000,
       {
         .min = 16,    // Forbid absurdly small values that would prevent most
@@ -344,8 +350,11 @@ configuration::configuration()
   , topic_partitions_memory_allocation_percent(
       *this,
       "topic_partitions_memory_allocation_percent",
-      "Percentage of total memory to reserve for topic partitions.",
+      "Percentage of total memory to reserve for topic partitions. See "
+      "topic_memory_per_partition for details.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      // default value must be synced with
+      // scale_parameters.py::DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT
       10,
       {
         .min = 1,
