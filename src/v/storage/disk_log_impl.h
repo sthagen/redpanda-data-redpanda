@@ -258,6 +258,15 @@ public:
 
     size_t max_segment_size() const;
 
+    uint64_t dirty_segment_bytes() const { return _dirty_segment_bytes; }
+
+    uint64_t closed_segment_bytes() const { return _closed_segment_bytes; }
+
+    // Returns the dirty ratio of the log.
+    // The dirty ratio is the ratio of bytes in closed, dirty segments to the
+    // total number of bytes in all closed segments in the log.
+    double dirty_ratio() const;
+
 private:
     friend class disk_log_appender; // for multi-term appends
     friend class disk_log_builder;  // for tests
@@ -454,6 +463,33 @@ private:
     std::optional<model::offset> _last_compaction_window_start_offset;
 
     size_t _reclaimable_size_bytes{0};
+
+    uint64_t _dirty_segment_bytes{0};
+    uint64_t _closed_segment_bytes{0};
+
+    // Update the number of bytes in dirty segments.
+    //
+    // Dirty segments are closed segments which have not yet been cleanly
+    // compacted- i.e, duplicates for keys in this segment _could_ be found in
+    // the prefix of the log up to this segment.
+    //
+    // This value can increase AND decrease. It increases
+    // when a new segment is rolled, and decreases when the segment is marked as
+    // cleanly compacted, closed segments are evicted from the log, or when
+    // bytes are removed by compaction. For that reason, one of the tags add_tag
+    // or subtract_tag must be used.
+    void add_dirty_segment_bytes(uint64_t bytes);
+    void subtract_dirty_segment_bytes(uint64_t bytes);
+
+    // Update the number of bytes in closed segments.
+    //
+    // This value can increase AND decrease. It increases when a new
+    // segment is rolled, and decreases when closed segments are evicted from
+    // the log, or when bytes are removed by compaction. For that reason, one of
+    // the tags add_tag or subtract_tag must be used.
+    void add_closed_segment_bytes(uint64_t bytes);
+    void subtract_closed_segment_bytes(uint64_t bytes);
+
     bool _compaction_enabled;
 };
 

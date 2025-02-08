@@ -24,6 +24,7 @@
 #include "random/generators.h"
 #include "reflection/adl.h"
 #include "storage/batch_cache.h"
+#include "storage/disk_log_impl.h"
 #include "storage/log_manager.h"
 #include "storage/log_reader.h"
 #include "storage/ntp_config.h"
@@ -5228,3 +5229,152 @@ FIXTURE_TEST(test_offset_range_size_incremental, storage_test_fixture) {
         }
     }
 };
+
+FIXTURE_TEST(dirty_ratio, storage_test_fixture) {
+    auto cfg = default_log_config(test_dir);
+    cfg.max_compacted_segment_size = config::mock_binding<size_t>(100_MiB);
+    cfg.cache = storage::with_cache::yes;
+    storage::ntp_config::default_overrides overrides;
+    overrides.cleanup_policy_bitflags
+      = model::cleanup_policy_bitflags::compaction;
+
+    ss::abort_source as;
+    storage::log_manager mgr = make_log_manager(cfg);
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp = model::ntp("default", "test", 0);
+    auto log = mgr
+                 .manage(storage::ntp_config(
+                   ntp,
+                   mgr.config().base_dir,
+                   std::make_unique<storage::ntp_config::default_overrides>(
+                     overrides)))
+                 .get();
+
+    auto* disk_log = static_cast<storage::disk_log_impl*>(log.get());
+
+    // add a segment with random keys until a certain size
+    auto add_segment = [log](size_t size, model::term_id term) {
+        do {
+            append_single_record_batch(log, 1, term, 16_KiB, true);
+        } while (log->segments().back()->size_bytes() < size);
+    };
+
+    static constexpr double tolerance = 1.0e-6;
+    uint64_t closed_segments_size_bytes = 0;
+    uint64_t dirty_segments_size_bytes = 0;
+    auto assert_on_new_segment = [&disk_log,
+                                  &closed_segments_size_bytes,
+                                  &dirty_segments_size_bytes](size_t index) {
+        auto new_segment_size_bytes = disk_log->segments()[index]->size_bytes();
+        closed_segments_size_bytes += new_segment_size_bytes;
+        dirty_segments_size_bytes += new_segment_size_bytes;
+        auto expected_dirty_ratio
+          = static_cast<double>(dirty_segments_size_bytes)
+            / static_cast<double>(closed_segments_size_bytes);
+        BOOST_REQUIRE_EQUAL(
+          disk_log->dirty_segment_bytes(), dirty_segments_size_bytes);
+        BOOST_REQUIRE_EQUAL(
+          disk_log->closed_segment_bytes(), closed_segments_size_bytes);
+        BOOST_REQUIRE_CLOSE(
+          disk_log->dirty_ratio(), expected_dirty_ratio, tolerance);
+    };
+
+    auto compact_and_assert = [&disk_log,
+                               &closed_segments_size_bytes,
+                               &dirty_segments_size_bytes,
+                               &as]() {
+        // Perform sliding window compaction, which will fully cleanly compact
+        // the log.
+        static const storage::compaction_config compact_cfg(
+          model::offset::max(), std::nullopt, ss::default_priority_class(), as);
+        disk_log->sliding_window_compact(compact_cfg).get();
+
+        dirty_segments_size_bytes = 0;
+
+        BOOST_REQUIRE_EQUAL(
+          disk_log->dirty_segment_bytes(), dirty_segments_size_bytes);
+        BOOST_REQUIRE_EQUAL(
+          disk_log->closed_segment_bytes(), closed_segments_size_bytes);
+        BOOST_REQUIRE_CLOSE(disk_log->dirty_ratio(), 0.0, tolerance);
+    };
+
+    add_segment(2_MiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 2);
+    assert_on_new_segment(0);
+    compact_and_assert();
+
+    add_segment(2_MiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 3);
+    assert_on_new_segment(1);
+    compact_and_assert();
+
+    add_segment(5_MiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 4);
+    assert_on_new_segment(2);
+    compact_and_assert();
+
+    add_segment(16_KiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 5);
+    assert_on_new_segment(3);
+    compact_and_assert();
+
+    add_segment(16_KiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 6);
+    assert_on_new_segment(4);
+    compact_and_assert();
+
+    // Add more segments, don't perform compaction to allow dirty_segment_bytes
+    // to remain non-zero.
+    add_segment(2_MiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    assert_on_new_segment(5);
+
+    add_segment(16_KiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    assert_on_new_segment(6);
+
+    add_segment(16_KiB, model::term_id(1));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    assert_on_new_segment(7);
+
+    std::vector<model::offset> base_offsets;
+    base_offsets.reserve(disk_log->segment_count());
+    for (const auto& s : disk_log->segments()) {
+        base_offsets.push_back(s->offsets().get_base_offset());
+    }
+    // Last base offset is not needed for truncation
+    base_offsets.pop_back();
+    std::reverse(base_offsets.begin(), base_offsets.end());
+
+    auto prev_dirty_segment_bytes = disk_log->dirty_segment_bytes();
+    auto prev_closed_segment_bytes = disk_log->dirty_segment_bytes();
+    auto prev_dirty_ratio = disk_log->dirty_ratio();
+
+    // Gradually truncate the log and see that dirty/closed segment bytes
+    // have decreased.
+    for (const auto& base_offset : base_offsets) {
+        disk_log
+          ->truncate(
+            storage::truncate_config(base_offset, ss::default_priority_class()))
+          .get();
+
+        auto new_dirty_segment_bytes = disk_log->dirty_segment_bytes();
+        auto new_closed_segment_bytes = disk_log->dirty_segment_bytes();
+        auto new_dirty_ratio = disk_log->dirty_ratio();
+        BOOST_REQUIRE_LE(new_dirty_segment_bytes, prev_dirty_segment_bytes);
+        BOOST_REQUIRE_LE(new_closed_segment_bytes, prev_closed_segment_bytes);
+        BOOST_REQUIRE_LE(new_dirty_ratio, prev_dirty_ratio);
+        prev_dirty_segment_bytes = new_dirty_segment_bytes;
+        prev_closed_segment_bytes = new_closed_segment_bytes;
+        prev_dirty_ratio = new_dirty_ratio;
+    }
+
+    BOOST_REQUIRE_EQUAL(disk_log->dirty_segment_bytes(), 0);
+    BOOST_REQUIRE_EQUAL(disk_log->closed_segment_bytes(), 0);
+    BOOST_REQUIRE_CLOSE(disk_log->dirty_ratio(), 0.0, tolerance);
+}

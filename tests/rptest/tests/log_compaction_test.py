@@ -112,6 +112,24 @@ class LogCompactionTest(PreallocNodesTest, PartitionMovementMixin):
             metrics_endpoint=MetricsEndpoint.METRICS,
             topic=self.topic_spec.name)
 
+    def get_dirty_segment_bytes(self):
+        return self.redpanda.metric_sum(
+            metric_name="vectorized_storage_log_dirty_segment_bytes",
+            metrics_endpoint=MetricsEndpoint.METRICS,
+            topic=self.topic_spec.name)
+
+    def get_closed_segment_bytes(self):
+        return self.redpanda.metric_sum(
+            metric_name="vectorized_storage_log_closed_segment_bytes",
+            metrics_endpoint=MetricsEndpoint.METRICS,
+            topic=self.topic_spec.name)
+
+    def get_dirty_ratio(self):
+        dirty_segment_bytes = self.get_dirty_segment_bytes()
+        closed_segment_bytes = self.get_closed_segment_bytes()
+        return 0.0 if closed_segment_bytes == 0 else float(
+            dirty_segment_bytes) / float(closed_segment_bytes)
+
     def produce_and_consume(self):
         """
         Creates producer and consumer. Asserts that tombstones are seen
@@ -135,6 +153,18 @@ class LogCompactionTest(PreallocNodesTest, PartitionMovementMixin):
 
         # Produce and wait
         producer.start()
+
+        def seen_dirty_ratio_above_zero():
+            dirty_bytes_nonzero = self.get_dirty_segment_bytes() > 0
+            closed_bytes_nonzero = self.get_closed_segment_bytes() > 0
+            dirty_ratio_nonzero = self.get_dirty_ratio() > 0.0
+            return dirty_bytes_nonzero and closed_bytes_nonzero and dirty_ratio_nonzero
+
+        wait_until(seen_dirty_ratio_above_zero,
+                   timeout_sec=10,
+                   backoff_sec=0.1,
+                   err_msg="Did not see a non-zero dirty ratio.")
+
         producer.wait_for_latest_value_map()
         producer.wait(timeout_sec=180)
 
@@ -209,6 +239,11 @@ class LogCompactionTest(PreallocNodesTest, PartitionMovementMixin):
         else:
             assert self.get_chunked_compaction_runs() == 0
 
+        # There should be no dirty segments left
+        assert self.get_dirty_segment_bytes() == 0
+        assert self.get_closed_segment_bytes() > 0
+        assert self.get_dirty_ratio() < 1.0e-6
+
         consumer = KgoVerifierSeqConsumer(self.test_context,
                                           self.redpanda,
                                           self.topic_spec.name,
@@ -229,6 +264,38 @@ class LogCompactionTest(PreallocNodesTest, PartitionMovementMixin):
         # Expect to see 0 tombstones consumed
         assert consumer.consumer_status.validator.tombstones_consumed == 0
         assert consumer.consumer_status.validator.invalid_reads == 0
+
+    def wait_for_log_truncation(self):
+        # Set log_retention_ms to an arbitrarily tiny value and wait for log truncation.
+        # This is done by watching the number of bytes in closed segments,
+        # which will decrease as segments are removed.
+        self.client().alter_topic_config(self.topic_spec.name,
+                                         TopicSpec.PROPERTY_RETENTION_TIME,
+                                         1000)
+
+        self.prev_closed_segment_bytes = self.get_closed_segment_bytes()
+        self.prev_dirty_segment_bytes = self.get_dirty_segment_bytes()
+        self.prev_dirty_ratio = self.get_dirty_ratio()
+
+        def all_segments_removed():
+            new_closed_segment_bytes = self.get_closed_segment_bytes()
+            new_dirty_segment_bytes = self.get_dirty_segment_bytes()
+            new_dirty_ratio = self.get_dirty_ratio()
+
+            assert new_closed_segment_bytes <= self.prev_closed_segment_bytes
+            assert new_dirty_segment_bytes <= self.prev_dirty_segment_bytes
+            assert new_dirty_ratio <= self.prev_dirty_ratio
+
+            self.prev_closed_segment_bytes = new_closed_segment_bytes
+            self.prev_dirty_segment_bytes = new_dirty_segment_bytes
+            self.prev_dirty_ratio = new_dirty_ratio
+
+            return new_dirty_segment_bytes == 0 and new_closed_segment_bytes == 0
+
+        wait_until(all_segments_removed,
+                   timeout_sec=120,
+                   backoff_sec=1,
+                   err_msg="Closed segment bytes did not reach zero.")
 
     @skip_debug_mode
     @cluster(num_nodes=4)
@@ -289,6 +356,9 @@ class LogCompactionTest(PreallocNodesTest, PartitionMovementMixin):
         self.produce_and_consume()
 
         self.validate_log()
+
+        if cleanup_policy == TopicSpec.CLEANUP_COMPACT_DELETE:
+            self.wait_for_log_truncation()
 
         # Clean up partition movement thread
         partition_move_thread.join()

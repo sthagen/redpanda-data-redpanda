@@ -149,6 +149,13 @@ disk_log_impl::disk_log_impl(
         if (_compaction_enabled) {
             s->mark_as_compacted_segment();
         }
+        if (s != _segs.back()) {
+            auto seg_size_bytes = s->size_bytes();
+            if (!s->index().has_clean_compact_timestamp()) {
+                add_dirty_segment_bytes(seg_size_bytes);
+            }
+            add_closed_segment_bytes(seg_size_bytes);
+        }
     }
     _probe->initial_segments_count(_segs.size());
     _probe->setup_metrics(this->config().ntp());
@@ -512,6 +519,10 @@ ss::future<> disk_log_impl::adjacent_merge_compact(
         if (result.did_compact()) {
             segment->clear_cached_disk_usage();
             _compaction_ratio.update(result.compaction_ratio());
+            const auto removed_bytes = result.size_before - result.size_after;
+            subtract_dirty_segment_bytes(removed_bytes);
+            subtract_closed_segment_bytes(removed_bytes);
+
             co_return;
         }
     }
@@ -599,6 +610,11 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
             continue;
         }
 
+        const auto removed_bytes = result.size_before - result.size_after;
+        if (!seg->index().has_clean_compact_timestamp()) {
+            subtract_dirty_segment_bytes(removed_bytes);
+        }
+        subtract_closed_segment_bytes(removed_bytes);
         vlog(
           gclog.debug,
           "[{}] segment {} self compaction result: {}",
@@ -627,8 +643,12 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
         // For all intents and purposes, these segments are already cleanly
         // compacted.
         auto seg = segs.front();
-        co_await internal::mark_segment_as_finished_window_compaction(
-          seg, true, *_probe);
+        bool marked_as_cleanly_compacted
+          = co_await internal::mark_segment_as_finished_window_compaction(
+            seg, true, *_probe);
+        if (marked_as_cleanly_compacted) {
+            subtract_dirty_segment_bytes(seg->size_bytes());
+        }
         segs.pop_front();
     }
     if (segs.empty()) {
@@ -827,6 +847,9 @@ disk_log_impl::compact_adjacent_segments(storage::compaction_config cfg) {
           r);
         if (r->did_compact()) {
             _compaction_ratio.update(r->compaction_ratio());
+            const auto removed_bytes = r->size_before - r->size_after;
+            subtract_dirty_segment_bytes(removed_bytes);
+            subtract_closed_segment_bytes(removed_bytes);
         }
     } else {
         vlog(
@@ -1275,13 +1298,21 @@ ss::future<bool> disk_log_impl::chunked_sliding_window_compact(
 
     // Segments can now be marked as finished window compaction
     for (auto& s : segs) {
-        co_await internal::mark_segment_as_finished_window_compaction(
-          s, false, *_probe);
+        std::ignore
+          = co_await internal::mark_segment_as_finished_window_compaction(
+            s, false, *_probe);
     }
 
-    // We can also mark the last segment as cleanly compacted now
-    co_await internal::mark_segment_as_finished_window_compaction(
-      seg, true, *_probe);
+    // We can also mark the last segment as cleanly compacted now.
+    bool marked_as_cleanly_compacted
+      = co_await internal::mark_segment_as_finished_window_compaction(
+        seg, true, *_probe);
+
+    // This should always be true - the unindexed segment would not have been
+    // cleanly compacted to begin with.
+    if (marked_as_cleanly_compacted) {
+        subtract_dirty_segment_bytes(seg->size_bytes());
+    }
 
     _last_compaction_window_start_offset = seg->offsets().get_base_offset();
     _probe->add_chunked_compaction_run();
@@ -1323,8 +1354,12 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
         // higher than those indexed, it may be because the segment is
         // entirely comprised of non-data batches. Mark it as compacted so
         // we can progress through compactions.
-        co_await internal::mark_segment_as_finished_window_compaction(
-          seg, is_clean_compacted, *_probe);
+        bool marked_as_cleanly_compacted
+          = co_await internal::mark_segment_as_finished_window_compaction(
+            seg, is_clean_compacted, *_probe);
+        if (marked_as_cleanly_compacted) {
+            subtract_dirty_segment_bytes(seg->size_bytes());
+        }
 
         vlog(
           gclog.debug,
@@ -1338,8 +1373,12 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
     if (!seg->may_have_compactible_records()) {
         // All data records are already compacted away. Skip to avoid a
         // needless rewrite.
-        co_await internal::mark_segment_as_finished_window_compaction(
-          seg, is_clean_compacted, *_probe);
+        bool marked_as_cleanly_compacted
+          = co_await internal::mark_segment_as_finished_window_compaction(
+            seg, is_clean_compacted, *_probe);
+        if (marked_as_cleanly_compacted) {
+            subtract_dirty_segment_bytes(seg->size_bytes());
+        }
 
         vlog(
           gclog.trace,
@@ -1434,18 +1473,32 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
     seg->force_set_commit_offset_from_index();
     seg->release_batch_cache_index();
 
+    const auto removed_bytes = ssize_t(size_before) - ssize_t(size_after);
+
+    // We must deduct the removed bytes from the dirty segment bytes.
+    // However, if the segment is marked as cleanly compacted below, the
+    // entire seg size (before compaction) will instead be removed from dirty
+    // segment bytes.
+    auto dirty_removed_bytes = removed_bytes;
+
     if (is_finished_window_compaction) {
         // Mark the segment as completed window compaction, and possibly set the
         // clean_compact_timestamp in it's index.
-        co_await internal::mark_segment_as_finished_window_compaction(
-          seg, is_clean_compacted, *_probe);
+        bool marked_as_cleanly_compacted
+          = co_await internal::mark_segment_as_finished_window_compaction(
+            seg, is_clean_compacted, *_probe);
+        if (marked_as_cleanly_compacted) {
+            dirty_removed_bytes = size_before;
+        }
     }
+
+    subtract_dirty_segment_bytes(dirty_removed_bytes);
+    subtract_closed_segment_bytes(removed_bytes);
 
     co_await seg->index().flush();
     co_await ss::rename_file(cmp_idx_tmpname.string(), cmp_idx_name.string());
     _probe->segment_compacted();
-    _probe->add_compaction_removed_bytes(
-      ssize_t(size_before) - ssize_t(size_after));
+    _probe->add_compaction_removed_bytes(removed_bytes);
 
     compaction_result res(size_before, size_after);
     _compaction_ratio.update(res.compaction_ratio());
@@ -1762,6 +1815,14 @@ ss::future<> disk_log_impl::new_segment(
                 vassert(!_closed, "cannot add log segment to closed log");
                 if (config().is_compacted()) {
                     h->mark_as_compacted_segment();
+                }
+                if (!_segs.empty()) {
+                    auto rolled_seg = _segs.back();
+                    const auto closed_segment_size = rolled_seg->size_bytes();
+                    if (!rolled_seg->index().has_clean_compact_timestamp()) {
+                        add_dirty_segment_bytes(closed_segment_size);
+                    }
+                    add_closed_segment_bytes(closed_segment_size);
                 }
                 _segs.add(std::move(h));
                 _probe->segment_created();
@@ -2737,6 +2798,11 @@ ss::future<> disk_log_impl::remove_segment_permanently(
     vlog(stlog.info, "Removing \"{}\" ({}, {})", s->filename(), ctx, s);
     // stats accounting must happen synchronously
     _probe->delete_segment(*s);
+    auto removed_segment_bytes = s->size_bytes();
+    if (!s->index().has_clean_compact_timestamp()) {
+        subtract_dirty_segment_bytes(removed_segment_bytes);
+    }
+    subtract_closed_segment_bytes(removed_segment_bytes);
     // background close
     s->tombstone();
     if (s->has_outstanding_locks()) {
@@ -4023,6 +4089,34 @@ ss::future<> disk_log_impl::remove_kvstore_state(
              kvs.remove(ks, internal::start_offset_key(ntp)),
              kvs.remove(ks, internal::clean_segment_key(ntp)))
       .discard_result();
+}
+
+double disk_log_impl::dirty_ratio() const {
+    // Avoid division by 0.
+    return (_closed_segment_bytes == 0)
+             ? 0.0
+             : static_cast<double>(_dirty_segment_bytes)
+                 / static_cast<double>(_closed_segment_bytes);
+}
+
+void disk_log_impl::add_dirty_segment_bytes(uint64_t bytes) {
+    _dirty_segment_bytes += bytes;
+    _probe->set_dirty_segment_bytes(_dirty_segment_bytes);
+}
+
+void disk_log_impl::add_closed_segment_bytes(uint64_t bytes) {
+    _closed_segment_bytes += bytes;
+    _probe->set_closed_segment_bytes(_closed_segment_bytes);
+}
+
+void disk_log_impl::subtract_dirty_segment_bytes(uint64_t bytes) {
+    _dirty_segment_bytes -= std::min(bytes, _dirty_segment_bytes);
+    _probe->set_dirty_segment_bytes(_dirty_segment_bytes);
+}
+
+void disk_log_impl::subtract_closed_segment_bytes(uint64_t bytes) {
+    _closed_segment_bytes -= std::min(bytes, _closed_segment_bytes);
+    _probe->set_closed_segment_bytes(_closed_segment_bytes);
 }
 
 } // namespace storage

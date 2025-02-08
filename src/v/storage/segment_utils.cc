@@ -1165,7 +1165,7 @@ offset_delta_time should_apply_delta_time_offset(
       && feature_table.local().is_active(features::feature::node_isolation)};
 }
 
-ss::future<> mark_segment_as_finished_window_compaction(
+ss::future<bool> mark_segment_as_finished_window_compaction(
   ss::lw_shared_ptr<segment> seg, bool set_clean_compact_timestamp, probe& pb) {
     seg->mark_as_finished_windowed_compaction();
     if (set_clean_compact_timestamp) {
@@ -1173,11 +1173,11 @@ ss::future<> mark_segment_as_finished_window_compaction(
           model::timestamp::now());
         if (did_set) {
             pb.add_cleanly_compacted_segment();
-            return seg->index().flush();
+            return seg->index().flush().then([] { return true; });
         }
     }
 
-    return ss::now();
+    return ss::make_ready_future<bool>(false);
 }
 
 bool is_past_tombstone_delete_horizon(

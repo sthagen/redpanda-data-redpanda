@@ -229,6 +229,16 @@ void probe::setup_metrics(const model::ntp& ntp) {
             "corresponds to the number of times the compaction key-offset map "
             "was unable to be built for a single segment."),
           labels),
+        sm::make_gauge(
+          "dirty_segment_bytes",
+          [this] { return _dirty_segment_bytes; },
+          sm::description("Number of bytes within dirty segments of the log"),
+          labels),
+        sm::make_gauge(
+          "closed_segment_bytes",
+          [this] { return _closed_segment_bytes; },
+          sm::description("Number of bytes within closed segments of the log"),
+          labels),
       },
       {},
       {sm::shard_label, partition_label});

@@ -556,7 +556,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_btest(
     name = "remote_partition_fuzz_test",
-    timeout = "moderate",
+    timeout = "long",
     srcs = [
         "remote_partition_fuzz_test.cc",
     ],
