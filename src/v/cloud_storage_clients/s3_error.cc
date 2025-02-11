@@ -420,7 +420,9 @@ rest_error_response::rest_error_response(
   std::string_view message,
   std::string_view request_id,
   std::string_view resource)
-  : _code(boost::lexical_cast<s3_error_code>(code))
+  : _code(
+      code.empty() ? s3_error_code::_unknown
+                   : boost::lexical_cast<s3_error_code>(code))
   , _code_str(code)
   , _message(message)
   , _request_id(request_id)

@@ -81,6 +81,31 @@ add_tag(snapshot_id id, const ss::sstring& tag_name, table_metadata* table) {
     return table->refs->at(tag_name);
 }
 
+// Examines the updates from the transaction and checks that they match the
+// expected counts, also ensuring that snapshot removals are stored
+// individually, to match the expectations from Java implementations.
+// https://github.com/apache/iceberg/blob/3e6da2e5437ffb3f643275927e5580cb9620256b/core/src/main/java/org/apache/iceberg/MetadataUpdateParser.java#L550-L553
+void check_expected_updates(
+  const transaction& txn,
+  size_t expected_snap_removals,
+  size_t expected_ref_removals) {
+    size_t snapshot_removals = 0;
+    size_t ref_removals = 0;
+    for (const auto& u : txn.updates().updates) {
+        if (std::holds_alternative<remove_snapshots>(u)) {
+            auto& r = std::get<remove_snapshots>(u);
+            EXPECT_EQ(1, r.snapshot_ids.size());
+            snapshot_removals++;
+        } else if (std::holds_alternative<remove_snapshot_ref>(u)) {
+            ref_removals++;
+        } else {
+            FAIL() << "Unexpected update: " << u.index();
+        }
+    }
+    EXPECT_EQ(expected_snap_removals, snapshot_removals);
+    EXPECT_EQ(ref_removals, expected_ref_removals);
+}
+
 static constexpr size_t default_total_snaps = 100;
 
 } // namespace
@@ -395,6 +420,10 @@ TEST_F(RemoveSnapshotsActionTest, TestRemoveSnapshotTransaction) {
     transaction txn(std::move(table));
     auto tx_outcome = txn.remove_expired_snapshots(now).get();
     ASSERT_FALSE(tx_outcome.has_error());
+
+    // Removed snapshots should be returned as individual updates.
+    ASSERT_NO_FATAL_FAILURE(
+      check_expected_updates(txn, default_total_snaps - 1, 0));
     ASSERT_EQ(
       txn.table().snapshots->size(),
       remove_snapshots_action::default_min_snapshots_retained);
@@ -417,6 +446,8 @@ TEST_F(RemoveSnapshotsActionTest, TestRemoveSnapshotReferenceTransaction) {
     transaction txn(std::move(table));
     auto tx_outcome = txn.remove_expired_snapshots(now).get();
     ASSERT_FALSE(tx_outcome.has_error());
+
+    ASSERT_NO_FATAL_FAILURE(check_expected_updates(txn, 1, 1));
     ASSERT_EQ(txn.table().snapshots->size(), 0);
     ASSERT_EQ(txn.table().refs->size(), 0);
 }

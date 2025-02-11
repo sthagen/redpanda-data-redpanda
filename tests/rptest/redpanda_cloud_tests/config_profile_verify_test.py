@@ -79,7 +79,7 @@ class ConfigProfileVerifyTest(RedpandaCloudTest):
     def _check_aws_nodes(self):
         cmd = self.redpanda.kubectl._ssh_prefix() + [
             'aws', 'ec2', 'describe-instances',
-            '--filters="Name=tag:Name, Values=redpanda-{}-rp"'.format(
+            '--filters="Name=tag:Name, Values=redpanda-{}-rp-*"'.format(
                 self._clusterId),
             '--query="Reservations[0].Instances[*].InstanceType"'
         ]
@@ -110,21 +110,27 @@ class ConfigProfileVerifyTest(RedpandaCloudTest):
             '--output', f'jsonpath-as-json="{jsonpath}"'
         ] # yapf: disable
 
-        output = subprocess.check_output(cmd)
-        self.logger.debug(f'nodes: {output}')
-        nodes = json.loads(output)
-        try:
-            nodes = json.loads(nodes)
-        except json.JSONDecodeError as e:
-            self.logger.error(
-                f"Failed to parse kubectl get nodes response: {nodes}")
-            raise ValueError(
-                f"Failed to parse kubectl get nodes response: {e}")
+        output = subprocess.check_output(cmd).decode("utf-8").strip()
 
+        self.logger.debug(f'Azure nodes raw output: {output}')
+
+        # Convert space separated output into a Python list
+        # Example: ["Standard_D2d_v5", "Standard_D2d_v5", "Standard_D2d_v5"]
+        nodes = output.split()
+
+        # Ensure we have nodes to validate
+        if not nodes:
+            self.logger.error(
+                "No nodes found with selector 'redpanda-node=true'")
+            raise ValueError(
+                "No nodes found with selector 'redpanda-node=true'")
+
+        # Validate the number of nodes
         config_nodes_count = self._configProfile['nodes_count']
         actual_nodes_count = len(nodes)
         assert actual_nodes_count == config_nodes_count, f"expected nodes_count: {config_nodes_count}, actual: {actual_nodes_count}"
 
+        # Validate machine type
         config_machine_type = self._configProfile['machine_type']
         actual_machine_type = nodes[0]
         assert actual_machine_type == config_machine_type, f"expected machineType: {config_machine_type}, actual: {actual_machine_type}"

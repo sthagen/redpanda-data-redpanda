@@ -159,12 +159,13 @@ class DatalakeE2ETests(RedpandaTest):
             assert count_after_produce == count, f"{count_after_produce} rows, expected {count}"
 
     @cluster(num_nodes=4)
-    @matrix(cloud_storage_type=supported_storage_types())
-    def test_remove_expired_snapshots(self, cloud_storage_type):
+    @matrix(cloud_storage_type=supported_storage_types(),
+            catalog_type=supported_catalog_types())
+    def test_remove_expired_snapshots(self, cloud_storage_type, catalog_type):
         table_name = f"redpanda.{self.topic_name}"
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              catalog_type=filesystem_catalog_type(),
+                              catalog_type=catalog_type,
                               include_query_engines=[QueryEngineType.SPARK
                                                      ]) as dl:
             dl.create_iceberg_enabled_topic(self.topic_name, partitions=1)
@@ -182,8 +183,9 @@ class DatalakeE2ETests(RedpandaTest):
             spark = dl.spark()
 
             def num_snapshots() -> int:
+                # Example: [(2445569139027301708, 1739213500520), (2859411459768103060, 1739213495458), (1069851874616045025, 1739213485410), (5648673429948705023, 1739213475351), (7558202443004267034, 1739213465282)]
                 snapshots_out = spark.run_query_fetch_all(
-                    f"select * from {table_name}.snapshots")
+                    f"call system.ancestors_of('{table_name}')")
                 return len(snapshots_out)
 
             num_snaps = num_snapshots()

@@ -297,9 +297,12 @@ ss::future<action::action_outcome> remove_snapshots_action::build_updates() && {
         co_return ret;
     }
 
-    if (!snaps_to_remove.empty()) {
-        ret.updates.emplace_back(
-          table_update::remove_snapshots{std::move(snaps_to_remove)});
+    // NOTE: the Java implementation only allows a single snapshot per update,
+    // despite the spec allowing multiple. To be maximally supportive of the
+    // ecosystem, we will serialize one snapshot per update.
+    // https://github.com/apache/iceberg/blob/3e6da2e5437ffb3f643275927e5580cb9620256b/core/src/main/java/org/apache/iceberg/MetadataUpdateParser.java#L550-L553
+    for (auto& s : snaps_to_remove) {
+        ret.updates.emplace_back(table_update::remove_snapshots{{s}});
     }
     for (auto& r : refs_to_remove) {
         ret.updates.emplace_back(
