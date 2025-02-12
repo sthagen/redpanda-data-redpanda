@@ -40,7 +40,7 @@ public:
             return;
         }
 
-        std::vector<sm::label_instance> labels{
+        std::vector<sm::label_instance> latency_labels{
           sm::label("latency_metric")("microseconds")};
 
         _metrics.add_group(
@@ -49,12 +49,12 @@ public:
             sm::make_histogram(
               "fetch_latency_us",
               sm::description("Fetch Latency"),
-              labels,
+              latency_labels,
               [this] { return _fetch_latency.internal_histogram_logform(); }),
             sm::make_histogram(
               "produce_latency_us",
               sm::description("Produce Latency"),
-              labels,
+              latency_labels,
               [this] { return _produce_latency.internal_histogram_logform(); }),
           },
           {},
@@ -67,7 +67,7 @@ public:
               "batch_size",
               sm::description(
                 "Batch size across all topics measured at the kafka layer."),
-              labels,
+              {},
               [this] { return _batch_size.batch_size_histogram_logform(); }),
           },
           {},

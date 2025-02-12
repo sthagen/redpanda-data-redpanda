@@ -118,10 +118,11 @@ class NessieCatalog(CatalogService):
         Specify them as Java -D properties instead.
         """
         d_flags = ""
-        d_flags += "-Dnessie.catalog.service.s3.default-options.access-key=urn:nessie-secret:quarkus:my-secrets-default "
-        d_flags += f"-Dmy-secrets-default.name={self.credentials.access_key} "
-        d_flags += f"-Dmy-secrets-default.secret={self.credentials.secret_key} "
-        d_flags += "-Dnessie.catalog.validate-secrets=true"
+        if isinstance(self.credentials, cloud_storage.S3Credentials):
+            d_flags += "-Dnessie.catalog.service.s3.default-options.access-key=urn:nessie-secret:quarkus:my-secrets-default "
+            d_flags += f"-Dmy-secrets-default.name={self.credentials.access_key} "
+            d_flags += f"-Dmy-secrets-default.secret={self.credentials.secret_key} "
+            d_flags += "-Dnessie.catalog.validate-secrets=true"
         return d_flags
 
     def _java_cmd(self, node):
