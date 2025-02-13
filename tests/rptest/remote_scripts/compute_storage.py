@@ -69,7 +69,7 @@ class SegmentReader:
 
 def safe_isdir(p: Path) -> bool:
     """
-    It's valid for files to be deleted at any time, 
+    It's valid for files to be deleted at any time,
     in that case that the file is missing, just return
     that it's not a directory
     """
@@ -81,10 +81,13 @@ def safe_isdir(p: Path) -> bool:
 
 def safe_listdir(p: Path) -> list[Path]:
     """
-    It's valid for directories to be deleted at any time, 
+    It's valid for directories to be deleted at any time,
     in that case that the directory is missing, just return
     that there are no files.
     """
+    if not safe_isdir(p):
+        return []
+
     try:
         return [f for f in p.iterdir()]
     except FileNotFoundError:
@@ -143,7 +146,9 @@ def compute_size(data_dir: Path, sizes: bool, calculate_md5: bool,
     for ns in safe_listdir(data_dir):
         if not safe_isdir(ns):
             continue
-        if ns.name in ["cloud_storage_cache", "crash_reports"]:
+        if ns.name in [
+                "cloud_storage_cache", "crash_reports", "datalake_staging"
+        ]:
             continue
         ns_output = {}
         for topic in safe_listdir(ns):
