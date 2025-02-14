@@ -294,17 +294,15 @@ ss::future<subject_schema> sharded_store::has_schema(
     for (auto ver : versions) {
         try {
             auto res = co_await get_subject_schema(schema.sub(), ver, inc_del);
-            if (norm) {
-                res.schema = co_await make_canonical_schema(
-                  unparsed_schema{
-                    res.schema.sub(),
-                    unparsed_schema_definition{
-                      unparsed_schema_definition::raw_string{
-                        res.schema.def().raw()().copy()},
-                      res.schema.def().type(),
-                      res.schema.def().refs()}},
-                  norm);
-            }
+            res.schema = co_await make_canonical_schema(
+              unparsed_schema{
+                res.schema.sub(),
+                unparsed_schema_definition{
+                  unparsed_schema_definition::raw_string{
+                    res.schema.def().raw()().copy()},
+                  res.schema.def().type(),
+                  res.schema.def().refs()}},
+              norm);
             if (schema.def() == res.schema.def()) {
                 sub_schema.emplace(std::move(res));
                 break;

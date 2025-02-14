@@ -12,14 +12,8 @@
 
 #include "cloud_storage/base_manifest.h"
 #include "container/fragmented_vector.h"
-#include "json/document.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
-
-#include <rapidjson/document.h>
-
-#include <optional>
 
 namespace cloud_storage {
 
@@ -68,8 +62,6 @@ public:
     size_t estimate_serialized_size() const;
 
 private:
-    void do_update(const rapidjson::Document& is);
-
     remote_segment_path _path;
     fragmented_vector<model::tx_range> _ranges;
 };

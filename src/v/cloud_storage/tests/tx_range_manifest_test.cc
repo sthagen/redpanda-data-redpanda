@@ -10,15 +10,10 @@
 
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
-#include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
-#include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/tx_range_manifest.h"
 #include "cloud_storage/types.h"
-#include "cluster/types.h"
-#include "model/compression.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
 
 #include <seastar/testing/test_case.hh>
@@ -27,11 +22,7 @@
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 
-#include <chrono>
 #include <iterator>
-#include <string>
-#include <string_view>
-#include <system_error>
 
 using namespace cloud_storage;
 
@@ -96,7 +87,6 @@ SEASTAR_THREAD_TEST_CASE(serialization_roundtrip_test) {
     iobuf buf;
     auto os = make_iobuf_ref_output_stream(buf);
     ss::copy(is, os).get();
-
     auto rstr = make_iobuf_input_stream(std::move(buf));
     tx_range_manifest restored(segment_path);
     restored.update(std::move(rstr)).get();

@@ -290,6 +290,21 @@ redpanda_cc_btest(
     ],
 )
 
+redpanda_cc_bench(
+    name = "tx_range_manifest_bench",
+    srcs = ["tx_range_manifest_bench.cc"],
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iobuf",
+        "//src/v/cloud_storage",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:benchmark",
+    ],
+)
+
 redpanda_cc_gtest(
     name = "topic_mount_manifest_test",
     timeout = "short",
