@@ -77,10 +77,10 @@ iobuf encode_plain(const chunked_vector<float64_value>& vals) {
 iobuf encode_plain(chunked_vector<byte_array_value> vals) {
     iobuf buf;
     for (auto& v : vals) {
-        int32_t i = ss::cpu_to_le(static_cast<int32_t>(v.val->size_bytes()));
+        int32_t i = ss::cpu_to_le(static_cast<int32_t>(v.val.size_bytes()));
         // NOLINTNEXTLINE(*reinterpret-cast*)
         buf.append(reinterpret_cast<const uint8_t*>(&i), sizeof(int32_t));
-        buf.append(std::move(*v.val));
+        buf.append(std::move(v.val));
     }
     return buf;
 }
@@ -88,7 +88,7 @@ iobuf encode_plain(chunked_vector<byte_array_value> vals) {
 iobuf encode_plain(chunked_vector<fixed_byte_array_value> vals) {
     iobuf buf;
     for (auto& v : vals) {
-        buf.append(std::move(*v.val));
+        buf.append(std::move(v.val));
     }
     return buf;
 }
@@ -161,8 +161,6 @@ iobuf encode_for_stats(int32_value v) { return encode_plain({v}); }
 iobuf encode_for_stats(int64_value v) { return encode_plain({v}); }
 iobuf encode_for_stats(float32_value v) { return encode_plain({v}); }
 iobuf encode_for_stats(float64_value v) { return encode_plain({v}); }
-iobuf encode_for_stats(const byte_array_value& v) { return v.val->copy(); }
-iobuf encode_for_stats(const fixed_byte_array_value& v) {
-    return v.val->copy();
-}
+iobuf encode_for_stats(const byte_array_value& v) { return v.val.copy(); }
+iobuf encode_for_stats(const fixed_byte_array_value& v) { return v.val.copy(); }
 } // namespace serde::parquet

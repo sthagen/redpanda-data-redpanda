@@ -46,9 +46,7 @@
 namespace details {
 class io_iterator_consumer {
 public:
-    using io_const_iterator
-      = uncounted_intrusive_list<io_fragment, &io_fragment::hook>::
-        const_iterator;
+    using io_const_iterator = io_fragment_list::const_iterator;
 
     io_iterator_consumer(
       const io_const_iterator& begin, const io_const_iterator& end) noexcept

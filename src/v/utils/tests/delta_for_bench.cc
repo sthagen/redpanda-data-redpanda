@@ -14,7 +14,7 @@
 
 #include <seastar/testing/perf_tests.hh>
 
-#include <ranges>
+#include <map>
 #include <vector>
 
 using namespace cloud_storage;

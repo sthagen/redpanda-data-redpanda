@@ -81,10 +81,10 @@ public:
         int64_t value_memory_usage = 0;
 
         ss::visit(
-          val,
+          std::move(val),
           [this, &value_memory_usage](value_type& v) {
               if constexpr (!std::is_trivially_copyable_v<value_type>) {
-                  value_memory_usage = v.val->size_bytes();
+                  value_memory_usage = v.val.size_bytes();
               } else {
                   value_memory_usage = sizeof(value_type);
               }

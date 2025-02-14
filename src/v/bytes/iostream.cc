@@ -19,7 +19,7 @@ ss::input_stream<char> make_iobuf_input_stream(iobuf io) {
             return get();
         }
         ss::future<ss::temporary_buffer<char>> get() final {
-            if (io.begin() == io.end()) {
+            if (io.empty()) {
                 return ss::make_ready_future<ss::temporary_buffer<char>>();
             }
             auto buf = io.begin()->share();

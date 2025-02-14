@@ -77,25 +77,25 @@ std::strong_ordering float64(const float64_value a, const float64_value b) {
 
 std::strong_ordering
 byte_array(const byte_array_value& a, const byte_array_value& b) {
-    return *a.val <=> *b.val;
+    return a.val <=> b.val;
 }
 
 std::strong_ordering fixed_byte_array(
   const fixed_byte_array_value& a, const fixed_byte_array_value& b) {
-    return *a.val <=> *b.val;
+    return a.val <=> b.val;
 }
 
 std::strong_ordering
 int128_be(const fixed_byte_array_value& a, const fixed_byte_array_value& b) {
     if (
-      a.val->size_bytes() != sizeof(absl::int128)
-      || b.val->size_bytes() != sizeof(absl::int128)) {
+      a.val.size_bytes() != sizeof(absl::int128)
+      || b.val.size_bytes() != sizeof(absl::int128)) {
         throw std::runtime_error("unable to convert input to int128");
     }
-    iobuf_const_parser ap(*a.val);
+    iobuf_const_parser ap(a.val);
     auto a_hi = ap.consume_be_type<int64_t>();
     auto a_lo = ap.consume_be_type<uint64_t>();
-    iobuf_const_parser bp(*b.val);
+    iobuf_const_parser bp(b.val);
     auto b_hi = bp.consume_be_type<int64_t>();
     auto b_lo = bp.consume_be_type<uint64_t>();
     // TODO: Switch to <=> on absl::int128 when
@@ -114,12 +114,12 @@ namespace internal {
 
 template<>
 byte_array_value copy(byte_array_value& v) {
-    return {std::make_unique<iobuf>(v.val->share(0, v.val->size_bytes()))};
+    return {v.val.share(0, v.val.size_bytes())};
 }
 
 template<>
 fixed_byte_array_value copy(fixed_byte_array_value& v) {
-    return {std::make_unique<iobuf>(v.val->share(0, v.val->size_bytes()))};
+    return {v.val.share(0, v.val.size_bytes())};
 }
 
 } // namespace internal

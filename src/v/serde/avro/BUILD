@@ -16,6 +16,7 @@ redpanda_cc_library(
         "//src/v/container:fragmented_vector",
         "//src/v/utils:vint",
         "@avro",
+        "@boost//:range",
         "@seastar",
     ],
 )

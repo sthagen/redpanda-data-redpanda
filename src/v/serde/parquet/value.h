@@ -15,7 +15,6 @@
 #include "container/fragmented_vector.h"
 
 #include <cstdint>
-#include <memory>
 #include <unistd.h>
 
 // A subset of parquet values that is needed for iceberg.
@@ -51,18 +50,14 @@ struct float64_value {
     bool operator==(const float64_value&) const = default;
 };
 struct byte_array_value {
-    std::unique_ptr<iobuf> val;
+    iobuf val;
 
-    bool operator==(const byte_array_value& other) const {
-        return *val == *other.val;
-    };
+    bool operator==(const byte_array_value&) const = default;
 };
 struct fixed_byte_array_value {
-    std::unique_ptr<iobuf> val;
+    iobuf val;
 
-    bool operator==(const fixed_byte_array_value& other) const {
-        return *val == *other.val;
-    };
+    bool operator==(const fixed_byte_array_value&) const = default;
 };
 
 struct repeated_element;

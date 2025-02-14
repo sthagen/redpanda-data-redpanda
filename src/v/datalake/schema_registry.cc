@@ -71,7 +71,7 @@ get_proto_offsets_result get_schema_proto_offsets(iobuf& buf) noexcept {
 result<proto_offsets_message_data, get_schema_error>
 get_proto_offsets(iobuf& buf) noexcept {
     proto_offsets_message_data result;
-    iobuf_const_parser parser(buf.share(0, buf.size_bytes()));
+    iobuf_const_parser parser(buf);
 
     // The encoding is a length, followed by indexes into the file or message.
     // Each number is a zigzag encoded integer.

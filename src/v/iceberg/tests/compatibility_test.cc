@@ -15,6 +15,7 @@
 #include "random/generators.h"
 
 #include <absl/container/btree_map.h>
+#include <boost/range/irange.hpp>
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 

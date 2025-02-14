@@ -84,6 +84,7 @@ redpanda_cc_gtest(
         "//src/v/test_utils:runfiles",
         "//src/v/utils:file_io",
         "@avro",
+        "@boost//:range",
         "@fmt",
         "@googletest//:gtest",
         "@googletest//:gtest_main",

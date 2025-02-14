@@ -11,15 +11,12 @@
 
 #pragma once
 #include "base/likely.h"
-#include "base/oncore.h"
 #include "base/seastarx.h"
 #include "bytes/details/io_allocation_size.h"
 #include "bytes/details/io_byte_iterator.h"
 #include "bytes/details/io_fragment.h"
 #include "bytes/details/io_iterator_consumer.h"
 #include "bytes/details/io_placeholder.h"
-#include "bytes/details/out_of_range.h"
-#include "container/intrusive_list_helpers.h"
 
 #include <seastar/core/temporary_buffer.hh>
 
@@ -52,7 +49,7 @@
  */
 class iobuf {
     // Not a lightweight object.
-    // 16 bytes for std::list
+    // 16 bytes for io_fragment_list
     // 8  bytes for _size_bytes
     // -----------------------
     //
@@ -60,7 +57,7 @@ class iobuf {
 
     // Each fragment:
     // 24  of ss::temporary_buffer<>
-    // 16  for left,right pointers
+    // 16  for prev,next pointers
     // 8   for consumed capacity
     // -----------------------
     //
@@ -68,7 +65,7 @@ class iobuf {
 
 public:
     using fragment = details::io_fragment;
-    using container = uncounted_intrusive_list<fragment, &fragment::hook>;
+    using container = details::io_fragment_list;
     using iterator = typename container::iterator;
     using reverse_iterator = typename container::reverse_iterator;
     using const_iterator = typename container::const_iterator;
@@ -90,10 +87,8 @@ public:
     ~iobuf() noexcept;
     iobuf(iobuf&& x) noexcept
       : _frags(std::move(x._frags))
-      , _size(x._size) {
-        x._frags = container{};
-        x._size = 0;
-    }
+      , _size(std::exchange(x._size, 0)) {}
+
     iobuf& operator=(iobuf&& x) noexcept {
         if (this != &x) {
             this->~iobuf();
@@ -330,10 +325,10 @@ iobuf::prepend(ss::temporary_buffer<char> b) {
 }
 [[gnu::always_inline]] inline void iobuf::prepend(iobuf b) {
     while (!b._frags.empty()) {
-        b._frags.pop_back_and_dispose([this](fragment* f) {
-            prepend(f->share());
-            details::dispose_io_fragment(f);
-        });
+        fragment* f = &b._frags.back();
+        b._frags.pop_back();
+        prepend(f->share());
+        details::dispose_io_fragment(f);
     }
 }
 /// append src + len into storage
@@ -397,29 +392,33 @@ iobuf::append(const uint8_t* src, size_t len) {
 /// appends the contents of buffer; might pack values into existing space
 inline void iobuf::append(iobuf o) {
     while (!o._frags.empty()) {
-        o._frags.pop_front_and_dispose([this](fragment* f) {
-            append(f->share());
-            details::dispose_io_fragment(f);
-        });
+        fragment* f = &o._frags.front();
+        o._frags.pop_front();
+        append(f->share());
+        details::dispose_io_fragment(f);
     }
 }
 
 inline void iobuf::append_fragments(iobuf o) {
     while (!o._frags.empty()) {
-        o._frags.pop_front_and_dispose([this](fragment* f) {
-            append(std::make_unique<fragment>(f->share()));
-            details::dispose_io_fragment(f);
-        });
+        fragment* f = &o._frags.front();
+        o._frags.pop_front();
+        append(std::make_unique<fragment>(f->share()));
+        details::dispose_io_fragment(f);
     }
 }
 /// used for iostreams
 inline void iobuf::pop_front() {
-    _size -= _frags.front().size();
-    _frags.pop_front_and_dispose(&details::dispose_io_fragment);
+    fragment* f = &_frags.front();
+    _size -= f->size();
+    _frags.pop_front();
+    details::dispose_io_fragment(f);
 }
 inline void iobuf::pop_back() {
-    _size -= _frags.back().size();
-    _frags.pop_back_and_dispose(&details::dispose_io_fragment);
+    fragment* f = &_frags.back();
+    _size -= f->size();
+    _frags.pop_back();
+    details::dispose_io_fragment(f);
 }
 inline void iobuf::trim_front(size_t n) {
     while (!_frags.empty()) {

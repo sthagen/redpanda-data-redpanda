@@ -15,6 +15,7 @@
 #include "cloud_topics/core/pipeline_stage.h"
 #include "cloud_topics/core/serializer.h"
 #include "cloud_topics/errc.h"
+#include "container/intrusive_list_helpers.h"
 #include "model/record.h"
 
 #include <seastar/core/lowres_clock.hh>

@@ -190,4 +190,15 @@ SEASTAR_THREAD_TEST_CASE(json_iobuf_writer_test) {
         BOOST_CHECK_EQUAL(out_buf, expected);
         BOOST_CHECK_EQUAL(to_string(out_buf), to_string(expected));
     }
+
+    {
+        json::chunked_buffer out;
+        json::iobuf_writer<json::chunked_buffer> os{out};
+        iobuf buf;
+        os.String(buf);
+        auto out_buf = std::move(out).as_iobuf();
+        auto expected = iobuf::from("\"\"");
+        BOOST_CHECK_EQUAL(out_buf, expected);
+        BOOST_CHECK_EQUAL(to_string(out_buf), to_string(expected));
+    }
 }

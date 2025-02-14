@@ -11,9 +11,8 @@
 
 #include "crash_tracker/recorder.h"
 
+#include <seastar/core/smp.hh>
 #include <seastar/util/print_safe.hh>
-
-#include <atomic>
 
 namespace crash_tracker {
 

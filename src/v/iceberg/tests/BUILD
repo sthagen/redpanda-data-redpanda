@@ -673,6 +673,7 @@ redpanda_cc_gtest(
         "//src/v/random:generators",
         "//src/v/test_utils:gtest",
         "@abseil-cpp//absl/container:btree",
+        "@boost//:range",
         "@fmt",
         "@googletest//:gtest",
         "@seastar",

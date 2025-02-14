@@ -46,6 +46,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/container:chunked_hash_map",
         "//src/v/container:fragmented_vector",
+        "//src/v/container:intrusive",
         "//src/v/datalake:logger",
         "//src/v/model",
         "//src/v/random:generators",

@@ -237,8 +237,8 @@ iobuf::placeholder iobuf::reserve(size_t sz) {
     vassert(sz, "zero length reservations are unsupported");
     reserve_memory(sz);
     _size += sz;
-    auto it = std::prev(_frags.end());
-    placeholder p(it, it->size(), sz);
-    it->reserve(sz);
+    auto& back = _frags.back();
+    placeholder p(back, back.size(), sz);
+    back.reserve(sz);
     return p;
 }

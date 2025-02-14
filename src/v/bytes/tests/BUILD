@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_cc_fuzz_test", "redpanda_cc_gtest")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_btest", "redpanda_cc_fuzz_test", "redpanda_cc_gtest")
 
 redpanda_cc_btest(
     name = "iobuf_test",
@@ -41,6 +41,22 @@ redpanda_cc_gtest(
         "@fmt",
         "@seastar",
         "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "iobuf_fragment_list_test",
+    timeout = "short",
+    srcs = [
+        "iobuf_fragment_list_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/bytes",
+        "//src/v/bytes:iobuf",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
     ],
 )
 
@@ -89,5 +105,16 @@ redpanda_cc_fuzz_test(
         "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:scattered_message",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "iobuf_rpbench",
+    srcs = ["iobuf_bench.cc"],
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iobuf",
+        "//src/v/random:generators",
+        "@seastar//:benchmark",
     ],
 )

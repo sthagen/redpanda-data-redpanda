@@ -50,3 +50,15 @@ inline dummyassert g_assert_log;
             __builtin_trap();                                                  \
         }                                                                      \
     } while (0)
+
+/**
+ * same as vassert but only debug mode. Use over assert for better
+ * error messages.
+ */
+#ifndef NDEBUG
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define dassert(x, msg, args...) vassert(x, msg, ##args)
+#else
+// NOLINTNEXTLINE(cppcoreguidelines-macro-usage)
+#define dassert(...)
+#endif

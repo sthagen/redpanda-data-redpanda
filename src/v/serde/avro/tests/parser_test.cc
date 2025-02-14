@@ -24,8 +24,10 @@
 #include <avro/Encoder.hh>
 #include <avro/Generic.hh>
 #include <avro/Schema.hh>
+#include <boost/range/irange.hpp>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
 using namespace testing;
 
 void parsed_to_avro(

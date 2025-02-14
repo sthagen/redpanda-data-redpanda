@@ -12,6 +12,7 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/loop.hh>
+#include <seastar/core/smp.hh>
 
 #include <boost/range/irange.hpp>
 

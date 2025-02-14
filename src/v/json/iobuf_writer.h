@@ -48,14 +48,17 @@ public:
 
 private:
     bool write_chunked_string(const iobuf& buf) {
-        const auto last_frag = [this]() {
-            return std::prev(this->os_->_impl.end());
-        };
+        const auto last_frag = [this]() { return this->os_->_impl.rbegin(); };
         using Ch = Base::Ch;
         this->Prefix(rapidjson::kStringType);
         const auto beg = buf.begin();
         const auto end = buf.end();
-        const auto last = std::prev(end);
+        if (beg == end) {
+            if (!Base::WriteString("", 0)) {
+                return false;
+            }
+            return this->EndValue(true);
+        }
         Ch stashed{};
         Ch* stash_pos{};
         // Base::WriteString is used to JSON encode the string, and requires a
@@ -73,7 +76,7 @@ private:
         //   3. Drop the final character
         // For each encoded fragment that is written (except the first one):
         //   4. Restore the stashed character over the prefix-quote
-        for (auto i = beg; i != end; ++i) {
+        for (auto i = beg;;) {
             if (!Base::WriteString(i->get(), i->size())) {
                 return false;
             }
@@ -81,23 +84,25 @@ private:
                 // 4. Restore the stashed character over the prefix-quote
                 *stash_pos = stashed;
             }
-            if (i != last) {
-                // 1. Trim the suffix quote
-                this->os_->_impl.trim_back(1);
-
-                // 2. Stash the final character, ...
-                auto last = last_frag();
-                stashed = *std::prev(last->get_current());
-                // 3. Drop the final character
-                this->os_->_impl.trim_back(1);
-
-                // Ensure a stable address to restore the stashed character
-                if (last != last_frag()) {
-                    this->os_->_impl.reserve_memory(1);
-                }
-                // 2. ...and where it is to be written.
-                stash_pos = last_frag()->get_current();
+            ++i;
+            if (i == end) {
+                break;
             }
+            // 1. Trim the suffix quote
+            this->os_->_impl.trim_back(1);
+
+            // 2. Stash the final character, ...
+            auto last = last_frag();
+            stashed = *std::prev(last->get_current());
+            // 3. Drop the final character
+            this->os_->_impl.trim_back(1);
+
+            // Ensure a stable address to restore the stashed character
+            if (last != last_frag()) {
+                this->os_->_impl.reserve_memory(1);
+            }
+            // 2. ...and where it is to be written.
+            stash_pos = last_frag()->get_current();
         }
         return this->EndValue(true);
     }

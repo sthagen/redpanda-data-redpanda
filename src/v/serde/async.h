@@ -180,6 +180,7 @@ ss::future<> write_async(iobuf& out, T t) {
                                 sizeof(checksum_t));
                           });
                     } else {
+                        std::ignore = checksum_placeholder;
                         return ss::now();
                     }
                 });

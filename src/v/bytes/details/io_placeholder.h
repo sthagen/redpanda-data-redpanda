@@ -13,19 +13,17 @@
 
 #include "bytes/details/io_fragment.h"
 #include "bytes/details/out_of_range.h"
-#include "container/intrusive_list_helpers.h"
 
 namespace details {
 class io_placeholder {
 public:
-    using iterator
-      = uncounted_intrusive_list<io_fragment, &io_fragment::hook>::iterator;
+    using iterator = io_fragment_list::iterator;
 
     io_placeholder() noexcept = default;
 
     io_placeholder(
-      const iterator& iter, size_t initial_index, size_t max_size_to_write)
-      : _iter(iter)
+      io_fragment& iter, size_t initial_index, size_t max_size_to_write)
+      : _current(&iter)
       , _byte_index(initial_index)
       , _remaining_size(max_size_to_write) {}
 
@@ -47,13 +45,13 @@ public:
 
     // the first byte of the _current_ iterator + offset
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-    const char* index() const { return _iter->get() + _byte_index; }
+    const char* index() const { return _current->get() + _byte_index; }
 
     // NOLINTNEXTLINE(cppcoreguidelines-pro-bounds-pointer-arithmetic)
-    char* mutable_index() { return _iter->get_write() + _byte_index; }
+    char* mutable_index() { return _current->get_write() + _byte_index; }
 
 private:
-    iterator _iter;
+    io_fragment* _current = nullptr;
     size_t _byte_index{0};
     size_t _remaining_size{0};
 };

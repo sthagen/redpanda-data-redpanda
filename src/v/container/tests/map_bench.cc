@@ -18,6 +18,8 @@
 #include <absl/container/btree_map.h>
 #include <boost/range/irange.hpp>
 
+#include <map>
+
 template<typename MapT, size_t KeySetSize, size_t FillPercent>
 class MapBenchTest {
     using key_t = typename MapT::key_type;

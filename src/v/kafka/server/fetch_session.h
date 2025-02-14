@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "container/intrusive_list_helpers.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fetch.h"
 #include "model/fundamental.h"

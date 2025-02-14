@@ -15,6 +15,8 @@
 
 #include <seastar/util/defer.hh>
 
+#include <boost/range/irange.hpp>
+
 namespace serde::avro {
 // an arbitrary limit for nesting depth (number of levels in the schema tree)
 static constexpr int max_nested_depth = 100;
