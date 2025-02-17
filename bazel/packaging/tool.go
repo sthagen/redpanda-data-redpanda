@@ -32,7 +32,6 @@ type pkgConfig struct {
 	RPKBinary         *string  `json:"rpk"`
 	SharedLibraries   []string `json:"shared_libraries"`
 	DefaultYAMLConfig *string  `json:"default_yaml_config"`
-	BinWrappers       []string `json:"bin_wrappers"`
 	Owner             int      `json:"owner"`
 }
 
@@ -90,18 +89,16 @@ func createTarball(cfg pkgConfig, w io.Writer) error {
 	}
 	dir("opt/")
 	dir("opt/redpanda/")
-	dir("opt/redpanda/bin/")
-	for _, bin := range cfg.BinWrappers {
-		file(filepath.Join("opt/redpanda/bin", filepath.Base(bin)), bin)
-	}
+
 	dir("opt/redpanda/lib/")
 	for _, so := range cfg.SharedLibraries {
 		file(filepath.Join("opt/redpanda/lib", filepath.Base(so)), so)
 	}
-	dir("opt/redpanda/libexec/")
-	file("opt/redpanda/libexec/redpanda", cfg.RedpandaBinary)
+
+	dir("opt/redpanda/bin/")
+	file("opt/redpanda/bin/redpanda", cfg.RedpandaBinary)
 	if cfg.RPKBinary != nil {
-		file("opt/redpanda/libexec/rpk", *cfg.RPKBinary)
+		file("opt/redpanda/bin/rpk", *cfg.RPKBinary)
 	}
 	dir("var/")
 	dir("var/lib/")
