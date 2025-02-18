@@ -91,6 +91,8 @@ def _prepare_package_content(ctx, dynamic_loader_path = "/opt/redpanda/lib"):
     )
 
 def _impl(ctx):
+    use_dir = not ctx.attr.out.endswith(".tar.gz")
+    out = ctx.actions.declare_directory(ctx.attr.out) if use_dir else ctx.actions.declare_file(ctx.attr.out)
     package_content = _prepare_package_content(ctx)
 
     # Create the configuration file for the packaging tool
@@ -101,6 +103,7 @@ def _impl(ctx):
         "shared_libraries": [solib.path for solib in package_content.shared_libraries],
         "default_yaml_config": ctx.file.default_yaml_config.path if ctx.file.default_yaml_config else None,
         "owner": ctx.attr.owner,
+        "directory_mode": use_dir,
     }
     ctx.actions.write(cfg_file, content = json.encode_indent(cfg))
 
@@ -113,7 +116,7 @@ def _impl(ctx):
 
     # run the packaging tool
     ctx.actions.run(
-        outputs = [ctx.outputs.out],
+        outputs = [out],
         inputs = inputs,
         tools = [ctx.executable._tool],
         executable = ctx.executable._tool,
@@ -121,12 +124,12 @@ def _impl(ctx):
             "-config",
             cfg_file.path,
             "-output",
-            ctx.outputs.out.path,
+            out.path,
         ],
         mnemonic = "BuildingRedpandaPackage",
         use_default_shell_env = False,
     )
-    return [DefaultInfo(files = depset([ctx.outputs.out]))]
+    return [DefaultInfo(files = depset([out]))]
 
 redpanda_package = rule(
     implementation = _impl,
@@ -142,7 +145,7 @@ redpanda_package = rule(
             allow_single_file = True,
         ),
         "owner": attr.int(),
-        "out": attr.output(
+        "out": attr.string(
             mandatory = True,
         ),
         "include_sysroot_libs": attr.bool(),

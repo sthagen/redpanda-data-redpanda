@@ -20,6 +20,15 @@ redpanda_package(
     rpath_override = "$ORIGIN/../lib",
 )
 
+redpanda_package(
+    name = "ducktape",
+    out = "redpanda_ducktape",
+    include_sysroot_libs = True,
+    redpanda_binary = "//:redpanda",
+    rpath_override = "$ORIGIN/../lib",
+    rpk_binary = "//:rpk",
+)
+
 # This is the ID for the nonroot user in the distroless containers.
 NONROOT_USER = 65532
 

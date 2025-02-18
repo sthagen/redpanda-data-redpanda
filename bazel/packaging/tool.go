@@ -33,6 +33,7 @@ type pkgConfig struct {
 	SharedLibraries   []string `json:"shared_libraries"`
 	DefaultYAMLConfig *string  `json:"default_yaml_config"`
 	Owner             int      `json:"owner"`
+	DirectoryMode     bool     `json:"directory_mode"`
 }
 
 func createTarball(cfg pkgConfig, w io.Writer) error {
@@ -113,6 +114,75 @@ func createTarball(cfg pkgConfig, w io.Writer) error {
 	}
 	return nil
 }
+func copyFile(src string, dst string) error {
+	srcFile, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
+	dstFile, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer dstFile.Close()
+	dstFile.ReadFrom(srcFile)
+
+	return nil
+}
+
+func createPackageDir(cfg pkgConfig, output string) error {
+	if err := os.MkdirAll(output, 0755); err != nil {
+		return err
+	}
+
+	dir := func(path string) error {
+		if err := os.Mkdir(filepath.Join(output, path), 0755); err != nil {
+			return fmt.Errorf("Error creating directory %s: %v", path, err)
+		}
+		return nil
+	}
+
+	file := func(src string, dir string, name string) error {
+		if err := copyFile(src, filepath.Join(output, dir, name)); err != nil {
+			return fmt.Errorf("Error copying file %s: %v", src, err)
+		}
+		return nil
+	}
+
+	if cfg.DefaultYAMLConfig != nil {
+		if err := dir("config"); err != nil {
+			return err
+		}
+	}
+	if err := dir("bin"); err != nil {
+		return err
+	}
+	if err := dir("lib"); err != nil {
+		return err
+	}
+
+	if err := dir("libexec"); err != nil {
+		return err
+	}
+
+	for _, so := range cfg.SharedLibraries {
+		if err := file(so, "lib", filepath.Base(so)); err != nil {
+			return err
+		}
+	}
+
+	if err := file(cfg.RedpandaBinary, "libexec", "redpanda"); err != nil {
+		return err
+	}
+
+	if cfg.RPKBinary != nil {
+		if err := file(*cfg.RPKBinary, "bin", "rpk"); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
 
 func runTool() error {
 	configPath := flag.String("config", "", "path to a configuration file to create the tarball")
@@ -124,17 +194,24 @@ func runTool() error {
 	} else if err := json.Unmarshal(b, &cfg); err != nil {
 		return fmt.Errorf("unable to parse config: %w", err)
 	}
-	file, err := os.OpenFile(*output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
-	if err != nil {
-		return fmt.Errorf("unable to open output file: %w", err)
-	}
-	defer file.Close()
-	bw := bufio.NewWriter(file)
-	defer bw.Flush()
-	gw := gzip.NewWriter(bw)
-	defer gw.Close()
-	if err := createTarball(cfg, gw); err != nil {
-		return fmt.Errorf("unable to create tarball: %w", err)
+
+	if cfg.DirectoryMode {
+		if err := createPackageDir(cfg, *output); err != nil {
+			return fmt.Errorf("unable to create package directory: %w", err)
+		}
+	} else {
+		file, err := os.OpenFile(*output, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o644)
+		if err != nil {
+			return fmt.Errorf("unable to open output file: %w", err)
+		}
+		defer file.Close()
+		bw := bufio.NewWriter(file)
+		defer bw.Flush()
+		gw := gzip.NewWriter(bw)
+		defer gw.Close()
+		if err := createTarball(cfg, gw); err != nil {
+			return fmt.Errorf("unable to create tarball: %w", err)
+		}
 	}
 	return nil
 }
