@@ -980,8 +980,7 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
             co_return ret;
         }
         if (unlikely(segment->is_closed())) {
-            throw std::runtime_error(fmt::format(
-              "Aborting compaction of closed segment: {}", *segment));
+            throw segment_closed_exception();
         }
         ++gen_it;
     }

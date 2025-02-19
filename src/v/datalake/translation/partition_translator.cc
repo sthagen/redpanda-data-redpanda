@@ -23,6 +23,7 @@
 #include "datalake/serde_parquet_writer.h"
 #include "datalake/table_creator.h"
 #include "datalake/translation/state_machine.h"
+#include "datalake/translation/translation_probe.h"
 #include "datalake/translation_task.h"
 #include "kafka/utils/txn_reader.h"
 #include "model/fundamental.h"
@@ -170,7 +171,8 @@ partition_translator::partition_translator(
   size_t reader_max_bytes,
   std::unique_ptr<ssx::semaphore>* parallel_translations,
   model::iceberg_invalid_record_action invalid_record_action,
-  std::filesystem::path writer_scratch_space)
+  std::filesystem::path writer_scratch_space,
+  ss::lw_shared_ptr<translation_probe> probe)
   : _term(partition->raft()->term())
   , _partition(std::move(partition))
   , _stm(_partition->raft()
@@ -194,6 +196,7 @@ partition_translator::partition_translator(
   , _parallel_translations(parallel_translations)
   , _invalid_record_action(invalid_record_action)
   , _writer_scratch_space(writer_scratch_space)
+  , _probe(std::move(probe))
   , _logger(prefix_logger{
       datalake_log, fmt::format("{}-term-{}", _partition->ntp(), _term)}) {
     vassert(_stm, "No translation stm found for {}", _partition->ntp());
@@ -293,6 +296,7 @@ partition_translator::do_translation_for_range(
       *_table_creator,
       _invalid_record_action,
       _location_provider,
+      *_probe,
     };
     const auto& ntp = _partition->ntp();
     auto remote_path_prefix = remote_path{

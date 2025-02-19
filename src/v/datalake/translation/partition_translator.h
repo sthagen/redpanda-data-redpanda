@@ -17,6 +17,7 @@
 #include "datalake/errors.h"
 #include "datalake/fwd.h"
 #include "datalake/location.h"
+#include "datalake/translation/translation_probe.h"
 #include "features/fwd.h"
 #include "kafka/data/partition_proxy.h"
 #include "model/metadata.h"
@@ -83,7 +84,8 @@ public:
       size_t reader_max_bytes,
       std::unique_ptr<ssx::semaphore>* parallel_translations,
       model::iceberg_invalid_record_action invalid_record_action,
-      std::filesystem::path writer_scratch_space);
+      std::filesystem::path writer_scratch_space,
+      ss::lw_shared_ptr<translation_probe> probe);
     ~partition_translator();
 
     void start_translation_in_background(ss::scheduling_group);
@@ -163,6 +165,7 @@ private:
     std::unique_ptr<ssx::semaphore>* _parallel_translations;
     model::iceberg_invalid_record_action _invalid_record_action;
     std::filesystem::path _writer_scratch_space;
+    ss::lw_shared_ptr<translation_probe> _probe;
     ss::gate _gate;
     ss::abort_source _as;
     prefix_logger _logger;

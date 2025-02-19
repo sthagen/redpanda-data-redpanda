@@ -17,6 +17,7 @@
 #include "datalake/tests/record_generator.h"
 #include "datalake/tests/test_data_writer.h"
 #include "datalake/tests/test_utils.h"
+#include "datalake/translation/translation_probe.h"
 #include "iceberg/filesystem_catalog.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
@@ -144,6 +145,7 @@ public:
           model::iceberg_invalid_record_action::dlq_table,
           location_provider(
             scoped_remote->remote.local().provider(), bucket_name),
+          *get_or_create_probe(ntp),
           as);
         auto res = reader.consume(std::move(mux), model::no_timeout).get();
         if (expect_error) {
@@ -191,9 +193,19 @@ public:
         }
     }
 
+    ss::lw_shared_ptr<translation_probe>
+    get_or_create_probe(const model::ntp& ntp) {
+        auto [it, inserted] = probes.try_emplace(ntp, nullptr);
+        if (inserted) {
+            it->second = ss::make_lw_shared<translation_probe>(ntp);
+        }
+        return it->second;
+    }
+
     catalog_schema_manager schema_mgr;
     record_schema_resolver type_resolver;
     direct_table_creator t_creator;
+    std::map<model::ntp, ss::lw_shared_ptr<translation_probe>> probes;
     lazy_abort_source as;
 
     static constexpr records_param default_param = {
@@ -370,6 +382,12 @@ TEST_F(RecordMultiplexerTest, TestMissingSchema) {
 
     assert_dlq_table(ntp.tp.topic, true);
     EXPECT_EQ(res.value().dlq_files.size(), default_param.hrs);
+
+    EXPECT_EQ(
+      get_or_create_probe(ntp)->counter_ref(
+        translation_probe::invalid_record_cause::
+          failed_kafka_schema_resolution),
+      default_param.num_records());
 }
 
 TEST_F(RecordMultiplexerTest, TestBadData) {
@@ -377,14 +395,20 @@ TEST_F(RecordMultiplexerTest, TestBadData) {
     auto reg_res
       = gen.register_avro_schema("avro_v1", avro_schema_v1_str).get();
     EXPECT_FALSE(reg_res.has_error()) << reg_res.error();
+    auto schema_id = reg_res.value();
 
     auto start_offset = model::offset{0};
     auto res = mux(
-      default_param, start_offset, [](storage::record_batch_builder& b) {
+      default_param,
+      start_offset,
+      [schema_id](storage::record_batch_builder& b) {
           iobuf buf;
           // Append data with a magic bytes that corresponds to the actual
           // schema.
-          buf.append("\0\0\0\0\0\1\0", 7);
+          buf.append("\0", 1);
+          int32_t encoded_id = ss::cpu_to_be(schema_id());
+          buf.append((const uint8_t*)(&encoded_id), 4);
+          buf.append("\1\1", 2);
           b.add_raw_kv(std::nullopt, std::move(buf));
       });
     ASSERT_TRUE(res.has_value());
@@ -392,6 +416,11 @@ TEST_F(RecordMultiplexerTest, TestBadData) {
 
     assert_dlq_table(ntp.tp.topic, true);
     EXPECT_EQ(res.value().dlq_files.size(), default_param.hrs);
+
+    EXPECT_EQ(
+      get_or_create_probe(ntp)->counter_ref(
+        translation_probe::invalid_record_cause::failed_data_translation),
+      default_param.num_records());
 }
 
 TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
@@ -444,4 +473,11 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
     // The schema for the main table should not have changed.
     schema = get_current_schema();
     EXPECT_EQ(schema->highest_field_id(), 10);
+
+    // Metrics updated.
+    EXPECT_EQ(
+      get_or_create_probe(ntp)->counter_ref(
+        translation_probe::invalid_record_cause::
+          failed_iceberg_schema_resolution),
+      default_param.num_records());
 }

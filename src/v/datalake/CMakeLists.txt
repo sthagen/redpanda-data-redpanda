@@ -18,6 +18,7 @@ v_cc_library(
     backlog_controller.cc
   DEPS
     v::datalake_translation
+    v::datalake_translation_probe
     v::datalake_coordinator
     v::cluster
     v::raft
@@ -60,6 +61,7 @@ v_cc_library(
   DEPS
     v::cloud_io
     v::datalake_common
+    v::datalake_translation_probe
     v::pandaproxy_schema_registry
     v::schema
     v::storage

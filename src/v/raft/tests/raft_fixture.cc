@@ -297,7 +297,14 @@ ss::future<result<RespT>> in_memory_test_protocol::dispatch(
         auto resp = co_await ss::with_timeout(
           opts.timeout.timeout_at(), std::move(f));
         iobuf_parser parser(std::move(resp));
-        co_return co_await serde::read_async<RespT>(parser);
+        RespT reply = co_await serde::read_async<RespT>(parser);
+        // intercept the reply if the interceptor is set
+        if (_reply_interceptor) {
+            auto intercepted = co_await (*_reply_interceptor)(
+              reply_variant{std::move(reply)}, id);
+            co_return std::get<RespT>(std::move(intercepted));
+        }
+        co_return reply;
     } catch (const ss::timed_out_error&) {
         co_return rpc::errc::client_request_timeout;
     } catch (const seastar::gate_closed_exception&) {
@@ -395,11 +402,11 @@ raft_node_instance::raft_node_instance(
       _max_inflight_requests.bind(),
       _max_queued_bytes.bind()))
   , _features(feature_table)
-  , _recovery_mem_quota([] {
+  , _recovery_mem_quota([this] {
       return raft::recovery_memory_quota::configuration{
         .max_recovery_memory = config::mock_binding<std::optional<size_t>>(
           200_MiB),
-        .default_read_buffer_size = config::mock_binding<size_t>(128_KiB),
+        .default_read_buffer_size = _default_recovery_read_size.bind(),
       };
   })
   , _recovery_scheduler(
@@ -694,6 +701,21 @@ raft_fixture::wait_for_leader(model::timeout_clock::time_point deadline) {
     co_return get_leader().value();
 }
 
+std::optional<model::node_id> raft_fixture::random_follower_id() const {
+    auto leader_id = get_leader();
+    std::vector<model::node_id> followers;
+    std::ranges::copy_if(
+      _nodes | std::views::keys,
+      std::back_inserter(followers),
+      [leader_id](model::node_id id) { return id != leader_id; });
+
+    if (followers.empty()) {
+        return std::nullopt;
+    }
+
+    return random_generators::random_choice(followers);
+}
+
 ss::future<model::node_id> raft_fixture::wait_for_leader_change(
   model::timeout_clock::time_point deadline, model::term_id term) {
     auto has_new_leader = [this, term] {
@@ -746,7 +768,7 @@ ss::future<> raft_fixture::create_simple_group(size_t number_of_nodes) {
 
 ss::future<> raft_fixture::wait_for_committed_offset(
   model::offset offset, std::chrono::milliseconds timeout) {
-    RPTEST_REQUIRE_EVENTUALLY_CORO(timeout, [this, offset] {
+    return tests::cooperative_spin_wait_with_timeout(timeout, [this, offset] {
         return std::all_of(
           nodes().begin(), nodes().end(), [offset](auto& pair) {
               return pair.second->raft()->committed_offset() >= offset;
@@ -755,7 +777,7 @@ ss::future<> raft_fixture::wait_for_committed_offset(
 }
 ss::future<> raft_fixture::wait_for_visible_offset(
   model::offset offset, std::chrono::milliseconds timeout) {
-    RPTEST_REQUIRE_EVENTUALLY_CORO(timeout, [this, offset] {
+    return tests::cooperative_spin_wait_with_timeout(timeout, [this, offset] {
         return std::all_of(
           nodes().begin(), nodes().end(), [offset](auto& pair) {
               return pair.second->raft()->last_visible_index() >= offset;

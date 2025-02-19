@@ -20,6 +20,7 @@
 #include "datalake/location.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/translation/partition_translator.h"
+#include "datalake/translation/translation_probe.h"
 #include "features/fwd.h"
 #include "model/metadata.h"
 #include "pandaproxy/schema_registry/fwd.h"
@@ -91,6 +92,11 @@ private:
       model::iceberg_invalid_record_action);
     void stop_translator(const model::ntp&);
     double average_translation_backlog();
+
+    /// \note The probe is created on the first use.
+    ss::lw_shared_ptr<translation_probe> get_or_create_probe(const model::ntp&);
+
+private:
     model::node_id _self;
     ss::sharded<raft::group_manager>* _group_mgr;
     ss::sharded<cluster::partition_manager>* _partition_mgr;
@@ -109,6 +115,8 @@ private:
     std::unique_ptr<datalake::type_resolver> _type_resolver;
     std::unique_ptr<datalake::schema_cache> _schema_cache;
     std::unique_ptr<backlog_controller> _backlog_controller;
+    chunked_hash_map<model::ntp, ss::lw_shared_ptr<class translation_probe>>
+      _translation_probe_by_ntp;
     ss::sharded<ss::abort_source>* _as;
     ss::scheduling_group _sg;
     ss::gate _gate;

@@ -35,7 +35,7 @@ public:
     using error = named_type<ss::sstring, struct error_tag>;
 
     // Registers the given schema with the given name.
-    ss::future<checked<std::nullopt_t, error>>
+    ss::future<checked<pandaproxy::schema_registry::schema_id, error>>
     register_avro_schema(std::string_view name, std::string_view schema);
 
     // Registers the given schema with the given name.

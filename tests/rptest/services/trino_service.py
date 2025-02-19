@@ -166,6 +166,17 @@ iceberg.{{ catalog_type }}-catalog.uri={{ catalog_uri }}
     def escape_identifier(self, table: str) -> str:
         return f'"{table}"'
 
+    def count_parquet_files(self, namespace, table) -> int:
+        # See Trino metadata tables documentation
+        # https://trino.io/docs/current/connector/iceberg.html#files-table
+        return self.count_table(namespace, f"{table}$files")
+
+    def optimize_parquet_files(self, namespace, table) -> None:
+        # Optimize the table to rewrite the data.
+        # https://trino.io/docs/current/connector/iceberg.html#alter-table-execute
+        self.run_query_fetch_one(
+            f"ALTER TABLE {namespace}.{table} EXECUTE optimize")
+
     @staticmethod
     def dict_to_conf(d: dict[str, Optional[str | bool]]):
         """

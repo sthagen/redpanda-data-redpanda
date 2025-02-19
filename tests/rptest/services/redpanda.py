@@ -235,7 +235,7 @@ class MetricSamples:
     def __init__(self, samples: list[MetricSample]):
         self.samples = samples
 
-    def label_filter(self, labels: Mapping[str, float]):
+    def label_filter(self, labels: Mapping[str, str]):
         def f(sample):
             for key, value in labels.items():
                 assert key in sample.labels

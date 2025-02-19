@@ -180,6 +180,19 @@ class SparkService(Service, QueryEngineBase):
     def engine_name():
         return QueryEngineType.SPARK
 
+    def count_parquet_files(self, namespace, table) -> int:
+        # Metadata query
+        # https://iceberg.apache.org/docs/1.6.1/spark-queries/#files
+        return self.run_query_fetch_one(
+            f"SELECT count(*) FROM {namespace}.{table}.files")[0]
+
+    def optimize_parquet_files(self, namespace, table) -> None:
+        # Spark Procedures provided by Iceberg SQL Extensions
+        # https://iceberg.apache.org/docs/1.6.1/spark-procedures/#rewrite_data_files
+        self.run_query_fetch_one(
+            f"CALL `{self.catalog_name}`.system.rewrite_data_files(\"{namespace}.{table}\")"
+        )
+
     def make_client(self):
         assert self.spark_host
         return hive.connect(host=self.spark_host,

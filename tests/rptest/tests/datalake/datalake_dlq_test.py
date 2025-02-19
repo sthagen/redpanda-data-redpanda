@@ -18,6 +18,7 @@ from rptest.clients.serde_client_utils import SchemaType, SerdeClientType
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import (
+    MetricsEndpoint,
     PandaproxyConfig,
     SchemaRegistryConfig,
     SISettings,
@@ -35,6 +36,15 @@ from rptest.util import expect_exception
 class IcebergInvalidRecordAction(str, Enum):
     DROP = "drop"
     DLQ_TABLE = "dlq_table"
+
+    def __str__(self):
+        return self.value
+
+
+class IcebergInvalidRecordCause(str, Enum):
+    FAILED_KAFKA_SCHEMA_RESOLUTION = "failed_kafka_schema_resolution"
+    FAILED_DATA_TRANSLATION = "failed_data_translation"
+    FAILED_ICEBERG_SCHEMA_RESOLUTION = "failed_iceberg_schema_resolution"
 
     def __str__(self):
         return self.value
@@ -346,6 +356,11 @@ class DatalakeDLQTest(RedpandaTest):
                                     5,
                                     table_override=f"{self.topic_name}~dlq")
 
+        invalid_schema_res = self._invalid_records_metric_sum(
+            self.topic_name,
+            IcebergInvalidRecordCause.FAILED_KAFKA_SCHEMA_RESOLUTION)
+        assert invalid_schema_res >= num_iter * num_invalid_per_iter, f"Expected {num_iter * num_invalid_per_iter} invalid records due to failed schema resolution but got {invalid_schema_res}"
+
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
             query_engine=[QueryEngineType.SPARK],
@@ -487,3 +502,23 @@ class DatalakeDLQTest(RedpandaTest):
             dlq_count = dl.query_engine(query_engine).count_table(
                 "redpanda", f"{self.topic_name}~dlq")
             assert dlq_count == num_iter * num_invalid_per_iter, f"Didn't expect additional records in DLQ table: Expected {num_iter * num_invalid_per_iter} but got {dlq_count}"
+
+    def _invalid_records_metric_sum(self, topic: str,
+                                    cause: IcebergInvalidRecordCause) -> int:
+        metric_name = 'redpanda_iceberg_translation_invalid_records_total'
+
+        samples = self.redpanda.metrics_sample(metric_name,
+                                               self.redpanda.nodes,
+                                               MetricsEndpoint.PUBLIC_METRICS)
+        if not samples:
+            return 0
+
+        return sum([
+            s.value for s in samples.label_filter({
+                'redpanda_topic':
+                topic,
+                **({
+                    'cause': str(cause)
+                } if cause is not None else {})
+            }).samples
+        ])

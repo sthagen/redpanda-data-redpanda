@@ -367,3 +367,12 @@ class DatalakeVerifier():
         finally:
             if self._consumer:
                 self._consumer.close()
+
+    @staticmethod
+    def oneshot(redpanda: RedpandaService,
+                topic: str,
+                query_engine: QueryEngineBase,
+                progress_timeout_sec=30):
+        verifier = DatalakeVerifier(redpanda, topic, query_engine)
+        verifier.start()
+        verifier.wait(progress_timeout_sec=progress_timeout_sec)

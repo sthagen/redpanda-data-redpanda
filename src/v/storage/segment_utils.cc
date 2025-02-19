@@ -824,8 +824,7 @@ make_concatenated_segment(
     // happened to be racing with an operation like truncation or shutdown.
     for (const auto& segment : segments) {
         if (unlikely(segment->is_closed())) {
-            throw std::runtime_error(fmt::format(
-              "Aborting compaction of closed segment: {}", *segment));
+            throw segment_closed_exception();
         }
     }
 

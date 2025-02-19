@@ -312,6 +312,10 @@ public:
     }
 
 private:
+    const model::ntp ntp{
+      model::ns{"rp"}, model::topic{"t"}, model::partition_id{0}};
+    const model::revision_id topic_rev{123};
+
     std::unordered_set<std::string> _added_names;
     datalake::chunked_schema_cache _schema_cache;
     datalake::catalog_schema_manager _schema_mgr;
@@ -319,12 +323,9 @@ private:
     datalake::tests::record_generator _record_gen;
     datalake::default_translator _translator;
     datalake::direct_table_creator _table_creator;
+    datalake::translation_probe _translation_probe{ntp};
     chunked_vector<model::record_batch> _batch_data;
     lazy_abort_source _as;
-
-    const model::ntp ntp{
-      model::ns{"rp"}, model::topic{"t"}, model::partition_id{0}};
-    const model::revision_id topic_rev{123};
 
     datalake::record_multiplexer create_mux() {
         return datalake::record_multiplexer(
@@ -338,6 +339,7 @@ private:
           model::iceberg_invalid_record_action::dlq_table,
           datalake::location_provider(
             scoped_remote->remote.local().provider(), bucket_name),
+          _translation_probe,
           _as);
     }
 

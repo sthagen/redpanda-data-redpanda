@@ -18,6 +18,7 @@
 #include "datalake/record_translator.h"
 #include "datalake/table_creator.h"
 #include "datalake/table_id_provider.h"
+#include "datalake/translation/translation_probe.h"
 #include "model/metadata.h"
 #include "model/record.h"
 #include "storage/parser_utils.h"
@@ -36,6 +37,7 @@ record_multiplexer::record_multiplexer(
   table_creator& table_creator,
   model::iceberg_invalid_record_action invalid_record_action,
   location_provider location_provider,
+  translation_probe& translation_probe,
   lazy_abort_source& as)
   : _log(datalake_log, fmt::format("{}", ntp))
   , _ntp(ntp)
@@ -47,6 +49,7 @@ record_multiplexer::record_multiplexer(
   , _table_creator(table_creator)
   , _invalid_record_action(invalid_record_action)
   , _location_provider(std::move(location_provider))
+  , _translation_probe(translation_probe)
   , _as(as) {}
 
 ss::future<ss::stop_iteration>
@@ -97,6 +100,8 @@ record_multiplexer::operator()(model::record_batch batch) {
             case type_resolver::errc::bad_input:
             case type_resolver::errc::translation_error:
                 auto invalid_res = co_await handle_invalid_record(
+                  translation_probe::invalid_record_cause::
+                    failed_kafka_schema_resolution,
                   offset,
                   record.share_key(),
                   record.share_value(),
@@ -128,6 +133,8 @@ record_multiplexer::operator()(model::record_batch batch) {
                   offset,
                   record_data_res.error());
                 auto invalid_res = co_await handle_invalid_record(
+                  translation_probe::invalid_record_cause::
+                    failed_data_translation,
                   offset,
                   record.share_key(),
                   record.share_value(),
@@ -151,6 +158,8 @@ record_multiplexer::operator()(model::record_batch batch) {
                 switch (e) {
                 case table_creator::errc::incompatible_schema: {
                     auto invalid_res = co_await handle_invalid_record(
+                      translation_probe::invalid_record_cause::
+                        failed_iceberg_schema_resolution,
                       offset,
                       record.share_key(),
                       record.share_value(),
@@ -300,13 +309,15 @@ record_multiplexer::end_of_stream() {
 
 ss::future<result<std::nullopt_t, writer_error>>
 record_multiplexer::handle_invalid_record(
+  translation_probe::invalid_record_cause cause,
   kafka::offset offset,
   std::optional<iobuf> key,
   std::optional<iobuf> val,
   model::timestamp ts,
   chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>
     headers) {
-    // TODO: add a metric!
+    _translation_probe.increment_invalid_record(cause);
+
     switch (_invalid_record_action) {
     case model::iceberg_invalid_record_action::drop:
         vlog(_log.debug, "Dropping invalid record at offset {}", offset);

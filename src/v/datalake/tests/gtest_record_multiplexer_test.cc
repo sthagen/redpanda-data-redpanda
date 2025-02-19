@@ -19,6 +19,7 @@
 #include "datalake/tests/record_generator.h"
 #include "datalake/tests/test_data_writer.h"
 #include "datalake/tests/test_utils.h"
+#include "datalake/translation/translation_probe.h"
 #include "iceberg/filesystem_catalog.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -49,6 +50,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
     int start_offset = 1005;
     auto writer_factory = std::make_unique<datalake::test_data_writer_factory>(
       false);
+    translation_probe probe(ntp);
     datalake::record_multiplexer multiplexer(
       ntp,
       rev,
@@ -61,6 +63,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
       location_provider(
         cloud_io::s3_compat_provider{"s3"},
         cloud_storage_clients::bucket_name{"bucket"}),
+      probe,
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -95,6 +98,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
     int batch_count = 10;
     auto writer_factory = std::make_unique<datalake::test_data_writer_factory>(
       true);
+    translation_probe probe(ntp);
     datalake::record_multiplexer multiplexer(
       ntp,
       rev,
@@ -107,6 +111,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
       location_provider(
         cloud_io::s3_compat_provider{"s3"},
         cloud_storage_clients::bucket_name{"bucket"}),
+      probe,
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -140,7 +145,7 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
       datalake::local_path(tmp_dir.get_path()),
       "data",
       ss::make_shared<datalake::serde_parquet_writer_factory>());
-
+    translation_probe probe(ntp);
     datalake::record_multiplexer multiplexer(
       ntp,
       rev,
@@ -153,6 +158,7 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
       location_provider(
         cloud_io::s3_compat_provider{"s3"},
         cloud_storage_clients::bucket_name{"bucket"}),
+      probe,
       as);
 
     model::test::record_batch_spec batch_spec;
@@ -264,6 +270,7 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
       datalake::local_path(tmp_dir.get_path()),
       "data",
       ss::make_shared<datalake::serde_parquet_writer_factory>());
+    translation_probe probe(ntp);
     record_multiplexer mux(
       ntp,
       rev,
@@ -274,6 +281,7 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
       location_provider(scoped_remote->remote.local().provider(), bucket_name),
+      probe,
       as);
     auto res = reader.consume(std::move(mux), model::no_timeout).get();
     ASSERT_FALSE(res.has_error()) << res.error();

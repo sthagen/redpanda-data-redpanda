@@ -144,6 +144,15 @@ double datalake_manager::average_translation_backlog() {
     return total_lag / translators_with_backlog;
 }
 
+ss::lw_shared_ptr<class translation_probe>
+datalake_manager::get_or_create_probe(const model::ntp& ntp) {
+    auto [it, inserted] = _translation_probe_by_ntp.try_emplace(ntp, nullptr);
+    if (inserted) {
+        it->second = ss::make_lw_shared<class translation_probe>(ntp);
+    }
+    return it->second;
+}
+
 ss::future<> datalake_manager::start() {
     /*
      * Ensure that datalake scratch space directory exists. This is run on each
@@ -178,6 +187,10 @@ ss::future<> datalake_manager::start() {
       = _partition_mgr->local().register_unmanage_notification(
         model::kafka_namespace, [this](model::topic_partition_view tp) {
             model::ntp ntp{model::kafka_namespace, tp.topic, tp.partition};
+            // We remove the probe only when partition is moved out of the
+            // shard to avoid metrics disappearing during much more common
+            // leadership changes.
+            _translation_probe_by_ntp.erase(ntp);
             stop_translator(ntp);
         });
     // Handle leadership changes
@@ -334,6 +347,7 @@ void datalake_manager::start_translator(
       "instance already exists",
       partition->ntp(),
       partition->term());
+
     auto translator = std::make_unique<translation::partition_translator>(
       partition,
       _coordinator_frontend,
@@ -348,7 +362,8 @@ void datalake_manager::start_translator(
       _effective_max_translator_buffered_data,
       &_parallel_translations,
       invalid_record_action,
-      _writer_scratch_space);
+      _writer_scratch_space,
+      get_or_create_probe(partition->ntp()));
     _translators.emplace(partition->ntp(), std::move(translator));
 }
 

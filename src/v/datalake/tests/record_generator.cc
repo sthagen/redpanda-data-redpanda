@@ -30,23 +30,25 @@
 
 namespace datalake::tests {
 
-ss::future<checked<std::nullopt_t, record_generator::error>>
+ss::future<
+  checked<pandaproxy::schema_registry::schema_id, record_generator::error>>
 record_generator::register_avro_schema(
   std::string_view name, std::string_view schema) {
     using namespace pandaproxy::schema_registry;
-    auto id = co_await ss::coroutine::as_future(
+    auto id_fut = co_await ss::coroutine::as_future(
       _sr->create_schema(unparsed_schema{
         subject{"foo"},
         unparsed_schema_definition{schema, schema_type::avro}}));
-    if (id.failed()) {
+    if (id_fut.failed()) {
         co_return error{fmt::format(
-          "Error creating schema {}: {}", name, id.get_exception())};
+          "Error creating schema {}: {}", name, id_fut.get_exception())};
     }
-    auto [_, added] = _id_by_name.emplace(name, id.get());
+    auto id = id_fut.get();
+    auto [_, added] = _id_by_name.emplace(name, id);
     if (!added) {
         co_return error{fmt::format("Failed to add schema {} to map", name)};
     }
-    co_return std::nullopt;
+    co_return id;
 }
 
 ss::future<checked<std::nullopt_t, record_generator::error>>
