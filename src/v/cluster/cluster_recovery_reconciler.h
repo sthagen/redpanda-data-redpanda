@@ -66,6 +66,11 @@ public:
       , _creds(creds)
       , _topic_table(topics) {}
 
+    // Returns a list of properties that are explicitly not recovered, since
+    // they would affect the cluster's ability to recover, or they are strongly
+    // coupled with the cluster's configuration.
+    static chunked_hash_set<ss::sstring> properties_ignore_list();
+
     // Returns the set of actions to perform to get to the state of 'snap'.
     //
     // Does not compute updates to existing states, only whether new state

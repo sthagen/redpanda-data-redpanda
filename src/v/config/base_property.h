@@ -33,6 +33,7 @@ class config_store;
 using required = ss::bool_class<struct required_tag>;
 using needs_restart = ss::bool_class<struct needs_restart_tag>;
 using is_secret = ss::bool_class<struct is_secret_tag>;
+using gets_restored = ss::bool_class<struct gets_restored_tag>;
 
 // Whether to redact secrets. If true, `secret_placeholder` should be used
 // instead of the config value.
@@ -72,6 +73,15 @@ public:
         visibility visibility{visibility::user};
         is_secret secret{is_secret::no};
 
+        // Whether or not this property should be restored following cluster
+        // restore events.
+        //
+        // This is particularly important to allow the restored cluster to
+        // define its own set of configs required for e.g., interacting with
+        // cloud storage, or creating hardware-specific definitions like cache
+        // sizes.
+        gets_restored gets_restored{gets_restored::yes};
+
         // Aliases are used exclusively for input: all output (e.g. listing
         // configuration) uses the primary name of the property.
         std::vector<std::string_view> aliases;
@@ -93,6 +103,7 @@ public:
     const std::vector<std::string_view>& aliases() const {
         return _meta.aliases;
     }
+    bool gets_restored() const { return bool(_meta.gets_restored); }
 
     // this serializes the property value. a full configuration serialization is
     // performed in config_store::to_json where the json object key is taken

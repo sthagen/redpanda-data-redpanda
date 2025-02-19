@@ -569,7 +569,7 @@ configuration::configuration()
       *this,
       "cluster_id",
       "Cluster identifier.",
-      {.needs_restart = needs_restart::no},
+      {.needs_restart = needs_restart::no, .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , disable_metrics(
@@ -1882,14 +1882,16 @@ configuration::configuration()
       "<<cloud_storage_secret_key>> to form the complete credentials required "
       "for authentication. To authenticate using IAM roles, see "
       "cloud_storage_credentials_source.",
-      {.visibility = visibility::user},
+      {.visibility = visibility::user, .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_secret_key(
       *this,
       "cloud_storage_secret_key",
       "Cloud provider secret key.",
-      {.visibility = visibility::user, .secret = is_secret::yes},
+      {.visibility = visibility::user,
+       .secret = is_secret::yes,
+       .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_region(
@@ -1897,14 +1899,14 @@ configuration::configuration()
       "cloud_storage_region",
       "Cloud provider region that houses the bucket or container used for "
       "storage.",
-      {.visibility = visibility::user},
+      {.visibility = visibility::user, .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_bucket(
       *this,
       "cloud_storage_bucket",
       "AWS or GCP bucket or container that should be used to store data.",
-      {.visibility = visibility::user},
+      {.visibility = visibility::user, .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_api_endpoint(
@@ -1914,7 +1916,7 @@ configuration::configuration()
       "generated using <<cloud_storage_region,region>> and "
       "<<cloud_storage_bucket,bucket>>. Otherwise, this uses the value "
       "assigned. - GCP: Uses `storage.googleapis.com`.",
-      {.visibility = visibility::user},
+      {.visibility = visibility::user, .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_api_endpoint)
   , cloud_storage_url_style(
@@ -1946,7 +1948,8 @@ configuration::configuration()
       "`azure_aks_oidc_federation` ",
       {.needs_restart = needs_restart::yes,
        .example = "config_file",
-       .visibility = visibility::user},
+       .visibility = visibility::user,
+       .gets_restored = gets_restored::no},
       model::cloud_credentials_source::config_file,
       {
         model::cloud_credentials_source::config_file,
@@ -2011,7 +2014,7 @@ configuration::configuration()
       "cloud_storage_trust_file",
       "Path to certificate that should be used to validate server certificate "
       "during TLS handshake.",
-      {.visibility = visibility::user},
+      {.visibility = visibility::user, .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_crl_file(
@@ -2320,7 +2323,8 @@ configuration::configuration()
       "`google_s3_compat`, `azure`, `minio`]",
       {.needs_restart = needs_restart::yes,
        .example = "aws",
-       .visibility = visibility::user},
+       .visibility = visibility::user,
+       .gets_restored = gets_restored::no},
       model::cloud_storage_backend::unknown,
       {model::cloud_storage_backend::aws,
        model::cloud_storage_backend::google_s3_compat,
@@ -2335,7 +2339,9 @@ configuration::configuration()
       "Derived from cloud_storage_credentials_source if not set. Only required "
       "when using IAM role based access. To authenticate using access keys, "
       "see `cloud_storage_access_key`.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::tunable,
+       .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_spillover_manifest_size(
@@ -2430,7 +2436,9 @@ configuration::configuration()
       "cloud_storage_azure_storage_account",
       "The name of the Azure storage account to use with Tiered Storage. If "
       "`null`, the property is disabled.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_azure_container(
@@ -2439,7 +2447,9 @@ configuration::configuration()
       "The name of the Azure container to use with Tiered Storage. If `null`, "
       "the property is disabled. The container must belong to "
       "cloud_storage_azure_storage_account.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_azure_shared_key(
@@ -2451,7 +2461,8 @@ configuration::configuration()
       "disabled. Redpanda expects this key string to be Base64 encoded.",
       {.needs_restart = needs_restart::no,
        .visibility = visibility::user,
-       .secret = is_secret::yes},
+       .secret = is_secret::yes,
+       .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_azure_adls_endpoint(
@@ -2460,7 +2471,9 @@ configuration::configuration()
       "Azure Data Lake Storage v2 endpoint override. Use when hierarchical "
       "namespaces are enabled on your storage account and you have set up a "
       "custom endpoint.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .gets_restored = gets_restored::no},
       std::nullopt,
       &validate_non_empty_string_opt)
   , cloud_storage_azure_adls_port(
@@ -2470,7 +2483,9 @@ configuration::configuration()
       "`cloud_storage_azure_adls_endpoint`. Use when Hierarchical Namespaces "
       "are enabled on your storage account and you have set up a custom "
       "endpoint.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .gets_restored = gets_restored::no},
       std::nullopt)
   , cloud_storage_azure_hierarchical_namespace_enabled(
       *this,
@@ -2680,7 +2695,9 @@ configuration::configuration()
       "Maximum size of object storage cache. If both this property and "
       "cloud_storage_cache_size_percent are set, Redpanda uses the minimum of "
       "the two.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      {.needs_restart = needs_restart::no,
+       .visibility = visibility::user,
+       .gets_restored = gets_restored::no},
       0,
       property<uint64_t>::noop_validator,
       legacy_default<uint64_t>(20_GiB, legacy_version{9}))
@@ -3699,6 +3716,7 @@ configuration::configuration()
       false)
   , iceberg_enabled(
       *this,
+      true,
       "iceberg_enabled",
       "Enables the translation of topic data into Iceberg tables. Setting "
       "iceberg_enabled to true activates the feature at the cluster level, but "

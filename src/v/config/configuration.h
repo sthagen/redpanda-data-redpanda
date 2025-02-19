@@ -702,7 +702,7 @@ struct configuration final : public config_store {
     property<bool> tls_enable_renegotiation;
 
     // datalake configurations
-    property<bool> iceberg_enabled;
+    enterprise<property<bool>> iceberg_enabled;
     bounded_property<std::chrono::milliseconds>
       iceberg_catalog_commit_interval_ms;
     property<ss::sstring> iceberg_catalog_base_location;

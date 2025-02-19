@@ -105,6 +105,12 @@ get_enterprise_features(const cluster::topic_configuration& cfg) {
                leaders_pref.value())) {
         features.emplace_back("leadership pinning");
     }
+
+    if (config::shard_local_cfg().iceberg_enabled.is_restricted()) {
+        if (cfg.properties.iceberg_mode != model::iceberg_mode::disabled) {
+            features.emplace_back("iceberg");
+        }
+    }
     return features;
 }
 
@@ -199,7 +205,11 @@ std::vector<std::string_view> get_enterprise_features(
                updated_pref.value())) {
         features.emplace_back("leadership pinning");
     }
-
+    if (config::shard_local_cfg().iceberg_enabled.is_restricted()) {
+        if (properties.iceberg_mode != model::iceberg_mode::disabled) {
+            features.emplace_back("iceberg");
+        }
+    }
     return features;
 }
 

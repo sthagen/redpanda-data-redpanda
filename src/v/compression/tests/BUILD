@@ -19,6 +19,32 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "snappy_test",
+    timeout = "short",
+    srcs = [
+        "snappy_tests.cc",
+    ],
+    cpu = 1,
+    data = [
+        "//src/v/compression/tests/snappy_payload:little_endian_compressed_data.snappy",
+        "//src/v/compression/tests/snappy_payload:uncompressed_data",
+    ],
+    env = {"SNAPPY_PAYLOAD_PATH": "src/v/compression/tests/snappy_payload"},
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iostream",
+        "//src/v/compression",
+        "//src/v/random:generators",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:file_io",
+        "@googletest//:gtest",
+        "@seastar",
+        "@snappy",
+    ],
+)
+
 redpanda_cc_btest(
     name = "zstd_test",
     timeout = "moderate",

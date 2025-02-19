@@ -17,7 +17,6 @@ rp_test(
   FIXTURE_TEST
   BINARY_NAME cluster_cloud_metadata
   SOURCES
-    controller_snapshot_reconciliation_test.cc
     manifest_downloads_test.cc
     offsets_lookup_batcher_test.cc
     offsets_lookup_test.cc
@@ -43,6 +42,7 @@ rp_test(
   BINARY_NAME gtest_cluster_cloud_metadata
   SOURCES
     cluster_recovery_backend_test.cc
+    controller_snapshot_reconciliation_test.cc
     producer_id_recovery_test.cc
   LIBRARIES
     v::application

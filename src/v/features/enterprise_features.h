@@ -65,6 +65,7 @@ public:
     // | Cluster     | `http_authentication`           | `OIDC`        |
     // | Cluster     | `enable_schema_id_validation`   | `redpanda`    |
     // | Cluster     | `enable_schema_id_validation`   | `compat`      |
+    // | Cluster     | `iceberg_enabled`               | `true`        |
     // | Node        | `fips_mode`                     | `enabled`     |
     // | Node        | `fips_mode`                     | `permissive`  |
     // +-------------+---------------------------------+---------------+

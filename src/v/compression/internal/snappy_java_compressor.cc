@@ -23,15 +23,6 @@
 #include <snappy.h>
 
 namespace compression::internal {
-struct snappy_magic {
-    static const constexpr std::array<uint8_t, 8> java_magic = {
-      0x82, 'S', 'N', 'A', 'P', 'P', 'Y', 0};
-    static const constexpr int32_t default_version = 1;
-    static const constexpr int32_t min_compatible_version = 1;
-    static const constexpr size_t header_len = java_magic.size()
-                                               + sizeof(default_version)
-                                               + sizeof(min_compatible_version);
-};
 
 size_t find_max_size_in_frags(const iobuf& x) {
     size_t ret = 0;
@@ -59,8 +50,10 @@ iobuf snappy_java_compressor::compress(const iobuf& x) {
     iobuf ret;
     ret.append(
       snappy_magic::java_magic.data(), snappy_magic::java_magic.size());
-    append_le(ret, snappy_magic::default_version);
-    append_le(ret, snappy_magic::min_compatible_version);
+    // versions in header are big-endian. See:
+    // https://github.com/xerial/snappy-java/blob/65e1ec3de1a0d447b137c6dd6393629aa3d75b8b/src/main/java/org/xerial/snappy/SnappyCodec.java#L78-L81
+    append_be(ret, snappy_magic::default_version);
+    append_be(ret, snappy_magic::min_compatible_version);
     // staging buffer
     ss::temporary_buffer<char> obuf(find_max_size_in_frags(x));
     for (const auto& f : x) {
@@ -83,17 +76,13 @@ iobuf snappy_java_compressor::uncompress(const iobuf& x) {
     if (unlikely(snappy_magic::java_magic != magic_compare)) {
         return snappy_standard_compressor::uncompress(x);
     }
-    // NOTE: version and min_version are LITTLE_ENDIAN!
-    const auto version = iter.consume_type<int32_t>();
-    const auto min_version = iter.consume_type<int32_t>();
-    if (unlikely(min_version < snappy_magic::min_compatible_version)) {
-        throw std::runtime_error(fmt_with_ctx(
-          fmt::format,
-          "version missmatch. iobuf: {} - version:{}, min_version:{}",
-          x,
-          version,
-          min_version));
-    }
+    // Previously, these version fields were erroneously written with
+    // little-endian encoding. They are now corrected to be written and decoded
+    // using big-endian. Additionally, there was previously a version check
+    // here. It has been removed due to incorrect implementation, and because
+    // most other snappy clients do not perform checks around these fields.
+    [[maybe_unused]] const auto version = iter.consume_be_type<int32_t>();
+    [[maybe_unused]] const auto min_version = iter.consume_be_type<int32_t>();
     // stream decoder next
     iobuf ret;
     const size_t input_bytes = x.size_bytes();

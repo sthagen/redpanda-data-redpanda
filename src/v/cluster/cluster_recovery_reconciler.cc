@@ -13,43 +13,31 @@
 
 #include "cluster/cluster_recovery_table.h"
 #include "cluster/topic_table.h"
+#include "config/config_store.h"
 #include "config/configuration.h"
+#include "container/chunked_hash_map.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "security/acl_store.h"
 #include "security/credential_store.h"
 
-#include <absl/container/flat_hash_map.h>
-
-namespace {
-// List of properties that are explicitly not recovered, since they would
-// affect the cluster's ability to recover, or they are strongly coupled with
-// the cluster's configuration.
-//
-// TODO: consider making this some annotation in the underlying properties so
-// we can tell if the new cluster cares about the config.
-const absl::flat_hash_set<ss::sstring> properties_ignore_list = {
-  "cloud_storage_cache_size",
-  "cluster_id",
-  "cloud_storage_access_key",
-  "cloud_storage_secret_key",
-  "cloud_storage_region",
-  "cloud_storage_bucket",
-  "cloud_storage_api_endpoint",
-  "cloud_storage_credentials_source",
-  "cloud_storage_trust_file",
-  "cloud_storage_backend",
-  "cloud_storage_credentials_host",
-  "cloud_storage_azure_storage_account",
-  "cloud_storage_azure_container",
-  "cloud_storage_azure_shared_key",
-  "cloud_storage_azure_adls_endpoint",
-  "cloud_storage_azure_adls_port",
-};
-} // anonymous namespace
-
 namespace cluster::cloud_metadata {
+
+chunked_hash_set<ss::sstring>
+controller_snapshot_reconciler::properties_ignore_list() {
+    chunked_hash_set<ss::sstring> ignore_list;
+    config::shard_local_cfg().for_each(
+      [&ignore_list](const config::base_property& prop) {
+          if (!prop.gets_restored()) {
+              ignore_list.emplace(prop.name());
+              for (const auto& alias : prop.aliases()) {
+                  ignore_list.emplace(alias);
+              }
+          }
+      });
+    return ignore_list;
+}
 
 controller_snapshot_reconciler::controller_actions
 controller_snapshot_reconciler::get_actions(
@@ -74,9 +62,10 @@ controller_snapshot_reconciler::get_actions(
     }
 
     const auto& snap_config = snap.config.values;
+    auto ignore_list = properties_ignore_list();
     if (cur_stage < recovery_stage::recovered_cluster_config) {
         for (const auto& [snap_k, snap_v] : snap_config) {
-            if (properties_ignore_list.contains(snap_k)) {
+            if (ignore_list.contains(snap_k)) {
                 continue;
             }
             if (!config::shard_local_cfg().contains(snap_k)) {

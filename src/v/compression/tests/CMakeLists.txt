@@ -34,3 +34,19 @@ rp_test(
   LABELS compression
   ARGS "-- -c 1"
 )
+
+set(SNAPPY_PAYLOAD_PATH "${CMAKE_CURRENT_SOURCE_DIR}/snappy_payload")
+
+rp_test(
+  UNIT_TEST
+  GTEST
+  BINARY_NAME snappy_tests
+  SOURCES snappy_tests.cc
+  LIBRARIES v::compression v::random v::gtest_main v::utils
+  LABELS compression
+  ARGS "-- -c 1"
+  INPUT_FILES
+   "${SNAPPY_PAYLOAD_PATH}/uncompressed_data"
+   "${SNAPPY_PAYLOAD_PATH}/little_endian_compressed_data.snappy"
+  ENV "SNAPPY_PAYLOAD_PATH="
+  )

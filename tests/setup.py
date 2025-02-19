@@ -13,7 +13,7 @@ setup(
     package_data={'': ['*.md']},
     include_package_data=True,
     install_requires=[
-        'ducktape@git+https://github.com/redpanda-data/ducktape.git@b9e25b11c0f1f083d7848dfa3ad7c134b0ed861a',
+        'ducktape@git+https://github.com/redpanda-data/ducktape.git@163187b8b2b0a226cb8ecf06119ed66300deac5a',
         'prometheus-client==0.9.0',
         'kafka-python==2.0.2',
         'crc32c==2.2',
@@ -55,6 +55,8 @@ setup(
         "thrift-sasl==0.4.3",
         "pyhive==0.7.0",
         "pynessie",
+        "python-snappy==0.7.3",
+        "lz4==4.4.3",
     ],
     scripts=[],
 )
