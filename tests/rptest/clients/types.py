@@ -42,6 +42,7 @@ class TopicSpec:
     PROPERTY_ICEBERG_MODE = "redpanda.iceberg.mode"
     PROPERTY_DELETE_RETENTION_MS = "delete.retention.ms"
     PROPERTY_ICEBERG_INVALID_RECORD_ACTION = "redpanda.iceberg.invalid.record.action"
+    PROPERTY_ICEBERG_TARGET_LAG_MS = "redpanda.iceberg.target.lag.ms"
 
     class CompressionTypes(str, Enum):
         """

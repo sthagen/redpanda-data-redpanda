@@ -59,7 +59,13 @@ go_library(
         "@rules_go//go/platform:openbsd": [
             "//src/go/rpk/pkg/tuners/ethtool",
         ],
+        "@rules_go//go/platform:osx": [
+            "//src/go/rpk/pkg/tuners/ethtool",
+        ],
         "@rules_go//go/platform:plan9": [
+            "//src/go/rpk/pkg/tuners/ethtool",
+        ],
+        "@rules_go//go/platform:qnx": [
             "//src/go/rpk/pkg/tuners/ethtool",
         ],
         "@rules_go//go/platform:solaris": [

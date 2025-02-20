@@ -66,7 +66,7 @@ public:
       chunked_vector<data_file> files,
       chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props = {},
       std::optional<ss::sstring> tag_name = std::nullopt,
-      std::optional<long> tag_expiration_ms = std::nullopt,
+      std::optional<int64_t> tag_expiration_ms = std::nullopt,
       size_t min_to_merge_new_files = default_min_to_merge_new_files,
       size_t mfile_target_size_bytes = default_target_size_bytes)
       : io_(io)
@@ -156,7 +156,7 @@ private:
     chunked_vector<data_file> new_data_files_;
     chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props_;
     std::optional<ss::sstring> tag_name_;
-    std::optional<long> tag_expiration_ms_;
+    std::optional<int64_t> tag_expiration_ms_;
 };
 
 } // namespace iceberg

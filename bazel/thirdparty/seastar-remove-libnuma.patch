@@ -1,0 +1,120 @@
+From 56a28faf8a419ce854669d00c10779ceef05dac5 Mon Sep 17 00:00:00 2001
+From: Tyler Rockwood <rockwood@redpanda.com>
+Date: Mon, 17 Feb 2025 15:59:14 +0000
+Subject: [PATCH] memory: remove libnuma dependency
+
+Seastar is currently pulling in all of libnuma to just invoke a single
+syscall. Additionally since libnuma being LGPL licensed, it's simpler
+to not include it as a dependency. Replace the call in numaif.h with
+a direct syscall.
+
+I'm assuming that once libnuma was depended on because it was a
+dependency of hwloc, however, hwloc version 2 removed the dependency
+on libnuma, so Seastar can too:
+https://github.com/open-mpi/hwloc/blob/263908a2c1f21c0e221a8d1f6472daf3a1fc07b9/NEWS#L291
+---
+ cooking_recipe.cmake |  2 +-
+ src/CMakeLists.txt   |  4 ----
+ src/core/memory.cc   | 34 +++++++++++++++++++++++++---------
+ 3 files changed, 26 insertions(+), 14 deletions(-)
+
+diff --git a/cooking_recipe.cmake b/cooking_recipe.cmake
+index d63ad23d646..0e8138d479b 100644
+--- a/cooking_recipe.cmake
++++ b/cooking_recipe.cmake
+@@ -110,7 +110,7 @@ cooking_ingredient (nettle
+     BUILD_COMMAND <DISABLE>
+     INSTALL_COMMAND ${make_command} install)
+ 
+-# Also a direct dependency of Seastar.
++# A dependency of DPDK.
+ cooking_ingredient (numactl
+   EXTERNAL_PROJECT_ARGS
+     URL https://github.com/numactl/numactl/releases/download/v2.0.12/numactl-2.0.12.tar.gz
+diff --git a/src/CMakeLists.txt b/src/CMakeLists.txt
+index 46e7a13daf8..6455b093386 100644
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -127,10 +127,6 @@ target_link_libraries (seastar-module
+     yaml-cpp::yaml-cpp
+     "$<BUILD_INTERFACE:Valgrind::valgrind>"
+     Threads::Threads)
+-if (Seastar_NUMA)
+-  target_link_libraries (seastar-module
+-    PRIVATE numactl::numactl)
+-endif ()
+ if (Seastar_HWLOC)
+   target_link_libraries (seastar-module
+     PRIVATE hwloc::hwloc)
+diff --git a/src/core/memory.cc b/src/core/memory.cc
+index 85d9b13cccd..4a3fbd0de19 100644
+--- a/src/core/memory.cc
++++ b/src/core/memory.cc
+@@ -101,10 +101,8 @@ module;
+ #include <utility>
+ #include <boost/intrusive/list.hpp>
+ #include <sys/mman.h>
++#include <sys/syscall.h>
+ 
+-#ifdef SEASTAR_HAVE_NUMA
+-#include <numaif.h>
+-#endif
+ #endif // !defined(SEASTAR_DEFAULT_ALLOCATOR)
+ 
+ #ifdef SEASTAR_MODULE
+@@ -1832,6 +1830,23 @@ void configure_minimal() {
+     init_cpu_mem();
+ }
+ 
++static long mbind(void *addr,
++                  unsigned long len,
++                  int mode,
++                  const unsigned long *nodemask,
++                  unsigned long maxnode,
++                  unsigned flags) {
++  return syscall(
++    SYS_mbind,
++    reinterpret_cast<long>(addr),
++    len,
++    mode,
++    reinterpret_cast<long>(nodemask),
++    maxnode,
++    flags
++  );
++}
++
+ internal::numa_layout
+ configure(std::vector<resource::memory> m, bool mbind,
+         bool transparent_hugepages,
+@@ -1865,16 +1880,18 @@ configure(std::vector<resource::memory> m, bool mbind,
+         get_cpu_mem().replace_memory_backing(sys_alloc);
+     }
+     get_cpu_mem().resize(total, sys_alloc);
+-#ifdef SEASTAR_HAVE_NUMA
+     size_t pos = 0;
+     for (auto&& x : m) {
+         unsigned long nodemask = 1UL << x.nodeid;
+         if (mbind) {
+             auto start = get_cpu_mem().mem() + pos;
+-            auto r = ::mbind(start, x.bytes,
+-                            MPOL_PREFERRED,
+-                            &nodemask, std::numeric_limits<unsigned long>::digits,
+-                            MPOL_MF_MOVE);
++            static constexpr int mpol_preferred = 1;
++            static constexpr unsigned int mpol_mf_move = 2;
++            auto r = seastar::memory::mbind(
++                           start, x.bytes,
++                           mpol_preferred,
++                           &nodemask, std::numeric_limits<unsigned long>::digits,
++                           mpol_mf_move);
+ 
+             if (r == -1) {
+                 char err[1000] = {};
+@@ -1890,7 +1907,6 @@ configure(std::vector<resource::memory> m, bool mbind,
+         }
+         pos += x.bytes;
+     }
+-#endif
+     return ret_layout;
+ }
+ 

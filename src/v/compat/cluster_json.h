@@ -630,6 +630,7 @@ inline void rjson_serialize(
     write_member(w, "delete_retention_ms", tps.delete_retention_ms);
     write_exceptional_member_type(
       w, "iceberg_invalid_record_action", tps.iceberg_invalid_record_action);
+    write_member(w, "iceberg_target_lag_ms", tps.iceberg_target_lag_ms);
     w.EndObject();
 }
 
@@ -704,6 +705,7 @@ inline void read_value(const json::Value& rd, cluster::topic_properties& obj) {
     read_member(rd, "delete_retention_ms", obj.delete_retention_ms);
     read_member(
       rd, "iceberg_invalid_record_action", obj.iceberg_invalid_record_action);
+    read_member(rd, "iceberg_target_lag_ms", obj.iceberg_target_lag_ms);
 }
 
 inline void rjson_serialize(

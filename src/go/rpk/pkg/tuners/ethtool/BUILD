@@ -39,7 +39,13 @@ go_library(
         "@rules_go//go/platform:openbsd": [
             "@com_github_safchain_ethtool//:ethtool",
         ],
+        "@rules_go//go/platform:osx": [
+            "@com_github_safchain_ethtool//:ethtool",
+        ],
         "@rules_go//go/platform:plan9": [
+            "@com_github_safchain_ethtool//:ethtool",
+        ],
+        "@rules_go//go/platform:qnx": [
             "@com_github_safchain_ethtool//:ethtool",
         ],
         "@rules_go//go/platform:solaris": [

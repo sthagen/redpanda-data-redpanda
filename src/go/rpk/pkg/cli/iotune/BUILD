@@ -83,7 +83,21 @@ go_library(
             "@com_github_spf13_afero//:afero",
             "@com_github_spf13_cobra//:cobra",
         ],
+        "@rules_go//go/platform:osx": [
+            "//src/go/rpk/pkg/config",
+            "//src/go/rpk/pkg/out",
+            "//src/go/rpk/pkg/tuners",
+            "@com_github_spf13_afero//:afero",
+            "@com_github_spf13_cobra//:cobra",
+        ],
         "@rules_go//go/platform:plan9": [
+            "//src/go/rpk/pkg/config",
+            "//src/go/rpk/pkg/out",
+            "//src/go/rpk/pkg/tuners",
+            "@com_github_spf13_afero//:afero",
+            "@com_github_spf13_cobra//:cobra",
+        ],
+        "@rules_go//go/platform:qnx": [
             "//src/go/rpk/pkg/config",
             "//src/go/rpk/pkg/out",
             "//src/go/rpk/pkg/tuners",

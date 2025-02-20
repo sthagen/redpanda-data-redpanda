@@ -110,14 +110,6 @@ def data_dependency():
         url = "https://vectorized-public.s3.amazonaws.com/dependencies/lksctp-tools-1.0.19.tar.gz",
     )
 
-    http_archive(
-        name = "numactl",
-        build_file = "//bazel/thirdparty:numactl.BUILD",
-        sha256 = "1ee27abd07ff6ba140aaf9bc6379b37825e54496e01d6f7343330cf1a4487035",
-        strip_prefix = "numactl-2.0.14",
-        url = "https://vectorized-public.s3.amazonaws.com/dependencies/numactl-v2.0.14.tar.gz",
-    )
-
     #
     # ** IMPORTANT - OpenSSL and FIPS **
     #
@@ -170,7 +162,7 @@ def data_dependency():
         sha256 = "cd235a75a15a2fff0bdc12462d28862ecbc96ac34445725d545c0041f32dfb39",
         strip_prefix = "seastar-3aa6ca607d0227052301427d400e50bbdd70f37b",
         url = "https://github.com/redpanda-data/seastar/archive/3aa6ca607d0227052301427d400e50bbdd70f37b.tar.gz",
-        patches = ["//bazel/thirdparty:seastar-fortify-source.patch"],
+        patches = ["//bazel/thirdparty:seastar-fortify-source.patch", "//bazel/thirdparty:seastar-remove-libnuma.patch"],
         patch_args = ["-p1"],
     )
 

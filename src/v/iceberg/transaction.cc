@@ -74,7 +74,7 @@ ss::future<transaction::txn_outcome> transaction::merge_append(
   chunked_vector<data_file> files,
   chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props,
   std::optional<ss::sstring> tag_name,
-  std::optional<long> tag_expiration_ms) {
+  std::optional<int64_t> tag_expiration_ms) {
     auto a = std::make_unique<merge_append_action>(
       io,
       table_,

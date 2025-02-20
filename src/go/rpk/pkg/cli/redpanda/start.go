@@ -95,7 +95,7 @@ func updateConfigWithFlags(y *config.RedpandaYaml, flags *pflag.FlagSet) {
 	}
 }
 
-func parseConfigKvs(args []string) ([]string, []string) {
+func parseConfigKvs(args []string) (parsedKVs []string, parsedArgs []string) {
 	setFlag := fmt.Sprintf("--%s", setConfigFlag)
 	kvs := []string{}
 	i := 0

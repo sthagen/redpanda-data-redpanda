@@ -488,6 +488,33 @@ struct delete_retention_ms_validator {
     }
 };
 
+struct iceberg_target_lag_ms_validator {
+    static constexpr const char* error_message
+      = "Unsupported redpanda.iceberg.target.lag.ms config";
+    static constexpr const auto config_name
+      = topic_property_iceberg_target_lag_ms;
+    static constexpr error_code ec = error_code::invalid_config;
+
+    static bool is_valid(const creatable_topic& c) {
+        if (auto it = std::ranges::find(
+              c.configs,
+              topic_property_iceberg_target_lag_ms,
+              &createable_topic_config::name);
+            it != c.configs.end() && it->value.has_value()) {
+            try {
+                using namespace std::chrono_literals;
+                auto val = boost::lexical_cast<std::chrono::milliseconds::rep>(
+                  it->value.value());
+                return val >= std::chrono::milliseconds{10s}.count()
+                       && val <= serde::max_serializable_ms.count();
+            } catch (...) {
+                return false;
+            }
+        }
+        return true;
+    }
+};
+
 template<typename T>
 struct configuration_value_validator {
     static constexpr const char* error_message = T::error_message;

@@ -280,6 +280,10 @@ to_cluster_type(const creatable_topic& t) {
       = get_enum_value<model::iceberg_invalid_record_action>(
         config_entries, topic_property_iceberg_invalid_record_action);
 
+    cfg.properties.iceberg_target_lag_ms
+      = get_duration_value<std::chrono::milliseconds>(
+        config_entries, topic_property_iceberg_target_lag_ms);
+
     schema_id_validation_config_parser schema_id_validation_config_parser{
       cfg.properties};
 

@@ -645,6 +645,9 @@ struct incremental_topic_updates
     property_update<std::optional<model::iceberg_invalid_record_action>>
       iceberg_invalid_record_action;
 
+    property_update<std::optional<std::chrono::milliseconds>>
+      iceberg_target_lag_ms;
+
     // To allow us to better control use of the deprecated shadow_indexing
     // field, use getters and setters instead.
     const auto& get_shadow_indexing() const { return shadow_indexing; }
@@ -685,7 +688,8 @@ struct incremental_topic_updates
           delete_retention_ms,
           iceberg_delete,
           iceberg_partition_spec,
-          iceberg_invalid_record_action);
+          iceberg_invalid_record_action,
+          iceberg_target_lag_ms);
     }
 
     friend std::ostream&

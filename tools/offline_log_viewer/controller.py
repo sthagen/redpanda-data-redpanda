@@ -150,6 +150,8 @@ def read_topic_properties_serde(rdr: Reader, version):
             rdr.read_optional(Reader.read_string),
             'iceberg_invalid_record_action':
             rdr.read_optional(Reader.read_serde_enum),
+            'iceberg_target_lag_ms':
+            rdr.read_optional(Reader.read_int64),
         }
 
     return topic_properties

@@ -85,7 +85,17 @@ go_library(
             "@com_github_hashicorp_go_multierror//:go-multierror",
             "@com_github_tklauser_go_sysconf//:go-sysconf",
         ],
+        "@rules_go//go/platform:osx": [
+            "//src/go/rpk/pkg/config",
+            "@com_github_hashicorp_go_multierror//:go-multierror",
+            "@com_github_tklauser_go_sysconf//:go-sysconf",
+        ],
         "@rules_go//go/platform:plan9": [
+            "//src/go/rpk/pkg/config",
+            "@com_github_hashicorp_go_multierror//:go-multierror",
+            "@com_github_tklauser_go_sysconf//:go-sysconf",
+        ],
+        "@rules_go//go/platform:qnx": [
             "//src/go/rpk/pkg/config",
             "@com_github_hashicorp_go_multierror//:go-multierror",
             "@com_github_tklauser_go_sysconf//:go-sysconf",

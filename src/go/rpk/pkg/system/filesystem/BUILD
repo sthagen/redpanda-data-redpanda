@@ -57,7 +57,15 @@ go_library(
             "@com_github_docker_go_units//:go-units",
             "@com_github_spf13_afero//:afero",
         ],
+        "@rules_go//go/platform:osx": [
+            "@com_github_docker_go_units//:go-units",
+            "@com_github_spf13_afero//:afero",
+        ],
         "@rules_go//go/platform:plan9": [
+            "@com_github_docker_go_units//:go-units",
+            "@com_github_spf13_afero//:afero",
+        ],
+        "@rules_go//go/platform:qnx": [
             "@com_github_docker_go_units//:go-units",
             "@com_github_spf13_afero//:afero",
         ],

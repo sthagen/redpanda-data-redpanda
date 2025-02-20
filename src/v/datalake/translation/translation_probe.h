@@ -20,11 +20,12 @@ public:
     // register_invalid_record_metric.
     enum class invalid_record_cause {
         /// Failed to resolve the Kafka schema for the record. This covers the
-        /// cases where magic byte is missing from the record or it references a
-        /// non-existent schema in the registry.
+        /// cases where the magic byte is missing from the record or schema id
+        /// refers to a non-existent schema.
         failed_kafka_schema_resolution,
-        /// Failed to translate the record data according to the schema fetches
-        /// from schema registry to an equivalent Iceberg schema.
+        /// Failed to translate the record data according to the schema fetched
+        /// from the schema registry to an equivalent Iceberg schema/Parquet
+        /// format.
         failed_data_translation,
         /// Failed to ensure the table schema matches the inferred Iceberg
         /// schema.
@@ -39,7 +40,7 @@ public:
         counter_ref(cause)++;
     }
 
-    constexpr size_t& counter_ref(invalid_record_cause cause) {
+    size_t& counter_ref(invalid_record_cause cause) {
         switch (cause) {
         case invalid_record_cause::failed_kafka_schema_resolution:
             return _num_failed_kafka_schema_resolution;

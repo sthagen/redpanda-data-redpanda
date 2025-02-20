@@ -28,6 +28,5 @@ cc_library(
     name = "wasmtime_c",
     hdrs = glob(["include/**"]) + [":gen_conf"],
     strip_include_prefix = "include",
-    # include_prefix = "wasmtime",
     deps = [":wasmtime_c_api"],
 )

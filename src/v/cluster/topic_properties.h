@@ -79,7 +79,8 @@ struct topic_properties
       std::optional<bool> iceberg_delete,
       std::optional<ss::sstring> iceberg_partition_spec,
       std::optional<model::iceberg_invalid_record_action>
-        iceberg_invalid_record_action)
+        iceberg_invalid_record_action,
+      std::optional<std::chrono::milliseconds> iceberg_target_lag_ms)
       : compression(compression)
       , cleanup_policy_bitflags(cleanup_policy_bitflags)
       , compaction_strategy(compaction_strategy)
@@ -123,7 +124,8 @@ struct topic_properties
       , delete_retention_ms(delete_retention_ms)
       , iceberg_delete(iceberg_delete)
       , iceberg_partition_spec(std::move(iceberg_partition_spec))
-      , iceberg_invalid_record_action(iceberg_invalid_record_action) {}
+      , iceberg_invalid_record_action(iceberg_invalid_record_action)
+      , iceberg_target_lag_ms(iceberg_target_lag_ms) {}
 
     std::optional<model::compression> compression;
     std::optional<model::cleanup_policy_bitflags> cleanup_policy_bitflags;
@@ -206,6 +208,8 @@ struct topic_properties
     std::optional<model::iceberg_invalid_record_action>
       iceberg_invalid_record_action;
 
+    std::optional<std::chrono::milliseconds> iceberg_target_lag_ms{};
+
     bool is_compacted() const;
     bool has_overrides() const;
     bool requires_remote_erase() const;
@@ -254,7 +258,8 @@ struct topic_properties
           delete_retention_ms,
           iceberg_delete,
           iceberg_partition_spec,
-          iceberg_invalid_record_action);
+          iceberg_invalid_record_action,
+          iceberg_target_lag_ms);
     }
 
     friend bool operator==(const topic_properties&, const topic_properties&)

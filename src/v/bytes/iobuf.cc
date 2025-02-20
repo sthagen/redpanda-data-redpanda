@@ -146,7 +146,7 @@ bool iobuf::operator==(std::string_view o) const {
           /// next chunk to compare is the remaining to cmp or the fragment size
           const auto size = std::min((o.size() - n), fg_sz);
           std::string_view a_view(src, size);
-          std::string_view b_view(o.cbegin() + n, size);
+          std::string_view b_view(o.data() + n, size);
           n += size;
           are_equal &= (a_view == b_view);
           return !are_equal ? ss::stop_iteration::yes : ss::stop_iteration::no;

@@ -78,7 +78,8 @@ bool is_supported(std::string_view name) {
        topic_property_delete_retention_ms,
        topic_property_iceberg_delete,
        topic_property_iceberg_partition_spec,
-       topic_property_iceberg_invalid_record_action});
+       topic_property_iceberg_invalid_record_action,
+       topic_property_iceberg_target_lag_ms});
 
     if (std::any_of(
           supported_configs.begin(),
@@ -122,7 +123,8 @@ using validators = make_validator_types<
   iceberg_config_validator,
   iceberg_invalid_record_action_validator,
   cloud_topic_config_validator,
-  delete_retention_ms_validator>;
+  delete_retention_ms_validator,
+  iceberg_target_lag_ms_validator>;
 
 static void
 append_topic_configs(request_context& ctx, create_topics_response& response) {

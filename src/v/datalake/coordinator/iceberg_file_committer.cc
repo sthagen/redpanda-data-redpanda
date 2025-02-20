@@ -317,7 +317,7 @@ public:
           std::move(icb_files_),
           {{commit_meta_prop, to_json_str(commit_meta)}},
           commit_tag_name,
-          /*tag_expiration_ms=*/std::numeric_limits<long>::max());
+          /*tag_expiration_ms=*/std::numeric_limits<int64_t>::max());
         if (icb_append_res.has_error()) {
             co_return log_and_convert_action_errc(
               icb_append_res.error(),

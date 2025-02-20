@@ -324,6 +324,11 @@ metadata_cache::get_default_delete_retention_ms() const {
     return config::shard_local_cfg().tombstone_retention_ms();
 }
 
+std::chrono::milliseconds
+metadata_cache::get_default_iceberg_target_lag_ms() const {
+    return config::shard_local_cfg().iceberg_target_lag_ms();
+}
+
 topic_properties metadata_cache::get_default_properties() const {
     topic_properties tp;
     tp.compression = {get_default_compression()};

@@ -54,7 +54,7 @@ public:
       chunked_vector<data_file>,
       chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props = {},
       std::optional<ss::sstring> tag_name = std::nullopt,
-      std::optional<long> tag_expiration_ms = std::nullopt);
+      std::optional<int64_t> tag_expiration_ms = std::nullopt);
 
     // Removes expired snapshots from the table, computing expiration based on
     // the given timestamp. Note, this does not perform IO to delete any

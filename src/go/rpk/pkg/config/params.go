@@ -1928,7 +1928,7 @@ func Set[T any](p *T, key, value string) error {
 // getField deeply search in v for the value that reflect field tags.
 //
 // The parentRawTag is the previous tag, and includes an index if there is one.
-func getField(tags []string, parentRawTag string, v reflect.Value) (reflect.Value, reflect.Value, error) {
+func getField(tags []string, parentRawTag string, v reflect.Value) (field reflect.Value, other reflect.Value, err error) {
 	// *At* the last element, we check if it is a slice. The final tag can
 	// still index into the slice and if that happens, we want to return
 	// the index:
@@ -1997,7 +1997,7 @@ func getField(tags []string, parentRawTag string, v reflect.Value) (reflect.Valu
 //  1. if tag is found within the struct, return the field.
 //  2. if tag is not found _but_ the struct has "Other" field, return Other.
 //  3. Error if it can't find the given tag and "Other" field is unavailable.
-func getFieldByTag(tag string, v reflect.Value) (reflect.Value, reflect.Value, error) {
+func getFieldByTag(tag string, v reflect.Value) (newV reflect.Value, otherV reflect.Value, err error) {
 	var (
 		t       = v.Type()
 		other   bool

@@ -3877,6 +3877,18 @@ configuration::configuration()
         model::iceberg_invalid_record_action::drop,
         model::iceberg_invalid_record_action::dlq_table,
       })
+  , iceberg_target_lag_ms(
+      *this,
+      "iceberg_target_lag_ms",
+      "Default value for the redpanda.iceberg.target.lag.ms topic property, "
+      "which controls how often data an Iceberg table is refreshed with new "
+      "data from the corresponding Redpanda topic. Redpanda attempts to commit "
+      "all the data produced to the topic within the lag target in a best "
+      "effort fashion, subject to resource availability.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      std::chrono::milliseconds{1min},
+      {.min = std::chrono::milliseconds{10s},
+       .max = serde::max_serializable_ms})
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

@@ -28,6 +28,7 @@
 #include "pandaproxy/schema_registry/schema_id_validation.h"
 #include "pandaproxy/schema_registry/subject_name_strategy.h"
 #include "security/acl.h"
+#include "serde/rw/chrono.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/sstring.hh>
@@ -514,6 +515,25 @@ struct iceberg_partition_spec_validator {
               "couldn't parse iceberg partition spec `{}': {}",
               value,
               parsed.error());
+        }
+        return std::nullopt;
+    }
+};
+
+struct iceberg_target_lag_ms_validator {
+    std::optional<ss::sstring> operator()(
+      const ss::sstring& /*raw*/,
+      const std::optional<std::chrono::milliseconds>& maybe_value) {
+        if (maybe_value.has_value()) {
+            const auto& value = maybe_value.value();
+            constexpr auto min_lag = std::chrono::milliseconds(10s);
+            if (value < min_lag || value > serde::max_serializable_ms) {
+                return fmt::format(
+                  "target.lag.ms value invalid, expected to be in range "
+                  "[{},{}]",
+                  min_lag,
+                  serde::max_serializable_ms);
+            }
         }
         return std::nullopt;
     }

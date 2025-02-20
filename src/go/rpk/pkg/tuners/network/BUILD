@@ -68,7 +68,17 @@ go_library(
             "//src/go/rpk/pkg/utils",
             "@com_github_spf13_afero//:afero",
         ],
+        "@rules_go//go/platform:osx": [
+            "//src/go/rpk/pkg/tuners/ethtool",
+            "//src/go/rpk/pkg/utils",
+            "@com_github_spf13_afero//:afero",
+        ],
         "@rules_go//go/platform:plan9": [
+            "//src/go/rpk/pkg/tuners/ethtool",
+            "//src/go/rpk/pkg/utils",
+            "@com_github_spf13_afero//:afero",
+        ],
+        "@rules_go//go/platform:qnx": [
             "//src/go/rpk/pkg/tuners/ethtool",
             "//src/go/rpk/pkg/utils",
             "@com_github_spf13_afero//:afero",

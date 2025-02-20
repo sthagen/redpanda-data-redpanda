@@ -389,6 +389,14 @@ create_topic_properties_update(
                   op);
                 continue;
             }
+            if (cfg.name == topic_property_iceberg_target_lag_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.iceberg_target_lag_ms,
+                  cfg.value,
+                  op,
+                  iceberg_target_lag_ms_validator{});
+                continue;
+            }
 
         } catch (const validation_error& e) {
             vlog(

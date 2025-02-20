@@ -1021,6 +1021,20 @@ config_response_container_t make_topic_configs(
             include_documentation,
             "Action to take when an invalid record is encountered."),
           &describe_as_string<model::iceberg_invalid_record_action>);
+
+        add_topic_config_if_requested(
+          config_keys,
+          result,
+          topic_property_iceberg_target_lag_ms,
+          metadata_cache.get_default_iceberg_target_lag_ms(),
+          topic_property_iceberg_target_lag_ms,
+          topic_properties.iceberg_target_lag_ms,
+          include_synonyms,
+          maybe_make_documentation(
+            include_documentation,
+            "Best effort target for Iceberg table lag relative to source "
+            "topic, in milliseconds."),
+          describe_as_string<std::chrono::milliseconds>);
     }
 
     return result;

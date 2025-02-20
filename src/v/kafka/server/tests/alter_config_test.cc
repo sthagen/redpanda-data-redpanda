@@ -1379,7 +1379,8 @@ FIXTURE_TEST(test_describe_iceberg_properties, alter_config_test_fixture) {
     std::vector<ss::sstring> iceberg_properties = {
       "redpanda.iceberg.delete",
       "redpanda.iceberg.partition.spec",
-      "redpanda.iceberg.invalid.record.action"};
+      "redpanda.iceberg.invalid.record.action",
+      "redpanda.iceberg.target.lag.ms"};
 
     {
         model::topic test_tp{"topic-1"};
