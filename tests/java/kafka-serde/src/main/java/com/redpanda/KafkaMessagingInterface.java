@@ -28,6 +28,8 @@ public interface KafkaMessagingInterface {
    * @param autoRegisterSchema True to automatically register schemas
    * @param skipKnownTypes Whether to skip known types when resolving schema
    *     dependencies
+   * @param useLatestVersion   Whether to use the latest schema version for
+   *     lookup
    * @return Instance of Properties
    *
    * @see java.util.Properties
@@ -35,7 +37,8 @@ public interface KafkaMessagingInterface {
    */
   Properties getProducerProperties(
       String brokers, String srAddr, SecuritySettings securitySettings,
-      boolean autoRegisterSchema, boolean skipKnownTypes);
+      boolean autoRegisterSchema, boolean skipKnownTypes,
+      boolean useLatestVersion);
 
   /**
    * Generates properties for a Kafka consumer
@@ -44,6 +47,7 @@ public interface KafkaMessagingInterface {
    * @param srAddr The URL of the schema registry
    * @param securitySettings The security settings (may be null)
    * @param consumerGroup The consumer group to use
+   * @param useLatestVersion Whether to use the latest schema version for lookup
    * @return Instance of Properties
    *
    * @see java.util.Properties
@@ -51,7 +55,7 @@ public interface KafkaMessagingInterface {
    */
   Properties getConsumerProperties(
       String brokers, String srAddr, SecuritySettings securitySettings,
-      String consumerGroup);
+      String consumerGroup, boolean useLatestVersion);
 
   /**
    * Tests production of messages

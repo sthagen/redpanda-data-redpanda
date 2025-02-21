@@ -240,4 +240,12 @@ failure_injectable_log::retention_offset(storage::gc_config cfg) const {
     return _underlying_log->retention_offset(cfg);
 }
 
+ssize_t failure_injectable_log::dirty_segment_bytes() const {
+    return _underlying_log->dirty_segment_bytes();
+}
+
+ssize_t failure_injectable_log::closed_segment_bytes() const {
+    return _underlying_log->closed_segment_bytes();
+}
+
 } // namespace raft

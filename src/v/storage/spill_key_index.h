@@ -30,7 +30,7 @@
 #include <absl/hash/hash.h>
 namespace storage::internal {
 using namespace storage; // NOLINT
-class spill_key_index final : public compacted_index_writer::impl {
+class spill_key_index final : public compacted_index_writer {
 public:
     struct value_type {
         model::offset base_offset;

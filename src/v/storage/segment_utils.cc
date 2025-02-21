@@ -148,20 +148,6 @@ ss::future<ss::file> make_reader_handle(
       std::move(ntp_sanitizer_config));
 }
 
-ss::future<compacted_index_writer> make_compacted_index_writer(
-  const std::filesystem::path& path,
-  ss::io_priority_class iopc,
-  storage_resources& resources,
-  std::optional<ntp_sanitizer_config> ntp_sanitizer_config) {
-    return ss::make_ready_future<compacted_index_writer>(
-      make_file_backed_compacted_index(
-        path.string(),
-        iopc,
-        false,
-        resources,
-        std::move(ntp_sanitizer_config)));
-}
-
 ss::future<segment_appender_ptr> make_segment_appender(
   const segment_full_path& path,
   size_t number_of_chunks,
@@ -238,21 +224,22 @@ natural_index_of_entries_to_keep(compacted_index_reader reader) {
 ss::future<> copy_filtered_entries(
   compacted_index_reader reader,
   roaring::Roaring to_copy_index,
-  compacted_index_writer writer) {
+  std::unique_ptr<compacted_index_writer> writer) {
     return ss::do_with(
       std::move(writer),
       [bm = std::move(to_copy_index),
-       reader](compacted_index_writer& writer) mutable {
+       reader](std::unique_ptr<compacted_index_writer>& writer) mutable {
           reader.reset();
           return reader
             .consume(
-              index_filtered_copy_reducer(std::move(bm), writer),
+              index_filtered_copy_reducer(std::move(bm), *writer),
               model::no_timeout)
             // must be last
             .finally([&writer] {
-                writer.set_flag(compacted_index::footer_flags::self_compaction);
+                writer->set_flag(
+                  compacted_index::footer_flags::self_compaction);
                 // do not handle exception on the close
-                return writer.close();
+                return writer->close();
             });
       });
 }
@@ -621,26 +608,26 @@ ss::future<> build_compaction_index(
   segment_full_path p,
   compaction_config cfg,
   storage_resources& resources) {
-    auto w = co_await make_compacted_index_writer(
-      p, cfg.iopc, resources, cfg.sanitizer_config);
-    auto reducer = tx_reducer(stm_manager, std::move(aborted_txs), &w);
+    auto w = storage::make_file_backed_compacted_index(
+      p, cfg.iopc, false, resources, cfg.sanitizer_config);
+    auto reducer = tx_reducer(stm_manager, std::move(aborted_txs), w.get());
     auto index_builder = co_await ss::coroutine::as_future<tx_reducer::stats>(
       std::move(rdr)
         .consume(std::move(reducer), model::no_timeout)
-        .finally([&w] { return w.close(); }));
+        .finally([&w] { return w->close(); }));
     if (index_builder.failed()) {
         auto exception = index_builder.get_exception();
         vlog(
           gclog.error,
           "Error rebuilding index: {}, {}",
-          w.filename(),
+          w->filename(),
           exception);
         std::rethrow_exception(exception);
     }
     vlog(
       gclog.info,
       "tx reducer path: {} stats {}",
-      w.filename(),
+      w->filename(),
       index_builder.get());
 }
 
@@ -909,7 +896,7 @@ make_concatenated_segment(
             // If even one segment in the set does not have a
             // clean_compact_timestamp, we must not mark the new index as having
             // one.
-            if (!seg->index().has_clean_compact_timestamp()) {
+            if (!seg->has_clean_compact_timestamp()) {
                 return std::nullopt;
             }
 
@@ -978,11 +965,13 @@ ss::future<std::vector<compacted_index_reader>> make_indices_readers(
 }
 
 ss::future<> rewrite_concatenated_indicies(
-  compacted_index_writer writer, std::vector<compacted_index_reader>& readers) {
+  std::unique_ptr<compacted_index_writer> writer,
+  std::vector<compacted_index_reader>& readers) {
     return ss::do_with(
-      std::move(writer), [&readers](compacted_index_writer& writer) {
+      std::move(writer),
+      [&readers](std::unique_ptr<compacted_index_writer>& writer) {
           return ss::do_with(
-            index_copy_reducer{writer},
+            index_copy_reducer{*writer},
             [&readers, &writer](index_copy_reducer& reducer) {
                 return ss::do_for_each(
                          readers.begin(),
@@ -994,7 +983,7 @@ ss::future<> rewrite_concatenated_indicies(
                                rdr.filename());
                              return rdr.consume(reducer, model::no_timeout);
                          })
-                  .finally([&writer] { return writer.close(); });
+                  .finally([&writer] { return writer->close(); });
             });
       });
 }
@@ -1037,15 +1026,14 @@ ss::future<> do_write_concatenated_compacted_index(
                           return ss::now();
                       }
 
-                      return make_compacted_index_writer(
-                               target_path,
-                               cfg.iopc,
-                               resources,
-                               cfg.sanitizer_config)
-                        .then([&readers](compacted_index_writer writer) {
-                            return rewrite_concatenated_indicies(
-                              std::move(writer), readers);
-                        });
+                      auto writer = storage::make_file_backed_compacted_index(
+                        target_path.string(),
+                        cfg.iopc,
+                        false,
+                        resources,
+                        cfg.sanitizer_config);
+                      return rewrite_concatenated_indicies(
+                        std::move(writer), readers);
                   })
                   .finally([&readers] {
                       return ss::parallel_for_each(
@@ -1182,7 +1170,7 @@ ss::future<bool> mark_segment_as_finished_window_compaction(
 bool is_past_tombstone_delete_horizon(
   ss::lw_shared_ptr<segment> seg, const compaction_config& cfg) {
     if (
-      seg->index().has_clean_compact_timestamp()
+      seg->has_clean_compact_timestamp()
       && cfg.tombstone_retention_ms.has_value()) {
         auto tombstone_delete_horizon = model::timestamp(
           seg->index().clean_compact_timestamp()->value()

@@ -534,7 +534,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_btest(
     name = "storage_e2e_single_thread",
-    timeout = "moderate",
+    timeout = "long",
     srcs = [
         "storage_e2e_test.cc",
     ],

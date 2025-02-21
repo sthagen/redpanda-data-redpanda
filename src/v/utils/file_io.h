@@ -20,6 +20,9 @@
 #include <filesystem>
 
 /// \brief Read an entire file into a ss::temporary_buffer
+///
+/// Use this interface only when you are certain that the resulting allocation
+/// will be under the recommended maximum size (128 KB).
 ss::future<ss::temporary_buffer<char>>
 read_fully_tmpbuf(const std::filesystem::path&);
 

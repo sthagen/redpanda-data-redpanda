@@ -131,6 +131,10 @@ public:
     std::optional<model::offset>
       retention_offset(storage::gc_config) const final;
 
+    ssize_t dirty_segment_bytes() const final;
+
+    ssize_t closed_segment_bytes() const final;
+
 private:
     ss::shared_ptr<storage::log> _underlying_log;
     std::optional<append_delay_generator> _append_delay_generator;

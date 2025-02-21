@@ -132,12 +132,6 @@ ss::future<ss::file> make_handle(
   ss::file_open_options opt,
   std::optional<ntp_sanitizer_config> ntp_sanitizer_config);
 
-ss::future<compacted_index_writer> make_compacted_index_writer(
-  const std::filesystem::path& path,
-  ss::io_priority_class iopc,
-  storage_resources& resources,
-  std::optional<ntp_sanitizer_config> ntp_sanitizer_config);
-
 ss::future<segment_appender_ptr> make_segment_appender(
   const segment_full_path& path,
   size_t number_of_chunks,

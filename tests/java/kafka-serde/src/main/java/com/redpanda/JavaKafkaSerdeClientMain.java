@@ -58,12 +58,13 @@ public class JavaKafkaSerdeClientMain {
     String consumerGroup = ns.getString("consumer_group");
     int count = ns.getInt("count");
     boolean skipKnownTypes = ns.getBoolean("skip_known_types");
+    boolean useLatestVersion = ns.getBoolean("use_latest_version");
 
     JavaKafkaSerdeClient.Protocol protocol = ns.get("protocol");
 
     JavaKafkaSerdeClient client = new JavaKafkaSerdeClient(
         brokers, topic, srAdr, consumerGroup, protocol, securitySettings,
-        skipKnownTypes, log);
+        skipKnownTypes, useLatestVersion, log);
 
     try {
       client.run(count);
@@ -110,6 +111,11 @@ public class JavaKafkaSerdeClientMain {
     parser.addArgument("--security").help("JSON formatted security string");
     parser.addArgument("--skip-known-types")
         .help("Whether to skip known types when resolving schema")
+        .setDefault(false)
+        .action(Arguments.storeTrue())
+        .type(Boolean.class);
+    parser.addArgument("--use-latest-version")
+        .help("Whether to use the latest version for when looking up schemas")
         .setDefault(false)
         .action(Arguments.storeTrue())
         .type(Boolean.class);

@@ -413,15 +413,15 @@ TEST_F(CompactionFixtureTest, TestChunkedCompaction) {
 
     ASSERT_TRUE(segs[0]->finished_self_compaction());
     ASSERT_TRUE(segs[0]->finished_windowed_compaction());
-    ASSERT_FALSE(segs[0]->index().has_clean_compact_timestamp());
+    ASSERT_FALSE(segs[0]->has_clean_compact_timestamp());
 
     ASSERT_TRUE(segs[1]->finished_self_compaction());
     ASSERT_TRUE(segs[1]->finished_windowed_compaction());
-    ASSERT_FALSE(segs[1]->index().has_clean_compact_timestamp());
+    ASSERT_FALSE(segs[1]->has_clean_compact_timestamp());
 
     ASSERT_TRUE(segs[2]->finished_self_compaction());
     ASSERT_TRUE(segs[2]->finished_windowed_compaction());
-    ASSERT_TRUE(segs[2]->index().has_clean_compact_timestamp());
+    ASSERT_TRUE(segs[2]->has_clean_compact_timestamp());
 
     ASSERT_TRUE(disk_log.get_last_compaction_window_start_offset().has_value());
     ASSERT_EQ(
@@ -441,8 +441,8 @@ TEST_F(CompactionFixtureTest, TestChunkedCompaction) {
     ASSERT_TRUE(did_compact);
 
     // Now the first two segments should be marked as clean.
-    ASSERT_TRUE(segs[0]->index().has_clean_compact_timestamp());
-    ASSERT_TRUE(segs[1]->index().has_clean_compact_timestamp());
+    ASSERT_TRUE(segs[0]->has_clean_compact_timestamp());
+    ASSERT_TRUE(segs[1]->has_clean_compact_timestamp());
 
     ASSERT_FALSE(
       disk_log.get_last_compaction_window_start_offset().has_value());
@@ -495,14 +495,14 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
         auto& seg = segs[i];
         ASSERT_TRUE(seg->finished_windowed_compaction());
         ASSERT_TRUE(seg->finished_self_compaction());
-        ASSERT_TRUE(seg->index().has_clean_compact_timestamp());
+        ASSERT_TRUE(seg->has_clean_compact_timestamp());
     }
 
     // The last added segment should not have had any compaction operations
     // performed.
     ASSERT_FALSE(segs[segs.size() - 2]->finished_windowed_compaction());
     ASSERT_FALSE(segs[segs.size() - 2]->finished_self_compaction());
-    ASSERT_FALSE(segs[segs.size() - 2]->index().has_clean_compact_timestamp());
+    ASSERT_FALSE(segs[segs.size() - 2]->has_clean_compact_timestamp());
 
     // We should have compacted all the way down to the start of the log, and
     // reset the start offset.
@@ -515,7 +515,7 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
     // Now, these values should be set.
     ASSERT_TRUE(segs[segs.size() - 2]->finished_windowed_compaction());
     ASSERT_TRUE(segs[segs.size() - 2]->finished_self_compaction());
-    ASSERT_TRUE(segs[segs.size() - 2]->index().has_clean_compact_timestamp());
+    ASSERT_TRUE(segs[segs.size() - 2]->has_clean_compact_timestamp());
 
     auto segments_compacted_3 = disk_log.get_probe().get_segments_compacted();
     ASSERT_LT(segments_compacted_2, segments_compacted_3);
@@ -851,7 +851,7 @@ TEST_F(CompactionFixtureTest, TestTombstones) {
     // clean_compact_timestamp set, since we fully indexed all of them.
     int num_clean_before = 0;
     for (const auto& seg : log->segments()) {
-        if (seg->index().has_clean_compact_timestamp()) {
+        if (seg->has_clean_compact_timestamp()) {
             ++num_clean_before;
         }
     }
@@ -872,7 +872,7 @@ TEST_F(CompactionFixtureTest, TestTombstones) {
     // Check that the clean_compact_timestamps got persisted in the index_state.
     int num_clean_again = 0;
     for (const auto& seg : log->segments()) {
-        if (seg->index().has_clean_compact_timestamp()) {
+        if (seg->has_clean_compact_timestamp()) {
             ++num_clean_again;
         }
     }
@@ -892,7 +892,7 @@ TEST_F(CompactionFixtureTest, TestTombstones) {
     // even after a restart.
     int num_clean_after = 0;
     for (const auto& seg : log->segments()) {
-        if (seg->index().has_clean_compact_timestamp()) {
+        if (seg->has_clean_compact_timestamp()) {
             ++num_clean_after;
         }
     }
@@ -971,7 +971,7 @@ TEST_P(CompactionFixtureTombstonesParamTest, TestTombstonesCompletelyEmptyLog) {
 
     ASSERT_TRUE(did_compact);
     for (size_t i = 0; i < num_segments; ++i) {
-        ASSERT_TRUE(log->segments()[i]->index().has_clean_compact_timestamp());
+        ASSERT_TRUE(log->segments()[i]->has_clean_compact_timestamp());
     }
 
     {
@@ -1237,7 +1237,7 @@ TEST_P(
 
         auto num_clean_compacted = 0;
         for (const auto& seg : log->segments()) {
-            if (seg->index().has_clean_compact_timestamp()) {
+            if (seg->has_clean_compact_timestamp()) {
                 ++num_clean_compacted;
             }
         }

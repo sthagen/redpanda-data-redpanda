@@ -530,3 +530,16 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "file_io_test",
+    timeout = "short",
+    srcs = ["file_io_test.cc"],
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:random",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:file_io",
+        "@googletest//:gtest",
+    ],
+)

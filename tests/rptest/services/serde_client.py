@@ -50,6 +50,7 @@ class SerdeClient(BackgroundThreadService):
             group=str(uuid4()),
             security_config: Optional[dict] = None,
             skip_known_types: Optional[bool] = None,
+            use_latest_version: Optional[bool] = None,
             subject_name_strategy: Optional[str] = None,
             payload_class: Optional[str] = None,
             compression_type: Optional[TopicSpec.CompressionTypes] = None):
@@ -77,6 +78,10 @@ class SerdeClient(BackgroundThreadService):
                 self._cmd_args += " --skip-known-types"
             else:
                 assert False
+
+        if use_latest_version:
+            assert self._serde_client_type == SerdeClientType.Java
+            self._cmd_args += " --use-latest-version"
 
         if subject_name_strategy is not None:
             assert self._serde_client_type == SerdeClientType.Python

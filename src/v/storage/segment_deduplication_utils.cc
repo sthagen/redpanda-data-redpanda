@@ -113,7 +113,7 @@ ss::future<model::offset> build_offset_map(
             cfg.asrc->check();
         }
         auto seg = *iter;
-        if (seg->index().has_clean_compact_timestamp()) {
+        if (seg->has_clean_compact_timestamp()) {
             // This segment has already been fully deduplicated, so building the
             // offset map for it would be pointless.
             vlog(

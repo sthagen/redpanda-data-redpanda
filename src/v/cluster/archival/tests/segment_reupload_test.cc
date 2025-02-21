@@ -845,6 +845,10 @@ SEASTAR_THREAD_TEST_CASE(test_upload_aligned_to_non_existent_offset) {
         }
         auto seg = b.get_log_segments().back();
         seg->release_appender(&b.get_disk_log_impl().readers()).get();
+        b.add_closed_segment_bytes(seg->file_size());
+        if (!seg->has_clean_compact_timestamp()) {
+            b.add_dirty_segment_bytes(seg->file_size());
+        }
     }
 
     b | storage::add_segment(*first)

@@ -50,7 +50,7 @@ segment::segment(
   segment_reader_ptr r,
   segment_index i,
   segment_appender_ptr a,
-  std::optional<compacted_index_writer> ci,
+  std::optional<std::unique_ptr<compacted_index_writer>> ci,
   std::optional<batch_cache_index> c,
   storage_resources& resources,
   segment::generation_id gen) noexcept
@@ -220,7 +220,7 @@ ss::future<> segment::do_close() {
         f = f.then([this] { return _appender->close(); });
     }
     if (_compaction_index) {
-        f = f.then([this] { return _compaction_index->close(); });
+        f = f.then([this] { return _compaction_index.value()->close(); });
     }
     // after appender flushes to make sure we make things visible
     // only after appender flush
@@ -234,18 +234,19 @@ ss::future<> segment::do_close() {
 ss::future<> segment::do_release_appender(
   segment_appender_ptr appender,
   std::optional<batch_cache_index> cache,
-  std::optional<compacted_index_writer> compacted_index) {
+  std::optional<std::unique_ptr<compacted_index_writer>> compacted_index) {
     return ss::do_with(
       std::move(appender),
       std::move(compacted_index),
       [this, cache = std::move(cache)](
         segment_appender_ptr& appender,
-        std::optional<compacted_index_writer>& compacted_index) {
+        std::optional<std::unique_ptr<compacted_index_writer>>&
+          compacted_index) {
           return appender->close()
             .then([this] { return _idx.flush(); })
             .then([this, &compacted_index] {
                 if (compacted_index) {
-                    return compacted_index->close();
+                    return compacted_index.value()->close();
                 }
                 clear_cached_disk_usage();
                 return ss::now();
@@ -410,8 +411,8 @@ ss::future<> segment::do_truncate(
         if (_compaction_index) {
             f = ss::do_with(
               std::exchange(_compaction_index, std::nullopt),
-              [](std::optional<compacted_index_writer>& c) {
-                  return c->close();
+              [](std::optional<std::unique_ptr<compacted_index_writer>>& c) {
+                  return c.value()->close();
               });
         }
         // always remove compaction index when truncating compacted segments
@@ -629,7 +630,7 @@ ss::future<append_result> segment::append(const model::record_batch& b) {
         // the next segment. We mark this index as `incomplete` and rebuild it
         // later from scratch during compaction.
         try {
-            auto index = std::exchange(_compaction_index, std::nullopt);
+            auto index = std::exchange(_compaction_index, std::nullopt).value();
             index->set_flag(compacted_index::footer_flags::incomplete);
             vlog(
               gclog.info,
@@ -870,24 +871,24 @@ ss::future<ss::lw_shared_ptr<segment>> make_segment(
             [path, pc, &resources, ntp_sanitizer_config](
               const ss::lw_shared_ptr<segment>& seg) mutable {
                 auto compacted_path = path.to_compacted_index();
-                return internal::make_compacted_index_writer(
-                         compacted_path,
-                         pc,
-                         resources,
-                         std::move(ntp_sanitizer_config))
-                  .then([seg, &resources](compacted_index_writer compact) {
-                      return ss::make_ready_future<ss::lw_shared_ptr<segment>>(
-                        ss::make_lw_shared<segment>(
-                          seg->offsets(),
-                          seg->release_segment_reader(),
-                          std::move(seg->index()),
-                          seg->release_appender(),
-                          std::move(compact),
-                          seg->has_cache()
-                            ? std::optional(std::move(seg->cache()->get()))
-                            : std::nullopt,
-                          resources));
-                  });
+                auto compact = make_file_backed_compacted_index(
+                  compacted_path,
+                  pc,
+                  false,
+                  resources,
+                  std::move(ntp_sanitizer_config));
+
+                return ss::make_ready_future<ss::lw_shared_ptr<segment>>(
+                  ss::make_lw_shared<segment>(
+                    seg->offsets(),
+                    seg->release_segment_reader(),
+                    std::move(seg->index()),
+                    seg->release_appender(),
+                    std::move(compact),
+                    seg->has_cache()
+                      ? std::optional(std::move(seg->cache()->get()))
+                      : std::nullopt,
+                    resources));
             });
       });
 }

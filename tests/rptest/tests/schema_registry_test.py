@@ -471,6 +471,7 @@ class SchemaRegistryEndpoints(RedpandaTest):
             topic: str,
             count: int,
             skip_known_types: Optional[bool] = None,
+            use_latest_version: Optional[bool] = None,
             subject_name_strategy: Optional[str] = None,
             payload_class: Optional[str] = None,
             compression_type: Optional[TopicSpec.CompressionTypes] = None):
@@ -486,6 +487,7 @@ class SchemaRegistryEndpoints(RedpandaTest):
                            topic=topic,
                            security_config=sec_cfg if sec_cfg else None,
                            skip_known_types=skip_known_types,
+                           use_latest_version=use_latest_version,
                            subject_name_strategy=subject_name_strategy,
                            payload_class=payload_class,
                            compression_type=compression_type)
@@ -2069,11 +2071,15 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
                  client_type=SerdeClientType.Java,
                  skip_known_types=True)
     @parametrize(protocol=SchemaType.PROTOBUF,
+                 client_type=SerdeClientType.Java,
+                 use_latest_version=True)
+    @parametrize(protocol=SchemaType.PROTOBUF,
                  client_type=SerdeClientType.Golang)
     def test_serde_client(self,
                           protocol: SchemaType,
                           client_type: SerdeClientType,
-                          skip_known_types: Optional[bool] = None):
+                          skip_known_types: Optional[bool] = None,
+                          use_latest_version: Optional[bool] = None):
         """
         Verify basic operation of Schema registry across a range of schema types and serde
         client types
@@ -2086,7 +2092,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             f"Connecting to redpanda: {self.redpanda.brokers()} schema_Reg: {schema_reg}"
         )
         client = self._get_serde_client(protocol, client_type, topic, 2,
-                                        skip_known_types)
+                                        skip_known_types, use_latest_version)
         self.logger.debug("Starting client")
         client.start()
         self.logger.debug("Waiting on client")

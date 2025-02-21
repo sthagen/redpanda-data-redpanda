@@ -172,6 +172,12 @@ ss::future<bool>
 disk_log_builder::update_start_offset(model::offset start_offset) {
     return get_disk_log_impl().update_start_offset(start_offset);
 }
+void disk_log_builder::add_dirty_segment_bytes(ssize_t bytes) {
+    get_disk_log_impl().add_dirty_segment_bytes(bytes);
+}
+void disk_log_builder::add_closed_segment_bytes(ssize_t bytes) {
+    get_disk_log_impl().add_closed_segment_bytes(bytes);
+}
 
 ss::future<> disk_log_builder::stop() {
     return _storage.stop().then([this]() { return _feature_table.stop(); });

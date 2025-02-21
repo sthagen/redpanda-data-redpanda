@@ -166,8 +166,8 @@ private:
     uint64_t _num_rounds_window_compaction = 0;
     uint64_t _num_chunked_compaction_runs = 0;
 
-    uint64_t _dirty_segment_bytes = 0;
-    uint64_t _closed_segment_bytes = 0;
+    ssize_t _dirty_segment_bytes = 0;
+    ssize_t _closed_segment_bytes = 0;
 
     ssize_t _compaction_removed_bytes = 0;
 

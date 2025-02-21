@@ -222,6 +222,9 @@ public:
      */
     virtual std::optional<model::offset> retention_offset(gc_config) const = 0;
 
+    virtual ssize_t dirty_segment_bytes() const = 0;
+    virtual ssize_t closed_segment_bytes() const = 0;
+
 private:
     ntp_config _config;
 

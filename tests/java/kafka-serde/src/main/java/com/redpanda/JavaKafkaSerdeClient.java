@@ -30,6 +30,7 @@ public class JavaKafkaSerdeClient {
   private final String consumerGroup;
   private final SecuritySettings securitySettings;
   private final boolean skipKnownTypes;
+  private final boolean useLatestVersion;
 
   private final Logger log;
 
@@ -44,6 +45,7 @@ public class JavaKafkaSerdeClient {
    * @param securitySettings The security settings
    * @param skipKnownTypes Whether to skip known types when resolving schema
    *     dependencies
+   * @param useLatestVersion Whether to use the latest schema version for lookup
    * @param log The logger to use
    *
    * @see SecuritySettings
@@ -52,7 +54,7 @@ public class JavaKafkaSerdeClient {
   public JavaKafkaSerdeClient(
       String brokers, String topic, String srAddr, String consumerGroup,
       Protocol protocol, SecuritySettings securitySettings,
-      boolean skipKnownTypes, Logger log) {
+      boolean skipKnownTypes, boolean useLatestVersion, Logger log) {
     this.brokers = brokers;
     this.topic = topic;
     this.srAddr = srAddr;
@@ -60,6 +62,7 @@ public class JavaKafkaSerdeClient {
     this.protocol = protocol;
     this.securitySettings = securitySettings;
     this.skipKnownTypes = skipKnownTypes;
+    this.useLatestVersion = useLatestVersion;
     this.log = log;
   }
 
@@ -87,7 +90,7 @@ public class JavaKafkaSerdeClient {
         this.log,
         test_interface.getProducerProperties(
             this.brokers, this.srAddr, this.securitySettings, true,
-            this.skipKnownTypes),
+            this.skipKnownTypes, this.useLatestVersion),
         this.topic, count);
 
     log.info("Starting consume");
@@ -95,7 +98,7 @@ public class JavaKafkaSerdeClient {
         this.log,
         test_interface.getConsumerProperties(
             this.brokers, this.srAddr, this.securitySettings,
-            this.consumerGroup),
+            this.consumerGroup, this.useLatestVersion),
         this.topic, count);
 
     log.info("Done!");

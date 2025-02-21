@@ -15,6 +15,7 @@
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/tests/service_fixture.h"
 #include "config/configuration.h"
+#include "storage/disk_log_impl.h"
 #include "storage/ntp_config.h"
 #include "test_utils/fixture.h"
 
@@ -153,6 +154,17 @@ struct reupload_fixture : public archiver_fixture {
 
     ss::shared_ptr<storage::log> disk_log_impl() {
         return get_local_storage_api().log_mgr().get(manifest_ntp);
+    }
+
+    // Need to call this when releasing an appender.
+    void add_segment_bytes(
+      ss::lw_shared_ptr<storage::segment> s, ssize_t size_bytes) {
+        static_cast<storage::disk_log_impl*>(disk_log_impl().get())
+          ->add_closed_segment_bytes(s->file_size());
+        if (!s->has_clean_compact_timestamp()) {
+            static_cast<storage::disk_log_impl*>(disk_log_impl().get())
+              ->add_dirty_segment_bytes(s->file_size());
+        }
     }
 
     cloud_storage::partition_manifest
@@ -523,6 +535,7 @@ FIXTURE_TEST(test_upload_both_compacted_and_non_compacted, reupload_fixture) {
     write_random_batches(last_segment, 20, 2);
     last_segment->appender().close().get();
     last_segment->release_appender();
+    add_segment_bytes(last_segment, last_segment->size_bytes());
 
     create_segment(
       {manifest_ntp,
@@ -592,6 +605,7 @@ FIXTURE_TEST(test_both_uploads_with_one_failing, reupload_fixture) {
     write_random_batches(last_segment, 20, 2);
     last_segment->appender().close().get();
     last_segment->release_appender();
+    add_segment_bytes(last_segment, last_segment->size_bytes());
 
     create_segment(
       {manifest_ntp,
@@ -780,6 +794,7 @@ FIXTURE_TEST(test_upload_limit, reupload_fixture) {
         write_random_batches(last_segment, 10, 2);
         last_segment->appender().close().get();
         last_segment->release_appender();
+        add_segment_bytes(last_segment, last_segment->size_bytes());
 
         create_segment(
           {manifest_ntp,

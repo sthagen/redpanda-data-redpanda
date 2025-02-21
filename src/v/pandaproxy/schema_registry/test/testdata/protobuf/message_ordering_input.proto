@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+import "google/protobuf/descriptor.proto";
+
+// Messages order should not be changed
+
+message MessageB {
+  string string6 = 6;
+  string string5 = 5;
+  string string4 = 4;
+  // synthetic optionals. These should be
+  // ordered together with the regular fields
+  optional string string3 = 3;
+  optional string string2 = 2;
+  optional string string1 = 1;
+}
+
+message MessageA {
+  string string6 = 6;
+  string string5 = 5;
+  string string4 = 4;
+  // synthetic optionals. These should be
+  // ordered together with the regular fields
+  optional string string3 = 3;
+  optional string string2 = 2;
+  optional string string1 = 1;
+}
+
+

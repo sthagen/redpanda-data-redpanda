@@ -417,4 +417,32 @@ public:
           .consume(batch_validating_consumer(), model::no_timeout)
           .get();
     }
+
+    std::pair<ssize_t, ssize_t> expected_dirty_and_closed_segment_bytes(
+      ss::shared_ptr<storage::log> log) const {
+        ssize_t dirty{0};
+        ssize_t closed{0};
+        for (const auto& segment : log->segments()) {
+            if (!segment->has_appender()) {
+                if (!segment->has_clean_compact_timestamp()) {
+                    dirty += segment->file_size();
+                }
+                closed += segment->file_size();
+            }
+        }
+        return {dirty, closed};
+    }
+
+    // Assert that the book-kept dirty and closed bytes reflect the contents of
+    // the log.
+    void check_dirty_and_closed_segment_bytes(
+      ss::shared_ptr<storage::log> log) const {
+        auto expected = expected_dirty_and_closed_segment_bytes(log);
+        tlog.trace(
+          "Expect dirty bytes: {}, expect closed bytes: {}",
+          expected.first,
+          expected.second);
+        RPTEST_EXPECT_EQ(log->dirty_segment_bytes(), expected.first);
+        RPTEST_EXPECT_EQ(log->closed_segment_bytes(), expected.second);
+    }
 };

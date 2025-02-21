@@ -46,7 +46,8 @@ public class AvroMessaging implements KafkaMessagingInterface {
   @Override
   public Properties getProducerProperties(
       String brokers, String srAddr, SecuritySettings securitySettings,
-      boolean autoRegisterSchema, boolean skipKnownTypes) {
+      boolean autoRegisterSchema, boolean skipKnownTypes,
+      boolean useLatestVersion) {
     Properties prop = new Properties();
     prop.put("bootstrap.servers", brokers);
     prop.put("key.serializer", StringSerializer.class);
@@ -54,6 +55,8 @@ public class AvroMessaging implements KafkaMessagingInterface {
     prop.put(
         AbstractKafkaSchemaSerDeConfig.AUTO_REGISTER_SCHEMAS,
         autoRegisterSchema);
+    prop.put(
+        AbstractKafkaSchemaSerDeConfig.USE_LATEST_VERSION, useLatestVersion);
     prop.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, srAddr);
     if (securitySettings != null) {
       prop.putAll(securitySettings.toProperties());
@@ -70,11 +73,13 @@ public class AvroMessaging implements KafkaMessagingInterface {
   @Override
   public Properties getConsumerProperties(
       String brokers, String srAddr, SecuritySettings securitySettings,
-      String consumerGroup) {
+      String consumerGroup, boolean useLatestVersion) {
     Properties prop = new Properties();
     prop.put("bootstrap.servers", brokers);
     prop.put("key.deserializer", StringDeserializer.class);
     prop.put("value.deserializer", KafkaAvroDeserializer.class);
+    prop.put(
+        AbstractKafkaSchemaSerDeConfig.USE_LATEST_VERSION, useLatestVersion);
     prop.put(AbstractKafkaSchemaSerDeConfig.SCHEMA_REGISTRY_URL_CONFIG, srAddr);
     prop.put(ConsumerConfig.GROUP_ID_CONFIG, consumerGroup);
     prop.put(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");

@@ -17,6 +17,7 @@ redpanda_cc_library(
         "//src/v/container:fragmented_vector",
         "//src/v/ssx:future_util",
         "//src/v/utils:external_process",
+        "//src/v/utils:file_io",
         "@boost//:algorithm",
     ],
     include_prefix = "debug_bundle",

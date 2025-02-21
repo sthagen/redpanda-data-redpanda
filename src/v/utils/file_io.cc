@@ -19,8 +19,6 @@
 #include <seastar/core/fstream.hh>
 #include <seastar/core/temporary_buffer.hh>
 
-#include <exception>
-
 ss::future<ss::temporary_buffer<char>>
 read_fully_tmpbuf(const std::filesystem::path& name) {
     return ss::with_file(
@@ -32,11 +30,23 @@ read_fully_tmpbuf(const std::filesystem::path& name) {
 }
 
 ss::future<iobuf> read_fully(const std::filesystem::path& name) {
-    return read_fully_tmpbuf(name).then([](ss::temporary_buffer<char> buf) {
-        iobuf iob;
-        iob.append(std::move(buf));
-        return iob;
-    });
+    return ss::with_file(
+      ss::open_file_dma(name.string(), ss::open_flags::ro), [](ss::file file) {
+          auto buf = std::make_unique<iobuf>();
+          auto* buf_ptr = buf.get();
+          return ss::do_with(
+            std::move(buf),
+            ss::make_file_input_stream(std::move(file)),
+            make_iobuf_ref_output_stream(*buf_ptr),
+            [](
+              std::unique_ptr<iobuf>& buf,
+              ss::input_stream<char>& input,
+              ss::output_stream<char>& output) {
+                return ss::copy(input, output).then([&buf] {
+                    return std::move(*buf);
+                });
+            });
+      });
 }
 
 /**

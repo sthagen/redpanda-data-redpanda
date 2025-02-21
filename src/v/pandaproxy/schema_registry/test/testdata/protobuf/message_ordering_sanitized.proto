@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+import "google/protobuf/descriptor.proto";
+message MessageB {
+  string string6 = 6;
+  string string5 = 5;
+  string string4 = 4;
+  optional string string3 = 3;
+  optional string string2 = 2;
+  optional string string1 = 1;
+}
+
+message MessageA {
+  string string6 = 6;
+  string string5 = 5;
+  string string4 = 4;
+  optional string string3 = 3;
+  optional string string2 = 2;
+  optional string string1 = 1;
+}
+

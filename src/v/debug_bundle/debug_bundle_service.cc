@@ -23,6 +23,7 @@
 #include "ssx/future-util.h"
 #include "storage/kvstore.h"
 #include "utils/external_process.h"
+#include "utils/file_io.h"
 
 #include <seastar/core/fstream.hh>
 #include <seastar/core/lowres_clock.hh>
@@ -105,16 +106,6 @@ std::filesystem::path form_debug_bundle_storage_directory() {
     return debug_bundle_dir.value_or(
       config::node().data_directory.value().path
       / service::debug_bundle_dir_name);
-}
-
-ss::future<iobuf> read_file(std::string_view path) {
-    iobuf buf;
-    auto file = co_await ss::open_file_dma(path, ss::open_flags::ro);
-    auto h = ss::defer([file]() mutable { ssx::background = file.close(); });
-    auto istrm = ss::make_file_input_stream(file);
-    auto ostrm = make_iobuf_ref_output_stream(buf);
-    co_await ss::copy(istrm, ostrm);
-    co_return buf;
 }
 
 ss::future<> write_file(std::string_view path, iobuf buf) {
@@ -900,7 +891,8 @@ ss::future<> service::maybe_reload_previous_run() {
       process_output_file_path);
     if (process_output_file_exists) {
         try {
-            auto buf = co_await read_file(process_output_file_path);
+            auto buf = co_await read_fully(
+              std::filesystem::path(process_output_file_path));
             iobuf_parser p(std::move(buf));
             po.emplace(serde::read<process_output>(p));
         } catch (const std::exception& e) {

@@ -25,6 +25,7 @@
 #include "storage/kvstore.h"
 #include "storage/storage_resources.h"
 #include "test_utils/test.h"
+#include "utils/file_io.h"
 
 #include <seastar/core/fstream.hh>
 #include <seastar/core/seastar.hh>
@@ -722,17 +723,6 @@ ss::future<> wait_for_kvstore_to_populate(
     throw std::runtime_error("Timed out waiting for metadata to be written");
 }
 
-ss::future<iobuf> read_file_contents(std::string_view file_path) {
-    auto file = co_await ss::open_file_dma(
-      file_path.data(), ss::open_flags::ro);
-    auto h = ss::defer([file]() mutable { ssx::background = file.close(); });
-    auto istrm = ss::make_file_input_stream(file);
-    iobuf buf;
-    auto ostrm = make_iobuf_ref_output_stream(buf);
-    co_await ss::copy(istrm, ostrm);
-    co_return buf;
-}
-
 TEST_F_CORO(debug_bundle_service_started_fixture, validate_metadata) {
     debug_bundle::job_id_t job_id(uuid_t::create());
 
@@ -772,8 +762,7 @@ TEST_F_CORO(debug_bundle_service_started_fixture, validate_metadata) {
       co_await debug_bundle::calculate_sha256_sum(job_file.native()));
 
     ASSERT_TRUE_CORO(co_await ss::file_exists(process_output_file.native()));
-    auto process_output_buf = co_await read_file_contents(
-      process_output_file.native());
+    auto process_output_buf = co_await read_fully(process_output_file);
 
     iobuf_parser process_output_parser(std::move(process_output_buf));
     auto po = serde::read<debug_bundle::process_output>(process_output_parser);
