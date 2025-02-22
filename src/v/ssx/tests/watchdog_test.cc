@@ -20,7 +20,7 @@ using namespace std::chrono_literals;
 SEASTAR_THREAD_TEST_CASE(watchdog_test_defuse) {
     bool watchdog_triggered = false;
     {
-        watchdog wd(100ms, [&] { watchdog_triggered = true; });
+        ssx::watchdog wd(100ms, [&] { watchdog_triggered = true; });
         // to allow some async code to run
         ss::sleep(1ms).get();
     }
@@ -34,7 +34,7 @@ SEASTAR_THREAD_TEST_CASE(watchdog_test_defuse) {
 SEASTAR_THREAD_TEST_CASE(watchdog_test_trigger) {
     bool watchdog_triggered = false;
     {
-        watchdog wd(100ms, [&] { watchdog_triggered = true; });
+        ssx::watchdog wd(100ms, [&] { watchdog_triggered = true; });
         ss::sleep(200ms).get();
     }
     BOOST_REQUIRE(watchdog_triggered == true);

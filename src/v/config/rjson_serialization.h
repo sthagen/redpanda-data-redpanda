@@ -142,4 +142,7 @@ void rjson_serialize(
   json::Writer<json::StringBuffer>&,
   const model::iceberg_invalid_record_action&);
 
+void rjson_serialize(
+  json::Writer<json::StringBuffer>&, config::datalake_catalog_auth_mode);
+
 } // namespace json

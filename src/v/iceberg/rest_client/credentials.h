@@ -19,6 +19,7 @@ namespace iceberg::rest_client {
 struct credentials {
     ss::sstring client_id;
     ss::sstring client_secret;
+    std::optional<ss::sstring> oauth2_server_uri;
 };
 
 }; // namespace iceberg::rest_client

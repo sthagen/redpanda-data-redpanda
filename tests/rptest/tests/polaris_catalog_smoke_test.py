@@ -77,6 +77,8 @@ class PolarisCatalogSmokeTest(RedpandaTest):
             "rest",
             "iceberg_rest_catalog_endpoint":
             self.polaris.catalog_url,
+            "iceberg_rest_catalog_authentication_mode":
+            "oauth2",
             "iceberg_rest_catalog_client_id":
             client_id,
             "iceberg_rest_catalog_client_secret":

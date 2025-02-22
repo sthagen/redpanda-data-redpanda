@@ -141,10 +141,10 @@ ss::future<walk_result> recursive_directory_walker::walk(
 
     auto guard = _gate.hold();
 
-    watchdog wd1m(std::chrono::seconds(60), [] {
+    ssx::watchdog wd1m(std::chrono::seconds(60), [] {
         vlog(cst_log.info, "Directory walk is taking more than 1 min");
     });
-    watchdog wd10m(std::chrono::seconds(600), [] {
+    ssx::watchdog wd10m(std::chrono::seconds(600), [] {
         vlog(cst_log.warn, "Directory walk is taking more than 10 min");
     });
 

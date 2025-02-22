@@ -966,7 +966,7 @@ ss::future<> remote_partition::run_eviction_loop() {
         // got stuck. The deadline is set to 5 minutes to avoid false positives.
         // The callback is self sufficient and can outlive the remote_partition
         // instance.
-        watchdog wd(300s, [ntp = _ntp] {
+        ssx::watchdog wd(300s, [ntp = _ntp] {
             vlog(cst_log.error, "Eviction loop for partition {} stuck", ntp);
         });
         auto eviction_in_flight = std::exchange(_eviction_pending, {});
@@ -1150,7 +1150,7 @@ remote_partition::aborted_transactions(offset_range offsets) {
 
 ss::future<> remote_partition::stop() {
     vlog(_ctxlog.debug, "remote partition stop {} segments", _segments.size());
-    watchdog wd(300s, [ntp = get_ntp()] {
+    ssx::watchdog wd(300s, [ntp = get_ntp()] {
         vlog(cst_log.error, "remote_partition {} stop operation stuck", ntp);
     });
 

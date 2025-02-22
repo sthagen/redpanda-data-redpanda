@@ -9,6 +9,8 @@
  */
 #pragma once
 #include "cloud_io/remote.h"
+#include "iceberg/rest_client/credentials.h"
+#include "iceberg/rest_client/oauth_token.h"
 
 namespace iceberg {
 class catalog;
@@ -34,6 +36,14 @@ public:
     ss::future<std::unique_ptr<iceberg::catalog>> create_catalog() final;
 
 private:
+    struct credentials_and_token {
+        std::optional<iceberg::rest_client::credentials> credentials{
+          std::nullopt};
+        std::optional<iceberg::rest_client::oauth_token> token{std::nullopt};
+    };
+
+    credentials_and_token make_credentials_or_token();
+
     config::configuration* config_;
 };
 /**

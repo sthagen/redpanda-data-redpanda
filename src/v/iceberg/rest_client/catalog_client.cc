@@ -11,7 +11,9 @@
 #include "iceberg/rest_client/catalog_client.h"
 
 #include "bytes/streambuf.h"
+#include "config/types.h"
 #include "http/request_builder.h"
+#include "http/rest_client/rest_entity.h"
 #include "http/utils.h"
 #include "iceberg/json_writer.h"
 #include "iceberg/rest_client/entities.h"
@@ -45,6 +47,7 @@ iobuf serialize_payload_as_json(const T& payload) {
     return std::move(buf).as_iobuf();
 }
 static constexpr std::string_view json_content_type = "application/json";
+static constexpr std::string_view oauth_token_endpoint = "oauth/tokens";
 } // namespace
 
 namespace iceberg::rest_client {
@@ -87,32 +90,44 @@ expected<json::Document> parse_json(iobuf&& raw_response) {
 catalog_client::catalog_client(
   std::unique_ptr<http::abstract_client> http_client,
   ss::sstring endpoint,
-  credentials credentials,
+  std::optional<credentials> credentials,
   std::optional<base_path> base_path,
   std::optional<prefix_path> prefix,
   std::optional<api_version> api_version,
   std::optional<oauth_token> token,
-  std::unique_ptr<retry_policy> retry_policy)
+  std::unique_ptr<retry_policy> retry_policy,
+  config::datalake_catalog_auth_mode auth_mode)
   : _http_client(std::move(http_client))
   , _endpoint{std::move(endpoint)}
   , _credentials{std::move(credentials)}
   , _path_components{std::move(base_path), std::move(prefix), std::move(api_version)}
   , _oauth_token{std::move(token)}
-  , _retry_policy{
-      retry_policy ? std::move(retry_policy)
-                   : std::make_unique<default_retry_policy>()} {}
+  , _retry_policy{retry_policy ? std::move(retry_policy) : std::make_unique<default_retry_policy>()}
+  , _auth_mode(auth_mode) {}
 
 ss::future<expected<oauth_token>>
 catalog_client::acquire_token(retry_chain_node& rtc) {
+    vassert(
+      _credentials.has_value(),
+      "_credentials should have a value in auth mode {}",
+      _auth_mode);
+
+    const auto& creds = _credentials.value();
+
+    // Use the specified OAuth2 server uri if it has a value.
+    // Otherwise, fall back to the deprecated /oauth/tokens catalog endpoint.
+    ss::sstring token_path = creds.oauth2_server_uri.value_or(
+      _path_components.token_api_path());
+
     const auto token_request
       = http::request_builder{}
           .method(boost::beast::http::verb::post)
-          .path(_path_components.token_api_path())
+          .path(token_path)
           .header("content-type", "application/x-www-form-urlencoded");
     auto payload = http::form_encode_data({
       {"grant_type", "client_credentials"},
-      {"client_id", _credentials.client_id},
-      {"client_secret", _credentials.client_secret},
+      {"client_id", creds.client_id},
+      {"client_secret", creds.client_secret},
       // TODO - parameterize this scope, the principal_role should be an input
       // to the catalog client
       {"scope", "PRINCIPAL_ROLE:ALL"},
@@ -139,6 +154,35 @@ catalog_client::ensure_token(retry_chain_node& rtc) {
           });
     }
     co_return _oauth_token->access_token;
+}
+
+ss::future<expected<std::monostate>> catalog_client::maybe_add_bearer_auth(
+  http::request_builder& request, retry_chain_node& rtc) {
+    switch (_auth_mode) {
+    case config::datalake_catalog_auth_mode::none: {
+        break;
+    }
+    case config::datalake_catalog_auth_mode::bearer: {
+        // Use provided token.
+        vassert(
+          _oauth_token.has_value(),
+          "_oauth_token should have a value in auth mode {}",
+          _auth_mode);
+        request.with_bearer_auth(_oauth_token->access_token);
+        break;
+    }
+    case config::datalake_catalog_auth_mode::oauth2: {
+        // Ensure bearer token is still valid, may require acquiring a fresh one
+        // with OAuth2 credentials.
+        auto token = co_await ensure_token(rtc);
+        if (!token.has_value()) {
+            co_return tl::unexpected(token.error());
+        }
+
+        request.with_bearer_auth(token.value());
+    }
+    }
+    co_return std::monostate{};
 }
 
 ss::future<expected<iobuf>> catalog_client::perform_request(
@@ -187,14 +231,13 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
 ss::future<expected<create_namespace_response>>
 catalog_client::create_namespace(
   create_namespace_request req, retry_chain_node& rtc) {
-    auto token = co_await ensure_token(rtc);
-    if (!token.has_value()) {
-        co_return tl::unexpected(token.error());
+    auto http_request = namespaces{root_path()}.create().with_content_type(
+      json_content_type);
+
+    auto auth_result = co_await maybe_add_bearer_auth(http_request, rtc);
+    if (!auth_result.has_value()) {
+        co_return tl::unexpected(auth_result.error());
     }
-    auto http_request = namespaces{root_path()}
-                          .create()
-                          .with_bearer_auth(token.value())
-                          .with_content_type(json_content_type);
 
     co_return (co_await perform_request(
                  rtc, http_request, serialize_payload_as_json(req)))
@@ -207,14 +250,13 @@ ss::future<expected<load_table_result>> catalog_client::create_table(
   const chunked_vector<ss::sstring>& ns,
   create_table_request req,
   retry_chain_node& rtc) {
-    auto token = co_await ensure_token(rtc);
-    if (!token.has_value()) {
-        co_return tl::unexpected(token.error());
+    auto http_request = table{root_path(), ns}.create().with_content_type(
+      json_content_type);
+
+    auto auth_result = co_await maybe_add_bearer_auth(http_request, rtc);
+    if (!auth_result.has_value()) {
+        co_return tl::unexpected(auth_result.error());
     }
-    auto http_request = table{root_path(), ns}
-                          .create()
-                          .with_bearer_auth(token.value())
-                          .with_content_type(json_content_type);
 
     co_return (co_await perform_request(
                  rtc, http_request, serialize_payload_as_json(req)))
@@ -226,13 +268,12 @@ ss::future<expected<load_table_result>> catalog_client::load_table(
   const chunked_vector<ss::sstring>& ns,
   const ss::sstring& table_name,
   retry_chain_node& rtc) {
-    auto token = co_await ensure_token(rtc);
-    if (!token.has_value()) {
-        co_return tl::unexpected(token.error());
-    }
+    auto http_request = table(root_path(), ns).get(table_name);
 
-    auto http_request
-      = table(root_path(), ns).get(table_name).with_bearer_auth(token.value());
+    auto auth_result = co_await maybe_add_bearer_auth(http_request, rtc);
+    if (!auth_result.has_value()) {
+        co_return tl::unexpected(auth_result.error());
+    }
 
     co_return (co_await perform_request(rtc, http_request))
       .and_then(parse_json)
@@ -244,11 +285,6 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
   const ss::sstring& table_name,
   std::optional<bool> purge_requested,
   retry_chain_node& rtc) {
-    auto token = co_await ensure_token(rtc);
-    if (!token.has_value()) {
-        co_return tl::unexpected(token.error());
-    }
-
     http::rest_client::rest_entity::optional_query_params params;
     if (purge_requested.has_value()) {
         params.emplace();
@@ -256,8 +292,12 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
     }
 
     auto http_request = table(root_path(), ns)
-                          .delete_(table_name, std::nullopt, std::move(params))
-                          .with_bearer_auth(token.value());
+                          .delete_(table_name, std::nullopt, std::move(params));
+
+    auto auth_result = co_await maybe_add_bearer_auth(http_request, rtc);
+    if (!auth_result.has_value()) {
+        co_return tl::unexpected(auth_result.error());
+    }
 
     co_return (co_await perform_request(rtc, http_request)).map([](iobuf&&) {
         // we expect empty response, discard it
@@ -267,15 +307,14 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
 
 ss::future<expected<commit_table_response>> catalog_client::commit_table_update(
   commit_table_request commit_request, retry_chain_node& rtc) {
-    auto token = co_await ensure_token(rtc);
-    if (!token.has_value()) {
-        co_return tl::unexpected(token.error());
-    }
-
     auto http_request = table(root_path(), commit_request.identifier.ns)
                           .update(commit_request.identifier.table)
-                          .with_bearer_auth(token.value())
                           .with_content_type(json_content_type);
+
+    auto auth_result = co_await maybe_add_bearer_auth(http_request, rtc);
+    if (!auth_result.has_value()) {
+        co_return tl::unexpected(auth_result.error());
+    }
 
     co_return (co_await perform_request(
                  rtc, http_request, serialize_payload_as_json(commit_request)))
@@ -314,7 +353,7 @@ ss::sstring path_components::token_api_path() const {
     }
 
     parts.push_back(_api_version());
-    return absl::StrJoin(parts, "/") + "/oauth/tokens";
+    return absl::StrJoin(parts, "/") + "/" + std::string{oauth_token_endpoint};
 }
 
 } // namespace iceberg::rest_client

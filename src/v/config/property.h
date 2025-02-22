@@ -14,6 +14,7 @@
 #include "base/type_traits.h"
 #include "config/base_property.h"
 #include "config/rjson_serialization.h"
+#include "config/types.h"
 #include "container/intrusive_list_helpers.h"
 #include "features/enterprise_feature_messages.h"
 #include "json/stringbuffer.h"
@@ -690,6 +691,10 @@ consteval std::string_view property_type_name() {
     } else if constexpr (std::is_same_v<
                            type,
                            model::iceberg_invalid_record_action>) {
+        return "string";
+    } else if constexpr (std::is_same_v<
+                           type,
+                           config::datalake_catalog_auth_mode>) {
         return "string";
     } else {
         static_assert(

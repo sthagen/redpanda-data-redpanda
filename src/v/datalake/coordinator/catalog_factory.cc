@@ -10,6 +10,7 @@
 #include "datalake/coordinator/catalog_factory.h"
 
 #include "config/configuration.h"
+#include "config/types.h"
 #include "datalake/logger.h"
 #include "iceberg/catalog.h"
 #include "iceberg/filesystem_catalog.h"
@@ -137,12 +138,38 @@ filesystem_catalog_factory::create_catalog() {
 rest_catalog_factory::rest_catalog_factory(config::configuration& config)
   : config_(&config) {}
 
+rest_catalog_factory::credentials_and_token
+rest_catalog_factory::make_credentials_or_token() {
+    auto creds_and_token = credentials_and_token{};
+    const auto auth_mode = config_->iceberg_rest_catalog_authentication_mode();
+    switch (auth_mode) {
+    case config::datalake_catalog_auth_mode::none:
+        break;
+    case config::datalake_catalog_auth_mode::bearer: {
+        throw_if_not_present(config_->iceberg_rest_catalog_token);
+        creds_and_token.token
+          = std::make_optional<iceberg::rest_client::oauth_token>(
+            config_->iceberg_rest_catalog_token().value());
+        break;
+    }
+    case config::datalake_catalog_auth_mode::oauth2: {
+        throw_if_not_present(config_->iceberg_rest_catalog_client_id);
+        throw_if_not_present(config_->iceberg_rest_catalog_client_secret);
+        creds_and_token.credentials
+          = std::make_optional<iceberg::rest_client::credentials>(
+            config_->iceberg_rest_catalog_client_id().value(),
+            config_->iceberg_rest_catalog_client_secret().value(),
+            config_->iceberg_rest_catalog_oauth2_server_uri());
+        break;
+    }
+    }
+    return creds_and_token;
+}
+
 ss::future<std::unique_ptr<iceberg::catalog>>
 rest_catalog_factory::create_catalog() {
     // TODO: add config level validation
     throw_if_not_present(config_->iceberg_rest_catalog_endpoint);
-    throw_if_not_present(config_->iceberg_rest_catalog_client_secret);
-    throw_if_not_present(config_->iceberg_rest_catalog_client_id);
 
     auto endpoint_information = endpoint_to_address(
       config_->iceberg_rest_catalog_endpoint().value());
@@ -161,10 +188,9 @@ rest_catalog_factory::create_catalog() {
           ? std::make_optional<iceberg::rest_client::prefix_path>(
               config_->iceberg_rest_catalog_prefix().value())
           : std::nullopt;
-    auto token = config_->iceberg_rest_catalog_token()
-                   ? std::make_optional<iceberg::rest_client::oauth_token>(
-                       config_->iceberg_rest_catalog_token().value())
-                   : std::nullopt;
+
+    auto creds_and_token = make_credentials_or_token();
+
     vlog(
       datalake_log.info,
       "Creating rest Iceberg catalog connected to: {}, with base path: {} and "
@@ -176,15 +202,13 @@ rest_catalog_factory::create_catalog() {
     auto client = std::make_unique<iceberg::rest_client::catalog_client>(
       std::move(http_client),
       config_->iceberg_rest_catalog_endpoint().value(),
-      // TODO: make credentials optional, we should provide either
-      // credentials or token
-      iceberg::rest_client::credentials{
-        .client_id = config_->iceberg_rest_catalog_client_id().value(),
-        .client_secret = config_->iceberg_rest_catalog_client_secret().value()},
-      std::move(endpoint_information.base_path), // base_path
-      std::move(prefix_path),                    // prefix
-      std::nullopt,                              // api_version
-      std::move(token)                           // token
+      std::move(creds_and_token.credentials),
+      std::move(endpoint_information.base_path),          // base_path
+      std::move(prefix_path),                             // prefix
+      std::nullopt,                                       // api_version
+      std::move(creds_and_token.token),                   // token
+      nullptr,                                            // retry_policy
+      config_->iceberg_rest_catalog_authentication_mode() // auth_mode
     );
 
     co_return std::make_unique<iceberg::rest_catalog>(

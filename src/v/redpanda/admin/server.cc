@@ -49,6 +49,7 @@
 #include "config/base_property.h"
 #include "config/configuration.h"
 #include "config/endpoint_tls_config.h"
+#include "config/validators.h"
 #include "container/fragmented_vector.h"
 #include "container/lw_shared_container.h"
 #include "features/enterprise_features.h"
@@ -1743,6 +1744,15 @@ void config_multi_property_validation(
           updated_config.cloud_storage_enabled.name(),
           updated_config.cloud_storage_enable_remote_read.name(),
           updated_config.cloud_storage_enable_remote_write.name());
+    }
+
+    // Validate iceberg authentication mode properties
+    auto opt_err = config::validate_iceberg_rest_catalog_auth_mode(
+      updated_config);
+    if (opt_err.has_value()) {
+        errors[ss::sstring{
+          updated_config.iceberg_rest_catalog_authentication_mode.name()}]
+          = opt_err.value();
     }
 }
 } // namespace

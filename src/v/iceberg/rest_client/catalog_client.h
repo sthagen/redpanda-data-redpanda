@@ -11,6 +11,7 @@
 #pragma once
 
 #include "bytes/iobuf.h"
+#include "config/types.h"
 #include "http/client.h"
 #include "http/request_builder.h"
 #include "iceberg/rest_client/credentials.h"
@@ -77,17 +78,22 @@ public:
     /// \param api_version api version used to construct URLs,
     /// defaults to v1
     /// \param token an optional oauth token which will be used
-    /// if valid. If expired, a new one will be acquired \param retry_policy a
-    /// retry policy used to determine how failing calls will be retried
+    /// if valid. If expired, a new one will be acquired
+    /// \param retry_policy a retry policy used to determine how failing calls
+    /// will be retried
+    /// \param auth_mode the authentication mode to be used for obtaining an
+    /// oauth token used for API calls
     catalog_client(
       std::unique_ptr<http::abstract_client> client,
       ss::sstring endpoint,
-      credentials credentials,
+      std::optional<credentials> credentials = std::nullopt,
       std::optional<base_path> base_path = std::nullopt,
       std::optional<prefix_path> prefix = std::nullopt,
       std::optional<api_version> api_version = std::nullopt,
       std::optional<oauth_token> token = std::nullopt,
-      std::unique_ptr<retry_policy> retry_policy = nullptr);
+      std::unique_ptr<retry_policy> retry_policy = nullptr,
+      config::datalake_catalog_auth_mode auth_mode
+      = config::datalake_catalog_auth_mode::none);
     /**
      * The REST client allows interaction with Iceberg REST catalog implementing
      * the Iceberg Catalog OpenApi Specification as stated here:
@@ -165,6 +171,14 @@ private:
     // expired. Acquired token is cached for future calls.
     ss::future<expected<ss::sstring>> ensure_token(retry_chain_node& rtc);
 
+    // Depending on the _auth_mode used in the catalog_client, authentication
+    // may be added to the http request.
+    //
+    // Returns an error if the authentication was unable to be added for any
+    // reason.
+    ss::future<expected<std::monostate>> maybe_add_bearer_auth(
+      http::request_builder& request, retry_chain_node& rtc);
+
     // Builds the request from supplied builder after validating it, performs
     // the request with optional payload, and takes care of retrying according
     // to policy
@@ -175,10 +189,11 @@ private:
 
     std::unique_ptr<http::abstract_client> _http_client;
     ss::sstring _endpoint;
-    credentials _credentials;
+    std::optional<credentials> _credentials;
     path_components _path_components;
     std::optional<oauth_token> _oauth_token{std::nullopt};
     std::unique_ptr<retry_policy> _retry_policy;
+    config::datalake_catalog_auth_mode _auth_mode;
 
     friend class catalog_client_tester;
 };

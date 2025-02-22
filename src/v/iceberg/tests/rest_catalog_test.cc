@@ -11,6 +11,7 @@
 #include "bytes/iobuf_parser.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
+#include "config/types.h"
 #include "iceberg/json_writer.h"
 #include "iceberg/rest_catalog.h"
 #include "iceberg/rest_client/catalog_client.h"
@@ -67,7 +68,10 @@ struct RestCatalogTest
           get_credentials(),
           iceberg::rest_client::base_path{"/catalog"},
           std::nullopt,
-          iceberg::rest_client::api_version("v1"));
+          iceberg::rest_client::api_version("v1"),
+          std::nullopt,
+          nullptr,
+          config::datalake_catalog_auth_mode::oauth2);
     }
     std::unique_ptr<cloud_io::scoped_remote> sr;
     iceberg::manifest_io io;

@@ -1705,6 +1705,55 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         for prop, value in out_of_bound_properties.items():
             self._check_value_everywhere(prop, value)
 
+    @cluster(num_nodes=1)
+    def test_iceberg_authentication_properties(self):
+        """
+        Tests that the Iceberg authentication properties are properly validated when set.
+        """
+        validated_auth_modes = ["bearer", "oauth2"]
+
+        # Check that setting the authentication mode to anything other than "none" alone returns an error.
+        for mode in validated_auth_modes:
+            with expect_exception(requests.exceptions.HTTPError,
+                                  lambda e: e.response.status_code == 400):
+                self.redpanda.set_cluster_config(
+                    {'iceberg_rest_catalog_authentication_mode': mode},
+                    expect_restart=True)
+
+        # Bearer mode needs catalog_token set, oauth2 mode needs both client_id/secret set.
+        invalid_auth_mode_props = [{
+            'iceberg_rest_catalog_authentication_mode':
+            'bearer',
+        }, {
+            'iceberg_rest_catalog_authentication_mode':
+            'oauth2',
+            'iceberg_rest_catalog_client_id':
+            'panda_id',
+        }]
+
+        for invalid_props in invalid_auth_mode_props:
+            # These should fail.
+            with expect_exception(requests.exceptions.HTTPError,
+                                  lambda e: e.response.status_code == 400):
+                self.redpanda.set_cluster_config(invalid_props,
+                                                 expect_restart=True)
+
+        valid_auth_mode_props = [{
+            'iceberg_rest_catalog_authentication_mode': 'bearer',
+            'iceberg_rest_catalog_token': 'panda_token'
+        }, {
+            'iceberg_rest_catalog_authentication_mode':
+            'oauth2',
+            'iceberg_rest_catalog_client_id':
+            'panda_id',
+            'iceberg_rest_catalog_client_secret':
+            'panda_secret'
+        }]
+
+        for valid_props in valid_auth_mode_props:
+            # These should succeed.
+            self.redpanda.set_cluster_config(valid_props, expect_restart=True)
+
 
 """
 PropertyAliasData:

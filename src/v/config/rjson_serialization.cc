@@ -273,4 +273,9 @@ void rjson_serialize(
     stringize(w, v);
 }
 
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w, config::datalake_catalog_auth_mode cam) {
+    stringize(w, cam);
+}
+
 } // namespace json

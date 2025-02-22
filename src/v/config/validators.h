@@ -12,6 +12,8 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "config/configuration.h"
+#include "config/types.h"
 
 #include <seastar/core/sstring.hh>
 
@@ -57,5 +59,8 @@ std::optional<ss::sstring> validate_tombstone_retention_ms(
 
 std::optional<ss::sstring>
 validate_iceberg_partition_spec(const ss::sstring& spec);
+
+std::optional<ss::sstring>
+validate_iceberg_rest_catalog_auth_mode(const configuration& config);
 
 }; // namespace config

@@ -3830,6 +3830,33 @@ configuration::configuration()
       {.visibility = visibility::user},
       std::nullopt,
       &validate_non_empty_string_opt)
+  , iceberg_rest_catalog_oauth2_server_uri(
+      *this,
+      "iceberg_rest_catalog_oauth2_server_uri",
+      "The OAuth URI used to retrieve access tokens for Iceberg catalog "
+      "authentication. If left undefined, the deprecated Iceberg catalog "
+      "endpoint `/v1/oauth/tokens` is used instead.",
+      {.visibility = visibility::user},
+      std::nullopt,
+      &validate_non_empty_string_opt)
+  , iceberg_rest_catalog_authentication_mode(
+      *this,
+      "iceberg_rest_catalog_authentication_mode",
+      "The authentication mode for client requests made to the Iceberg "
+      "catalog. Choose from: `none`, `bearer`, and `oauth2`. In `bearer` mode, "
+      "the token specified in `iceberg_rest_catalog_token` is used "
+      "unconditonally, and no attempts are made to refresh the token. In "
+      "`oauth2` mode, the credentials specified in "
+      "`iceberg_rest_catalog_client_id` and "
+      "`iceberg_rest_catalog_client_secret` are used to obtain a bearer token "
+      "from the URI defined by `iceberg_rest_catalog_oauth2_server_uri.`",
+      {.needs_restart = needs_restart::yes,
+       .example = "none",
+       .visibility = visibility::user},
+      datalake_catalog_auth_mode::none,
+      {datalake_catalog_auth_mode::none,
+       datalake_catalog_auth_mode::bearer,
+       datalake_catalog_auth_mode::oauth2})
   , iceberg_backlog_controller_p_coeff(
       *this,
       "iceberg_backlog_controller_p_coeff",

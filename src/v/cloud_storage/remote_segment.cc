@@ -210,7 +210,7 @@ ss::future<> remote_segment::stop() {
         co_return;
     }
 
-    watchdog wd(300s, [path = _path] {
+    ssx::watchdog wd(300s, [path = _path] {
         vlog(cst_log.error, "remote_segment {} stop operation stuck", path);
     });
 
@@ -1549,7 +1549,7 @@ ss::future<> remote_segment_batch_reader::stop() {
         co_return;
     }
 
-    watchdog wd(300s, [path = _seg->get_segment_path()] {
+    ssx::watchdog wd(300s, [path = _seg->get_segment_path()] {
         vlog(
           cst_log.error,
           "remote_segment_batch_reader {} stop operation stuck",

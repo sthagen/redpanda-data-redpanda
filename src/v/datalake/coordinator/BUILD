@@ -132,6 +132,8 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cloud_io:remote",
+        "//src/v/iceberg/rest_client:credentials",
+        "//src/v/iceberg/rest_client:oauth_token",
         "@seastar",
     ],
 )

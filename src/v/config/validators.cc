@@ -12,6 +12,7 @@
 #include "config/validators.h"
 
 #include "config/configuration.h"
+#include "config/types.h"
 #include "datalake/partition_spec_parser.h"
 #include "model/namespace.h"
 #include "model/validation.h"
@@ -274,6 +275,41 @@ validate_iceberg_partition_spec(const ss::sstring& value) {
     if (!parsed.value().is_valid_for_default_spec()) {
         return fmt::format(
           "partition spec `{}' can't be used as a default spec", value);
+    }
+    return std::nullopt;
+}
+
+std::optional<ss::sstring>
+validate_iceberg_rest_catalog_auth_mode(const config::configuration& config) {
+    auto auth_mode = config.iceberg_rest_catalog_authentication_mode();
+    switch (auth_mode) {
+    case datalake_catalog_auth_mode::none:
+        return std::nullopt;
+    case datalake_catalog_auth_mode::bearer: {
+        const auto& token = config.iceberg_rest_catalog_token;
+        if (!token().has_value()) {
+            return fmt::format(
+              "Must set {} when iceberg_rest_catalog_authentication_mode is "
+              "set to {}.",
+              token.name(),
+              auth_mode);
+        }
+        break;
+    }
+    case datalake_catalog_auth_mode::oauth2: {
+        const auto& client_id = config.iceberg_rest_catalog_client_id;
+        const auto& client_secret = config.iceberg_rest_catalog_client_secret;
+        if (!(client_id().has_value() && client_secret().has_value())) {
+            return fmt::format(
+              "Must set both of {} and {} when "
+              "iceberg_rest_catalog_authentication_mode is "
+              "set to {}.",
+              client_id.name(),
+              client_secret.name(),
+              auth_mode);
+        }
+        break;
+    }
     }
     return std::nullopt;
 }

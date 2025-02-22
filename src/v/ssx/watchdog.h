@@ -19,6 +19,7 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/util/noncopyable_function.hh>
 
+namespace ssx {
 /// This tool can be used to detect anomalously long
 /// running operations or stuck async loops.
 /// You can create an instance of 'watchdog' and pass
@@ -92,3 +93,5 @@ private:
     void cancel() { _as.request_abort(); }
     seastar::abort_source _as;
 };
+
+} // namespace ssx
