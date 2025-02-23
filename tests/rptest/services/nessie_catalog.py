@@ -123,6 +123,9 @@ class NessieCatalog(CatalogService):
             d_flags += f"-Dmy-secrets-default.name={self.credentials.access_key} "
             d_flags += f"-Dmy-secrets-default.secret={self.credentials.secret_key} "
             d_flags += "-Dnessie.catalog.validate-secrets=true"
+        elif isinstance(self.credentials,
+                        cloud_storage.AWSInstanceMetadataCredentials):
+            d_flags += "-Dnessie.catalog.service.s3.default-options.default-options.server-auth-mode=APPLICATION_GLOBAL"
         return d_flags
 
     def _java_cmd(self, node):
