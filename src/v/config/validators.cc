@@ -231,28 +231,6 @@ validate_api_endpoint(const std::optional<ss::sstring>& os) {
 std::optional<ss::sstring> validate_tombstone_retention_ms(
   const std::optional<std::chrono::milliseconds>& ms) {
     if (ms.has_value()) {
-        // For simplicity's sake, cloud storage enable/read/write permissions
-        // cannot be enabled at the same time as tombstone_retention_ms at the
-        // cluster level, to avoid the case in which redpanda refuses to create
-        // new, misconfigured topics due to cluster defaults
-        const auto& cloud_storage_enabled
-          = config::shard_local_cfg().cloud_storage_enabled;
-        const auto& cloud_storage_remote_write
-          = config::shard_local_cfg().cloud_storage_enable_remote_write;
-        const auto& cloud_storage_remote_read
-          = config::shard_local_cfg().cloud_storage_enable_remote_read;
-        if (
-          cloud_storage_enabled() || cloud_storage_remote_write()
-          || cloud_storage_remote_read()) {
-            return fmt::format(
-              "cannot set {} if any of ({}, {}, {}) are enabled at the cluster "
-              "level",
-              config::shard_local_cfg().tombstone_retention_ms.name(),
-              cloud_storage_enabled.name(),
-              cloud_storage_remote_write.name(),
-              cloud_storage_remote_read.name());
-        }
-
         if (ms.value() < 1ms || ms.value() > serde::max_serializable_ms) {
             return fmt::format(
               "tombstone_retention_ms should be in range: [1, {}]",
