@@ -10,6 +10,7 @@
 
 #include "iceberg/compatibility.h"
 
+#include "iceberg/compatibility_types.h"
 #include "iceberg/compatibility_utils.h"
 #include "iceberg/datatypes.h"
 
@@ -38,7 +39,7 @@ struct primitive_type_promotion_policy_visitor {
 
     type_check_result operator()(
       const iceberg::date_type&, const iceberg::timestamp_type&) const {
-        return type_promoted::yes;
+        return type_promoted::changes_partition;
     }
 
     type_check_result
@@ -141,8 +142,12 @@ schema_transform_state add_field(const nested_field& f) {
  * remove_field - This field (from the source schema) does not appear in the
  * destination schema. Mark it as such.
  */
-schema_transform_state remove_field(const nested_field& f) {
+schema_transform_state
+remove_field(const nested_field& f, const partition_spec& pspec) {
     f.set_evolution_metadata(nested_field::removed::yes);
+    if (pspec.get_field(f.id) != nullptr) {
+        return {.n_removed = 1, .n_removed_partition_fields = 1};
+    }
     return {.n_removed = 1};
 }
 
@@ -156,6 +161,8 @@ schema_transform_state remove_field(const nested_field& f) {
  */
 class annotate_schema_visitor {
 public:
+    explicit annotate_schema_visitor(const partition_spec& pspec)
+      : pspec_(&pspec) {}
     schema_transform_result
     visit(const struct_type& source_t, const struct_type& dest_t) && {
         return std::invoke(*this, source_t, dest_t);
@@ -183,7 +190,9 @@ public:
         // downstream.
         if (auto res = for_each_field(
               source_struct,
-              [&state](const nested_field* f) { state += remove_field(*f); },
+              [this, &state](const nested_field* f) {
+                  state += remove_field(*f, *pspec_);
+              },
               [](const nested_field* f) {
                   // visit only those fields that were not already marked (i.e.
                   // mapped correctly into the destination struct). assume that
@@ -319,6 +328,9 @@ public:
     schema_transform_result operator()(const S&, const D&) const {
         return schema_evolution_errc::incompatible;
     }
+
+private:
+    const partition_spec* pspec_;
 };
 
 /**
@@ -338,17 +350,24 @@ public:
  */
 struct validate_transform_visitor {
     explicit validate_transform_visitor(
-      nested_field* f, schema_transform_state& state)
+      nested_field* f,
+      schema_transform_state& state,
+      const partition_spec& spec)
       : f_(f)
-      , state_(&state) {}
+      , state_(&state)
+      , spec_(&spec) {}
     schema_errc_result operator()(const nested_field::src_info& src) {
         bool promoted = false;
         if (src.type.has_value()) {
             if (auto ct_res = check_types(src.type.value(), f_->type);
                 ct_res.has_error()) {
                 return schema_evolution_errc::type_mismatch;
-            } else if (ct_res.value() == type_promoted::yes) {
-                promoted = true;
+            } else if (
+              ct_res.value() == type_promoted::changes_partition
+              && spec_->get_field(src.id) != nullptr) {
+                return schema_evolution_errc::partition_spec_conflict;
+            } else {
+                promoted = ct_res.value() != type_promoted::no;
             }
         }
         if (
@@ -379,6 +398,7 @@ struct validate_transform_visitor {
 private:
     nested_field* f_;
     schema_transform_state* state_;
+    const partition_spec* spec_;
 };
 
 } // namespace
@@ -391,20 +411,32 @@ check_types(const iceberg::field_type& src, const iceberg::field_type& dest) {
       dest);
 }
 
-schema_transform_result
-annotate_schema_transform(const struct_type& source, const struct_type& dest) {
-    return annotate_schema_visitor{}.visit(source, dest);
+schema_transform_result annotate_schema_transform(
+  const struct_type& source,
+  const struct_type& dest,
+  const partition_spec& spec) {
+    return annotate_schema_visitor{spec}.visit(source, dest);
 }
 
-schema_transform_result validate_schema_transform(struct_type& dest) {
-    schema_transform_state state{};
+schema_transform_result validate_schema_transform(
+  const schema_transform_result& annotate_res,
+  struct_type& dest,
+  const partition_spec& spec) {
+    if (annotate_res.has_error()) {
+        return annotate_res.error();
+    }
+    if (annotate_res.value().n_removed_partition_fields > 0) {
+        return schema_evolution_errc::partition_spec_conflict;
+    }
+    auto state = annotate_res.value();
     if (auto res = for_each_field(
           dest,
-          [&state](nested_field* f) {
+          [&state, &spec](nested_field* f) {
               vassert(
                 f->has_evolution_metadata(),
                 "Should have visited every destination field");
-              return std::visit(validate_transform_visitor{f, state}, f->meta);
+              return std::visit(
+                validate_transform_visitor{f, state, spec}, f->meta);
           });
         res.has_error()) {
         return res.error();
@@ -413,29 +445,16 @@ schema_transform_result validate_schema_transform(struct_type& dest) {
 }
 
 namespace {
-schema_transform_result
-do_visit_schemas(const struct_type& source, struct_type& dest) {
-    schema_transform_state result;
-    if (auto annotate_res = annotate_schema_transform(source, dest);
-        annotate_res.has_error()) {
-        return annotate_res.error();
-    } else {
-        result += annotate_res.value();
-    }
-
-    if (auto validate_res = validate_schema_transform(dest);
-        validate_res.has_error()) {
-        return validate_res.error();
-    } else {
-        result += validate_res.value();
-    }
-    return result;
+schema_transform_result do_visit_schemas(
+  const struct_type& source, struct_type& dest, const partition_spec& spec) {
+    auto annotate_res = annotate_schema_transform(source, dest, spec);
+    return validate_schema_transform(annotate_res, dest, spec);
 }
 } // namespace
 
-schema_evolution_result
-evolve_schema(const struct_type& source, struct_type& dest) {
-    if (auto res = do_visit_schemas(source, dest); res.has_error()) {
+schema_evolution_result evolve_schema(
+  const struct_type& source, struct_type& dest, const partition_spec& spec) {
+    if (auto res = do_visit_schemas(source, dest, spec); res.has_error()) {
         return res.error();
     } else {
         return schema_changed{res.value().total() > 0};
@@ -444,7 +463,8 @@ evolve_schema(const struct_type& source, struct_type& dest) {
 
 fill_ids_result
 try_fill_field_ids(const struct_type& source, struct_type& dest) {
-    if (auto res = do_visit_schemas(source, dest); res.has_error()) {
+    if (auto res = do_visit_schemas(source, dest, partition_spec{});
+        res.has_error()) {
         return res.error();
     } else {
         // All we care about here is that every field got an ID

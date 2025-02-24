@@ -666,11 +666,13 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         ":test_schemas",
+        "//src/v/datalake:partition_spec_parser",
         "//src/v/iceberg:compatibility",
         "//src/v/iceberg:compatibility_types",
         "//src/v/iceberg:compatibility_utils",
         "//src/v/iceberg:datatypes",
         "//src/v/iceberg:field_collecting_visitor",
+        "//src/v/iceberg:partition",
         "//src/v/random:generators",
         "//src/v/test_utils:gtest",
         "@abseil-cpp//absl/container:btree",
@@ -704,6 +706,7 @@ redpanda_cc_bench(
         "//src/v/iceberg:compatibility",
         "//src/v/iceberg:datatypes",
         "//src/v/iceberg:field_collecting_visitor",
+        "//src/v/iceberg:partition",
         "@seastar//:benchmark",
     ],
 )

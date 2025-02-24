@@ -402,3 +402,80 @@ TEST(SchemaAvroSerialization, TestNestedSchema) {
     const auto& parsed_struct = std::get<struct_type>(parsed_type);
     ASSERT_EQ(s.schema_struct, parsed_struct);
 }
+
+TEST(SchemaAvroSerialization, TestLogicalTypes) {
+    struct_type type;
+    type.fields.emplace_back(nested_field::create(
+      0, "decimal", field_required::yes, decimal_type{8, 0}));
+    type.fields.emplace_back(
+      nested_field::create(1, "date", field_required::yes, date_type{}));
+    type.fields.emplace_back(
+      nested_field::create(2, "time", field_required::yes, time_type{}));
+    type.fields.emplace_back(nested_field::create(
+      3, "timestamp", field_required::yes, timestamp_type{}));
+    type.fields.emplace_back(
+      nested_field::create(4, "uuid", field_required::yes, uuid_type{}));
+
+    schema s{
+      .schema_struct = std::move(type),
+      .schema_id = schema::id_t{0},
+      .identifier_field_ids = {}};
+    auto avro_root = struct_type_to_avro(s.schema_struct, "test_schema");
+    auto avro_schema = avro::ValidSchema(avro_root);
+    const auto expected_str = R"({
+    "type": "record",
+    "name": "test_schema",
+    "fields": [
+        {
+            "name": "decimal",
+            "type": {
+                "type": "fixed",
+                "name": "decimal",
+                "size": 4,
+                "logicalType": "decimal", "precision": 8, "scale": 0
+            },
+            "field-id": 0
+        },
+        {
+            "name": "date",
+            "type": {
+            "type": "int",
+            "logicalType": "date"
+},
+            "field-id": 1
+        },
+        {
+            "name": "time",
+            "type": {
+            "type": "long",
+            "logicalType": "time-micros"
+},
+            "field-id": 2
+        },
+        {
+            "name": "timestamp",
+            "type": {
+            "type": "long",
+            "logicalType": "timestamp-micros"
+},
+            "field-id": 3
+        },
+        {
+            "name": "uuid",
+            "type": {
+            "type": "string",
+            "logicalType": "uuid"
+},
+            "field-id": 4
+        }
+    ]
+}
+)";
+    ASSERT_STREQ(expected_str, avro_schema.toJson().c_str());
+
+    // Now parse it back from Avro and ensure the types are equal.
+    auto parsed_type = type_from_avro(avro_schema.root());
+    ASSERT_TRUE(std::holds_alternative<struct_type>(parsed_type));
+    const auto& parsed_struct = std::get<struct_type>(parsed_type);
+    ASSERT_EQ(s.schema_struct, parsed_struct);
+}

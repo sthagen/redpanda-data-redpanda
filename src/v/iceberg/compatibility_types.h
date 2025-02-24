@@ -23,7 +23,25 @@ enum class compat_errc {
     mismatch,
 };
 
-using type_promoted = ss::bool_class<struct type_promoted_tag>;
+/**
+ * type_promoted - returned from check_types(field_type src, field_type dest)
+ * to indicate
+ *   a) that src & dest are compatible types
+ *   b) whether a field of type src requires type promotion to type dest, as
+ *      follows:
+ *      - ::no - types are identical if primitive, of same structural type
+ *         otherwise
+ *      - ::yes - src is promoted to dest and it is always safe to do so
+ *      - ::changes_partition - src is promoted to dest but doing so would
+ *        change the value of a partition transform function involving that
+ *        field.
+ */
+enum class type_promoted {
+    no,
+    yes,
+    changes_partition,
+};
+
 using type_check_result = checked<type_promoted, compat_errc>;
 
 // TODO(oren): possibly a whole error_code?
@@ -35,6 +53,7 @@ enum class schema_evolution_errc {
     new_required_field,
     null_nested_field,
     invalid_state,
+    partition_spec_conflict,
 };
 
 /**
@@ -49,6 +68,12 @@ struct schema_transform_state {
     size_t n_removed{0};
     size_t n_added{0};
     size_t n_promoted{0};
+    size_t n_removed_partition_fields{0};
+
+    // when we remove a field, it's always counted in n_removed, and _also_
+    // counted in n_removed_partition_fields iff it was a partition field.
+    // therefore, to avoid double counting, don't include
+    // n_removed_partition_fields in the total.
     size_t total() { return n_removed + n_added + n_promoted; }
 };
 
@@ -71,5 +96,11 @@ template<>
 struct fmt::formatter<iceberg::schema_evolution_errc>
   : formatter<std::string_view> {
     auto format(iceberg::schema_evolution_errc d, format_context& ctx) const
+      -> format_context::iterator;
+};
+
+template<>
+struct fmt::formatter<iceberg::type_promoted> : formatter<std::string_view> {
+    auto format(iceberg::type_promoted d, format_context& ctx) const
       -> format_context::iterator;
 };

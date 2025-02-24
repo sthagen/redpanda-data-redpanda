@@ -54,4 +54,13 @@ std::optional<partition_spec> partition_spec::resolve(
     };
 }
 
+const partition_field*
+partition_spec::get_field(nested_field::id_t source_id) const {
+    auto it = std::ranges::find(fields, source_id, &partition_field::source_id);
+    if (it == fields.end()) {
+        return nullptr;
+    }
+    return &(*it);
+}
+
 } // namespace iceberg

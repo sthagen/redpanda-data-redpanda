@@ -43,6 +43,8 @@ struct partition_spec {
     static std::optional<partition_spec>
     resolve(const unresolved_partition_spec&, const struct_type& schema_type);
 
+    const partition_field* get_field(nested_field::id_t source_id) const;
+
     friend bool operator==(const partition_spec&, const partition_spec&)
       = default;
 

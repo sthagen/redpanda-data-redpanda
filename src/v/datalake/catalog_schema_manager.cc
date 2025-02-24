@@ -76,10 +76,12 @@ fill_field_ids(iceberg::struct_type& dest, const iceberg::struct_type& source) {
 // pulled from.
 // NOTE: Post processing is required to assign IDs to any destination fields not
 // found in source (i.e. new fields).
-checked<std::nullopt_t, fill_errc>
-check_schema_compat(iceberg::struct_type& dest, iceberg::struct_type source) {
+checked<std::nullopt_t, fill_errc> check_schema_compat(
+  iceberg::struct_type& dest,
+  iceberg::struct_type source,
+  const iceberg::partition_spec& spec) {
     using namespace iceberg;
-    if (auto evo_res = evolve_schema(source, dest); evo_res.has_error()) {
+    if (auto evo_res = evolve_schema(source, dest, spec); evo_res.has_error()) {
         vlog(
           datalake_log.warn,
           "Schema compatibility error: '{}'\n",
@@ -290,8 +292,18 @@ catalog_schema_manager::get_ids_from_table_meta(
         return errc::failed;
     }
 
+    const auto* cur_spec = table_meta.get_partition_spec(
+      table_meta.default_spec_id);
+    if (cur_spec == nullptr) {
+        vlog(
+          datalake_log.error,
+          "Cannot find default partition spec {} in table {}",
+          table_meta.default_spec_id,
+          table_id);
+        return errc::failed;
+    }
     auto compat_res = check_schema_compat(
-      dest_type, schema->schema_struct.copy());
+      dest_type, schema->schema_struct.copy(), *cur_spec);
     if (compat_res.has_error()) {
         switch (compat_res.error()) {
         case fill_errc::invalid_schema:

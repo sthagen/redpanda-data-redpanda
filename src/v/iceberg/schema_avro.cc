@@ -79,7 +79,7 @@ struct avro_primitive_type_visitor {
         return ret;
     }
     avro::Schema operator()(const date_type&) {
-        auto ret = avro::LongSchema();
+        auto ret = avro::IntSchema();
         ret.root()->setLogicalType(avro::LogicalType(avro::LogicalType::DATE));
         return ret;
     }
