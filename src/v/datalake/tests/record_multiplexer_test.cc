@@ -22,6 +22,7 @@
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 #include "model/timeout_clock.h"
+#include "random/generators.h"
 #include "storage/record_batch_builder.h"
 
 #include <seastar/core/circular_buffer.hh>
@@ -101,8 +102,7 @@ public:
     RecordMultiplexerTestBase()
       : schema_mgr(catalog)
       , type_resolver(registry)
-      , t_creator(type_resolver, schema_mgr)
-      , as([] { return std::nullopt; }) {}
+      , t_creator(type_resolver, schema_mgr) {}
 
     // Runs the multiplexer on records generated with cb() based on the test
     // parameters.
@@ -132,8 +132,6 @@ public:
                 batches.emplace_back(std::move(batch_builder).build());
             }
         }
-        auto reader = model::make_memory_record_batch_reader(
-          std::move(batches));
         record_multiplexer mux(
           ntp,
           topic_rev,
@@ -145,9 +143,26 @@ public:
           model::iceberg_invalid_record_action::dlq_table,
           location_provider(
             scoped_remote->remote.local().provider(), bucket_name),
-          *get_or_create_probe(ntp),
-          as);
-        auto res = reader.consume(std::move(mux), model::no_timeout).get();
+          *get_or_create_probe(ntp));
+        // randomly split batches into multiple readers
+        size_t total_batches = batches.size();
+        size_t total_split_batches = 0;
+        while (!batches.empty()) {
+            auto subset_size = random_generators::get_int<size_t>(
+              1, batches.size());
+            ss::circular_buffer<model::record_batch> subset;
+            while (subset.size() != subset_size) {
+                subset.push_back(batches.front().share());
+                batches.pop_front();
+            }
+            total_split_batches += subset.size();
+            auto reader = model::make_memory_record_batch_reader(
+              std::move(subset));
+            mux.multiplex(std::move(reader), model::no_timeout, as).get();
+            mux.flush_writers().get();
+        }
+        EXPECT_EQ(total_batches, total_split_batches);
+        auto res = std::move(mux).finish().get();
         if (expect_error) {
             EXPECT_TRUE(res.has_error());
         } else {
@@ -206,7 +221,7 @@ public:
     record_schema_resolver type_resolver;
     direct_table_creator t_creator;
     std::map<model::ntp, ss::lw_shared_ptr<translation_probe>> probes;
-    lazy_abort_source as;
+    ss::abort_source as;
 
     static constexpr records_param default_param = {
       .records_per_batch = 1,

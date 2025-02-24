@@ -48,7 +48,13 @@ public:
     //
     // Expects that the input value abides by the schema denoted by `type_`.
     ss::future<writer_error>
-    add_data(iceberg::struct_value, int64_t approx_size);
+    add_data(iceberg::struct_value, int64_t approx_size, ss::abort_source&);
+
+    size_t buffered_bytes() const;
+    size_t flushed_bytes() const;
+
+    // Flushes all the inflight writers.
+    ss::future<> flush();
 
     struct partitioned_file {
         local_file_metadata local_file;

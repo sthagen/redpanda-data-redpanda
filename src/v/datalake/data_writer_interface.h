@@ -25,6 +25,7 @@ enum class writer_error {
     parquet_conversion_error,
     file_io_error,
     no_data,
+    flush_error,
 };
 
 struct data_writer_error_category : std::error_category {
@@ -43,6 +44,43 @@ inline std::error_code make_error_code(writer_error e) noexcept {
 }
 
 /**
+ * Interface to track memory used by the parquet writer. The reservations are
+ * held until the tracker object is alive or release is explicitly called.
+ */
+class writer_mem_tracker {
+public:
+    writer_mem_tracker() = default;
+    writer_mem_tracker(const writer_mem_tracker&) = delete;
+    writer_mem_tracker(writer_mem_tracker&&) = default;
+    writer_mem_tracker& operator=(const writer_mem_tracker&) = delete;
+    writer_mem_tracker& operator=(writer_mem_tracker&&) = delete;
+
+    virtual ~writer_mem_tracker() = default;
+
+    /**
+     * Reserves `bytes` worth of memory. If the memory is already available
+     * (due to unused bytes from prior reservations), does nothing. May not be
+     * called concurrently with other methods.
+     */
+    virtual ss::future<>
+    maybe_reserve_memory(size_t bytes, ss::abort_source&) = 0;
+
+    /**
+     * Notify the mem tracker of current memory usage. The writer may
+     * choose to compress/shrink memory upon which the tracker must be
+     * notified of the current usage. May not be called concurrently with
+     * other methods.
+     */
+    virtual void update_current_memory_usage(size_t current_bytes_usage) = 0;
+
+    /**
+     * Releases all the reservations. After this caller, the reserved bytes
+     * tracked is 0. May not be called concurrently with other methods.
+     */
+    virtual void release() = 0;
+};
+
+/**
  * Parquet writer interface. The writer should write parquet serialized data to
  * the output stream provided during its creation.
  */
@@ -56,7 +94,21 @@ public:
     virtual ~parquet_ostream() = default;
 
     virtual ss::future<writer_error>
-      add_data_struct(iceberg::struct_value, size_t) = 0;
+    add_data_struct(iceberg::struct_value, size_t, ss::abort_source&) = 0;
+
+    /**
+     * Returns the total bytes buffered in the writer pending flush.
+     */
+    virtual size_t buffered_bytes() const = 0;
+    /**
+     * Returns the total bytes flushed to the ostream.
+     */
+    virtual size_t flushed_bytes() const = 0;
+    /**
+     * Forces a flush of bytes to ostream. Guarantees that all the buffered
+     * memory is released.
+     */
+    virtual ss::future<> flush() = 0;
 
     virtual ss::future<writer_error> finish() = 0;
 };
@@ -72,8 +124,9 @@ public:
 
     virtual ~parquet_ostream_factory() = default;
 
-    virtual ss::future<std::unique_ptr<parquet_ostream>>
-    create_writer(const iceberg::struct_type&, ss::output_stream<char>) = 0;
+    virtual ss::future<std::unique_ptr<parquet_ostream>> create_writer(
+      const iceberg::struct_type&, ss::output_stream<char>, writer_mem_tracker&)
+      = 0;
 };
 
 /**
@@ -93,8 +146,21 @@ public:
     virtual ~parquet_file_writer() = default;
 
     virtual ss::future<writer_error> add_data_struct(
-      iceberg::struct_value /* data */, int64_t /* approx_size */)
+      iceberg::struct_value /* data */,
+      int64_t /* approx_size */,
+      ss::abort_source&)
       = 0;
+
+    /**
+     * Returns the total bytes buffered in the writer pending flush.
+     */
+    virtual size_t buffered_bytes() const = 0;
+    /**
+     * Returns the total bytes flushed to the ostream.
+     */
+    virtual size_t flushed_bytes() const = 0;
+
+    virtual ss::future<writer_error> flush() = 0;
 
     virtual ss::future<result<local_file_metadata, writer_error>> finish() = 0;
 };

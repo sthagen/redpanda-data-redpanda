@@ -212,7 +212,7 @@ FAILURE_INJECTION_LOG_ALLOW_LIST = [
     re.compile(
         "Assert failure: .* filesystem error: Injected Failure: Input/output error"
     ),
-    re.compile("assert - Backtrace below:"),
+    re.compile("assert - Backtrace:"),
     re.compile("finject - .* flush called concurrently with other operations")
 ]
 

@@ -678,6 +678,49 @@
                     ]
                 }
             ]
+        },
+        {
+            "path": "/v1/debug/ctracker/va/{shard}",
+            "operations": [
+                {
+                    "method": "PUT",
+                    "summary": "Simulate va message on specific shard",
+                    "nickname": "put_ctracker_va",
+                    "parameters": [
+                        {
+                            "name": "shard",
+                            "in": "path",
+                            "required": true,
+                            "type": "integer"
+                        },
+                        {
+                            "name": "message",
+                            "in": "body",
+                            "required": true,
+                            "schema": {
+                                "$ref": "#/models/ctracker_va_value"
+                            }
+                        }
+                    ],
+                    "responses": {
+                        "200": {
+                            "description": "Ok"
+                        },
+                        "400": {
+                            "description": "Bad request"
+                        },
+                        "401": {
+                            "description": "Unauthorized"
+                        },
+                        "403": {
+                            "description": "Forbidden"
+                        },
+                        "404": {
+                            "description": "Not found"
+                        }
+                    }
+                }
+            ]
         }
     ],
     "models": {
@@ -1237,7 +1280,7 @@
             "id": "partition_producer_state",
             "description": "Debug state of a single producer producing to a partition ",
             "properties": {
-                "id" : {
+                "id": {
                     "type": "long",
                     "description": "ID of the producer, assigned by Redpanda."
                 },
@@ -1423,6 +1466,16 @@
                 "new_node_uuid": {
                     "type": "string",
                     "description": "Node unique identifier. UUID is generated when Redpanda starts with empty data folder"
+                }
+            }
+        },
+        "ctracker_va_value": {
+            "id": "ctracker_va_value",
+            "description": "Message to store on the shard",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "description": "The message to store"
                 }
             }
         }

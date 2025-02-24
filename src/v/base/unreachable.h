@@ -19,9 +19,10 @@
 #define unreachable()                                                          \
     /* NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while) */                     \
     do {                                                                       \
-        ::detail::g_assert_log.l.error(                                        \
-          "This code should not be reached ({}:{})", __FILE__, __LINE__);      \
-        ::detail::g_assert_log.l.error(                                        \
-          "Backtrace below:\n{}", seastar::current_backtrace());               \
+        ::detail::g_assert_log_holder.register_event(                          \
+          ss::current_backtrace(),                                             \
+          "This code should not be reached ({}:{})",                           \
+          __FILE__,                                                            \
+          __LINE__);                                                           \
         __builtin_trap();                                                      \
     } while (0)

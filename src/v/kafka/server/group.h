@@ -626,18 +626,19 @@ public:
     ss::future<offset_fetch_response>
     handle_offset_fetch(offset_fetch_request&& r);
 
-    void insert_offset(model::topic_partition tp, offset_metadata md) {
+    void insert_offset(const model::topic_partition& tp, offset_metadata md) {
         if (auto o_it = _offsets.find(tp); o_it != _offsets.end()) {
             o_it->second->metadata = std::move(md);
         } else {
             _offsets.emplace(
-              std::move(tp),
+              tp,
               std::make_unique<offset_metadata_with_probe>(
                 std::move(md), _id, tp, _enable_group_metrics));
         }
     }
 
-    bool try_upsert_offset(model::topic_partition tp, offset_metadata md) {
+    bool
+    try_upsert_offset(const model::topic_partition& tp, offset_metadata md) {
         if (auto o_it = _offsets.find(tp); o_it != _offsets.end()) {
             if (o_it->second->metadata.log_offset < md.log_offset) {
                 o_it->second->metadata = std::move(md);
@@ -646,7 +647,7 @@ public:
             return false;
         } else {
             _offsets.emplace(
-              std::move(tp),
+              tp,
               std::make_unique<offset_metadata_with_probe>(
                 std::move(md), _id, tp, _enable_group_metrics));
             return true;

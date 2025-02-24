@@ -16,8 +16,8 @@
 #include "datalake/location.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
-#include "datalake/serde_parquet_writer.h"
 #include "datalake/table_creator.h"
+#include "datalake/tests/test_data_writer.h"
 #include "datalake/tests/test_utils.h"
 #include "datalake/translation/translation_probe.h"
 #include "datalake/translation_task.h"
@@ -92,13 +92,8 @@ public:
         return std::make_unique<datalake::local_parquet_file_writer_factory>(
           datalake::local_path(tmp_dir.get_path()),
           "test-prefix",
-          ss::make_shared<datalake::serde_parquet_writer_factory>());
-    }
-
-    lazy_abort_source& never_abort() {
-        static thread_local lazy_abort_source noop = {
-          []() { return std::nullopt; }};
-        return noop;
+          ss::make_shared<datalake::serde_parquet_writer_factory>(),
+          std::make_unique<datalake::noop_mem_tracker>());
     }
 
     template<typename R>
@@ -137,6 +132,9 @@ public:
 
     translation_task create_task() {
         return translation_task(
+          ntp,
+          rev,
+          get_writer_factory(),
           cloud_io,
           *schema_mgr,
           *schema_resolver,
@@ -186,16 +184,17 @@ private:
 };
 
 TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
-    auto result = create_task()
-                    .translate(
-                      ntp,
-                      rev,
-                      get_writer_factory(),
+    datalake::translation_task task = create_task();
+    task.translate_once(make_batches(10, 16), as).get();
+    auto flush_result = task.flush().get();
+    ASSERT_FALSE(flush_result.has_error());
+    task.translate_once(make_batches(10, 16, model::offset{160}), as).get();
+    auto result = std::move(task)
+                    .finish(
                       translation_task::custom_partitioning_enabled::yes,
-                      make_batches(10, 16),
                       datalake::remote_path("test/location/1"),
                       test_rcn,
-                      never_abort())
+                      as)
                     .get();
 
     ASSERT_FALSE(result.has_error());
@@ -203,7 +202,9 @@ TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
     auto transformed_range = std::move(result.value());
     // check offset range
     ASSERT_EQ(transformed_range.start_offset, kafka::offset(0));
-    ASSERT_EQ(transformed_range.last_offset, kafka::offset(159));
+    // 2 translations of 10 batches with 16 records each
+    // = 2 * 10 * 16 = 320 records
+    ASSERT_EQ(transformed_range.last_offset, kafka::offset(319));
     ASSERT_EQ(transformed_range.files.size(), 1);
 
     // check that the resulting files were actually uploaded to the cloud
@@ -213,20 +214,18 @@ TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
 }
 
 TEST_F(TranslateTaskTest, TestDataFileMissing) {
+    datalake::translation_task task = create_task();
     // create deleting task to cause local io error
     deleter del(tmp_dir.get_path().string());
     del.start();
     auto stop_deleter = ss::defer([&del] { del.stop().get(); });
-    auto result = create_task()
-                    .translate(
-                      ntp,
-                      rev,
-                      get_writer_factory(),
+    task.translate_once(make_batches(10, 16), as).get();
+    auto result = std::move(task)
+                    .finish(
                       translation_task::custom_partitioning_enabled::yes,
-                      make_batches(10, 16),
                       datalake::remote_path("test/location/1"),
                       test_rcn,
-                      never_abort())
+                      as)
                     .get();
 
     ASSERT_TRUE(result.has_error());
@@ -234,6 +233,18 @@ TEST_F(TranslateTaskTest, TestDataFileMissing) {
 }
 
 TEST_F(TranslateTaskTest, TestUploadError) {
+    datalake::translation_task task(
+      ntp,
+      model::revision_id{123},
+      get_writer_factory(),
+      cloud_io,
+      *schema_mgr,
+      *schema_resolver,
+      *translator,
+      *t_creator,
+      model::iceberg_invalid_record_action::dlq_table,
+      location_provider,
+      probe);
     // fail all PUT requests
     fail_request_if(
       [](const http_test_utils::request_info& req) -> bool {
@@ -243,16 +254,13 @@ TEST_F(TranslateTaskTest, TestUploadError) {
         .body = "failed!",
         .status = ss::http::reply::status_type::internal_server_error});
 
-    auto result = create_task()
-                    .translate(
-                      ntp,
-                      model::revision_id{123},
-                      get_writer_factory(),
+    task.translate_once(make_batches(10, 16), as).get();
+    auto result = std::move(task)
+                    .finish(
                       translation_task::custom_partitioning_enabled::yes,
-                      make_batches(10, 16),
                       datalake::remote_path("test/location/1"),
                       test_rcn,
-                      never_abort())
+                      as)
                     .get();
 
     ASSERT_TRUE(result.has_error());

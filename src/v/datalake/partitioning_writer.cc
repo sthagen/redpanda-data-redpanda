@@ -30,8 +30,19 @@ operator<<(std::ostream& o, const partitioning_writer::partitioned_file& f) {
     return o;
 }
 
-ss::future<writer_error>
-partitioning_writer::add_data(iceberg::struct_value val, int64_t approx_size) {
+ss::future<> partitioning_writer::flush() {
+    return ss::max_concurrent_for_each(writers_, 10, [](auto& entry) {
+        return entry.second->flush().then([](writer_error err) {
+            if (err == writer_error::ok) {
+                return ss::make_ready_future();
+            }
+            return ss::make_exception_future<>(err);
+        });
+    });
+}
+
+ss::future<writer_error> partitioning_writer::add_data(
+  iceberg::struct_value val, int64_t approx_size, ss::abort_source& as) {
     iceberg::partition_key pk;
     try {
         pk = iceberg::partition_key::create(val, accessors_, spec_);
@@ -59,12 +70,28 @@ partitioning_writer::add_data(iceberg::struct_value val, int64_t approx_size) {
     }
     auto& writer = writer_iter->second;
     auto write_res = co_await writer->add_data_struct(
-      std::move(val), approx_size);
+      std::move(val), approx_size, as);
     if (write_res != writer_error::ok) {
         vlog(datalake_log.error, "Failed to add data: {}", write_res);
         co_return write_res;
     }
     co_return write_res;
+}
+
+size_t partitioning_writer::buffered_bytes() const {
+    size_t result = 0;
+    for (const auto& [_, writer] : writers_) {
+        result += writer->buffered_bytes();
+    }
+    return result;
+}
+
+size_t partitioning_writer::flushed_bytes() const {
+    size_t result = 0;
+    for (const auto& [_, writer] : writers_) {
+        result += writer->flushed_bytes();
+    }
+    return result;
 }
 
 ss::future<

@@ -8,6 +8,7 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
+#include "base/vassert.h"
 #include "cloud_storage/cache_service.h"
 #include "cluster/cloud_storage_size_reducer.h"
 #include "cluster/controller.h"
@@ -32,7 +33,9 @@
 #include "storage/kvstore.h"
 
 #include <seastar/core/shard_id.hh>
+#include <seastar/core/smp.hh>
 #include <seastar/core/sstring.hh>
+#include <seastar/http/exception.hh>
 #include <seastar/http/httpd.hh>
 #include <seastar/json/json_elements.hh>
 
@@ -498,6 +501,16 @@ void admin_server::register_debug_routes() {
         -> ss::future<ss::json::json_return_type> {
           return get_node_uuid_handler();
       });
+
+    if constexpr (admin_server::is_store_message_enabled()) {
+        register_route_raw_async<superuser>(
+          ss::httpd::debug_json::put_ctracker_va,
+          [this](
+            std::unique_ptr<ss::http::request> req,
+            std::unique_ptr<ss::http::reply> res) {
+              return put_ctracker_va(std::move(req), std::move(res));
+          });
+    }
 }
 
 using admin::apply_validator;
@@ -1028,4 +1041,44 @@ ss::future<ss::json::json_return_type> admin_server::override_node_uuid_handler(
       });
 
     co_return ss::json::json_return_type(ss::json::json_void());
+}
+
+ss::future<std::unique_ptr<ss::http::reply>> admin_server::put_ctracker_va(
+  std::unique_ptr<ss::http::request> req,
+  std::unique_ptr<ss::http::reply> res) {
+    ss::shard_id shard = 0;
+    try {
+        shard = std::stoi(req->get_path_param("shard"));
+    } catch (...) {
+        throw ss::httpd::bad_param_exception(
+          fmt::format("Invalid shard id: {}", req->get_path_param("shard")));
+    }
+
+    if (shard >= ss::smp::count) {
+        throw ss::httpd::bad_param_exception(
+          fmt::format("Invalid shard id: {}", shard));
+    }
+
+    auto doc = co_await parse_json_body(req.get());
+    if (!doc.IsObject()) {
+        throw ss::httpd::bad_request_exception(
+          "Request body must be a JSON object");
+    }
+    if (!doc.HasMember("message")) {
+        throw ss::httpd::bad_request_exception(
+          fmt::format("'message' missing"));
+    }
+    if (!doc["message"].IsString()) {
+        throw ss::httpd::bad_request_exception(
+          fmt::format("'message' must be a string"));
+    }
+    auto msg = ss::sstring{doc["message"].GetString()};
+
+    co_await ss::smp::submit_to(shard, [msg = std::move(msg)] {
+        ::detail::g_assert_log_holder.register_event(
+          ss::current_backtrace(), "{}", msg);
+    });
+
+    res->set_status(ss::http::reply::status_type::ok);
+    co_return std::move(res);
 }

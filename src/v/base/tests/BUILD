@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_cc_btest_no_seastar")
+load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_cc_btest_no_seastar", "redpanda_cc_gtest")
 
 redpanda_cc_btest_no_seastar(
     name = "outcome_test",
@@ -21,5 +21,19 @@ redpanda_cc_btest(
         "//src/v/base",
         "//src/v/test_utils:seastar_boost",
         "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "assert_log_holder_test",
+    timeout = "short",
+    srcs = [
+        "assert_log_holder_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
     ],
 )

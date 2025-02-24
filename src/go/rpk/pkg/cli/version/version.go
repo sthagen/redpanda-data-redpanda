@@ -28,8 +28,6 @@ var (
 	version   string // Semver of rpk.
 	rev       string // Short git SHA.
 	buildTime string // Timestamp of build time, RFC3339.
-	hostOs    string // OS that was used to built rpk (go env GOHOSTOS).
-	hostArch  string // Arch that was used to built rpk (go env GOHOSTARCH).
 )
 
 type rpkVersion struct {
@@ -70,7 +68,7 @@ To get only the rpk version, use 'rpk --version'.`,
 				GitRef:    rev,
 				BuildTime: buildTime,
 				GoVersion: runtime.Version(),
-				OsArch:    fmt.Sprintf("%s/%s", hostOs, hostArch),
+				OsArch:    fmt.Sprintf("%s/%s", runtime.GOOS, runtime.GOARCH),
 			}
 			printRpkVersion(rv)
 			var rows redpandaVersions

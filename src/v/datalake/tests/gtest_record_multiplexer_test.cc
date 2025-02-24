@@ -41,7 +41,7 @@ const model::ntp
   ntp(model::ns{"rp"}, model::topic{"t"}, model::partition_id{0});
 const model::revision_id rev{123};
 default_translator translator;
-lazy_abort_source as([] { return std::nullopt; });
+ss::abort_source as;
 } // namespace
 
 TEST(DatalakeMultiplexerTest, TestMultiplexer) {
@@ -63,8 +63,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
       location_provider(
         cloud_io::s3_compat_provider{"s3"},
         cloud_storage_clients::bucket_name{"bucket"}),
-      probe,
-      as);
+      probe);
 
     model::test::record_batch_spec batch_spec;
     batch_spec.records = record_count;
@@ -79,8 +78,8 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
             std::move(batches));
       });
 
-    auto result
-      = reader.consume(std::move(multiplexer), model::no_timeout).get();
+    multiplexer.multiplex(std::move(reader), model::no_timeout, as).get();
+    auto result = std::move(multiplexer).finish().get();
 
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result.value().data_files.size(), 1);
@@ -111,8 +110,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
       location_provider(
         cloud_io::s3_compat_provider{"s3"},
         cloud_storage_clients::bucket_name{"bucket"}),
-      probe,
-      as);
+      probe);
 
     model::test::record_batch_spec batch_spec;
     batch_spec.records = record_count;
@@ -125,7 +123,8 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
           return ss::make_ready_future<model::record_batch_reader::data_t>(
             std::move(batches));
       });
-    auto res = reader.consume(std::move(multiplexer), model::no_timeout).get();
+    multiplexer.multiplex(std::move(reader), model::no_timeout, as).get();
+    auto res = std::move(multiplexer).finish().get();
     ASSERT_TRUE(res.has_error());
     EXPECT_EQ(res.error(), datalake::writer_error::parquet_conversion_error);
 }
@@ -144,7 +143,9 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
     auto writer_factory = std::make_unique<local_parquet_file_writer_factory>(
       datalake::local_path(tmp_dir.get_path()),
       "data",
-      ss::make_shared<datalake::serde_parquet_writer_factory>());
+      ss::make_shared<datalake::serde_parquet_writer_factory>(),
+      std::make_unique<noop_mem_tracker>());
+
     translation_probe probe(ntp);
     datalake::record_multiplexer multiplexer(
       ntp,
@@ -158,8 +159,7 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
       location_provider(
         cloud_io::s3_compat_provider{"s3"},
         cloud_storage_clients::bucket_name{"bucket"}),
-      probe,
-      as);
+      probe);
 
     model::test::record_batch_spec batch_spec;
     batch_spec.records = record_count;
@@ -174,8 +174,8 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
             std::move(batches));
       });
 
-    auto result
-      = reader.consume(std::move(multiplexer), model::no_timeout).get();
+    multiplexer.multiplex(std::move(reader), model::no_timeout, as).get();
+    auto result = std::move(multiplexer).finish().get();
 
     ASSERT_TRUE(result.has_value());
     ASSERT_EQ(result.value().data_files.size(), 1);
@@ -269,7 +269,8 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
     auto writer_factory = std::make_unique<local_parquet_file_writer_factory>(
       datalake::local_path(tmp_dir.get_path()),
       "data",
-      ss::make_shared<datalake::serde_parquet_writer_factory>());
+      ss::make_shared<datalake::serde_parquet_writer_factory>(),
+      std::make_unique<noop_mem_tracker>());
     translation_probe probe(ntp);
     record_multiplexer mux(
       ntp,
@@ -281,9 +282,9 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
       t_creator,
       model::iceberg_invalid_record_action::dlq_table,
       location_provider(scoped_remote->remote.local().provider(), bucket_name),
-      probe,
-      as);
-    auto res = reader.consume(std::move(mux), model::no_timeout).get();
+      probe);
+    mux.multiplex(std::move(reader), model::no_timeout, as).get();
+    auto res = std::move(mux).finish().get();
     ASSERT_FALSE(res.has_error()) << res.error();
     EXPECT_EQ(res.value().start_offset(), start_offset());
 

@@ -11,6 +11,7 @@
 
 #include "crash_tracker/recorder.h"
 
+#include "base/vassert.h"
 #include "config/node_config.h"
 #include "crash_tracker/logger.h"
 #include "crash_tracker/types.h"
@@ -99,6 +100,8 @@ ss::future<> recorder::start() {
     co_await ensure_crashdir_exists();
     co_await remove_old_crashfiles();
     co_await _writer.initialize(co_await generate_crashfile_name());
+    ::detail::g_assert_log_holder.register_cb(
+      [](std::string_view msg) { get_recorder().record_crash_vassert(msg); });
 }
 
 namespace {
@@ -208,6 +211,22 @@ void recorder::record_crash_exception(std::exception_ptr eptr) {
       format_buf.capacity(),
       "Failure during startup: {}",
       eptr);
+
+    _writer.write();
+}
+
+void recorder::record_crash_vassert(std::string_view msg) {
+    auto* cd_opt = _writer.fill();
+    if (!cd_opt) {
+        // The writer has already been consumed by another crash
+        print_skipping();
+        return;
+    }
+    auto& cd = *cd_opt;
+
+    record_backtrace(cd);
+    cd.type = crash_type::assertion;
+    record_message(cd, msg);
 
     _writer.write();
 }

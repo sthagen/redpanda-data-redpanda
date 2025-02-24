@@ -692,6 +692,18 @@ private:
     ss::future<std::unique_ptr<ss::http::reply>> delete_debug_bundle_file(
       std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>);
 
+    // Shard store message routes
+    ss::future<std::unique_ptr<ss::http::reply>> put_ctracker_va(
+      std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>);
+
+    static constexpr bool is_store_message_enabled() {
+#ifndef NDEBUG
+        return true;
+#else
+        return false;
+#endif
+    }
+
     ss::future<> throw_on_error(
       ss::http::request& req,
       std::error_code ec,

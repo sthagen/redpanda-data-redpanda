@@ -35,6 +35,8 @@ class CrashLoopChecksTest(RedpandaTest):
         "Illegal instruction on",
     ]
 
+    ASSERT_CRASH_LOG = ["assert - "]
+
     # main - application.cc:348 - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found)
     # main - application.cc:363 - Failure during startup: std::__1::system_error (error C-Ares:11, unreachable_host.com: Connection refused)
     HOSTNAME_ERRORS = [
@@ -53,7 +55,11 @@ class CrashLoopChecksTest(RedpandaTest):
                 "crash_loop_limit": CrashLoopChecksTest.CRASH_LOOP_LIMIT,
                 "developer_mode": False
             },
-            log_config=LoggingConfig('info', logger_levels={'main': 'debug'}),
+            log_config=LoggingConfig('info',
+                                     logger_levels={
+                                         'main': 'debug',
+                                         'crash_tracker': 'trace'
+                                     }),
         )
         self.broker = self.redpanda.nodes[0]
 
@@ -286,3 +292,37 @@ class CrashLoopChecksTest(RedpandaTest):
         report = self.read_first_crash_report()
         assert len(report['stacktrace']) > 0, \
             f'Unexpected empty stacktrace for report: {report}'
+
+    @cluster(num_nodes=1,
+             log_allow_list=CRASH_LOOP_LOG + SIGNAL_CRASH_LOG +
+             ASSERT_CRASH_LOG)
+    @matrix(signal_shard=[0, 1])
+    def test_vassert_message(self, signal_shard: int):
+        if not self.debug_mode:
+            self.logger.info(
+                "Skipping test, endpoints only exist in debug mode")
+            return
+        admin = self.redpanda._admin
+        msg = f'Message from shard {signal_shard}'
+        if signal_shard == 0:
+            signal_thread = RedpandaService.SHARD_0_THREAD_NAME
+        else:
+            signal_thread = RedpandaService.SHARD_1_THREAD_NAME
+
+        self.redpanda.set_tolerate_crashes(True)
+        admin.put_ctracker_va_message(shard=signal_shard,
+                                      msg=msg,
+                                      node=self.broker)
+
+        # Use SIGILL as it's the signal raised on assert and we want
+        # to ensure that our assert message inserted above is what
+        # was written to the crash report and not anything from the
+        # signal handler
+        self.redpanda.signal_redpanda(self.broker,
+                                      signal=signal.SIGILL,
+                                      thread=signal_thread)
+
+        report = self.read_first_crash_report()
+        assert 5 == report['type'], f'Unexpected crash type: {report["type"]}'
+        assert f'{msg} on shard {signal_shard}.' == report[
+            'crash_message'], f'Unexpected crash message: {report["crash_message"]}'

@@ -1896,3 +1896,13 @@ class Admin:
         return self._request(
             'POST',
             f"transaction/unsafe_abort_group_transaction/{group_id}?{params}")
+
+    def put_ctracker_va_message(self,
+                                shard: int,
+                                msg: str,
+                                node: MaybeNode = None):
+        params = {"message": msg}
+        return self._request("PUT",
+                             f'debug/ctracker/va/{shard}',
+                             node=node,
+                             data=json.dumps(params))

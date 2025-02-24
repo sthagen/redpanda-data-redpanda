@@ -28,7 +28,8 @@ enum class crash_type {
     startup_exception,
     segfault,
     abort,
-    illegal_instruction
+    illegal_instruction,
+    assertion
 };
 
 /// reserved_string is a simple wrapper around a std::array that allows

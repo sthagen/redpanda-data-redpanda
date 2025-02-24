@@ -54,6 +54,8 @@ public:
 
     void record_crash_exception(std::exception_ptr eptr);
 
+    void record_crash_vassert(std::string_view msg);
+
     /// Returns the list of recorded crashes in increasing crash_time order
     ss::future<std::vector<recorded_crash>> get_recorded_crashes(
       include_malformed_files incl_malformed

@@ -268,6 +268,7 @@ redpanda_cc_gtest(
         "//src/v/iceberg:filesystem_catalog",
         "//src/v/model",
         "//src/v/pandaproxy",
+        "//src/v/random:generators",
         "//src/v/schema:registry",
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:gtest",
@@ -362,6 +363,7 @@ redpanda_cc_gtest(
         "local_parquet_file_writer_test.cc",
     ],
     deps = [
+        ":test_data_writer",
         "//src/v/datalake:local_parquet_file_writer",
         "//src/v/datalake/tests:test_data",
         "//src/v/iceberg:datatypes",
@@ -381,6 +383,7 @@ redpanda_cc_gtest(
         "serde_parquet_writer_test.cc",
     ],
     deps = [
+        ":test_data_writer",
         "//src/v/bytes:iostream",
         "//src/v/datalake:serde_parquet_writer",
         "//src/v/datalake/tests:test_data",
