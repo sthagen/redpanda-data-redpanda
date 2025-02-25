@@ -423,3 +423,19 @@ redpanda_cc_bench(
         "@seastar//:benchmark",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "partition_key_path_test",
+    timeout = "short",
+    srcs = [
+        "partition_key_path_test.cc",
+    ],
+    deps = [
+        ":test_data",
+        "//src/v/datalake:partition_key_path",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

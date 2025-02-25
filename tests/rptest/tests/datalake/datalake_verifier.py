@@ -47,7 +47,8 @@ class DatalakeVerifier():
                  topic: str,
                  query_engine: QueryEngineBase,
                  compacted: bool = False,
-                 table_override: Optional[str] = None):
+                 table_override: Optional[str] = None,
+                 max_buffered_msgs=5000):
         self.redpanda = redpanda
         self.topic = topic
         self.table = table_override or topic
@@ -70,7 +71,7 @@ class DatalakeVerifier():
         self._lock = threading.Lock()
         self._stop = threading.Event()
         # number of messages buffered in memory
-        self._msg_semaphore = threading.Semaphore(5000)
+        self._msg_semaphore = threading.Semaphore(max_buffered_msgs)
         self._num_msgs_pending_verification = 0
         # Signalled when enough messages are batched so query
         # thread can perform verification. Larger batches results
@@ -92,6 +93,7 @@ class DatalakeVerifier():
         self._offline_mode_established = False
         self._consumer_positions = None  # set iff in offline mode
         self._partition_hwms = None  # set iff in offline mode
+        self._consumer_lock = threading.Lock()
 
         self._compacted = compacted
         # When consuming from a compacted topic, there may be records in the
@@ -116,25 +118,27 @@ class DatalakeVerifier():
         return c
 
     def update_and_get_fetch_positions(self):
-        if self._offline_mode_established:
-            assert self._consumer_positions is not None
-            return self._consumer_positions
+        with self._consumer_lock:
+            if self._offline_mode_established:
+                assert self._consumer_positions is not None
+                return self._consumer_positions
 
-        with self._lock:
-            partitions = [
-                TopicPartition(topic=self.topic, partition=p)
-                for p in self._consumed_messages.keys()
-            ]
-            positions = self._consumer.position(partitions)
-            for p in positions:
-                if p.error is not None:
-                    self.logger.warning(
-                        f"Error querying position for partition {p.partition}")
-                else:
-                    self.logger.debug(
-                        f"next position for {p.partition} is {p.offset}")
-                    self._next_positions[p.partition] = p.offset
-            return self._next_positions.copy()
+            with self._lock:
+                partitions = [
+                    TopicPartition(topic=self.topic, partition=p)
+                    for p in self._consumed_messages.keys()
+                ]
+                positions = self._consumer.position(partitions)
+                for p in positions:
+                    if p.error is not None:
+                        self.logger.warning(
+                            f"Error querying position for partition {p.partition}"
+                        )
+                    else:
+                        self.logger.debug(
+                            f"next position for {p.partition} is {p.offset}")
+                        self._next_positions[p.partition] = p.offset
+                return self._next_positions.copy()
 
     def partition_hwms(self) -> List[RpkPartition]:
         if self._offline_mode_established:
@@ -143,24 +147,45 @@ class DatalakeVerifier():
         return list(self._rpk.describe_topic(self.topic))
 
     # to be called no more than once
-    def go_offline(self):
+    def go_offline(self, timeout=60):
         assert not self._offline_mode_requested.is_set()
+        self.logger.debug(f"offline mode requested")
         self._offline_mode_requested.set()
-        self._consumer_stopped.wait()
-        # todo: send consumer thread stop, remember positions when it stopped
+        assert self._consumer_stopped.wait(timeout)
+        self.logger.debug(f"consistent state reached")
         self._consumer_positions = self.update_and_get_fetch_positions()
         self.logger.debug(f"remembered {self._consumer_positions=}")
         self._partition_hwms = self.partition_hwms()
-        self.logger.debug(f"remembered {self._partition_hwms=}")
-        self._consumer.close()
-        self._consumer = None
-        self._offline_mode_established = True
+        for p in self._partition_hwms:
+            self.logger.debug(
+                f"remembered partition {p.id=} hwm={p.high_watermark}, ")
+        with self._consumer_lock:
+            self._consumer.close()
+            self._consumer = None
+            self.logger.debug(f"offline mode established")
+            self._offline_mode_established = True
+
+    def _consumed_till_hwm(self, update: bool):
+        self.logger.debug("checking _consumed_till_hwm")
+        if update:
+            # reduce _lock contention
+            if not self._consumed_till_hwm(False):
+                return False
+            self.update_and_get_fetch_positions()
+        for p in self.partition_hwms():
+            if self._next_positions[p.id] < p.high_watermark:
+                self.logger.debug(
+                    f"partition {p.id} high watermark: {p.high_watermark} max offset: {self._next_positions[p.id]} has not been consumed fully"
+                )
+                return False
+        return True
 
     def _consumer_thread(self):
         try:
             self.logger.info("Starting consumer thread")
-            while not self._stop.is_set() \
-              and not self._offline_mode_requested.is_set():
+            while not self._stop.is_set() and not (
+                    self._offline_mode_requested.is_set()
+                    and self._consumed_till_hwm(update=True)):
                 self._msg_semaphore.acquire()
                 if self._stop.is_set():
                     break
@@ -295,16 +320,12 @@ class DatalakeVerifier():
     def _all_offsets_translated(self):
         partition_hwms = self.partition_hwms()
         with self._lock:
+            if not self._consumed_till_hwm(update=False):
+                return False
             for p in partition_hwms:
                 if p.id not in self._max_queried_offsets:
                     self.logger.debug(
                         f"partition {p.id} not found in max offsets: {self._max_queried_offsets}"
-                    )
-                    return False
-
-                if self._next_positions[p.id] < p.high_watermark:
-                    self.logger.debug(
-                        f"partition {p.id} high watermark: {p.high_watermark} max offset: {self._next_positions[p.id]} has not been consumed fully"
                     )
                     return False
                 # Ensure all the consumed messages are drained.
@@ -343,10 +364,12 @@ class DatalakeVerifier():
             self.logger.debug(f"No errors around waiting")
         except Exception as e:
             self.logger.error(f"Error around waiting: {e}")
+            raise
         finally:
             self.stop()
 
     def stop(self):
+        self.logger.debug("stopping")
         try:
             self._stop.set()
             self._msg_semaphore.release()

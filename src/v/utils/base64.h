@@ -40,7 +40,7 @@ ss::sstring base64_to_string(std::string_view);
 iobuf base64_to_iobuf(const iobuf&);
 
 // base64 <-> iobuf
-ss::sstring iobuf_to_base64(const iobuf&);
+ss::sstring iobuf_to_base64(const iobuf&, std::optional<size_t> = std::nullopt);
 
 /// \brief Used to decode URL encoded base64 values
 ///

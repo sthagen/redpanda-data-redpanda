@@ -72,8 +72,9 @@ ss::sstring bytes_to_base64(bytes_view input) {
     return output;
 }
 
-ss::sstring iobuf_to_base64(const iobuf& input) {
-    const size_t output_capacity = encode_capacity(input.size_bytes());
+ss::sstring iobuf_to_base64(const iobuf& input, std::optional<size_t> limit) {
+    auto sz_bytes = limit.value_or(input.size_bytes());
+    const size_t output_capacity = encode_capacity(sz_bytes);
     ss::sstring output(ss::sstring::initialized_later{}, output_capacity);
     size_t written = 0;
 
@@ -83,7 +84,7 @@ ss::sstring iobuf_to_base64(const iobuf& input) {
     // encode each iobuf fragment
     iobuf::iterator_consumer input_it(input.cbegin(), input.cend());
     input_it.consume(
-      input.size_bytes(),
+      sz_bytes,
       [&state, &written, &output, output_capacity](const char* src, size_t sz) {
           size_t output_len;                          // NOLINT
           char* output_ptr = output.data() + written; // NOLINT

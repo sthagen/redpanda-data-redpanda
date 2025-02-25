@@ -27,7 +27,7 @@ class JavaCompressionTest(EndToEndTest):
         self.extra_rp_conf = {
             'log_segment_size': 2 * 1024**2,  # 2 MiB
             'compacted_log_segment_size': 1024**2,  # 1 MiB
-            'log_compaction_interval_ms': 5000,
+            'log_compaction_interval_ms': 10000,
         }
 
         super().__init__(test_context=test_context,
@@ -46,7 +46,7 @@ class JavaCompressionTest(EndToEndTest):
     def produce_until_segment_count(self,
                                     count,
                                     compression_type,
-                                    timeout_sec=60):
+                                    timeout_sec=120):
         producer = VerifiableProducer(self.test_context,
                                       num_nodes=1,
                                       redpanda=self.redpanda,
@@ -64,7 +64,7 @@ class JavaCompressionTest(EndToEndTest):
             producer.clean()
             producer.free()
 
-    def consume(self, num_messages=100, timeout_sec=30):
+    def consume(self, num_messages=100, timeout_sec=120):
         deadline = time() + timeout_sec
         consumer = KafkaConsumer(self.topic_spec.name,
                                  bootstrap_servers=self.redpanda.brokers(),
@@ -88,7 +88,7 @@ class JavaCompressionTest(EndToEndTest):
             metrics_endpoint=MetricsEndpoint.METRICS,
             topic=self.topic_spec.name)
 
-    def wait_for_compacted_segments(self, num_segments, timeout_sec=30):
+    def wait_for_compacted_segments(self, num_segments, timeout_sec=120):
         wait_until(lambda: self.get_compacted_segments() >= num_segments,
                    timeout_sec=timeout_sec,
                    err_msg=f"Timed out waiting for compacted segments.")

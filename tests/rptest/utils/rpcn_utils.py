@@ -13,7 +13,8 @@ def counter_stream_config(redpanda: RedpandaService,
                           topic: str,
                           subject: str,
                           field_to_bloblang: dict[str, str] = {},
-                          cnt: int = 3000) -> dict:
+                          cnt: int = 3000,
+                          interval_ms: int | None = None) -> dict:
     """
     Creates a RPCN config where the input is a simple counter, and fields are
     mapped via the input mapping of bloblang functions.
@@ -39,7 +40,7 @@ def counter_stream_config(redpanda: RedpandaService,
         "input": {
             "generate": {
                 "mapping": "root = counter()",
-                "interval": "",
+                "interval": "" if interval_ms is None else f"{interval_ms}ms",
                 "count": cnt,
                 "batch_size": 1
             }

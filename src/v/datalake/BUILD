@@ -627,3 +627,27 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "partition_key_path",
+    srcs = [
+        "partition_key_path.cc",
+    ],
+    hdrs = [
+        "partition_key_path.h",
+    ],
+    include_prefix = "datalake",
+    visibility = [":__subpackages__"],
+    deps = [
+        ":base_types",
+        ":logger",
+        "//src/v/base",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/iceberg:partition_key",
+        "//src/v/ssx:sformat",
+        "//src/v/utils:base64",
+        "@abseil-cpp//absl/strings",
+        "@fmt",
+        "@seastar",
+    ],
+)

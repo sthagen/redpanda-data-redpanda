@@ -407,11 +407,11 @@ template<>
 struct instance_generator<cluster::reconciliation_state_request> {
     static cluster::reconciliation_state_request random() {
         auto f = []() { return model::random_ntp(); };
-        return {.ntps = tests::random_vector(std::move(f))};
+        return {.ntps = tests::random_chunked_vector(std::move(f))};
     }
 
     static std::vector<cluster::reconciliation_state_request> limits() {
-        return {{}};
+        return {};
     }
 };
 
@@ -562,7 +562,7 @@ template<>
 struct instance_generator<cluster::reconciliation_state_reply> {
     static cluster::reconciliation_state_reply random() {
         return {
-          .results = tests::random_vector([] {
+          .results = tests::random_chunked_vector([] {
               return instance_generator<
                 cluster::ntp_reconciliation_state>::random();
           }),

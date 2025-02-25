@@ -1379,14 +1379,14 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
         roundtrip_test(data);
     }
     {
-        std::vector<model::ntp> ntps;
+        chunked_vector<model::ntp> ntps;
         for (int i = 0, mi = random_generators::get_int(10); i < mi; i++) {
             ntps.push_back(model::random_ntp());
         }
         cluster::reconciliation_state_request data{
-          .ntps = ntps,
+          .ntps = std::move(ntps),
         };
-        roundtrip_test(data);
+        roundtrip_test(std::move(data));
     }
     {
         cluster::backend_operation data{
@@ -1415,7 +1415,7 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
         roundtrip_test(std::move(data));
     }
     {
-        std::vector<cluster::ntp_reconciliation_state> results;
+        chunked_vector<cluster::ntp_reconciliation_state> results;
         for (int i = 0, mi = random_generators::get_int(10); i < mi; i++) {
             ss::chunked_fifo<cluster::backend_operation> backend_operations;
             for (int j = 0, mj = random_generators::get_int(10); j < mj; j++) {
