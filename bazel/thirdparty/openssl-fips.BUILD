@@ -12,6 +12,7 @@ configure_make(
     configure_options = [
         "enable-fips",
         "--libdir=lib",
+        "no-tests",
     ] + select({
         "@openssl//:debug_mode": ["--debug"],
         "@openssl//:release_mode": ["--release"],
@@ -34,15 +35,25 @@ filegroup(
     name = "gen_dir",
     srcs = [":openssl-fips"],
     output_group = "gen_dir",
-    visibility = [
-        "//visibility:public",
-    ],
 )
 
 select_file(
     name = "fipsmodule_so",
     srcs = ":openssl-fips",
     subpath = "lib/ossl-modules/fips.so",
+    visibility = [
+        "//visibility:public",
+    ],
+)
+
+# We must use a genrule here because the output of `gen_dir`
+# is a directory artifact, which you cannot pluck things out of
+# using select_file.
+genrule(
+    name = "fipsmodule_cnf",
+    srcs = [":gen_dir"],
+    outs = ["fipsmodule.cnf"],
+    cmd = "cp -L $(SRCS)/ssl/fipsmodule.cnf $@",
     visibility = [
         "//visibility:public",
     ],

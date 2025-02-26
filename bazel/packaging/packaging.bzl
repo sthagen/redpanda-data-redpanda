@@ -2,6 +2,7 @@
 A rule to create a redpanda tarball given inputs from the build system.
 """
 
+load("@bazel_skylib//lib:collections.bzl", "collections")
 load("@bazel_tools//tools/cpp:toolchain_utils.bzl", "find_cpp_toolchain")
 
 def _is_versioned(file, starts_with):
@@ -67,27 +68,67 @@ def _prepare_package_content(ctx, dynamic_loader_path = "/opt/redpanda/lib"):
     if ctx.attr.include_sysroot_libs and dynamic_loader == None:
         fail("Dynamic loader not found in sysroot")
 
-    # Collect all the shared libraries that we built as part of Redpanda.
-    rp_runfiles = ctx.attr.redpanda_binary[DefaultInfo].default_runfiles.files.to_list()
-    for solib in rp_runfiles:
-        # Why the redpanda binary is marked as a runfile of itself? No idea...
-        if solib == ctx.file.redpanda_binary:
+    # Collect all the shared libraries that we built as part of each binary.
+    # NOTE: We don't need to do this for `rpk` because it's a static binary,
+    # this is only needed for binaries with shared libraries.
+    binaries = [
+        ctx.attr.redpanda_binary,
+        ctx.attr.rp_util,
+        ctx.attr.iotune,
+        ctx.attr.hwloc_calc,
+        ctx.attr.hwloc_distrib,
+        ctx.attr.openssl,
+    ]
+    binary_files = [
+        ctx.file.redpanda_binary,
+        ctx.file.rp_util,
+        ctx.file.iotune,
+        ctx.file.hwloc_calc,
+        ctx.file.hwloc_distrib,
+        ctx.file.openssl,
+    ]
+    for b in binaries:
+        if b == None:
             continue
-        shared_libraries.append(solib)
-    rp_binary = ctx.file.redpanda_binary
+        runfiles = b[DefaultInfo].default_runfiles.files.to_list()
+        for solib in runfiles:
+            # Why the binary is marked as a runfile of itself? No idea...
+            if solib in binary_files:
+                continue
+            shared_libraries.append(solib)
 
     if ctx.attr.rpath_override != "":
-        #TODO: add overriding iotune and rp_util rpaths after we add them to the package
-        rp_binary = _override_binary_rpath(ctx, ctx.attr.rpath_override, rp_binary)
+        for i in range(0, len(binary_files)):
+            if binary_files[i] == None:
+                continue
+            binary_files[i] = _override_binary_rpath(
+                ctx,
+                ctx.attr.rpath_override,
+                binary_files[i],
+            )
 
-    # TODO: set dynamic loader for other native binaries in the package
     if ctx.attr.include_sysroot_libs:
-        rp_binary = _set_dynamic_loader(ctx, rp_binary, dynamic_loader, dynamic_loader_path)
+        for i in range(0, len(binary_files)):
+            if binary_files[i] == None:
+                continue
+            binary_files[i] = _set_dynamic_loader(
+                ctx,
+                binary_files[i],
+                dynamic_loader,
+                dynamic_loader_path,
+            )
+
+    [rp_binary, rp_util, iotune, hwloc_calc, hwloc_distrib, openssl] = binary_files
 
     return struct(
         redpanda_binary = rp_binary,
+        rp_util = rp_util,
+        iotune = iotune,
+        hwloc_calc = hwloc_calc,
+        hwloc_distrib = hwloc_distrib,
+        openssl = openssl,
         rpk_binary = ctx.file.rpk_binary,
-        shared_libraries = shared_libraries,
+        shared_libraries = collections.uniq(shared_libraries),
     )
 
 def _impl(ctx):
@@ -95,13 +136,23 @@ def _impl(ctx):
     out = ctx.actions.declare_directory(ctx.attr.out) if use_dir else ctx.actions.declare_file(ctx.attr.out)
     package_content = _prepare_package_content(ctx)
 
+    fips_enabled = ctx.file.fips_module != None
+    if fips_enabled != (ctx.file.fips_config != None):
+        fail("`fips_module` and `fips_config` must both be specified in", ctx.attr.name)
+
     # Create the configuration file for the packaging tool
     cfg_file = ctx.actions.declare_file("%s.config.json" % ctx.attr.name)
     cfg = {
         "redpanda_binary": package_content.redpanda_binary.path,
+        "rp_util": package_content.rp_util.path if package_content.rp_util else None,
+        "iotune": package_content.iotune.path if package_content.iotune else None,
+        "hwloc_calc": package_content.hwloc_calc.path if package_content.hwloc_calc else None,
+        "hwloc_distrib": package_content.hwloc_distrib.path if package_content.hwloc_distrib else None,
+        "openssl": package_content.openssl.path if package_content.openssl else None,
         "rpk": package_content.rpk_binary.path if package_content.rpk_binary else None,
         "shared_libraries": [solib.path for solib in package_content.shared_libraries],
         "default_yaml_config": ctx.file.default_yaml_config.path if ctx.file.default_yaml_config else None,
+        "fips": {"module": ctx.file.fips_module.path, "config": ctx.file.fips_config.path} if fips_enabled else None,
         "owner": ctx.attr.owner,
         "directory_mode": use_dir,
     }
@@ -109,10 +160,23 @@ def _impl(ctx):
 
     inputs = [cfg_file, package_content.redpanda_binary] + package_content.shared_libraries
 
-    if package_content.rpk_binary:
-        inputs.append(package_content.rpk_binary)
-    if ctx.file.default_yaml_config:
-        inputs.append(ctx.file.default_yaml_config)
+    optional_inputs = [
+        package_content.rp_util,
+        package_content.iotune,
+        package_content.hwloc_calc,
+        package_content.hwloc_distrib,
+        package_content.openssl,
+        package_content.rpk_binary,
+        ctx.file.default_yaml_config,
+    ]
+
+    for input in optional_inputs:
+        if input != None:
+            inputs.append(input)
+
+    if fips_enabled:
+        inputs.append(ctx.file.fips_module)
+        inputs.append(ctx.file.fips_config)
 
     # run the packaging tool
     ctx.actions.run(
@@ -138,7 +202,28 @@ redpanda_package = rule(
             allow_single_file = True,
             mandatory = True,
         ),
+        "rp_util": attr.label(
+            allow_single_file = True,
+        ),
+        "iotune": attr.label(
+            allow_single_file = True,
+        ),
+        "hwloc_calc": attr.label(
+            allow_single_file = True,
+        ),
+        "hwloc_distrib": attr.label(
+            allow_single_file = True,
+        ),
+        "openssl": attr.label(
+            allow_single_file = True,
+        ),
         "default_yaml_config": attr.label(
+            allow_single_file = True,
+        ),
+        "fips_module": attr.label(
+            allow_single_file = True,
+        ),
+        "fips_config": attr.label(
             allow_single_file = True,
         ),
         "rpk_binary": attr.label(

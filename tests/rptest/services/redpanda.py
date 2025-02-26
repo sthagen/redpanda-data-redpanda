@@ -3827,10 +3827,16 @@ class RedpandaService(RedpandaServiceBase):
             if manifest_dump_limit == 0 and key_dump_limit == 0:
                 break
 
-        archive_basename = "cloud_diagnostics.zip"
-        archive_path = os.path.join(
+        service_dir = os.path.join(
             TestContext.results_dir(self._context, self._context.test_index),
-            archive_basename)
+            self.service_id)
+
+        if not os.path.isdir(service_dir):
+            mkdir_p(service_dir)
+
+        archive_basename = "cloud_diagnostics.zip"
+        archive_path = os.path.join(service_dir, archive_basename)
+
         with zipfile.ZipFile(archive_path, mode='w') as archive:
             for m in manifests_to_dump:
                 self.logger.info(f"Fetching manifest {m}")

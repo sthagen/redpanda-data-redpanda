@@ -110,9 +110,19 @@ class CloudClusterUtils:
         self.logger.debug(f"Running '{cmd}'")
         return self.rpk._execute(cmd, env=self.env, timeout=timeout)
 
+    # rpk_cloud_logout clears credentials
+    def rpk_cloud_logout(self):
+        self.logger.debug(f"Clearing rpk login")
+        cmd = self._get_rpk_cloud_cmd()
+        cmd += ["logout", "--clear-credentials"]
+        return self._exec(cmd)
+
     def rpk_cloud_login(self, client_id, client_secret):
+        # first, log out and clear client credentials
+        self.rpk_cloud_logout()
+
         # perform cloud login
-        self.logger.debug(f"...[{client_id}] Loggin in to cloud cluster")
+        self.logger.debug(f"...[{client_id}] Logging in to cloud cluster")
         cmd = self._get_rpk_cloud_cmd()
         cmd += [
             "login", "--save", f"--client-id={client_id}",

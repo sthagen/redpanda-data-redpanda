@@ -706,6 +706,7 @@ cc_binary(
     srcs = [
         "apps/iotune/iotune.cc",
     ],
+    visibility = ["//visibility:public"],
     deps = [
         ":seastar",
         "@boost//:program_options",

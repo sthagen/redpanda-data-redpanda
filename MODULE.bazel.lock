@@ -2242,7 +2242,7 @@
         "usagesDigest": "w/4oKk2OAM/M7lcmdc7YdBkwIxjG2XrXTu3iGgs17Kk=",
         "recordedFileInputs": {
           "@@rules_python~//tools/publish/requirements_linux.txt": "8175b4c8df50ae2f22d1706961884beeb54e7da27bd2447018314a175981997d",
-          "@@//bazel/thirdparty/requirements.txt": "467beb453d7c6af2a46102447295eeb12590cf33d7e9f52c1bccf7a0ee526b66",
+          "@@//bazel/thirdparty/requirements.txt": "a1a545828dbec7ea21ad5f6f8d0fadba4c3f4c818229838ac456f690f18a18a5",
           "@@rules_fuzzing~//fuzzing/requirements.txt": "ab04664be026b632a0d2a2446c4f65982b7654f5b6851d2f9d399a19b7242a5b",
           "@@rules_python~//tools/publish/requirements_windows.txt": "7673adc71dc1a81d3661b90924d7a7c0fc998cd508b3cb4174337cef3f2de556",
           "@@protobuf~//python/requirements.txt": "983be60d3cec4b319dcab6d48aeb3f5b2f7c3350f26b3a9e97486c37967c73c5",
@@ -2403,7 +2403,7 @@
               ],
               "python_interpreter_target": "@@rules_python~~python~python_3_12_host//:python",
               "repo": "python_deps_312",
-              "requirement": "MarkupSafe==2.1.2 --hash=sha256:abcabc8c2b26036d62d4c746381a6f7cf60aafcc653198ad678306986b09450d"
+              "requirement": "MarkupSafe==2.1.5 --hash=sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5"
             }
           },
           "python_deps_312_psutil": {

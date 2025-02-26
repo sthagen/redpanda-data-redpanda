@@ -97,9 +97,9 @@ expand_template(
 
 genrule(
     name = "fipsmodule_cnf",
-    srcs = ["@openssl-fips//:gen_dir"],
+    srcs = ["@openssl-fips//:fipsmodule_cnf"],
     outs = ["etc/ssl/fipsmodule.cnf"],
-    cmd = "cp -L $(SRCS)/ssl/fipsmodule.cnf $@",
+    cmd = "cp -L $(SRCS) $@",
 )
 
 common_data_deps = [

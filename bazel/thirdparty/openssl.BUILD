@@ -72,10 +72,16 @@ configure_make(
     ],
 )
 
+# This is only the plain binary and does not have LD_LIBRARY_PATH
+# properly setup, so don't expect to be able to easily run this
+# binary and it pickup the proper shared libraries.
 filegroup(
-    name = "gen_dir",
+    name = "openssl_binary",
     srcs = [":openssl"],
-    output_group = "gen_dir",
+    output_group = "openssl",
+    visibility = [
+        "//visibility:public",
+    ],
 )
 
 select_file(
@@ -87,6 +93,7 @@ select_file(
     ],
 )
 
+# If you need to bazel_run or use a genrule with openssl, this is the target you want
 runnable_binary(
     name = "openssl_exe",
     binary = "openssl",
