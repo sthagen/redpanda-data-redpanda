@@ -9,8 +9,15 @@ go_library(
     ],
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors",
     visibility = ["//visibility:public"],
-    deps = [
-        "//src/go/rpk/pkg/tuners/executors/commands",
-        "@com_github_spf13_afero//:afero",
-    ],
+    deps = select({
+        "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/tuners/executors/commands",
+            "@com_github_spf13_afero//:afero",
+        ],
+        "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/tuners/executors/commands",
+            "@com_github_spf13_afero//:afero",
+        ],
+        "//conditions:default": [],
+    }),
 )

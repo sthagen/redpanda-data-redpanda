@@ -267,7 +267,7 @@ public:
     // Returns the dirty ratio of the log.
     // The dirty ratio is the ratio of bytes in closed, dirty segments to the
     // total number of bytes in all closed segments in the log.
-    double dirty_ratio() const;
+    double dirty_ratio();
 
 private:
     friend class disk_log_appender; // for multi-term appends
@@ -504,7 +504,21 @@ private:
     // closed_segment_bytes, and conditionally removed from dirty_segment_bytes.
     void subtract_segment_bytes(ss::lw_shared_ptr<segment> s, ssize_t bytes);
 
+    // Performs a manual O(n) reset of the dirty and closed bytes in the log by
+    // iterating over segment in the log. Used as a safety hatch in
+    // dirty_ratio() to prevent returning a bogus value due to improper
+    // book-keeping.
+    void reset_dirty_and_closed_bytes();
+
     bool _compaction_enabled;
+
+    // The counter for the number of self compactions that have occured in
+    // adjacent_merge_compact() since the last adjacent merge operation was
+    // triggered. Used in combination with the cluster tunable
+    // `log_compaction_adjacent_merge_self_compaction_count`, which sets the
+    // number of self compactions that must occur before attempting to
+    // compaction adjacent segments.
+    size_t _adjacent_merge_counter{0};
 };
 
 } // namespace storage

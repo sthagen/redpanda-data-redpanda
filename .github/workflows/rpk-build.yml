@@ -21,21 +21,35 @@ on:
       - 'src/v/pandaproxy/schema_registry/protobuf/**'
       - '.github/workflows/rpk-build.yml'
 jobs:
-  test:
-    name: Test rpk
+  build:
     strategy:
       matrix:
-        os: [linux, darwin, windows]
-        arch: [amd64, arm64]
-    runs-on: ubuntu-latest
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: linux
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    runs-on: ubuntu-24.04
     steps:
-      - name: Check out code
-        uses: actions/checkout@v4
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
         with:
           go-version: stable
           cache-dependency-path: 'src/go/rpk/go.sum'
-      - name: Run tests
+      - run: GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o rpk cmd/rpk/main.go
         working-directory: src/go/rpk/
-        run: go run gotest.tools/gotestsum@v1.11.0 -- -cover ./...
+  test:
+    strategy:
+      matrix:
+        runner: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache-dependency-path: 'src/go/rpk/go.sum'
+      - run: go run gotest.tools/gotestsum@v1.12.0 -- -cover ./...
+        working-directory: src/go/rpk/

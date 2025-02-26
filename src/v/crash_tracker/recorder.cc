@@ -17,6 +17,7 @@
 #include "crash_tracker/types.h"
 #include "model/timestamp.h"
 #include "random/generators.h"
+#include "utils/directory_walker.h"
 #include "utils/file_io.h"
 
 #include <seastar/core/file.hh>
@@ -33,6 +34,22 @@ using namespace std::chrono_literals;
 namespace crash_tracker {
 
 static constexpr std::string_view crash_report_suffix = ".crash";
+
+namespace {
+
+std::filesystem::path
+to_upload_marker_path(const std::filesystem::path& crash_report_path) {
+    return crash_report_path.string() + recorder::upload_marker_suffix;
+}
+
+std::filesystem::path
+to_crash_report_path(const std::filesystem::path& upload_marker_path) {
+    auto full_path = upload_marker_path.string();
+    return full_path.substr(
+      0, full_path.size() - recorder::upload_marker_suffix.size());
+}
+
+} // namespace
 
 recorder& get_recorder() {
     static recorder inst;
@@ -96,9 +113,41 @@ ss::future<> recorder::remove_old_crashfiles() const {
     co_return;
 }
 
+namespace {
+ss::future<> upload_marker_walker_fn(
+  std::filesystem::path basedir, ss::directory_entry entry) {
+    const auto path = (basedir / std::string_view{entry.name}).string();
+    if (!path.ends_with(recorder::upload_marker_suffix)) {
+        // Not an upload marker
+        co_return;
+    }
+
+    auto dangling = !co_await ss::file_exists(
+      to_crash_report_path(std::filesystem::path{path}).string());
+    if (dangling) {
+        vlog(
+          ctlog.trace, "Removing dangling crash report upload marker {}", path);
+        co_await ss::remove_file(path);
+    }
+}
+} // namespace
+
+ss::future<> recorder::remove_dangling_upload_markers() const {
+    auto basedir = config::node().crash_report_dir_path();
+    if (!co_await ss::file_exists(basedir.string())) {
+        co_return;
+    }
+
+    co_await directory_walker::walk(
+      basedir.string(), [basedir](ss::directory_entry entry) -> ss::future<> {
+          return upload_marker_walker_fn(basedir, std::move(entry));
+      });
+}
+
 ss::future<> recorder::start() {
     co_await ensure_crashdir_exists();
     co_await remove_old_crashfiles();
+    co_await remove_dangling_upload_markers();
     co_await _writer.initialize(co_await generate_crashfile_name());
     ::detail::g_assert_log_holder.register_cb(
       [](std::string_view msg) { get_recorder().record_crash_vassert(msg); });
@@ -231,19 +280,58 @@ void recorder::record_crash_vassert(std::string_view msg) {
     _writer.write();
 }
 
+ss::future<bool> recorder::recorded_crash::is_uploaded() const {
+    co_return co_await ss::file_exists(
+      to_upload_marker_path(file_path).string());
+}
+
+ss::future<> recorder::recorded_crash::mark_uploaded() const {
+    // Create an empty upload marker
+    const auto marker_path = to_upload_marker_path(file_path).string();
+    auto f = co_await ss::open_file_dma(marker_path, ss::open_flags::create);
+    co_await f.close();
+    co_return;
+};
+
 std::chrono::system_clock::time_point
 recorder::recorded_crash::timestamp() const {
-    auto recorded_timestamp_opt = crash
-                                    ? std::make_optional(
-                                        model::to_time_point(crash->crash_time))
-                                    : std::nullopt;
-    auto lwt_sys_timepoint = std::chrono::system_clock::time_point{
-      std::chrono::duration_cast<std::chrono::system_clock::duration>(
-        last_write_time.time_since_epoch())};
-
     // Prefer the recorded timestamp, fall back to the last write time
-    return recorded_timestamp_opt.value_or(lwt_sys_timepoint);
+    return crash ? model::to_time_point(crash->crash_time) : last_write_time;
 }
+
+namespace {
+ss::future<> recorded_crashes_walker_fn(
+  std::filesystem::path basedir,
+  ss::directory_entry entry,
+  std::vector<recorder::recorded_crash>& result,
+  recorder::include_malformed_files incl_malformed) {
+    const auto path = (basedir / std::string_view{entry.name}).string();
+    if (!path.ends_with(crash_report_suffix)) {
+        // Filter only for crash files
+        co_return;
+    }
+
+    auto file_stats = co_await ss::file_stat(path);
+
+    auto buf = co_await read_fully(path);
+    try {
+        auto crash_desc = serde::from_iobuf<crash_description>(std::move(buf));
+        result.emplace_back(
+          path, std::move(crash_desc), file_stats.time_changed);
+    } catch (const serde::serde_exception& e) {
+        vlog(
+          ctlog.debug,
+          "Exception while deserializing a crash report file {}: {}",
+          path,
+          e);
+        if (incl_malformed) {
+            result.emplace_back(path, std::nullopt, file_stats.time_changed);
+        } else {
+            vlog(ctlog.warn, "Ignoring malformed crash report file {}", path);
+        }
+    }
+}
+} // namespace
 
 ss::future<std::vector<recorder::recorded_crash>>
 recorder::get_recorded_crashes(
@@ -254,36 +342,12 @@ recorder::get_recorded_crashes(
         co_return result;
     }
 
-    for (const auto& entry :
-         std::filesystem::directory_iterator(crash_report_dir)) {
-        if (!entry.path().string().ends_with(crash_report_suffix)) {
-            // Filter only for crash files
-            continue;
-        }
-
-        auto buf = co_await read_fully(entry.path());
-        try {
-            auto crash_desc = serde::from_iobuf<crash_description>(
-              std::move(buf));
-            result.emplace_back(
-              entry.path(), std::move(crash_desc), entry.last_write_time());
-        } catch (const serde::serde_exception& e) {
-            vlog(
-              ctlog.debug,
-              "Exception while deserializing a crash report file {}: {}",
-              entry.path(),
-              e);
-            if (incl_malformed) {
-                result.emplace_back(
-                  entry.path(), std::nullopt, entry.last_write_time());
-            } else {
-                vlog(
-                  ctlog.warn,
-                  "Ignoring malformed crash report file {}",
-                  entry.path());
-            }
-        }
-    }
+    co_await directory_walker::walk(
+      crash_report_dir.string(),
+      [crash_report_dir, &result, incl_malformed](ss::directory_entry entry) {
+          return recorded_crashes_walker_fn(
+            crash_report_dir, std::move(entry), result, incl_malformed);
+      });
 
     std::sort(
       result.begin(),

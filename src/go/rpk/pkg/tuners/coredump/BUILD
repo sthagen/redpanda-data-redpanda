@@ -5,12 +5,21 @@ go_library(
     srcs = ["tuner.go"],
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/coredump",
     visibility = ["//visibility:public"],
-    deps = [
-        "//src/go/rpk/pkg/tuners",
-        "//src/go/rpk/pkg/tuners/executors",
-        "//src/go/rpk/pkg/tuners/executors/commands",
-        "@com_github_spf13_afero//:afero",
-    ],
+    deps = select({
+        "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/tuners",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/tuners/executors/commands",
+            "@com_github_spf13_afero//:afero",
+        ],
+        "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/tuners",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/tuners/executors/commands",
+            "@com_github_spf13_afero//:afero",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
@@ -18,9 +27,17 @@ go_test(
     size = "small",
     srcs = ["tuner_test.go"],
     embed = [":coredump"],
-    deps = [
-        "//src/go/rpk/pkg/tuners/executors",
-        "@com_github_spf13_afero//:afero",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = select({
+        "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/tuners/executors",
+            "@com_github_spf13_afero//:afero",
+            "@com_github_stretchr_testify//require",
+        ],
+        "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/tuners/executors",
+            "@com_github_spf13_afero//:afero",
+            "@com_github_stretchr_testify//require",
+        ],
+        "//conditions:default": [],
+    }),
 )

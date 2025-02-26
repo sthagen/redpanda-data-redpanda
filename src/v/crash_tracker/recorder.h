@@ -27,11 +27,12 @@ namespace crash_tracker {
 class recorder {
 public:
     static constexpr auto crash_files_to_keep = 50;
+    static constexpr std::string upload_marker_suffix = ".uploaded";
 
     struct recorded_crash {
         std::filesystem::path file_path;
         std::optional<crash_description> crash;
-        std::filesystem::file_time_type last_write_time;
+        std::chrono::system_clock::time_point last_write_time;
 
         ss::future<bool> is_uploaded() const;
         ss::future<> mark_uploaded() const;
@@ -67,6 +68,7 @@ private:
     ss::future<> ensure_crashdir_exists() const;
     ss::future<std::filesystem::path> generate_crashfile_name() const;
     ss::future<> remove_old_crashfiles() const;
+    ss::future<> remove_dangling_upload_markers() const;
 
     prepared_writer _writer;
 

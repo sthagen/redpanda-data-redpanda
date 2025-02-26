@@ -116,6 +116,7 @@ class NessieCatalog(CatalogService):
         """
         These options don't work nicely with conversion to env variable format.
         Specify them as Java -D properties instead.
+        https://projectnessie.org/nessie-latest/configuration/#s3-default-bucket-settings
         """
         d_flags = ""
         if isinstance(self.credentials, cloud_storage.S3Credentials):
@@ -125,7 +126,7 @@ class NessieCatalog(CatalogService):
             d_flags += "-Dnessie.catalog.validate-secrets=true"
         elif isinstance(self.credentials,
                         cloud_storage.AWSInstanceMetadataCredentials):
-            d_flags += "-Dnessie.catalog.service.s3.default-options.default-options.server-auth-mode=APPLICATION_GLOBAL"
+            d_flags += "-Dnessie.catalog.service.s3.default-options.auth-type=APPLICATION_GLOBAL"
         return d_flags
 
     def _java_cmd(self, node):

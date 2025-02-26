@@ -8,19 +8,34 @@ go_library(
     ],
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/iotune",
     visibility = ["//visibility:public"],
-    deps = [
-        "//src/go/rpk/pkg/cloud/provider",
-        "//src/go/rpk/pkg/os",
-        "@org_uber_go_zap//:zap",
-    ],
+    deps = select({
+        "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/cloud/provider",
+            "//src/go/rpk/pkg/os",
+            "@org_uber_go_zap//:zap",
+        ],
+        "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/cloud/provider",
+            "//src/go/rpk/pkg/os",
+            "@org_uber_go_zap//:zap",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
     name = "iotune_test",
     size = "small",
     srcs = ["data_test.go"],
-    deps = [
-        ":iotune",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = select({
+        "@rules_go//go/platform:android": [
+            ":iotune",
+            "@com_github_stretchr_testify//require",
+        ],
+        "@rules_go//go/platform:linux": [
+            ":iotune",
+            "@com_github_stretchr_testify//require",
+        ],
+        "//conditions:default": [],
+    }),
 )

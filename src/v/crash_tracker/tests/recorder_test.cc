@@ -64,6 +64,80 @@ TEST_F(RecorderTest, TestFileCleanup) {
     ASSERT_EQ(crashes.size(), recorder::crash_files_to_keep);
 }
 
+TEST_F(RecorderTest, TestUploadMarkers) {
+    constexpr auto n_reports = 5;
+
+    // Generate some crash reports
+    const auto test_eptr = std::make_exception_ptr(std::runtime_error{""});
+    for (size_t i = 0; i < n_reports; i++) {
+        auto rec = get_test_recorder();
+        rec.start().get();
+        rec.record_crash_exception(test_eptr);
+    }
+
+    auto rec = get_test_recorder();
+    rec.start().get();
+
+    // Verify upload markers work as expected
+    auto crashes = rec.get_recorded_crashes().get();
+    for (auto& report : crashes) {
+        ASSERT_EQ(report.is_uploaded().get(), false);
+        report.mark_uploaded().get();
+        ASSERT_EQ(report.is_uploaded().get(), true);
+    }
+}
+
+namespace {
+
+size_t count_upload_markers() {
+    size_t result = 0;
+    for (const auto& entry : std::filesystem::directory_iterator(
+           config::node().crash_report_dir_path())) {
+        if (entry.path().string().ends_with(recorder::upload_marker_suffix)) {
+            result++;
+        }
+    }
+    return result;
+}
+
+} // namespace
+
+TEST_F(RecorderTest, TestUploadMarkerCleanup) {
+    const auto test_eptr = std::make_exception_ptr(std::runtime_error{""});
+
+    // Simulate lots of crashed restarts to generate crash reports on disk
+    for (size_t i = 0; i < recorder::crash_files_to_keep + 5; i++) {
+        auto rec = get_test_recorder();
+        rec.start().get();
+
+        // Mark all earlier crash reports as uploaded before each crash
+        auto crashes = rec.get_recorded_crashes().get();
+        for (auto& report : crashes) {
+            report.mark_uploaded().get();
+        }
+
+        rec.record_crash_exception(test_eptr);
+    }
+    // Note: the crash report generated in the last iteration was not been
+    // marked uploaded
+
+    // Run one more restart and observe that old crash files and crash markers
+    // are cleaned up
+    auto rec = get_test_recorder();
+    rec.start().get();
+
+    // Verify that all but the latest report has been marked uploaded
+    auto crashes = rec.get_recorded_crashes().get();
+    ASSERT_EQ(crashes.size(), recorder::crash_files_to_keep);
+    for (size_t i = 0; i < crashes.size(); ++i) {
+        const auto expect_uploaded = (i != (crashes.size() - 1));
+        ASSERT_EQ(crashes[i].is_uploaded().get(), expect_uploaded);
+    }
+
+    // Verify that there are no dangling upload markers
+    ASSERT_EQ(count_upload_markers(), recorder::crash_files_to_keep - 1);
+}
+
 class ParametrizedRecorderTest
   : public testing::TestWithParam<recorder::recorded_signo> {
 public:

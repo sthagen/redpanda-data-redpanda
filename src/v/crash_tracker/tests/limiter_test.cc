@@ -39,8 +39,7 @@ TEST_F(LimiterTest, TestDescribeCrashes) {
             res.addition_info = crash_description::reserved_string_t{
               "false != true at example.cc:123"};
         }
-        return recorder::recorded_crash{
-          "", std::move(res), std::chrono::file_clock::time_point{}};
+        return recorder::recorded_crash{"", std::move(res), {}};
     };
 
     crashes.emplace_back(make_crash(with_additional_info::no));

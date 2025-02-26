@@ -1006,6 +1006,15 @@ configuration::configuration()
       "Use sliding window compaction.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       true)
+  , log_compaction_adjacent_merge_self_compaction_count(
+      *this,
+      "log_compaction_adjacent_merge_self_compaction_count",
+      "The number of self compactions that must occur before an adjacent "
+      "compaction is attempted in the log. If set to `std::nullopt`, every "
+      "segment in the log must be self-compacted before an adjacent compaction "
+      "is attempted.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      10)
   , retention_bytes(
       *this,
       "retention_bytes",

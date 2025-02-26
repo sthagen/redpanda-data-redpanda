@@ -23,8 +23,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/go/rpk/pkg/os",
-        "//src/go/rpk/pkg/tuners/executors",
-        "//src/go/rpk/pkg/tuners/executors/commands",
         "//src/go/rpk/pkg/utils",
         "@com_github_docker_go_units//:go-units",
         "@com_github_spf13_afero//:afero",
@@ -37,6 +35,8 @@ go_library(
         ],
         "@rules_go//go/platform:android": [
             "//src/go/rpk/pkg/config",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/tuners/executors/commands",
             "@com_github_hashicorp_go_multierror//:go-multierror",
             "@com_github_tklauser_go_sysconf//:go-sysconf",
         ],
@@ -72,6 +72,8 @@ go_library(
         ],
         "@rules_go//go/platform:linux": [
             "//src/go/rpk/pkg/config",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/tuners/executors/commands",
             "@com_github_hashicorp_go_multierror//:go-multierror",
             "@com_github_tklauser_go_sysconf//:go-sysconf",
         ],
@@ -127,10 +129,18 @@ go_test(
     embed = [":system"],
     deps = [
         "//src/go/rpk/pkg/config",
-        "//src/go/rpk/pkg/tuners/executors",
-        "//src/go/rpk/pkg/utils",
         "@com_github_spf13_afero//:afero",
         "@com_github_stretchr_testify//assert",
         "@com_github_stretchr_testify//require",
-    ],
+    ] + select({
+        "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/utils",
+        ],
+        "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/utils",
+        ],
+        "//conditions:default": [],
+    }),
 )

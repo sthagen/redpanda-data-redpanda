@@ -5521,3 +5521,59 @@ FIXTURE_TEST(dirty_and_closed_bytes_bookkeeping, storage_test_fixture) {
         check_dirty_and_closed_segment_bytes(log);
     }
 }
+
+FIXTURE_TEST(
+  negative_dirty_and_closed_bytes_triggers_reset, storage_test_fixture) {
+    using namespace storage;
+    disk_log_builder b;
+    b | start();
+    auto cleanup = ss::defer([&] { b.stop().get(); });
+    auto& disk_log = b.get_disk_log_impl();
+    const auto num_segs = 5;
+    const auto start_offset = 0;
+    const auto records_per_seg = 150;
+    for (int i = 0; i < num_segs; ++i) {
+        auto offset = start_offset + i * records_per_seg;
+        b | add_segment(offset)
+          | add_random_batch(
+            offset, records_per_seg, maybe_compress_batches::yes);
+        disk_log.force_roll(ss::default_priority_class()).get();
+    }
+
+    auto saved_dirty_segment_bytes = disk_log.dirty_segment_bytes();
+    auto saved_closed_segment_bytes = disk_log.closed_segment_bytes();
+    BOOST_REQUIRE_EQUAL(disk_log.size_bytes(), saved_dirty_segment_bytes);
+    BOOST_REQUIRE_EQUAL(saved_dirty_segment_bytes, saved_closed_segment_bytes);
+
+    // Add a large negative number to dirty segment bytes.
+    ssize_t large_negative_number
+      = -5 * static_cast<ssize_t>(disk_log.size_bytes());
+    b.add_dirty_segment_bytes(large_negative_number);
+
+    BOOST_REQUIRE_LT(disk_log.dirty_segment_bytes(), 0);
+    // Calling disk_log.dirty_ratio() will trigger
+    // disk_log_impl::reset_dirty_and_closed_bytes(), a safety hatch that should
+    // reset the dirty segment bytes to the proper value.
+    auto dirty_ratio = disk_log.dirty_ratio();
+
+    static const double epsilon = 1.0e-6;
+    BOOST_REQUIRE_CLOSE(dirty_ratio, 1.0, epsilon);
+
+    // Dirty segment bytes should be equal to its value before the bogus
+    // negative amount was added.
+    BOOST_REQUIRE_EQUAL(
+      saved_dirty_segment_bytes, disk_log.dirty_segment_bytes());
+
+    // We can repeat the same process with the closed segment bytes.
+    b.add_closed_segment_bytes(large_negative_number);
+
+    BOOST_REQUIRE_LT(disk_log.closed_segment_bytes(), 0);
+
+    // Trigger the safety hatch again.
+    dirty_ratio = disk_log.dirty_ratio();
+
+    BOOST_REQUIRE_CLOSE(dirty_ratio, 1.0, epsilon);
+
+    BOOST_REQUIRE_EQUAL(
+      saved_closed_segment_bytes, disk_log.closed_segment_bytes());
+}

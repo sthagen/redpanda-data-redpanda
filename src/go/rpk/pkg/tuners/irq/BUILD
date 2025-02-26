@@ -12,15 +12,27 @@ go_library(
     ],
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq",
     visibility = ["//visibility:public"],
-    deps = [
-        "//src/go/rpk/pkg/os",
-        "//src/go/rpk/pkg/tuners/executors",
-        "//src/go/rpk/pkg/tuners/executors/commands",
-        "//src/go/rpk/pkg/tuners/hwloc",
-        "//src/go/rpk/pkg/utils",
-        "@com_github_spf13_afero//:afero",
-        "@org_uber_go_zap//:zap",
-    ],
+    deps = select({
+        "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/tuners/executors/commands",
+            "//src/go/rpk/pkg/tuners/hwloc",
+            "//src/go/rpk/pkg/utils",
+            "@com_github_spf13_afero//:afero",
+            "@org_uber_go_zap//:zap",
+        ],
+        "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/tuners/executors/commands",
+            "//src/go/rpk/pkg/tuners/hwloc",
+            "//src/go/rpk/pkg/utils",
+            "@com_github_spf13_afero//:afero",
+            "@org_uber_go_zap//:zap",
+        ],
+        "//conditions:default": [],
+    }),
 )
 
 go_test(
@@ -34,11 +46,21 @@ go_test(
     ],
     data = glob(["testdata/**"]),
     embed = [":irq"],
-    deps = [
-        "//src/go/rpk/pkg/os",
-        "//src/go/rpk/pkg/tuners/executors",
-        "//src/go/rpk/pkg/utils",
-        "@com_github_spf13_afero//:afero",
-        "@com_github_stretchr_testify//require",
-    ],
+    deps = select({
+        "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/utils",
+            "@com_github_spf13_afero//:afero",
+            "@com_github_stretchr_testify//require",
+        ],
+        "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/os",
+            "//src/go/rpk/pkg/tuners/executors",
+            "//src/go/rpk/pkg/utils",
+            "@com_github_spf13_afero//:afero",
+            "@com_github_stretchr_testify//require",
+        ],
+        "//conditions:default": [],
+    }),
 )
