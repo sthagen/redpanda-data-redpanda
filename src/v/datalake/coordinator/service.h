@@ -22,6 +22,9 @@ public:
     ss::future<ensure_table_exists_reply> ensure_table_exists(
       ensure_table_exists_request, ::rpc::streaming_context&) override;
 
+    ss::future<ensure_dlq_table_exists_reply> ensure_dlq_table_exists(
+      ensure_dlq_table_exists_request, ::rpc::streaming_context&) override;
+
     ss::future<add_translated_data_files_reply> add_translated_data_files(
       add_translated_data_files_request, ::rpc::streaming_context&) override;
 

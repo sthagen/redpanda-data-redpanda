@@ -14,8 +14,6 @@ build --@rules_go//go/config:pure
 # https://github.com/bazel-contrib/toolchains_llvm/pull/445#issuecomment-2605443516
 build --copt=-ffile-compilation-dir=. --host_copt=-ffile-compilation-dir=.
 
-common:clang-19 --extra_toolchains=@llvm_19_toolchain//:all
-
 build:system-clang --extra_toolchains=@local_config_cc_toolchains//:all
 build:system-clang --action_env=BAZEL_COMPILER=clang
 build:system-clang --cxxopt=-std=c++23 --host_cxxopt=-std=c++23

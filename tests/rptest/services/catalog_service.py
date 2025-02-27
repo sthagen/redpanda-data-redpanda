@@ -8,10 +8,9 @@
 # by the Apache License, Version 2.0
 
 from ducktape.services.service import Service
-from ducktape.cluster.cluster import ClusterNode
 from rptest.context import cloud_storage
 
-from typing import Optional, Any
+import abc
 from enum import Enum
 
 from pyiceberg.catalog import load_catalog
@@ -37,19 +36,18 @@ def catalog_type_to_config_string(catalog_type: CatalogType) -> str:
     elif catalog_type == CatalogType.NESSIE:
         return 'nessie'
 
+    raise ValueError(f"Unsupported catalog type: {catalog_type}")
 
-class CatalogService(Service):
-    # Expected to be available after initialization of derived class.
-    # Use catalog_url property to access.
-    _catalog_url: Optional[str] = None
+
+class CatalogService(abc.ABC, Service):
     DEFAULT_WAREHOUSE_NAME = 'redpanda-iceberg-catalog'
 
     def __init__(self,
                  ctx,
                  cloud_storage_bucket: str,
                  warehouse_name: str = DEFAULT_WAREHOUSE_NAME,
-                 node: ClusterNode | None = None):
-        super(CatalogService, self).__init__(ctx, num_nodes=0 if node else 1)
+                 **kwargs):
+        super(CatalogService, self).__init__(ctx, **kwargs)
         self.dedicated_nodes = ctx.globals.get("dedicated_nodes", False)
         self.credentials = cloud_storage.Credentials.from_context(ctx)
 
@@ -57,10 +55,25 @@ class CatalogService(Service):
         self.warehouse_name = warehouse_name
         self._catalog_url = None
 
+    @abc.abstractmethod
+    def catalog_type(self) -> CatalogType:
+        ...
+
     @property
-    def catalog_url(self) -> str:
-        assert self._catalog_url, "URL not available because service is not started"
-        return self._catalog_url
+    @abc.abstractmethod
+    def iceberg_rest_url(self) -> str:
+        ...
+
+    @property
+    def vendor_api_url(self) -> str:
+        """
+        Some services (e.g. Nessie) may expose a vendor-specific API endpoint
+        that is distinct from the Iceberg REST API which can then be leveraged
+        by custom clients (e.g. Spark extensions).
+        """
+        raise NotImplementedError(
+            f"Vendor API URL not implemented for catalog type: {self.catalog_type}"
+        )
 
     def compute_warehouse_path(self):
         """
@@ -84,14 +97,9 @@ class CatalogService(Service):
             raise ValueError(
                 f"Unsupported credential type: {type(self.credentials)}")
 
-    def _client(self,
-                catalog_name: str = 'default',
-                catalog_url: Optional[str] = None):
-        if not catalog_url:
-            catalog_url = self.catalog_url
-
+    def client(self, catalog_name: str = 'default'):
         conf = dict()
-        conf["uri"] = catalog_url
+        conf["uri"] = self.iceberg_rest_url
         conf["warehouse"] = self.cloud_storage_warehouse
 
         if isinstance(self.credentials, cloud_storage.S3Credentials):

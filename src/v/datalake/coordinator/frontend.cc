@@ -124,13 +124,14 @@ auto frontend::remote_dispatch(req_t request, model::node_id leader_id) {
               ::rpc::client_opts{model::timeout_clock::now() + rpc_timeout});
         })
       .then(&::rpc::get_ctx_data<resp_t>)
-      .then([leader_id](result<resp_t> r) {
+      .then([leader_id, self = _self](result<resp_t> r) {
           if (r.has_error()) {
               vlog(
                 datalake::datalake_log.warn,
-                "got error {} on coordinator {}",
+                "got error {} sending to coordinator leader {} from node {}",
                 r.error().message(),
-                leader_id);
+                leader_id,
+                self);
               return resp_t{errc::timeout};
           }
           return r.value();

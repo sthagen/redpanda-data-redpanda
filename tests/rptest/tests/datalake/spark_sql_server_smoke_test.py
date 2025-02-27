@@ -13,7 +13,7 @@ from ducktape.mark import matrix
 
 from rptest.services.cluster import cluster
 from rptest.services.spark_service import SparkService
-from rptest.tests.datalake.iceberg_rest_catalog import IcebergRESTCatalogTest
+from rptest.tests.datalake.iceberg_rest_catalog_test import IcebergRESTCatalogTest
 from rptest.tests.datalake.utils import supported_storage_types
 
 
@@ -30,7 +30,7 @@ class SparkSmokeTest(IcebergRESTCatalogTest):
     def setUp(self):
         super().setUp()
         self.spark = SparkService(self.test_ctx,
-                                  self.catalog_service.catalog_url,
+                                  self.catalog_service.iceberg_rest_url,
                                   self.catalog_service.cloud_storage_warehouse,
                                   self.catalog_service.catalog_type())
         self.spark.start()

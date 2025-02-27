@@ -171,7 +171,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                 "iceberg_catalog_type":
                 "rest",
                 "iceberg_rest_catalog_endpoint":
-                self.catalog_service.catalog_url,
+                self.catalog_service.iceberg_rest_url,
                 "iceberg_rest_catalog_client_id":
                 "panda-user",
                 "iceberg_rest_catalog_client_secret":

@@ -435,7 +435,11 @@ private:
 namespace {
 
 // Specifies how many batches should be in the test dataset.
+#ifdef NDEBUG
 static constexpr size_t batches = 1000;
+#else
+static constexpr size_t batches = 1;
+#endif
 // Specifies how many records should be in each batch of the test dataset.
 static constexpr size_t records_per_batch = 10;
 

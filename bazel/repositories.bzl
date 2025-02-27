@@ -199,13 +199,13 @@ filegroup(
     http_archive(
         name = "x86_64_sysroot",
         build_file_content = sysroot_build_file,
-        sha256 = "7639199d529a2aee4b0007a2c55f6178235e732782ca47795a3022342e7ad985",
-        urls = ["http://redpanda-core-toolchain.s3-website-us-east-1.amazonaws.com/sysroot-ubuntu-22.04-x86_64-2025-01-26.tar.gz"],
+        sha256 = "282b7eb89ca45d2309217d5d2099cc087c1e7bd55f7891b9d2ddca648b6663b7",
+        urls = ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-x86_64-2025-02-24.tar.zst"],
     )
 
     http_archive(
         name = "aarch64_sysroot",
         build_file_content = sysroot_build_file,
-        sha256 = "536cc7a4e0eb41418239da62f7f8d7205f1006fa5670f4ab8fab4a8db86de087",
-        urls = ["http://redpanda-core-toolchain.s3-website-us-east-1.amazonaws.com/sysroot-ubuntu-22.04-aarch64-2025-01-26.tar.gz"],
+        sha256 = "a162b62d4d34588232137c8f14d45849aaa36202b9081f2718452f4a086ae817",
+        urls = ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-aarch64-2025-02-24.tar.zst"],
     )

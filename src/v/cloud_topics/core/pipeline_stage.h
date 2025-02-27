@@ -12,6 +12,8 @@
 
 #include "utils/named_type.h"
 
+#include <vector>
+
 namespace experimental::cloud_topics::core {
 
 class pipeline_stage_id {
@@ -23,9 +25,9 @@ public:
 
     ~pipeline_stage_id() = default;
     pipeline_stage_id(const pipeline_stage_id& ps) = default;
-    pipeline_stage_id(pipeline_stage_id&& ps) = delete;
+    pipeline_stage_id(pipeline_stage_id&& ps) = default;
     pipeline_stage_id& operator=(const pipeline_stage_id& ps) = default;
-    pipeline_stage_id& operator=(pipeline_stage_id&& ps) = delete;
+    pipeline_stage_id& operator=(pipeline_stage_id&& ps) = default;
 
 private:
     int _id;
@@ -47,7 +49,7 @@ public:
     pipeline_stage register_pipeline_stage() noexcept;
 
 private:
-    std::vector<const pipeline_stage_id> _stages;
+    std::vector<pipeline_stage_id> _stages;
 };
 
 } // namespace experimental::cloud_topics::core

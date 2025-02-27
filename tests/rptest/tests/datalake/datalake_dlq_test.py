@@ -522,3 +522,51 @@ class DatalakeDLQTest(RedpandaTest):
                 } if cause is not None else {})
             }).samples
         ])
+
+
+class DatalakeDLQMultinodeTest(RedpandaTest):
+    def __init__(self, test_ctx, *args, **kwargs):
+        super(DatalakeDLQMultinodeTest,
+              self).__init__(test_ctx,
+                             num_brokers=3,
+                             si_settings=SISettings(test_context=test_ctx),
+                             extra_rp_conf={
+                                 "iceberg_enabled": "true",
+                                 "iceberg_catalog_commit_interval_ms": 1000
+                             },
+                             *args,
+                             **kwargs)
+        self.test_ctx = test_ctx
+        self.topic_name = "test"
+
+    def setUp(self):
+        # Redpanda will be started by DatalakeServices
+        pass
+
+    @cluster(num_nodes=6)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            catalog_type=supported_catalog_types())
+    def test_dlq_table_with_multiple_nodes(self, cloud_storage_type,
+                                           catalog_type):
+        """
+        Produces invalid records to a `value_schema_id_prefix` mode topic,
+        expecting records to be written to the DLQ table.
+
+        This serves as a smoke test for multi-node clusters, e.g. ensuring
+        remote dispatch for the DLQ table works correctly.
+        """
+        dlq_table_name = f"{self.topic_name}~dlq"
+        num_records = 10
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              catalog_type=catalog_type,
+                              include_query_engines=[QueryEngineType.SPARK
+                                                     ]) as dl:
+            dl.create_iceberg_enabled_topic(
+                self.topic_name, iceberg_mode="value_schema_id_prefix")
+
+            dl.produce_to_topic(self.topic_name, 1, num_records)
+            dl.wait_for_translation(self.topic_name,
+                                    num_records,
+                                    table_override=dlq_table_name)
+            assert dl.num_tables() == 1, "Expected only 1 table in catalog"

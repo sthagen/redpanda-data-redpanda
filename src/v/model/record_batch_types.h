@@ -15,6 +15,7 @@
 
 #include <cstdint>
 #include <ostream>
+#include <vector>
 
 namespace model {
 enum class record_batch_type : int8_t {

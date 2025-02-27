@@ -66,7 +66,7 @@ class DatalakeServices():
                 "iceberg_catalog_type":
                 "rest",
                 "iceberg_rest_catalog_endpoint":
-                self.catalog_service.catalog_url,
+                self.catalog_service.iceberg_rest_url,
                 "iceberg_rest_catalog_client_id":
                 "panda-user",
                 "iceberg_rest_catalog_client_secret":
@@ -81,11 +81,12 @@ class DatalakeServices():
 
         for engine in self.included_query_engines:
             svc_cls = get_query_engine_by_type(engine)
-            svc = svc_cls(self.test_ctx,
-                          iceberg_catalog_uri=self.catalog_service.catalog_url,
-                          default_warehouse_dir=self.catalog_service.
-                          cloud_storage_warehouse,
-                          catalog_type=self.catalog_service.catalog_type())
+            svc = svc_cls(
+                self.test_ctx,
+                iceberg_catalog_uri=self.catalog_service.iceberg_rest_url,
+                default_warehouse_dir=self.catalog_service.
+                cloud_storage_warehouse,
+                catalog_type=self.catalog_service.catalog_type())
             svc.start()
             self.query_engines.append(svc)
 

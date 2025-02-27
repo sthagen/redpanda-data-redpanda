@@ -17,7 +17,7 @@ namespace experimental::cloud_topics::core {
 pipeline_stage_container::pipeline_stage_container(size_t max_pipeline_stages) {
     _stages.reserve(max_pipeline_stages);
     for (size_t i = 0; i < max_pipeline_stages; i++) {
-        _stages.push_back(pipeline_stage_id(static_cast<int>(i)));
+        _stages.emplace_back(static_cast<int>(i));
     }
 }
 

@@ -71,10 +71,11 @@ class IcebergRESTCatalog(CatalogService):
                  ctx,
                  cloud_storage_bucket: str,
                  warehouse_name: str = CatalogService.DEFAULT_WAREHOUSE_NAME,
-                 filesystem_wrapper_mode: bool = False,
-                 node: ClusterNode | None = None):
-        super(IcebergRESTCatalog, self).__init__(ctx, cloud_storage_bucket,
-                                                 warehouse_name, node)
+                 filesystem_wrapper_mode: bool = False):
+        super(IcebergRESTCatalog, self).__init__(ctx,
+                                                 cloud_storage_bucket,
+                                                 warehouse_name,
+                                                 num_nodes=1)
 
         self.set_filesystem_wrapper_mode(filesystem_wrapper_mode)
         # This REST server can operate in two modes.
@@ -92,15 +93,18 @@ class IcebergRESTCatalog(CatalogService):
         # Trino <-> REST server (HadoopCatalog) <-> S3
         # Trino <-> REST server (JDBC Catalog) <-> local sqllite DB.
         self.db_file = None
-
-    def catalog_name(self) -> str:
-        return self.catalog_type().value
+        self._catalog_url = None
 
     def catalog_type(self) -> CatalogType:
         if self.filesystem_wrapper_mode:
             return CatalogType.REST_HADOOP
         else:
             return CatalogType.REST_JDBC
+
+    @property
+    def iceberg_rest_url(self) -> str:
+        assert self._catalog_url, "URL not available because service is not started"
+        return self._catalog_url
 
     def set_filesystem_wrapper_mode(self, mode: bool):
         self.filesystem_wrapper_mode = mode
@@ -128,9 +132,6 @@ class IcebergRESTCatalog(CatalogService):
         else:
             raise ValueError(
                 f"Unsupported credential type: {type(self.credentials)}")
-
-    def client(self, catalog_name: str = 'default'):
-        return self._client(catalog_name=catalog_name)
 
     def _make_env(self):
         env = dict()
@@ -230,7 +231,7 @@ class IcebergRESTCatalog(CatalogService):
         self.wait(timeout_sec=30)
 
     def wait_node(self, node, timeout_sec=None):
-        check_cmd = f"pyiceberg --uri {self.catalog_url} create namespace default"
+        check_cmd = f"pyiceberg --uri {self.iceberg_rest_url} create namespace default"
 
         def _ready():
             try:

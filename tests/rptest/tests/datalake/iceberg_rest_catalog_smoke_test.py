@@ -1,7 +1,7 @@
 from rptest.services.cluster import cluster
 
 from ducktape.mark import matrix
-from rptest.tests.datalake.iceberg_rest_catalog import IcebergRESTCatalogTest
+from rptest.tests.datalake.iceberg_rest_catalog_test import IcebergRESTCatalogTest
 from pyiceberg.schema import Schema
 from pyiceberg.types import (
     TimestampType,

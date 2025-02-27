@@ -20,6 +20,7 @@
 #include "bytes/iobuf.h"
 #include "bytes/scattered_message.h"
 
+#include <deque>
 #include <exception>
 #include <numeric>
 

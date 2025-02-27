@@ -240,8 +240,8 @@ redpanda_cc_btest(
         "batch_cache_reclaim_test.cc",
     ],
     target_compatible_with = select({
-        "@seastar//:use_system_allocator": [],
-        "//conditions:default": ["@platforms//:incompatible"],
+        "@seastar//:use_system_allocator": ["@platforms//:incompatible"],
+        "//conditions:default": [],
     }),
     deps = [
         "//src/v/model",

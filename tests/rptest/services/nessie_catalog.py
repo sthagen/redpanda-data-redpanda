@@ -8,21 +8,13 @@
 # by the Apache License, Version 2.0
 
 import os
-import json
-import collections
-import re
-import time
-from typing import Optional, Any
-
-from ducktape.services.service import Service
-from ducktape.utils.util import wait_until
-from ducktape.cluster.cluster import ClusterNode
+from typing import Optional
 
 import requests
+from ducktape.utils.util import wait_until
 
-from rptest.services.tls import TLSCertManager
-from rptest.services.catalog_service import CatalogType, CatalogService
 from rptest.context import cloud_storage
+from rptest.services.catalog_service import CatalogService, CatalogType
 
 
 class NessieCatalog(CatalogService):
@@ -60,32 +52,31 @@ class NessieCatalog(CatalogService):
     def __init__(self,
                  ctx,
                  cloud_storage_bucket: str,
-                 warehouse_name: str = CatalogService.DEFAULT_WAREHOUSE_NAME,
-                 node: ClusterNode | None = None):
-        super(NessieCatalog, self).__init__(ctx, cloud_storage_bucket,
-                                            warehouse_name, node)
+                 warehouse_name: str = CatalogService.DEFAULT_WAREHOUSE_NAME):
+        super(NessieCatalog, self).__init__(ctx,
+                                            cloud_storage_bucket,
+                                            warehouse_name,
+                                            num_nodes=1)
 
         self._ctx = ctx
         self._current_reference = "main"
         self.compute_warehouse_path()
 
-    # The endpoint that directly accesses the iceberg catalog.
-    _iceberg_url: Optional[str] = None
+        self._vendor_api_url = None
+        self._catalog_url: Optional[str] = None
 
     @property
-    def iceberg_url(self) -> str:
-        assert self._iceberg_url, "URL not available because service is not started"
-        return self._iceberg_url
+    def iceberg_rest_url(self) -> str:
+        assert self._catalog_url, "URL not available because service is not started"
+        return self._catalog_url
 
-    def catalog_name(self) -> str:
-        return self.catalog_type().value
+    @property
+    def vendor_api_url(self) -> str:
+        assert self._vendor_api_url, "URL not available because service is not started"
+        return self._vendor_api_url
 
     def catalog_type(self) -> CatalogType:
         return CatalogType.NESSIE
-
-    def client(self, catalog_name: str = 'default'):
-        return self._client(catalog_name=catalog_name,
-                            catalog_url=self._iceberg_url)
 
     def _java_home(self, node):
         return node.account.ssh_output(
@@ -127,6 +118,9 @@ class NessieCatalog(CatalogService):
         elif isinstance(self.credentials,
                         cloud_storage.AWSInstanceMetadataCredentials):
             d_flags += "-Dnessie.catalog.service.s3.default-options.auth-type=APPLICATION_GLOBAL"
+        elif isinstance(self.credentials,
+                        cloud_storage.GCPInstanceMetadataCredentials):
+            d_flags += "-Dnessie.catalog.service.gcs.default-options.auth-type=APPLICATION_DEFAULT"
         return d_flags
 
     def _java_cmd(self, node):
@@ -175,8 +169,8 @@ class NessieCatalog(CatalogService):
                    err_msg="Error waiting for nessie catalog to start",
                    retry_on_exc=True)
 
-        self._iceberg_url = self._nessie_iceberg_path(node)
-        self._catalog_url = self._http_request_path_from_node(
+        self._catalog_url = self._nessie_iceberg_path(node)
+        self._vendor_api_url = self._http_request_path_from_node(
             node, NessieCatalog.NESSIE_API_VERSION)
 
     def wait_node(self, node, timeout_sec=None):

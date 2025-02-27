@@ -353,7 +353,11 @@ record_multiplexer::handle_invalid_record(
     _translation_probe.increment_invalid_record(cause);
     switch (_invalid_record_action) {
     case model::iceberg_invalid_record_action::drop:
-        vlog(_log.debug, "Dropping invalid record at offset {}", offset);
+        vlog(
+          _log.debug,
+          "Dropping invalid record at offset {}: {}",
+          offset,
+          cause);
 
         // Advance processed offset.
         if (!_result.has_value()) {
@@ -366,7 +370,11 @@ record_multiplexer::handle_invalid_record(
         co_return std::nullopt;
 
     case model::iceberg_invalid_record_action::dlq_table:
-        vlog(_log.debug, "Writing to DLQ invalid record at offset {}", offset);
+        vlog(
+          _log.debug,
+          "Writing to DLQ invalid record at offset {}: {}",
+          offset,
+          cause);
 
         if (!_invalid_record_writer) {
             auto ensure_res = co_await _table_creator.ensure_dlq_table(

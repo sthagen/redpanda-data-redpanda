@@ -426,17 +426,18 @@ def redpanda_cc_bench(
             "exec $@ --iterations=1 --runs=1 --duration=0 --no-stdout --overprovisioned",
         ],
     )
+    test_data, test_env = _test_options()
     native.sh_test(
         name = name + "_test",
         timeout = timeout,
         tags = resource_tags + tags,
         srcs = [name + "_test_script"],
-        env = env,
+        env = env | test_env,
         args = [
             "$(rootpath :{})".format(name),
         ] + args,
         data = [
             ":" + name,
-        ] + data,
+        ] + data + test_data,
         target_compatible_with = target_compatible_with,
     )

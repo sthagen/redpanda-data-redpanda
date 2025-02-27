@@ -15,6 +15,8 @@
 
 #include <seastar/core/sleep.hh>
 
+#include <queue>
+
 using namespace std::chrono_literals;
 
 static constexpr auto polling_interval = 1s;
