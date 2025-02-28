@@ -28,12 +28,11 @@ class ShadowIndexingCompactedTopicTest(EndToEndTest):
         self.si_settings = SISettings(test_context,
                                       cloud_storage_max_connections=5,
                                       fast_uploads=True)
-        extra_rp_conf = dict(
-            enable_leader_balancer=False,
-            partition_autobalancing_mode="off",
-            group_initial_rebalance_delay=300,
-            compacted_log_segment_size=self.segment_size,
-        )
+        extra_rp_conf = dict(enable_leader_balancer=False,
+                             partition_autobalancing_mode="off",
+                             group_initial_rebalance_delay=300,
+                             compacted_log_segment_size=self.segment_size,
+                             min_cleanable_dirty_ratio=0.0)
         self.redpanda = make_redpanda_service(context=self.test_context,
                                               num_brokers=self.num_brokers,
                                               si_settings=self.si_settings,

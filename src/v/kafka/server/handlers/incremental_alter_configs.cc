@@ -397,7 +397,14 @@ create_topic_properties_update(
                   iceberg_target_lag_ms_validator{});
                 continue;
             }
-
+            if (cfg.name == topic_property_min_cleanable_dirty_ratio) {
+                parse_and_set_tristate(
+                  update.properties.min_cleanable_dirty_ratio,
+                  cfg.value,
+                  op,
+                  min_cleanable_dirty_ratio_validator{});
+                continue;
+            }
         } catch (const validation_error& e) {
             vlog(
               klog.debug,

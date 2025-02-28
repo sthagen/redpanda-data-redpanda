@@ -16,6 +16,7 @@
 #include "http/rest_client/rest_entity.h"
 #include "http/utils.h"
 #include "iceberg/json_writer.h"
+#include "iceberg/logger.h"
 #include "iceberg/rest_client/entities.h"
 #include "iceberg/rest_client/json.h"
 #include "iceberg/table_requests_json.h"
@@ -224,7 +225,14 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
         }
 
         retriable_errors.emplace_back(std::move(error.err));
-        co_await ss::sleep_abortable(permit.delay, rtc.root_abort_source());
+        auto sleep_fut = co_await ss::coroutine::as_future(
+          ss::sleep_abortable(permit.delay, rtc.root_abort_source()));
+        if (sleep_fut.failed()) {
+            auto ex = sleep_fut.get_exception();
+            vlog(log.debug, "Exception during sleep: {}", ex);
+            co_return tl::unexpected(
+              retries_exhausted{.errors = std::move(retriable_errors)});
+        }
     }
 }
 

@@ -78,6 +78,9 @@ class Reader:
     def read_uint64(self):
         return struct.unpack(self.with_endianness('Q'), self.stream.read(8))[0]
 
+    def read_double(self):
+        return struct.unpack(self.with_endianness('d'), self.stream.read(8))[0]
+
     def read_serde_enum(self):
         return self.read_int32()
 

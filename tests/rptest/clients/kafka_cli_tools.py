@@ -247,13 +247,16 @@ sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthL
 
         assert configs is not None, "didn't find Configs: section"
 
-        def maybe_int(key: str, value: str):
+        def maybe_convert_value(key: str, value: str):
             if key in [
                     "retention_ms", "retention_bytes", 'segment_bytes',
                     'delete_retention_ms'
             ]:
                 return int(value)
-            return value
+            elif key in ['min_cleanable_dirty_ratio']:
+                return float(value)
+            else:
+                return value
 
         def fix_key(key: str):
             return key.replace(".", "_")
@@ -265,7 +268,10 @@ sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthL
         ]
 
         configs = {fix_key(kv[0].strip()): kv[1].strip() for kv in configs}
-        configs = {kv[0]: maybe_int(kv[0], kv[1]) for kv in configs.items()}
+        configs = {
+            kv[0]: maybe_convert_value(kv[0], kv[1])
+            for kv in configs.items()
+        }
         configs["replication_factor"] = replication_factor
         configs["partition_count"] = partitions
         # The cast below is needed because a dict cannot be unpacked as keyword args

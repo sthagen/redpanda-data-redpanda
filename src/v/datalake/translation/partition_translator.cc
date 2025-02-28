@@ -253,6 +253,7 @@ ss::future<> partition_translator::stop() {
     _as.request_abort();
     co_await std::move(f);
     _partition->unregister_flush_hook(_partition_flush_subscription);
+    vlog(_logger.debug, "stopped partition translator in term {}", _term);
 }
 
 kafka::offset partition_translator::min_offset_for_translation() const {

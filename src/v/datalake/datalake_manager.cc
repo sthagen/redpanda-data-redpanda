@@ -263,6 +263,7 @@ ss::future<> datalake_manager::start() {
 }
 
 ss::future<> datalake_manager::stop() {
+    vlog(datalake_log.debug, "Stopping datalake manager...");
     auto f = _gate.close();
     co_await _backlog_controller->stop();
     _deregistrations.clear();
@@ -272,6 +273,7 @@ ss::future<> datalake_manager::stop() {
       });
     co_await std::move(f);
     _schema_cache->stop();
+    vlog(datalake_log.debug, "Stopped datalake manager...");
 }
 
 std::chrono::milliseconds datalake_manager::translation_interval_ms() const {

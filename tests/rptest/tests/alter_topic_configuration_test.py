@@ -251,6 +251,53 @@ class AlterTopicConfiguration(RedpandaTest):
         assert altered_output["redpanda.remote.read"] == "false"
         assert altered_output["redpanda.remote.write"] == "false"
 
+    @cluster(num_nodes=3)
+    def test_min_cleanable_dirty_ratio_validation(self):
+        topic = self.topics[0].name
+        kafka_tools = KafkaCliTools(self.redpanda)
+        self.redpanda.set_cluster_config({"min_cleanable_dirty_ratio": 0.5})
+        initial_spec = kafka_tools.describe_topic(topic)
+
+        # Check that a value outside valid range is rejected
+        try:
+            self.client().alter_topic_configs(
+                topic, {TopicSpec.PROPERTY_MIN_CLEANABLE_DIRTY_RATIO: 1.01})
+        except subprocess.CalledProcessError as e:
+            assert "is outside of allowed range" in e.output
+
+        assert initial_spec.min_cleanable_dirty_ratio == kafka_tools.describe_topic(
+            topic
+        ).min_cleanable_dirty_ratio, "min.cleanable.dirty.ratio shouldn't be changed to invalid value"
+
+        # Check that a valid value is accepted
+        self.client().alter_topic_configs(
+            topic, {TopicSpec.PROPERTY_MIN_CLEANABLE_DIRTY_RATIO: 0.3})
+
+        assert kafka_tools.describe_topic(
+            topic).min_cleanable_dirty_ratio == 0.3
+
+        # Check that we can disable the tristate with -1
+        self.client().alter_topic_configs(
+            topic, {TopicSpec.PROPERTY_MIN_CLEANABLE_DIRTY_RATIO: -1})
+
+        assert kafka_tools.describe_topic(
+            topic).min_cleanable_dirty_ratio == -1
+
+        # Check that we can disable the tristate with any value < 0
+        self.client().alter_topic_configs(
+            topic, {TopicSpec.PROPERTY_MIN_CLEANABLE_DIRTY_RATIO: -123.456})
+
+        assert kafka_tools.describe_topic(
+            topic).min_cleanable_dirty_ratio == -1
+
+        # Check that deleting the topic config resets it back to cluster default
+        self.client().delete_topic_config(
+            topic, TopicSpec.PROPERTY_MIN_CLEANABLE_DIRTY_RATIO)
+
+        assert kafka_tools.describe_topic(
+            topic
+        ).min_cleanable_dirty_ratio == initial_spec.min_cleanable_dirty_ratio
+
 
 class ShadowIndexingGlobalConfig(RedpandaTest):
     topics = (TopicSpec(partition_count=1, replication_factor=3), )

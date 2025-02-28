@@ -84,6 +84,8 @@ public:
     // the table.
     virtual ss::future<checked<std::nullopt_t, errc>>
     commit_txn(const table_identifier& table_ident, transaction) = 0;
+
+    virtual ss::future<> stop() = 0;
 };
 std::ostream& operator<<(std::ostream&, catalog::errc);
 

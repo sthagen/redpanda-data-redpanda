@@ -35,7 +35,8 @@ class CompactionGapsTest(RedpandaTest):
                 "iceberg_enabled": "true",
                 "iceberg_catalog_commit_interval_ms": 5000,
                 "datalake_coordinator_snapshot_max_delay_secs": 10,
-                "log_compaction_interval_ms": 5000
+                "log_compaction_interval_ms": 5000,
+                "min_cleanable_dirty_ratio": 0.0
             },
             *args,
             **kwargs)

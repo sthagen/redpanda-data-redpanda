@@ -34,7 +34,8 @@ class LogCompactionTest(PreallocNodesTest, PartitionMovementMixin):
             'log_segment_size': 2 * 1024**2,  # 2 MiB
             'retention_bytes': 25 * 1024**2,  # 25 MiB
             'compacted_log_segment_size': 1024**2,  # 1 MiB
-            'storage_compaction_key_map_memory': key_map_memory_kb * 1024
+            'storage_compaction_key_map_memory': key_map_memory_kb * 1024,
+            'min_cleanable_dirty_ratio': 0.0
         }
 
         # This environment variable is required to get around the map memory bounds

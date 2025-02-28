@@ -132,8 +132,9 @@ public:
       retention_offset(storage::gc_config) const final;
 
     ssize_t dirty_segment_bytes() const final;
-
     ssize_t closed_segment_bytes() const final;
+
+    double dirty_ratio() final;
 
 private:
     ss::shared_ptr<storage::log> _underlying_log;

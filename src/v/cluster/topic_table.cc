@@ -1110,6 +1110,10 @@ topic_properties topic_table::update_topic_properties(
     incremental_update(
       updated_properties.iceberg_target_lag_ms,
       overrides.iceberg_target_lag_ms);
+    incremental_update(
+      updated_properties.min_cleanable_dirty_ratio,
+      overrides.min_cleanable_dirty_ratio);
+
     return updated_properties;
 }
 

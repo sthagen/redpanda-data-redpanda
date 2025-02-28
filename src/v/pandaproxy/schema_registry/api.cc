@@ -76,14 +76,16 @@ ss::future<> api::start() {
 }
 
 ss::future<> api::stop() {
+    vlog(plog.debug, "Stopping schema registry API...");
+    co_await _client.stop();
     co_await _service.stop();
     co_await _sequencer.stop();
-    co_await _client.stop();
     co_await _schema_id_cache.stop();
     co_await _schema_id_validation_probe.stop();
     if (_store) {
         co_await _store->stop();
     }
+    vlog(plog.debug, "Stopped schema registry API...");
 }
 
 ss::future<> api::restart() {

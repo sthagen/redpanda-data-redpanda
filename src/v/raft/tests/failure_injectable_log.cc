@@ -248,4 +248,8 @@ ssize_t failure_injectable_log::closed_segment_bytes() const {
     return _underlying_log->closed_segment_bytes();
 }
 
+double failure_injectable_log::dirty_ratio() {
+    return _underlying_log->dirty_ratio();
+}
+
 } // namespace raft

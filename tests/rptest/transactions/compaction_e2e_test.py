@@ -27,7 +27,7 @@ from rptest.services.metrics_check import MetricCheck
 
 class CompactionE2EIdempotencyTest(RedpandaTest):
     def __init__(self, test_context):
-        extra_rp_conf = {}
+        extra_rp_conf = {"min_cleanable_dirty_ratio": 0.0}
 
         self.segment_size = 5 * 1024 * 1024
         self.partition_count = 3
@@ -186,7 +186,8 @@ class CompactionWithRecoveryTest(RedpandaTest, PartitionMovementMixin):
         # keep read size low to ensure reads fall within a transaction
         extra_rp_conf = {
             "raft_recovery_default_read_size": 1024,
-            "log_compaction_interval_ms": 2000
+            "log_compaction_interval_ms": 2000,
+            "min_cleanable_dirty_ratio": 0.0
         }
         super(CompactionWithRecoveryTest,
               self).__init__(test_context=test_context,
@@ -254,7 +255,7 @@ class CompactionE2ERebootTest(RedpandaTest):
         self.segment_size = 5 * 1024 * 1024
         super(CompactionE2ERebootTest,
               self).__init__(test_context=test_context,
-                             extra_rp_conf={},
+                             extra_rp_conf={"min_cleanable_dirty_ratio": 0.0},
                              log_level="trace")
 
     @skip_debug_mode

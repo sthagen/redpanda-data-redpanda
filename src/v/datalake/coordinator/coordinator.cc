@@ -70,12 +70,14 @@ void coordinator::start() {
 }
 
 ss::future<> coordinator::stop_and_wait() {
+    vlog(datalake_log.debug, "Coordinator stopping...");
     as_.request_abort();
     leader_cond_.broken();
     if (term_as_.has_value()) {
         term_as_->get().request_abort();
     }
-    return gate_.close();
+    co_await gate_.close();
+    vlog(datalake_log.debug, "Coordinator stopped...");
 }
 
 ss::future<> coordinator::run_until_abort() {

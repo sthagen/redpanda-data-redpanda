@@ -48,7 +48,7 @@ public:
 
     ~rest_catalog() final = default;
 
-    ss::future<> stop();
+    ss::future<> stop() final;
 
 private:
     retry_chain_node create_rtc();

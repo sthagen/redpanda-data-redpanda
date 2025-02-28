@@ -252,6 +252,8 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds> log_compaction_interval_ms;
     // same as delete.retention.ms in kafka
     property<std::optional<std::chrono::milliseconds>> tombstone_retention_ms;
+    bounded_property<std::optional<double>, numeric_bounds>
+      min_cleanable_dirty_ratio;
     property<bool> log_disable_housekeeping_for_tests;
     property<bool> log_compaction_use_sliding_window;
     property<std::optional<size_t>>

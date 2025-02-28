@@ -94,9 +94,11 @@ ss::future<> coordinator_manager::stop() {
         gm_.unregister_leadership_notification(*leadership_notifications_);
     }
     auto gate_close = gate_.close();
+    auto catalog_stop = catalog_->stop();
     for (auto& [_, crd] : coordinators_) {
         co_await crd->stop_and_wait();
     }
+    co_await std::move(catalog_stop);
     co_await std::move(gate_close);
 }
 

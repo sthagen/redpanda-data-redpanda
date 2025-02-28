@@ -993,6 +993,19 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       std::nullopt,
       validate_tombstone_retention_ms)
+  , min_cleanable_dirty_ratio(
+      *this,
+      "min_cleanable_dirty_ratio",
+      "The minimum ratio between the number of bytes in \"dirty\" segments and "
+      "the total number of bytes in closed segments that must be reached "
+      "before a partition's log is eligible for compaction in a compact topic. "
+      "The topic property `min.cleanable.dirty.ratio` overrides the value of "
+      "`min_cleanable_dirty_ratio` at the topic level.",
+      {.needs_restart = needs_restart::no,
+       .example = "0.5",
+       .visibility = visibility::user},
+      0.5,
+      {.min = 0.0, .max = 1.0})
   , log_disable_housekeeping_for_tests(
       *this,
       "log_disable_housekeeping_for_tests",

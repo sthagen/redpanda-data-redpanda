@@ -43,6 +43,7 @@ class TopicSpec:
     PROPERTY_DELETE_RETENTION_MS = "delete.retention.ms"
     PROPERTY_ICEBERG_INVALID_RECORD_ACTION = "redpanda.iceberg.invalid.record.action"
     PROPERTY_ICEBERG_TARGET_LAG_MS = "redpanda.iceberg.target.lag.ms"
+    PROPERTY_MIN_CLEANABLE_DIRTY_RATIO = "min.cleanable.dirty.ratio"
 
     class CompressionTypes(str, Enum):
         """
@@ -125,7 +126,8 @@ class TopicSpec:
             initial_retention_local_target_bytes: int | None = None,
             initial_retention_local_target_ms: int | None = None,
             virtual_cluster_id: str | None = None,
-            delete_retention_ms: int | None = None):
+            delete_retention_ms: int | None = None,
+            min_cleanable_dirty_ratio: float | None = None):
         self.name = name or f"topic-{self._random_topic_suffix()}"
         self.partition_count = partition_count
         self.replication_factor = replication_factor
@@ -152,6 +154,7 @@ class TopicSpec:
         self.initial_retention_local_target_ms = initial_retention_local_target_ms
         self.virtual_cluster_id = virtual_cluster_id
         self.delete_retention_ms = delete_retention_ms
+        self.min_cleanable_dirty_ratio = min_cleanable_dirty_ratio
 
     def __str__(self):
         return self.name

@@ -77,7 +77,8 @@ class EndToEndShadowIndexingBase(EndToEndTest):
             cloud_storage_cluster_metadata_upload_interval_ms=1000,
             # Tests may configure spillover manually.
             cloud_storage_spillover_manifest_size=None,
-            controller_snapshot_max_age_sec=1)
+            controller_snapshot_max_age_sec=1,
+            min_cleanable_dirty_ratio=0.0)
         if extra_rp_conf:
             for k, v in conf.items():
                 extra_rp_conf[k] = v

@@ -35,6 +35,10 @@ inline const char* to_str(const rapidjson::Type t) {
     return str[t];
 }
 
+inline void read_value(const json::Value& v, double& target) {
+    target = v.GetDouble();
+}
+
 inline void read_value(const json::Value& v, int64_t& target) {
     target = v.GetInt64();
 }

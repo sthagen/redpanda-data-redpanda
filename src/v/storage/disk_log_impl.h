@@ -267,7 +267,7 @@ public:
     // Returns the dirty ratio of the log.
     // The dirty ratio is the ratio of bytes in closed, dirty segments to the
     // total number of bytes in all closed segments in the log.
-    double dirty_ratio();
+    double dirty_ratio() final;
 
 private:
     friend class disk_log_appender; // for multi-term appends

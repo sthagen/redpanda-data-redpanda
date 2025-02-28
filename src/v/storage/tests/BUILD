@@ -564,6 +564,7 @@ redpanda_cc_btest(
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:directory_walker",
         "//src/v/utils:to_string",
+        "//src/v/utils:tristate",
         "@boost//:test",
         "@fmt",
         "@seastar",

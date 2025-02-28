@@ -38,6 +38,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <type_traits>
 
 namespace kafka {
 template<typename T>
@@ -539,6 +540,25 @@ struct iceberg_target_lag_ms_validator {
     }
 };
 
+struct min_cleanable_dirty_ratio_validator {
+    std::optional<ss::sstring>
+    operator()(const ss::sstring&, const tristate<double>& value) {
+        double min = 0.0;
+        double max = 1.0;
+        if (value.has_optional_value()) {
+            if (value.value() < min || value.value() > max) {
+                return fmt::format(
+                  "min.cleanable.dirty.ratio {} is outside of allowed range "
+                  "[{}, {}]",
+                  value.value(),
+                  min,
+                  max);
+            }
+        }
+        return std::nullopt;
+    }
+};
+
 template<typename T, typename... ValidatorTypes>
 requires requires(
   model::topic_namespace_view tns,
@@ -795,7 +815,9 @@ void parse_and_set_tristate(
     }
     // set property value
     if (op == config_resource_operation::set) {
-        auto parsed = boost::lexical_cast<int64_t>(*value);
+        using config_t
+          = std::conditional_t<std::is_floating_point_v<T>, T, int64_t>;
+        auto parsed = boost::lexical_cast<config_t>(*value);
         if (parsed <= 0) {
             property.value = tristate<T>{};
         } else {

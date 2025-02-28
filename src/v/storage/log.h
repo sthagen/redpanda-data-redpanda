@@ -225,6 +225,11 @@ public:
     virtual ssize_t dirty_segment_bytes() const = 0;
     virtual ssize_t closed_segment_bytes() const = 0;
 
+    // Returns the dirty ratio of the log. The dirty ratio is the ratio of bytes
+    // in closed, dirty segments to the total number of bytes in all closed
+    // segments in the log.
+    virtual double dirty_ratio() = 0;
+
 private:
     ntp_config _config;
 

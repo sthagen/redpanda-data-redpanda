@@ -86,6 +86,8 @@ public:
         // properties.
         tristate<std::chrono::milliseconds> tombstone_retention_ms;
 
+        tristate<double> min_cleanable_dirty_ratio;
+
         friend std::ostream&
         operator<<(std::ostream&, const default_overrides&);
     };
@@ -363,6 +365,18 @@ public:
         }
         return _overrides ? _overrides->cloud_topic_enabled
                           : default_cloud_topic_enabled;
+    }
+
+    std::optional<double> min_cleanable_dirty_ratio() const {
+        if (_overrides) {
+            if (_overrides->min_cleanable_dirty_ratio.is_disabled()) {
+                return std::nullopt;
+            }
+            if (_overrides->min_cleanable_dirty_ratio.has_optional_value()) {
+                return _overrides->min_cleanable_dirty_ratio.value();
+            }
+        }
+        return config::shard_local_cfg().min_cleanable_dirty_ratio();
     }
 
     ntp_config copy() const {

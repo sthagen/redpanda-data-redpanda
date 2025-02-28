@@ -313,6 +313,16 @@ class DescribeTopicsTest(RedpandaTest):
                 value="dlq_table",
                 doc_string=
                 "Action to take when an invalid record is encountered."),
+            "min.cleanable.dirty.ratio":
+            ConfigProperty(
+                config_type="DOUBLE",
+                value="0.5",
+                doc_string=
+                "The minimum ratio between the number of bytes in \"dirty\" segments and "
+                "the total number of bytes in closed segments that must be reached "
+                "before a partition's log is eligible for compaction in a compact topic. "
+                "The topic property `min.cleanable.dirty.ratio` overrides the value of "
+                "`min_cleanable_dirty_ratio` at the topic level."),
         }
 
         tp_spec = TopicSpec()

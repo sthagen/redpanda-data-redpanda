@@ -95,6 +95,8 @@ public:
     ss::future<checked<std::nullopt_t, errc>>
     commit_txn(const table_identifier& table_ident, transaction) final;
 
+    ss::future<> stop() final { return ss::make_ready_future(); }
+
 private:
     // Constructs a path suitable for the table's location: a prefix to be used
     // for files relating to this table.

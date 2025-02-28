@@ -83,7 +83,7 @@ create_topic_properties_update(
     std::apply(apply_op(op_t::none), update.custom_properties.serde_fields());
 
     static_assert(
-      std::tuple_size_v<decltype(update.properties.serde_fields())> == 35,
+      std::tuple_size_v<decltype(update.properties.serde_fields())> == 36,
       "If you added a property, please decide on it's default alter config "
       "policy, and handle the update in the loop below");
     static_assert(
@@ -397,6 +397,14 @@ create_topic_properties_update(
                           v);
                       return std::chrono::milliseconds{parsed};
                   });
+                continue;
+            }
+            if (cfg.name == topic_property_min_cleanable_dirty_ratio) {
+                parse_and_set_tristate(
+                  update.properties.min_cleanable_dirty_ratio,
+                  cfg.value,
+                  kafka::config_resource_operation::set,
+                  min_cleanable_dirty_ratio_validator{});
                 continue;
             }
         } catch (const validation_error& e) {

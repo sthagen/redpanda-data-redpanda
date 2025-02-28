@@ -284,6 +284,9 @@ to_cluster_type(const creatable_topic& t) {
       = get_duration_value<std::chrono::milliseconds>(
         config_entries, topic_property_iceberg_target_lag_ms);
 
+    cfg.properties.min_cleanable_dirty_ratio = get_tristate_value<double>(
+      config_entries, topic_property_min_cleanable_dirty_ratio);
+
     schema_id_validation_config_parser schema_id_validation_config_parser{
       cfg.properties};
 

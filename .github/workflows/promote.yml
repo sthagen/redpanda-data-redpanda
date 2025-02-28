@@ -5,7 +5,7 @@ on:
     types: [published]
 jobs:
   trigger-promote:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       id-token: write
       contents: read
@@ -19,10 +19,10 @@ jobs:
           secret-ids: |
             ,sdlc/prod/github/buildkite_token
           parse-json-secrets: true
-      - uses: buildkite/trigger-pipeline-action@v2.0.0
+      - uses: buildkite/trigger-pipeline-action@v2.3.0
         with:
           buildkite_api_access_token: ${{ env.BUILDKITE_TOKEN }}
           pipeline: "redpanda/redpanda"
           branch: dev
           message: ":github: Promote redpanda ${{ github.ref_name }} packages"
-          build_env_vars: '{"PROMOTE_REDPANDA_FROM_STAGING": "1", "TARGET_VERSION": "${{ github.ref_name }}"}'
+          build_env_vars: '{"PIPELINE_ACTION": "promote-from-staging", "TARGET_VERSION": "${{ github.ref_name }}"}'
