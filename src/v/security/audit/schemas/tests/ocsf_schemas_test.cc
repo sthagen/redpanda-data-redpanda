@@ -16,6 +16,8 @@
 
 #include <seastar/net/socket_defs.hh>
 
+#include <rapidjson/document.h>
+
 #include <optional>
 #define BOOST_TEST_MODULE security_audit
 
@@ -258,6 +260,39 @@ static const ss::sstring test_service_ser{
   "name": "test"
 }
   )"};
+
+void sort_http_headers(rapidjson::Document& doc) {
+    // Sort http_request.http_headers by name
+    if (
+      doc.HasMember("http_request") && doc["http_request"].IsObject()
+      && doc["http_request"].HasMember("http_headers")
+      && doc["http_request"]["http_headers"].IsArray()) {
+        auto& headers = doc["http_request"]["http_headers"];
+        std::sort(
+          headers.Begin(),
+          headers.End(),
+          [](const rapidjson::Value& a, const rapidjson::Value& b) {
+              return std::strcmp(a["name"].GetString(), b["name"].GetString())
+                     < 0;
+          });
+    }
+}
+
+/// Normalize an API activity json object where some fields are expected to be
+/// unordered but we want them in a consistent order for test comparisons (eg.
+/// http_headers)
+std::string normalize_json(const std::string& json_str) {
+    rapidjson::Document doc;
+    doc.Parse(json_str.c_str());
+
+    BOOST_REQUIRE_MESSAGE(!doc.HasParseError(), "JSON parse error");
+    sort_http_headers(doc);
+
+    rapidjson::StringBuffer buffer;
+    rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+    doc.Accept(writer);
+    return buffer.GetString();
+}
 
 BOOST_AUTO_TEST_CASE(validate_api_activity) {
     auto dst_endpoint = rp_kafka_endpoint;
@@ -618,7 +653,7 @@ BOOST_AUTO_TEST_CASE(make_api_activity_event_authorized) {
 
     auto ser = sa::rjson_serialize(api_activity);
 
-    BOOST_REQUIRE_EQUAL(ser, ::json::minify(expected));
+    BOOST_REQUIRE_EQUAL(normalize_json(ser), normalize_json(expected));
 }
 
 BOOST_AUTO_TEST_CASE(make_authentication_event_success) {
@@ -817,7 +852,7 @@ BOOST_AUTO_TEST_CASE(make_api_activity_event_authorized_authn_disabled) {
 
     auto ser = sa::rjson_serialize(api_activity);
 
-    BOOST_REQUIRE_EQUAL(ser, ::json::minify(expected));
+    BOOST_REQUIRE_EQUAL(normalize_json(ser), normalize_json(expected));
 }
 
 BOOST_AUTO_TEST_CASE(make_authn_event_failure) {

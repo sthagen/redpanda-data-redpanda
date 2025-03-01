@@ -292,4 +292,20 @@ validate_iceberg_rest_catalog_auth_mode(const config::configuration& config) {
     return std::nullopt;
 }
 
+std::optional<ss::sstring>
+validate_consumer_group_metrics(const std::vector<ss::sstring>& metrics) {
+    constexpr auto supported = std::to_array<std::string_view>(
+      {"group", "partition", "consumer_lag"});
+
+    // Validate results
+    for (const auto& m : metrics) {
+        if (std::ranges::none_of(
+              supported, [&m](const auto& s) { return s == m; })) {
+            return ssx::sformat("'{}' is not a valid consumer group metric", m);
+        }
+    }
+
+    return std::nullopt;
+}
+
 }; // namespace config

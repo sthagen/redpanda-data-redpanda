@@ -63,4 +63,7 @@ validate_iceberg_partition_spec(const ss::sstring& spec);
 std::optional<ss::sstring>
 validate_iceberg_rest_catalog_auth_mode(const configuration& config);
 
+std::optional<ss::sstring>
+validate_consumer_group_metrics(const std::vector<ss::sstring>& metrics);
+
 }; // namespace config

@@ -14,7 +14,8 @@ RUN apt-get update && apt-get install -y \
 
 # Copy required glibc files
 RUN mkdir -p /output/pkgs/{usr/,}lib/$(uname -m)-linux-gnu /output/pkgs/usr/include /output/pkgs/lib64 \
-    && cp -r /usr/lib/*-linux-gnu/ld-linux-*.so* /output/pkgs/lib64/ \
+    && (if test $(uname -m) = "x86_64"; then cp -r /usr/lib/*-linux-gnu/ld-linux-*.so* /output/pkgs/lib64/; fi) \
+    && (if test $(uname -m) = "aarch64"; then cp -r /usr/lib/*-linux-gnu/ld-linux-*.so* /output/pkgs/lib/; fi) \
     && cp -r /usr/lib/*-linux-gnu/libc.{a,so}* /output/pkgs/lib/$(uname -m)-linux-gnu/ \
     && cp -r /usr/lib/*-linux-gnu/libc_nonshared.a* /output/pkgs/usr/lib/$(uname -m)-linux-gnu/ \
     && cp -r /usr/lib/*-linux-gnu/libm.{a,so}* /output/pkgs/lib/$(uname -m)-linux-gnu/ \

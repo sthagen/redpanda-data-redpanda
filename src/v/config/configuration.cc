@@ -14,6 +14,7 @@
 #include "config/base_property.h"
 #include "config/bounded_property.h"
 #include "config/node_config.h"
+#include "config/types.h"
 #include "config/validators.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
@@ -596,6 +597,14 @@ configuration::configuration()
       "sense by the shard and/or partition labels.",
       {.needs_restart = needs_restart::no},
       false)
+  , enable_consumer_group_metrics(
+      *this,
+      "enable_consumer_group_metrics",
+      "List of enabled consumer group metrics. Accepted "
+      "Values: `group`, `partition`, `consumer_lag`",
+      {.needs_restart = needs_restart::no},
+      std::vector<ss::sstring>{"group", "partition"},
+      validate_consumer_group_metrics)
   , group_min_session_timeout_ms(
       *this,
       "group_min_session_timeout_ms",

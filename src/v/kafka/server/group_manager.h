@@ -132,8 +132,7 @@ public:
       ss::sharded<cluster::topic_table>&,
       ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
       ss::sharded<features::feature_table>&,
-      group_metadata_serializer_factory,
-      enable_group_metrics group_metrics);
+      group_metadata_serializer_factory);
 
     ss::future<> start();
     ss::future<> stop();
@@ -318,7 +317,6 @@ private:
     //
 
     model::broker _self;
-    enable_group_metrics _enable_group_metrics;
     config::binding<std::chrono::milliseconds> _offset_retention_check;
 };
 

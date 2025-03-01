@@ -22,11 +22,11 @@ from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.kafka_cli_consumer import KafkaCliConsumer
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
-from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, RedpandaService
+from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, RedpandaService, MetricsEndpoint
 from rptest.services.rpk_producer import RpkProducer
 from rptest.services.verifiable_consumer import VerifiableConsumer
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import wait_until_result
+from rptest.util import expect_exception, wait_until_result
 from rptest.utils.mode_checks import skip_debug_mode
 
 from ducktape.utils.util import wait_until
@@ -657,6 +657,102 @@ class ConsumerGroupTest(RedpandaTest):
 
         self.producer.wait()
         self.producer.free()
+
+    @cluster(num_nodes=6)
+    @parametrize(enabled_group_metrics=[])
+    @parametrize(enabled_group_metrics=["group"])
+    @parametrize(enabled_group_metrics=["partition"])
+    @parametrize(enabled_group_metrics=["consumer_lag"])
+    @parametrize(enabled_group_metrics=["group", "partition"])
+    @parametrize(enabled_group_metrics=["group", "consumer_lag"])
+    @parametrize(enabled_group_metrics=["partition", "consumer_lag"])
+    @parametrize(enabled_group_metrics=["group", "partition", "consumer_lag"])
+    def test_group_metrics(self, enabled_group_metrics):
+        """
+        Test validating the behavior of group metrics
+        """
+        def flip_option(option):
+            if option in enabled_group_metrics:
+                enabled_group_metrics.remove(option)
+            else:
+                enabled_group_metrics.append(option)
+
+        self.redpanda.set_cluster_config(
+            {"enable_consumer_group_metrics": enabled_group_metrics})
+
+        self.create_topic(20)
+        group = 'test-gr-1'
+        # use 2 consumers
+        consumers = self.create_consumers(2,
+                                          self.topic_spec.name,
+                                          group,
+                                          static_members=False)
+
+        self.start_producer()
+        # wait for some messages
+        wait_until(
+            lambda: ConsumerGroupTest.group_consumed_at_least(
+                consumers, 50 * len(consumers)), 30, 2,
+            "Test setup failed. Waiting on consumers timed out.")
+        self.validate_group_state(group,
+                                  expected_state="Stable",
+                                  static_members=False)
+
+        metrics = {
+            "group": [
+                "redpanda_kafka_consumer_group_consumers",
+                "redpanda_kafka_consumer_group_topics"
+            ],
+            "partition": ["redpanda_kafka_consumer_group_committed_offset"],
+            "consumer_lag": [
+                "redpanda_kafka_consumer_group_lag_max",
+                "redpanda_kafka_consumer_group_lag_sum"
+            ]
+        }
+
+        def get_group_metrics_from_nodes(patterns):
+            samples = self.redpanda.metrics_samples(
+                patterns, self.redpanda.started_nodes(),
+                MetricsEndpoint.PUBLIC_METRICS)
+            success = samples is not None and set(
+                samples.keys()) == set(patterns)
+            return success
+
+        for option, patterns in metrics.items():
+            expected_value = option in enabled_group_metrics
+            wait_until(
+                lambda: get_group_metrics_from_nodes(patterns
+                                                     ) == expected_value,
+                30,
+                1,
+                err_msg=
+                f"Looking for metrics in '{option}'. Timed-out while expecting value '{expected_value}'"
+            )
+
+        for option in metrics.keys():
+            flip_option(option)
+
+        self.redpanda.set_cluster_config(
+            {"enable_consumer_group_metrics": enabled_group_metrics})
+
+        for option, patterns in metrics.items():
+            expected_value = option in enabled_group_metrics
+            wait_until(
+                lambda: get_group_metrics_from_nodes(patterns
+                                                     ) == expected_value,
+                30,
+                1,
+                err_msg=
+                f"Looking for metrics in '{option}'. Timed-out while expecting value '{expected_value}'"
+            )
+
+        self.producer.wait()
+        self.producer.free()
+
+        for c in consumers:
+            c.stop()
+            c.wait()
+            c.free()
 
 
 @dataclass

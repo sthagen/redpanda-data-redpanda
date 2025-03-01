@@ -69,8 +69,7 @@ group_manager::group_manager(
   ss::sharded<cluster::topic_table>& topic_table,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
   ss::sharded<features::feature_table>& feature_table,
-  group_metadata_serializer_factory serializer_factory,
-  enable_group_metrics enable_metrics)
+  group_metadata_serializer_factory serializer_factory)
   : _tp_ns(std::move(tp_ns))
   , _gm(gm)
   , _pm(pm)
@@ -80,7 +79,6 @@ group_manager::group_manager(
   , _serializer_factory(std::move(serializer_factory))
   , _conf(config::shard_local_cfg())
   , _self(cluster::make_self_broker(config::node()))
-  , _enable_group_metrics(enable_metrics)
   , _offset_retention_check(_conf.group_offset_retention_check_ms.bind()) {}
 
 ss::future<> group_manager::start() {
@@ -950,8 +948,7 @@ ss::future<> group_manager::do_recover_group(
               term,
               _tx_frontend,
               _feature_table,
-              _serializer_factory(),
-              _enable_group_metrics);
+              _serializer_factory());
             _groups.emplace(group_id, group);
             group->reschedule_all_member_heartbeats();
         }
@@ -1160,8 +1157,7 @@ group::join_group_stages group_manager::join_group(join_group_request&& r) {
           it->second->term,
           _tx_frontend,
           _feature_table,
-          _serializer_factory(),
-          _enable_group_metrics);
+          _serializer_factory());
         _groups.emplace(r.data.group_id, group);
         _groups.rehash(0);
         is_new_group = true;
@@ -1313,8 +1309,7 @@ group_manager::txn_offset_commit(txn_offset_commit_request&& r) {
                 p->term,
                 _tx_frontend,
                 _feature_table,
-                _serializer_factory(),
-                _enable_group_metrics);
+                _serializer_factory());
               _groups.emplace(r.data.group_id, group);
               _groups.rehash(0);
           }
@@ -1409,8 +1404,7 @@ group_manager::begin_tx(cluster::begin_group_tx_request&& r) {
                 p->term,
                 _tx_frontend,
                 _feature_table,
-                _serializer_factory(),
-                _enable_group_metrics);
+                _serializer_factory());
               _groups.emplace(r.group_id, group);
               _groups.rehash(0);
           }
@@ -1484,8 +1478,7 @@ group_manager::offset_commit(offset_commit_request&& r) {
               p->term,
               _tx_frontend,
               _feature_table,
-              _serializer_factory(),
-              _enable_group_metrics);
+              _serializer_factory());
             _groups.emplace(r.data.group_id, group);
             _groups.rehash(0);
         } else {

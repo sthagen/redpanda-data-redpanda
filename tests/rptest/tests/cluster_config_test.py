@@ -716,6 +716,9 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 valid_value = random.choice(
                     [e for e in p['enum_values'] if e != initial_value])
 
+            if name == "enable_consumer_group_metrics":
+                valid_value = random.choice([[], ["group"], ["partition"]])
+
             updates[name] = valid_value
 
         patch_result = self.admin.patch_cluster_config(upsert=updates,

@@ -15,6 +15,9 @@
 #include "cluster/simple_batch_builder.h"
 #include "cluster/tx_protocol_types.h"
 #include "cluster/tx_utils.h"
+#include "config/configuration.h"
+#include "config/property.h"
+#include "config/types.h"
 #include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
 #include "features/feature_table.h"
@@ -103,8 +106,6 @@ enum class group_state {
     /// Transient state as the group is being removed.
     dead,
 };
-
-using enable_group_metrics = ss::bool_class<struct enable_gr_metrics_tag>;
 
 std::ostream& operator<<(std::ostream&, group_state gs);
 
@@ -227,18 +228,28 @@ public:
     struct offset_metadata_with_probe {
         offset_metadata metadata;
         group_offset_probe probe;
+        metrics_conversion_binding enable_group_metrics;
 
         offset_metadata_with_probe(
           offset_metadata _metadata,
           const kafka::group_id& group_id,
           const model::topic_partition& tp,
-          enable_group_metrics enable_metrics)
+          metrics_conversion_binding _enable_group_metrics)
           : metadata(std::move(_metadata))
-          , probe(metadata.offset) {
-            if (enable_metrics) {
-                probe.setup_metrics(group_id, tp);
-                probe.setup_public_metrics(group_id, tp);
-            }
+          , probe(metadata.offset)
+          , enable_group_metrics(std::move(_enable_group_metrics)) {
+            const auto metrics_registration = [this, group_id, tp]() {
+                if (enable_group_metrics().partition) {
+                    probe.register_metrics(group_id, tp);
+                    probe.register_public_metrics(group_id, tp);
+                } else {
+                    probe.deregister_metrics();
+                    probe.deregister_public_metrics();
+                }
+            };
+
+            enable_group_metrics.watch(metrics_registration);
+            metrics_registration();
         }
     };
 
@@ -257,8 +268,7 @@ public:
       model::term_id,
       ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
       ss::sharded<features::feature_table>&,
-      group_metadata_serializer,
-      enable_group_metrics);
+      group_metadata_serializer);
 
     // constructor used when loading state from log
     group(
@@ -270,8 +280,7 @@ public:
       model::term_id,
       ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
       ss::sharded<features::feature_table>&,
-      group_metadata_serializer,
-      enable_group_metrics);
+      group_metadata_serializer);
 
     ~group() noexcept;
 
@@ -633,7 +642,11 @@ public:
             _offsets.emplace(
               tp,
               std::make_unique<offset_metadata_with_probe>(
-                std::move(md), _id, tp, _enable_group_metrics));
+                std::move(md),
+                _id,
+                tp,
+                _conf.enable_consumer_group_metrics.bind(
+                  std::function{enabled_metrics::from_vector})));
         }
     }
 
@@ -649,7 +662,11 @@ public:
             _offsets.emplace(
               tp,
               std::make_unique<offset_metadata_with_probe>(
-                std::move(md), _id, tp, _enable_group_metrics));
+                std::move(md),
+                _id,
+                tp,
+                _conf.enable_consumer_group_metrics.bind(
+                  std::function{enabled_metrics::from_vector})));
             return true;
         }
     }
@@ -923,6 +940,8 @@ private:
 
     cluster::tx::errc map_tx_replication_error(std::error_code ec);
 
+    void setup_metrics();
+
     kafka::group_id _id;
     group_state _state;
     std::optional<model::timestamp> _state_timestamp;
@@ -945,6 +964,7 @@ private:
       model::topic_partition,
       std::unique_ptr<offset_metadata_with_probe>>
       _offsets;
+    consumer_lag_metrics _lag_metrics;
     group_probe<
       model::topic_partition,
       std::unique_ptr<offset_metadata_with_probe>>
@@ -965,7 +985,7 @@ private:
     producers_map _producers;
     chunked_hash_map<model::topic_partition, offset_metadata>
       _pending_offset_commits;
-    enable_group_metrics _enable_group_metrics;
+    metrics_conversion_binding _enable_group_metrics;
 
     ss::gate _gate;
     ss::timer<clock_type> _auto_abort_timer;

@@ -196,6 +196,7 @@ struct configuration final : public config_store {
     property<bool> disable_metrics;
     property<bool> disable_public_metrics;
     property<bool> aggregate_metrics;
+    property<std::vector<ss::sstring>> enable_consumer_group_metrics;
     property<std::chrono::milliseconds> group_min_session_timeout_ms;
     property<std::chrono::milliseconds> group_max_session_timeout_ms;
     property<std::chrono::milliseconds> group_initial_rebalance_delay;

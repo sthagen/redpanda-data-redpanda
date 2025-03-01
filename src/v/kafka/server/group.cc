@@ -17,6 +17,7 @@
 #include "cluster/tx_gateway_frontend.h"
 #include "cluster/tx_utils.h"
 #include "config/configuration.h"
+#include "config/types.h"
 #include "container/fragmented_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/heartbeat.h"
@@ -30,6 +31,7 @@
 #include "kafka/protocol/wire.h"
 #include "kafka/server/errors.h"
 #include "kafka/server/group_metadata.h"
+#include "kafka/server/group_probe.h"
 #include "kafka/server/logger.h"
 #include "kafka/server/member.h"
 #include "model/fundamental.h"
@@ -48,6 +50,8 @@
 #include <boost/uuid/uuid_io.hpp>
 #include <fmt/ostream.h>
 #include <fmt/ranges.h>
+
+#include <functional>
 
 namespace kafka {
 
@@ -113,8 +117,7 @@ group::group(
   model::term_id term,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
   ss::sharded<features::feature_table>& feature_table,
-  group_metadata_serializer serializer,
-  enable_group_metrics group_metrics)
+  group_metadata_serializer serializer)
   : _id(std::move(id))
   , _state(s)
   , _state_timestamp(model::timestamp::now())
@@ -124,19 +127,18 @@ group::group(
   , _conf(conf)
   , _catchup_lock(std::move(catchup_lock))
   , _partition(std::move(partition))
-  , _probe(_members, _static_members, _offsets)
+  , _probe(_members, _static_members, _offsets, _lag_metrics)
   , _ctxlog(klog, *this)
   , _ctx_txlog(cluster::txlog, *this)
   , _md_serializer(std::move(serializer))
   , _term(term)
-  , _enable_group_metrics(group_metrics)
+  , _enable_group_metrics(conf.enable_consumer_group_metrics.bind(
+      std::function{enabled_metrics::from_vector}))
   , _abort_interval_ms(config::shard_local_cfg()
                          .abort_timed_out_transactions_interval_ms.value())
   , _tx_frontend(tx_frontend)
   , _feature_table(feature_table) {
-    if (_enable_group_metrics) {
-        _probe.setup_public_metrics(_id);
-    }
+    setup_metrics();
 
     start_abort_timer();
 }
@@ -150,8 +152,7 @@ group::group(
   model::term_id term,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
   ss::sharded<features::feature_table>& feature_table,
-  group_metadata_serializer serializer,
-  enable_group_metrics group_metrics)
+  group_metadata_serializer serializer)
   : _id(std::move(id))
   , _state(md.members.empty() ? group_state::empty : group_state::stable)
   , _state_timestamp(
@@ -167,12 +168,13 @@ group::group(
   , _conf(conf)
   , _catchup_lock(std::move(catchup_lock))
   , _partition(std::move(partition))
-  , _probe(_members, _static_members, _offsets)
+  , _probe(_members, _static_members, _offsets, _lag_metrics)
   , _ctxlog(klog, *this)
   , _ctx_txlog(cluster::txlog, *this)
   , _md_serializer(std::move(serializer))
   , _term(term)
-  , _enable_group_metrics(group_metrics)
+  , _enable_group_metrics(conf.enable_consumer_group_metrics.bind(
+      std::function{enabled_metrics::from_vector}))
   , _abort_interval_ms(config::shard_local_cfg()
                          .abort_timed_out_transactions_interval_ms.value())
   , _tx_frontend(tx_frontend)
@@ -193,9 +195,7 @@ group::group(
     // update when restoring from metadata value
     update_subscriptions();
 
-    if (_enable_group_metrics) {
-        _probe.setup_public_metrics(_id);
-    }
+    setup_metrics();
 
     start_abort_timer();
 }
@@ -3618,6 +3618,25 @@ group::delete_offsets(std::vector<model::topic_partition> offsets) {
     }
 
     return deleted_offsets;
+}
+
+void group::setup_metrics() {
+    const auto metrics_registration = [this]() {
+        if (_enable_group_metrics().group) {
+            _probe.register_group_metrics(_id);
+        } else {
+            _probe.deregister_group_metrics();
+        }
+
+        if (_enable_group_metrics().consumer_lag) {
+            _probe.register_consumer_lag_metrics(_id);
+        } else {
+            _probe.deregister_consumer_lag_metrics();
+        }
+    };
+
+    _enable_group_metrics.watch(metrics_registration);
+    metrics_registration();
 }
 
 } // namespace kafka

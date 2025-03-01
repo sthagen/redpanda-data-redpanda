@@ -200,7 +200,7 @@
   "moduleExtensions": {
     "//bazel:extensions.bzl%non_module_dependencies": {
       "general": {
-        "bzlTransitiveDigest": "7yHEvqkGjICm+74vrxJH44/bjB/C66ZXUPSLBwrvXZQ=",
+        "bzlTransitiveDigest": "5HhiysSTX7Nv7efwtmsCAE4ulcgXblScu4+4ezg0vh8=",
         "usagesDigest": "8eEn6X1e7HKkx2OPWUwQBOEnT9TIkMhEcXbu/wRjGno=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -381,7 +381,6 @@
               "strip_prefix": "seastar-534c1a88bccacd2bcd8a35a062e929001ecda279",
               "url": "https://github.com/redpanda-data/seastar/archive/534c1a88bccacd2bcd8a35a062e929001ecda279.tar.gz",
               "patches": [
-                "@@//bazel/thirdparty:seastar-fortify-source.patch",
                 "@@//bazel/thirdparty:seastar-remove-libnuma.patch"
               ],
               "patch_args": [
@@ -435,9 +434,9 @@
             "ruleClassName": "http_archive",
             "attributes": {
               "build_file_content": "\nfilegroup(\n  name = \"sysroot\",\n  srcs = glob([\"*/**\"]),\n  visibility = [\"//visibility:public\"],\n)",
-              "sha256": "a162b62d4d34588232137c8f14d45849aaa36202b9081f2718452f4a086ae817",
+              "sha256": "39e3d368d57a40d36f6735dcfe3ed699c6a5962cd47c5b1f652254f077632688",
               "urls": [
-                "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-aarch64-2025-02-24.tar.zst"
+                "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-aarch64-2025-02-27.tar.zst"
               ]
             }
           }
@@ -2240,7 +2239,7 @@
         "usagesDigest": "w/4oKk2OAM/M7lcmdc7YdBkwIxjG2XrXTu3iGgs17Kk=",
         "recordedFileInputs": {
           "@@rules_python~//tools/publish/requirements_linux.txt": "8175b4c8df50ae2f22d1706961884beeb54e7da27bd2447018314a175981997d",
-          "@@//bazel/thirdparty/requirements.txt": "a1a545828dbec7ea21ad5f6f8d0fadba4c3f4c818229838ac456f690f18a18a5",
+          "@@//bazel/thirdparty/requirements.txt": "da2bd57c0582d7d4df425e8fcb98c8b25ca3ca3d0fd92525d95cd08eb329848d",
           "@@rules_fuzzing~//fuzzing/requirements.txt": "ab04664be026b632a0d2a2446c4f65982b7654f5b6851d2f9d399a19b7242a5b",
           "@@rules_python~//tools/publish/requirements_windows.txt": "7673adc71dc1a81d3661b90924d7a7c0fc998cd508b3cb4174337cef3f2de556",
           "@@protobuf~//python/requirements.txt": "983be60d3cec4b319dcab6d48aeb3f5b2f7c3350f26b3a9e97486c37967c73c5",
@@ -2401,7 +2400,7 @@
               ],
               "python_interpreter_target": "@@rules_python~~python~python_3_12_host//:python",
               "repo": "python_deps_312",
-              "requirement": "MarkupSafe==2.1.5 --hash=sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5"
+              "requirement": "MarkupSafe==2.1.5 --hash=sha256:f5dfb42c4604dddc8e4305050aa6deb084540643ed5804d7455b5df8fe16f5e5                   --hash=sha256:ac07bad82163452a6884fe8fa0963fb98c2346ba78d779ec06bd7a6262132aee"
             }
           },
           "python_deps_312_psutil": {

@@ -162,7 +162,7 @@ def data_dependency():
         sha256 = "d12be25cebdd06ad91a70b950f9ab61a4fd43d27b119a943e95911f5b25bdf97",
         strip_prefix = "seastar-534c1a88bccacd2bcd8a35a062e929001ecda279",
         url = "https://github.com/redpanda-data/seastar/archive/534c1a88bccacd2bcd8a35a062e929001ecda279.tar.gz",
-        patches = ["//bazel/thirdparty:seastar-fortify-source.patch", "//bazel/thirdparty:seastar-remove-libnuma.patch"],
+        patches = ["//bazel/thirdparty:seastar-remove-libnuma.patch"],
         patch_args = ["-p1"],
     )
 
@@ -206,6 +206,6 @@ filegroup(
     http_archive(
         name = "aarch64_sysroot",
         build_file_content = sysroot_build_file,
-        sha256 = "a162b62d4d34588232137c8f14d45849aaa36202b9081f2718452f4a086ae817",
-        urls = ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-aarch64-2025-02-24.tar.zst"],
+        sha256 = "39e3d368d57a40d36f6735dcfe3ed699c6a5962cd47c5b1f652254f077632688",
+        urls = ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-19.1.7/sysroot-ubuntu-22.04-aarch64-2025-02-27.tar.zst"],
     )

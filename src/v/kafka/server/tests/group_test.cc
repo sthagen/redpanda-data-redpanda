@@ -9,6 +9,7 @@
 
 #include "cluster/partition.h"
 #include "config/configuration.h"
+#include "config/types.h"
 #include "container/fragmented_vector.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/group.h"
@@ -51,6 +52,7 @@ static bool is_uuid(const ss::sstring& uuid) {
  */
 static group get() {
     static config::configuration conf;
+    conf.enable_consumer_group_metrics.set_value(std::vector<ss::sstring>{});
     ss::sharded<cluster::tx_gateway_frontend> fr;
     ss::sharded<features::feature_table> feature_table;
     return group(
@@ -62,8 +64,7 @@ static group get() {
       model::term_id(),
       fr,
       feature_table,
-      make_consumer_offsets_serializer(),
-      enable_group_metrics::no);
+      make_consumer_offsets_serializer());
 }
 
 static const std::vector<member_protocol> test_group_protos = {
