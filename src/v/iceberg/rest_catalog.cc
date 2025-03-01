@@ -11,6 +11,7 @@
 #include "iceberg/rest_catalog.h"
 
 #include "iceberg/rest_client/catalog_client.h"
+#include "iceberg/rest_client/error.h"
 #include "iceberg/table_requests.h"
 namespace iceberg {
 
@@ -49,6 +50,10 @@ struct http_error_mapping_visitor {
 
     errc operator()(const http::url_build_error&) const {
         return unexpected_state;
+    }
+
+    errc operator()(const rest_client::aborted_error&) const {
+        return shutting_down;
     }
 };
 // Translates domain error to more general catalog::errc.

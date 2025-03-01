@@ -18,3 +18,23 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "replica_state_validator_test",
+    timeout = "short",
+    srcs = [
+        "replica_state_validator_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/cloud_storage",
+        "//src/v/cluster",
+        "//src/v/model",
+        "//src/v/storage",
+        "//src/v/storage/tests:disk_log_builder",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:seastar_boost",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

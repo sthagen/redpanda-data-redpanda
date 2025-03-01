@@ -1224,6 +1224,7 @@ redpanda_cc_library(
         ":table_requests",
         ":table_requirement_json",
         "//src/v/iceberg/rest_client:client",
+        "//src/v/iceberg/rest_client:error",
         "//src/v/json",
         "//src/v/utils:mutex",
     ],

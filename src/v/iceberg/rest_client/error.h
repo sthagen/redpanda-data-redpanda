@@ -40,13 +40,17 @@ struct retries_exhausted {
     std::vector<http_call_error> errors;
 };
 
+// Error returned when the underlying subsystems are being shut down.
+using aborted_error = named_type<ss::sstring, struct aborted_tag>;
+
 // Represents the sum of all error types which can be encountered during
 // rest-client operations.
 using domain_error = std::variant<
   http::url_build_error,
   json_parse_error,
   http_call_error,
-  retries_exhausted>;
+  retries_exhausted,
+  aborted_error>;
 
 // The core result type used by all operations in the iceberg/rest-client which
 // can fail. Allows chaining of operations together and short-circuiting when an

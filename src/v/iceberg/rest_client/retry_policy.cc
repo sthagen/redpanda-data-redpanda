@@ -12,16 +12,25 @@
 
 #include "net/connection.h"
 
+#include <exception>
+
 namespace {
 
 using iceberg::rest_client::failure;
 
+failure aborted(std::string_view msg) {
+    return failure{
+      .can_be_retried = false, .aborted = true, .err = ss::sstring{msg}};
+}
+
 failure unretriable(std::string_view msg) {
-    return failure{.can_be_retried = false, .err = ss::sstring{msg}};
+    return failure{
+      .can_be_retried = false, .aborted = false, .err = ss::sstring{msg}};
 }
 
 failure retriable(std::string_view msg) {
-    return failure{.can_be_retried = true, .err = ss::sstring{msg}};
+    return failure{
+      .can_be_retried = true, .aborted = false, .err = ss::sstring{msg}};
 }
 
 using enum boost::beast::http::status;
@@ -95,14 +104,14 @@ failure default_retry_policy::should_retry(std::exception_ptr ex) const {
         }
         return retriable(err.what());
     } catch (const ss::gate_closed_exception&) {
-        throw;
+        return aborted(fmt::format("{}", std::current_exception()));
     } catch (const ss::abort_requested_exception&) {
-        throw;
+        return aborted(fmt::format("{}", std::current_exception()));
     } catch (const ss::nested_exception& nested) {
         if (
           is_abort_or_gate_close_exception(nested.inner)
           || is_abort_or_gate_close_exception(nested.outer)) {
-            throw;
+            return aborted(fmt::format("{}", std::current_exception()));
         };
         return unretriable(fmt::format(
           "{} [outer: {}, inner: {}]",

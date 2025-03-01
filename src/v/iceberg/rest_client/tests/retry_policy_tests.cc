@@ -47,6 +47,7 @@ TEST(default_retry_policy, status_retriable) {
           .status = status, .body = iobuf::from("retry")});
         ASSERT_FALSE(result.has_value());
         ASSERT_TRUE(result.error().can_be_retried);
+        ASSERT_FALSE(result.error().aborted);
     }
 }
 
@@ -58,6 +59,7 @@ TEST(default_retry_policy, status_not_retriable) {
           .status = status, .body = iobuf::from("retry")});
         ASSERT_FALSE(result.has_value());
         ASSERT_FALSE(result.error().can_be_retried);
+        ASSERT_FALSE(result.error().aborted);
     }
 }
 
@@ -65,39 +67,44 @@ TEST(default_retry_policy, boost_system_errors) {
     auto retriable = throw_and_catch(
       boost::system::system_error{boost::beast::http::error::end_of_stream});
     ASSERT_TRUE(retriable.can_be_retried);
+    ASSERT_FALSE(retriable.aborted);
     auto unretriable = throw_and_catch(
       boost::system::system_error{boost::beast::http::error::bad_alloc});
     ASSERT_FALSE(unretriable.can_be_retried);
+    ASSERT_FALSE(unretriable.aborted);
 }
 
 TEST(default_retry_policy, system_errors) {
     auto retriable = throw_and_catch(
       std::system_error{ETIMEDOUT, std::generic_category()});
     ASSERT_TRUE(retriable.can_be_retried);
+    ASSERT_FALSE(retriable.aborted);
     auto unretriable = throw_and_catch(
       std::system_error{ETIMEDOUT, ss::tls::error_category()});
     ASSERT_FALSE(unretriable.can_be_retried);
+    ASSERT_FALSE(unretriable.aborted);
 }
 
-TEST(default_retry_policy, rethrown_exceptions) {
-    EXPECT_THROW(
-      throw_and_catch(ss::gate_closed_exception{}), ss::gate_closed_exception);
-    EXPECT_THROW(
-      throw_and_catch(ss::abort_requested_exception{}),
-      ss::abort_requested_exception);
+TEST(default_retry_policy, abort_exception) {
+    auto gate_failure = throw_and_catch(ss::gate_closed_exception{});
+    ASSERT_TRUE(gate_failure.aborted);
+    ASSERT_FALSE(gate_failure.can_be_retried);
+    auto abort_failure = throw_and_catch(ss::abort_requested_exception{});
+    ASSERT_TRUE(abort_failure.aborted);
+    ASSERT_FALSE(abort_failure.can_be_retried);
 }
 
 TEST(default_retry_policy, nested_exception) {
-    EXPECT_THROW(
-      throw_and_catch(ss::nested_exception{
-        std::make_exception_ptr(ss::gate_closed_exception{}),
-        std::make_exception_ptr(std::runtime_error{"out"})}),
-      ss::nested_exception);
-    EXPECT_THROW(
-      throw_and_catch(ss::nested_exception{
-        std::make_exception_ptr(std::invalid_argument{""}),
-        std::make_exception_ptr(ss::abort_requested_exception{})}),
-      ss::nested_exception);
+    auto gate_failure = throw_and_catch(ss::nested_exception{
+      std::make_exception_ptr(ss::gate_closed_exception{}),
+      std::make_exception_ptr(std::runtime_error{"out"})});
+    ASSERT_TRUE(gate_failure.aborted);
+    ASSERT_FALSE(gate_failure.can_be_retried);
+    auto abort_failure = throw_and_catch(ss::nested_exception{
+      std::make_exception_ptr(std::invalid_argument{""}),
+      std::make_exception_ptr(ss::abort_requested_exception{})});
+    ASSERT_TRUE(abort_failure.aborted);
+    ASSERT_FALSE(abort_failure.can_be_retried);
 
     auto result = throw_and_catch(ss::nested_exception{
       std::make_exception_ptr(std::invalid_argument{"i"}),

@@ -95,4 +95,18 @@ else()
       ARGS "-- -c 1"
     )
 
+    rp_test(
+      UNIT_TEST
+      GTEST
+      BINARY_NAME gtest_replica_state_validator_test
+      SOURCES
+        replica_state_validator_test.cc
+      LIBRARIES
+        v::cluster
+        v::storage
+        v::storage_test_utils
+        v::gtest_main
+      LABELS archival
+      ARGS "-- -c 1"
+    )
 endif()

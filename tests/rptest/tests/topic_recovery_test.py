@@ -48,6 +48,10 @@ from rptest.utils.si_utils import (
 
 CLOUD_STORAGE_SEGMENT_MAX_UPLOAD_INTERVAL_SEC = 10
 
+ALLOWED_REPLICA_VALIDATOR_ERRORS = [
+    "anomaly detected: Offset translation anomaly detected for offset",
+]
+
 
 class BaseCase:
     """Base class for all test cases. The template method inside the test
@@ -1207,6 +1211,7 @@ class TopicRecoveryTest(RedpandaTest):
             extra_rp_conf={
                 'cloud_storage_recovery_topic_validation_mode':
                 'check_manifest_existence',
+                'cloud_storage_disable_upload_consistency_checks': 'true',
             },
             **kwargs)
 
@@ -1635,7 +1640,8 @@ class TopicRecoveryTest(RedpandaTest):
         self.do_run(test_case)
 
     @cluster(num_nodes=4,
-             log_allow_list=MISSING_DATA_ERRORS + TRANSIENT_ERRORS)
+             log_allow_list=MISSING_DATA_ERRORS + TRANSIENT_ERRORS +
+             ALLOWED_REPLICA_VALIDATOR_ERRORS)
     @matrix(cloud_storage_type=get_cloud_storage_type())
     def test_missing_segment(self, cloud_storage_type):
         """Test the handling of the missing segment. The segment is

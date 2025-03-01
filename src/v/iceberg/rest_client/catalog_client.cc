@@ -18,6 +18,7 @@
 #include "iceberg/json_writer.h"
 #include "iceberg/logger.h"
 #include "iceberg/rest_client/entities.h"
+#include "iceberg/rest_client/error.h"
 #include "iceberg/rest_client/json.h"
 #include "iceberg/table_requests_json.h"
 #include "json/istreamwrapper.h"
@@ -220,6 +221,10 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
         }
 
         auto& error = call_res.error();
+        if (error.aborted) {
+            co_return tl::unexpected(
+              aborted_error{"Shutting down while evaluating retry"});
+        }
         if (!error.can_be_retried) {
             co_return tl::unexpected(std::move(error.err));
         }
@@ -229,9 +234,9 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
           ss::sleep_abortable(permit.delay, rtc.root_abort_source()));
         if (sleep_fut.failed()) {
             auto ex = sleep_fut.get_exception();
-            vlog(log.debug, "Exception during sleep: {}", ex);
-            co_return tl::unexpected(
-              retries_exhausted{.errors = std::move(retriable_errors)});
+            auto msg = fmt::format("Exception during retry sleep: {}", ex);
+            vlog(log.debug, "{}", msg);
+            co_return tl::unexpected(aborted_error{msg});
         }
     }
 }

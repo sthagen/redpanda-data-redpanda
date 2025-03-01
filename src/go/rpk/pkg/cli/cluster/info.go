@@ -13,6 +13,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -52,8 +53,15 @@ can be printed with the -d flag, and internal topics can be printed with the -i
 flag.
 
 In the broker section, the controller node is suffixed with *.
+
+Using this command with --format json/yaml implies that all sections are 
+included.
 `,
-		Run: func(_ *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, args []string) {
+			f := p.Formatter
+			if h, ok := f.Help([]metadataResponse{}); ok {
+				out.Exit(h)
+			}
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 
@@ -75,7 +83,7 @@ In the broker section, the controller node is suffixed with *.
 			if len(args) > 0 || detailed || internal {
 				topics = true
 			}
-			if requestedSections == 0 { // default to all sections
+			if requestedSections == 0 || !f.IsText() { // default to all sections
 				cluster, brokers, topics, internal = true, true, true, true
 				requestedSections = 4
 			}
@@ -99,6 +107,11 @@ In the broker section, the controller node is suffixed with *.
 			}
 			out.MaybeDie(err, "unable to request metadata: %v", err)
 
+			if !f.IsText() {
+				err = printRawMetadataToW(cmd.OutOrStdout(), f, m)
+				out.MaybeDie(err, "unable to print metadata in %q format: %v", f.Kind, err)
+				return
+			}
 			// We only print the cluster section if the response
 			// has a cluster.
 			if cluster && m.Cluster != "" {
@@ -119,6 +132,7 @@ In the broker section, the controller node is suffixed with *.
 		},
 	}
 	p.InstallKafkaFlags(cmd)
+	p.InstallFormatFlag(cmd)
 	cmd.Flags().BoolVarP(&cluster, "print-cluster", "c", false, "Print cluster section")
 	cmd.Flags().BoolVarP(&brokers, "print-brokers", "b", false, "Print brokers section")
 	cmd.Flags().BoolVarP(&topics, "print-topics", "t", false, "Print topics section (implied if any topics are specified)")
@@ -255,6 +269,93 @@ func PrintTopics(topics kadm.TopicDetails, internal, detailed bool) {
 		}
 		tw.Flush()
 	}
+}
+
+type metadataResponse struct {
+	ClusterName  string         `json:"cluster_name" yaml:"cluster_name"`
+	ControllerID int            `json:"controller_id" yaml:"controller_id"`
+	Brokers      []BrokerDetail `json:"brokers" yaml:"brokers"`
+	Topics       []TopicDetail  `json:"topics" yaml:"topics"`
+}
+
+type BrokerDetail struct {
+	ID   int32   `json:"id" yaml:"id"`
+	Host string  `json:"host" yaml:"host"`
+	Port int32   `json:"port" yaml:"port"`
+	Rack *string `json:"rack,omitempty" yaml:"rack,omitempty"`
+}
+
+type TopicDetail struct {
+	Name           string            `json:"name" yaml:"name"`
+	IsInternal     bool              `json:"is_internal" yaml:"is_internal"`
+	PartitionCount int               `json:"partition_count" yaml:"partition_count"`
+	ReplicasCount  int               `json:"replicas_count" yaml:"replicas_count"`
+	Partitions     []PartitionDetail `json:"partitions" yaml:"partitions"`
+}
+
+type PartitionDetail struct {
+	Partition       int32   `json:"partition" yaml:"partition"`
+	Leader          int32   `json:"leader" yaml:"leader"`
+	LeaderEpoch     int32   `json:"leader_epoch" yaml:"leader_epoch"`
+	Replicas        []int32 `json:"replicas" yaml:"replicas"`
+	OfflineReplicas []int32 `json:"offline_replicas,omitempty" yaml:"offline_replicas,omitempty"`
+	Error           string  `json:"error,omitempty" yaml:"error,omitempty"`
+}
+
+func printRawMetadataToW(w io.Writer, f config.OutFormatter, m kadm.Metadata) error {
+	resp := metadataResponse{
+		ClusterName:  m.Cluster,
+		ControllerID: int(m.Controller),
+	}
+	var brokers []BrokerDetail
+	for _, b := range m.Brokers {
+		brokers = append(brokers, BrokerDetail{
+			ID:   b.NodeID,
+			Host: b.Host,
+			Port: b.Port,
+			Rack: b.Rack,
+		})
+	}
+	resp.Brokers = brokers
+	var topics []TopicDetail
+	if len(m.Topics) > 0 {
+		for _, topic := range m.Topics.Sorted() {
+			td := TopicDetail{
+				Name:           topic.Topic,
+				IsInternal:     topic.IsInternal,
+				PartitionCount: len(topic.Partitions),
+			}
+			if len(topic.Partitions) > 0 {
+				td.ReplicasCount = len(topic.Partitions[0].Replicas)
+			}
+			var partitions []PartitionDetail
+			for _, p := range topic.Partitions.Sorted() {
+				pd := PartitionDetail{
+					Partition:       p.Partition,
+					Leader:          p.Leader,
+					LeaderEpoch:     p.LeaderEpoch,
+					Replicas:        p.Replicas,
+					OfflineReplicas: p.OfflineReplicas,
+				}
+				if p.Err != nil {
+					pd.Error = p.Err.Error()
+				}
+				partitions = append(partitions, pd)
+			}
+			td.Partitions = partitions
+			topics = append(topics, td)
+		}
+	}
+	resp.Topics = topics
+	_, _, t, err := f.Format(&resp)
+	if err != nil {
+		return fmt.Errorf("unable to print in the requested format %q: %v", f.Kind, err)
+	}
+	_, err = fmt.Fprintln(w, t)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 type int32s []int32

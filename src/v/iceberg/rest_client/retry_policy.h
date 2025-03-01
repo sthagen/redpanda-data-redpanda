@@ -18,7 +18,10 @@ namespace iceberg::rest_client {
 // Represents an http call which failed, encodes information about possible
 // retriability and cause
 struct failure {
-    bool can_be_retried;
+    bool can_be_retried{false};
+
+    // NOTE: takes precedence over can_be_retried.
+    bool aborted{false};
     http_call_error err;
     bool is_transport_error() const;
 };
@@ -40,8 +43,8 @@ struct retry_policy {
     virtual result_t should_retry(http::downloaded_response response) const = 0;
 
     // Handles the case where the future failed with an exception. Shutdown
-    // related errors are rethrown, all other errors are classified into
-    // retriable or unretriable.
+    // related errors are returned indicating so, all other errors are
+    // classified into retriable or unretriable.
     virtual failure should_retry(std::exception_ptr ex) const = 0;
     virtual ~retry_policy() = default;
 };

@@ -307,13 +307,30 @@ struct iceberg_config_validator {
                 return false;
             }
         }
+        bool is_iceberg_topic = parsed_mode != model::iceberg_mode::disabled;
+        if (!is_iceberg_topic) {
+            // Not an Iceberg topic, nothing more to validate.
+            return true;
+        }
+
+        bool is_read_replica = std::find_if(
+                                 c.configs.begin(),
+                                 c.configs.end(),
+                                 [](const createable_topic_config& cfg) {
+                                     return cfg.name
+                                            == topic_property_read_replica;
+                                 })
+                               != c.configs.end();
+        if (is_read_replica) {
+            // Not yet supported: read replicas must not be Iceberg topics.
+            return false;
+        }
 
         // If iceberg is enabled at the cluster level, the topic can
         // be created with any override. If it is disabled
         // at the cluster level, it cannot be enabled with a topic
         // override.
-        return config::shard_local_cfg().iceberg_enabled()
-               || parsed_mode == model::iceberg_mode::disabled;
+        return config::shard_local_cfg().iceberg_enabled();
     }
 };
 
