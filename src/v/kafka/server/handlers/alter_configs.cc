@@ -16,6 +16,7 @@
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/alter_configs_request.h"
 #include "kafka/protocol/schemata/alter_configs_response.h"
+#include "kafka/protocol/types.h"
 #include "kafka/server/handlers/configs/config_utils.h"
 #include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/request_context.h"
@@ -83,7 +84,7 @@ create_topic_properties_update(
     std::apply(apply_op(op_t::none), update.custom_properties.serde_fields());
 
     static_assert(
-      std::tuple_size_v<decltype(update.properties.serde_fields())> == 36,
+      std::tuple_size_v<decltype(update.properties.serde_fields())> == 37,
       "If you added a property, please decide on it's default alter config "
       "policy, and handle the update in the loop below");
     static_assert(
@@ -399,6 +400,7 @@ create_topic_properties_update(
                   });
                 continue;
             }
+
             if (cfg.name == topic_property_min_cleanable_dirty_ratio) {
                 parse_and_set_tristate(
                   update.properties.min_cleanable_dirty_ratio,
@@ -407,6 +409,15 @@ create_topic_properties_update(
                   min_cleanable_dirty_ratio_validator{});
                 continue;
             }
+
+            if (cfg.name == topic_property_remote_allow_gaps) {
+                parse_and_set_optional_bool_alpha(
+                  update.properties.remote_allow_gaps,
+                  cfg.value,
+                  kafka::config_resource_operation::set);
+                continue;
+            }
+
         } catch (const validation_error& e) {
             return make_error_alter_config_resource_response<
               alter_configs_resource_response>(

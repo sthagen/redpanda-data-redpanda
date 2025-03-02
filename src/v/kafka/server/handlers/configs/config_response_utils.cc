@@ -1049,6 +1049,20 @@ config_response_container_t make_topic_configs(
         include_documentation,
         config::shard_local_cfg().min_cleanable_dirty_ratio.desc()));
 
+    add_topic_config_if_requested(
+      config_keys,
+      result,
+      config::shard_local_cfg().cloud_storage_enable_remote_allow_gaps.name(),
+      config::shard_local_cfg().cloud_storage_enable_remote_allow_gaps(),
+      topic_property_remote_allow_gaps,
+      topic_properties.remote_topic_allow_gaps,
+      include_synonyms,
+      maybe_make_documentation(
+        include_documentation,
+        config::shard_local_cfg()
+          .cloud_storage_enable_remote_allow_gaps.desc()),
+      &describe_as_string<bool>);
+
     return result;
 }
 

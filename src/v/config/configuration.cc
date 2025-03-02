@@ -2462,6 +2462,30 @@ configuration::configuration()
       "and shouldn't be set in production.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
+  , cloud_storage_enable_segment_uploads(
+      *this,
+      "cloud_storage_enable_segment_uploads",
+      "Controls the upload of log segments to Tiered Storage. "
+      "If set to false, this property temporarily pauses all log segment "
+      "uploads from the Redpanda cluster. When the uploads are paused, the "
+      "'cloud_storage_enable_remote_allow_gaps' cluster configuration and "
+      "'redpanda.remote.allowgaps' topic properties control local retention "
+      "behavior.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      true)
+  , cloud_storage_enable_remote_allow_gaps(
+      *this,
+      "cloud_storage_enable_remote_allow_gaps",
+      "Controls the eviction of locally-stored log segments when Tiered "
+      "Storage uploads are paused. "
+      "Set to `false` (default) to only evict data that has already been "
+      "uploaded to cloud storage. If the retained data fills the local volume, "
+      "Redpanda will throttle producers. "
+      "Set to `true` to allow the eviction of locally-stored log segments, "
+      "which "
+      "may create gaps in offsets.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , cloud_storage_azure_storage_account(
       *this,
       "cloud_storage_azure_storage_account",

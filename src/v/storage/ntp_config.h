@@ -87,6 +87,8 @@ public:
         tristate<std::chrono::milliseconds> tombstone_retention_ms;
 
         tristate<double> min_cleanable_dirty_ratio;
+        // Controls behavior during pause
+        std::optional<bool> remote_allow_gaps;
 
         friend std::ostream&
         operator<<(std::ostream&, const default_overrides&);
@@ -231,6 +233,15 @@ public:
     bool is_read_replica_mode_enabled() const {
         return _overrides != nullptr && _overrides->read_replica
                && _overrides->read_replica.value();
+    }
+
+    bool is_remote_allow_gaps_enabled() const {
+        auto cluster_default
+          = config::shard_local_cfg().cloud_storage_enable_remote_allow_gaps();
+        if (_overrides == nullptr) {
+            return cluster_default;
+        }
+        return _overrides->remote_allow_gaps.value_or(cluster_default);
     }
 
     /**

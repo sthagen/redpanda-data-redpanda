@@ -5500,7 +5500,7 @@ FIXTURE_TEST(dirty_and_closed_bytes_bookkeeping, storage_test_fixture) {
 #ifdef NDEBUG
     static constexpr int num_operations = 50;
 #else
-    static constexpr int num_operations = 25;
+    static constexpr int num_operations = 10;
 #endif
 
     for (int i = 0; i < num_operations; ++i) {

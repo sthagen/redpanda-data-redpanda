@@ -789,38 +789,47 @@ ss::future<> ntp_archiver::upload_until_term_change_legacy() {
           fence,
           _parent.archival_meta_stm()->get_insync_offset());
 
-        auto [non_compacted_upload_result, compacted_upload_result]
-          = co_await upload_next_candidates(archival_stm_fence{
-            .read_write_fence = fence,
-            // Only use the rw-fence if the feature is enabled which requires
-            // major version upgrade.
-            .emit_rw_fence_cmd = emit_read_write_fence(_feature_table),
-          });
-        if (non_compacted_upload_result.num_failed != 0) {
-            // The logic in class `remote` already does retries: if we get here,
-            // it means the upload failed after several retries, justifying
-            // a warning to the operator: something non-transient may be wrong,
-            // although we do also see this in practice on AWS S3 occasionally
-            // during normal operation.
-            vlog(
-              _rtclog.warn,
-              "Failed to upload {} segments out of {}",
-              non_compacted_upload_result.num_failed,
-              non_compacted_upload_result.num_succeeded
-                + non_compacted_upload_result.num_failed
-                + non_compacted_upload_result.num_cancelled);
-        } else if (non_compacted_upload_result.num_succeeded != 0) {
-            vlog(
-              _rtclog.debug,
-              "Successfully uploaded {} segments",
-              non_compacted_upload_result.num_succeeded);
+        bool uploads_paused
+          = !config::shard_local_cfg().cloud_storage_enable_segment_uploads();
+        std::optional<batch_result> result;
+        auto track_paused = _probe->register_archiver_on_hold(uploads_paused);
+        if (!uploads_paused) {
+            result = co_await upload_next_candidates(archival_stm_fence{
+              .read_write_fence = fence,
+              // Only use the rw-fence if the feature is enabled which requires
+              // major version upgrade.
+              .emit_rw_fence_cmd = emit_read_write_fence(_feature_table),
+            });
         }
+        if (result.has_value()) {
+            auto [compacted_upload_result, non_compacted_upload_result]
+              = result.value();
+            if (non_compacted_upload_result.num_failed != 0) {
+                // The logic in class `remote` already does retries: if we get
+                // here, it means the upload failed after several retries,
+                // justifying a warning to the operator: something non-transient
+                // may be wrong, although we do also see this in practice on AWS
+                // S3 occasionally during normal operation.
+                vlog(
+                  _rtclog.warn,
+                  "Failed to upload {} segments out of {}",
+                  non_compacted_upload_result.num_failed,
+                  non_compacted_upload_result.num_succeeded
+                    + non_compacted_upload_result.num_failed
+                    + non_compacted_upload_result.num_cancelled);
+            } else if (non_compacted_upload_result.num_succeeded != 0) {
+                vlog(
+                  _rtclog.debug,
+                  "Successfully uploaded {} segments",
+                  non_compacted_upload_result.num_succeeded);
+            }
 
-        if (non_compacted_upload_result.num_cancelled != 0) {
-            vlog(
-              _rtclog.debug,
-              "Cancelled upload of {} segments",
-              non_compacted_upload_result.num_cancelled);
+            if (non_compacted_upload_result.num_cancelled != 0) {
+                vlog(
+                  _rtclog.debug,
+                  "Cancelled upload of {} segments",
+                  non_compacted_upload_result.num_cancelled);
+            }
         }
 
         if (ss::lowres_clock::now() >= _next_housekeeping) {
@@ -855,7 +864,9 @@ ss::future<> ntp_archiver::upload_until_term_change_legacy() {
           "upload_until_term_change: released units (current {})",
           _uploads_active.current());
 
-        if (non_compacted_upload_result.num_succeeded == 0) {
+        if (
+          !result.has_value()
+          || result.value().non_compacted_upload_result.num_succeeded == 0) {
             // The backoff algorithm here is used to prevent high CPU
             // utilization when redpanda is not receiving any data and there
             // is nothing to update. Also, we want to limit amount of
@@ -1971,7 +1982,22 @@ ntp_archiver::wait_uploads_complete(
     result.checks_disabled
       = config::shard_local_cfg()
           .cloud_storage_disable_upload_consistency_checks.value();
-    if (!result.checks_disabled) {
+    auto skip_metadata_check = [this] {
+        // Special handling of the situation when the gap was created
+        // while the archiver was paused with 'redpanda.remote.allowgaps'
+        // set to 'true'.
+        // If the property is set to true and the local start offset
+        // doesn't match the last uploaded offset we should skip the
+        // check.
+        auto manifest_last = manifest().get_last_offset();
+        auto local_first = _parent.raft_start_offset();
+        model::offset manifest_next = model::next_offset(manifest_last);
+        bool gaps_allowed
+          = _parent.log()->config().is_remote_allow_gaps_enabled();
+        return gaps_allowed && !manifest().empty()
+               && manifest_next < local_first;
+    }();
+    if (!skip_metadata_check && !result.checks_disabled) {
         // With read-write-fence it's guaranteed that the concurrent
         // updates are not a problem. But we still need this check
         // to prevent certain bugs from corrupting the cloud storage
@@ -3356,6 +3382,11 @@ ss::future<bool> ntp_archiver::do_upload_local(
     if (!may_begin_uploads()) {
         co_return false;
     }
+
+    if (!config::shard_local_cfg().cloud_storage_enable_segment_uploads()) {
+        co_return false;
+    }
+
     auto [upload, locks] = std::move(upload_locks);
 
     for (const auto& s : upload.sources) {

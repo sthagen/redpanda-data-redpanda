@@ -750,6 +750,7 @@ FIXTURE_TEST(
       "redpanda.leaders.preference",
       "delete.retention.ms",
       "min.cleanable.dirty.ratio",
+      "redpanda.remote.allowgaps",
     };
 
     // All properties_request

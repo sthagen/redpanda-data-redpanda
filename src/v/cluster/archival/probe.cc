@@ -150,6 +150,12 @@ void ntp_level_probe::setup_public_metrics(const model::ntp& ntp) {
          sm::description(
            "Total size in bytes of the user-visible log for the topic"),
          labels)
+         .aggregate(aggregate_labels),
+       sm::make_gauge(
+         "paused_archivers",
+         [this] { return _num_paused_archivers; },
+         sm::description("Number of paused archivers"),
+         labels)
          .aggregate(aggregate_labels)});
 }
 

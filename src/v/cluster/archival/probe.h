@@ -16,6 +16,8 @@
 #include "model/fundamental.h"
 
 #include <seastar/core/metrics_registration.hh>
+#include <seastar/util/defer.hh>
+#include <seastar/util/noncopyable_function.hh>
 
 #include <cstdint>
 
@@ -67,6 +69,20 @@ public:
         _compacted_replaced_bytes = bytes;
     }
 
+    /// Increment metric and return an object which decrements it
+    /// upon destruction.
+    std::optional<ss::deferred_action<ss::noncopyable_function<void()>>>
+    register_archiver_on_hold(bool paused) {
+        if (!paused) {
+            return std::nullopt;
+        }
+        _num_paused_archivers++;
+        ss::noncopyable_function<void()> lmd = [this] {
+            _num_paused_archivers--;
+        };
+        return ss::defer(std::move(lmd));
+    }
+
 private:
     /// Uploaded offsets
     uint64_t _uploaded = 0;
@@ -80,6 +96,9 @@ private:
     int64_t _segments_deleted = 0;
     /// cloud bytes "removed" due to compaction operation
     size_t _compacted_replaced_bytes = 0;
+
+    /// total number of paused ntp_archiver instances
+    size_t _num_paused_archivers = 0;
 
     metrics::internal_metric_groups _metrics;
     metrics::public_metric_groups _public_metrics;

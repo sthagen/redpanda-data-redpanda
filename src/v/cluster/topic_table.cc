@@ -1113,7 +1113,8 @@ topic_properties topic_table::update_topic_properties(
     incremental_update(
       updated_properties.min_cleanable_dirty_ratio,
       overrides.min_cleanable_dirty_ratio);
-
+    incremental_update(
+      updated_properties.remote_topic_allow_gaps, overrides.remote_allow_gaps);
     return updated_properties;
 }
 

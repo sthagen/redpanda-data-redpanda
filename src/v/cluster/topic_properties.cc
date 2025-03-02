@@ -23,6 +23,7 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       "read_replica: {}, read_replica_bucket: {}, "
       "remote_topic_namespace_override: {}, "
       "remote_topic_properties: {}, "
+      "remote_topic_allow_gaps: {}, "
       "batch_max_bytes: {}, retention_local_target_bytes: {}, "
       "retention_local_target_ms: {}, remote_delete: {}, segment_ms: {}, "
       "record_key_schema_id_validation: {}, "
@@ -60,6 +61,7 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       properties.read_replica_bucket,
       properties.remote_topic_namespace_override,
       properties.remote_topic_properties,
+      properties.remote_topic_allow_gaps,
       properties.batch_max_bytes,
       properties.retention_local_target_bytes,
       properties.retention_local_target_ms,
@@ -136,7 +138,8 @@ bool topic_properties::has_overrides() const {
         || iceberg_delete.has_value() || iceberg_partition_spec.has_value()
         || iceberg_invalid_record_action.has_value()
         || iceberg_target_lag_ms.has_value()
-        || min_cleanable_dirty_ratio.is_engaged();
+        || min_cleanable_dirty_ratio.is_engaged()
+        || remote_topic_allow_gaps.has_value();
 
     if (config::shard_local_cfg().development_enable_cloud_topics()) {
         return overrides
@@ -180,6 +183,7 @@ topic_properties::get_ntp_cfg_overrides() const {
     ret.cloud_topic_enabled = cloud_topic_enabled;
     ret.tombstone_retention_ms = delete_retention_ms;
     ret.min_cleanable_dirty_ratio = min_cleanable_dirty_ratio;
+    ret.remote_allow_gaps = remote_topic_allow_gaps;
     return ret;
 }
 
@@ -277,6 +281,7 @@ adl<cluster::topic_properties>::from(iobuf_parser& parser) {
       std::nullopt,
       std::nullopt,
       tristate<double>{std::nullopt},
+      std::nullopt,
     };
 }
 

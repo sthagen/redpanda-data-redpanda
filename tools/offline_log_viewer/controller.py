@@ -156,6 +156,11 @@ def read_topic_properties_serde(rdr: Reader, version):
             rdr.read_tristate(Reader.read_double),
         }
 
+    if version >= 11:
+        topic_properties |= {
+            'remote_topic_allow_gaps': rdr.read_optional(Reader.read_bool),
+        }
+
     return topic_properties
 
 

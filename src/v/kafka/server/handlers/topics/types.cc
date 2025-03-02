@@ -237,6 +237,9 @@ to_cluster_type(const creatable_topic& t) {
       = get_bool_value(config_entries, topic_property_remote_delete)
           .value_or(storage::ntp_config::default_remote_delete);
 
+    cfg.properties.remote_topic_allow_gaps = get_bool_value(
+      config_entries, topic_property_remote_allow_gaps);
+
     cfg.properties.segment_ms = get_tristate_value<std::chrono::milliseconds>(
       config_entries, topic_property_segment_ms);
 

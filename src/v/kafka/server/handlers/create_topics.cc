@@ -80,7 +80,8 @@ bool is_supported(std::string_view name) {
        topic_property_iceberg_partition_spec,
        topic_property_iceberg_invalid_record_action,
        topic_property_iceberg_target_lag_ms,
-       topic_property_min_cleanable_dirty_ratio});
+       topic_property_min_cleanable_dirty_ratio,
+       topic_property_remote_allow_gaps});
 
     if (std::any_of(
           supported_configs.begin(),

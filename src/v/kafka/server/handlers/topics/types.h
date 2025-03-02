@@ -53,6 +53,8 @@ inline constexpr std::string_view topic_property_remote_read
   = "redpanda.remote.read";
 inline constexpr std::string_view topic_property_read_replica
   = "redpanda.remote.readreplica";
+inline constexpr std::string_view topic_property_remote_allow_gaps
+  = "redpanda.remote.allowgaps";
 inline constexpr std::string_view topic_property_replication_factor
   = "replication.factor";
 inline constexpr std::string_view topic_property_remote_delete
