@@ -158,6 +158,11 @@ sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthL
             args += [
                 "--config", f"delete.retention.ms={spec.delete_retention_ms}"
             ]
+        if spec.min_cleanable_dirty_ratio is not None:
+            args += [
+                "--config",
+                f"min.cleanable.dirty.ratio={spec.min_cleanable_dirty_ratio}"
+            ]
         return self._run("kafka-topics.sh", args, desc="create_topic")
 
     def create_topic_partitions(self, topic: str, partitions: int):
