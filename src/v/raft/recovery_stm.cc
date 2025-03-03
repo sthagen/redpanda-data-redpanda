@@ -62,13 +62,10 @@ ss::future<> recovery_stm::recover() {
         _stop_requested = true;
         return ss::now();
     }
-    auto sg = meta.value()->is_learner ? _scheduling.learner_recovery_sg
-                                       : _scheduling.default_sg;
-    auto iopc = meta.value()->is_learner ? _scheduling.learner_recovery_iopc
-                                         : _scheduling.default_iopc;
 
     return ss::with_scheduling_group(
-      sg, [this, iopc] { return do_recover(iopc); });
+      _scheduling.send_sg,
+      [this, iopc = _scheduling.default_iopc] { return do_recover(iopc); });
 }
 
 ss::future<> recovery_stm::do_recover(ss::io_priority_class iopc) {

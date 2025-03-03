@@ -52,6 +52,27 @@ redpanda_test_cc_library(
 )
 
 redpanda_test_cc_library(
+    name = "cluster_test_fixture",
+    hdrs = [
+        "cluster_test_fixture.h",
+        "utils.h",
+    ],
+    include_prefix = "cluster/tests",
+    deps = [
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "//src/v/redpanda",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/resource_mgmt:cpu_scheduling",
+        "//src/v/test_utils:fixture",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@seastar",
+    ],
+)
+
+redpanda_test_cc_library(
     name = "rm_stm_test_fixture",
     hdrs = [
         "rm_stm_test_fixture.h",
@@ -573,6 +594,25 @@ redpanda_test_cc_library(
     include_prefix = "cluster/tests",
     deps = [
         "//src/v/cluster",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "health_monitor_test",
+    timeout = "short",
+    srcs = ["health_monitor_test.cc"],
+    deps = [
+        ":cluster_test_fixture",
+        ":health_monitor_test_utils",
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@fmt",
+        "@seastar",
+        "@seastar//:testing",
     ],
 )
 

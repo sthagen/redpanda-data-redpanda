@@ -32,6 +32,7 @@ namespace internal {
 struct append_entries_queue {
 public:
     explicit append_entries_queue(
+      ss::scheduling_group sg,
       model::node_id,
       consensus_client_protocol,
       ss::gate::holder,
@@ -74,7 +75,7 @@ private:
 
     void setup_internal_metrics();
     void setup_public_metrics();
-
+    ss::scheduling_group _sg;
     model::node_id _target_node;
     consensus_client_protocol _base_protocol;
     clock_type::time_point _last_sent_timestamp;
@@ -121,6 +122,7 @@ public:
      * node, keeping up to max_inflight concurrent requests.
      */
     buffered_protocol(
+      ss::scheduling_group sg,
       consensus_client_protocol base,
       config::binding<size_t> max_inflight_requests,
       config::binding<size_t> max_buffered_bytes);
@@ -160,7 +162,7 @@ private:
       model::node_id,
       std::unique_ptr<internal::append_entries_queue>>
       _append_entries_queues;
-
+    ss::scheduling_group _sg;
     consensus_client_protocol _base_protocol;
     config::binding<size_t> _max_inflight_requests;
     config::binding<size_t> _max_buffered_bytes;

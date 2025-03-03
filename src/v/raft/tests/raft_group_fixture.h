@@ -175,6 +175,7 @@ struct raft_node {
           log,
           raft::scheduling_config(
             seastar::default_scheduling_group(),
+            seastar::default_scheduling_group(),
             seastar::default_priority_class()),
           config::mock_binding<std::chrono::milliseconds>(10s),
           config::mock_binding<bool>(true),

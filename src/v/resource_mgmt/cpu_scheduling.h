@@ -29,11 +29,11 @@ public:
          */
         _admin = co_await ss::create_scheduling_group("admin", 100);
         /**
-         * Main Raft scheduling group. Currently used for processing Raft
+         * Raft receive scheduling group. Used for processing Raft
          * requests on the receiver side of an RPC protocol. i.e. on the
          * follower.
          */
-        _raft = co_await ss::create_scheduling_group("raft", 1000);
+        _raft_recv = co_await ss::create_scheduling_group("raft_recv", 1000);
         /**
          * Kafka scheduling group. Used for parsing and processing Kafka
          * requests.
@@ -55,10 +55,10 @@ public:
         _compaction = co_await ss::create_scheduling_group(
           "log_compaction", 100);
         /**
-         * Special group to control the priority of learner recovery.
+         * Raft send scheduling group. Used for Raft send part. Raft leader
+         * election and buffered protocol dispatch loop runs in this group.
          */
-        _raft_learner_recovery = co_await ss::create_scheduling_group(
-          "raft_learner_recovery", 50);
+        _raft_send = co_await ss::create_scheduling_group("raft_send", 1000);
         /**
          * Group used to run the archival upload process. Controller dynamically
          * based on the upload backlog.
@@ -98,12 +98,12 @@ public:
 
     ss::future<> destroy_groups() {
         co_await destroy_scheduling_group(_admin);
-        co_await destroy_scheduling_group(_raft);
+        co_await destroy_scheduling_group(_raft_recv);
         co_await destroy_scheduling_group(_kafka);
         co_await destroy_scheduling_group(_cluster);
         co_await destroy_scheduling_group(_cache_background_reclaim);
         co_await destroy_scheduling_group(_compaction);
-        co_await destroy_scheduling_group(_raft_learner_recovery);
+        co_await destroy_scheduling_group(_raft_send);
         co_await destroy_scheduling_group(_archival_upload);
         co_await destroy_scheduling_group(_raft_heartbeats);
         co_await destroy_scheduling_group(_self_test);
@@ -114,7 +114,7 @@ public:
     }
 
     ss::scheduling_group admin_sg() { return _admin; }
-    ss::scheduling_group raft_sg() { return _raft; }
+    ss::scheduling_group raft_recv_sg() { return _raft_recv; }
     ss::scheduling_group kafka_sg() { return _kafka; }
     ss::scheduling_group cluster_sg() { return _cluster; }
 
@@ -122,9 +122,7 @@ public:
         return _cache_background_reclaim;
     }
     ss::scheduling_group compaction_sg() { return _compaction; }
-    ss::scheduling_group raft_learner_recovery_sg() {
-        return _raft_learner_recovery;
-    }
+    ss::scheduling_group raft_send_sg() { return _raft_send; }
     ss::scheduling_group archival_upload() { return _archival_upload; }
     ss::scheduling_group raft_heartbeats() { return _raft_heartbeats; }
     ss::scheduling_group self_test_sg() { return _self_test; }
@@ -154,12 +152,12 @@ public:
         return {
           std::cref(_default),
           std::cref(_admin),
-          std::cref(_raft),
+          std::cref(_raft_recv),
           std::cref(_kafka),
           std::cref(_cluster),
           std::cref(_cache_background_reclaim),
           std::cref(_compaction),
-          std::cref(_raft_learner_recovery),
+          std::cref(_raft_send),
           std::cref(_archival_upload),
           std::cref(_raft_heartbeats),
           std::cref(_self_test),
@@ -173,12 +171,12 @@ private:
     ss::scheduling_group _default{
       seastar::default_scheduling_group()}; // created and managed by seastar
     ss::scheduling_group _admin;
-    ss::scheduling_group _raft;
+    ss::scheduling_group _raft_recv;
     ss::scheduling_group _kafka;
     ss::scheduling_group _cluster;
     ss::scheduling_group _cache_background_reclaim;
     ss::scheduling_group _compaction;
-    ss::scheduling_group _raft_learner_recovery;
+    ss::scheduling_group _raft_send;
     ss::scheduling_group _archival_upload;
     ss::scheduling_group _raft_heartbeats;
     ss::scheduling_group _self_test;

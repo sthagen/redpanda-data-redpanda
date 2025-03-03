@@ -48,7 +48,7 @@ void check_reports_the_same(
     std::sort(lhs.begin(), lhs.end(), by_id);
     std::sort(rhs.begin(), rhs.end(), by_id);
 
-    for (auto i = 0; i < lhs.size(); ++i) {
+    for (size_t i = 0; i < lhs.size(); ++i) {
         auto& lr = lhs[i];
         auto& rr = rhs[i];
         BOOST_TEST_REQUIRE(
@@ -59,7 +59,7 @@ void check_reports_the_same(
             BOOST_REQUIRE_MESSAGE(r_it != rr->topics.end(), "tp_ns: " << tp_ns);
             auto& r_partitions = r_it->second;
             BOOST_REQUIRE_EQUAL(l_partitions.size(), r_partitions.size());
-            for (auto p = 0; p < l_partitions.size(); ++p) {
+            for (size_t p = 0; p < l_partitions.size(); ++p) {
                 auto& l_p = l_partitions[p];
                 auto& r_p = r_partitions[p];
                 BOOST_REQUIRE_EQUAL(l_p.id, r_p.id);
@@ -71,7 +71,7 @@ void check_reports_the_same(
 
         BOOST_TEST_REQUIRE(
           lr->local_state.disks().size() == rr->local_state.disks().size());
-        for (auto i = 0; i < lr->local_state.disks().size(); ++i) {
+        for (size_t i = 0; i < lr->local_state.disks().size(); ++i) {
             BOOST_REQUIRE_EQUAL(
               lr->local_state.disks().at(i).alert,
               rr->local_state.disks().at(i).alert);
@@ -98,7 +98,7 @@ void check_states_the_same(
     std::sort(lhs.begin(), lhs.end(), by_id);
     std::sort(rhs.begin(), rhs.end(), by_id);
 
-    for (auto i = 0; i < lhs.size(); ++i) {
+    for (size_t i = 0; i < lhs.size(); ++i) {
         auto& lr = lhs[i];
         auto& rr = rhs[i];
         BOOST_TEST_REQUIRE(lr.membership_state() == rr.membership_state());

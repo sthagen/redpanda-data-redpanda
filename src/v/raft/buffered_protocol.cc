@@ -71,10 +71,12 @@ ss::future<result<Ret>> apply_with_gate(
 } // namespace
 
 buffered_protocol::buffered_protocol(
+  ss::scheduling_group sg,
   consensus_client_protocol base,
   config::binding<size_t> max_inflight_requests,
   config::binding<size_t> max_buffered_bytes)
-  : _base_protocol(std::move(base))
+  : _sg(sg)
+  , _base_protocol(std::move(base))
   , _max_inflight_requests(std::move(max_inflight_requests))
   , _max_buffered_bytes(std::move(max_buffered_bytes))
   , _gc_timer([this] { garbage_collect_unused_queues(); }) {
@@ -110,6 +112,7 @@ ss::future<result<append_entries_reply>> buffered_protocol::append_entries(
                 it,
                 target_node,
                 std::make_unique<internal::append_entries_queue>(
+                  _sg,
                   target_node,
                   _base_protocol,
                   _gate.hold(),
@@ -227,12 +230,14 @@ void buffered_protocol::garbage_collect_unused_queues() {
 
 namespace internal {
 append_entries_queue::append_entries_queue(
+  ss::scheduling_group sg,
   model::node_id target_node,
   consensus_client_protocol base_protocol,
   ss::gate::holder gate_holder,
   config::binding<size_t> max_inflight_requests,
   config::binding<size_t> max_buffered_bytes)
-  : _target_node(target_node)
+  : _sg(sg)
+  , _target_node(target_node)
   , _base_protocol(std::move(base_protocol))
   , _logger(raftlog, fmt::format("[node: {}]", _target_node))
   , _current_max_inflight_requests(max_inflight_requests())
@@ -256,8 +261,10 @@ append_entries_queue::append_entries_queue(
     setup_internal_metrics();
     // start dispatch loop
     ssx::repeat_until_gate_closed(
-      _gate,
-      [this, gate_holder = std::move(gate_holder)] { return dispatch_loop(); });
+      _gate, [this, gate_holder = std::move(gate_holder)] {
+          return ss::with_scheduling_group(
+            _sg, [this] { return dispatch_loop(); });
+      });
 };
 
 ss::future<> append_entries_queue::dispatch_loop() {

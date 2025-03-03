@@ -10,6 +10,7 @@
 #include "cloud_io/remote.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
+#include "config/property.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/coordinator/iceberg_file_committer.h"
 #include "datalake/coordinator/tests/state_test_utils.h"
@@ -95,7 +96,7 @@ public:
       , catalog(remote(), bucket_name, ss::sstring(base_location))
       , schema_mgr(catalog)
       , manifest_io(remote(), bucket_name)
-      , committer(catalog, manifest_io) {
+      , committer(catalog, manifest_io, config::mock_binding(false)) {
         set_expectations_and_listen({});
     }
     cloud_io::remote& remote() { return sr->remote.local(); }

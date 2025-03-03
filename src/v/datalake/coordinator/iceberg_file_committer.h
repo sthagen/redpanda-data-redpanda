@@ -10,6 +10,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "config/property.h"
 #include "container/fragmented_vector.h"
 #include "datalake/coordinator/file_committer.h"
 #include "datalake/coordinator/state_update.h"
@@ -22,9 +23,13 @@ namespace datalake::coordinator {
 
 class iceberg_file_committer : public file_committer {
 public:
-    iceberg_file_committer(iceberg::catalog& catalog, iceberg::manifest_io& io)
+    iceberg_file_committer(
+      iceberg::catalog& catalog,
+      iceberg::manifest_io& io,
+      config::binding<bool> disable_snapshot_tags)
       : catalog_(catalog)
-      , io_(io) {}
+      , io_(io)
+      , disable_snapshot_tags_(std::move(disable_snapshot_tags)) {}
     ~iceberg_file_committer() override = default;
 
     // Commits the given files to the table, creating the table if necessary.
@@ -54,6 +59,7 @@ private:
     // Must outlive this committer.
     iceberg::catalog& catalog_;
     iceberg::manifest_io& io_;
+    config::binding<bool> disable_snapshot_tags_;
 };
 
 } // namespace datalake::coordinator

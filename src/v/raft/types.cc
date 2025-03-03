@@ -203,6 +203,21 @@ std::ostream& operator<<(std::ostream& o, const follower_index_metadata& i) {
       i.is_recovering);
     return o;
 }
+std::ostream& operator<<(std::ostream& o, const follower_metrics& i) {
+    fmt::print(
+      o,
+      "{{node_id: {}, is_learner: {}, committed_log_index: {}, "
+      "dirty_log_index: {}, match_index: {}, is_live: {}, "
+      "under_replicated: {}}}",
+      i.id,
+      i.is_learner,
+      i.committed_log_index,
+      i.dirty_log_index,
+      i.match_index,
+      i.is_live,
+      i.under_replicated);
+    return o;
+}
 std::ostream& operator<<(std::ostream& o, const heartbeat_metadata& hm) {
     fmt::print(
       o,

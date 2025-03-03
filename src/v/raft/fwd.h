@@ -14,6 +14,7 @@
 namespace raft {
 
 class consensus;
+struct follower_metrics;
 class group_manager;
 class recovery_throttle;
 class state_machine_manager;

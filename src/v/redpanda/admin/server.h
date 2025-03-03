@@ -509,6 +509,10 @@ private:
       stop_broker_maintenance_handler(std::unique_ptr<ss::http::request>);
     ss::future<ss::json::json_return_type>
       reset_crash_tracking(std::unique_ptr<ss::http::request>);
+    ss::future<ss::json::json_return_type>
+      pre_restart_probe(std::unique_ptr<ss::http::request>);
+    ss::future<ss::json::json_return_type>
+      post_restart_probe(std::unique_ptr<ss::http::request>);
 
     /// Register partition routes
     ss::future<ss::json::json_return_type>

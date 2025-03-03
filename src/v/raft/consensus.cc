@@ -49,6 +49,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/metrics.hh>
 #include <seastar/core/semaphore.hh>
+#include <seastar/coroutine/switch_to.hh>
 #include <seastar/util/defer.hh>
 
 #include <fmt/ostream.h>
@@ -1032,56 +1033,62 @@ void consensus::dispatch_vote(bool leadership_transfer) {
     // background, acquire lock, transition state
     ssx::background
       = ssx::spawn_with_gate_then(_bg, [this, leadership_transfer] {
-            return dispatch_prevote(leadership_transfer)
-              .then([this, leadership_transfer](
-                      election_success prevote_success) mutable {
-                  vlog(
-                    _ctxlog.debug,
-                    "pre-vote phase success: {}, current term: {}, "
-                    "leadership transfer: {}",
-                    prevote_success,
-                    _term,
-                    leadership_transfer);
-                  // if a current node is not longer candidate we should skip
-                  // proceeding to actual vote phase
-                  if (!prevote_success || _vstate != vote_state::candidate) {
-                      return ss::make_ready_future<>();
-                  }
-                  auto vstm = std::make_unique<vote_stm>(this);
-                  auto p = vstm.get();
+            return ss::with_scheduling_group(
+              _scheduling.send_sg, [this, leadership_transfer] {
+                  return dispatch_prevote(leadership_transfer)
+                    .then([this, leadership_transfer](
+                            election_success prevote_success) mutable {
+                        vlog(
+                          _ctxlog.debug,
+                          "pre-vote phase success: {}, current term: {}, "
+                          "leadership transfer: {}",
+                          prevote_success,
+                          _term,
+                          leadership_transfer);
+                        // if a current node is not longer candidate we should
+                        // skip proceeding to actual vote phase
+                        if (
+                          !prevote_success
+                          || _vstate != vote_state::candidate) {
+                            return ss::make_ready_future<>();
+                        }
+                        auto vstm = std::make_unique<vote_stm>(this);
+                        auto p = vstm.get();
 
-                  // CRITICAL: vote performs locking on behalf of consensus
-                  return p->vote(leadership_transfer)
-                    .then_wrapped(
-                      [this, p, vstm = std::move(vstm)](
-                        ss::future<election_success> vote_f) mutable {
-                          try {
-                              vote_f.get();
-                          } catch (const ss::gate_closed_exception&) {
-                              // Shutting down, don't log.
-                          } catch (...) {
-                              vlog(
-                                _ctxlog.warn,
-                                "Error returned from voting process {}",
-                                std::current_exception());
-                          }
-                          auto f = p->wait().finally(
-                            [vstm = std::move(vstm)] {});
-                          // make sure we wait for all futures when gate is
-                          // closed
-                          if (_bg.is_closed()) {
-                              return f;
-                          }
-                          // background
-                          ssx::spawn_with_gate(
-                            _bg, [f = std::move(f)]() mutable {
-                                return std::move(f);
+                        // CRITICAL: vote performs locking on behalf of
+                        // consensus
+                        return p->vote(leadership_transfer)
+                          .then_wrapped(
+                            [this, p, vstm = std::move(vstm)](
+                              ss::future<election_success> vote_f) mutable {
+                                try {
+                                    vote_f.get();
+                                } catch (const ss::gate_closed_exception&) {
+                                    // Shutting down, don't log.
+                                } catch (...) {
+                                    vlog(
+                                      _ctxlog.warn,
+                                      "Error returned from voting process {}",
+                                      std::current_exception());
+                                }
+                                auto f = p->wait().finally(
+                                  [vstm = std::move(vstm)] {});
+                                // make sure we wait for all futures when gate
+                                // is closed
+                                if (_bg.is_closed()) {
+                                    return f;
+                                }
+                                // background
+                                ssx::spawn_with_gate(
+                                  _bg, [f = std::move(f)]() mutable {
+                                      return std::move(f);
+                                  });
+
+                                return ss::make_ready_future<>();
                             });
-
-                          return ss::make_ready_future<>();
-                      });
-              })
-              .finally([this] { arm_vote_timeout(); });
+                    })
+                    .finally([this] { arm_vote_timeout(); });
+              });
         }).handle_exception([this](const std::exception_ptr& e) {
             vlog(_ctxlog.warn, "Exception thrown while voting - {}", e);
         });
@@ -1432,6 +1439,7 @@ ss::future<> consensus::start(
 ss::future<>
 consensus::do_start(std::optional<xshard_transfer_state> xst_state) {
     try {
+        co_await ss::coroutine::switch_to(_scheduling.send_sg);
         auto u = co_await _op_lock.get_units();
 
         read_voted_for();
@@ -1616,6 +1624,9 @@ consensus::do_start(std::optional<xshard_transfer_state> xst_state) {
         co_await _event_manager.start();
         _append_requests_buffer.start();
         if (_stm_manager) {
+            // previously the state machine manager was started in the main
+            // scheduling group, let's keep it for now
+            co_await ss::coroutine::switch_to(ss::default_scheduling_group());
             co_await _stm_manager->start();
         }
 
@@ -3256,13 +3267,15 @@ const group_configuration& consensus::config() const {
     return _configuration_manager.get_latest();
 }
 
-ss::future<timeout_now_reply> consensus::timeout_now(timeout_now_request&& r) {
+ss::future<timeout_now_reply> consensus::timeout_now(timeout_now_request r) {
     if (unlikely(is_request_target_node_invalid("timeout_now", r))) {
-        return ss::make_ready_future<timeout_now_reply>(timeout_now_reply{
+        co_return timeout_now_reply{
           .term = _term,
           .result = timeout_now_reply::status::failure,
-        });
+        };
     }
+
+    co_await ss::coroutine::switch_to(_scheduling.send_sg);
 
     if (r.term != _term) {
         vlog(
@@ -3272,17 +3285,14 @@ ss::future<timeout_now_reply> consensus::timeout_now(timeout_now_request&& r) {
           r.term,
           _term);
 
-        auto f = ss::now();
         if (r.term > _term) {
-            f = step_down(r.term, "timeout_now");
+            co_await step_down(r.term, "timeout_now");
         }
 
-        return f.then([this] {
-            return ss::make_ready_future<timeout_now_reply>(timeout_now_reply{
-              .term = _term,
-              .result = timeout_now_reply::status::failure,
-            });
-        });
+        co_return timeout_now_reply{
+          .term = _term,
+          .result = timeout_now_reply::status::failure,
+        };
     }
 
     if (_vstate != vote_state::follower) {
@@ -3294,10 +3304,10 @@ ss::future<timeout_now_reply> consensus::timeout_now(timeout_now_request&& r) {
           r.node_id,
           r.term);
 
-        return ss::make_ready_future<timeout_now_reply>(timeout_now_reply{
+        co_return timeout_now_reply{
           .term = _term,
           .result = timeout_now_reply::status::failure,
-        });
+        };
     }
 
     if (_node_priority_override == zero_voter_priority) {
@@ -3309,10 +3319,10 @@ ss::future<timeout_now_reply> consensus::timeout_now(timeout_now_request&& r) {
           r.node_id,
           r.term);
 
-        return ss::make_ready_future<timeout_now_reply>(timeout_now_reply{
+        co_return timeout_now_reply{
           .term = _term,
           .result = timeout_now_reply::status::failure,
-        });
+        };
     }
 
     // start an election immediately
@@ -3329,11 +3339,11 @@ ss::future<timeout_now_reply> consensus::timeout_now(timeout_now_request&& r) {
      * the election having not yet started) and allowing the receiver to step
      * down even before it receives a request vote rpc.
      */
-    return ss::make_ready_future<timeout_now_reply>(timeout_now_reply{
+    co_return timeout_now_reply{
       .target_node_id = r.node_id,
       .term = _term,
       .result = timeout_now_reply::status::success,
-    });
+    };
 }
 
 ss::future<transfer_leadership_reply>
@@ -3962,6 +3972,12 @@ std::vector<follower_metrics> consensus::get_follower_metrics() const {
     ret.reserve(_fstats.size());
     const auto offsets = _log->offsets();
     for (const auto& f : _fstats) {
+        vlog(
+          _ctxlog.trace,
+          "build_follower_metrics node={} meta={} lstats={}",
+          f.first.id(),
+          f.second,
+          offsets);
         ret.push_back(build_follower_metrics(
           f.first.id(),
           offsets,

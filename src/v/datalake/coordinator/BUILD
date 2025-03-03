@@ -189,6 +189,7 @@ redpanda_cc_library(
         ":commit_offset_metadata",
         ":state",
         "//src/v/base",
+        "//src/v/config",
         "//src/v/datalake:logger",
         "//src/v/datalake:table_id_provider",
         "//src/v/iceberg:manifest_entry",

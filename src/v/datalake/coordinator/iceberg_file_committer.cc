@@ -212,7 +212,9 @@ checked<iceberg::partition_key, file_committer::errc> build_partition_key(
 class table_commit_builder {
 public:
     static checked<table_commit_builder, file_committer::errc> create(
-      iceberg::table_identifier table_id, iceberg::table_metadata&& table) {
+      iceberg::table_identifier table_id,
+      iceberg::table_metadata&& table,
+      bool with_tag) {
         auto meta_res = get_iceberg_committed_offset(table);
         if (meta_res.has_error()) {
             vlog(
@@ -225,7 +227,7 @@ public:
         }
 
         return table_commit_builder(
-          std::move(table_id), std::move(table), meta_res.value());
+          std::move(table_id), std::move(table), meta_res.value(), with_tag);
     }
 
 public:
@@ -311,13 +313,20 @@ public:
         // snapshot expiration doesn't clear this snapshot and its commit
         // metadata properties. The tag ensures that we retain them e.g. in
         // case of external table updates and low snapshot retention.
+        auto tag_name = with_snapshot_tag_
+                          ? std::make_optional<ss::sstring>(commit_tag_name)
+                          : std::nullopt;
+        auto tag_expiry_ms = with_snapshot_tag_
+                               ? std::make_optional<int64_t>(
+                                   std::numeric_limits<int64_t>::max())
+                               : std::nullopt;
         iceberg::transaction txn(std::move(table_));
         auto icb_append_res = co_await txn.merge_append(
           io,
           std::move(icb_files_),
           {{commit_meta_prop, to_json_str(commit_meta)}},
-          commit_tag_name,
-          /*tag_expiration_ms=*/std::numeric_limits<int64_t>::max());
+          std::move(tag_name),
+          tag_expiry_ms);
         if (icb_append_res.has_error()) {
             co_return log_and_convert_action_errc(
               icb_append_res.error(),
@@ -340,10 +349,12 @@ private:
     table_commit_builder(
       iceberg::table_identifier table_id,
       iceberg::table_metadata&& table,
-      std::optional<model::offset> table_commit_offset)
+      std::optional<model::offset> table_commit_offset,
+      bool with_tag)
       : table_id_(std::move(table_id))
       , table_(std::move(table))
-      , table_commit_offset_(table_commit_offset) {}
+      , table_commit_offset_(table_commit_offset)
+      , with_snapshot_tag_(with_tag) {}
 
 private:
     bool should_skip_entry(model::offset added_pending_at) const {
@@ -355,6 +366,7 @@ private:
     iceberg::table_identifier table_id_;
     iceberg::table_metadata table_;
     std::optional<model::offset> table_commit_offset_;
+    bool with_snapshot_tag_;
 
     // State accumulated.
     chunked_vector<iceberg::data_file> icb_files_;
@@ -402,7 +414,9 @@ iceberg_file_committer::commit_topic_files_to_catalog(
             }
         } else {
             auto main_table_commit_builder_res = table_commit_builder::create(
-              std::move(main_table_id), std::move(main_table_res.value()));
+              std::move(main_table_id),
+              std::move(main_table_res.value()),
+              !disable_snapshot_tags_());
             if (main_table_commit_builder_res.has_error()) {
                 co_return main_table_commit_builder_res.error();
             }
@@ -443,7 +457,9 @@ iceberg_file_committer::commit_topic_files_to_catalog(
             }
         } else {
             auto dlq_table_commit_builder_res = table_commit_builder::create(
-              std::move(dlq_table_id), std::move(dlq_table_res.value()));
+              std::move(dlq_table_id),
+              std::move(dlq_table_res.value()),
+              !disable_snapshot_tags_());
             if (dlq_table_commit_builder_res.has_error()) {
                 co_return dlq_table_commit_builder_res.error();
             }

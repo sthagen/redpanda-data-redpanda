@@ -69,6 +69,11 @@ public:
     get_node_drain_status(
       model::node_id node_id, model::timeout_clock::time_point deadline);
 
+    ss::future<result<restart_risk_report>> get_current_node_restart_risks(
+      size_t limit, model::timeout_clock::time_point deadline);
+
+    ss::future<result<double>> get_current_node_in_sync_replicas_share(
+      model::timeout_clock::time_point deadline);
     /**
      *  Return cluster health overview
      *

@@ -27,7 +27,8 @@ namespace raft {
 
 group_manager::group_manager(
   model::node_id self,
-  ss::scheduling_group raft_sg,
+  ss::scheduling_group raft_recv_sg,
+  ss::scheduling_group raft_send_sg,
   ss::scheduling_group raft_heartbeats_sched_group,
   group_manager::config_provider_fn cfg,
   recovery_memory_quota::config_provider_fn recovery_mem_cfg,
@@ -36,9 +37,11 @@ group_manager::group_manager(
   ss::sharded<coordinated_recovery_throttle>& recovery_throttle,
   ss::sharded<features::feature_table>& feature_table)
   : _self(self)
-  , _raft_sg(raft_sg)
+  , _raft_recv_sg(raft_recv_sg)
+  , _raft_send_sg(raft_send_sg)
   , _configuration(cfg())
   , _buffered_protocol(ss::make_shared<buffered_protocol>(
+      _raft_send_sg,
       make_rpc_client_protocol(self, clients),
       _configuration.max_inflight_requests_per_node,
       _configuration.max_buffered_bytes_per_node))
@@ -133,7 +136,7 @@ ss::future<ss::lw_shared_ptr<raft::consensus>> group_manager::create_group(
       raft::group_configuration(nodes, revision),
       raft::timeout_jitter(_configuration.election_timeout_ms),
       log,
-      scheduling_config(_raft_sg, raft_priority()),
+      scheduling_config(_raft_recv_sg, _raft_send_sg, raft_priority()),
       _configuration.raft_io_timeout_ms,
       _configuration.enable_longest_log_detection,
       consensus_client_protocol(_buffered_protocol),

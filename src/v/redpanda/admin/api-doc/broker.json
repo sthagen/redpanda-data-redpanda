@@ -249,6 +249,44 @@
                     ]
                 }
             ]
+        },
+        {
+            "path": "/v1/broker/pre_restart_probe",
+            "operations": [
+                {
+                    "method": "GET",
+                    "summary": "Check if it is safe to restart this broker",
+                    "type": "pre_restart_check_result",
+                    "nickname": "pre_restart_probe",
+                    "produces": [
+                        "application/json"
+                    ],
+                    "parameters": [
+                      {
+                        "in": "query",
+                        "name": "limit",
+                        "schema": {"type": "integer"},
+                        "required": false,
+                        "description": "Limit the number of partitions listed for each risk type (default is 128)"
+                      }
+                    ]
+                }
+            ]
+        },
+        {
+            "path": "/v1/broker/post_restart_probe",
+            "operations": [
+                {
+                    "method": "GET",
+                    "summary": "Check if it this broker has recovered after restart",
+                    "type": "post_restart_check_result",
+                    "nickname": "post_restart_probe",
+                    "produces": [
+                        "application/json"
+                    ],
+                    "parameters": []
+                }
+            ]
         }
     ],
     "models": {
@@ -468,6 +506,64 @@
                 "uuid": {
                     "type": "string",
                     "description": "Broker unique identifier. UUID is generated when Redpanda starts with empty data folder"
+                }
+            }
+        },
+        "pre_restart_check_result": {
+            "id": "pre_restart_check_result",
+            "description": "Pre-restart check result",
+            "properties" : {
+                "risks": {
+                    "type": "restart_risks",
+                    "description": "Partitions affected by the current node restart, arranged by risk type"
+                }
+            }
+        },
+        "post_restart_check_result": {
+            "id": "post_restart_check_result",
+            "description": "Post-restart check result",
+            "properties" : {
+                "load_reclaimed_pc": {
+                    "type": "int",
+                    "description": "Measure the load the broker has reclaimed after a restart as a percentage of in-sync replicas. 0 to 100."
+                }
+            }
+        },
+        "restart_risks": {
+            "id": "restart_risks",
+            "description": "Partitions affected by the current node restart, arranged by risk type (each list is truncated according to the limit specified in the request)",
+            "properties" : {
+                "rf1_offline" : {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "description": "ntp"
+                    },
+                    "description": "Partitions with replication factor 1 that have a replica on current node"
+                },
+                "full_acks_produce_unavailable" : {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "description": "ntp"
+                    },
+                    "description": "Partitions that may reject produce requests (with acks=-1) if the current node is restarted"
+                },
+                "unavailable" : {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "description": "ntp"
+                    },
+                    "description": "Partitions that may reject consume and produce requests if the current node is restarted"
+                },
+                "acks1_data_loss" : {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "description": "ntp"
+                    },
+                    "description": "Partitions that may lose data produced (with acks=1) if the current node is restarted"
                 }
             }
         }

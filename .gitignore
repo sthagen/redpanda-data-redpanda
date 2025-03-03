@@ -246,6 +246,7 @@ results
 .ducktape
 tests/docker/build
 vbuild/
+tests/java/iceberg-rest-catalog/.gradle
 
 /.vtools.yml
 /vtools
@@ -269,3 +270,4 @@ vbuild/
 
 # Ctest
 /Testing
+

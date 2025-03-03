@@ -1437,7 +1437,8 @@ void application::wire_up_redpanda_services(
     raft_group_manager
       .start(
         node_id,
-        sched_groups.raft_sg(),
+        sched_groups.raft_recv_sg(),
+        sched_groups.raft_send_sg(),
         sched_groups.raft_heartbeats(),
         [] {
             return raft::group_manager::configuration{
@@ -2894,7 +2895,7 @@ void application::start_runtime_services(
               runtime_services.push_back(std::make_unique<raft::service<
                                            cluster::partition_manager,
                                            cluster::shard_table>>(
-                sched_groups.raft_sg(),
+                sched_groups.raft_recv_sg(),
                 smp_service_groups.raft_smp_sg(),
                 sched_groups.raft_heartbeats(),
                 partition_manager,
@@ -2958,13 +2959,13 @@ void application::start_runtime_services(
               std::ref(offsets_recovery_router),
               std::ref(offsets_upload_router)));
           runtime_services.push_back(std::make_unique<cluster::id_allocator>(
-            sched_groups.raft_sg(),
+            sched_groups.raft_recv_sg(),
             smp_service_groups.raft_smp_sg(),
             std::ref(id_allocator_frontend)));
           // _rm_group_proxy is wrap around a sharded service with only
           // `.local()' access so it's ok to share without foreign_ptr
           runtime_services.push_back(std::make_unique<cluster::tx_gateway>(
-            sched_groups.raft_sg(),
+            sched_groups.raft_recv_sg(),
             smp_service_groups.raft_smp_sg(),
             std::ref(tx_gateway_frontend),
             _rm_group_proxy.get(),
@@ -2974,7 +2975,7 @@ void application::start_runtime_services(
               runtime_services.push_back(std::make_unique<raft::service<
                                            cluster::partition_manager,
                                            cluster::shard_table>>(
-                sched_groups.raft_sg(),
+                sched_groups.raft_recv_sg(),
                 smp_service_groups.raft_smp_sg(),
                 sched_groups.raft_heartbeats(),
                 partition_manager,

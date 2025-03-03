@@ -2655,6 +2655,62 @@ admin_server::reset_crash_tracking(std::unique_ptr<ss::http::request>) {
     co_return ss::json::json_void();
 }
 
+namespace {
+void format_affected_partitions(
+  const cluster::restart_risk_report::partitions_t& src,
+  ss::json::json_list<ss::sstring>& dest) {
+    dest = src | std::views::transform([](const model::ntp& ntp) {
+               return fmt::format(
+                 "{}/{}/{}", ntp.ns(), ntp.tp.topic(), ntp.tp.partition());
+           });
+    dest._set = true; // even if empty
+}
+} // namespace
+
+ss::future<ss::json::json_return_type>
+admin_server::pre_restart_probe(std::unique_ptr<ss::http::request> req) {
+    vlog(adminlog.debug, "Requested broker pre-restart probe");
+    auto limit = get_integer_query_param(*req, "limit");
+    auto maybe_res = co_await _controller->get_health_monitor()
+                       .local()
+                       .get_current_node_restart_risks(
+                         limit.value_or(128),
+                         model::time_from_now(std::chrono::seconds(5)));
+
+    if (!maybe_res.has_value()) {
+        co_await throw_on_error(*req, maybe_res.error(), model::controller_ntp);
+        vassert(false, "the line above should have thrown");
+    }
+    const auto& res = maybe_res.value();
+    ss::httpd::broker_json::restart_risks risks;
+    format_affected_partitions(res.rf1_offline, risks.rf1_offline);
+    format_affected_partitions(
+      res.full_acks_produce_unavailable, risks.full_acks_produce_unavailable);
+    format_affected_partitions(res.unavailable, risks.unavailable);
+    format_affected_partitions(res.acks1_data_loss, risks.acks1_data_loss);
+
+    ss::httpd::broker_json::pre_restart_check_result ret;
+    ret.risks = risks;
+    co_return ss::json::json_return_type(ret);
+}
+
+ss::future<ss::json::json_return_type>
+admin_server::post_restart_probe(std::unique_ptr<ss::http::request> req) {
+    vlog(adminlog.debug, "Requested broker post-restart probe");
+    auto maybe_res = co_await _controller->get_health_monitor()
+                       .local()
+                       .get_current_node_in_sync_replicas_share(
+                         model::time_from_now(std::chrono::seconds(5)));
+    if (!maybe_res.has_value()) {
+        co_await throw_on_error(*req, maybe_res.error(), model::controller_ntp);
+        vassert(false, "the line above should have thrown");
+    }
+    ss::httpd::broker_json::post_restart_check_result ret;
+    // placeholder, to be implemented
+    ret.load_reclaimed_pc = 100 * maybe_res.value();
+    co_return ss::json::json_return_type(ret);
+}
+
 void admin_server::register_broker_routes() {
     register_route<user>(
       ss::httpd::broker_json::get_cluster_view,
@@ -2777,6 +2833,16 @@ void admin_server::register_broker_routes() {
       ss::httpd::broker_json::reset_crash_tracking,
       [this](std::unique_ptr<ss::http::request> req) {
           return reset_crash_tracking(std::move(req));
+      });
+    register_route<publik>(
+      ss::httpd::broker_json::pre_restart_probe,
+      [this](std::unique_ptr<ss::http::request> req) {
+          return pre_restart_probe(std::move(req));
+      });
+    register_route<publik>(
+      ss::httpd::broker_json::post_restart_probe,
+      [this](std::unique_ptr<ss::http::request> req) {
+          return post_restart_probe(std::move(req));
       });
 }
 

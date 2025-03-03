@@ -739,6 +739,7 @@ struct configuration final : public config_store {
     enum_property<model::iceberg_invalid_record_action>
       iceberg_invalid_record_action;
     bounded_property<std::chrono::milliseconds> iceberg_target_lag_ms;
+    property<bool> iceberg_disable_snapshot_tagging;
 
     configuration();
 

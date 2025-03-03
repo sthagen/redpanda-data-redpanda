@@ -61,7 +61,7 @@ ss::future<> append_entries_buffer::stop() {
 void append_entries_buffer::start() {
     ssx::spawn_with_gate(_gate, [this] {
         return ss::with_scheduling_group(
-          _consensus._scheduling.default_sg, [this] {
+          _consensus._scheduling.recv_sg, [this] {
               return ss::do_until(
                 [this] { return _gate.is_closed(); },
                 [this] {

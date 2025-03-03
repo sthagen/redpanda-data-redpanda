@@ -66,7 +66,7 @@ admin_server::get_transactions_inner_handler(
     auto partition = pm.get(ntp);
     if (!partition) {
         throw ss::httpd::server_error_exception(
-          fmt_with_ctx(fmt::format, "Can not find partition {}", partition));
+          fmt_with_ctx(fmt::format, "Can not find partition {}", ntp));
     }
 
     auto rm_stm_ptr = partition->rm_stm();
@@ -174,8 +174,8 @@ admin_server::mark_transaction_expired_handler(
           auto partition = pm.get(ntp);
           if (!partition) {
               return ss::make_exception_future<ss::json::json_return_type>(
-                ss::httpd::server_error_exception(fmt_with_ctx(
-                  fmt::format, "Can not find partition {}", partition)));
+                ss::httpd::server_error_exception(
+                  fmt_with_ctx(fmt::format, "Can not find partition {}", ntp)));
           }
 
           auto rm_stm_ptr = partition->rm_stm();

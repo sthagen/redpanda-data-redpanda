@@ -86,9 +86,26 @@ private:
     alive _is_alive;
 };
 
+enum class follower_status { in_sync, out_of_sync, down };
+std::ostream& operator<<(std::ostream& o, follower_status);
+
+struct followers_stats
+  : serde::
+      envelope<followers_stats, serde::version<0>, serde::compat_version<0>> {
+    // all distinct
+    int16_t in_sync = 1; // leader is always in sync
+    std::vector<model::node_id> out_of_sync;
+    std::vector<model::node_id> down;
+
+    auto serde_fields() { return std::tie(in_sync, out_of_sync, down); }
+
+    friend std::ostream& operator<<(std::ostream&, const followers_stats&);
+    friend bool operator==(const followers_stats&, const followers_stats&)
+      = default;
+};
 struct partition_status
   : serde::
-      envelope<partition_status, serde::version<3>, serde::compat_version<0>> {
+      envelope<partition_status, serde::version<4>, serde::compat_version<0>> {
     static constexpr size_t invalid_size_bytes = size_t(-1);
     static constexpr uint32_t invalid_shard_id = uint32_t(-1);
 
@@ -97,6 +114,7 @@ struct partition_status
     std::optional<model::node_id> leader_id;
     model::revision_id revision_id;
     size_t size_bytes;
+    // on leaders only, counts under-replicated replicas, whether live or not
     std::optional<uint8_t> under_replicated_replicas;
 
     /*
@@ -116,6 +134,9 @@ struct partition_status
 
     uint32_t shard = invalid_shard_id;
 
+    // present on leaders only
+    std::optional<followers_stats> followers_stats;
+
     auto serde_fields() {
         return std::tie(
           id,
@@ -125,7 +146,8 @@ struct partition_status
           size_bytes,
           under_replicated_replicas,
           reclaimable_size_bytes,
-          shard);
+          shard,
+          followers_stats);
     }
 
     friend std::ostream& operator<<(std::ostream&, const partition_status&);
@@ -337,6 +359,21 @@ struct cluster_health_report
             in.skip(in.bytes_left() - h._bytes_left_limit);
         }
     }
+};
+
+struct restart_risk_report {
+    using partitions_t = chunked_vector<model::ntp>;
+    partitions_t rf1_offline;
+    partitions_t full_acks_produce_unavailable;
+    partitions_t unavailable;
+    partitions_t acks1_data_loss;
+
+    size_t limit;
+
+    void push(
+      partitions_t restart_risk_report::*member,
+      const model::topic_namespace&,
+      model::partition_id);
 };
 
 struct cluster_health_overview {

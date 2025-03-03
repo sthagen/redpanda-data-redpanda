@@ -55,7 +55,9 @@ ss::future<> coordinator_manager::start() {
     catalog_ = co_await catalog_factory_->create_catalog();
     schema_mgr_ = std::make_unique<catalog_schema_manager>(*catalog_);
     file_committer_ = std::make_unique<iceberg_file_committer>(
-      *catalog_, manifest_io_);
+      *catalog_,
+      manifest_io_,
+      config::shard_local_cfg().iceberg_disable_snapshot_tagging.bind());
     snapshot_remover_ = std::make_unique<iceberg_snapshot_remover>(
       *catalog_, manifest_io_);
 

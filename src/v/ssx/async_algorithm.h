@@ -283,6 +283,7 @@ ss::future<> async_for_each(Container&& container, Fn f) {
  *
  * The iterators must remain valid until the returned future resolves.
  *
+ * @param counter the counter object to use, may be reused across invocations
  * @param begin the beginning of the range to process
  * @param end the end of the range to process
  * @param f the function to call on each element
@@ -297,6 +298,78 @@ ss::future<> async_for_each_counter(
   async_counter& counter, Iterator begin, Iterator end, Fn f) {
     return detail::async_for_each_fast<Traits>(
       detail::ref_counter{counter.count}, begin, end, std::move(f));
+}
+
+/**
+ * @brief Call f on every element, yielding occasionally and accepting
+ * an externally provided counter for yield control.
+ *
+ * This is equivalent to std::for_each, except that the computational
+ * loop yields every Traits::interval (default 100) iterations in order
+ * to avoid reactor stalls. The returned future resolves when all elements
+ * have been processed.
+ *
+ * This behaves similarly to async_for_each except that the counter used to
+ * track how much work as been done since the last attempted yield is passed
+ * in by the caller. This allows use in more complex cases such as nested loops
+ * where the inner loop may itself not do sufficient work to ever trigger the
+ * yield condition, even though the total amount of work done across all
+ iterations
+ * is very high.
+ *
+ * Use case:
+ *
+ * Replace something like:
+ *
+ * for (... outer loop ...) {
+ *   for (... inner loop ...) {
+ *      f(elem);
+ *   }
+ * }
+ * with:
+ *
+ * async_counter counter;
+ * for (... outer loop ...) {
+ *    co_await async_for_each(counter, begin, end, f);
+ * }
+ *
+ * The counter is taken by reference and must live at least until the
+ * returned future resolves: this usually trivial when the caller is a
+ * coroutine but may require some care when continuation style is used.
+ *
+ * The function is taken by value.
+ *
+ * Until the returned future resolves, the container's begin and end iterators,
+ * as they were when called, must remain valid, and the container itself must
+ * remain live if it was passed via lvalue reference.
+ *
+ * @param counter the counter object to use, may be reused across invocations
+ * @param container universal reference to container
+ * @param f the function to call on each element
+ * @return ss::future<> a future which resolves when all elements have been
+ * processed
+ */
+template<typename Traits = async_algo_traits, typename Fn, typename Container>
+requires requires(Container c, Fn fn) {
+    { ss::futurize_invoke(fn, *std::begin(c)) } -> std::same_as<ss::future<>>;
+    std::end(c);
+}
+ss::future<>
+async_for_each_counter(async_counter& counter, Container&& container, Fn f) {
+    if constexpr (std::is_lvalue_reference_v<decltype(container)>) {
+        return detail::async_for_each_fast<Traits>(
+          counter, std::begin(container), std::end(container), std::move(f));
+    } else {
+        return ss::do_with(
+          std::move(container),
+          [&counter, f = std::move(f)](Container& container) {
+              return detail::async_for_each_fast<Traits>(
+                counter,
+                std::begin(container),
+                std::end(container),
+                std::move(f));
+          });
+    }
 }
 
 } // namespace ssx

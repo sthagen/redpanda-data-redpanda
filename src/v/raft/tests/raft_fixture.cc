@@ -398,6 +398,7 @@ raft_node_instance::raft_node_instance(
   , _base_directory(std::move(base_directory))
   , _protocol(ss::make_shared<in_memory_test_protocol>(node_map, _logger))
   , _buffered_protocol(ss::make_shared<buffered_protocol>(
+      ss::default_scheduling_group(),
       consensus_client_protocol(_protocol),
       _max_inflight_requests.bind(),
       _max_queued_bytes.bind()))
@@ -471,7 +472,9 @@ raft_node_instance::initialise(std::vector<raft::vnode> initial_nodes) {
       timeout_jitter(_election_timeout),
       _f_log,
       scheduling_config(
-        ss::default_scheduling_group(), ss::default_priority_class()),
+        ss::default_scheduling_group(),
+        ss::default_scheduling_group(),
+        ss::default_priority_class()),
       config::mock_binding<std::chrono::milliseconds>(1s),
       config::mock_binding<bool>(_enable_longest_log_detection),
       consensus_client_protocol(_buffered_protocol),

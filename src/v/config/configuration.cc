@@ -3971,6 +3971,16 @@ configuration::configuration()
       std::chrono::milliseconds{1min},
       {.min = std::chrono::milliseconds{10s},
        .max = serde::max_serializable_ms})
+  , iceberg_disable_snapshot_tagging(
+      *this,
+      "iceberg_disable_snapshot_tagging",
+      "Whether to disable tagging of Iceberg snapshots. These tags are "
+      "used to ensure that the snapshots that Redpanda writes are retained "
+      "during snapshot removal, which in turn, helps Redpanda ensure exactly "
+      "once delivery of records. Disabling tags is therefore not recommended, "
+      "but may be useful if the Iceberg catalog does not support tags.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      false)
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

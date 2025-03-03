@@ -980,6 +980,25 @@ class Admin:
         """
         return self._request('get', f"brokers/{id}", node=node).json()
 
+    def get_broker_pre_restart_probe(self, limit=None, node=None):
+        """
+        Return broker pre-restart probe.
+        """
+        assert node is not None
+        params = None if limit is None else {"limit": limit}
+        return self._request('get',
+                             "broker/pre_restart_probe",
+                             node=node,
+                             params=params).json()
+
+    def get_broker_post_restart_probe(self, node=None):
+        """
+        Return broker post-restart probe.
+        """
+        assert node is not None
+        return self._request('get', "broker/post_restart_probe",
+                             node=node).json()
+
     def get_cluster_view(self, node):
         """
         Return cluster_view.

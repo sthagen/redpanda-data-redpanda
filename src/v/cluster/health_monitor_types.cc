@@ -23,6 +23,7 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
 
+#include <fmt/core.h>
 #include <fmt/ostream.h>
 
 #include <algorithm>
@@ -144,11 +145,34 @@ std::ostream& operator<<(std::ostream& o, const cluster_health_report& r) {
     return o;
 }
 
+std::ostream& operator<<(std::ostream& o, follower_status status) {
+    switch (status) {
+    case follower_status::in_sync:
+        return o << "in_sync";
+    case follower_status::out_of_sync:
+        return o << "out_of_sync";
+    case follower_status::down:
+        return o << "down";
+    }
+}
+
+std::ostream& operator<<(std::ostream& o, const followers_stats& ls) {
+    fmt::print(
+      o,
+      "{{in_sync: {}, out_of_sync: {}, down: "
+      "{}}}",
+      ls.in_sync,
+      ls.out_of_sync,
+      ls.down);
+    return o;
+}
+
 std::ostream& operator<<(std::ostream& o, const partition_status& ps) {
     fmt::print(
       o,
       "{{id: {}, term: {}, leader_id: {}, revision_id: {}, size_bytes: {}, "
-      "reclaimable_size_bytes: {}, under_replicated: {}, shard: {}}}",
+      "reclaimable_size_bytes: {}, under_replicated: {}, shard: {}, "
+      "followers_stats: {}}}",
       ps.id,
       ps.term,
       ps.leader_id,
@@ -156,7 +180,8 @@ std::ostream& operator<<(std::ostream& o, const partition_status& ps) {
       ps.size_bytes,
       ps.reclaimable_size_bytes,
       ps.under_replicated_replicas,
-      ps.shard);
+      ps.shard,
+      ps.followers_stats);
     return o;
 }
 
@@ -282,6 +307,16 @@ std::ostream& operator<<(std::ostream& o, const get_cluster_health_request& r) {
 std::ostream& operator<<(std::ostream& o, const get_cluster_health_reply& r) {
     fmt::print(o, "{{error: {}, report: {}}}", r.error, r.report);
     return o;
+}
+
+void restart_risk_report::push(
+  partitions_t restart_risk_report::*member,
+  const model::topic_namespace& nt,
+  model::partition_id pid) {
+    auto& list = this->*member;
+    if (list.size() < limit) {
+        list.emplace_back(nt.ns, nt.tp, pid);
+    }
 }
 
 std::ostream& operator<<(std::ostream& o, const cluster_health_overview& ho) {

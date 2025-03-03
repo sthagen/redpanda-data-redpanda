@@ -63,6 +63,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_io:remote",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
+        "//src/v/config",
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:logger",
         "//src/v/datalake:table_definition",
