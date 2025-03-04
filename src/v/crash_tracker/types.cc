@@ -13,6 +13,23 @@
 
 namespace crash_tracker {
 
+std::ostream& operator<<(std::ostream& os, crash_type ct) {
+    switch (ct) {
+    case crash_type::unknown:
+        return os << "unknown";
+    case crash_type::startup_exception:
+        return os << "startup_exception";
+    case crash_type::segfault:
+        return os << "segfault";
+    case crash_type::abort:
+        return os << "abort";
+    case crash_type::illegal_instruction:
+        return os << "illegal_instruction";
+    case crash_type::assertion:
+        return os << "assertion";
+    }
+}
+
 std::ostream& operator<<(std::ostream& os, const crash_description& cd) {
     fmt::print(os, "{}", cd.crash_message.c_str());
 

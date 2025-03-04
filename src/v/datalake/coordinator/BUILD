@@ -86,6 +86,7 @@ redpanda_cc_library(
         "//src/v/iceberg:filesystem_catalog",
         "//src/v/pandaproxy",
         "//src/v/schema:registry",
+        "//src/v/storage",
         "//src/v/storage:record_batch_builder",
     ],
     include_prefix = "datalake/coordinator",
@@ -198,6 +199,7 @@ redpanda_cc_library(
         "//src/v/iceberg:transaction",
         "//src/v/iceberg:values",
         "//src/v/iceberg:values_bytes",
+        "//src/v/storage",
     ],
     include_prefix = "datalake/coordinator",
     deps = [

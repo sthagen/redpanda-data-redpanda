@@ -1337,6 +1337,7 @@ void application::wire_up_runtime_services(
         construct_service(
           _datalake_coordinator_mgr,
           node_id,
+          std::ref(storage),
           std::ref(raft_group_manager),
           std::ref(partition_manager),
           std::ref(controller->get_topics_state()),

@@ -10,14 +10,10 @@
 #include "kafka/protocol/schemata/sasl_authenticate_request.h"
 #include "kafka/protocol/schemata/sasl_authenticate_response.h"
 #include "kafka/server/handlers/details/security.h"
-#include "random/generators.h"
 #include "security/acl.h"
-#include "security/authorizer.h"
-#include "utils/base64.h"
 
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/test/unit_test.hpp>
 #include <fmt/ostream.h>

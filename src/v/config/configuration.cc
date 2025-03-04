@@ -3981,6 +3981,14 @@ configuration::configuration()
       "but may be useful if the Iceberg catalog does not support tags.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
+  , iceberg_disable_automatic_snapshot_expiry(
+      *this,
+      "iceberg_disable_automatic_snapshot_expiry",
+      "Whether to disable automatic Iceberg snapshot expiry. This may be "
+      "useful if the Iceberg catalog expects to perform snapshot expiry on "
+      "its own.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      false)
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

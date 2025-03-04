@@ -12,10 +12,12 @@
 #include "cloud_io/tests/scoped_remote.h"
 #include "config/property.h"
 #include "datalake/catalog_schema_manager.h"
+#include "datalake/coordinator/commit_offset_metadata.h"
 #include "datalake/coordinator/iceberg_file_committer.h"
 #include "datalake/coordinator/tests/state_test_utils.h"
 #include "datalake/table_definition.h"
 #include "datalake/tests/test_utils.h"
+#include "features/feature_table.h"
 #include "iceberg/filesystem_catalog.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_io.h"
@@ -23,6 +25,8 @@
 #include "iceberg/table_identifier.h"
 #include "iceberg/transaction.h"
 #include "iceberg/values_bytes.h"
+#include "model/fundamental.h"
+#include "storage/api.h"
 #include "test_utils/async.h"
 
 #include <seastar/util/defer.hh>
@@ -84,6 +88,20 @@ file_committer_loop(file_committer& committer, size_t num_chunks, bool& done) {
     done = true;
     co_return;
 }
+storage::api
+dummy_storage(ss::sharded<features::feature_table>& feature_table) {
+    return storage::api{
+      []() {
+          return storage::kvstore_config(
+            1_MiB,
+            config::mock_binding(10ms),
+            "dummy.dir",
+            storage::make_sanitized_file_config());
+      },
+      []() { return storage::log_config("dummy.dir", 1_GiB); },
+      feature_table};
+}
+const model::cluster_uuid cluster_uuid{uuid_t::create()};
 } // namespace
 
 class FileCommitterTest
@@ -93,11 +111,23 @@ public:
     static constexpr std::string_view base_location{"test"};
     FileCommitterTest()
       : sr(cloud_io::scoped_remote::create(10, conf))
+      , storage(dummy_storage(feature_table))
       , catalog(remote(), bucket_name, ss::sstring(base_location))
       , schema_mgr(catalog)
       , manifest_io(remote(), bucket_name)
-      , committer(catalog, manifest_io, config::mock_binding(false)) {
+      , committer(storage, catalog, manifest_io, config::mock_binding(false)) {
+        feature_table.start().get();
+        feature_table
+          .invoke_on_all(
+            [](features::feature_table& f) { f.testing_activate_all(); })
+          .get();
+        storage.start().get();
+        storage.set_cluster_uuid(cluster_uuid);
         set_expectations_and_listen({});
+    }
+    void TearDown() override {
+        storage.stop().get();
+        feature_table.stop().get();
     }
     cloud_io::remote& remote() { return sr->remote.local(); }
 
@@ -111,7 +141,45 @@ public:
         ASSERT_FALSE(res.has_error());
     }
 
+    void get_snap_data_files(
+      const iceberg::snapshot& snap, chunked_vector<ss::sstring>* uris) {
+        const auto& mlist_uri = snap.manifest_list_path;
+        auto mlist_res = manifest_io.download_manifest_list(mlist_uri).get();
+        ASSERT_TRUE(mlist_res.has_value());
+        const auto& mlist = mlist_res.value();
+
+        auto schema = datalake::default_schema();
+        auto pspec = iceberg::partition_spec::resolve(
+          datalake::hour_partition_spec(), schema.schema_struct);
+        ASSERT_TRUE(pspec.has_value());
+        auto pk_type = iceberg::partition_key_type::create(
+          pspec.value(), schema);
+
+        // Collect all the data files for this snapshot.
+        for (const auto& m : mlist.files) {
+            auto m_res
+              = manifest_io.download_manifest(m.manifest_path, pk_type).get();
+            ASSERT_TRUE(m_res.has_value());
+            for (const auto& e : m_res.value().entries) {
+                uris->emplace_back(e.data_file.file_path());
+            }
+        }
+    }
+
+    // Populates `uris` with the data files referenced by the current snapshot.
+    void get_current_data_files(chunked_vector<ss::sstring>* uris) {
+        auto load_res = catalog.load_table(table_ident).get();
+        ASSERT_FALSE(load_res.has_error());
+        const auto& table = load_res.value();
+        ASSERT_TRUE(table.current_snapshot_id.has_value());
+        auto cur_snap = table.get_snapshots_by_id().at(
+          *table.current_snapshot_id);
+        ASSERT_NO_FATAL_FAILURE(get_snap_data_files(cur_snap, uris));
+    }
+
     std::unique_ptr<cloud_io::scoped_remote> sr;
+    ss::sharded<features::feature_table> feature_table;
+    storage::api storage;
     iceberg::filesystem_catalog catalog;
     datalake::catalog_schema_manager schema_mgr;
     iceberg::manifest_io manifest_io;
@@ -465,6 +533,100 @@ TEST_F(FileCommitterTest, TestDeduplicateFromAncestor) {
     ASSERT_EQ(2, load_res.value().snapshots.value().size());
 }
 
+TEST_F(FileCommitterTest, TestDontDeduplicateFromOtherCluster) {
+    create_table();
+
+    // Create some offset ranges with file paths.
+    topics_state state;
+    state.topic_to_state[topic] = make_topic_state(
+      /*offset_bounds_by_pid=*/{{{0, 99}, {100, 199}}},
+      /*added_at=*/model::offset{1000},
+      /*with_files=*/true);
+    auto res = committer.commit_topic_files_to_catalog(topic, state).get();
+    ASSERT_FALSE(res.has_error());
+    chunked_vector<ss::sstring> uris;
+    ASSERT_NO_FATAL_FAILURE(get_current_data_files(&uris));
+    ASSERT_EQ(2, uris.size());
+
+    // Now commit some data, but with a new cluster UUID. Even though the
+    // files were added at a lower offset than above, since it's from a new
+    // cluster UUID, the files should still be added.
+    topics_state new_cluster_state;
+    new_cluster_state.topic_to_state[topic] = make_topic_state(
+      // NOTE: deduplication is based on the added_at offset rather than offset
+      // ranges, so it doesn't matter we're adding the same ranges here.
+      /*offset_bounds_by_pid=*/{{{0, 99}, {100, 199}}},
+      /*added_at=*/model::offset{0},
+      /*with_files=*/true);
+
+    model::cluster_uuid new_cluster{uuid_t::create()};
+    auto new_storage = dummy_storage(feature_table);
+    new_storage.set_cluster_uuid(new_cluster);
+    iceberg_file_committer new_cluster_committer(
+      new_storage, catalog, manifest_io, config::mock_binding(false));
+    res = new_cluster_committer
+            .commit_topic_files_to_catalog(topic, new_cluster_state)
+            .get();
+    ASSERT_FALSE(res.has_error());
+
+    uris.clear();
+    ASSERT_NO_FATAL_FAILURE(get_current_data_files(&uris));
+    ASSERT_EQ(4, uris.size());
+}
+
+TEST_F(FileCommitterTest, TestDeduplicateWithMissingClusterUUID) {
+    create_table();
+
+    // Create some offset ranges with file paths.
+    topics_state state;
+    state.topic_to_state[topic] = make_topic_state(
+      /*offset_bounds_by_pid=*/{{{0, 99}, {100, 199}}},
+      /*added_at=*/model::offset{1000},
+      /*with_files=*/true);
+    auto res = committer.commit_topic_files_to_catalog(topic, state).get();
+    ASSERT_FALSE(res.has_error());
+    chunked_vector<ss::sstring> uris;
+    ASSERT_NO_FATAL_FAILURE(get_current_data_files(&uris));
+    ASSERT_EQ(2, uris.size());
+
+    auto load_res = catalog.load_table(table_ident).get();
+    ASSERT_FALSE(load_res.has_error());
+    auto& table = load_res.value();
+    for (auto& snap : table.snapshots.value()) {
+        auto& props = snap.summary.other;
+        auto prop_it = props.find("redpanda.commit-metadata");
+        if (prop_it != props.end()) {
+            auto res = parse_commit_offset_json(prop_it->second);
+            ASSERT_FALSE(res.has_error());
+            auto& meta = res.value();
+            // Reset the cluster field, to simulate an version of Redpanda that
+            // didn't write this field.
+            meta.cluster = std::nullopt;
+
+            prop_it->second = to_json_str(meta);
+        }
+    }
+    auto rewrite_res
+      = catalog.rewrite_table_meta_for_tests(table_ident, table).get();
+    ASSERT_FALSE(rewrite_res.has_error());
+
+    topics_state new_cluster_state;
+    new_cluster_state.topic_to_state[topic] = make_topic_state(
+      /*offset_bounds_by_pid=*/{{{0, 99}, {100, 199}}},
+      /*added_at=*/model::offset{0},
+      /*with_files=*/true);
+
+    res
+      = committer.commit_topic_files_to_catalog(topic, new_cluster_state).get();
+    ASSERT_FALSE(res.has_error());
+
+    // Redpanda should assume that the cluster-UUID-less metadata belongs to
+    // the current cluster and the files should be deduplicated.
+    uris.clear();
+    ASSERT_NO_FATAL_FAILURE(get_current_data_files(&uris));
+    ASSERT_EQ(2, uris.size());
+}
+
 TEST_F(FileCommitterTest, TestDeduplicateConcurrently) {
     create_table();
 
@@ -497,31 +659,12 @@ TEST_F(FileCommitterTest, TestDeduplicateConcurrently) {
     // Check that each snapshot does not contain duplicates.
     size_t max_num_files = 0;
     for (const auto& snap : *table.snapshots) {
-        const auto& mlist_uri = snap.manifest_list_path;
-        auto mlist_res = manifest_io.download_manifest_list(mlist_uri).get();
-        ASSERT_TRUE(mlist_res.has_value());
-        const auto& mlist = mlist_res.value();
-
         chunked_vector<ss::sstring> uris;
-        chunked_hash_set<ss::sstring> uris_deduped;
-        auto schema = datalake::default_schema();
-        auto pspec = iceberg::partition_spec::resolve(
-          datalake::hour_partition_spec(), schema.schema_struct);
-        ASSERT_TRUE(pspec.has_value());
-        auto pk_type = iceberg::partition_key_type::create(
-          pspec.value(), schema);
+        ASSERT_NO_FATAL_FAILURE(get_snap_data_files(snap, &uris));
 
-        // Collect all the data files for this snapshot.
-        for (const auto& m : mlist.files) {
-            auto m_res
-              = manifest_io.download_manifest(m.manifest_path, pk_type).get();
-            ASSERT_TRUE(m_res.has_value());
-            for (const auto& e : m_res.value().entries) {
-                uris.emplace_back(e.data_file.file_path());
-                uris_deduped.emplace(e.data_file.file_path());
-            }
-        }
         // Ensure no duplicates.
+        chunked_hash_set<ss::sstring> uris_deduped;
+        uris_deduped.insert(uris.begin(), uris.end());
         ASSERT_EQ(uris.size(), uris_deduped.size());
         max_num_files = std::max(uris.size(), max_num_files);
     }

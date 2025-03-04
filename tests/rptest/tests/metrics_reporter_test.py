@@ -48,7 +48,10 @@ class MetricsReporterServer:
         return self.http.requests
 
     def reports(self):
-        return [json.loads(r['body']) for r in self.requests()]
+        return [
+            json.loads(r['body']) for r in self.requests()
+            if r['path'] == '/metrics'
+        ]
 
 
 class MetricsReporterTest(RedpandaTest):

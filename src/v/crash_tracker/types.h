@@ -32,6 +32,8 @@ enum class crash_type {
     assertion
 };
 
+std::ostream& operator<<(std::ostream&, crash_type);
+
 /// reserved_string is a simple wrapper around a std::array that allows
 /// pre-allocating a string of a certain size with trailing '\0's and allows
 /// safer access to the populated part of the string.

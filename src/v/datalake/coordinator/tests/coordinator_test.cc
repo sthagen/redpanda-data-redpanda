@@ -78,7 +78,8 @@ struct coordinator_node {
           *file_committer,
           *snapshot_remover,
           commit_interval_ms.bind(),
-          default_partition_spec.bind()) {}
+          default_partition_spec.bind(),
+          disable_snapshot_expiry.bind()) {}
 
     ss::future<checked<std::nullopt_t, coordinator::errc>>
     remove_tombstone(const model::topic&, model::revision_id) {
@@ -97,6 +98,7 @@ struct coordinator_node {
     config::mock_property<std::chrono::milliseconds> commit_interval_ms;
     config::mock_property<ss::sstring> default_partition_spec{
       "(hour(redpanda.timestamp))"};
+    config::mock_property<bool> disable_snapshot_expiry{false};
     cluster::data_migrations::migrated_resources mr;
     cluster::topic_table topic_table;
     datalake::binary_type_resolver type_resolver;

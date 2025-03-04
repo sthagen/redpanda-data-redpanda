@@ -11,6 +11,7 @@
 
 #include "base/vlog.h"
 #include "cluster/topic_table.h"
+#include "config/configuration.h"
 #include "container/fragmented_vector.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/coordinator/state_update.h"
@@ -156,23 +157,25 @@ coordinator::run_until_term_change(model::term_id term) {
         for (const auto& t : topics) {
             // TODO: per topic means embarrassingly parallel.
 
-            // Before we add to the table, clean up any expired snapshots.
-            // TODO: consider decoupling this from the commit interval.
-            auto removal_res
-              = co_await snapshot_remover_.remove_expired_snapshots(
-                t, model::timestamp::now());
-            if (removal_res.has_error()) {
-                switch (removal_res.error()) {
-                case snapshot_remover::errc::shutting_down:
-                    co_return errc::shutting_down;
-                case snapshot_remover::errc::failed:
-                    vlog(
-                      datalake_log.debug,
-                      "Error removing snapshots from catalog for topic {}",
-                      t);
+            if (!disable_snapshot_expiry_()) {
+                // Before we add to the table, clean up any expired snapshots.
+                // TODO: consider decoupling this from the commit interval.
+                auto removal_res
+                  = co_await snapshot_remover_.remove_expired_snapshots(
+                    t, model::timestamp::now());
+                if (removal_res.has_error()) {
+                    switch (removal_res.error()) {
+                    case snapshot_remover::errc::shutting_down:
+                        co_return errc::shutting_down;
+                    case snapshot_remover::errc::failed:
+                        vlog(
+                          datalake_log.debug,
+                          "Error removing snapshots from catalog for topic {}",
+                          t);
+                    }
+                    // Inentional fallthrough -- snapshot removal shouldn't
+                    // block progressing appends.
                 }
-                // Inentional fallthrough -- snapshot removal shouldn't block
-                // progressing appends.
             }
 
             auto commit_res

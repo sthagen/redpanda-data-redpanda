@@ -41,6 +41,7 @@
 #include "utils/unresolved_address.h"
 
 #include <seastar/core/abort_source.hh>
+#include <seastar/core/condition-variable.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -187,7 +188,20 @@ ss::future<> metrics_reporter::start() {
 ss::future<> metrics_reporter::stop() {
     vlog(clusterlog.info, "Stopping Metrics Reporter...");
     _tick_timer.cancel();
+    _cluster_info_initialized_cvar.broken();
     co_await _gate.close();
+}
+
+ss::future<>
+metrics_reporter::wait_cluster_info_initialized(ss::abort_source& as) {
+    constexpr auto retry_period = 5s;
+    while (!as.abort_requested() && !_cluster_info.is_initialized()) {
+        co_await _cluster_info_initialized_cvar
+          .wait(retry_period, [this] { return _cluster_info.is_initialized(); })
+          .handle_exception_type([](const ss::condition_variable_timed_out&) {
+              // Noop, check if abort requested and wait again
+          });
+    }
 }
 
 void metrics_reporter::report_metrics() {
@@ -398,6 +412,7 @@ ss::future<> metrics_reporter::try_initialize_cluster_info() {
     _cluster_info.uuid = fmt::format("{}", uuid_gen());
     vlog(
       clusterlog.info, "Generated cluster metrics ID {}", _cluster_info.uuid);
+    _cluster_info_initialized_cvar.signal();
 }
 
 /**
@@ -442,14 +457,15 @@ iobuf serialize_metrics_snapshot(
 
     return out;
 }
-ss::future<http::client> metrics_reporter::make_http_client() {
+
+ss::future<http::client> details::metrics_http_client::make_http_client() {
     net::base_transport::configuration client_configuration;
     client_configuration.server_addr = net::unresolved_address(
-      ss::sstring(_address.host), _address.port);
+      ss::sstring(_conf.addr.host), _conf.addr.port);
 
     client_configuration.disable_metrics = net::metrics_disabled::yes;
 
-    if (_address.protocol == "https") {
+    if (_conf.addr.protocol == "https") {
         ss::tls::credentials_builder builder;
         builder.set_client_auth(ss::tls::client_auth::NONE);
         builder.set_minimum_tls_version(
@@ -457,12 +473,14 @@ ss::future<http::client> metrics_reporter::make_http_client() {
         auto ca_file = co_await net::find_ca_file();
         if (ca_file) {
             vlog(
-              _logger.trace, "using {} as metrics reporter CA store", ca_file);
+              _conf.logger.trace,
+              "using {} as metrics reporter CA store",
+              ca_file);
             co_await builder.set_x509_trust_file(
               ca_file.value(), ss::tls::x509_crt_format::PEM);
         } else {
             vlog(
-              _logger.trace,
+              _conf.logger.trace,
               "ca file not found, defaulting to system trust store");
             co_await builder.set_system_trust();
         }
@@ -471,24 +489,35 @@ ss::future<http::client> metrics_reporter::make_http_client() {
           = co_await net::build_reloadable_credentials_with_probe<
             ss::tls::certificate_credentials>(
             std::move(builder), "metrics_reporter", "httpclient");
-        client_configuration.tls_sni_hostname = _address.host;
+        client_configuration.tls_sni_hostname = _conf.addr.host;
     }
-    co_return http::client(client_configuration, _as.local());
+    co_return http::client(client_configuration, _conf.as);
 }
 
 ss::future<>
-metrics_reporter::do_send_metrics(http::client& client, iobuf body) {
+details::metrics_http_client::do_send_metrics(http::client& client) {
     auto timeout = config::shard_local_cfg().metrics_reporter_tick_interval();
-    auto res = co_await client.get_connected(timeout, _logger);
+    auto res = co_await client.get_connected(timeout, _conf.logger);
     // skip sending metrics, unable to connect
     if (res != http::reconnect_result_t::connected) {
         vlog(
-          _logger.trace, "unable to send metrics report, connection timeout");
+          _conf.logger.trace,
+          "unable to send metrics report, connection timeout");
         co_return;
     }
     auto resp_stream = co_await client.post(
-      _address.path, std::move(body), http::content_type::json, timeout);
+      _conf.addr.path, std::move(_out), http::content_type::json, timeout);
     co_await resp_stream->prefetch_headers();
+}
+
+ss::future<>
+details::metrics_http_client::send_metrics(configs conf, iobuf out) {
+    metrics_http_client metrics_client{conf, std::move(out)};
+    co_await http::with_client(
+      co_await metrics_client.make_http_client(),
+      [&metrics_client](http::client& client) {
+          return metrics_client.do_send_metrics(client);
+      });
 }
 
 ss::future<> metrics_reporter::do_report_metrics() {
@@ -546,10 +575,10 @@ ss::future<> metrics_reporter::do_report_metrics() {
     }
     auto out = serialize_metrics_snapshot(snapshot.value());
     try {
-        co_await http::with_client(
-          co_await make_http_client(), [this, &out](http::client& client) {
-              return do_send_metrics(client, std::move(out));
-          });
+        details::metrics_http_client::configs conf(
+          _address, _logger, _as.local());
+        co_await details::metrics_http_client::send_metrics(
+          conf, std::move(out));
         _last_success = ss::lowres_clock::now();
     } catch (...) {
         vlog(

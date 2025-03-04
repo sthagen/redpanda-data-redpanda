@@ -19,7 +19,13 @@ struct commit_offset_metadata {
     // are committed to an external catalog.
     model::offset offset;
 
-    // TODO: version? topic revision id? partition id? cluster uuid?
+    // UUID of the cluster that committed this metadata.
+    //
+    // Is std::nullopt if this was written in an older version of Redpanda that
+    // did not serialize this field.
+    std::optional<model::cluster_uuid> cluster;
+
+    // TODO: version? topic revision id? partition id?
 };
 
 using parse_offset_error = named_type<ss::sstring, struct parse_tag>;

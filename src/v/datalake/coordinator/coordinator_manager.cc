@@ -30,6 +30,7 @@ namespace datalake::coordinator {
 
 coordinator_manager::coordinator_manager(
   model::node_id self,
+  ss::sharded<storage::api>& storage,
   ss::sharded<raft::group_manager>& gm,
   ss::sharded<cluster::partition_manager>& pm,
   ss::sharded<cluster::topic_table>& topics,
@@ -39,6 +40,7 @@ coordinator_manager::coordinator_manager(
   ss::sharded<cloud_io::remote>& io,
   cloud_storage_clients::bucket_name bucket)
   : self_(self)
+  , storage_(storage.local())
   , gm_(gm.local())
   , pm_(pm.local())
   , topics_(topics.local())
@@ -55,6 +57,7 @@ ss::future<> coordinator_manager::start() {
     catalog_ = co_await catalog_factory_->create_catalog();
     schema_mgr_ = std::make_unique<catalog_schema_manager>(*catalog_);
     file_committer_ = std::make_unique<iceberg_file_committer>(
+      storage_,
       *catalog_,
       manifest_io_,
       config::shard_local_cfg().iceberg_disable_snapshot_tagging.bind());
@@ -132,7 +135,9 @@ void coordinator_manager::start_managing(cluster::partition& p) {
       *file_committer_,
       *snapshot_remover_,
       config::shard_local_cfg().iceberg_catalog_commit_interval_ms.bind(),
-      config::shard_local_cfg().iceberg_default_partition_spec.bind());
+      config::shard_local_cfg().iceberg_default_partition_spec.bind(),
+      config::shard_local_cfg()
+        .iceberg_disable_automatic_snapshot_expiry.bind());
     if (p.is_leader()) {
         crd->notify_leadership(self_);
     }

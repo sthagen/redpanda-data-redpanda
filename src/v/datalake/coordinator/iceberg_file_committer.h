@@ -19,15 +19,21 @@
 
 #include <seastar/core/future.hh>
 
+namespace storage {
+class api;
+} // namespace storage
+
 namespace datalake::coordinator {
 
 class iceberg_file_committer : public file_committer {
 public:
     iceberg_file_committer(
+      storage::api& storage,
       iceberg::catalog& catalog,
       iceberg::manifest_io& io,
       config::binding<bool> disable_snapshot_tags)
-      : catalog_(catalog)
+      : storage_(storage)
+      , catalog_(catalog)
       , io_(io)
       , disable_snapshot_tags_(std::move(disable_snapshot_tags)) {}
     ~iceberg_file_committer() override = default;
@@ -57,6 +63,7 @@ public:
 
 private:
     // Must outlive this committer.
+    storage::api& storage_;
     iceberg::catalog& catalog_;
     iceberg::manifest_io& io_;
     config::binding<bool> disable_snapshot_tags_;

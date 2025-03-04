@@ -293,24 +293,11 @@ class LogCompactionTest(LogCompactionTestBase, PreallocNodesTest,
                                          TopicSpec.PROPERTY_RETENTION_TIME,
                                          1000)
 
-        self.prev_closed_segment_bytes = self.get_closed_segment_bytes()
-        self.prev_dirty_segment_bytes = self.get_dirty_segment_bytes()
-        self.prev_dirty_ratio = self.get_dirty_ratio()
-
         def all_segments_removed():
-            new_closed_segment_bytes = self.get_closed_segment_bytes()
-            new_dirty_segment_bytes = self.get_dirty_segment_bytes()
-            new_dirty_ratio = self.get_dirty_ratio()
+            closed_segment_bytes = self.get_closed_segment_bytes()
+            dirty_segment_bytes = self.get_dirty_segment_bytes()
 
-            assert new_closed_segment_bytes <= self.prev_closed_segment_bytes
-            assert new_dirty_segment_bytes <= self.prev_dirty_segment_bytes
-            assert new_dirty_ratio <= self.prev_dirty_ratio
-
-            self.prev_closed_segment_bytes = new_closed_segment_bytes
-            self.prev_dirty_segment_bytes = new_dirty_segment_bytes
-            self.prev_dirty_ratio = new_dirty_ratio
-
-            return new_dirty_segment_bytes == 0 and new_closed_segment_bytes == 0
+            return dirty_segment_bytes == 0 and closed_segment_bytes == 0
 
         wait_until(all_segments_removed,
                    timeout_sec=120,

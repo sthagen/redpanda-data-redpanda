@@ -270,7 +270,8 @@ public:
     template<typename T>
     T read() {
         std::array<char, sizeof(T)> buf;
-        if (std::distance(pc_, program_.cend()) < buf.size()) {
+        if (
+          std::distance(pc_, program_.cend()) < static_cast<long>(buf.size())) {
             throw end_of_program();
         }
         std::copy_n(pc_, buf.size(), buf.begin());
@@ -328,7 +329,7 @@ public:
 };
 
 struct noop {
-    auto operator()(cstore_ops& ops) const {}
+    auto operator()(cstore_ops&) const {}
 };
 struct self_move_op {
     auto operator()(cstore_ops& ops) const { ops.self_moves(); }

@@ -97,6 +97,13 @@ public:
 
     ss::future<> stop() final { return ss::make_ready_future(); }
 
+    // Rewrites a new version of the table with the given metadata. This is not
+    // safe and should only be used for tests -- production updates to the
+    // table should be performed with a transaction.
+    // Expects the table already exists.
+    ss::future<checked<std::nullopt_t, errc>> rewrite_table_meta_for_tests(
+      const table_identifier& table_ident, const table_metadata&);
+
 private:
     // Constructs a path suitable for the table's location: a prefix to be used
     // for files relating to this table.

@@ -20,13 +20,14 @@ from confluent_kafka.avro import AvroProducer
 from confluent_kafka.schema_registry import SchemaRegistryClient
 from rptest.clients.rpk import RpkTool, RpkException
 from rptest.clients.types import TopicSpec
+from rptest.services.catalog_service import CatalogType
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import PandaproxyConfig, SISettings, SchemaRegistryConfig
 from rptest.services.redpanda_connect import RedpandaConnectService
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
-from rptest.tests.datalake.catalog_service_factory import filesystem_catalog_type
+from rptest.tests.datalake.catalog_service_factory import filesystem_catalog_type, supported_catalog_types
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.util import expect_exception
@@ -533,10 +534,11 @@ class SchemaEvolutionE2ETests(RedpandaTest):
     def setup_services(self,
                        query_engine: QueryEngineType,
                        compat_level: str = "NONE",
-                       partition_spec: str = None):
+                       partition_spec: str = None,
+                       catalog_type: CatalogType = filesystem_catalog_type()):
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,
-                              catalog_type=filesystem_catalog_type(),
+                              catalog_type=catalog_type,
                               include_query_engines=[
                                   query_engine,
                               ]) as dl:
@@ -563,16 +565,18 @@ class SchemaEvolutionE2ETests(RedpandaTest):
         query_engine=QUERY_ENGINES,
         test_case=list(LEGAL_TEST_CASES.keys()),
         produce_mode=PRODUCER_MODES,
+        catalog_type=supported_catalog_types(),
     )
     def test_legal_schema_evolution(self, cloud_storage_type, query_engine,
-                                    test_case, produce_mode):
+                                    test_case, produce_mode, catalog_type):
         """
         Test that rows written with schema A are still readable after evolving
         the table to schema B.
         """
         tc = LEGAL_TEST_CASES[test_case]
         with self.setup_services(query_engine,
-                                 partition_spec=tc.partition_spec) as dl:
+                                 partition_spec=tc.partition_spec,
+                                 catalog_type=catalog_type) as dl:
             count = 10
             ctx = TranslationContext()
             tc.initial_schema.produce(dl,
@@ -602,16 +606,18 @@ class SchemaEvolutionE2ETests(RedpandaTest):
         query_engine=QUERY_ENGINES,
         test_case=list(ILLEGAL_TEST_CASES.keys()),
         produce_mode=PRODUCER_MODES,
+        catalog_type=supported_catalog_types(),
     )
     def test_illegal_schema_evolution(self, cloud_storage_type, query_engine,
-                                      test_case, produce_mode):
+                                      test_case, produce_mode, catalog_type):
         """
         check that records produced with an incompatible schema don't wind up
         in the table.
         """
         tc = ILLEGAL_TEST_CASES[test_case]
         with self.setup_services(query_engine,
-                                 partition_spec=tc.partition_spec) as dl:
+                                 partition_spec=tc.partition_spec,
+                                 catalog_type=catalog_type) as dl:
             count = 10
             ctx = TranslationContext()
             tc.initial_schema.produce(dl,
@@ -643,16 +649,19 @@ class SchemaEvolutionE2ETests(RedpandaTest):
         cloud_storage_type=supported_storage_types(),
         query_engine=QUERY_ENGINES,
         produce_mode=PRODUCER_MODES,
+        catalog_type=supported_catalog_types(),
     )
     def test_dropped_column_no_collision(self, cloud_storage_type,
-                                         query_engine, produce_mode):
+                                         query_engine, produce_mode,
+                                         catalog_type):
         """
         Translate some records, drop field A, translate some more, reintroduce field A  *by name*
         (this should create a *new* column). Confirm that 'select A' reads only the new column,
         producing nulls for all rows written prior to the final update.
         """
 
-        with self.setup_services(query_engine) as dl:
+        with self.setup_services(query_engine,
+                                 catalog_type=catalog_type) as dl:
             count = 10
             ctx = TranslationContext()
             initial_schema, next_schema, _ = LEGAL_TEST_CASES["drop_column"]
@@ -718,14 +727,17 @@ class SchemaEvolutionE2ETests(RedpandaTest):
         cloud_storage_type=supported_storage_types(),
         query_engine=QUERY_ENGINES,
         produce_mode=PRODUCER_MODES,
+        catalog_type=supported_catalog_types(),
     )
     def test_dropped_column_select_fails(self, cloud_storage_type,
-                                         query_engine, produce_mode):
+                                         query_engine, produce_mode,
+                                         catalog_type):
         """
         Test that selecting a dropped column fails "gracefully" - or at least
         predictably and consistently.
         """
-        with self.setup_services(query_engine) as dl:
+        with self.setup_services(query_engine,
+                                 catalog_type=catalog_type) as dl:
             count = 10
             ctx = TranslationContext()
             initial_schema, next_schema, _ = LEGAL_TEST_CASES['drop_column']
@@ -757,14 +769,16 @@ class SchemaEvolutionE2ETests(RedpandaTest):
         cloud_storage_type=supported_storage_types(),
         query_engine=QUERY_ENGINES,
         produce_mode=PRODUCER_MODES,
+        catalog_type=supported_catalog_types(),
     )
     def test_reorder_columns(self, cloud_storage_type, query_engine,
-                             produce_mode):
+                             produce_mode, catalog_type):
         """
         Test that changing the order of columns doesn't change the values
         associated with a column or field name.
         """
-        with self.setup_services(query_engine) as dl:
+        with self.setup_services(query_engine,
+                                 catalog_type=catalog_type) as dl:
             count = 10
             ctx = TranslationContext()
             initial_schema, next_schema, _ = LEGAL_TEST_CASES[
@@ -790,15 +804,17 @@ class SchemaEvolutionE2ETests(RedpandaTest):
         query_engine=QUERY_ENGINES,
         test_case=list(LEGAL_TEST_CASES.keys()),
         produce_mode=PRODUCER_MODES,
+        catalog_type=supported_catalog_types(),
     )
     def test_old_schema_writer(self, cloud_storage_type, query_engine,
-                               test_case, produce_mode):
+                               test_case, produce_mode, catalog_type):
         """
         Tests that, after a backwards compatible update from schema A to schema B, we can keep
         tranlsating records produced with schema A without another schema update by falling back
         to an already extant parquet writer for schema A.
         """
-        with self.setup_services(query_engine) as dl:
+        with self.setup_services(query_engine,
+                                 catalog_type=catalog_type) as dl:
 
             count = 10
             ctx = TranslationContext()
@@ -830,9 +846,10 @@ class SchemaEvolutionE2ETests(RedpandaTest):
         cloud_storage_type=supported_storage_types(),
         query_engine=QUERY_ENGINES,
         use_partition_spec=[True, False],
+        catalog_type=supported_catalog_types(),
     )
     def test_partition_spec_evo(self, cloud_storage_type, query_engine,
-                                use_partition_spec):
+                                use_partition_spec, catalog_type):
 
         tc = EvolutionTestCase(
             initial_schema=GenericSchema(
@@ -884,7 +901,8 @@ class SchemaEvolutionE2ETests(RedpandaTest):
             )
 
         with self.setup_services(query_engine,
-                                 partition_spec=tc.partition_spec) as dl:
+                                 partition_spec=tc.partition_spec,
+                                 catalog_type=catalog_type) as dl:
             count = 10
             ctx = TranslationContext()
             tc.initial_schema.produce(dl,

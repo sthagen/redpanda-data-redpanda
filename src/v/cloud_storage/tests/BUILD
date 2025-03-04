@@ -2,6 +2,7 @@ load(
     "//bazel:test.bzl",
     "redpanda_cc_bench",
     "redpanda_cc_btest",
+    "redpanda_cc_fuzz_test",
     "redpanda_cc_gtest",
     "redpanda_test_cc_library",
 )
@@ -606,5 +607,24 @@ redpanda_cc_bench(
         "@abseil-cpp//absl/container:btree",
         "@seastar",
         "@seastar//:benchmark",
+    ],
+)
+
+redpanda_cc_fuzz_test(
+    name = "segment_meta_cstore_fuzz_rpfixture",
+    timeout = "short",
+    srcs = ["segment_meta_cstore_fuzz.cc"],
+    args = [
+        "-max_total_time=30",
+        "-rss_limit_mb=8192",
+    ],
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/cloud_storage",
+        "//src/v/model",
+        "//src/v/reflection:to_tuple",
+        "//src/v/serde",
+        "@abseil-cpp//absl/container:btree",
+        "@fmt",
     ],
 )

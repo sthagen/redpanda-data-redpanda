@@ -218,6 +218,17 @@ filesystem_catalog::check_expected_version_hint(
 }
 
 ss::future<checked<std::nullopt_t, catalog::errc>>
+filesystem_catalog::rewrite_table_meta_for_tests(
+  const table_identifier& table_ident, const table_metadata& tmeta) {
+    auto read_res = co_await read_table_meta(table_ident);
+    if (read_res.has_error()) {
+        co_return read_res.error();
+    }
+    auto cur_version = read_res.value().version;
+    co_return co_await write_table_meta(table_ident, tmeta, cur_version);
+}
+
+ss::future<checked<std::nullopt_t, catalog::errc>>
 filesystem_catalog::write_table_meta(
   const table_identifier& table_ident,
   const table_metadata& tmeta,

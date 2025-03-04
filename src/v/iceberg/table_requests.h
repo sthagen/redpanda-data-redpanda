@@ -31,7 +31,7 @@ struct create_table_request {
 
     // If set to true, the table is not created, but table metadata is
     // initialized and returned by the catalog.
-    std::optional<bool> stage_create;
+    std::optional<bool> stage_create = false;
 
     std::optional<chunked_hash_map<ss::sstring, ss::sstring>> properties;
 };

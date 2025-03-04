@@ -13,9 +13,9 @@ from rptest.services.apache_iceberg_catalog import IcebergRESTCatalog
 
 from typing import List
 
-# TODO: Nessie is not supported here yet. Add it back once
-# required datalake authentication changes have been made.
-SUPPORTED_CATALOG_TYPES = [CatalogType.REST_JDBC, CatalogType.REST_HADOOP]
+SUPPORTED_CATALOG_TYPES = [
+    CatalogType.REST_JDBC, CatalogType.REST_HADOOP, CatalogType.NESSIE
+]
 
 
 def filesystem_catalog_type() -> CatalogType:
@@ -29,8 +29,6 @@ def supported_catalog_types() -> List[CatalogType]:
 def make_catalog_service_for_type(catalog_type: CatalogType, test_ctx,
                                   cloud_storage_bucket: str,
                                   warehouse_name: str) -> CatalogService:
-    if catalog_type not in SUPPORTED_CATALOG_TYPES:
-        raise NotImplementedError(f"No catalog of type {catalog_type}")
     if catalog_type == CatalogType.REST_JDBC:
         return IcebergRESTCatalog(test_ctx,
                                   cloud_storage_bucket=cloud_storage_bucket,
@@ -40,3 +38,9 @@ def make_catalog_service_for_type(catalog_type: CatalogType, test_ctx,
                                   cloud_storage_bucket=cloud_storage_bucket,
                                   warehouse_name=warehouse_name,
                                   filesystem_wrapper_mode=True)
+    elif catalog_type == CatalogType.NESSIE:
+        return NessieCatalog(test_ctx,
+                             cloud_storage_bucket=cloud_storage_bucket,
+                             warehouse_name=warehouse_name)
+    else:
+        raise NotImplementedError(f"No catalog of type {catalog_type}")

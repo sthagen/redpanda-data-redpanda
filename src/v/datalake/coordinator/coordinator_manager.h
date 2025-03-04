@@ -39,6 +39,7 @@ class coordinator_manager {
 public:
     coordinator_manager(
       model::node_id self,
+      ss::sharded<storage::api>&,
       ss::sharded<raft::group_manager>&,
       ss::sharded<cluster::partition_manager>&,
       ss::sharded<cluster::topic_table>&,
@@ -66,6 +67,7 @@ private:
 
     ss::gate gate_;
     model::node_id self_;
+    storage::api& storage_;
     raft::group_manager& gm_;
     cluster::partition_manager& pm_;
     cluster::topic_table& topics_;

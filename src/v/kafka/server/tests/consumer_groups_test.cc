@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "cluster/controller_api.h"
-#include "features/feature_table.h"
 #include "kafka/client/client.h"
 #include "kafka/protocol/describe_groups.h"
 #include "kafka/protocol/errors.h"

@@ -265,6 +265,38 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_btest(
+    name = "consumer_groups_test",
+    timeout = "short",
+    srcs = [
+        "consumer_groups_test.cc",
+    ],
+    cpu = 1,
+    tags = ["exclusive"],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/kafka/client",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:describe_groups",
+        "//src/v/kafka/protocol:find_coordinator",
+        "//src/v/kafka/protocol:join_group",
+        "//src/v/kafka/protocol:offset_commit",
+        "//src/v/kafka/protocol/schemata:join_group_request",
+        "//src/v/kafka/server",
+        "//src/v/model",
+        "//src/v/model:timeout_clock",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:base64",
+        "//src/v/utils:to_string",
+        "@boost//:test",
+        "@fmt",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_btest(
     name = "group_test",
     timeout = "short",
     srcs = [

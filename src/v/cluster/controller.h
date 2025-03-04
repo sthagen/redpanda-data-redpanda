@@ -18,6 +18,7 @@
 #include "cluster/node_status_table.h"
 #include "cluster/scheduling/leader_balancer.h"
 #include "cluster/types.h"
+#include "crash_reporter.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "raft/fwd.h"
@@ -316,6 +317,7 @@ private:
     ss::sharded<health_monitor_backend> _hm_backend;   // single instance
     ss::sharded<health_manager> _health_manager;
     ss::sharded<metrics_reporter> _metrics_reporter;
+    ss::sharded<crash_reporter> _crash_reporter;          // single instance
     ss::sharded<feature_manager> _feature_manager;        // single instance
     ss::sharded<feature_backend> _feature_backend;        // instance per core
     ss::sharded<features::feature_table>& _feature_table; // instance per core

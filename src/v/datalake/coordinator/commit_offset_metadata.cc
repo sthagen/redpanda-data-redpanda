@@ -41,19 +41,42 @@ parse_commit_offset_json(std::string_view s) {
         return parse_offset_error{
           fmt::format("'offset' field is not an int64: {}", s)};
     }
+    model::offset offset{iter->value.GetInt64()};
+
+    iter = obj.FindMember("cluster");
+    std::optional<model::cluster_uuid> cluster;
+    if (iter != obj.MemberEnd()) {
+        if (!iter->value.IsString()) {
+            return parse_offset_error{
+              fmt::format("'cluster' field is not a string: {}", s)};
+        }
+        try {
+            cluster.emplace(
+              model::cluster_uuid::type::from_string(iter->value.GetString()));
+        } catch (...) {
+            return parse_offset_error{fmt::format(
+              "Exception while parsing cluster field: {}: {}",
+              std::current_exception(),
+              s)};
+        }
+    }
     return commit_offset_metadata{
-      .offset = model::offset{iter->value.GetInt64()},
+      .offset = offset,
+      .cluster = cluster,
     };
 }
 
 std::string to_json_str(const commit_offset_metadata& m) {
     json::chunked_buffer buf;
     json::iobuf_writer<json::chunked_buffer> w(buf);
+    // TODO: would be more future proof if we add the control topic revision.
     w.StartObject();
-    // TODO: would be more future proof if we add the control topic revision
-    // and cluster UUID in here too.
     w.Key("offset");
     w.Int64(m.offset());
+    if (m.cluster.has_value()) {
+        w.Key("cluster");
+        w.String(ss::sstring(m.cluster.value()()));
+    }
     w.EndObject();
     auto p = iobuf_parser(std::move(buf).as_iobuf());
     std::string str;

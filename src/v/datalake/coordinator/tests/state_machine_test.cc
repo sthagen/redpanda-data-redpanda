@@ -41,6 +41,10 @@ struct coordinator_stm_fixture : stm_raft_fixture<stm> {
         return config::mock_binding<ss::sstring>("(hour(redpanda.timestamp))");
     }
 
+    config::binding<bool> disable_snapshot_expiry() const {
+        return config::mock_binding<bool>(false);
+    }
+
     stm_shptrs_t create_stms(
       state_machine_manager_builder& builder,
       raft_node_instance& node) override {
@@ -64,7 +68,8 @@ struct coordinator_stm_fixture : stm_raft_fixture<stm> {
                 file_committer,
                 snapshot_remover,
                 commit_interval(),
-                default_partition_spec());
+                default_partition_spec(),
+                disable_snapshot_expiry());
             coordinators[node.get_vnode()]->start();
             return ss::now();
         });

@@ -47,7 +47,8 @@ public:
       file_committer& file_committer,
       snapshot_remover& snapshot_remover,
       config::binding<std::chrono::milliseconds> commit_interval,
-      config::binding<ss::sstring> default_partition_spec)
+      config::binding<ss::sstring> default_partition_spec,
+      config::binding<bool> disable_snapshot_expiry)
       : stm_(std::move(stm))
       , topic_table_(topics)
       , type_resolver_(type_resolver)
@@ -56,7 +57,8 @@ public:
       , file_committer_(file_committer)
       , snapshot_remover_(snapshot_remover)
       , commit_interval_(std::move(commit_interval))
-      , default_partition_spec_(std::move(default_partition_spec)) {}
+      , default_partition_spec_(std::move(default_partition_spec))
+      , disable_snapshot_expiry_(std::move(disable_snapshot_expiry)) {}
 
     void start();
     ss::future<> stop_and_wait();
@@ -121,6 +123,7 @@ private:
     snapshot_remover& snapshot_remover_;
     config::binding<std::chrono::milliseconds> commit_interval_;
     config::binding<ss::sstring> default_partition_spec_;
+    config::binding<bool> disable_snapshot_expiry_;
 
     ss::gate gate_;
     ss::abort_source as_;

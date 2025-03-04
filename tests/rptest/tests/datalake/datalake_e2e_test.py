@@ -20,7 +20,7 @@ from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.tests.datalake.catalog_service_factory import supported_catalog_types, filesystem_catalog_type
-from ducktape.mark import matrix
+from ducktape.mark import matrix, ignore
 from ducktape.utils.util import wait_until
 from rptest.services.metrics_check import MetricCheck
 from rptest.services.catalog_service import CatalogType
@@ -159,9 +159,16 @@ class DatalakeE2ETests(RedpandaTest):
             assert count_after_produce == count, f"{count_after_produce} rows, expected {count}"
 
     @cluster(num_nodes=4)
+    @ignore(catalog_type=CatalogType.NESSIE,
+            cloud_storage_type=CloudStorageType.S3)
+    @ignore(catalog_type=CatalogType.NESSIE,
+            cloud_storage_type=CloudStorageType.ABS)
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())
     def test_remove_expired_snapshots(self, cloud_storage_type, catalog_type):
+        """
+        Nessie doesn't support tags, so it is ignored for this test.
+        """
         table_name = f"redpanda.{self.topic_name}"
         with DatalakeServices(self.test_ctx,
                               redpanda=self.redpanda,

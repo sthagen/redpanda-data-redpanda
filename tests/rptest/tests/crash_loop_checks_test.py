@@ -18,31 +18,31 @@ from ducktape.errors import TimeoutError
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 
+CRASH_LOOP_LOG = [
+    "Crash loop detected. Too many consecutive crashes.*",
+    ".*Failure during startup: crash_tracker::crash_loop_limit_reached \(Crash loop detected, aborting startup.\).*"
+]
+
+SIGNAL_CRASH_LOG = [
+    "Aborting on",
+    "Segmentation fault on",
+    "Illegal instruction on",
+]
+
+ASSERT_CRASH_LOG = ["assert - "]
+
+# main - application.cc:348 - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found)
+# main - application.cc:363 - Failure during startup: std::__1::system_error (error C-Ares:11, unreachable_host.com: Connection refused)
+HOSTNAME_ERRORS = [
+    ".*Failure during startup: std::__1::system_error \(error C-Ares:4, unreachable_host.com: Not found\)",
+    ".*Failure during startup: std::__1::system_error \(error C-Ares:11, unreachable_host.com: Connection refused\)"
+]
+
 
 class CrashLoopChecksTest(RedpandaTest):
     "Checks crash loop detection works as expected."
 
     CRASH_LOOP_LIMIT = 3
-
-    CRASH_LOOP_LOG = [
-        "Crash loop detected. Too many consecutive crashes.*",
-        ".*Failure during startup: crash_tracker::crash_loop_limit_reached \(Crash loop detected, aborting startup.\).*"
-    ]
-
-    SIGNAL_CRASH_LOG = [
-        "Aborting on",
-        "Segmentation fault on",
-        "Illegal instruction on",
-    ]
-
-    ASSERT_CRASH_LOG = ["assert - "]
-
-    # main - application.cc:348 - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found)
-    # main - application.cc:363 - Failure during startup: std::__1::system_error (error C-Ares:11, unreachable_host.com: Connection refused)
-    HOSTNAME_ERRORS = [
-        ".*Failure during startup: std::__1::system_error \(error C-Ares:4, unreachable_host.com: Not found\)",
-        ".*Failure during startup: std::__1::system_error \(error C-Ares:11, unreachable_host.com: Connection refused\)"
-    ]
 
     CRASH_LOOP_TRACKER_FILE = f"{RedpandaService.DATA_DIR}/startup_log"
     CRASH_REPORTS_DIR = f"{RedpandaService.DATA_DIR}/crash_reports"

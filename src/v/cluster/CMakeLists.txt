@@ -158,6 +158,7 @@ v_cc_library(
     cluster_recovery_table.cc
     cluster_recovery_reconciler.cc
     controller_api.cc
+    crash_reporter.cc
     members_frontend.cc
     members_backend.cc
     health_manager.cc
@@ -273,6 +274,7 @@ v_cc_library(
     v::cloud_storage
     v::cloud_topics_dl_stm
     v::cluster_topic_properties
+    v::crash_tracker
     v::features
     v::version
     v::enterprise_features
