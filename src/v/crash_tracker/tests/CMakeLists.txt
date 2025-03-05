@@ -4,7 +4,7 @@ rp_test(
   BINARY_NAME limiter_test
   SOURCES
     limiter_test.cc
-  LIBRARIES v::gtest_main v::crash_tracker Seastar::seastar
+  LIBRARIES v::gtest_main v::crash_tracker v::version Seastar::seastar
   ARGS "-- -c 1"
 )
 

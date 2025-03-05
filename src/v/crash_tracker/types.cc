@@ -11,6 +11,8 @@
 
 #include "crash_tracker/types.h"
 
+#include "version/version.h"
+
 namespace crash_tracker {
 
 std::ostream& operator<<(std::ostream& os, crash_type ct) {
@@ -31,6 +33,7 @@ std::ostream& operator<<(std::ostream& os, crash_type ct) {
 }
 
 std::ostream& operator<<(std::ostream& os, const crash_description& cd) {
+    fmt::print(os, "Redpanda version: {}. ", cd.app_version);
     fmt::print(os, "{}", cd.crash_message.c_str());
 
     const auto opt_stacktrace = cd.stacktrace.c_str();

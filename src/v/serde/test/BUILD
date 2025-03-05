@@ -1,4 +1,6 @@
-load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_btest")
+load("@rules_python//python:defs.bzl", "py_binary")
+load("//bazel:build.bzl", "redpanda_cc_binary")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_btest", "redpanda_cc_fuzz_test", "redpanda_test_cc_library")
 
 redpanda_cc_bench(
     name = "serde_rpbench",
@@ -54,5 +56,63 @@ redpanda_cc_btest(
         "@boost//:test",
         "@seastar",
         "@seastar//:testing",
+    ],
+)
+
+py_binary(
+    name = "struct_gen",
+    srcs = ["struct_gen.py"],
+    main = "struct_gen.py",
+    visibility = ["//visibility:public"],
+    deps = ["@python_deps//jinja2"],
+)
+
+genrule(
+    name = "generated_structs_genrule",
+    outs = ["generated_structs.h"],
+    cmd = "$(PYTHON3) $(execpath :struct_gen) $@",
+    toolchains = ["@rules_python//python:current_py_toolchain"],
+    tools = [":struct_gen"],
+)
+
+redpanda_test_cc_library(
+    name = "generated_structs",
+    hdrs = [":generated_structs.h"],
+    include_prefix = "serde/test",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/serde",
+        "//src/v/serde:iobuf",
+        "//src/v/serde:optional",
+        "//src/v/serde:sstring",
+        "//src/v/serde:vector",
+    ],
+)
+
+redpanda_cc_fuzz_test(
+    name = "serde_fuzz_test",
+    timeout = "moderate",
+    srcs = ["fuzz.cc"],
+    args = [
+        "-max_total_time=60",
+        "-rss_limit_mb=8192",
+    ],
+    deps = [
+        ":generated_structs",
+        "//src/v/reflection:type_traits",
+        "//src/v/serde",
+        "//src/v/serde:vector",
+    ],
+)
+
+redpanda_cc_binary(
+    name = "serde_fuzz_main",
+    testonly = True,
+    srcs = ["fuzz.cc"],
+    defines = ["MAIN=1"],
+    deps = [
+        ":generated_structs",
+        "//src/v/reflection:type_traits",
+        "//src/v/serde",
     ],
 )

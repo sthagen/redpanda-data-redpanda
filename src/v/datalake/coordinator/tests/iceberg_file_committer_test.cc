@@ -16,6 +16,7 @@
 #include "datalake/coordinator/iceberg_file_committer.h"
 #include "datalake/coordinator/tests/state_test_utils.h"
 #include "datalake/table_definition.h"
+#include "datalake/table_id_provider.h"
 #include "datalake/tests/test_utils.h"
 #include "features/feature_table.h"
 #include "iceberg/filesystem_catalog.h"
@@ -43,12 +44,13 @@ void add_partition_state(
   std::vector<pairs_t> offset_bounds_by_pid,
   topic_state& state,
   model::offset added_at,
-  bool with_files) {
+  bool with_files,
+  bool dlq = false) {
     for (size_t i = 0; i < offset_bounds_by_pid.size(); i++) {
         auto pid = static_cast<model::partition_id>(i);
         partition_state p_state;
         for (auto& f :
-             make_pending_files(offset_bounds_by_pid[i], with_files)) {
+             make_pending_files(offset_bounds_by_pid[i], with_files, dlq)) {
             p_state.pending_entries.emplace_back(pending_entry{
               .data = std::move(f), .added_pending_at = added_at});
         }
@@ -58,10 +60,11 @@ void add_partition_state(
 topic_state make_topic_state(
   std::vector<pairs_t> offset_bounds_by_pid,
   model::offset added_at = model::offset{1000},
-  bool with_files = false) {
+  bool with_files = false,
+  bool dlq = false) {
     topic_state state;
     add_partition_state(
-      std::move(offset_bounds_by_pid), state, added_at, with_files);
+      std::move(offset_bounds_by_pid), state, added_at, with_files, dlq);
     return state;
 }
 
@@ -670,4 +673,56 @@ TEST_F(FileCommitterTest, TestDeduplicateConcurrently) {
     }
     // The total number of data files should match the number of chunks.
     ASSERT_EQ(max_num_files, num_chunks);
+}
+
+TEST_F(FileCommitterTest, TestDontLoadDLQTable) {
+    create_table();
+    topics_state state;
+    state.topic_to_state[topic] = make_topic_state(
+      {
+        {{0, 99}, {100, 199}},
+      },
+      /*added_at=*/model::offset{1000},
+      /*with_files=*/true,
+      /*dlq=*/false);
+    auto res = committer.commit_topic_files_to_catalog(topic, state).get();
+    ASSERT_FALSE(res.has_error());
+
+    // In committing data to the main table, we should send no requests asking
+    // about the DLQ table.
+    auto is_dlq_request = [](const http_test_utils::request_info& req) {
+        return req.url.contains("/test-topic~dlq/");
+    };
+    auto dlq_reqs = get_requests(is_dlq_request);
+    ASSERT_EQ(0, dlq_reqs.size());
+}
+
+TEST_F(FileCommitterTest, TestDontLoadMainTable) {
+    // Create a DLQ table.
+    auto create_res = schema_mgr
+                        .ensure_table_schema(
+                          datalake::table_id_provider::dlq_table_id(topic),
+                          datalake::schemaless_struct_type(),
+                          datalake::hour_partition_spec())
+                        .get();
+    ASSERT_FALSE(create_res.has_error());
+    topics_state state;
+
+    // Commit data to the DLQ.
+    state.topic_to_state[topic] = make_topic_state(
+      {
+        {{0, 99}, {100, 199}},
+      },
+      /*added_at=*/model::offset{1000},
+      /*with_files=*/true,
+      /*dlq=*/true);
+    auto res = committer.commit_topic_files_to_catalog(topic, state).get();
+    ASSERT_FALSE(res.has_error());
+
+    // We should send no requests asking about the main table.
+    auto is_main_request = [](const http_test_utils::request_info& req) {
+        return req.url.contains("/test-topic/");
+    };
+    auto main_reqs = get_requests(is_main_request);
+    ASSERT_EQ(0, main_reqs.size());
 }

@@ -78,4 +78,26 @@ bool topic_state::has_pending_entries() const {
     return false;
 }
 
+bool topic_state::has_pending_main_entries() const {
+    for (const auto& [_, partition_state] : pid_to_pending_files) {
+        for (const auto& e : partition_state.pending_entries) {
+            if (!e.data.files.empty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool topic_state::has_pending_dlq_entries() const {
+    for (const auto& [_, partition_state] : pid_to_pending_files) {
+        for (const auto& e : partition_state.pending_entries) {
+            if (!e.data.dlq_files.empty()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 } // namespace datalake::coordinator

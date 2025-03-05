@@ -214,7 +214,7 @@ class CrashLoopChecksTest(RedpandaTest):
                                              "Too many consecutive crashes")
         assert self.redpanda.search_log_node(
             broker,
-            "Crash #4 at 20.* UTC - Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found) Backtrace: .*"
+            "Crash #4 at 20.* UTC - Redpanda version: .*. Failure during startup: std::__1::system_error (error C-Ares:4, unreachable_host.com: Not found) Backtrace: .*"
         )
         self.expect_crash_count(1 + CrashLoopChecksTest.CRASH_LOOP_LIMIT + 1)
 
@@ -234,6 +234,8 @@ class CrashLoopChecksTest(RedpandaTest):
             'crash_message'], f'Unexpected crash message: {report["crash_message"]}'
         assert len(report['stacktrace']) > 0, \
             f'Unexpected empty stacktrace for report: {report}'
+        assert len(report['app_version']) > 0, \
+            f'Unexpected empty app_version for report: {report}'
 
     @cluster(num_nodes=1, log_allow_list=CRASH_LOOP_LOG + SIGNAL_CRASH_LOG)
     @matrix(signo=[signal.SIGSEGV, signal.SIGABRT, signal.SIGILL],
@@ -289,7 +291,7 @@ class CrashLoopChecksTest(RedpandaTest):
 
         assert self.redpanda.search_log_node(
             broker,
-            f"Crash #4 at 20.* - {signo_prefix()} on shard {signal_shard}. Backtrace: "
+            f"Crash #4 at 20.* - Redpanda version: .*. {signo_prefix()} on shard {signal_shard}. Backtrace: "
         )
 
         report = self.read_first_crash_report()

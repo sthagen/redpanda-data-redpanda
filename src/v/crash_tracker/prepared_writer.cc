@@ -15,6 +15,7 @@
 #include "crash_tracker/types.h"
 #include "hashing/xx.h"
 #include "model/timestamp.h"
+#include "version/version.h"
 
 #include <seastar/core/file-types.hh>
 #include <seastar/core/file.hh>
@@ -76,6 +77,8 @@ prepared_writer::initialize(std::filesystem::path crash_file_path) {
             "Failed to open {} to record crash reason",
             _crash_report_file_name));
     }
+
+    _prepared_cd.app_version = ss::sstring{redpanda_version()};
 
     // Update _state as the last step in initialize() to make earlier changes
     // visible across threads.

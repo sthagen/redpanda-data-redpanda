@@ -1,5 +1,5 @@
-#include "generated_structs.h"
 #include "reflection/type_traits.h"
+#include "serde/test/generated_structs.h"
 
 #if defined(MAIN)
 #include <fstream>
@@ -164,8 +164,7 @@ bool test_failure(
 }
 
 template<typename T, std::size_t... Generations>
-bool eq_generations(
-  T&& a, T&& b, std::index_sequence<Generations...> generations) {
+bool eq_generations(T&& a, T&& b, std::index_sequence<Generations...>) {
     return (
       (a.template get_generation<Generations>()
        == b.template get_generation<Generations>())

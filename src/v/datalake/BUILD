@@ -589,7 +589,7 @@ redpanda_cc_library(
         "table_id_provider.h",
     ],
     include_prefix = "datalake",
-    visibility = [":__subpackages__"],
+    visibility = ["//visibility:public"],
     deps = [
         "//src/v/iceberg:table_identifier",
         "//src/v/model",

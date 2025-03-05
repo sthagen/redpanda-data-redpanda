@@ -100,6 +100,8 @@ struct topic_state
     operator<<(std::ostream&, topic_state::lifecycle_state_t);
 
     bool has_pending_entries() const;
+    bool has_pending_main_entries() const;
+    bool has_pending_dlq_entries() const;
 
     // Topic revision
     model::revision_id revision;

@@ -67,6 +67,7 @@ redpanda_cc_gtest(
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:logger",
         "//src/v/datalake:table_definition",
+        "//src/v/datalake:table_id_provider",
         "//src/v/datalake/coordinator:commit_offset_metadata",
         "//src/v/datalake/coordinator:iceberg_file_committer",
         "//src/v/datalake/tests:test_utils",

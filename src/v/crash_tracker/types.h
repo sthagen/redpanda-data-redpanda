@@ -125,12 +125,18 @@ struct crash_description
     /// verbose for telemetry.
     /// Eg. top-N allocations
     reserved_string_t addition_info;
+    ss::sstring app_version;
 
     crash_description() = default;
 
     auto serde_fields() {
         return std::tie(
-          type, crash_time, crash_message, stacktrace, addition_info);
+          type,
+          crash_time,
+          crash_message,
+          stacktrace,
+          addition_info,
+          app_version);
     }
 
     friend std::ostream& operator<<(std::ostream&, const crash_description&);

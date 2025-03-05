@@ -436,12 +436,16 @@ iceberg_file_committer::commit_topic_files_to_catalog(
         vlog(datalake_log.debug, "Topic {} has no pending entries", topic);
         co_return chunked_vector<mark_files_committed_update>{};
     }
-    auto topic_revision = tp_it->second.revision;
+    // Make a copy up here so we don't have to worry about the state changing
+    // underneath us. The STM should be robust enough to detect and reject
+    // concurrent changes that result in invalid state updates.
+    auto tp_state = tp_it->second.copy();
+    auto topic_revision = tp_state.revision;
 
     // Main table (may not exist if all records so far were invalid and the
     // schema couldn't be determined):
     std::optional<table_commit_builder> main_table_commit_builder;
-    {
+    if (tp_state.has_pending_main_entries()) {
         auto main_table_id = table_id_provider::table_id(topic);
         auto main_table_res = co_await catalog_.load_table(main_table_id);
         if (main_table_res.has_error()) {
@@ -477,10 +481,7 @@ iceberg_file_committer::commit_topic_files_to_catalog(
 
     // DLQ table (optional):
     std::optional<table_commit_builder> dlq_table_commit_builder;
-    {
-        // TODO(iceberg-dlq): Load it on demand.
-        //  For now, we load it unconditionally because once we start processing
-        //  pending entries we are not allowed to suspend/co_await.
+    if (tp_state.has_pending_dlq_entries()) {
         auto dlq_table_id = table_id_provider::dlq_table_id(topic);
         auto dlq_table_res = co_await catalog_.load_table(dlq_table_id);
         if (dlq_table_res.has_error()) {
@@ -519,38 +520,15 @@ iceberg_file_committer::commit_topic_files_to_catalog(
         }
     }
 
-    // update the iterator after a scheduling point
-    tp_it = state.topic_to_state.find(topic);
-    if (
-      tp_it == state.topic_to_state.end()
-      || tp_it->second.revision != topic_revision) {
-        vlog(
-          datalake_log.debug,
-          "Commit returning early, topic {} state is missing or revision has "
-          "changed: current {} vs expected {}",
-          topic,
-          tp_it->second.revision,
-          topic_revision);
-        co_return chunked_vector<mark_files_committed_update>{};
-    }
-
     chunked_hash_map<model::partition_id, kafka::offset> pending_commits;
-    const auto& tp_state = tp_it->second;
     for (const auto& [pid, p_state] : tp_state.pid_to_pending_files) {
         for (const auto& e : p_state.pending_entries) {
             pending_commits[pid] = e.data.last_offset;
 
             if (!e.data.files.empty()) {
-                if (!main_table_commit_builder) {
-                    vlog(
-                      datalake_log.error,
-                      "Pending files for topic {} revision {} but no main "
-                      "table",
-                      topic,
-                      topic_revision);
-                    co_return file_committer::errc::failed;
-                }
-
+                vassert(
+                  main_table_commit_builder.has_value(),
+                  "Should have main table builder");
                 auto res = main_table_commit_builder->process_pending_entry(
                   topic, topic_revision, io_, e.added_pending_at, e.data.files);
                 if (res.has_error()) {
@@ -559,16 +537,9 @@ iceberg_file_committer::commit_topic_files_to_catalog(
             }
 
             if (!e.data.dlq_files.empty()) {
-                if (!dlq_table_commit_builder) {
-                    vlog(
-                      datalake_log.error,
-                      "Pending DLQ files for topic {} revision {} but no DLQ "
-                      "table",
-                      topic,
-                      topic_revision);
-                    co_return file_committer::errc::failed;
-                }
-
+                vassert(
+                  dlq_table_commit_builder.has_value(),
+                  "Should have DLQ table builder");
                 auto dlq_res = dlq_table_commit_builder->process_pending_entry(
                   topic,
                   topic_revision,

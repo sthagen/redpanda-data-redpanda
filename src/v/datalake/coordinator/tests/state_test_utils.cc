@@ -13,7 +13,8 @@ namespace datalake::coordinator {
 
 chunked_vector<translated_offset_range> make_pending_files(
   const std::vector<std::pair<int64_t, int64_t>>& offset_bounds,
-  bool with_file) {
+  bool with_file,
+  bool dlq) {
     chunked_vector<translated_offset_range> files;
     files.reserve(offset_bounds.size());
     for (const auto& [begin, end] : offset_bounds) {
@@ -24,12 +25,21 @@ chunked_vector<translated_offset_range> make_pending_files(
               .file_size_bytes = 1024,
             });
         }
-        files.emplace_back(translated_offset_range{
-          .start_offset = kafka::offset{begin},
-          .last_offset = kafka::offset{end},
-          .files = std::move(fs),
-          // Other args irrelevant.
-        });
+        if (dlq) {
+            files.emplace_back(translated_offset_range{
+              .start_offset = kafka::offset{begin},
+              .last_offset = kafka::offset{end},
+              .dlq_files = std::move(fs),
+              // Other args irrelevant.
+            });
+        } else {
+            files.emplace_back(translated_offset_range{
+              .start_offset = kafka::offset{begin},
+              .last_offset = kafka::offset{end},
+              .files = std::move(fs),
+              // Other args irrelevant.
+            });
+        }
     }
     return files;
 }

@@ -9,5 +9,6 @@ def decode_crash_report(path: str) -> dict[str, Any]:
             'timestamp': rdr.read_int64(),
             'crash_message': rdr.read_string(),
             'stacktrace': rdr.read_string(),
-            'additional_info': rdr.read_string()
+            'additional_info': rdr.read_string(),
+            'app_version': rdr.read_string()
         })

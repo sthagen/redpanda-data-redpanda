@@ -35,6 +35,7 @@ public:
             ss::sstring stacktrace;
             ss::sstring reason;
             ss::sstring description;
+            ss::sstring app_version;
         };
 
         ss::sstring cluster_uuid;

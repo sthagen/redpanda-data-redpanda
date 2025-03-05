@@ -16,6 +16,7 @@
 #include "utils/token_bucket.h"
 
 #include <seastar/core/abort_source.hh>
+#include <seastar/core/lowres_clock.hh>
 #include <seastar/core/weak_ptr.hh>
 
 namespace experimental::cloud_topics {
@@ -30,15 +31,13 @@ struct throttler_accessor;
 /// some write requests out of the pipeline temporarily
 /// and then returns them back. The request which was withheld
 /// by the throttler could expire.
-template<class Clock>
+template<class Clock = ss::lowres_clock>
 class throttler {
     friend struct throttler_accessor;
 
 public:
     // TODO: add config properties for limits
-    explicit throttler(
-      size_t tput_limit,
-      core::write_pipeline<Clock>&); // TODO: add read_pipeline
+    explicit throttler(size_t tput_limit, core::write_pipeline<Clock>::stage s);
 
     ss::future<> start();
     ss::future<> stop();
@@ -68,13 +67,12 @@ private:
     /// consumers and effectively throttles the workload.
     void throttle_tput(size_t);
 
-    core::write_pipeline<Clock>& _pipeline;
     token_bucket<Clock> _write_tput_tb;
 
     using write_req_ptr = ss::weak_ptr<core::write_request<Clock>>;
     ss::abort_source _as;
     ss::gate _gate;
-    core::pipeline_stage _my_stage;
+    core::write_pipeline<Clock>::stage _my_stage;
     // Total number of events handled
     size_t _total_events{0};
     // Number of outstanding throttled write requests

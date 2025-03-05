@@ -17,7 +17,7 @@ namespace experimental::cloud_topics::core {
 pipeline_stage_container::pipeline_stage_container(size_t max_pipeline_stages) {
     _stages.reserve(max_pipeline_stages);
     for (size_t i = 0; i < max_pipeline_stages; i++) {
-        _stages.emplace_back(static_cast<int>(i));
+        _stages.push_back(pipeline_stage_id(static_cast<int>(i)));
     }
 }
 
@@ -46,8 +46,8 @@ pipeline_stage pipeline_stage_container::first_stage() const {
 }
 
 pipeline_stage pipeline_stage_container::register_pipeline_stage() noexcept {
-    vassert(!_stages.empty(), "No pipeline stages registered");
-    return pipeline_stage(&_stages.front());
+    vassert(!_stages.empty(), "No pipeline stages allocated");
+    return pipeline_stage(&_stages.at(_registered++));
 }
 
 } // namespace experimental::cloud_topics::core

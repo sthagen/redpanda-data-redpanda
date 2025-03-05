@@ -81,6 +81,25 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "base_pipeline",
+    hdrs = [
+        "base_pipeline.h",
+    ],
+    include_prefix = "cloud_topics/core",
+    deps = [
+        ":pipeline_stage",
+        "//src/v/base",
+        "//src/v/cloud_topics:logger",
+        "//src/v/cloud_topics:types",
+        "//src/v/cloud_topics/core:event_filter",
+        "//src/v/container:fragmented_vector",
+        "//src/v/ssx:future_util",
+        "//src/v/utils:retry_chain_node",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "write_pipeline",
     srcs = [
         "write_pipeline.cc",
@@ -96,6 +115,7 @@ redpanda_cc_library(
     ],
     include_prefix = "cloud_topics/core",
     deps = [
+        ":base_pipeline",
         ":pipeline_stage",
         "//src/v/base",
         "//src/v/bytes",

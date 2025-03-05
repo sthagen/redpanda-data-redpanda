@@ -11,6 +11,8 @@ redpanda_cc_gtest(
         "//src/v/crash_tracker",
         "//src/v/model",
         "//src/v/test_utils:gtest",
+        "//src/v/version",
+        "@fmt",
         "@googletest//:gtest",
         "@seastar",
     ],

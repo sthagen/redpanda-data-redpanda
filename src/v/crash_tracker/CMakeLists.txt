@@ -17,6 +17,7 @@ v_cc_library(
     v::serde
     v::hashing
     v::random
+    v::version
 )
 
 add_subdirectory(tests)

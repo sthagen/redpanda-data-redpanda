@@ -35,6 +35,7 @@ redpanda_cc_library(
         "//src/v/serde:vector",
         "//src/v/utils:directory_walker",
         "//src/v/utils:file_io",
+        "//src/v/version",
         "@fmt",
     ],
     include_prefix = "crash_tracker",

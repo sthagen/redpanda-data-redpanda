@@ -88,6 +88,7 @@ crash_reporter::build_crash_report_payload(
         if (report.crash) {
             r.stacktrace = ss::sstring{report.crash->stacktrace.c_str()};
             r.reason = fmt::format("{}", report.crash->type);
+            r.app_version = report.crash->app_version;
 
             if (
               report.crash->type
@@ -229,16 +230,16 @@ void rjson_serialize(
     w.StartObject();
     w.Key("timestamp");
     w.Uint64(report.timestamp);
-
     w.Key("node_id");
     w.Int(report.node_id);
-
     w.Key("stacktrace");
     w.String(report.stacktrace);
     w.Key("reason");
     w.String(report.reason);
     w.Key("description");
     w.String(report.description);
+    w.Key("app_version");
+    w.String(report.app_version);
     w.EndObject();
 }
 

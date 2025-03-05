@@ -69,9 +69,12 @@ public:
 // If with_file is true, the range will contain a data file, which may be
 // useful when callers need more than just offset bounds (e.g. to test file
 // deduplication).
+//
+// If dlq is true, all files will be marked as DLQ files.
 chunked_vector<translated_offset_range> make_pending_files(
   const std::vector<std::pair<int64_t, int64_t>>& offset_bounds,
-  bool with_file = false);
+  bool with_file = false,
+  bool dlq = false);
 
 // Asserts that the given state has the expected partition state.
 void check_partition(
