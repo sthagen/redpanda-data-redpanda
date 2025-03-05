@@ -96,6 +96,8 @@ struct translation_status {
     clock::time_point next_checkpoint_deadline;
     // Current memory byte reservation, if a translation is running
     std::optional<size_t> memory_bytes_reserved;
+
+    std::optional<size_t> translation_backlog;
 };
 std::ostream& operator<<(std::ostream&, const translation_status&);
 
@@ -142,9 +144,21 @@ public:
     virtual ss::future<> close() noexcept = 0;
 
     /**
+     * Invoked when any of the translation related properties are altered.
+     */
+    virtual void reconcile_properties() noexcept = 0;
+
+    /**
      * Current status of the translation.
      */
     virtual translation_status status() const = 0;
+
+    /**
+     * Approximation for current translation lag, in milliseconds.
+     * Precise semantics are implementation defined.
+     */
+    virtual ss::future<std::optional<std::chrono::milliseconds>>
+    current_lag_ms() const = 0;
 
     /**
      * Notification from the translator to translate until time
@@ -340,7 +354,8 @@ public:
 
     // For testing
     size_t running_translators() const;
-    const std::unique_ptr<reservations_tracker>& reservations() const {
+
+    std::unique_ptr<reservations_tracker>& reservations() {
         return _mem_tracker;
     }
     const translators& all_translators() const { return _executor.translators; }

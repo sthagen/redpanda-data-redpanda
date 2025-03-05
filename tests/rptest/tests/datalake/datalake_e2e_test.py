@@ -345,7 +345,7 @@ class DatalakeMetricsTest(RedpandaTest):
                              si_settings=SISettings(test_context=test_ctx),
                              extra_rp_conf={
                                  "iceberg_enabled": "true",
-                                 "iceberg_catalog_commit_interval_ms": "5000",
+                                 "iceberg_catalog_commit_interval_ms": "1000",
                                  "enable_leader_balancer": False
                              },
                              schema_registry_config=SchemaRegistryConfig(),
@@ -358,12 +358,15 @@ class DatalakeMetricsTest(RedpandaTest):
     def setUp(self):
         pass
 
-    def wait_for_lag(self, metric_check: MetricCheck, metric_name: str,
-                     count: int):
+    def wait_for_lag(self,
+                     metric_check: MetricCheck,
+                     metric_name: str,
+                     count: int,
+                     timeout_sec: int = 30):
         wait_until(
             lambda: metric_check.evaluate([(metric_name, lambda _, val: val ==
                                             count)]),
-            timeout_sec=30,
+            timeout_sec=timeout_sec,
             backoff_sec=5,
             err_msg=f"Timed out waiting for {metric_name} to reach: {count}")
 
@@ -405,5 +408,12 @@ class DatalakeMetricsTest(RedpandaTest):
             # Resume iceberg translation
             dl.catalog_service.start()
 
+            # translation lag goes straight to zero once we reconcile coordinator state
             self.wait_for_lag(m, DatalakeMetricsTest.translation_lag, 0)
-            self.wait_for_lag(m, DatalakeMetricsTest.commit_lag, 0)
+            # the committed offset is fed by a commit task that is concurrent to
+            # the translation loop, so we may have to wait one `wait_for_data`
+            # timeout period (30s) before the lag goes to zero.
+            self.wait_for_lag(m,
+                              DatalakeMetricsTest.commit_lag,
+                              0,
+                              timeout_sec=45)

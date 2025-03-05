@@ -504,6 +504,12 @@ ss::future<> disk_log_impl::adjacent_merge_compact(
           _manager.resources(),
           _feature_table);
 
+        if (segment->is_closed()) {
+            // We can race here with a truncation operation that removes the
+            // full segment, since we are not under a rewrite lock.
+            continue;
+        }
+
         vlog(
           gclog.debug,
           "[{}] segment {} compaction result: {}",
@@ -614,6 +620,12 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
           _feature_table);
 
         if (result.did_compact() == false) {
+            continue;
+        }
+
+        if (seg->is_closed()) {
+            // We can race here with a truncation operation that removes the
+            // full segment, since we are not under a rewrite lock.
             continue;
         }
 

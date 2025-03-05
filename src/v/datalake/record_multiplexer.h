@@ -18,6 +18,7 @@
 #include "datalake/translation/translation_probe.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
+#include "model/timestamp.h"
 #include "utils/prefix_logger.h"
 
 #include <seastar/core/future.hh>
@@ -101,6 +102,10 @@ public:
      * progress.
      */
     ss::future<result<write_result, writer_error>> finish() &&;
+
+    size_t buffered_bytes() const;
+
+    size_t flushed_bytes() const;
 
 private:
     // Handles the given record components of a record that is invalid for the

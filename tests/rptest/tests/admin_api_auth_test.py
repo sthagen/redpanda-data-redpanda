@@ -107,6 +107,30 @@ class AdminApiAuthTest(RedpandaTest):
         # Hit an endpoint requiring superuser
         charles_admin.get_cluster_config()
 
+    @cluster(num_nodes=3)
+    def test_public_get_license(self):
+        res = self.anonymous_admin.get_license()
+        assert 'loaded' in res and res['loaded'], \
+            f"Expected res[loaded] = True, got {res}"
+
+        lic = res['license']
+        assert 'org' not in lic, \
+            f"Expected 'org' to be omitted from response, got {lic}"
+        assert 'format_version' not in lic , \
+            f"Expected 'format_version' to be omitted from response, got {lic}"
+
+    @cluster(num_nodes=3)
+    def test_user_get_license(self):
+        res = self.regular_user_admin.get_license()
+        assert 'loaded' in res and res['loaded'], \
+            f"Expected res['loaded'] = True, got {res}"
+
+        lic = res['license']
+        assert 'org' in lic and lic['org'] != '', \
+            f"Expected lic['org'] == '', got {lic}"
+        assert 'format_version' in lic and lic['format_version'] >= 0, \
+            f"Expected lic['format_version'] > 0, got {lic}"
+
 
 class AdminApiAuthEnablementTest(RedpandaTest):
     """

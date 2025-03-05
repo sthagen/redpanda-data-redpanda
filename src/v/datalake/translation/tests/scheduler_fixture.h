@@ -39,6 +39,11 @@ public:
     translation_status status() const override;
     void start_translation(clock::duration translate_for) override;
     void stop_translation() override;
+    void reconcile_properties() noexcept override {}
+    ss::future<std::optional<std::chrono::milliseconds>>
+    current_lag_ms() const override {
+        co_return std::chrono::milliseconds{0};
+    }
 
 private:
     // Mock of a single parquet file writer.

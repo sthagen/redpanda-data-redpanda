@@ -742,6 +742,12 @@ struct configuration final : public config_store {
     property<bool> iceberg_disable_snapshot_tagging;
     property<bool> iceberg_disable_automatic_snapshot_expiry;
 
+    // datalake scheduler configs
+    bounded_property<size_t> datalake_scheduler_block_size_bytes;
+    bounded_property<size_t> datalake_scheduler_max_concurrent_translations;
+    bounded_property<std::chrono::milliseconds>
+      datalake_scheduler_time_slice_ms;
+
     configuration();
 
     error_map_t load(const YAML::Node& root_node);

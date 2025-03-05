@@ -3963,7 +3963,7 @@ configuration::configuration()
       *this,
       "iceberg_target_lag_ms",
       "Default value for the redpanda.iceberg.target.lag.ms topic property, "
-      "which controls how often data an Iceberg table is refreshed with new "
+      "which controls how often data in an Iceberg table is refreshed with new "
       "data from the corresponding Redpanda topic. Redpanda attempts to commit "
       "all the data produced to the topic within the lag target in a best "
       "effort fashion, subject to resource availability.",
@@ -3989,6 +3989,34 @@ configuration::configuration()
       "its own.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
+  , datalake_scheduler_block_size_bytes(
+      *this,
+      "datalake_scheduler_block_size_bytes",
+      "Size, in bytes, of each memory block reserved for record translation, "
+      "as tracked by the datalake scheduler.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      4_MiB,
+      {.min = 1_MiB, .max = 8_MiB})
+  , datalake_scheduler_max_concurrent_translations(
+      *this,
+      "datalake_scheduler_max_concurrent_translations",
+      "The maximum number of translations that the datalake scheduler will "
+      "allow to run at a given time. If a translation is requested but the "
+      "number of running translations exceeds this value, the request will be "
+      "put to sleep temporarily, polling until capacity becomes available.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      4,
+      {.min = 1, .max = 8})
+  , datalake_scheduler_time_slice_ms(
+      *this,
+      "datalake_scheduler_time_slice_ms",
+      "Time, in milliseconds, for a datalake translation as scheduled by the "
+      "datalake scheduler. After a translation is scheduled, it will run until "
+      "either a) the time specified has elapsed or b) all pending records on "
+      "its source partition have been translated.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      30s,
+      {.min = 1s, .max = 60s})
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

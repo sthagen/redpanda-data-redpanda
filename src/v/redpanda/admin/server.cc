@@ -2432,9 +2432,11 @@ void admin_server::register_features_routes() {
           return put_feature_handler(std::move(req));
       });
 
-    register_route<user>(
+    register_route<publik, true>(
       ss::httpd::features_json::get_license,
-      [this](std::unique_ptr<ss::http::request>) {
+      [this](
+        std::unique_ptr<ss::http::request>,
+        const request_auth_result& auth_result) {
           ss::httpd::features_json::license_response res;
           res.loaded = false;
           const auto& ft = _controller->get_feature_table().local();
@@ -2442,8 +2444,10 @@ void admin_server::register_features_routes() {
           if (license) {
               res.loaded = true;
               ss::httpd::features_json::license_contents lc;
-              lc.format_version = license->format_version;
-              lc.org = license->organization;
+              if (auth_result.is_authenticated()) {
+                  lc.format_version = license->format_version;
+                  lc.org = license->organization;
+              }
               lc.type = security::license_type_to_string(license->type);
               lc.expires = license->expiry.count();
               lc.sha256 = license->checksum;

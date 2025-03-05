@@ -316,7 +316,8 @@ class CloudCluster():
                                        self.provider_key, self.provider_secret,
                                        self.config.provider,
                                        self.config.api_url, oauth_url_origin,
-                                       self.config.oauth_audience)
+                                       self.config.oauth_audience,
+                                       self.config.public_api_url)
         if self.config.type == CLOUD_TYPE_BYOC:
             # remove current plugin if any
             self.utils.rpk_plugin_uninstall('byoc', sudo=True)

@@ -1,6 +1,7 @@
 import json
 from rptest.clients.rpk import RpkTool
 from rptest.services.redpanda_types import KafkaClientSecurity
+from typing import Any
 
 
 class FakePanda:
@@ -16,20 +17,22 @@ class FakePanda:
 
 
 class CloudClusterUtils:
-    def __init__(self, context, logger, infra_id, infra_secret, provider,
-                 cloud_url_origin, oauth_url_origin, oauth_audience):
-        """
-        Initialize CloudClusterUtils.
+    def __init__(self, context: Any, logger: Any, infra_id: str,
+                 infra_secret: str, provider: str, cloud_url_origin: str,
+                 oauth_url_origin: str, oauth_audience: str,
+                 rpk_public_api_url: str) -> None:
+        """Initialize CloudClusterUtils.
 
-        :param logger: logging object
-        :param cluster_config: dict object loaded from
-               context.globals["cloud_cluster"]
-        :param infra_id: access key id
-        :param infra_secret: access key secret
-        :param provider: cloud provider, e.g. AWS
-        :param cloud_url_origin: just scheme and hostname
-        :param oauth_url_origin: just scheme and hostname
-        :param oauth_audience: audience for issued token
+        Args:
+            context (Any): context object
+            logger (Any): logger object
+            infra_id (str): aws access key id
+            infra_secret (str): aws access key secret
+            provider (str): cloud provider, e.g. 'aws', 'gcp', 'azure'
+            cloud_url_origin (str): rpk cloud url
+            oauth_url_origin (str): rpk cloud auth url
+            oauth_audience (str): rpk cloud auth audience for issued token
+            rpk_public_api_url (str): rpk cloud public api url
         """
         self.fake_panda = FakePanda(context, logger)
         # Create rpk to use several functions that is isolated
@@ -42,6 +45,7 @@ class CloudClusterUtils:
             'RPK_CLOUD_URL': cloud_url_origin,
             'RPK_CLOUD_AUTH_URL': oauth_url_origin,
             'RPK_CLOUD_AUTH_AUDIENCE': oauth_audience,
+            'RPK_PUBLIC_API_URL': rpk_public_api_url,
             'CLOUD_URL': f'{cloud_url_origin}/api/v1'
         }
         if self.provider == 'aws':

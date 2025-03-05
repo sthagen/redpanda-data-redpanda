@@ -719,6 +719,15 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
             if name == "enable_consumer_group_metrics":
                 valid_value = random.choice([[], ["group"], ["partition"]])
 
+            if name == "datalake_scheduler_block_size_bytes":
+                valid_value = random.choice(range(1048576, 8388608 + 1))
+
+            if name == "datalake_scheduler_max_concurrent_translations":
+                valid_value = random.choice(range(1, 8 + 1))
+
+            if name == "datalake_scheduler_time_slice_ms":
+                valid_value = random.choice(range(1000, 60000 + 1))
+
             updates[name] = valid_value
 
         patch_result = self.admin.patch_cluster_config(upsert=updates,
