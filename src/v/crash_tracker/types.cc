@@ -29,6 +29,8 @@ std::ostream& operator<<(std::ostream& os, crash_type ct) {
         return os << "illegal_instruction";
     case crash_type::assertion:
         return os << "assertion";
+    case crash_type::oom:
+        return os << "oom";
     }
 }
 

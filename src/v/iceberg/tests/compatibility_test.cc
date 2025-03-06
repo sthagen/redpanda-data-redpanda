@@ -178,8 +178,10 @@ std::vector<field_test_case> generate_test_cases() {
     test_data.emplace_back(int_type{}, long_type{}, type_promoted::yes);
     test_data.emplace_back(int_type{}, boolean_type{}, compat_errc::mismatch);
 
+    // TODO(iceberg): date -> timestamp is v3-only. When/if we support v3, we'll
+    // want to reinstate this promotion.
     test_data.emplace_back(
-      date_type{}, timestamp_type{}, type_promoted::changes_partition);
+      date_type{}, timestamp_type{}, compat_errc::mismatch);
     test_data.emplace_back(date_type{}, long_type{}, compat_errc::mismatch);
 
     test_data.emplace_back(float_type{}, double_type{}, type_promoted::yes);
@@ -373,13 +375,12 @@ static const std::vector<struct_evolution_test_case> valid_cases{
             ids.get_one(),
             "qux",
             field_required::yes,
-            list_type::create(
-              ids.get_one(), field_required::yes, date_type{})));
+            list_type::create(ids.get_one(), field_required::yes, int_type{})));
           return s;
       },
     .update =
       [](struct_type& s) {
-          get<list_type>(s.fields[0]).element_field->type = timestamp_type{};
+          get<list_type>(s.fields[0]).element_field->type = long_type{};
       },
     .validator =
       [](const struct_type& src, const struct_type& dst) {
@@ -387,7 +388,6 @@ static const std::vector<struct_evolution_test_case> valid_cases{
           auto& dst_list = get<list_type>(dst.fields.back());
           return updated(*src_list.element_field, *dst_list.element_field);
       },
-    .pspec = "(qux)",
   },
   struct_evolution_test_case{
     .description = "evolving a list-element struct is allowed",
@@ -446,7 +446,6 @@ static const std::vector<struct_evolution_test_case> valid_cases{
           return updated(*src_map.key_field, *dst_map.key_field)
                  && updated(*src_map.value_field, *dst_map.value_field);
       },
-    .pspec = "(a_map)",
   },
   struct_evolution_test_case{
     .description = "we can 'add' nested fields",
@@ -548,7 +547,6 @@ static const std::vector<struct_evolution_test_case> valid_cases{
                  && dst_nested.fields.empty()
                  && removed(*src_nested.fields.back());
       },
-    .pspec = "(nested)", // TODO(oren): seems wrong frankly, should this fail?
   },
   struct_evolution_test_case{
     .description
@@ -676,7 +674,6 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     // should reordered fields in a schema correspond to some parquet layout
     // change on disk?
     .any_change = schema_changed::no,
-    .pspec = "(quux,location)",
   },
   struct_evolution_test_case{
     .description
@@ -751,8 +748,7 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
             ids.get_one(),
             "qux",
             field_required::yes,
-            list_type::create(
-              ids.get_one(), field_required::yes, date_type{})));
+            list_type::create(ids.get_one(), field_required::yes, int_type{})));
           return s;
       },
     .update =
@@ -943,8 +939,9 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .validate_err = schema_evolution_errc::new_required_field,
   },
   struct_evolution_test_case{
-    .description = "promoting from date -> timestamp is fine as long as that "
-                   "field does not appear in the partition spec",
+    .description
+    = "promoting from date -> timestamp is is illegal in Iceberg v2. it is "
+      "allowed in v3, unless the field doesn't appears in the partition  spec",
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
@@ -960,7 +957,7 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
           std::get<struct_type>(s.fields.back()->type).fields.back()->type
             = timestamp_type{};
       },
-    .validate_err = schema_evolution_errc::partition_spec_conflict,
+    .validate_err = schema_evolution_errc::type_mismatch,
     .pspec = "(nested.date)",
   },
   struct_evolution_test_case{
@@ -1222,4 +1219,73 @@ TEST_P(StructEvoCompatibilityTest, CanCheckEquivalence) {
 
     EXPECT_FALSE(schemas_equivalent(original, next));
     EXPECT_FALSE(schemas_equivalent(next, original));
+}
+
+TEST(ValuePromotionTest, PrimitiveValuePromotion) {
+    // trivial promotions should leave the value intact
+    std::vector<std::pair<primitive_value, primitive_type>> trivial;
+    trivial.emplace_back(boolean_value{true}, boolean_type{});
+    trivial.emplace_back(int_value{42}, int_type{});
+    trivial.emplace_back(long_value{42}, long_type{});
+    trivial.emplace_back(float_value{1.5}, float_type{});
+    trivial.emplace_back(double_value{1.5}, double_type{});
+    trivial.emplace_back(
+      decimal_value{42}, decimal_type{.precision = 10, .scale = 2});
+    trivial.emplace_back(date_value{123}, date_type{});
+    trivial.emplace_back(time_value{1234}, time_type{});
+    trivial.emplace_back(timestamp_value{31536000000023ul}, timestamp_type{});
+    trivial.emplace_back(
+      timestamptz_value{31536000000023ul}, timestamptz_type{});
+    trivial.emplace_back(
+      string_value{bytes_to_iobuf(bytes::from_string("foobar"))},
+      string_type{});
+    trivial.emplace_back(uuid_value{uuid_t::create()}, uuid_type{});
+    trivial.emplace_back(
+      fixed_value{bytes_to_iobuf(bytes{1, 2, 3, 4, 5, 6, 7, 8, 255})},
+      fixed_type{.length = 9});
+    trivial.emplace_back(
+      binary_value{bytes_to_iobuf(bytes{1, 2, 3, 4, 5, 6, 7, 8, 255})},
+      binary_type{});
+
+    for (const auto& [val, type] : trivial) {
+        ASSERT_EQ(promote_primitive_value_type(make_copy(val), type), val);
+    }
+
+    // non-trivial promotions
+    ASSERT_EQ(
+      promote_primitive_value_type(int_value{42}, long_type{}), long_value{42});
+    ASSERT_EQ(
+      promote_primitive_value_type(float_value{1.5}, double_type{}),
+      double_value{1.5});
+
+    // test some forbidden promotions
+    std::vector<std::pair<primitive_value, primitive_type>> forbidden;
+    forbidden.emplace_back(boolean_value{true}, int_type{});
+    forbidden.emplace_back(int_value{42}, double_type{});
+    forbidden.emplace_back(long_value{42}, int_type{});
+    forbidden.emplace_back(float_value{1.5}, int_type{});
+    forbidden.emplace_back(double_value{1.5}, float_type{});
+    forbidden.emplace_back(date_value{123}, timestamptz_type{});
+    forbidden.emplace_back(time_value{1234}, timestamptz_type{});
+    forbidden.emplace_back(decimal_value{42}, int_type{});
+    forbidden.emplace_back(
+      timestamp_value{31536000000023ul}, timestamptz_type{});
+    forbidden.emplace_back(
+      timestamptz_value{31536000000023ul}, timestamp_type{});
+    forbidden.emplace_back(
+      string_value{bytes_to_iobuf(bytes::from_string("foobar"))},
+      binary_type{});
+    forbidden.emplace_back(uuid_value{uuid_t::create()}, binary_type{});
+    forbidden.emplace_back(
+      fixed_value{bytes_to_iobuf(bytes{1, 2, 3, 4, 5, 6, 7, 8, 255})},
+      binary_type{});
+    forbidden.emplace_back(
+      binary_value{bytes_to_iobuf(bytes::from_string("foobar"))},
+      string_type{});
+
+    for (const auto& [val, type] : forbidden) {
+        ASSERT_THROW(
+          promote_primitive_value_type(make_copy(val), type), std::logic_error)
+          << "value: " << val << ", type: " << type;
+    }
 }

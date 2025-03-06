@@ -11,6 +11,7 @@ v_cc_library(
     Seastar::seastar
     v::ssx
     v::config
+    v::crash_tracker
   )
 
 v_cc_library(

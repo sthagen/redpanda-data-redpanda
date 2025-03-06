@@ -151,17 +151,9 @@ public:
         ASSERT_TRUE(mlist_res.has_value());
         const auto& mlist = mlist_res.value();
 
-        auto schema = datalake::default_schema();
-        auto pspec = iceberg::partition_spec::resolve(
-          datalake::hour_partition_spec(), schema.schema_struct);
-        ASSERT_TRUE(pspec.has_value());
-        auto pk_type = iceberg::partition_key_type::create(
-          pspec.value(), schema);
-
         // Collect all the data files for this snapshot.
         for (const auto& m : mlist.files) {
-            auto m_res
-              = manifest_io.download_manifest(m.manifest_path, pk_type).get();
+            auto m_res = manifest_io.download_manifest(m.manifest_path).get();
             ASSERT_TRUE(m_res.has_value());
             for (const auto& e : m_res.value().entries) {
                 uris->emplace_back(e.data_file.file_path());
@@ -498,14 +490,19 @@ TEST_F(FileCommitterTest, TestDeduplicateFromAncestor) {
     // Add a new snapshot to the table by appending some data. Explicitly
     // _don't_ add the commit metadata property.
     iceberg::transaction tx(std::move(load_res.value()));
-    chunked_vector<iceberg::data_file> new_files;
+    chunked_vector<iceberg::file_to_append> new_files;
     iceberg::partition_key pk;
     pk.val = std::make_unique<iceberg::struct_value>();
     pk.val->fields.emplace_back(iceberg::int_value{0});
-    new_files.emplace_back(iceberg::data_file{
+    iceberg::data_file icb_file{
       .file_path = iceberg::uri("foobar"),
       .partition = std::move(pk),
       .file_size_bytes = 1024,
+    };
+    new_files.emplace_back(iceberg::file_to_append{
+      .file = std::move(icb_file),
+      .schema_id = tx.table().current_schema_id,
+      .partition_spec_id = tx.table().default_spec_id,
     });
     auto append_res = tx.merge_append(manifest_io, std::move(new_files)).get();
     ASSERT_FALSE(append_res.has_error());

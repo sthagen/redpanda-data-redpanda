@@ -23,6 +23,10 @@ chunked_vector<translated_offset_range> make_pending_files(
             fs.emplace_back(data_file{
               .remote_path = fmt::format("{}-{}", begin, end),
               .file_size_bytes = 1024,
+              .table_schema_id = 0,
+              .partition_spec_id = 0,
+              .partition_key = chunked_vector<std::optional<bytes>>::single(
+                std::nullopt),
             });
         }
         if (dlq) {

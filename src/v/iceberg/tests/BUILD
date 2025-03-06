@@ -223,6 +223,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_io:remote",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",
+        "//src/v/iceberg:compatibility",
         "//src/v/iceberg:manifest",
         "//src/v/iceberg:manifest_entry",
         "//src/v/iceberg:manifest_io",

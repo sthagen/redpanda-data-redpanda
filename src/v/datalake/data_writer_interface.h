@@ -27,6 +27,7 @@ enum class writer_error {
     no_data,
     flush_error,
 };
+std::ostream& operator<<(std::ostream&, const writer_error&);
 
 struct data_writer_error_category : std::error_category {
     const char* name() const noexcept final { return "Data Writer Error"; }

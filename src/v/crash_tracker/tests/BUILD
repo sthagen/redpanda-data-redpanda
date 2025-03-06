@@ -23,6 +23,7 @@ redpanda_cc_gtest(
     timeout = "short",
     srcs = [
         "recorder_test.cc",
+        "utils.h",
     ],
     deps = [
         "//src/v/config",
@@ -58,6 +59,24 @@ redpanda_cc_binary(
         "//src/v/model",
         "//src/v/utils:file_io",
         "@boost//:program_options",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "crash_reporter_oom_test",
+    timeout = "short",
+    srcs = [
+        "crash_reporter_oom_test.cc",
+        "utils.h",
+    ],
+    deps = [
+        "//src/v/config",
+        "//src/v/crash_tracker",
+        "//src/v/resource_mgmt:memory_sampling",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:human",
+        "@googletest//:gtest",
         "@seastar",
     ],
 )

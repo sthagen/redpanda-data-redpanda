@@ -74,26 +74,32 @@ public:
         return {std::move(pk_struct)};
     }
 
-    chunked_vector<data_file> create_data_files(
+    chunked_vector<file_to_append> create_data_files(
+      const table_metadata& md,
       const ss::sstring& path_base,
       size_t num_files,
       size_t record_count,
       int32_t pk_value = 42) {
-        chunked_vector<data_file> ret;
+        chunked_vector<file_to_append> ret;
         ret.reserve(num_files);
         const auto records_per_file = record_count / num_files;
         const auto leftover_records = record_count % num_files;
         for (size_t i = 0; i < num_files; i++) {
             const auto path = uri(fmt::format("{}-{}", path_base, i));
-            ret.emplace_back(data_file{
+            data_file file{
               .content_type = data_file_content_type::data,
               .file_path = path,
               .partition = partition_key{make_int_pk(pk_value)},
               .record_count = records_per_file,
               .file_size_bytes = 1_KiB,
+            };
+            ret.emplace_back(file_to_append{
+              .file = std::move(file),
+              .schema_id = md.current_schema_id,
+              .partition_spec_id = md.default_spec_id,
             });
         }
-        ret[0].record_count += leftover_records;
+        ret[0].file.record_count += leftover_records;
         return ret;
     }
     /**
@@ -102,15 +108,15 @@ public:
     ss::future<transaction> generate_metadata() {
         transaction tx(create_table());
         (void)co_await tx.merge_append(
-          io, create_data_files("test_1", 1, 10, 1));
+          io, create_data_files(tx.table(), "test_1", 1, 10, 1));
         (void)co_await tx.merge_append(
-          io, create_data_files("test_2", 2, 20, 2));
+          io, create_data_files(tx.table(), "test_2", 2, 20, 2));
         (void)co_await tx.merge_append(
-          io, create_data_files("test_3", 3, 30, 3));
+          io, create_data_files(tx.table(), "test_3", 3, 30, 3));
         (void)co_await tx.merge_append(
-          io, create_data_files("test_4", 2, 40, 4));
+          io, create_data_files(tx.table(), "test_4", 2, 40, 4));
         (void)co_await tx.merge_append(
-          io, create_data_files("test_5", 1, 50, 5));
+          io, create_data_files(tx.table(), "test_5", 1, 50, 5));
         co_return tx;
     }
 
@@ -142,8 +148,7 @@ public:
         chunked_vector<iceberg::manifest> manifests;
         auto files = co_await collect_all_manifest_files(table);
         for (auto& f : files) {
-            auto m = co_await io.download_manifest(
-              f.manifest_path, make_partition_key_type(table));
+            auto m = co_await io.download_manifest(f.manifest_path);
             manifests.push_back(std::move(m.assume_value()));
         }
         co_return manifests;

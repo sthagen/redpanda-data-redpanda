@@ -43,6 +43,10 @@ public:
     virtual ss::future<pandaproxy::schema_registry::schema_getter*>
     getter() const = 0;
 
+    // Returns a getter after syncing with the underlying store.
+    virtual ss::future<pandaproxy::schema_registry::schema_getter*>
+    synced_getter() const = 0;
+
     ss::future<std::optional<pandaproxy::schema_registry::valid_schema>>
     get_valid_schema(pandaproxy::schema_registry::schema_id schema_id) const;
 

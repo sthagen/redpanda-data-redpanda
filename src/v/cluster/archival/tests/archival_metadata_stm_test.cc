@@ -20,10 +20,10 @@
 #include "raft/fundamental.h"
 #include "raft/persisted_stm.h"
 #include "raft/state_machine_manager.h"
-#include "raft/tests/raft_group_fixture.h"
 #include "raft/tests/simple_raft_fixture.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/async.h"
+#include "test_utils/fixture.h"
 
 #include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>

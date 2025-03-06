@@ -35,7 +35,9 @@ std::optional<partition_spec> partition_spec::resolve(
     for (const auto& field : spec.fields) {
         const auto* source_field = schema_type.find_field_by_name(
           field.source_name);
-        if (!source_field) {
+        if (
+          !source_field
+          || !std::holds_alternative<primitive_type>(source_field->type)) {
             return std::nullopt;
         }
 

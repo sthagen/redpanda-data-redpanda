@@ -31,6 +31,8 @@ constexpr std::string_view table{"remover-test-table"};
 const model::topic test_topic{table};
 const iceberg::table_identifier test_table_id{
   .ns = {"redpanda"}, .table = ss::sstring{table}};
+const iceberg::table_identifier test_dlq_table_id{
+  .ns = {"redpanda"}, .table = ss::sstring{fmt::format("{}~dlq", table)}};
 } // anonymous namespace
 
 class SnapshotRemoverTest
@@ -65,25 +67,29 @@ public:
     }
 
     ss::future<> add_snapshot(const iceberg::table_identifier& table_id) {
-        chunked_vector<iceberg::data_file> files;
+        chunked_vector<iceberg::file_to_append> files;
         auto filename = make_filename(file_counter_++);
         auto file_uri = manifest_io.to_uri({filename});
-
-        iceberg::partition_key pk;
-        pk.val = std::make_unique<iceberg::struct_value>();
-        pk.val->fields.emplace_back(iceberg::int_value{0});
-        files.emplace_back(iceberg::data_file{
-          .file_path = file_uri,
-          .partition = std::move(pk),
-          .file_size_bytes = 0,
-        });
 
         auto load_res = co_await catalog.load_table(table_id);
         ASSERT_FALSE_CORO(load_res.has_error())
           << "Error loading: " << load_res.error();
+        iceberg::transaction txn(std::move(load_res.value()));
 
-        auto& table = load_res.value();
-        iceberg::transaction txn(std::move(table));
+        iceberg::partition_key pk;
+        pk.val = std::make_unique<iceberg::struct_value>();
+        pk.val->fields.emplace_back(iceberg::int_value{0});
+        iceberg::data_file file{
+          .file_path = file_uri,
+          .partition = std::move(pk),
+          .file_size_bytes = 0,
+        };
+        files.emplace_back(iceberg::file_to_append{
+          .file = std::move(file),
+          .schema_id = txn.table().current_schema_id,
+          .partition_spec_id = txn.table().default_spec_id,
+        });
+
         auto merge_res = co_await txn.merge_append(
           manifest_io, std::move(files));
         ASSERT_FALSE_CORO(merge_res.has_error())
@@ -229,6 +235,55 @@ TEST_F(SnapshotRemoverTest, TestRemoveFromMissingTable) {
     auto remove_res
       = remover.remove_expired_snapshots(test_topic, model::timestamp::now())
           .get();
-    ASSERT_TRUE(remove_res.has_error());
-    ASSERT_EQ(remove_res.error(), snapshot_remover::errc::failed);
+    ASSERT_FALSE(remove_res.has_error());
+}
+
+TEST_F(SnapshotRemoverTest, TestRemoveFromBothTables) {
+    create_table(test_table_id).get();
+    add_snapshots(test_table_id, 7).get();
+
+    create_table(test_dlq_table_id).get();
+    add_snapshots(test_dlq_table_id, 5).get();
+
+    auto add_ts = model::timestamp::now();
+    auto before_snaps = get_snapshots(test_table_id).get();
+    auto before_snaps_dlq = get_snapshots(test_dlq_table_id).get();
+    ASSERT_EQ(before_snaps.size(), 7);
+    ASSERT_EQ(before_snaps_dlq.size(), 5);
+    for (const auto& s : before_snaps) {
+        ASSERT_TRUE(has_object(s.manifest_list_path));
+    }
+    for (const auto& s : before_snaps_dlq) {
+        ASSERT_TRUE(has_object(s.manifest_list_path));
+    }
+
+    // Run removal far enough in the future to expire files.
+    model::timestamp cleanup_ts{
+      add_ts.value()
+      + iceberg::remove_snapshots_action::default_max_snapshot_age_ms};
+    auto remove_res
+      = remover.remove_expired_snapshots(test_topic, cleanup_ts).get();
+    ASSERT_FALSE(remove_res.has_error());
+
+    // The manifest lists should be retained for both the main and DLQ tables.
+    size_t num_snaps = 0;
+    for (const auto& s : before_snaps) {
+        if (has_object(s.manifest_list_path)) {
+            ++num_snaps;
+        }
+    }
+    size_t num_snaps_dlq = 0;
+    for (const auto& s : before_snaps_dlq) {
+        if (has_object(s.manifest_list_path)) {
+            ++num_snaps_dlq;
+        }
+    }
+    ASSERT_EQ(
+      num_snaps,
+      iceberg::remove_snapshots_action::default_min_snapshots_retained);
+    ASSERT_EQ(
+      num_snaps_dlq,
+      iceberg::remove_snapshots_action::default_min_snapshots_retained);
+    ASSERT_EQ(num_snaps, get_snapshots(test_table_id).get().size());
+    ASSERT_EQ(num_snaps_dlq, get_snapshots(test_dlq_table_id).get().size());
 }

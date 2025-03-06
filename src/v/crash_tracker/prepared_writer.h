@@ -28,16 +28,20 @@ namespace crash_tracker {
 // clang-format off
 // +---------------+  initialize()   +-------------+  fill()   +--------+  write()   +---------+
 // | uninitialized +---------------->| initialized +---------->| filled +----------->| written |
-// +---------------+                 +------+------+           +--------+            +---------+
-//                                          |
-//                                          |
-//                                          |
-//                                          |
-//                                          |
+// +------+--------+                 +------+------+           +--------+            +---------+
+//       / \                                |
+//        |                                 |
+//        |                                 |
+//        |                                 |
+//      reset()                             |
 //                                          |                        release()      +----------+
 //                                          +-------------------------------------->| released |
 //                                                                                  +----------+
 // clang-format on
+//
+// Please note there is a `reset()` method provided that can be used but _only_
+// for testing purposes.  It will reset the prepared_writer back to the
+// uninitialized state
 class prepared_writer {
 public:
     ss::future<> initialize(std::filesystem::path);
@@ -50,6 +54,10 @@ public:
     /// Async-signal safe
     /// Must be called after a fill() that returned a non-null value
     void write();
+
+    /// Only to be used under testing situations.  Must be called _after_
+    /// release()
+    void reset();
 
 private:
     enum class state { uninitialized, initialized, filled, written, released };
@@ -69,7 +77,7 @@ private:
     crash_description _prepared_cd;
     iobuf _serde_output;
     std::filesystem::path _crash_report_file_name;
-    int _fd{0};
+    int _fd{-1};
 };
 
 } // namespace crash_tracker

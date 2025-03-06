@@ -13,6 +13,7 @@
 #include "datalake/coordinator/snapshot_remover.h"
 #include "iceberg/catalog.h"
 #include "iceberg/manifest_io.h"
+#include "iceberg/table_identifier.h"
 
 #include <seastar/core/future.hh>
 
@@ -30,8 +31,15 @@ public:
       remove_expired_snapshots(model::topic, model::timestamp) const final;
 
 private:
+    // Remove snapshots that have expired as of `ts` for the given table within
+    // the context of the given topic. Is a no-op if the table doesn't exist.
+    ss::future<checked<std::nullopt_t, errc>> remove_expired_snapshots(
+      model::topic, iceberg::table_identifier, model::timestamp ts) const;
+
     // TODO: pull this out into some helper? Seems useful for other actions.
     iceberg::table_identifier table_id_for_topic(const model::topic& t) const;
+    iceberg::table_identifier
+    dlq_table_id_for_topic(const model::topic& t) const;
 
     // Must outlive this remover.
     iceberg::catalog& catalog_;

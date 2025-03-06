@@ -224,6 +224,7 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/datalake:logger",
+        "//src/v/datalake:table_id_provider",
         "//src/v/iceberg:manifest_entry",
         "//src/v/iceberg:transaction",
     ],
@@ -233,6 +234,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/iceberg:catalog",
         "//src/v/iceberg:manifest_io",
+        "//src/v/iceberg:table_identifier",
         "//src/v/utils:prefix_logger",
         "@seastar",
     ],

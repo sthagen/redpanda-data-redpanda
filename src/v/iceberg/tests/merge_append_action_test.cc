@@ -10,6 +10,7 @@
 #include "cloud_io/remote.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
+#include "iceberg/compatibility.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/manifest_io.h"
 #include "iceberg/merge_append_action.h"
@@ -71,33 +72,61 @@ public:
         };
     }
 
-    partition_key make_int_pk(int32_t v) {
+    partition_key make_single_field_pk(primitive_value v) {
         auto pk_struct = std::make_unique<struct_value>();
-        pk_struct->fields.emplace_back(int_value{v});
+        pk_struct->fields.emplace_back(std::move(v));
         return {std::move(pk_struct)};
     }
 
-    chunked_vector<data_file> create_data_files(
+    chunked_vector<file_to_append> create_data_files(
+      const table_metadata& md,
       const ss::sstring& path_base,
       size_t num_files,
       size_t record_count,
-      int32_t pk_value = 42) {
-        chunked_vector<data_file> ret;
+      primitive_value pk_value = int_value{42},
+      std::optional<schema::id_t> schema_id = std::nullopt,
+      std::optional<partition_spec::id_t> partition_spec_id = std::nullopt) {
+        chunked_vector<file_to_append> ret;
         ret.reserve(num_files);
         const auto records_per_file = record_count / num_files;
         const auto leftover_records = record_count % num_files;
         for (size_t i = 0; i < num_files; i++) {
             const auto path = fmt::format("{}-{}", path_base, i);
-            ret.emplace_back(data_file{
+            data_file file{
               .content_type = data_file_content_type::data,
               .file_path = uri(path),
-              .partition = partition_key{make_int_pk(pk_value)},
+              .partition = make_single_field_pk(make_copy(pk_value)),
               .record_count = records_per_file,
               .file_size_bytes = 1_KiB,
+            };
+            ret.emplace_back(file_to_append{
+              .file = std::move(file),
+              .schema_id = (schema_id ? *schema_id : md.current_schema_id),
+              .partition_spec_id
+              = (partition_spec_id ? *partition_spec_id : md.default_spec_id),
             });
         }
-        ret[0].record_count += leftover_records;
+        ret[0].file.record_count += leftover_records;
         return ret;
+    }
+
+    void merge_append_and_check(
+      transaction& tx,
+      chunked_vector<file_to_append> files,
+      size_t expected_snapshots,
+      size_t expected_manifests) {
+        auto res = tx.merge_append(io, std::move(files)).get();
+        ASSERT_FALSE(res.has_error()) << res.error();
+        const auto& table = tx.table();
+        ASSERT_TRUE(table.snapshots.has_value());
+        ASSERT_TRUE(table.current_snapshot_id.has_value());
+        ASSERT_EQ(table.snapshots.value().size(), expected_snapshots);
+
+        auto latest_mlist_path
+          = table.snapshots.value().back().manifest_list_path;
+        auto latest_mlist = io.download_manifest_list(latest_mlist_path).get();
+        ASSERT_TRUE(latest_mlist.has_value());
+        ASSERT_EQ(latest_mlist.value().files.size(), expected_manifests);
     }
 
     std::unique_ptr<cloud_io::scoped_remote> sr;
@@ -117,7 +146,8 @@ TEST_F(MergeAppendActionTest, TestMergeByCount) {
         const auto expected_manifests = expected_snapshots;
         auto res = tx.merge_append(
                        io,
-                       create_data_files("foo", files_per_man, rows_per_man))
+                       create_data_files(
+                         tx.table(), "foo", files_per_man, rows_per_man))
                      .get();
         ASSERT_FALSE(res.has_error()) << res.error();
         const auto& table = tx.table();
@@ -135,7 +165,9 @@ TEST_F(MergeAppendActionTest, TestMergeByCount) {
     // At the merge threshold, we expect the latest snapshot contains a merged
     // manifest.
     auto res = tx.merge_append(
-                   io, create_data_files("foo", files_per_man, rows_per_man))
+                   io,
+                   create_data_files(
+                     tx.table(), "foo", files_per_man, rows_per_man))
                  .get();
     ASSERT_FALSE(res.has_error()) << res.error();
     const auto& table = tx.table();
@@ -174,10 +206,11 @@ TEST_F(MergeAppendActionTest, TestMergeByBytes) {
     for (size_t i = 0; i < num_to_merge_at; i++) {
         const auto expected_snapshots = i + 1;
         const auto expected_manifests = expected_snapshots;
-        auto res
-          = tx.merge_append(
-                io, create_data_files(path_base, files_per_man, rows_per_man))
-              .get();
+        auto res = tx.merge_append(
+                       io,
+                       create_data_files(
+                         tx.table(), path_base, files_per_man, rows_per_man))
+                     .get();
         ASSERT_FALSE(res.has_error()) << res.error();
         const auto& table = tx.table();
         ASSERT_TRUE(table.snapshots.has_value());
@@ -195,7 +228,8 @@ TEST_F(MergeAppendActionTest, TestMergeByBytes) {
     // manifest.
     auto res = tx.merge_append(
                    io,
-                   create_data_files(path_base, files_per_man, rows_per_man))
+                   create_data_files(
+                     tx.table(), path_base, files_per_man, rows_per_man))
                  .get();
     ASSERT_FALSE(res.has_error()) << res.error();
     const auto& table = tx.table();
@@ -249,6 +283,101 @@ TEST_F(MergeAppendActionTest, TestMergeByBytes) {
     ASSERT_EQ(merged_mfile.deleted_rows_count, 0);
 }
 
+TEST_F(MergeAppendActionTest, TestMergeAfterTypePromotion) {
+    const size_t num_to_merge_at
+      = merge_append_action::default_min_to_merge_new_files;
+    const size_t files_per_man = 2;
+    const size_t rows_per_man = 25;
+    transaction tx(create_table());
+    // Repeatedly add new data files up to the merge count threshold. First half
+    // of the files will be with the old schema.
+    for (size_t i = 0; i < num_to_merge_at / 2; i++) {
+        const auto expected_snapshots = i + 1;
+        const auto expected_manifests = expected_snapshots;
+        merge_append_and_check(
+          tx,
+          create_data_files(tx.table(), "foo", files_per_man, rows_per_man),
+          expected_snapshots,
+          expected_manifests);
+    }
+
+    // Promote int partition column to long.
+    {
+        auto orig_type = tx.table().schemas.at(0).schema_struct.copy();
+        auto new_type = orig_type.copy();
+        bool found = false;
+        for (auto& field : new_type.fields) {
+            if (field->name == "bar") {
+                field->type = long_type{};
+                found = true;
+            }
+        }
+        ASSERT_TRUE(found);
+
+        auto compat_res = evolve_schema(
+          orig_type, new_type, tx.table().partition_specs.back());
+        ASSERT_FALSE(compat_res.has_error());
+
+        auto res = tx.set_schema(iceberg::schema{
+                                   .schema_struct = std::move(new_type),
+                                   .schema_id = iceberg::schema::unassigned_id,
+                                   .identifier_field_ids = {},
+                                 })
+                     .get();
+        ASSERT_FALSE(res.has_error()) << res.error();
+    }
+
+    // Add the remaining files, now partition column value is long.
+    for (size_t i = num_to_merge_at / 2; i < num_to_merge_at; i++) {
+        const auto expected_snapshots = i + 1;
+        const auto expected_manifests = expected_snapshots;
+        merge_append_and_check(
+          tx,
+          create_data_files(
+            tx.table(), "foo", files_per_man, rows_per_man, long_value{42}),
+          expected_snapshots,
+          expected_manifests);
+    }
+
+    // At the merge threshold, we expect the latest snapshot contains a merged
+    // manifest. All manifests should be successfully merged, even though the
+    // type of the partition column is not the same.
+    auto res = tx.merge_append(
+                   io,
+                   create_data_files(
+                     tx.table(), "foo", files_per_man, rows_per_man))
+                 .get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    const auto& table = tx.table();
+    ASSERT_TRUE(table.snapshots.has_value());
+    ASSERT_EQ(table.snapshots.value().size(), num_to_merge_at + 1);
+
+    // Validate that the latest snapshot indeed contains a single manifest.
+    auto latest_mlist_path = table.snapshots.value().back().manifest_list_path;
+    auto latest_mlist = io.download_manifest_list(latest_mlist_path).get();
+    ASSERT_TRUE(latest_mlist.has_value());
+    ASSERT_EQ(latest_mlist.value().files.size(), 1);
+    const auto& merged_mfile = latest_mlist.value().files[0];
+
+    // Check that the manifest file's metadata seem sane.
+    ASSERT_EQ(merged_mfile.partition_spec_id(), 0);
+
+    ASSERT_EQ(merged_mfile.partitions.size(), 1);
+    ASSERT_FALSE(merged_mfile.partitions[0].contains_nan);
+    ASSERT_FALSE(merged_mfile.partitions[0].contains_null);
+    auto partition_bytes = value_to_bytes(long_value{42});
+    ASSERT_EQ(merged_mfile.partitions[0].lower_bound, partition_bytes);
+    ASSERT_EQ(merged_mfile.partitions[0].upper_bound, partition_bytes);
+
+    ASSERT_EQ(merged_mfile.added_files_count, files_per_man);
+    ASSERT_EQ(merged_mfile.added_rows_count, rows_per_man);
+    ASSERT_EQ(
+      merged_mfile.existing_files_count, num_to_merge_at * files_per_man);
+    ASSERT_EQ(merged_mfile.existing_rows_count, num_to_merge_at * rows_per_man);
+    ASSERT_EQ(merged_mfile.deleted_files_count, 0);
+    ASSERT_EQ(merged_mfile.deleted_rows_count, 0);
+}
+
 TEST_F(MergeAppendActionTest, TestUniqueSnapshotIds) {
     transaction tx(create_table());
     const auto& table = tx.table();
@@ -256,7 +385,9 @@ TEST_F(MergeAppendActionTest, TestUniqueSnapshotIds) {
     const size_t num_snapshots = 1000;
     for (auto i = 0; i < 1000; i++) {
         const auto expected_snapshots = i + 1;
-        auto res = tx.merge_append(io, create_data_files("foo", 1, 1)).get();
+        auto res = tx.merge_append(
+                       io, create_data_files(tx.table(), "foo", 1, 1))
+                     .get();
         ASSERT_FALSE(res.has_error()) << res.error();
         ASSERT_TRUE(table.snapshots.has_value());
         ASSERT_TRUE(table.current_snapshot_id.has_value());
@@ -288,7 +419,9 @@ TEST_F(MergeAppendActionTest, TestPartitionSummaries) {
         int32_t pk = base_pk + i;
         const auto expected_manifests = i + 1;
         auto res
-          = tx.merge_append(io, create_data_files("foo", 1, 1, pk)).get();
+          = tx.merge_append(
+                io, create_data_files(tx.table(), "foo", 1, 1, int_value{pk}))
+              .get();
         ASSERT_FALSE(res.has_error()) << res.error();
 
         // Download the resulting manifest list and make sure we only added a
@@ -320,7 +453,9 @@ TEST_F(MergeAppendActionTest, TestPartitionSummaries) {
     // Write one more manifest, triggering a merge.
     const int32_t last_pk = base_pk + num_to_merge_at + 123;
     auto res
-      = tx.merge_append(io, create_data_files("foo", 1, 1, last_pk)).get();
+      = tx.merge_append(
+            io, create_data_files(tx.table(), "foo", 1, 1, int_value{last_pk}))
+          .get();
     ASSERT_FALSE(res.has_error()) << res.error();
     auto latest_mlist_path = table.snapshots.value().back().manifest_list_path;
     auto latest_mlist_res = io.download_manifest_list(latest_mlist_path).get();
@@ -345,7 +480,9 @@ TEST_F(MergeAppendActionTest, TestBadMetadata) {
     chunked_vector<table_metadata> bad_tables;
     auto check_bad = [this](table_metadata t) {
         transaction tx(std::move(t));
-        auto res = tx.merge_append(io, create_data_files("foo", 1, 1)).get();
+        auto res = tx.merge_append(
+                       io, create_data_files(tx.table(), "foo", 1, 1))
+                     .get();
         ASSERT_TRUE(res.has_error());
         ASSERT_EQ(res.error(), action::errc::unexpected_state);
     };
@@ -368,12 +505,6 @@ TEST_F(MergeAppendActionTest, TestBadMetadata) {
         ASSERT_NO_FATAL_FAILURE(check_bad(std::move(t)));
     }
     {
-        // More than one partition spec.
-        auto t = create_table();
-        t.partition_specs.emplace_back(partition_spec{});
-        ASSERT_NO_FATAL_FAILURE(check_bad(std::move(t)));
-    }
-    {
         // Current schema is bogus.
         auto t = create_table();
         t.current_schema_id = schema::id_t{1234};
@@ -389,9 +520,9 @@ TEST_F(MergeAppendActionTest, TestBadMetadata) {
 
 TEST_F(MergeAppendActionTest, TestBadFile) {
     transaction tx(create_table());
-    auto bad_files = create_data_files("foo", 1, 1);
+    auto bad_files = create_data_files(tx.table(), "foo", 1, 1);
     for (auto& f : bad_files) {
-        f.partition = partition_key{};
+        f.file.partition = partition_key{};
     }
     auto res = tx.merge_append(io, std::move(bad_files)).get();
     ASSERT_TRUE(res.has_error());
@@ -401,10 +532,12 @@ TEST_F(MergeAppendActionTest, TestBadFile) {
 TEST_F(MergeAppendActionTest, TestTagSnapshot) {
     transaction tx(create_table());
     const auto& table = tx.table();
-    auto res
-      = tx.merge_append(
-            io, create_data_files("foo", 1, 1), /*snapshot_props=*/{}, "tag")
-          .get();
+    auto res = tx.merge_append(
+                   io,
+                   create_data_files(tx.table(), "foo", 1, 1),
+                   /*snapshot_props=*/{},
+                   "tag")
+                 .get();
     ASSERT_FALSE(res.has_error()) << res.error();
     ASSERT_TRUE(table.current_snapshot_id.has_value());
 
@@ -425,7 +558,10 @@ TEST_F(MergeAppendActionTest, TestTagSnapshot) {
 
     // Merge again with a tag.
     res = tx.merge_append(
-              io, create_data_files("foo", 1, 1), /*snapshot_props=*/{}, "tag")
+              io,
+              create_data_files(tx.table(), "foo", 1, 1),
+              /*snapshot_props=*/{},
+              "tag")
             .get();
     ASSERT_FALSE(res.has_error()) << res.error();
     ASSERT_TRUE(table.current_snapshot_id.has_value());
@@ -439,7 +575,7 @@ TEST_F(MergeAppendActionTest, TestTagSnapshot) {
     // Now merge with a different tag. The old tag shouldn't be affected.
     res = tx.merge_append(
               io,
-              create_data_files("foo", 1, 1),
+              create_data_files(tx.table(), "foo", 1, 1),
               /*snapshot_props=*/{},
               /*tag_name=*/"other")
             .get();
@@ -465,10 +601,12 @@ TEST_F(MergeAppendActionTest, TestTagWithExpiration) {
     const auto& table = tx.table();
     chunked_hash_set<snapshot_id> snap_ids;
     // Add a snapshot without an explicit tag expiration.
-    auto res
-      = tx.merge_append(
-            io, create_data_files("foo", 1, 1), /*snapshot_props=*/{}, "tag")
-          .get();
+    auto res = tx.merge_append(
+                   io,
+                   create_data_files(tx.table(), "foo", 1, 1),
+                   /*snapshot_props=*/{},
+                   "tag")
+                 .get();
     ASSERT_FALSE(res.has_error()) << res.error();
     ASSERT_TRUE(table.current_snapshot_id.has_value());
 
@@ -488,7 +626,7 @@ TEST_F(MergeAppendActionTest, TestTagWithExpiration) {
     auto long_max = std::numeric_limits<long>::max();
     res = tx.merge_append(
               io,
-              create_data_files("foo", 1, 1),
+              create_data_files(tx.table(), "foo", 1, 1),
               /*snapshot_props=*/{},
               "tag",
               /*tag_expiration_ms=*/long_max)
@@ -508,4 +646,141 @@ TEST_F(MergeAppendActionTest, TestTagWithExpiration) {
     ASSERT_FALSE(tag_snap.min_snapshots_to_keep.has_value());
     ASSERT_TRUE(tag_snap.max_ref_age_ms.has_value());
     ASSERT_EQ(long_max, tag_snap.max_ref_age_ms.value());
+}
+
+TEST_F(MergeAppendActionTest, TestMultiplePartitionSpecs) {
+    const size_t num_to_merge_at
+      = merge_append_action::default_min_to_merge_new_files;
+    const size_t files_per_man = 2;
+    const size_t rows_per_man = 25;
+    transaction tx(create_table());
+
+    auto files_with_first_spec = [&]() {
+        return create_data_files(
+          tx.table(),
+          "foo",
+          files_per_man,
+          rows_per_man,
+          int_value{42},
+          tx.table().schemas.at(0).schema_id,
+          tx.table().partition_specs.at(0).spec_id);
+    };
+
+    // Repeatedly add 50 manifests with old partition spec.
+    for (size_t i = 0; i < num_to_merge_at / 2; i++) {
+        const auto expected_snapshots = i + 1;
+        const auto expected_manifests = expected_snapshots;
+        merge_append_and_check(
+          tx, files_with_first_spec(), expected_snapshots, expected_manifests);
+    }
+
+    {
+        // Add new partition spec and make it default.
+        auto table = std::move(tx).release_metadata();
+        auto new_spec = partition_spec{.spec_id = partition_spec::id_t{1}};
+        new_spec.fields.push_back(partition_field{
+          .source_id = nested_field::id_t{3}, // baz
+          .field_id = partition_field::id_t{1001},
+          .name = "baz",
+          .transform = identity_transform{},
+        });
+        table.partition_specs.push_back(std::move(new_spec));
+        table.default_spec_id = table.partition_specs.back().spec_id;
+        tx = transaction(std::move(table));
+
+        // delete the field used by the old spec
+        const auto& orig_type = tx.table().schemas.at(0).schema_struct.copy();
+        chunked_vector<nested_field_ptr> fields_copy;
+        for (const auto& f : orig_type.fields) {
+            if (f->name != "bar") {
+                fields_copy.emplace_back(f->copy());
+            }
+        }
+        struct_type new_type{.fields = std::move(fields_copy)};
+        auto compat_res = evolve_schema(
+          orig_type, new_type, tx.table().partition_specs.back());
+        ASSERT_FALSE(compat_res.has_error());
+
+        auto res = tx.set_schema(iceberg::schema{
+                                   .schema_struct = std::move(new_type),
+                                   .schema_id = iceberg::schema::unassigned_id,
+                                   .identifier_field_ids = {},
+                                 })
+                     .get();
+        ASSERT_FALSE(res.has_error()) << res.error();
+    }
+
+    auto files_with_second_spec = [&]() {
+        return create_data_files(
+          tx.table(),
+          "foo",
+          files_per_man,
+          rows_per_man,
+          boolean_value{true},
+          tx.table().schemas.at(1).schema_id,
+          tx.table().partition_specs.at(1).spec_id);
+    };
+
+    auto files_with_both_specs = [&]() {
+        auto ret = files_with_first_spec();
+        auto more_files = files_with_second_spec();
+        std::move(
+          more_files.begin(), more_files.end(), std::back_inserter(ret));
+        return ret;
+    };
+
+    // Add more files with both specs. Number of manifests with the old spec
+    // will reach the merge threshold.
+    for (size_t i = 0; i < num_to_merge_at / 2; i++) {
+        // each merge_append here adds 1 snapshot and 2 manifests
+        const auto expected_snapshots = num_to_merge_at / 2 + i + 1;
+        const auto expected_manifests = num_to_merge_at / 2 + 1 + 2 * i + 1;
+        merge_append_and_check(
+          tx, files_with_both_specs(), expected_snapshots, expected_manifests);
+    }
+
+    // At the merge threshold, we expect the latest snapshot contains a merged
+    // manifest for the old spec and the initial set of unmerged manifests for
+    // the new spec.
+    auto res = tx.merge_append(io, files_with_both_specs()).get();
+    ASSERT_FALSE(res.has_error()) << res.error();
+    const auto& table = tx.table();
+    ASSERT_TRUE(table.snapshots.has_value());
+    ASSERT_EQ(table.snapshots.value().size(), num_to_merge_at + 1);
+
+    // Validate that the latest snapshot indeed contains a single manifest for
+    // the old spec.
+    auto latest_mlist_path = table.snapshots.value().back().manifest_list_path;
+    auto latest_mlist = io.download_manifest_list(latest_mlist_path).get();
+    ASSERT_TRUE(latest_mlist.has_value());
+    ASSERT_EQ(latest_mlist.value().files.size(), num_to_merge_at / 2 + 2);
+
+    const manifest_file* merged_mfile = nullptr;
+    for (const auto& m : latest_mlist.value().files) {
+        if (m.partition_spec_id() == 0) {
+            ASSERT_FALSE(merged_mfile);
+            merged_mfile = &m;
+        } else {
+            // still unmerged files with new partition spec
+            ASSERT_EQ(m.partition_spec_id(), 1);
+            ASSERT_EQ(m.added_files_count, files_per_man);
+            ASSERT_EQ(m.added_rows_count, rows_per_man);
+            ASSERT_EQ(m.existing_files_count, 0);
+            ASSERT_EQ(m.existing_rows_count, 0);
+            ASSERT_EQ(m.deleted_files_count, 0);
+            ASSERT_EQ(m.deleted_rows_count, 0);
+        }
+    }
+    ASSERT_TRUE(merged_mfile);
+
+    // Check that the manifest file's metadata seem sane.
+    ASSERT_EQ(merged_mfile->partition_spec_id(), 0);
+    ASSERT_EQ(merged_mfile->added_files_count, files_per_man);
+    ASSERT_EQ(merged_mfile->added_rows_count, rows_per_man);
+    ASSERT_EQ(
+      merged_mfile->existing_files_count, num_to_merge_at * files_per_man);
+    ASSERT_EQ(
+      merged_mfile->existing_rows_count, num_to_merge_at * rows_per_man);
+    ASSERT_EQ(merged_mfile->deleted_files_count, 0);
+    ASSERT_EQ(merged_mfile->deleted_rows_count, 0);
 }

@@ -11,6 +11,7 @@
 
 #include "bytes/iobuf.h"
 #include "container/fragmented_vector.h"
+#include "iceberg/datatypes.h"
 #include "utils/uuid.h"
 
 #include <absl/numeric/int128.h>
@@ -168,6 +169,70 @@ std::ostream& operator<<(std::ostream&, const value&);
 
 size_t value_hash(const struct_value&);
 size_t value_hash(const value&);
+
+// Provides the mapping between the c++ type of a primitive iceberg value
+// variant and the c++ type of the corresponding primitive iceberg type variant.
+template<typename TVal>
+struct primitive_value_type {};
+template<>
+struct primitive_value_type<boolean_value> {
+    using type = boolean_type;
+};
+template<>
+struct primitive_value_type<int_value> {
+    using type = int_type;
+};
+template<>
+struct primitive_value_type<long_value> {
+    using type = long_type;
+};
+template<>
+struct primitive_value_type<float_value> {
+    using type = float_type;
+};
+template<>
+struct primitive_value_type<double_value> {
+    using type = double_type;
+};
+template<>
+struct primitive_value_type<decimal_value> {
+    using type = decimal_type;
+};
+template<>
+struct primitive_value_type<date_value> {
+    using type = date_type;
+};
+template<>
+struct primitive_value_type<time_value> {
+    using type = time_type;
+};
+template<>
+struct primitive_value_type<timestamp_value> {
+    using type = timestamp_type;
+};
+template<>
+struct primitive_value_type<timestamptz_value> {
+    using type = timestamptz_type;
+};
+template<>
+struct primitive_value_type<string_value> {
+    using type = string_type;
+};
+template<>
+struct primitive_value_type<uuid_value> {
+    using type = uuid_type;
+};
+template<>
+struct primitive_value_type<fixed_value> {
+    using type = fixed_type;
+};
+template<>
+struct primitive_value_type<binary_value> {
+    using type = binary_type;
+};
+
+template<typename TVal>
+using primitive_value_type_t = typename primitive_value_type<TVal>::type;
 
 } // namespace iceberg
 

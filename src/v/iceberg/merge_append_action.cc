@@ -11,6 +11,7 @@
 
 #include "base/units.h"
 #include "base/vlog.h"
+#include "iceberg/compatibility.h"
 #include "iceberg/logger.h"
 #include "iceberg/manifest.h"
 #include "iceberg/manifest_file_packer.h"
@@ -119,9 +120,8 @@ chunked_vector<field_summary> release_with_bytes(field_summary_val::list_t l) {
 } // namespace
 
 field_summary_val::list_t
-field_summary_val::empty_summaries(const partition_key_type& pk_type) {
+field_summary_val::empty_summaries(size_t num_fields) {
     field_summary_val::list_t ret;
-    const auto num_fields = pk_type.type.fields.size();
     ret.reserve(num_fields);
     for (size_t i = 0; i < num_fields; ++i) {
         ret.emplace_back(field_summary_val{});
@@ -151,55 +151,33 @@ ss::future<action::action_outcome> merge_append_action::build_updates() && {
       log.info,
       "Building append update for {} data files",
       new_data_files_.size());
-    // Look for the current schema.
-    const auto schema_id = table_.current_schema_id;
-    auto schema_it = std::ranges::find(
-      table_.schemas, schema_id, &schema::schema_id);
-    if (schema_it == table_.schemas.end()) {
-        vlog(log.error, "Table schema {} is missing from metadata", schema_id);
-        co_return action::errc::unexpected_state;
-    }
-    const auto& schema = *schema_it;
-
-    // Look for the current partition spec.
-    const auto& pspecs = table_.partition_specs;
-    auto pspec_it = std::ranges::find(
-      pspecs, table_.default_spec_id, &partition_spec::spec_id);
-    if (pspec_it == pspecs.end()) {
-        vlog(
-          log.error,
-          "Partition spec {} is missing from metadata",
-          table_.default_spec_id);
-        co_return action::errc::unexpected_state;
-    }
-    if (pspecs.size() != 1) {
-        // TODO: when we support multiple partition specs, we'll need to group
-        // them by spec id and write manifest files per spec.
-        vlog(
-          log.error,
-          "Currently exactly one partition spec is supported: {} found",
-          pspecs.size());
-        co_return action::errc::unexpected_state;
-    }
 
     // Validate our input files that their partition keys look sane.
-    const auto& pspec = *pspec_it;
     for (const auto& f : new_data_files_) {
-        if (f.partition.val == nullptr) {
+        if (f.file.partition.val == nullptr) {
             vlog(
               log.error,
               "Metadata for data file {} is missing partition key",
-              f.file_path);
+              f.file.file_path);
             co_return action::errc::unexpected_state;
         }
-        auto f_num_fields = f.partition.val->fields.size();
-        if (f_num_fields != pspec.fields.size()) {
+        const auto* pspec = table_.get_partition_spec(f.partition_spec_id);
+        if (!pspec) {
+            vlog(
+              log.error,
+              "partition spec {} for file {} not found in metadata",
+              f.partition_spec_id,
+              f.file.file_path);
+            co_return action::errc::unexpected_state;
+        }
+        auto f_num_fields = f.file.partition.val->fields.size();
+        if (f_num_fields != pspec->fields.size()) {
             vlog(
               log.error,
               "Partition key for data file {} has {} fields, expected {}",
-              f.file_path,
+              f.file.file_path,
               f_num_fields,
-              pspec.fields.size());
+              pspec->fields.size());
             co_return action::errc::unexpected_state;
         }
     }
@@ -252,14 +230,8 @@ ss::future<action::action_outcome> merge_append_action::build_updates() && {
     const auto new_seq_num = sequence_number{table_.last_sequence_number() + 1};
     const auto new_snap_id = generate_unused_snap_id(table_);
 
-    // TODO: support more than one partition spec by grouping the merged
-    // manifests by spec id.
-    auto pk_type = partition_key_type::create(pspec, schema);
     const table_snapshot_ctx ctx{
       .commit_uuid = commit_uuid_,
-      .schema = schema,
-      .pspec = pspec,
-      .pk_type = pk_type,
       .snap_id = new_snap_id,
       .seq_num = new_seq_num,
     };
@@ -267,7 +239,7 @@ ss::future<action::action_outcome> merge_append_action::build_updates() && {
     auto mfiles_res = co_await pack_mlist_and_new_data(
       ctx, std::move(mlist), std::move(new_data_files_));
     if (mfiles_res.has_error()) {
-        co_return to_action_errc(mfiles_res.error());
+        co_return mfiles_res.error();
     }
     manifest_list new_mlist{std::move(mfiles_res.value())};
 
@@ -300,7 +272,7 @@ ss::future<action::action_outcome> merge_append_action::build_updates() && {
           .other = {},
       },
       .manifest_list_path = new_mlist_path,
-      .schema_id = schema.schema_id,
+      .schema_id = table_.current_schema_id,
     };
     for (auto& [k, v] : snapshot_props_) {
         s.summary.other.emplace(k, v);
@@ -354,13 +326,42 @@ merge_append_action::upload_as_manifest(
     co_return co_await io_.upload_manifest(path, m);
 }
 
-ss::future<checked<chunked_vector<manifest_file>, metadata_io::errc>>
+namespace {
+
+// Depending on how schema evolves, type of partition key fields can change
+// (e.g. a field type can be promoted from int to long). This means that
+// partition values of all data files in the new manifest need to be
+// promoted to the common type before creating the manifest.
+//
+// Preconditions: pk and pk_type have the same size, and the promotion for each
+// field is possible.
+void promote_partition_key_type(
+  partition_key& pk, const partition_key_type& pk_type) {
+    // ensured by the callers
+    vassert(
+      pk.val->fields.size() == pk_type.type.fields.size(),
+      "unexpected partition key size: {} (expected: {})",
+      pk.val->fields.size(),
+      pk_type.type.fields.size());
+    for (size_t i = 0; i < pk.val->fields.size(); ++i) {
+        auto& field = pk.val->fields[i];
+        if (field) {
+            const auto& type = std::get<primitive_type>(
+              pk_type.type.fields[i]->type);
+            field = promote_primitive_value_type(
+              std::move(std::get<primitive_value>(*field)), type);
+        }
+    }
+}
+
+} // namespace
+
+ss::future<checked<chunked_vector<manifest_file>, action::errc>>
 merge_append_action::maybe_merge_mfiles_and_new_data(
   chunked_vector<manifest_file> to_merge,
-  chunked_vector<data_file> new_data_files,
+  chunked_vector<file_to_append> new_data_files,
+  const partition_spec& pspec,
   const table_snapshot_ctx& ctx) {
-    size_t added_rows{0};
-    size_t added_files{0};
     vlog(
       log.info,
       "Considering {} existing manifest files and {} data files to merge",
@@ -370,60 +371,36 @@ merge_append_action::maybe_merge_mfiles_and_new_data(
     // of if we upload a brand new manifest or merge with an existing manifest,
     // the new data files will need new entries.
     chunked_vector<manifest_entry> new_data_entries;
-    auto partition_summaries = field_summary_val::empty_summaries(ctx.pk_type);
+    auto max_schema_id_in_added = schema::id_t::min();
     for (auto& f : new_data_files) {
-        update_partition_summaries(f, partition_summaries);
-        added_rows += f.record_count;
+        max_schema_id_in_added = std::max(max_schema_id_in_added, f.schema_id);
         manifest_entry e{
           .status = manifest_entry_status::added,
           .snapshot_id = ctx.snap_id,
           .sequence_number = std::nullopt,
           .file_sequence_number = std::nullopt,
-          .data_file = std::move(f),
+          .data_file = std::move(f.file),
         };
         new_data_entries.emplace_back(std::move(e));
     }
     chunked_vector<manifest_file> ret;
     if (to_merge.size() < default_min_to_merge_new_files) {
         // Upload and return. This bin is too small to merge.
-        const auto new_manifest_path = get_manifest_path(
-          table_.location, ctx.commit_uuid, generate_manifest_num());
-        added_files = new_data_entries.size();
-        const auto mfile_up_res = co_await upload_as_manifest(
-          new_manifest_path,
-          ctx.schema,
-          ctx.pspec,
-          std::move(new_data_entries));
-        if (mfile_up_res.has_error()) {
-            co_return mfile_up_res.error();
+        auto new_mfile_res = co_await merge_mfiles(
+          {}, std::move(new_data_entries), max_schema_id_in_added, pspec, ctx);
+        if (new_mfile_res.has_error()) {
+            co_return new_mfile_res.error();
         }
-        // Since this bin was too small to merge, we won't do anything else to
-        // its manifests, just add them back to the returned container.
-        ret.emplace_back(manifest_file{
-          .manifest_path = new_manifest_path,
-          .manifest_length = mfile_up_res.value(),
-          .partition_spec_id = ctx.pspec.spec_id,
-          .content = manifest_file_content::data,
-          .seq_number = ctx.seq_num,
-          .min_seq_number = ctx.seq_num,
-          .added_snapshot_id = ctx.snap_id,
-          .added_files_count = added_files,
-          .existing_files_count = 0,
-          .deleted_files_count = 0,
-          .added_rows_count = added_rows,
-          .existing_rows_count = 0,
-          .deleted_rows_count = 0,
-          .partitions = release_with_bytes(std::move(partition_summaries)),
-        });
+        ret.emplace_back(std::move(new_mfile_res.value()));
         std::move(to_merge.begin(), to_merge.end(), std::back_inserter(ret));
         co_return ret;
     }
     auto merged_mfile_res = co_await merge_mfiles(
       std::move(to_merge),
-      ctx,
-      std::move(partition_summaries),
       std::move(new_data_entries),
-      added_rows);
+      max_schema_id_in_added,
+      pspec,
+      ctx);
     if (merged_mfile_res.has_error()) {
         co_return merged_mfile_res.error();
     }
@@ -431,39 +408,53 @@ merge_append_action::maybe_merge_mfiles_and_new_data(
     co_return ret;
 }
 
-ss::future<checked<manifest_file, metadata_io::errc>>
+ss::future<checked<manifest_file, action::errc>>
 merge_append_action::merge_mfiles(
   chunked_vector<manifest_file> to_merge,
-  const table_snapshot_ctx& ctx,
-  field_summary_val::list_t added_summaries,
   chunked_vector<manifest_entry> added_entries,
-  size_t added_rows) {
-    vlog(
-      log.info,
+  std::optional<schema::id_t> max_schema_id_in_added,
+  const partition_spec& pspec,
+  const table_snapshot_ctx& ctx) {
+    vlogl(
+      log,
+      to_merge.empty() ? ss::log_level::debug : ss::log_level::info,
       "Merging {} manifest files and {} added manifest entries",
       to_merge.size(),
       added_entries.size());
-    auto added_files = added_entries.size();
+
+    const size_t added_files = added_entries.size();
+    size_t added_rows = 0;
+    for (const auto& e : added_entries) {
+        added_rows += e.data_file.record_count;
+    }
+
     auto merged_entries = std::move(added_entries);
+    auto max_schema_id = max_schema_id_in_added.value_or(schema::id_t::min());
     size_t existing_rows = 0;
     size_t existing_files = 0;
     auto min_seq_num = ctx.seq_num;
-    auto partition_summaries = added_summaries.empty()
-                                 ? field_summary_val::empty_summaries(
-                                     ctx.pk_type)
-                                 : std::move(added_summaries);
     for (const auto& mfile : to_merge) {
         // Download the manifest file and collect the entries into the merged
         // container.
-        auto mfile_res = co_await io_.download_manifest(
-          mfile.manifest_path, ctx.pk_type);
+        auto mfile_res = co_await io_.download_manifest(mfile.manifest_path);
         if (mfile_res.has_error()) {
-            co_return mfile_res.error();
+            co_return to_action_errc(mfile_res.error());
         }
         auto m = std::move(mfile_res).value();
+        max_schema_id = std::max(max_schema_id, m.metadata.schema.schema_id);
         existing_files += m.entries.size();
         for (auto& e : m.entries) {
-            update_partition_summaries(e.data_file, partition_summaries);
+            auto f_num_fields = e.data_file.partition.val->fields.size();
+            if (f_num_fields != pspec.fields.size()) {
+                vlog(
+                  log.error,
+                  "Partition key for data file {} has {} fields, expected {}",
+                  e.data_file.file_path,
+                  f_num_fields,
+                  pspec.fields.size());
+                co_return action::errc::unexpected_state;
+            }
+
             existing_rows += e.data_file.record_count;
             // Rewrite sequence numbers for previously added entries.
             // These entries refer to files committed prior to this action.
@@ -483,17 +474,52 @@ merge_append_action::merge_mfiles(
           m.entries.end(),
           std::back_inserter(merged_entries));
     }
+
+    // If the partition spec is not the default one, there is a risk that the
+    // partition key type can't be resolved with the current schema (e.g. if the
+    // spec uses a source column that was subsequently deleted). To prevent
+    // that, we choose the schema with the highest id among all manifests and
+    // new files with this spec. Presumably, any of these schemas can be used to
+    // resolve the key type, but we choose the one with the highest id because
+    // it should contain the "most promoted" types, and therefore partition keys
+    // for all files can be promoted to the key type resolved with this schema.
+    auto schema_id = pspec.spec_id == table_.default_spec_id
+                       ? table_.current_schema_id
+                       : max_schema_id;
+    const auto* schema = table_.get_schema(schema_id);
+    if (!schema) {
+        vlog(log.error, "Table schema {} is missing from metadata", schema_id);
+        co_return errc::unexpected_state;
+    }
+
+    auto pk_type = partition_key_type::create(pspec, *schema);
+    auto partition_summaries = field_summary_val::empty_summaries(
+      pspec.fields.size());
+    for (auto& e : merged_entries) {
+        try {
+            promote_partition_key_type(e.data_file.partition, pk_type);
+            update_partition_summaries(e.data_file, partition_summaries);
+        } catch (const std::exception& ex) {
+            vlog(
+              log.error,
+              "bad partition key for file {}: {}",
+              e.data_file.file_path,
+              ex);
+            co_return errc::unexpected_state;
+        }
+    }
+
     const auto merged_manifest_path = get_manifest_path(
       table_.location, ctx.commit_uuid, generate_manifest_num());
     const auto mfile_up_res = co_await upload_as_manifest(
-      merged_manifest_path, ctx.schema, ctx.pspec, std::move(merged_entries));
+      merged_manifest_path, *schema, pspec, std::move(merged_entries));
     if (mfile_up_res.has_error()) {
-        co_return mfile_up_res.error();
+        co_return to_action_errc(mfile_up_res.error());
     }
     manifest_file merged_file{
       .manifest_path = merged_manifest_path,
       .manifest_length = mfile_up_res.value(),
-      .partition_spec_id = ctx.pspec.spec_id,
+      .partition_spec_id = pspec.spec_id,
       .content = manifest_file_content::data,
       .seq_number = ctx.seq_num,
       .min_seq_number = min_seq_num,
@@ -509,51 +535,81 @@ merge_append_action::merge_mfiles(
     co_return merged_file;
 }
 
-ss::future<checked<chunked_vector<manifest_file>, metadata_io::errc>>
+ss::future<checked<chunked_vector<manifest_file>, action::errc>>
 merge_append_action::pack_mlist_and_new_data(
   const table_snapshot_ctx& ctx,
   manifest_list old_mlist,
-  chunked_vector<data_file> new_data_files) {
-    auto num_old_files = old_mlist.files.size();
-    auto binned_mfiles = manifest_packer::pack(
-      default_target_size_bytes, std::move(old_mlist.files));
-    vlog(
-      log.info,
-      "Packed {} manifests into {} bins",
-      num_old_files,
-      binned_mfiles.size());
-    if (binned_mfiles.empty()) {
-        // If we had no manifests at all, at least create an empty bin to add
-        // new manifests to below.
-        binned_mfiles.emplace_back(chunked_vector<manifest_file>{});
-    }
-    chunked_vector<manifest_file> new_mfiles;
-    // Always add files to the first bin, which by convention will be the
-    // latest data. We may not merge existing manifests if the bin is
-    // small, but we'll at least add metadata for the new data files.
-    auto merged_bins_res = co_await maybe_merge_mfiles_and_new_data(
-      std::move(binned_mfiles[0]), std::move(new_data_files), ctx);
-    if (merged_bins_res.has_error()) {
-        co_return merged_bins_res.error();
-    }
-    auto merged_bins = std::move(merged_bins_res.value());
-    std::move(
-      merged_bins.begin(), merged_bins.end(), std::back_inserter(new_mfiles));
+  chunked_vector<file_to_append> new_data_files) {
+    struct per_spec_data {
+        chunked_vector<manifest_file> existing_manifests;
+        chunked_vector<file_to_append> new_data_files;
+    };
 
-    // Merge the rest of the bins.
-    for (size_t i = 1; i < binned_mfiles.size(); i++) {
-        auto& bin = binned_mfiles[i];
-        if (bin.size() == 1) {
-            // The bin has only a single manifest so there's nothing to do,
-            // just add it as is.
-            new_mfiles.emplace_back(std::move(bin[0]));
-            continue;
+    chunked_hash_map<partition_spec::id_t, per_spec_data> spec2data;
+    for (auto& m : old_mlist.files) {
+        auto spec_id = m.partition_spec_id;
+        spec2data[spec_id].existing_manifests.push_back(std::move(m));
+    }
+    for (auto& f : new_data_files) {
+        auto spec_id = f.partition_spec_id;
+        spec2data[spec_id].new_data_files.push_back(std::move(f));
+    }
+
+    chunked_vector<manifest_file> new_mfiles;
+    for (auto& [spec_id, data] : spec2data) {
+        const auto* pspec = table_.get_partition_spec(spec_id);
+        if (!pspec) {
+            vlog(log.error, "partition spec {} not found in metadata", spec_id);
+            co_return errc::unexpected_state;
         }
-        auto merged_bin_res = co_await merge_mfiles(std::move(bin), ctx);
-        if (merged_bin_res.has_error()) {
-            co_return merged_bin_res.error();
+
+        auto num_old_manifests = data.existing_manifests.size();
+        auto binned_mfiles = manifest_packer::pack(
+          default_target_size_bytes, std::move(data.existing_manifests));
+        vlog(
+          log.info,
+          "Packed {} manifests into {} bins for partition spec id {}",
+          num_old_manifests,
+          binned_mfiles.size(),
+          spec_id);
+        if (binned_mfiles.empty()) {
+            // If we had no manifests at all, at least create an empty bin to
+            // add new manifests to below.
+            binned_mfiles.emplace_back(chunked_vector<manifest_file>{});
         }
-        new_mfiles.emplace_back(std::move(merged_bin_res.value()));
+        // Always add files to the first bin, which by convention will be the
+        // latest data. We may not merge existing manifests if the bin is
+        // small, but we'll at least add metadata for the new data files.
+        auto merged_bins_res = co_await maybe_merge_mfiles_and_new_data(
+          std::move(binned_mfiles[0]),
+          std::move(data.new_data_files),
+          *pspec,
+          ctx);
+        if (merged_bins_res.has_error()) {
+            co_return merged_bins_res.error();
+        }
+        auto merged_bins = std::move(merged_bins_res.value());
+        std::move(
+          merged_bins.begin(),
+          merged_bins.end(),
+          std::back_inserter(new_mfiles));
+
+        // Merge the rest of the bins.
+        for (size_t i = 1; i < binned_mfiles.size(); i++) {
+            auto& bin = binned_mfiles[i];
+            if (bin.size() == 1) {
+                // The bin has only a single manifest so there's nothing to do,
+                // just add it as is.
+                new_mfiles.emplace_back(std::move(bin[0]));
+                continue;
+            }
+            auto merged_bin_res = co_await merge_mfiles(
+              std::move(bin), {}, std::nullopt, *pspec, ctx);
+            if (merged_bin_res.has_error()) {
+                co_return merged_bin_res.error();
+            }
+            new_mfiles.emplace_back(std::move(merged_bin_res.value()));
+        }
     }
     co_return new_mfiles;
 }

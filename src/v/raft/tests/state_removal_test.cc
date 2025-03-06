@@ -7,129 +7,104 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "raft/tests/raft_group_fixture.h"
+#include "raft/tests/raft_fixture.h"
+#include "raft/tests/raft_fixture_retry_policy.h"
 #include "raft/types.h"
 #include "utils/directory_walker.h"
 
 #include <seastar/core/sstring.hh>
 #include <seastar/util/defer.hh>
-
-bytes kvstore_key(raft::metadata_key key, raft::group_id group) {
-    iobuf buf;
-    reflection::serialize(buf, key, group);
-    return iobuf_to_bytes(buf);
-}
-
-bool is_group_state_cleared(raft_node& n) {
-    // check all metadata in kvstore
-    for (int8_t i = 0; i < static_cast<int8_t>(raft::metadata_key::last); ++i) {
-        auto key = static_cast<raft::metadata_key>(i);
-        auto buf = n.storage.local().kvs().get(
-          storage::kvstore::key_space::consensus,
-          kvstore_key(key, n.consensus->group()));
-
-        if (buf.has_value()) {
-            return false;
-        }
+using namespace raft;
+struct state_removal_test : public raft::raft_fixture {
+    bytes kvstore_key(raft::metadata_key key, raft::group_id group) {
+        iobuf buf;
+        reflection::serialize(buf, key, group);
+        return iobuf_to_bytes(buf);
     }
 
-    return true;
-}
+    bool is_group_state_cleared(raft::raft_node_instance& n) {
+        // check all metadata in kvstore
+        for (int8_t i = 0; i < static_cast<int8_t>(raft::metadata_key::last);
+             ++i) {
+            auto key = static_cast<raft::metadata_key>(i);
+            auto buf = n.get_kvstore().get(
+              storage::kvstore::key_space::consensus,
+              kvstore_key(key, n.raft()->group()));
 
-bool snapshot_exists(raft_node& n) {
-    bool snapshot_exists = false;
-    directory_walker::walk(
-      n.log->config().work_directory(),
-      [&snapshot_exists](ss::directory_entry ent) {
-          if (!ent.type || *ent.type != ss::directory_entry_type::regular) {
+            if (buf.has_value()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool snapshot_exists(raft::raft_node_instance& n) {
+        bool snapshot_exists = false;
+        directory_walker::walk(
+          n.raft()->log()->config().work_directory(),
+          [&snapshot_exists](ss::directory_entry ent) {
+              if (!ent.type || *ent.type != ss::directory_entry_type::regular) {
+                  return ss::now();
+              }
+
+              if (ent.name.find("snapshot") != ss::sstring::npos) {
+                  snapshot_exists = true;
+              }
               return ss::now();
-          }
+          })
+          .get();
 
-          if (ent.name.find("snapshot") != ss::sstring::npos) {
-              snapshot_exists = true;
-          }
-          return ss::now();
-      })
-      .get();
-
-    return snapshot_exists;
-}
-
-/**
- * Specialized vs. raft_node::stop_node because in the below
- * tests we explicitly stop consensus early, so need to avoid
- * double-stopping it during stop_node.
- */
-void stop_node(raft_node& node) {
-    node.recovery_throttle.stop().get();
-    node.server.stop().get();
-    node._as.request_abort();
-    node.raft_manager.stop().get();
-
-    node.hbeats->stop().get();
-    node.hbeats.reset();
-
-    // Nothing else should reference the consensus object: if it lives
-    // on past this point, it could dereference destroyed references
-    // to storage and recovery_scheduler objects.
-    assert(node.consensus.owned());
-    node.consensus = nullptr;
-
-    node.recovery_scheduler.stop().get();
-    node.cache.stop().get();
-    node.log = nullptr;
-    node.storage.stop().get();
-    node.feature_table.stop().get();
-    node.as_service.stop().get();
-
-    node.started = false;
-}
-
-FIXTURE_TEST(remove_persistent_state_test_no_snapshot, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 1);
-    gr.enable_all();
-
-    bool success = replicate_random_batches(gr, 5).get();
-    BOOST_REQUIRE(success);
-
-    validate_logs_replication(gr);
-    auto& node = gr.get_member(model::node_id(0));
-    node.consensus->stop().get();
-    auto defered = ss::defer([&node] { stop_node(node); });
-    BOOST_REQUIRE_EQUAL(is_group_state_cleared(node), false);
-    BOOST_REQUIRE_EQUAL(snapshot_exists(node), false);
-    BOOST_REQUIRE_EQUAL(node.consensus->get_snapshot_size(), 0);
-
-    // remove state
-    node.consensus->remove_persistent_state().get();
-    BOOST_REQUIRE_EQUAL(is_group_state_cleared(node), true);
+        return snapshot_exists;
+    }
+    ss::future<result<replicate_result>> replicate_random_batches() {
+        return retry_with_leader(
+          default_timeout(), 1s, [this](raft_node_instance& leader) {
+              auto batches = make_batches(10, 5, 128);
+              return leader.raft()->replicate(
+                std::move(batches),
+                raft::replicate_options(raft::consistency_level::quorum_ack));
+          });
+    }
 };
 
-FIXTURE_TEST(remove_persistent_state_test_with_snapshot, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 1);
-    gr.enable_all();
+TEST_F(state_removal_test, remove_persistent_state_test_no_snapshot) {
+    create_simple_group(1).get();
 
-    bool success = replicate_random_batches(gr, 10).get();
-    BOOST_REQUIRE(success);
+    auto res = replicate_random_batches().get();
+    ASSERT_TRUE(res.has_value());
+    assert_logs_equal().get();
+    auto& node = nodes().begin()->second;
 
-    validate_logs_replication(gr);
-    auto& node = gr.get_member(model::node_id(0));
-    // write snapshot
-    node.consensus
-      ->write_snapshot(
-        raft::write_snapshot_cfg(node.consensus->last_visible_index(), iobuf()))
-      .get();
-    node.consensus->stop().get();
-
-    auto defered = ss::defer([&node] { stop_node(node); });
-    BOOST_REQUIRE_EQUAL(is_group_state_cleared(node), false);
-    BOOST_REQUIRE_EQUAL(snapshot_exists(node), true);
-    BOOST_REQUIRE_EQUAL(
-      node.consensus->get_snapshot_size(), get_snapshot_size_from_disk(node));
+    ASSERT_FALSE(is_group_state_cleared(*node));
+    ASSERT_FALSE(snapshot_exists(*node));
+    ASSERT_EQ(node->raft()->get_snapshot_size(), 0);
 
     // remove state
-    node.consensus->remove_persistent_state().get();
-    BOOST_REQUIRE_EQUAL(is_group_state_cleared(node), true);
-    BOOST_REQUIRE_EQUAL(snapshot_exists(node), false);
-    BOOST_REQUIRE_EQUAL(node.consensus->get_snapshot_size(), 0);
+    node->raft()->remove_persistent_state().get();
+    ASSERT_TRUE(is_group_state_cleared(*node));
+};
+
+TEST_F(state_removal_test, remove_persistent_state_test_with_snapshot) {
+    create_simple_group(1).get();
+
+    auto res = replicate_random_batches().get();
+    ASSERT_TRUE(res.has_value());
+
+    assert_logs_equal().get();
+    auto& node = nodes().begin()->second;
+    node->raft()
+      ->write_snapshot(
+        raft::write_snapshot_cfg(node->raft()->last_visible_index(), iobuf()))
+      .get();
+
+    ASSERT_FALSE(is_group_state_cleared(*node));
+    ASSERT_TRUE(snapshot_exists(*node));
+    ASSERT_GT(node->raft()->get_snapshot_size(), 0);
+
+    // remove state
+    node->raft()->remove_persistent_state().get();
+    ASSERT_TRUE(is_group_state_cleared(*node));
+    ASSERT_FALSE(snapshot_exists(*node));
+    ASSERT_EQ(node->raft()->get_snapshot_size(), 0);
 };

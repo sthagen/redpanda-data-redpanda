@@ -12,19 +12,28 @@
 
 #include <fmt/core.h>
 namespace datalake {
-std::string data_writer_error_category::message(int ev) const {
-    switch (static_cast<writer_error>(ev)) {
+std::ostream& operator<<(std::ostream& os, const writer_error& ev) {
+    switch (ev) {
     case writer_error::ok:
-        return "Ok";
+        os << "Ok";
+        break;
     case writer_error::parquet_conversion_error:
-        return "Parquet Conversion Error";
+        os << "Parquet Conversion Error";
+        break;
     case writer_error::file_io_error:
-        return "File IO Error";
+        os << "File IO Error";
+        break;
     case writer_error::no_data:
-        return "No data";
+        os << "No data";
+        break;
     case writer_error::flush_error:
-        return "Flush failed";
+        os << "Flush failed";
+        break;
     }
+    return os;
+}
+std::string data_writer_error_category::message(int ev) const {
+    return fmt::to_string(static_cast<writer_error>(ev));
 }
 
 } // namespace datalake

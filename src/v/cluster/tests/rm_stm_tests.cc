@@ -20,11 +20,11 @@
 #include "model/tests/randoms.h"
 #include "model/timestamp.h"
 #include "raft/consensus_utils.h"
-#include "raft/tests/raft_group_fixture.h"
 #include "random/generators.h"
 #include "storage/record_batch_builder.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/async.h"
+#include "test_utils/fixture.h"
 #include "test_utils/randoms.h"
 #include "utils/directory_walker.h"
 

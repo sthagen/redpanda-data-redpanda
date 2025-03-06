@@ -279,16 +279,28 @@ public:
                     return pk.error();
                 }
 
-                // TODO: pass schema_id and pspec_id to merge_append_action
-                // (currently it assumes that the files were serialized with the
-                // current schema and a single partition spec).
-                icb_files_.push_back({
+                iceberg::data_file file{
                   .content_type = iceberg::data_file_content_type::data,
                   .file_path = io.to_uri(std::filesystem::path(f.remote_path)),
                   .file_format = iceberg::data_file_format::parquet,
                   .partition = std::move(pk.value()),
                   .record_count = f.row_count,
                   .file_size_bytes = f.file_size_bytes,
+                };
+                // For files created by a legacy Redpanda version that only
+                // supported hourly partitioning, choose current schema and
+                // spec ids.
+                auto schema_id = f.table_schema_id >= 0
+                                   ? iceberg::schema::id_t{f.table_schema_id}
+                                   : table_.current_schema_id;
+                auto pspec_id
+                  = f.partition_spec_id >= 0
+                      ? iceberg::partition_spec::id_t{f.partition_spec_id}
+                      : table_.default_spec_id;
+                icb_files_.push_back(iceberg::file_to_append{
+                  .file = std::move(file),
+                  .schema_id = schema_id,
+                  .partition_spec_id = pspec_id,
                 });
             }
         }
@@ -392,7 +404,7 @@ private:
     bool with_snapshot_tag_;
 
     // State accumulated.
-    chunked_vector<iceberg::data_file> icb_files_;
+    chunked_vector<iceberg::file_to_append> icb_files_;
     std::optional<model::offset> new_committed_offset_;
 };
 

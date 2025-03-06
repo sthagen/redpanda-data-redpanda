@@ -122,7 +122,7 @@ public:
 
     virtual std::optional<kafka::offset> max_offset_for_translation() const = 0;
 
-    virtual ss::future<std::error_code> update_highest_translated_offset(
+    virtual ss::future<std::error_code> replicate_highest_translated_offset(
       kafka::offset new_offset,
       model::term_id,
       model::timeout_clock::duration timeout,

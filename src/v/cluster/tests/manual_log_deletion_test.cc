@@ -9,167 +9,140 @@
 
 #include "cluster/log_eviction_stm.h"
 #include "config/configuration.h"
-#include "finjector/hbadger.h"
-#include "model/fundamental.h"
-#include "model/metadata.h"
-#include "model/record.h"
-#include "model/timestamp.h"
-#include "raft/consensus_utils.h"
-#include "raft/fundamental.h"
-#include "raft/tests/raft_group_fixture.h"
-#include "random/generators.h"
-#include "storage/record_batch_builder.h"
-#include "storage/tests/utils/disk_log_builder.h"
+#include "raft/tests/raft_fixture.h"
 #include "test_utils/async.h"
 
 #include <seastar/core/abort_source.hh>
 
-#include <filesystem>
-#include <optional>
-#include <system_error>
-#include <vector>
+#include <gtest/gtest.h>
+struct manual_deletion_fixture : public raft::raft_fixture {
+    static model::record_batch
+    make_batches_with_timestamp(model::timestamp ts) {
+        storage::record_batch_builder builder(
+          model::record_batch_type::raft_data, model::offset(0));
 
-struct manual_deletion_fixture : public raft_test_fixture {
-    manual_deletion_fixture()
-      : gr(
-          raft::group_id(0),
-          3,
-          model::cleanup_policy_bitflags::deletion,
-          1_KiB) {
-        config::shard_local_cfg().log_segment_size_min.set_value(
-          std::optional<uint64_t>());
-        gr.enable_all();
-        auto& members = gr.get_members();
-        for (auto& [id, member] : members) {
-            maybe_init_eviction_stm(id);
-        }
+        builder.add_raw_kv(iobuf::from("key"), iobuf::from("value"));
+        auto batch = std::move(builder).build();
+
+        batch.header().first_timestamp = ts;
+        batch.header().max_timestamp = ts;
+
+        return batch;
     }
 
-    virtual ~manual_deletion_fixture() {
-        std::vector<model::node_id> to_delete;
-        for (auto& [id, _] : gr.get_members()) {
-            to_delete.push_back(id);
-        }
-        for (auto id : to_delete) {
-            auto& member = gr.get_member(id);
-            if (member.started) {
-                gr.disable_node(id);
-            }
-        }
-        config::shard_local_cfg().log_segment_size_min.reset();
-    }
-
-    void maybe_init_eviction_stm(model::node_id id) {
-        auto& member = gr.get_member(id);
-        if (member.log->config().is_collectable()) {
-            auto& kvstore = member.storage.local().kvs();
-            auto eviction_stm = std::make_unique<cluster::log_eviction_stm>(
-              member.consensus.get(), tstlog, kvstore);
-            eviction_stm->start().get();
-            eviction_stms.emplace(id, std::move(eviction_stm));
-            member.kill_eviction_stm_cb
-              = std::make_unique<ss::noncopyable_function<ss::future<>()>>(
-                [this, id = id]() {
-                    tstlog.info("Stopping eviction stm: {}", id);
-                    auto found = eviction_stms.find(id);
-                    if (found != eviction_stms.end()) {
-                        if (found->second != nullptr) {
-                            return found->second->stop().then([this, id]() {
-                                tstlog.info("eviction stm stopped: {}", id);
-                                eviction_stms.erase(id);
-                            });
-                        }
-                    }
-                    return ss::now();
-                });
-        }
+    ss::future<> init_and_start_node(model::node_id id) {
+        auto& n = node(id);
+        raft::state_machine_manager_builder stm_mgr_builder;
+        n.initialise(all_vnodes()).get();
+        cluster::log_eviction_stm_factory f(n.get_kvstore());
+        f.create(stm_mgr_builder, n.raft().get());
+        return n.start(std::move(stm_mgr_builder));
     }
 
     void prepare_raft_group() {
-        wait_for_group_leader(gr);
-        ss::abort_source as;
+        config::shard_local_cfg().log_segment_size_min.set_value(128_KiB);
+        for (size_t id = 0; id < 3; ++id) {
+            add_node(
+              model::node_id(static_cast<int32_t>(id)), model::revision_id{0});
+        }
 
+        for (auto& [id, _] : nodes()) {
+            init_and_start_node(id).get();
+        }
+
+        auto leader_id = wait_for_leader(10s).get();
         auto first_ts = model::timestamp::now();
-        // append some entries
-        [[maybe_unused]] bool res
-          = replicate_compactible_batches(gr, first_ts).get();
-        // make it so that above batch will be collected by time based
-        // retention, by setting the threshold to 2 seconds after it
+        for (int i = 0; i < 5; i++) {
+            node(leader_id)
+              .raft()
+              ->replicate(
+                make_batches(
+                  100,
+                  [first_ts](auto) {
+                      return make_batches_with_timestamp(first_ts);
+                  }),
+                raft::replicate_options(raft::consistency_level::quorum_ack))
+              .get();
+            node(leader_id).raft()->step_down("test").get();
+            leader_id = wait_for_leader(10s).get();
+        }
+
         retention_timestamp = model::to_timestamp(
           model::timestamp_clock::now() + 2s);
-        ss::sleep(5s).get(); // wait to ensure broker_timestamp is different for
-                             // the next batch
+        ss::sleep(5s).get(); // wait to ensure broker_timestamp is different
         auto second_ts = model::timestamp(first_ts() + 200000);
-        // append some more entries
-        res = replicate_compactible_batches(gr, second_ts).get();
-        validate_logs_replication(gr);
-    }
+        node(leader_id)
+          .raft()
+          ->replicate(
+            make_batches(
+              100,
+              [second_ts](auto) {
+                  return make_batches_with_timestamp(second_ts);
+              }),
+            raft::replicate_options(raft::consistency_level::quorum_ack))
+          .get();
 
+        wait_for_committed_offset(node(leader_id).raft()->dirty_offset(), 10s)
+          .get();
+    }
+    ss::future<bool> do_execute_housekeeping() {
+        for (auto& [_, n] : nodes()) {
+            co_await n->raft()->log()->housekeeping(
+              storage::housekeeping_config(
+                retention_timestamp,
+                100_MiB,
+                model::offset::max(),
+                std::nullopt,
+                ss::default_priority_class(),
+                as,
+                storage::ntp_sanitizer_config{.sanitize_only = true}));
+
+            if (n->raft()->log()->offsets().start_offset <= model::offset(0)) {
+                co_return false;
+            }
+        }
+        co_return true;
+    }
     void apply_retention_policy() {
-        wait_for(
-          2s,
-          [this] {
-              for (auto& [_, n] : gr.get_members()) {
-                  n.log
-                    ->housekeeping(storage::housekeeping_config(
-                      retention_timestamp,
-                      100_MiB,
-                      model::offset::max(),
-                      std::nullopt,
-                      ss::default_priority_class(),
-                      as,
-                      storage::ntp_sanitizer_config{.sanitize_only = true}))
-                    .get();
-                  if (n.log->offsets().start_offset <= model::offset(0)) {
-                      return false;
-                  }
-              }
-              return true;
-          },
-          "logs has prefix truncated");
+        tests::cooperative_spin_wait_with_timeout(5s, [this] {
+            return do_execute_housekeeping();
+        }).get();
     }
 
-    void remove_data(std::vector<model::node_id> nodes) {
+    void
+    remove_data(const absl::flat_hash_set<model::node_id>& nodes_to_delete) {
         std::vector<std::filesystem::path> to_delete;
-        to_delete.reserve(nodes.size());
+        to_delete.reserve(nodes_to_delete.size());
 
         // disable and remove data
-        for (auto id : nodes) {
+        for (auto id : nodes_to_delete) {
             to_delete.push_back(std::filesystem::path(
-              gr.get_member(id).log->config().topic_directory()));
-            gr.disable_node(id);
-            tstlog.info("node disabled: {}", id);
+              node(id).raft()->log()->config().topic_directory()));
+        }
+        for (auto id : nodes_to_delete) {
+            stop_node(id).get();
         }
         for (auto& path : to_delete) {
             std::filesystem::remove_all(path);
         }
         // enable back
-        for (auto id : nodes) {
-            gr.enable_node(id);
-            maybe_init_eviction_stm(id);
+        for (auto id : nodes_to_delete) {
+            add_node(id, model::revision_id(0));
+        }
+        for (auto id : nodes_to_delete) {
+            init_and_start_node(id).get();
         }
     }
 
-    void remove_all_data() {
-        std::vector<model::node_id> nodes;
-        for (auto& [id, _] : gr.get_members()) {
-            nodes.push_back(id);
-        }
-        remove_data(nodes);
-    }
+    void remove_all_data() { remove_data(all_ids()); }
 
-    using stm_map_t = std::
-      unordered_map<model::node_id, std::unique_ptr<cluster::log_eviction_stm>>;
-    raft_group gr;
     model::timestamp retention_timestamp;
     ss::abort_source as;
-    stm_map_t eviction_stms;
 };
 
-FIXTURE_TEST(
-  test_collected_log_recovery_admin_deletion_all, manual_deletion_fixture) {
+TEST_F(
+  manual_deletion_fixture, test_collected_log_recovery_admin_deletion_all) {
     prepare_raft_group();
-    // compact logs
     apply_retention_policy();
 
     // simulate admin deleting log folders. For more details look here:
@@ -177,19 +150,15 @@ FIXTURE_TEST(
     // https://github.com/redpanda-data/redpanda/issues/321
 
     remove_all_data();
+    auto leader_id = wait_for_leader(10s).get();
 
-    validate_logs_replication(gr);
-
-    wait_for(
-      10s,
-      [this] { return are_all_commit_indexes_the_same(gr); },
-      "After recovery state is consistent");
+    wait_for_committed_offset(node(leader_id).raft()->dirty_offset(), 30s)
+      .get();
 };
 
-FIXTURE_TEST(
-  test_collected_log_recovery_admin_deletion_one, manual_deletion_fixture) {
+TEST_F(
+  manual_deletion_fixture, test_collected_log_recovery_admin_deletion_one) {
     prepare_raft_group();
-    // compact logs
     apply_retention_policy();
 
     // simulate admin deleting log folders. For more details look here:
@@ -197,11 +166,8 @@ FIXTURE_TEST(
     // https://github.com/redpanda-data/redpanda/issues/321
 
     remove_data({model::node_id(1)});
+    auto leader_id = wait_for_leader(10s).get();
 
-    validate_logs_replication(gr);
-
-    wait_for(
-      10s,
-      [this] { return are_all_commit_indexes_the_same(gr); },
-      "After recovery state is consistent");
-};
+    wait_for_committed_offset(node(leader_id).raft()->dirty_offset(), 30s)
+      .get();
+}

@@ -64,11 +64,9 @@ ss::future<> translation_stm::do_apply(const model::record_batch& batch) {
           _log.trace,
           "updating highest translated offset to {}",
           value.highest_translated_offset);
-        if (value.last_translated_timestamp) {
-            _last_translated_timestamp = std::max(
-              _last_translated_timestamp.value_or(model::timestamp::min()),
-              value.last_translated_timestamp.value());
-        }
+
+        _last_translated_timestamp = std::max(
+          _last_translated_timestamp, value.last_translated_timestamp);
         if (value.highest_translated_offset > _highest_translated_offset) {
             update_highest_translated_offset(value.highest_translated_offset);
         }
@@ -210,7 +208,7 @@ ss::future<> translation_stm::apply_raft_snapshot(const iobuf&) {
     // with the snapshot.
     vlog(_log.debug, "Applying raft snapshot, resetting state");
     _highest_translated_offset = kafka::offset{};
-    _last_translated_timestamp = model::timestamp::min();
+    _last_translated_timestamp = std::nullopt;
     co_return;
 }
 

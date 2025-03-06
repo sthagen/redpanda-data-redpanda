@@ -175,6 +175,7 @@ redpanda_cc_library(
         ":compatibility_utils",
         ":datatypes",
         ":partition",
+        ":values",
         "//src/v/base",
     ],
 )
@@ -463,6 +464,7 @@ redpanda_cc_library(
         "merge_append_action.h",
     ],
     implementation_deps = [
+        ":compatibility",
         ":logger",
         ":manifest",
         ":manifest_file_packer",
@@ -1099,6 +1101,7 @@ redpanda_cc_library(
     include_prefix = "iceberg",
     visibility = ["//visibility:public"],
     deps = [
+        ":datatypes",
         "//src/v/bytes:iobuf",
         "//src/v/container:fragmented_vector",
         "//src/v/utils:uuid",

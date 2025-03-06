@@ -297,11 +297,9 @@ TEST(ManifestSerializationTest, TestMetadataWithPartitionSpec) {
       .metadata = std::move(meta),
       .entries = {},
     };
-    auto pk_type = partition_key_type::create(
-      m.metadata.partition_spec, m.metadata.schema);
     auto serialized_buf = serialize_avro(m);
     for (int i = 0; i < 10; i++) {
-        auto m_roundtrip = parse_manifest(pk_type, std::move(serialized_buf));
+        auto m_roundtrip = parse_manifest(std::move(serialized_buf));
         ASSERT_EQ(m.metadata, m_roundtrip.metadata);
         ASSERT_EQ(0, m_roundtrip.entries.size());
 
@@ -319,7 +317,7 @@ TEST(ManifestSerializationTest, TestSerializeManifestData) {
     }
     auto orig_buf = iobuf{
       ss::util::read_entire_file(manifest_path.value()).get()};
-    auto m = parse_manifest({struct_type{}}, orig_buf.copy());
+    auto m = parse_manifest(orig_buf.copy());
     ASSERT_EQ(100, m.entries.size());
     ASSERT_EQ(m.metadata.manifest_content_type, manifest_content_type::data);
     ASSERT_EQ(m.metadata.format_version, format_version::v2);
@@ -331,8 +329,7 @@ TEST(ManifestSerializationTest, TestSerializeManifestData) {
 
     auto serialized_buf = serialize_avro(m);
     for (int i = 0; i < 10; i++) {
-        auto m_roundtrip = parse_manifest(
-          {struct_type{}}, std::move(serialized_buf));
+        auto m_roundtrip = parse_manifest(std::move(serialized_buf));
         ASSERT_EQ(m.metadata, m_roundtrip.metadata);
         ASSERT_EQ(100, m_roundtrip.entries.size());
         ASSERT_EQ(

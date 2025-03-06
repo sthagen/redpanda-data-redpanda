@@ -12,6 +12,7 @@
 #include "base/seastarx.h"
 #include "base/vlog.h"
 #include "datalake/logger.h"
+#include "datalake/table_id_provider.h"
 #include "iceberg/catalog.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/transaction.h"
@@ -56,11 +57,38 @@ snapshot_remover::errc log_and_convert_action_errc(
 ss::future<checked<std::nullopt_t, snapshot_remover::errc>>
 iceberg_snapshot_remover::remove_expired_snapshots(
   model::topic topic, model::timestamp ts) const {
-    auto table_id = table_id_for_topic(topic);
+    std::optional<snapshot_remover::errc> error;
+    auto dlq_res = co_await remove_expired_snapshots(
+      topic, table_id_provider::dlq_table_id(topic), ts);
+    if (dlq_res.has_error()) {
+        error = dlq_res.error();
+    }
+    auto main_res = co_await remove_expired_snapshots(
+      topic, table_id_provider::table_id(topic), ts);
+    // Arbitrarily favor returning the error from the main table if they both
+    // return errors.
+    if (main_res.has_error()) {
+        error = main_res.error();
+    }
+    if (error.has_value()) {
+        co_return *error;
+    }
+    co_return std::nullopt;
+}
+
+ss::future<checked<std::nullopt_t, snapshot_remover::errc>>
+iceberg_snapshot_remover::remove_expired_snapshots(
+  model::topic topic,
+  iceberg::table_identifier table_id,
+  model::timestamp ts) const {
     prefix_logger log(
       datalake_log, fmt::format("[topic: {}, table_id: {}]", topic, table_id));
     auto table_res = co_await catalog_.load_table(table_id);
     if (table_res.has_error()) {
+        if (table_res.error() == iceberg::catalog::errc::not_found) {
+            vlog(log.debug, "Table not found, no snapshots to remove");
+            co_return std::nullopt;
+        }
         co_return log_and_convert_catalog_errc(
           log,
           table_res.error(),
@@ -79,6 +107,10 @@ iceberg_snapshot_remover::remove_expired_snapshots(
     if (removal_res.has_error()) {
         co_return log_and_convert_action_errc(
           log, removal_res.error(), "Error computing expired snapshots");
+    }
+    if (txn.updates().updates.empty()) {
+        vlog(log.debug, "No snapshots expired, skipping removal");
+        co_return std::nullopt;
     }
     auto commit_res = co_await catalog_.commit_txn(table_id, std::move(txn));
     if (commit_res.has_error()) {
@@ -136,15 +168,6 @@ iceberg_snapshot_remover::remove_expired_snapshots(
         }
     }
     co_return std::nullopt;
-}
-
-iceberg::table_identifier
-iceberg_snapshot_remover::table_id_for_topic(const model::topic& t) const {
-    return iceberg::table_identifier{
-      // TODO: namespace as a topic property? Keep it in the table metadata?
-      .ns = {"redpanda"},
-      .table = t,
-    };
 }
 
 } // namespace datalake::coordinator

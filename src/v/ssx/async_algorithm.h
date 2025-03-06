@@ -210,8 +210,7 @@ ss::future<> async_for_each(Iterator begin, Iterator end, Fn f) {
  * The function is taken by value.
  *
  * Until the returned future resolves, the container's begin and end iterators,
- * as they were when called, must remain valid, and the container itself must
- * remain live if it was passed via lvalue reference.
+ * as they were when called, and the container itself must remain valid.
  *
  * @param container universal reference to container
  * @param f the function to call on each element
@@ -224,22 +223,11 @@ requires requires(Container c, Fn fn) {
     std::end(c);
 }
 ss::future<> async_for_each(Container&& container, Fn f) {
-    if constexpr (std::is_lvalue_reference_v<decltype(container)>) {
-        return async_for_each_fast<Traits>(
-          detail::internal_counter{},
-          std::begin(container),
-          std::end(container),
-          std::move(f));
-    } else {
-        return ss::do_with(
-          std::move(container), [f = std::move(f)](Container& container) {
-              return async_for_each_fast<Traits>(
-                detail::internal_counter{},
-                std::begin(container),
-                std::end(container),
-                std::move(f));
-          });
-    }
+    return async_for_each_fast<Traits>(
+      detail::internal_counter{},
+      std::begin(container),
+      std::end(container),
+      std::move(f));
 }
 
 /**
@@ -340,8 +328,7 @@ ss::future<> async_for_each_counter(
  * The function is taken by value.
  *
  * Until the returned future resolves, the container's begin and end iterators,
- * as they were when called, must remain valid, and the container itself must
- * remain live if it was passed via lvalue reference.
+ * as they were when called, and the container itself must remain valid.
  *
  * @param counter the counter object to use, may be reused across invocations
  * @param container universal reference to container
@@ -356,20 +343,8 @@ requires requires(Container c, Fn fn) {
 }
 ss::future<>
 async_for_each_counter(async_counter& counter, Container&& container, Fn f) {
-    if constexpr (std::is_lvalue_reference_v<decltype(container)>) {
-        return detail::async_for_each_fast<Traits>(
-          counter, std::begin(container), std::end(container), std::move(f));
-    } else {
-        return ss::do_with(
-          std::move(container),
-          [&counter, f = std::move(f)](Container& container) {
-              return detail::async_for_each_fast<Traits>(
-                counter,
-                std::begin(container),
-                std::end(container),
-                std::move(f));
-          });
-    }
+    return detail::async_for_each_fast<Traits>(
+      counter, std::begin(container), std::end(container), std::move(f));
 }
 
 } // namespace ssx

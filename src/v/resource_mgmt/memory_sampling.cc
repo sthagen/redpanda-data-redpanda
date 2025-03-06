@@ -12,15 +12,18 @@
 #include "resource_mgmt/memory_sampling.h"
 
 #include "base/vlog.h"
+#include "crash_tracker/recorder.h"
 #include "resource_mgmt/available_memory.h"
 #include "ssx/future-util.h"
 #include "ssx/sformat.h"
+#include "utils/human.h"
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/memory.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/sstring.hh>
+#include <seastar/util/defer.hh>
 #include <seastar/util/memory_diagnostics.hh>
 
 #include <chrono>
@@ -64,6 +67,57 @@ memory_sampling::get_oom_diagnostics_callback() {
     return [allocation_sites = std::move(allocation_sites),
             format_buf = std::move(format_buf)](
              seastar::memory::memory_diagnostics_writer writer) mutable {
+        // Note here that there is an implicit dependency that the crash tracker
+        // has already been initialized before OOM recording begins
+        auto& recorder = crash_tracker::get_recorder();
+        auto oom_recorder = recorder.begin_oom_recording();
+        auto finish_oom_writing = ss::defer([&recorder, &oom_recorder] {
+            if (oom_recorder.has_value()) {
+                recorder.finish_oom_recording();
+            }
+        });
+        if (oom_recorder) {
+            /// This mimics the same output from Seastar's dumping memory
+            /// statistics function
+            auto stats = ss::memory::stats();
+            auto total_mem = stats.total_memory();
+            auto free_mem = stats.free_memory();
+            auto failed_allocs = stats.failed_allocations();
+            (*oom_recorder)("Dumping seastar memory diagnostics\n");
+            auto bytes_written = fmt::format_to_n(
+                                   format_buf.begin(),
+                                   format_buf.size(),
+                                   "Used memory:   {}\n",
+                                   human::bytes(
+                                     static_cast<double>(total_mem - free_mem)))
+                                   .size;
+            (*oom_recorder)(std::string_view(
+              format_buf.data(), std::min(bytes_written, format_buf.size())));
+            bytes_written = fmt::format_to_n(
+                              format_buf.begin(),
+                              format_buf.size(),
+                              "Free memory:   {}\n",
+                              human::bytes(static_cast<double>(free_mem)))
+                              .size;
+            (*oom_recorder)(std::string_view(
+              format_buf.data(), std::min(bytes_written, format_buf.size())));
+            bytes_written = fmt::format_to_n(
+                              format_buf.begin(),
+                              format_buf.size(),
+                              "Total memory:  {}\n",
+                              human::bytes(static_cast<double>(total_mem)))
+                              .size;
+            (*oom_recorder)(std::string_view(
+              format_buf.data(), std::min(bytes_written, format_buf.size())));
+            bytes_written = fmt::format_to_n(
+                              format_buf.begin(),
+                              format_buf.size(),
+                              "Hard failures: {}\n\n",
+                              failed_allocs)
+                              .size;
+            (*oom_recorder)(std::string_view(
+              format_buf.data(), std::min(bytes_written, format_buf.size())));
+        }
         auto num_sites = ss::memory::sampled_memory_profile(
           allocation_sites.data(), allocation_sites.size());
 
@@ -78,6 +132,10 @@ memory_sampling::get_oom_diagnostics_callback() {
                "    at: the backtrace for this allocation site\n");
         writer(diagnostics_header());
         writer("\n");
+        if (oom_recorder.has_value()) {
+            (*oom_recorder)(diagnostics_header());
+            (*oom_recorder)("\n");
+        }
 
         for (size_t i = 0; i < top_n; ++i) {
             auto bytes_written = fmt::format_to_n(
@@ -87,10 +145,19 @@ memory_sampling::get_oom_diagnostics_callback() {
                                    allocation_sites[i])
                                    .size;
 
-            writer(std::string_view(format_buf.data(), bytes_written));
+            writer(std::string_view(
+              format_buf.data(), std::min(bytes_written, format_buf.size())));
+            if (oom_recorder.has_value()) {
+                (*oom_recorder)(std::string_view(
+                  format_buf.data(),
+                  std::min(bytes_written, format_buf.size())));
+            }
         }
 
         writer(confluence_reference());
+        if (oom_recorder.has_value()) {
+            (*oom_recorder)(confluence_reference());
+        }
     };
 }
 

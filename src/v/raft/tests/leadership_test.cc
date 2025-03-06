@@ -7,107 +7,118 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "finjector/hbadger.h"
-#include "model/metadata.h"
-#include "model/timeout_clock.h"
-#include "raft/tests/raft_group_fixture.h"
-#include "raft/types.h"
+#include "raft/tests/raft_fixture.h"
+#include "test_utils/async.h"
 
-FIXTURE_TEST(test_single_node_group, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 1);
-    gr.enable_all();
+#include <gmock/gmock.h>
+using namespace raft;
+struct leadership_test_fixture : raft_fixture {
+    ::testing::AssertionResult assert_single_leader() {
+        auto leaders = std::ranges::count_if(
+          nodes(), [](auto& node) { return node.second->raft()->is_leader(); });
 
-    wait_for_group_leader(gr);
-    assert_at_most_one_leader(gr);
-
-    validate_logs_replication(gr);
-
-    // leader should be stable when there are no failures
-    assert_stable_leadership(gr, 5);
-};
-
-FIXTURE_TEST(test_leader_is_elected_in_group, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 3);
-    gr.enable_all();
-
-    wait_for_group_leader(gr);
-    assert_at_most_one_leader(gr);
-
-    validate_logs_replication(gr);
-
-    // leader should be stable when there are no failures
-    assert_stable_leadership(gr, 5);
-};
-
-FIXTURE_TEST(
-  test_leader_is_elected_after_current_leader_fail, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 3);
-    gr.enable_all();
-    auto leader_id = wait_for_group_leader(gr);
-
-    assert_at_most_one_leader(gr);
-
-    // Stop the current leader
-    tstlog.info("Stopping current leader {}", leader_id);
-    gr.disable_node(leader_id);
-
-    auto new_leader_id = wait_for_group_leader(gr);
-    assert_at_most_one_leader(gr);
-
-    // require leader id has changed
-    BOOST_REQUIRE_NE(leader_id, new_leader_id);
-    assert_stable_leadership(gr);
-};
-
-FIXTURE_TEST(
-  test_leader_is_not_elected_when_there_is_no_majority, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 3);
-
-    gr.enable_all();
-
-    auto leader_id = wait_for_group_leader(gr);
-    assert_at_most_one_leader(gr);
-
-    validate_logs_replication(gr);
-
-    // Stop the current leader
-    tstlog.info("Stopping current leader {}", leader_id);
-    gr.disable_node(leader_id);
-
-    auto new_leader_id = wait_for_group_leader(gr);
-    assert_at_most_one_leader(gr);
-
-    // second_leader killed
-    tstlog.info("Stopping newly elected leader {}", new_leader_id);
-    gr.disable_node(new_leader_id);
-
-    assert_stable_leadership(gr);
-};
-
-FIXTURE_TEST(
-  test_leader_is_reelected_when_majority_is_back_up, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 3);
-    gr.enable_all();
-
-    // Wait for first leader
-    auto leader_id = wait_for_group_leader(gr);
-    assert_at_most_one_leader(gr);
-
-    validate_logs_replication(gr);
-
-    // Disable current leader and other node
-    gr.disable_node(leader_id);
-
-    for (auto& [id, node] : gr.get_members()) {
-        if (leader_id != id) {
-            gr.disable_node(id);
-            break;
+        if (leaders != 1) {
+            return ::testing::AssertionFailure()
+                   << "Expected 1 leader, got " << leaders;
         }
+        return ::testing::AssertionSuccess();
     }
 
-    // enable again the old leader
-    gr.enable_node(leader_id);
-    // wait for next leader to be elected after recovery
-    wait_for_group_leader(gr);
-    assert_at_most_one_leader(gr);
+    ::testing::AssertionResult assert_leadership_stable(model::node_id id) {
+        ss::sleep(get_election_timeout() * 3).get();
+        if (!node(id).raft()->is_leader()) {
+            return ::testing::AssertionFailure()
+                   << "Expected leader to be stable, previous: " << id
+                   << " current: " << wait_for_leader(10s).get();
+        }
+        return ::testing::AssertionSuccess();
+    }
+
+    void wait_for_no_leader() {
+        tests::cooperative_spin_wait_with_timeout(10s, [this] {
+            return std::ranges::all_of(nodes(), [](auto& node) {
+                return node.second->raft()->is_leader() == false;
+            });
+        }).get();
+    }
+
+    ::testing::AssertionResult assert_stable_no_leader() {
+        ss::sleep(get_election_timeout() * 3).get();
+        auto no_leader = std::ranges::all_of(nodes(), [](auto& node) {
+            return node.second->raft()->is_leader() == false;
+        });
+        if (!no_leader) {
+            return ::testing::AssertionFailure()
+                   << "Raft group is expected to have no leader";
+        }
+        return ::testing::AssertionSuccess();
+    }
 };
+
+TEST_F(leadership_test_fixture, test_single_node_group) {
+    create_simple_group(1).get();
+    auto leader_id = wait_for_leader(10s).get();
+
+    ASSERT_TRUE(assert_single_leader());
+
+    // leader should be stable when there are no failures
+    ASSERT_TRUE(assert_leadership_stable(leader_id));
+};
+
+TEST_F(leadership_test_fixture, test_leader_is_elected_in_group) {
+    create_simple_group(3).get();
+    auto leader_id = wait_for_leader(10s).get();
+
+    ASSERT_TRUE(assert_single_leader());
+
+    // leader should be stable when there are no failures
+    ASSERT_TRUE(assert_leadership_stable(leader_id));
+    wait_for_committed_offset(node(leader_id).raft()->dirty_offset(), 10s)
+      .get();
+};
+
+TEST_F(
+  leadership_test_fixture, test_leader_is_elected_after_current_leader_fail) {
+    create_simple_group(3).get();
+    auto leader_id = wait_for_leader(10s).get();
+
+    ASSERT_TRUE(assert_single_leader());
+
+    // leader should be stable when there are no failures
+    ASSERT_TRUE(assert_leadership_stable(leader_id));
+    stop_node(leader_id).get();
+
+    auto new_leader_id = wait_for_leader(10s).get();
+    ASSERT_TRUE(assert_single_leader());
+    // require leader id has changed
+    ASSERT_NE(leader_id, new_leader_id);
+    wait_for_committed_offset(node(new_leader_id).raft()->dirty_offset(), 10s)
+      .get();
+
+    assert_leadership_stable(new_leader_id);
+}
+
+TEST_F(
+  leadership_test_fixture,
+  test_leader_is_not_elected_when_there_is_no_majority) {
+    create_simple_group(3).get();
+    auto leader_id = wait_for_leader(10s).get();
+
+    ASSERT_TRUE(assert_single_leader());
+
+    // leader should be stable when there are no failures
+    ASSERT_TRUE(assert_leadership_stable(leader_id));
+    stop_node(leader_id).get();
+
+    auto new_leader_id = wait_for_leader(10s).get();
+    ASSERT_TRUE(assert_single_leader());
+    stop_node(new_leader_id).get();
+    wait_for_no_leader();
+    ss::sleep(get_election_timeout() * 3).get();
+    ASSERT_TRUE(assert_stable_no_leader());
+    // leader is re-elected when nodes are back up
+    add_node(leader_id, model::revision_id{0});
+    node(leader_id).init_and_start(all_vnodes()).get();
+    leader_id = wait_for_leader(10s).get();
+    assert_leadership_stable(leader_id);
+}

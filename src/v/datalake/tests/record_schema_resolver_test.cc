@@ -309,6 +309,10 @@ public:
     getter() const override {
         co_return &_store;
     }
+    ss::future<pandaproxy::schema_registry::schema_getter*>
+    synced_getter() const override {
+        co_return &_store;
+    }
     ss::future<pandaproxy::schema_registry::canonical_schema_definition>
     get_schema_definition(
       pandaproxy::schema_registry::schema_id id) const override {

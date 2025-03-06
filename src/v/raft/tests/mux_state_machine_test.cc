@@ -12,16 +12,13 @@
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
-#include "raft/group_configuration.h"
 #include "raft/mux_state_machine.h"
 #include "raft/state_machine_base.h"
 #include "raft/tests/raft_fixture.h"
 #include "raft/tests/raft_fixture_retry_policy.h"
-#include "raft/tests/simple_raft_fixture.h"
 #include "reflection/adl.h"
 #include "storage/record_batch_builder.h"
 #include "storage/tests/utils/disk_log_builder.h"
-#include "test_utils/fixture.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
@@ -39,7 +36,6 @@
 #include <chrono>
 #include <exception>
 #include <memory>
-#include <numeric>
 #include <system_error>
 
 using namespace std::chrono_literals;

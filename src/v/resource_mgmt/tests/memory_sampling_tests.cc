@@ -9,13 +9,17 @@
  * by the Apache License, Version 2.0
  */
 
+#include "config/node_config.h"
+#include "crash_tracker/recorder.h"
 #include "resource_mgmt/memory_sampling.h"
 #include "storage/batch_cache.h"
 #include "test_utils/async.h"
+#include "test_utils/tmp_dir.h"
 
 #include <seastar/core/memory.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/testing/thread_test_case.hh>
+#include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
 #include <boost/test/tools/old/interface.hpp>
@@ -28,7 +32,22 @@
 
 #ifndef SEASTAR_DEFAULT_ALLOCATOR
 
+namespace {
+void initialize_crash_recorder(const ss::sstring& dir_name) {
+    config::node().data_directory.set_value(std::filesystem::path{dir_name});
+    crash_tracker::get_recorder().start().get();
+}
+
+void finalize_crash_recorder() {
+    crash_tracker::get_recorder().stop().get();
+    crash_tracker::get_recorder().reset();
+}
+} // namespace
+
 SEASTAR_THREAD_TEST_CASE(test_no_allocs_in_oom_callback) {
+    temporary_dir tmpdir("memory-sampling");
+    initialize_crash_recorder(tmpdir.get_path().native());
+    auto reset_recorder = ss::defer([] { finalize_crash_recorder(); });
     seastar::memory::scoped_heap_profiling profiling(16000);
 
     std::vector<std::vector<char>> dummy_bufs;
@@ -74,6 +93,9 @@ SEASTAR_THREAD_TEST_CASE(test_no_allocs_in_oom_callback) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_low_watermark_logging) {
+    temporary_dir tmpdir("memory-sampling");
+    initialize_crash_recorder(tmpdir.get_path().native());
+    auto reset_recorder = ss::defer([] { finalize_crash_recorder(); });
     seastar::logger dummy_logger("dummy");
     std::stringstream output_buf;
     dummy_logger.set_ostream(output_buf);

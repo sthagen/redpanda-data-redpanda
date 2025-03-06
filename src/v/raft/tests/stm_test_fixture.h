@@ -21,7 +21,6 @@
 #include "raft/state_machine_manager.h"
 #include "raft/tests/raft_fixture.h"
 #include "raft/tests/raft_fixture_retry_policy.h"
-#include "raft/tests/raft_group_fixture.h"
 #include "raft/types.h"
 #include "random/generators.h"
 #include "serde/envelope.h"

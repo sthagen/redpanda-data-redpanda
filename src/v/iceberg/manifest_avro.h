@@ -16,6 +16,6 @@
 namespace iceberg {
 
 iobuf serialize_avro(const manifest&);
-manifest parse_manifest(const partition_key_type&, iobuf);
+manifest parse_manifest(iobuf);
 
 } // namespace iceberg

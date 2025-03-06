@@ -12,6 +12,7 @@
 
 #include "datalake/translation/deps.h"
 #include "datalake/translation/scheduling.h"
+#include "random/simple_time_jitter.h"
 #include "utils/prefix_logger.h"
 #include "utils/retry_chain_node.h"
 
@@ -143,6 +144,10 @@ private:
     std::unique_ptr<coordinator_api> _coordinator;
     std::unique_ptr<data_source> _data_source;
     std::unique_ptr<translation_context> _translation_ctx;
+    // TODO: consider baking backoff into the scheduler on translation failure.
+    using jitter_t
+      = simple_time_jitter<ss::lowres_clock, std::chrono::milliseconds>;
+    jitter_t _jitter;
     model::term_id _term;
     prefix_logger _logger;
     bool _initialized = false;

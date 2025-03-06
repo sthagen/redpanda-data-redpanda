@@ -24,15 +24,14 @@
 using namespace std::chrono_literals;
 
 namespace iceberg {
-ss::future<checked<manifest, metadata_io::errc>> manifest_io::download_manifest(
-  const uri& uri, const partition_key_type& pk_type) {
+ss::future<checked<manifest, metadata_io::errc>>
+manifest_io::download_manifest(const uri& uri) {
     auto path_res = from_uri(uri);
     if (path_res.has_error()) {
         co_return path_res.error();
     }
 
-    co_return co_await download_manifest(
-      manifest_path(path_res.value()), pk_type);
+    co_return co_await download_manifest(manifest_path(path_res.value()));
 }
 
 ss::future<checked<manifest_list, metadata_io::errc>>
@@ -46,12 +45,10 @@ manifest_io::download_manifest_list(const uri& uri) {
       manifest_list_path{path_res.value()});
 }
 
-ss::future<checked<manifest, metadata_io::errc>> manifest_io::download_manifest(
-  const manifest_path& path, const partition_key_type& pk_type) {
+ss::future<checked<manifest, metadata_io::errc>>
+manifest_io::download_manifest(const manifest_path& path) {
     co_return co_await download_object<manifest>(
-      path(), "iceberg::manifest", [&pk_type](iobuf b) {
-          return parse_manifest(pk_type, std::move(b));
-      });
+      path(), "iceberg::manifest", parse_manifest);
 }
 
 ss::future<checked<manifest_list, metadata_io::errc>>

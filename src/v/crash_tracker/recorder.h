@@ -16,6 +16,7 @@
 #include "crash_tracker/types.h"
 
 #include <seastar/util/bool_class.hh>
+#include <seastar/util/noncopyable_function.hh>
 
 #include <chrono>
 
@@ -49,6 +50,9 @@ public:
 
     ss::future<> start();
     ss::future<> stop();
+    /// _ONLY_ to be used during testing, will reset the underlying writer and
+    /// prepare it for `start()`
+    void reset();
 
     /// Async-signal safe
     void record_crash_sighandler(recorded_signo signo);
@@ -56,6 +60,16 @@ public:
     void record_crash_exception(std::exception_ptr eptr);
 
     void record_crash_vassert(std::string_view msg);
+
+    using oom_recorder = ss::noncopyable_function<void(std::string_view)>;
+
+    // This function is used to begin recording messages on an OOM crash.
+    // If able to, it will return a function that can be called to append
+    // messages to the crash description until finish_oom_recording()
+    // is called.
+    std::optional<oom_recorder> begin_oom_recording();
+    // Called when finished recording OOM messages
+    void finish_oom_recording();
 
     /// Returns the list of recorded crashes in increasing crash_time order
     ss::future<std::vector<recorded_crash>> get_recorded_crashes(
@@ -71,6 +85,23 @@ private:
     ss::future<> remove_dangling_upload_markers() const;
 
     prepared_writer _writer;
+
+    class oom_writer {
+    public:
+        using iterator =
+          typename crash_description::reserved_string_t::iterator;
+        explicit oom_writer(crash_description* oom_cd)
+          : _oom_cd(oom_cd)
+          , _oom_msg_pos(_oom_cd->crash_message.begin()) {}
+
+        void operator()(std::string_view) noexcept;
+
+    private:
+        crash_description* _oom_cd{nullptr};
+        iterator _oom_msg_pos;
+    };
+
+    std::optional<oom_writer> _oom_writer;
 
     friend recorder& get_recorder();
     friend recorder get_test_recorder();

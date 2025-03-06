@@ -43,6 +43,12 @@ public:
         co_return reader;
     }
 
+    ss::future<ppsr::schema_getter*> synced_getter() const override {
+        auto [reader, writer] = co_await service();
+        co_await writer->read_sync();
+        co_return reader;
+    }
+
     ss::future<ppsr::canonical_schema_definition>
     get_schema_definition(ppsr::schema_id id) const override {
         auto [reader, _] = co_await service();
@@ -83,6 +89,10 @@ public:
         throw std::logic_error(
           "invalid attempted usage of a disabled schema registry");
     }
+    ss::future<ppsr::schema_getter*> synced_getter() const override {
+        throw std::logic_error(
+          "invalid attempted usage of a disabled schema registry");
+    }
     ss::future<ppsr::canonical_schema_definition>
     get_schema_definition(ppsr::schema_id) const override {
         throw std::logic_error(
@@ -106,7 +116,15 @@ registry::get_valid_schema(ppsr::schema_id schema_id) const {
     auto schema_def_opt = co_await reader->maybe_get_schema_definition(
       schema_id);
     if (!schema_def_opt.has_value()) {
-        co_return std::nullopt;
+        // Assume that we expect to have the schema. If it's not there, one
+        // possibility is that the reader needs to catch up, so do that and try
+        // again.
+        reader = co_await synced_getter();
+        schema_def_opt = co_await reader->maybe_get_schema_definition(
+          schema_id);
+        if (!schema_def_opt.has_value()) {
+            co_return std::nullopt;
+        }
     }
     auto& schema_def = *schema_def_opt;
     auto schema_type = schema_def.type();

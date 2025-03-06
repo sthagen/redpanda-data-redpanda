@@ -12,7 +12,6 @@
 #include "cluster/tests/raft_fixture_retry_policy.h"
 #include "errc.h"
 #include "raft/tests/raft_fixture.h"
-#include "raft/tests/raft_group_fixture.h"
 #include "serde/envelope.h"
 #include "test_utils/test.h"
 

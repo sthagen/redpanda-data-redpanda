@@ -182,12 +182,25 @@ ss::future<> prepared_writer::release() {
     }
 
     ::close(_fd);
+    _fd = -1;
     co_await ss::remove_file(_crash_report_file_name.c_str());
     vlog(ctlog.debug, "Deleted crash report file: {}", _crash_report_file_name);
 
     _state = state::released;
 
     co_return;
+}
+
+void prepared_writer::reset() {
+    auto cur_state = _state.load();
+    if (cur_state != state::released) {
+        ::close(_fd);
+        _fd = -1;
+    }
+    _state = state::uninitialized;
+    _serde_output.clear();
+    _crash_report_file_name.clear();
+    _prepared_cd = crash_description{};
 }
 
 } // namespace crash_tracker

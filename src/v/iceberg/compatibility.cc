@@ -39,7 +39,10 @@ struct primitive_type_promotion_policy_visitor {
 
     type_check_result operator()(
       const iceberg::date_type&, const iceberg::timestamp_type&) const {
-        return type_promoted::changes_partition;
+        // TODO(iceberg): This is a v3-only type promotion that can affect
+        // partitioning. When we introduce v3 support, we should reinstante this
+        // promotion with the type_promoted::changes_partition result. return
+        return compat_errc::mismatch;
     }
 
     type_check_result
@@ -401,6 +404,26 @@ private:
     const partition_spec* spec_;
 };
 
+struct primitive_value_type_promoting_visitor {
+    template<typename TVal, typename TType>
+    primitive_value operator()(TVal v, const TType& t) const {
+        if constexpr (std::is_same_v<TType, primitive_value_type_t<TVal>>) {
+            return v;
+        }
+        if constexpr (
+          std::is_same_v<TVal, int_value> && std::is_same_v<TType, long_type>) {
+            return long_value{v.val};
+        }
+        if constexpr (
+          std::is_same_v<TVal, float_value>
+          && std::is_same_v<TType, double_type>) {
+            return double_value{v.val};
+        }
+        throw std::invalid_argument(
+          fmt::format("Cannot promote primitive value {} to type {}", v, t));
+    }
+};
+
 } // namespace
 
 type_check_result
@@ -409,6 +432,12 @@ check_types(const iceberg::field_type& src, const iceberg::field_type& dest) {
       field_type_check_visitor{primitive_type_promotion_policy_visitor{}},
       src,
       dest);
+}
+
+primitive_value promote_primitive_value_type(
+  primitive_value value, const primitive_type& dest_type) {
+    return std::visit(
+      primitive_value_type_promoting_visitor{}, std::move(value), dest_type);
 }
 
 schema_transform_result annotate_schema_transform(

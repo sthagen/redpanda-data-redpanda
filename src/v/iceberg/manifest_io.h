@@ -35,10 +35,10 @@ public:
       : metadata_io(io, std::move(b)) {}
     ~manifest_io() = default;
 
-    ss::future<checked<manifest, metadata_io::errc>> download_manifest(
-      const manifest_path& path, const partition_key_type& pk_type);
     ss::future<checked<manifest, metadata_io::errc>>
-    download_manifest(const uri& uri, const partition_key_type& pk_type);
+    download_manifest(const manifest_path& path);
+    ss::future<checked<manifest, metadata_io::errc>>
+    download_manifest(const uri& uri);
 
     ss::future<checked<manifest_list, metadata_io::errc>>
     download_manifest_list(const manifest_list_path& path);

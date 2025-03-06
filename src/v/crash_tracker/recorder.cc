@@ -25,8 +25,11 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/util/print_safe.hh>
 
+#include <fmt/core.h>
+
 #include <chrono>
 #include <filesystem>
+#include <iterator>
 #include <string_view>
 
 using namespace std::chrono_literals;
@@ -155,32 +158,40 @@ ss::future<> recorder::start() {
 
 namespace {
 
+template<typename OutputIt, typename... Args>
+void format_to_safe(
+  OutputIt& it,
+  size_t& remaining,
+  fmt::format_string<Args...> fmt,
+  Args&&... args) {
+    if (remaining == 0) {
+        return; // Prevent buffer overflow
+    }
+
+    auto result = fmt::format_to_n(
+      it, remaining, fmt, std::forward<Args>(args)...);
+    size_t bytes_written = std::distance(it, result.out);
+
+    it = result.out;
+    remaining -= std::min(remaining, bytes_written);
+}
+
 void record_backtrace(crash_description& cd) {
-    size_t pos = 0;
-    auto printer = [&pos, &cd](auto fmt, auto&&... args) {
-        if (pos >= cd.stacktrace.capacity()) {
-            return; // Prevent buffer overflow
-        }
+    auto it = cd.stacktrace.begin();
+    auto remaining = cd.stacktrace.capacity();
+    auto first = true;
 
-        auto result = fmt::format_to_n(
-          cd.stacktrace.begin() + pos,
-          cd.stacktrace.capacity() - pos,
-          fmt,
-          std::forward<decltype(args)...>(args)...);
-        pos = std::min(pos + result.size, cd.stacktrace.capacity());
-    };
-
-    ss::backtrace([&pos, &printer](ss::frame f) {
-        const bool first = pos == 0;
+    ss::backtrace([&it, &remaining, &first](ss::frame f) {
         if (!first) {
-            printer(FMT_STRING(" "), " ");
+            format_to_safe(it, remaining, " ");
         }
+        first = false;
 
         if (!f.so->name.empty()) {
-            printer(FMT_STRING("{}+"), f.so->name.c_str());
+            format_to_safe(it, remaining, "{}+", f.so->name.c_str());
         }
 
-        printer(FMT_STRING("{:#x}"), f.addr);
+        format_to_safe(it, remaining, "{:#x}", f.addr);
     });
 }
 
@@ -280,6 +291,30 @@ void recorder::record_crash_vassert(std::string_view msg) {
     _writer.write();
 }
 
+std::optional<recorder::oom_recorder> recorder::begin_oom_recording() {
+    auto* cd_opt = _writer.fill();
+    if (!cd_opt) {
+        // The writer has already been consumed by another crash
+        return std::nullopt;
+    }
+    vassert(!_oom_writer.has_value(), "OOM recording already in progress");
+    _oom_writer.emplace(oom_writer{cd_opt});
+    auto& cd = *cd_opt;
+
+    record_backtrace(cd);
+    cd.type = crash_type::oom;
+    return [this](std::string_view ms) {
+        vassert(_oom_writer.has_value(), "OOM message already recorded");
+        (*_oom_writer)(ms);
+    };
+}
+
+void recorder::finish_oom_recording() {
+    vassert(_oom_writer.has_value(), "No OOM recording in progress");
+    _oom_writer.reset();
+    _writer.write();
+}
+
 ss::future<bool> recorder::recorded_crash::is_uploaded() const {
     co_return co_await ss::file_exists(
       to_upload_marker_path(file_path).string());
@@ -361,4 +396,14 @@ recorder::get_recorded_crashes(
 
 ss::future<> recorder::stop() { co_await _writer.release(); }
 
+void recorder::reset() { _writer.reset(); }
+
+void recorder::oom_writer::operator()(std::string_view msg) noexcept {
+    auto result = fmt::format_to_n(
+      _oom_msg_pos,
+      std::distance(_oom_msg_pos, _oom_cd->crash_message.end()),
+      "{}",
+      msg);
+    _oom_msg_pos = result.out;
+}
 } // namespace crash_tracker

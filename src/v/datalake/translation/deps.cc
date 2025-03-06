@@ -241,14 +241,27 @@ public:
         return kafka::prev_offset(model::offset_cast(lso.value()));
     }
 
-    ss::future<std::error_code> update_highest_translated_offset(
+    ss::future<std::error_code> replicate_highest_translated_offset(
       kafka::offset new_offset,
       model::term_id term,
       model::timeout_clock::duration timeout,
       ss::abort_source& as) final {
+        // _translation_target holds the max translatable offset from the last
+        // time we found new translatable records, along with the system time we
+        // found them. the general idea here is that, once we've translated
+        // up to an offset that meets or exceeds the stored target offset, any
+        // additional offsets must have become translatable at some
+        // _translation_target.ts + T. at this point, we can replicate the
+        // cached timestamp, since it provides a lower bound for when
+        // new_offset became translatable, from the perspective of the
+        // translator.
+        // If translation met or exceeded the target, also reset it to nullopt
+        // so that a new target can be set the next time fresh offsets become
+        // available for translation.
         std::optional<model::timestamp> new_ts{};
         if (_translation_target && new_offset >= _translation_target->offset) {
-            new_ts.emplace(_translation_target->ts);
+            new_ts.emplace(
+              std::exchange(_translation_target, std::nullopt)->ts);
         }
         return _stm->reset_highest_translated_offset(
           new_offset, new_ts, term, timeout, as);
@@ -327,12 +340,17 @@ private:
     // updated to max_offset_for_translation and current system time when
     // wait_for_data_to_translated finds untranslated offsets on the input
     // partition. the timestamp here is used as a rough approximation of
-    // the corresponding recor's write time, replicated when we translate
+    // the corresponding record's write time, replicated when we translate
     // an offset meeting or exceeding target.offset.
     std::optional<timestamped_offset> _translation_target;
 
     void update_translation_target() {
-        if (auto max_o = max_offset_for_translation(); max_o.has_value()) {
+        // don't set a new _translation_target until the current one is cleared
+        // out. this way we can't get into a situation where we're continually
+        // chasing the tip of the log but never reaching it (e.g. due to produce
+        // resources exceeding translate resources).
+        if (auto max_o = max_offset_for_translation();
+            !_translation_target.has_value() && max_o.has_value()) {
             _translation_target.emplace(
               timestamped_offset{max_o.value(), model::timestamp::now()});
         }

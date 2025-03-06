@@ -558,6 +558,8 @@ class SchemaEvolutionE2ETests(RedpandaTest):
             }).set_compatibility(subject_name=f"{self.topic_name}-value",
                                  level=compat_level)
             yield dl
+            # make sure nothing we did trashed our ability to read the whole table
+            self.select(dl, query_engine, cols=['*'])
 
     @cluster(num_nodes=3)
     @matrix(
@@ -840,90 +842,3 @@ class SchemaEvolutionE2ETests(RedpandaTest):
 
             assert len(select_out) == count * 3, \
                 f"Expected {count*3} rows, got {len(select_out)}"
-
-    @cluster(num_nodes=3)
-    @matrix(
-        cloud_storage_type=supported_storage_types(),
-        query_engine=QUERY_ENGINES,
-        use_partition_spec=[True, False],
-        catalog_type=supported_catalog_types(),
-    )
-    def test_partition_spec_evo(self, cloud_storage_type, query_engine,
-                                use_partition_spec, catalog_type):
-
-        tc = EvolutionTestCase(
-            initial_schema=GenericSchema(
-                fields=[
-                    {
-                        "name": "ts",
-                        "type": {
-                            "type": "int",
-                            "logicalType": "date",
-                        }
-                    },
-                ],
-                generate_record=lambda x: {
-                    "ts": int(x),
-                },
-                spark_table=[('ts', 'date')],
-                trino_table=[
-                    ('ts', 'date'),
-                ],
-            ),
-            next_schema=GenericSchema(
-                fields=[
-                    {
-                        "name": "ts",
-                        "type": {
-                            "type": "long",
-                            "logicalType": "timestamp-millis",
-                        }
-                    },
-                ],
-                generate_record=lambda x: {
-                    "ts": int(x) * 60 * 60 * 24,
-                },
-                spark_table=[('ts', 'timestamp_ntz')],
-                trino_table=[
-                    ('ts', 'timestamp(6)'),
-                ],
-            ),
-            partition_spec="(ts)" if use_partition_spec else None,
-        )
-
-        if tc.partition_spec is not None:
-            self.logger.debug(
-                f"Schema evolution should fail if the date field is referenced in the partition spec"
-            )
-        else:
-            self.logger.debug(
-                f"Schema evolution should succeed if the date field is not referenced in the partition spec"
-            )
-
-        with self.setup_services(query_engine,
-                                 partition_spec=tc.partition_spec,
-                                 catalog_type=catalog_type) as dl:
-            count = 10
-            ctx = TranslationContext()
-            tc.initial_schema.produce(dl,
-                                      self.topic_name,
-                                      count,
-                                      ctx,
-                                      mode=ProducerType.AVRO)
-
-            tc.initial_schema.check_table_schema(dl, self.table_name,
-                                                 query_engine)
-
-            tc.next_schema.produce(dl,
-                                   self.topic_name,
-                                   count,
-                                   ctx,
-                                   should_translate=not use_partition_spec,
-                                   mode=ProducerType.AVRO)
-
-            if use_partition_spec:
-                tc.initial_schema.check_table_schema(dl, self.table_name,
-                                                     query_engine)
-            else:
-                tc.next_schema.check_table_schema(dl, self.table_name,
-                                                  query_engine)

@@ -8,12 +8,9 @@
 // by the Apache License, Version 2.0
 
 #include "cluster/log_eviction_stm.h"
-#include "raft/tests/raft_group_fixture.h"
-#include "redpanda/tests/fixture.h"
+#include "raft/tests/raft_fixture.h"
 #include "storage/disk_log_impl.h"
-
-#include <boost/test/tools/old/interface.hpp>
-#include <boost/test/unit_test.hpp>
+#include "test_utils/async.h"
 
 ss::logger logger("eviction_stm_test");
 
@@ -22,6 +19,11 @@ public:
     test_log_eviction_stm(
       raft::consensus* c, ss::logger& logger, storage::kvstore& kvs)
       : cluster::log_eviction_stm(c, logger, kvs) {}
+
+    ss::future<> stop() override {
+        p->set_exception(ss::abort_requested_exception());
+        return cluster::log_eviction_stm::stop();
+    }
 
     /**
      * The two following methods can be used to drive the eviction stms
@@ -56,77 +58,71 @@ public:
     std::optional<ss::promise<model::offset>> p;
 };
 
-FIXTURE_TEST(test_eviction_stm_deadlock, raft_test_fixture) {
-    raft_group gr = raft_group(raft::group_id(0), 3);
-    gr.enable_all();
-    auto leader_id = wait_for_group_leader(gr);
-    auto leader_raft = gr.get_member(leader_id).consensus;
+struct eviction_stm_fixture : public raft::raft_fixture {};
 
-    /// Publish records and open new segments
-    auto impl = leader_raft->log();
-    std::vector<storage::offset_stats> offsets;
-    for (auto i = 0; i < 5; ++i) {
-        replicate_random_batches(gr, 20).get();
-        offsets.push_back(impl->offsets());
-        impl->force_roll(ss::default_priority_class()).get();
+TEST_F(eviction_stm_fixture, test_eviction_stm_deadlock) {
+    for (int i = 0; i < 3; ++i) {
+        add_node(model::node_id(0), model::revision_id(0));
     }
 
-    /// Create an instance of the log eviction stm, however using the subclass
-    /// above which allows this test to drive the storage eviction loop
-    ss::abort_source as;
-    test_log_eviction_stm eviction_stm(
-      leader_raft.get(),
-      logger,
-      gr.get_member(leader_id).storage.local().kvs());
-    eviction_stm.start().get();
-    auto cleanup = ss::defer([&] {
-        // NOTE: this it the natural order of shutdown.
-        leader_raft->stop().get();
-        as.request_abort();
-        eviction_stm.stop().get();
-    });
+    for (auto& [id, node] : nodes()) {
+        raft::state_machine_manager_builder stm_mgr_builder;
+        node->initialise(all_vnodes()).get();
+        stm_mgr_builder.create_stm<test_log_eviction_stm>(
+          node->raft().get(), logger(), node->get_kvstore());
 
+        node->start(std::move(stm_mgr_builder)).get();
+    }
+    std::vector<storage::offset_stats> offsets;
+    for (auto i = 0; i < 5; ++i) {
+        auto leader_id = wait_for_leader(10s).get();
+        auto& leader = node(leader_id);
+
+        leader.raft()
+          ->replicate(
+            make_batches(20, 1, 128),
+            raft::replicate_options(raft::consistency_level::quorum_ack))
+          .get();
+
+        auto log = leader.raft()->log();
+        offsets.push_back(log->offsets());
+        log->force_roll(ss::default_priority_class()).get();
+    }
+    auto leader_id = wait_for_leader(10s).get();
+    auto& leader = node(leader_id);
     /// Fufills the promise causing the monitor_log_eviction loop to continue
     const auto highest_term0_offset = offsets[0].dirty_offset;
-    eviction_stm.drive_eviction_loop(highest_term0_offset);
+    auto eviction_stm
+      = leader.raft()->stm_manager()->get<test_log_eviction_stm>();
+    eviction_stm->drive_eviction_loop(highest_term0_offset);
     auto next_start_offset = highest_term0_offset + model::offset(1);
     /// Wait until the effect has proceeded, i.e. a snapshot has been taken
     tests::cooperative_spin_wait_with_timeout(
       5s,
-      [leader_raft, highest_term0_offset] {
-          return leader_raft->last_snapshot_index() == highest_term0_offset;
+      [&leader, highest_term0_offset] {
+          return leader.raft()->last_snapshot_index() == highest_term0_offset;
       })
       .get();
     /// eviction_stm should report the correct new start offset
-    BOOST_CHECK_EQUAL(next_start_offset, eviction_stm.effective_start_offset());
+    ASSERT_EQ(next_start_offset, eviction_stm->effective_start_offset());
+    ss::sleep(5s).get();
+    /// Test deadlock, attempt to truncate at offset that will be translated
+    // to be below the raft last snapshot, this should have no effect
+    eviction_stm->drive_eviction_loop(next_start_offset);
 
-    /// Test deadlock, attempt to truncate at offset that will be translated to
-    /// be below the raft last snapshot, this should have no effect
-    eviction_stm.drive_eviction_loop(next_start_offset);
-
-    /// Then try to evict some more data, if this step fails, previous call had
-    /// initiated the deadlock
-    const auto highest_term1_offset = offsets[1].dirty_offset;
-    eviction_stm.drive_eviction_loop(highest_term1_offset);
+    /// Then try to evict some more data, if this step fails, previous call
+    /// const had initiated the deadlock
+    auto highest_term1_offset = offsets[1].dirty_offset;
+    eviction_stm->drive_eviction_loop(highest_term1_offset);
     /// Wait until the effect has proceeded, i.e. a snapshot has been taken,
     /// if this does not timeout, this means no deadlock has occurred
     tests::cooperative_spin_wait_with_timeout(
       5s,
-      [leader_raft, highest_term1_offset] {
-          return leader_raft->last_snapshot_index() >= highest_term1_offset;
+      [&leader, highest_term1_offset] {
+          return leader.raft()->last_snapshot_index() >= highest_term1_offset;
       })
       .get();
 
     next_start_offset = highest_term1_offset + model::offset(1);
-    BOOST_CHECK_EQUAL(next_start_offset, eviction_stm.effective_start_offset());
-    cleanup.cancel();
-
-    /// Shutdown the eviction stm, the abort source is externally managed
-    as.request_abort();
-    if (eviction_stm.p) {
-        /// Not really an error, allowing any existing futures waited on to
-        /// complete will allow the loop to be safely shutdown.
-        eviction_stm.p->set_exception(ss::abort_requested_exception());
-    }
-    eviction_stm.stop().get();
+    ASSERT_EQ(next_start_offset, eviction_stm->effective_start_offset());
 }

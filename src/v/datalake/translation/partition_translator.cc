@@ -14,6 +14,7 @@
 #include "resource_mgmt/io_priority.h"
 
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/util/defer.hh>
 
 namespace datalake::translation {
 
@@ -62,6 +63,9 @@ ss::futurize_t<FuncRet> retry_with_backoff(
         co_await ss::sleep_abortable(retry.delay, *retry.abort_source);
     }
 }
+constexpr std::chrono::milliseconds translation_jitter{500};
+constexpr std::chrono::milliseconds translation_jitter_base{5000};
+
 } // namespace
 
 partition_translator::partition_translator(
@@ -73,6 +77,7 @@ partition_translator::partition_translator(
   , _coordinator(std::move(coordinator))
   , _data_source(std::move(data_source))
   , _translation_ctx(std::move(translation_ctx))
+  , _jitter{translation_jitter_base, translation_jitter}
   , _term(_data_source->term())
   , _logger(
       datalake_log, fmt::format("{}-term-{}", _data_source->ntp(), _term)) {}
@@ -152,7 +157,16 @@ ss::future<> partition_translator::translate_until_stopped() {
       "[{}] Translation started before the translator is properly initialized",
       id);
 
+    bool needs_jitter = false;
     while (!_as.abort_requested()) {
+        if (needs_jitter) {
+            co_await ss::sleep_abortable(_jitter.next_duration(), _as);
+        }
+        // We'll keep track of if we exit early out of this iteration, in which
+        // case the next iteration should see some jitter.
+        auto scoped_set_jitter = ss::defer(
+          [&needs_jitter] { needs_jitter = true; });
+
         retry_chain_node rcn{
           _as, max_translation_task_timeout, initial_backoff};
 
@@ -168,7 +182,7 @@ ss::future<> partition_translator::translate_until_stopped() {
           kafka::prev_offset(_data_source->min_offset_for_translation()));
 
         auto reset_error
-          = co_await _data_source->update_highest_translated_offset(
+          = co_await _data_source->replicate_highest_translated_offset(
             last_translated_offset, _term, wait_timeout, _as);
 
         if (reset_error) {
@@ -269,16 +283,21 @@ ss::future<> partition_translator::translate_until_stopped() {
               _logger.warn,
               "Failed to checkpoint translated files: {}",
               checkpoint_result);
+            continue;
         }
 
-        reset_error = co_await _data_source->update_highest_translated_offset(
-          last_translated_offset, _term, wait_timeout, _as);
+        reset_error
+          = co_await _data_source->replicate_highest_translated_offset(
+            last_translated_offset, _term, wait_timeout, _as);
         if (reset_error) {
             vlog(
               _logger.warn,
               "error updating highest translated offset: {}",
               reset_error);
+            continue;
         }
+        scoped_set_jitter.cancel();
+        needs_jitter = false;
     }
 }
 

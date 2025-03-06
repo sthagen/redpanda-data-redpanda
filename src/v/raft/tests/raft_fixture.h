@@ -603,6 +603,10 @@ public:
 
     void enable_offset_translation() { _with_offset_translation = true; }
 
+    std::chrono::milliseconds get_election_timeout() const {
+        return _election_timeout();
+    }
+
 protected:
     class raft_not_leader_exception : std::exception {};
 

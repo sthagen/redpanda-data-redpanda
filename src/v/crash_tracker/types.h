@@ -29,7 +29,8 @@ enum class crash_type {
     segfault,
     abort,
     illegal_instruction,
-    assertion
+    assertion,
+    oom
 };
 
 std::ostream& operator<<(std::ostream&, crash_type);
@@ -42,7 +43,12 @@ struct reserved_string {
     static_assert(Size > 0, "Size must be greater than 0");
     // Add an extra byte for the trailing '\0'
     using underlying_t = std::array<char, Size + 1>;
-    using type = underlying_t::value_type;
+    using type = typename underlying_t::value_type;
+    using pointer = typename underlying_t::pointer;
+    using const_pointer = typename underlying_t::const_pointer;
+    using reference = typename underlying_t::reference;
+    using const_reference = typename underlying_t::const_reference;
+    using iterator = typename underlying_t::iterator;
 
     reserved_string() = default;
     explicit reserved_string(ss::sstring other) noexcept {
@@ -54,17 +60,19 @@ struct reserved_string {
         std::copy(other.begin(), other.end(), _str->begin());
     };
 
-    type* begin() { return _str->begin(); }
-    const type* c_str() const noexcept { return _str->data(); }
+    iterator begin() { return _str->begin(); }
+    iterator end() { return _str->end(); }
 
-    type& operator[](size_t i) { return (*_str)[i]; }
-    const type& operator[](size_t i) const { return (*_str)[i]; }
+    const_pointer c_str() const noexcept { return _str->data(); }
+
+    reference operator[](size_t i) { return (*_str)[i]; }
+    const_reference operator[](size_t i) const { return (*_str)[i]; }
 
     /// The length of the populated, non-'\0' prefix of the string.
     size_t length() const noexcept { return strlen(_str->data()); }
 
     /// The full capacity of the string, including the all-'\0' suffix.
-    size_t capacity() const noexcept { return Size; }
+    constexpr size_t capacity() const noexcept { return Size; }
 
 private:
     std::unique_ptr<underlying_t> _str{std::make_unique<underlying_t>()};

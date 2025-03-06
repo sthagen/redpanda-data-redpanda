@@ -127,37 +127,6 @@ bool matches(const metadata_query<ResultT>& query, const manifest& s) {
     return !query.manifest_matcher.has_value() || (*query.manifest_matcher)(s);
 }
 
-checked<
-  std::reference_wrapper<const schema>,
-  iceberg::metadata_query_executor::errc>
-get_snapshot_schema(const table_metadata& table, const snapshot& snap) {
-    auto s_it = std::ranges::find(
-      table.schemas, snap.schema_id, &schema::schema_id);
-    if (s_it == table.schemas.end()) {
-        return iceberg::metadata_query_executor::errc::
-          table_metadata_inconsistency;
-    }
-    return std::ref(*s_it);
-}
-
-checked<partition_key_type, iceberg::metadata_query_executor::errc>
-make_partition_key_type(
-  const table_metadata& table,
-  const schema& schema,
-  const manifest_file& m_file) {
-    auto p_spec_it = std::ranges::find(
-      table.partition_specs,
-      m_file.partition_spec_id,
-      &partition_spec::spec_id);
-
-    if (p_spec_it == table.partition_specs.end()) {
-        return iceberg::metadata_query_executor::errc::
-          table_metadata_inconsistency;
-    }
-
-    return partition_key_type::create(*p_spec_it, schema);
-}
-
 } // namespace
 
 template<result_type ResultT>
@@ -198,11 +167,6 @@ do_execute_query(
               fmt::underlying_t<metadata_io::errc>(m_list_result.error()));
             co_return metadata_query_executor::errc::metadata_io_error;
         }
-        auto schema_result = get_snapshot_schema(table, s);
-        if (schema_result.has_error()) {
-            co_return schema_result.error();
-        }
-        const auto& schema = schema_result.value().get();
         for (auto& manifest_file : m_list_result.value().files) {
             if (!matches(query, manifest_file)) {
                 continue;
@@ -213,14 +177,9 @@ do_execute_query(
                 }
                 continue;
             }
-            auto pk_result = make_partition_key_type(
-              table, schema, manifest_file);
-            if (pk_result.has_error()) {
-                co_return pk_result.error();
-            }
-            auto m_result = co_await io.download_manifest(
-              manifest_file.manifest_path, std::move(pk_result.value()));
 
+            auto m_result = co_await io.download_manifest(
+              manifest_file.manifest_path);
             if (m_result.has_error()) {
                 vlog(
                   log.warn,

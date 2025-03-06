@@ -99,6 +99,7 @@ class NessieCatalog(CatalogService):
         elif isinstance(self.credentials,
                         cloud_storage.ABSSharedKeyCredentials):
             env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_AUTH_TYPE"] = "STORAGE_SHARED_KEY"
+            env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_ENDPOINT"] = self.credentials.endpoint
             env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_ACCOUNT_NAME"] = self.credentials.account_name
             env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_ACCOUNT_SECRET"] = self.credentials.account_key
         return env

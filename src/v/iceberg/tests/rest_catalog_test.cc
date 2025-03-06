@@ -440,18 +440,22 @@ TEST_F(RestCatalogTest, CommitTxnHappyPath) {
     iceberg::rest_catalog catalog(
       std::move(client), config::mock_binding<std::chrono::milliseconds>(10s));
     auto table_md = create_empty_table_metadata(bucket_name);
-    chunked_vector<iceberg::data_file> files;
+    iceberg::transaction txn(std::move(table_md));
+
+    chunked_vector<iceberg::file_to_append> files;
     std::unique_ptr<iceberg::struct_value> partition_key_val
       = std::make_unique<iceberg::struct_value>();
     partition_key_val->fields.push_back(iceberg::int_value{0});
-
-    files.push_back(iceberg::data_file{
+    iceberg::data_file file{
       .content_type = iceberg::data_file_content_type::data,
       .file_format = iceberg::data_file_format::parquet,
       .partition = iceberg::partition_key{.val = std::move(partition_key_val)},
+    };
+    files.push_back(iceberg::file_to_append{
+      .file = std::move(file),
+      .schema_id = txn.table().current_schema_id,
+      .partition_spec_id = txn.table().default_spec_id,
     });
-
-    iceberg::transaction txn(std::move(table_md));
 
     auto outcome = txn.merge_append(io, std::move(files)).get();
     ASSERT_FALSE(outcome.has_error());

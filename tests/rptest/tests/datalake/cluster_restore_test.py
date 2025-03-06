@@ -40,6 +40,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             # Frequent Iceberg uploads.
             "iceberg_enabled": "true",
             "iceberg_catalog_commit_interval_ms": 1000,
+            "iceberg_target_lag_ms": 1000,
         }
         si_settings = SISettings(
             test_context,

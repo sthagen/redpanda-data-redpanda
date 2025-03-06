@@ -12,4 +12,10 @@ go_binary(
     name = "rpk",
     embed = [":rpk_lib"],
     visibility = ["//visibility:public"],
+    x_defs = {
+        "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/version.version": "{STABLE_GIT_LATEST_TAG}",
+        "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/version.rev": "{STABLE_GIT_COMMIT}",
+        "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/version.buildTime": "{FORMATTED_DATE}",
+        "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common.tag": "{STABLE_GIT_LATEST_TAG}",
+    },
 )

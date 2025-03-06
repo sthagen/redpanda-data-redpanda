@@ -498,9 +498,9 @@ int application::run(int ac, char** av) {
                 });
                 // must initialize configuration before services
                 hydrate_config(cfg);
+                init_crashtracker(app_signal);
                 initialize();
                 check_environment();
-                init_crashtracker(app_signal);
                 setup_metrics();
                 wire_up_and_start(app_signal);
                 post_start_tasks();

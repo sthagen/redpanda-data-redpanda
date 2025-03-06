@@ -9,6 +9,9 @@ build --linkopt -stdlib=libc++
 # By default build without CGO
 build --@rules_go//go/config:pure
 
+build:gofips --@rules_go//go/toolchain:sdk_name=go_sdk_with_systemcrypto
+build:gofips --@rules_go//go/config:pure=false
+
 # Improve caching and readability of filepaths that the compiler uses by not using
 # absolute paths, and instead use paths that are relative to the redpanda repo.
 # https://github.com/bazel-contrib/toolchains_llvm/pull/445#issuecomment-2605443516

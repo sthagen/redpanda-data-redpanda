@@ -142,7 +142,7 @@ redpanda_cc_btest(
 )
 
 redpanda_test_cc_library(
-    name = "raft_fixiture_retry_policy",
+    name = "raft_fixture_retry_policy",
     hdrs = [
         "raft_fixture_retry_policy.h",
     ],
@@ -161,7 +161,7 @@ redpanda_cc_gtest(
         "partition_properties_stm_test.cc",
     ],
     deps = [
-        ":raft_fixiture_retry_policy",
+        ":raft_fixture_retry_policy",
         ":utils",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:random",
@@ -569,6 +569,47 @@ redpanda_cc_btest(
         "@boost//:range",
         "@boost//:test",
         "@fmt",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "manual_log_deletion_test",
+    timeout = "short",
+    srcs = [
+        "manual_log_deletion_test.cc",
+    ],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/raft/tests:raft_fixture",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:to_string",
+        "@googletest//:gtest",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "eviction_stm_test",
+    timeout = "short",
+    srcs = [
+        "eviction_stm_test.cc",
+    ],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/raft/tests:raft_fixture",
+        "//src/v/storage",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:to_string",
+        "@googletest//:gtest",
+        "@seastar",
         "@seastar//:testing",
     ],
 )

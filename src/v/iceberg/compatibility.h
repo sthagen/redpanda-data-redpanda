@@ -13,6 +13,7 @@
 #include "iceberg/compatibility_types.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/partition.h"
+#include "iceberg/values.h"
 
 namespace iceberg {
 
@@ -41,6 +42,15 @@ namespace iceberg {
  */
 type_check_result
 check_types(const iceberg::field_type& src, const iceberg::field_type& dest);
+
+// Promote primitive value variant c++ type to the c++ variant type determined
+// by `dest`. Trivial promotion to the same type is allowed (e.g. int_value ->
+// int_value if `dest` is int_type), as well as promotions allowed by the v2
+// spec Primitive Type Promotion policy (int -> long, float -> double, decimal
+// -> decimal). Note: underlying c++ type for decimal values with any precision
+// is the same, so the promotion is trivial in this case as well.
+primitive_value
+promote_primitive_value_type(primitive_value value, const primitive_type& dest);
 
 /**
  * annotate_schema_transform - Answers whether a one schema can "evolve" into

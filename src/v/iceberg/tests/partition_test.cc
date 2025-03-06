@@ -235,3 +235,47 @@ TEST(PartitionTest, TestSpecResolve) {
         ASSERT_EQ(resolved, std::nullopt);
     }
 }
+
+TEST(PartitionTest, TestInvalidSpecResolve) {
+    auto schema_field_type = test_nested_schema_type();
+    const auto& schema_type = std::get<struct_type>(schema_field_type);
+
+    {
+        // spec with struct source field
+        auto input = chunked_vector<unresolved_partition_spec::field>::single(
+          unresolved_partition_spec::field{
+            .source_name = {"person"},
+            .transform = identity_transform{},
+            .name = "field1",
+          });
+        auto resolved = partition_spec::resolve(
+          unresolved_partition_spec{.fields = std::move(input)}, schema_type);
+        ASSERT_FALSE(resolved.has_value());
+    }
+
+    {
+        // spec with list source field
+        auto input = chunked_vector<unresolved_partition_spec::field>::single(
+          unresolved_partition_spec::field{
+            .source_name = {"qux"},
+            .transform = identity_transform{},
+            .name = "field1",
+          });
+        auto resolved = partition_spec::resolve(
+          unresolved_partition_spec{.fields = std::move(input)}, schema_type);
+        ASSERT_FALSE(resolved.has_value());
+    }
+
+    {
+        // spec with map source field
+        auto input = chunked_vector<unresolved_partition_spec::field>::single(
+          unresolved_partition_spec::field{
+            .source_name = {"quux"},
+            .transform = identity_transform{},
+            .name = "field1",
+          });
+        auto resolved = partition_spec::resolve(
+          unresolved_partition_spec{.fields = std::move(input)}, schema_type);
+        ASSERT_FALSE(resolved.has_value());
+    }
+}

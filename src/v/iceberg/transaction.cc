@@ -71,7 +71,7 @@ ss::future<transaction::txn_outcome> transaction::set_schema(schema s) {
 
 ss::future<transaction::txn_outcome> transaction::merge_append(
   manifest_io& io,
-  chunked_vector<data_file> files,
+  chunked_vector<file_to_append> files,
   chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props,
   std::optional<ss::sstring> tag_name,
   std::optional<int64_t> tag_expiration_ms) {
