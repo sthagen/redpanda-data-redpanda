@@ -14,40 +14,18 @@
 #include "model/fundamental.h"
 
 #include <algorithm>
+#include <iterator>
 
 namespace experimental::cloud_topics {
 
-void dl_stm_state::push_overlay(dl_version version, dl_overlay overlay) {
-    _version_invariant.set_version(version);
-
-    auto entry_it = std::find_if(
-      _overlays.begin(),
-      _overlays.end(),
-      [&overlay](const dl_overlay_entry& entry) {
-          return entry.overlay == overlay;
-      });
-    if (entry_it != _overlays.end()) {
-        // A duplicate push_overlay is tolerated if this is a retry. A retry can
-        // only happen if the version is the same.
-        // Otherwise it's an error.
-        if (entry_it->added_at == version) {
-            return;
-        }
-
-        throw std::runtime_error(fmt::format(
-          "Overlay already exists but added at a different version. Overlay: "
-          "{}, added_at: {}, "
-          "current_version: {}",
-          overlay,
-          entry_it->added_at,
-          version));
-    }
-
+void dl_stm_state::push_overlay(
+  dl_version version, dl_overlay overlay) noexcept {
     _overlays.push_back(dl_overlay_entry{
       .overlay = std::move(overlay),
       // The overlay becomes visible starting with the current version.
       .added_at = version,
     });
+    _version_invariant.set_version(version);
 }
 
 std::optional<dl_overlay>
@@ -145,6 +123,52 @@ void dl_stm_state::remove_snapshots_before(dl_version last_version_to_keep) {
     } else {
         _snapshots.erase(_snapshots.begin(), it);
     }
+}
+
+dl_stm_offsets& dl_stm_state::get_offsets() noexcept { return _offsets; }
+
+const dl_stm_offsets& dl_stm_state::get_offsets() const noexcept {
+    return _offsets;
+}
+
+dl_stm_state
+dl_stm_state::get_state_at(model::offset snapshot_at) const noexcept {
+    dl_stm_state result;
+    // Copy overlays
+    std::copy_if(
+      _overlays.begin(),
+      _overlays.end(),
+      std::back_inserter(result._overlays),
+      [snapshot_at](const dl_overlay_entry& o) noexcept {
+          return o.added_at() <= snapshot_at;
+      });
+    // Copy snapshots
+    std::copy_if(
+      _snapshots.begin(),
+      _snapshots.end(),
+      std::back_inserter(result._snapshots),
+      [snapshot_at](const dl_snapshot_id& o) noexcept {
+          return o.version() <= snapshot_at;
+      });
+    // Copy version invariant and offsets
+    if (!result._snapshots.empty()) {
+        // The snapshot versions can't go back
+        result._version_invariant.set_last_snapshot_version(
+          result._snapshots.back().version);
+    }
+    if (!result._overlays.empty()) {
+        dl_version ver;
+        for (const auto& ov : result._overlays) {
+            ver = std::max(ver, ov.added_at);
+            ver = std::max(ver, ov.removed_at);
+        }
+        result._version_invariant.set_version(ver);
+        result._offsets.advance_insync_offset(model::offset{ver()});
+        result._offsets.advance_applied_offset();
+    }
+    result._offsets.advance_last_reconciled_offset(
+      _offsets.get_last_reconciled_offset());
+    return result;
 }
 
 } // namespace experimental::cloud_topics

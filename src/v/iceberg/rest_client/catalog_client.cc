@@ -22,6 +22,7 @@
 #include "iceberg/rest_client/json.h"
 #include "iceberg/table_requests_json.h"
 #include "json/istreamwrapper.h"
+#include "ssx/future-util.h"
 
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
@@ -198,7 +199,27 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
     std::vector<http_call_error> retriable_errors{};
 
     while (true) {
-        const auto permit = rtc.retry();
+        retry_permit permit{};
+        try {
+            permit = rtc.retry();
+        } catch (...) {
+            auto ex = std::current_exception();
+            auto msg = fmt::format("{}", ex);
+            bool is_shutdown = ssx::is_shutdown_exception(ex);
+            vlogl(
+              log,
+              is_shutdown ? ss::log_level::debug : ss::log_level::error,
+              "Exception during catalog request: {}",
+              msg);
+            if (is_shutdown) {
+                co_return tl::unexpected(aborted_error{msg});
+            }
+            // NOTE: we only expect shutdown errors. If that's not the case,
+            // conservatively return a non-aborted error so callers don't think
+            // we're shutting down when we're not.
+            co_return tl::unexpected(
+              retries_exhausted{.errors = std::move(retriable_errors)});
+        }
         if (!permit.is_allowed) {
             co_return tl::unexpected(
               retries_exhausted{.errors = std::move(retriable_errors)});

@@ -129,6 +129,7 @@ redpanda_cc_library(
         "//src/v/iceberg:table_requests",
         "//src/v/iceberg:table_requests_json",
         "//src/v/json",
+        "//src/v/ssx:future_util",
         "//src/v/utils:named_type",
         "//src/v/utils:retry_chain_node",
         "@abseil-cpp//absl/strings",
