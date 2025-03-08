@@ -3,6 +3,7 @@ set (srcs
     scheduler_fixture.cc
     scheduler_tests.cc
     fair_scheduling_policy_tests.cc
+    partition_translator_tests.cc
 )
 
 rp_test(
@@ -11,7 +12,7 @@ rp_test(
   TIMEOUT 2000
   BINARY_NAME datalake_translation_tests
   SOURCES ${srcs}
-  LIBRARIES  v::datalake_translation v::features v::raft_fixture v::gtest_main
+  LIBRARIES  v::datalake_translation v::features v::raft_fixture v::gtest_main v::model_test_utils
   LABELS datalake
   ARGS "-- -c 1 -m 2G"
 )

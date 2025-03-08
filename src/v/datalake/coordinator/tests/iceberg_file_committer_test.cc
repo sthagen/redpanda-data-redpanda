@@ -228,7 +228,8 @@ TEST_F(FileCommitterTest, TestMissingTable) {
     load_res = catalog.load_table(table_ident).get();
     // The table should be created.
     ASSERT_FALSE(load_res.has_error());
-    ASSERT_FALSE(load_res.value().snapshots.has_value());
+    ASSERT_TRUE(load_res.value().snapshots.has_value());
+    ASSERT_EQ(0, load_res.value().snapshots->size());
 
     // Now try again with some data.
     state.topic_to_state[topic] = make_topic_state({{{0, 100}}});

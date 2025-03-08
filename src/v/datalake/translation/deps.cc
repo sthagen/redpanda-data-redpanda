@@ -473,6 +473,14 @@ public:
         co_return std::make_optional(std::move(result.value()));
     }
 
+    ss::future<> discard() final {
+        if (!_in_progress_translation) {
+            co_return;
+        }
+        auto task = std::exchange(_in_progress_translation, std::nullopt);
+        co_await std::move(task.value()).discard().discard_result();
+    }
+
 private:
     scheduling::clock::duration compute_target_lag() const {
         // todo: In addition to integrating with config subsystem, an additional

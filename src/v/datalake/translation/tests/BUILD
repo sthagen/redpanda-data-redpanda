@@ -72,3 +72,22 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "partition_translator_test",
+    timeout = "short",
+    srcs = [
+        "partition_translator_tests.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":scheduler_fixture",
+        "//src/v/datalake/translation:partition_translator",
+        "//src/v/datalake/translation:translator_deps",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random",
+        "@seastar",
+    ],
+)

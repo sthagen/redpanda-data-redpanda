@@ -192,6 +192,11 @@ public:
     virtual ss::future<std::optional<coordinator::translated_offset_range>>
     finish(retry_chain_node&, ss::abort_source&) = 0;
 
+    /**
+     * Cleans up state and discards an translated result.
+     */
+    virtual ss::future<> discard() = 0;
+
     static std::unique_ptr<translation_context>
     make_default_translation_context(
       local_path,

@@ -21,8 +21,6 @@ namespace datalake::translation {
 namespace {
 using namespace std::chrono_literals;
 // A simple utility to conditionally retry with backoff on failures.
-static constexpr std::chrono::milliseconds initial_backoff{300};
-static constexpr std::chrono::milliseconds max_translation_task_timeout{3min};
 constexpr model::timeout_clock::duration wait_timeout = 5s;
 
 template<
@@ -63,8 +61,6 @@ ss::futurize_t<FuncRet> retry_with_backoff(
         co_await ss::sleep_abortable(retry.delay, *retry.abort_source);
     }
 }
-constexpr std::chrono::milliseconds translation_jitter{500};
-constexpr std::chrono::milliseconds translation_jitter_base{5000};
 
 } // namespace
 
@@ -72,12 +68,17 @@ partition_translator::partition_translator(
   ss::scheduling_group sg,
   std::unique_ptr<coordinator_api> coordinator,
   std::unique_ptr<data_source> data_source,
-  std::unique_ptr<translation_context> translation_ctx)
+  std::unique_ptr<translation_context> translation_ctx,
+  jitter_t jitter,
+  std::chrono::milliseconds retry_max_timeout,
+  std::chrono::milliseconds retry_initial_backoff)
   : _sg(sg)
   , _coordinator(std::move(coordinator))
   , _data_source(std::move(data_source))
   , _translation_ctx(std::move(translation_ctx))
-  , _jitter{translation_jitter_base, translation_jitter}
+  , _jitter{std::move(jitter)}
+  , _retry_max_timeout(retry_max_timeout)
+  , _retry_initial_backoff(retry_initial_backoff)
   , _term(_data_source->term())
   , _logger(
       datalake_log, fmt::format("{}-term-{}", _data_source->ntp(), _term)) {}
@@ -167,8 +168,7 @@ ss::future<> partition_translator::translate_until_stopped() {
         auto scoped_set_jitter = ss::defer(
           [&needs_jitter] { needs_jitter = true; });
 
-        retry_chain_node rcn{
-          _as, max_translation_task_timeout, initial_backoff};
+        retry_chain_node rcn{_as, _retry_max_timeout, _retry_initial_backoff};
 
         // Reconcile with the coordinator
         auto result = co_await fetch_latest_translated_offset(rcn);
@@ -239,9 +239,7 @@ ss::future<> partition_translator::translate_until_stopped() {
               "Translation attempt failed: {}, discarding state to reset "
               "translation",
               translate_f.get_exception());
-            // todo(tests): add more tests to exercise this branch logic
-            // todo: enhance the API to skip uploading to cloud storage.
-            co_await _translation_ctx->finish(rcn, _as).discard_result();
+            co_await _translation_ctx->discard();
             continue;
         }
 

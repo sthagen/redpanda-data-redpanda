@@ -287,6 +287,38 @@ translation_task::finish(
     co_return ret;
 }
 
+ss::future<checked<std::nullopt_t, translation_task::errc>>
+translation_task::discard() && {
+    auto mux_result = co_await std::move(_multiplexer).finish();
+    if (mux_result.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "Error writing data files - {}",
+          mux_result.error());
+        co_return errc::file_io_error;
+    }
+    auto write_result = std::move(mux_result).value();
+    auto [data_result, dlq_result] = co_await ss::when_all_succeed(
+      delete_local_data_files(write_result.data_files),
+      delete_local_data_files(write_result.dlq_files));
+
+    if (data_result.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "error deleting local data files - {}",
+          data_result.error());
+        co_return data_result.error();
+    }
+    if (dlq_result.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "error deleting local dlq files - {}",
+          data_result.error());
+        co_return dlq_result.error();
+    }
+    co_return std::nullopt;
+}
+
 std::ostream& operator<<(std::ostream& o, translation_task::errc ec) {
     switch (ec) {
     case translation_task::errc::file_io_error:

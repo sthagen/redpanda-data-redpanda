@@ -78,6 +78,7 @@ filesystem_catalog::create_table(
       .partition_specs = std::move(specs),
       .default_spec_id = partition_spec::id_t{0},
       .last_partition_id = highest_pid,
+      .snapshots = chunked_vector<snapshot>{},
       .sort_orders = std::move(sort_orders),
       .default_sort_order_id = sort_order::id_t{0},
     };

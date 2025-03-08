@@ -282,7 +282,7 @@ scheduler::scheduler(
       });
 }
 
-void scheduler::notify_ready(const translator_id& id) {
+void scheduler::notify_ready(const translator_id& id) noexcept {
     if (_executor.gate.is_closed()) {
         return;
     }
@@ -307,8 +307,10 @@ void scheduler::notify_ready(const translator_id& id) {
     _state_changed_cvar.signal();
 }
 
-void scheduler::notify_done(const translator_id& id) {
-    auto holder = _executor.gate.hold();
+void scheduler::notify_done(const translator_id& id) noexcept {
+    if (_executor.gate.is_closed()) {
+        return;
+    }
     vlog(datalake_log.trace, "done notification from translator: {}", id);
     auto it = _executor.translators.find(id);
     if (it == _executor.translators.end()) {

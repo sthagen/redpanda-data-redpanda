@@ -74,6 +74,13 @@ public:
       retry_chain_node& parent_rcn,
       ss::abort_source&) &&;
 
+    /**
+     * Cleans up any translated files locally and discards the translation
+     * result. This task does not accept an abort source as it is intended
+     * to be short running.
+     */
+    ss::future<checked<std::nullopt_t, translation_task::errc>> discard() &&;
+
 private:
     friend std::ostream& operator<<(std::ostream&, errc);
 

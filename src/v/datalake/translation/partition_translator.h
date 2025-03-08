@@ -63,12 +63,19 @@ namespace datalake::translation {
  * See scheduler.h for more details on scheduling translators in general.
  */
 class partition_translator : public scheduling::translator {
+private:
+    using jitter_t
+      = simple_time_jitter<ss::lowres_clock, std::chrono::milliseconds>;
+
 public:
     explicit partition_translator(
       ss::scheduling_group,
       std::unique_ptr<coordinator_api>,
       std::unique_ptr<data_source>,
-      std::unique_ptr<translation_context>);
+      std::unique_ptr<translation_context>,
+      jitter_t jitter,
+      std::chrono::milliseconds retry_max_timeout,
+      std::chrono::milliseconds retry_initial_backoff);
 
     const scheduling::translator_id& id() const final;
 
@@ -145,9 +152,9 @@ private:
     std::unique_ptr<data_source> _data_source;
     std::unique_ptr<translation_context> _translation_ctx;
     // TODO: consider baking backoff into the scheduler on translation failure.
-    using jitter_t
-      = simple_time_jitter<ss::lowres_clock, std::chrono::milliseconds>;
     jitter_t _jitter;
+    std::chrono::milliseconds _retry_max_timeout;
+    std::chrono::milliseconds _retry_initial_backoff;
     model::term_id _term;
     prefix_logger _logger;
     bool _initialized = false;

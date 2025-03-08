@@ -41,13 +41,13 @@ public:
      * Notifies that the translator with the given id is ready to translate
      * data.
      */
-    virtual void notify_ready(const translator_id&) = 0;
+    virtual void notify_ready(const translator_id&) noexcept = 0;
 
     /**
      * Notifies that the translator with the given id has finished the currently
      * in progress translation and has released all the resources.
      */
-    virtual void notify_done(const translator_id&) = 0;
+    virtual void notify_done(const translator_id&) noexcept = 0;
 
     /**
      * Notifies that the translators cannot make progress due to memory
@@ -333,8 +333,8 @@ public:
     scheduler& operator=(scheduler&&) = delete;
     ~scheduler() override = default;
 
-    void notify_ready(const translator_id&) override;
-    void notify_done(const translator_id&) override;
+    void notify_ready(const translator_id&) noexcept override;
+    void notify_done(const translator_id&) noexcept override;
     void notify_memory_exhausted() override;
 
     ss::future<> stop();

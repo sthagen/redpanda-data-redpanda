@@ -481,10 +481,12 @@ class DataTransformsTest(BaseDataTransformsTest):
     @matrix(offset=[
         "+0",
         "-1",
-        f"@{int(time.time() * 1000)}",
+        "__current_time__",
         "+9223372036854775807",  # int64_max - should clamp to start at latest
     ])
     def test_consume_from_offset(self, offset):
+        if offset == "__current_time__":
+            offset = f"@{int(time.time() * 1000)}"
         '''
         Verify that offset-delta based and timestamp based consumption works as expected.
         That is, records produced prior to deployment should still be accessible given an
@@ -533,12 +535,14 @@ class DataTransformsTest(BaseDataTransformsTest):
         "@9223372036854775807",  # int64_max (out of range for millis)
         "+NaN",  # lexical cast error (literal NaN)
         "-9223372036854775808",  # lexical cast error (int64 overflow)
-        f"@{time.time() * 1000}",  # lexical cast error (float value)
+        "__current_time__",
         "@-10",  # illegal negative value
         "--10",  # illegal negative value
         "+-10",  # illegal negative value
     ])
     def test_consume_junk_off(self, offset):
+        if offset == "__current_time__":
+            offset = f"@{time.time() * 1000}"  # lexical cast error (float value)
         '''
         Tests for junk data. Deployment should fail cleanly in the admin API or rpk.
         '''
