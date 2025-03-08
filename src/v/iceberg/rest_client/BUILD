@@ -3,6 +3,23 @@ load("//bazel:build.bzl", "redpanda_cc_library")
 package(default_visibility = ["//src/v/iceberg:__subpackages__"])
 
 redpanda_cc_library(
+    name = "client_probe",
+    srcs = [
+        "client_probe.cc",
+    ],
+    hdrs = [
+        "client_probe.h",
+    ],
+    include_prefix = "iceberg/rest_client",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/http",
+        "//src/v/metrics",
+        "//src/v/net",
+    ],
+)
+
+redpanda_cc_library(
     name = "error",
     srcs = [
         "error.cc",
@@ -108,6 +125,7 @@ redpanda_cc_library(
     include_prefix = "iceberg/rest_client",
     visibility = ["//visibility:public"],
     deps = [
+        ":client_probe",
         ":credentials",
         ":entities",
         ":error",

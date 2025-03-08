@@ -439,7 +439,7 @@ group::duration_type group::rebalance_timeout() const {
         return it->second->rebalance_timeout();
     } else {
         vlog(_ctxlog.trace, "Cannot compute rebalance timeout for empty group");
-        throw std::runtime_error("no members in group");
+        return 0s;
     }
 }
 

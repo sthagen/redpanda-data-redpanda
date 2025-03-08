@@ -162,7 +162,6 @@ def data_dependency():
         sha256 = "d12be25cebdd06ad91a70b950f9ab61a4fd43d27b119a943e95911f5b25bdf97",
         strip_prefix = "seastar-534c1a88bccacd2bcd8a35a062e929001ecda279",
         url = "https://github.com/redpanda-data/seastar/archive/534c1a88bccacd2bcd8a35a062e929001ecda279.tar.gz",
-        patches = ["//bazel/thirdparty:seastar-remove-libnuma.patch"],
         patch_args = ["-p1"],
     )
 

@@ -17,6 +17,9 @@ class catalog;
 class filesystem_catalog;
 class rest_catalog;
 } // namespace iceberg
+namespace iceberg::rest_client {
+class client_probe;
+} // namespace iceberg::rest_client
 
 namespace datalake::coordinator {
 
@@ -31,7 +34,9 @@ public:
  */
 class rest_catalog_factory : public catalog_factory {
 public:
-    explicit rest_catalog_factory(config::configuration& config);
+    explicit rest_catalog_factory(
+      config::configuration& config, ss::metrics::label_instance);
+    ~rest_catalog_factory() override;
 
     ss::future<std::unique_ptr<iceberg::catalog>> create_catalog() final;
 
@@ -45,6 +50,7 @@ private:
     credentials_and_token make_credentials_or_token();
 
     config::configuration* config_;
+    ss::shared_ptr<iceberg::rest_client::client_probe> client_probe_;
 };
 /**
  * Filesystem catalog factory, the will use provided cloud_io::remote and bucket
@@ -67,10 +73,13 @@ private:
 
 /**
  * Returns a catalog factory based on the configuration provided.
+ * The given metrics label instance should distinguish metrics from different
+ * instances of catalog factory instances.
  */
 std::unique_ptr<catalog_factory> get_catalog_factory(
   config::configuration& config,
   cloud_io::remote& remote,
-  const cloud_storage_clients::bucket_name& bucket);
+  const cloud_storage_clients::bucket_name& bucket,
+  ss::metrics::label_instance label);
 
 } // namespace datalake::coordinator

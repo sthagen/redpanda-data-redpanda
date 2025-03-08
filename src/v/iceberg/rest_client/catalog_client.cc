@@ -99,14 +99,16 @@ catalog_client::catalog_client(
   std::optional<api_version> api_version,
   std::optional<oauth_token> token,
   std::unique_ptr<retry_policy> retry_policy,
-  config::datalake_catalog_auth_mode auth_mode)
+  config::datalake_catalog_auth_mode auth_mode,
+  ss::shared_ptr<client_probe> probe)
   : _http_client(std::move(http_client))
   , _endpoint{std::move(endpoint)}
   , _credentials{std::move(credentials)}
   , _path_components{std::move(base_path), std::move(prefix), std::move(api_version)}
   , _oauth_token{std::move(token)}
   , _retry_policy{retry_policy ? std::move(retry_policy) : std::make_unique<default_retry_policy>()}
-  , _auth_mode(auth_mode) {}
+  , _auth_mode(auth_mode)
+  , _probe(std::move(probe)) {}
 
 ss::future<expected<oauth_token>>
 catalog_client::acquire_token(retry_chain_node& rtc) {
@@ -135,7 +137,11 @@ catalog_client::acquire_token(retry_chain_node& rtc) {
       // to the catalog client
       {"scope", "PRINCIPAL_ROLE:ALL"},
     });
-    co_return (co_await perform_request(rtc, token_request, std::move(payload)))
+    co_return (co_await perform_request(
+                 rtc,
+                 token_request,
+                 client_probe::endpoint::oauth_token,
+                 std::move(payload)))
       .and_then(parse_json)
       .and_then(parse_as_expected("oauth_token", parse_oauth_token));
 }
@@ -191,6 +197,7 @@ ss::future<expected<std::monostate>> catalog_client::maybe_add_bearer_auth(
 ss::future<expected<iobuf>> catalog_client::perform_request(
   retry_chain_node& rtc,
   http::request_builder request_builder,
+  client_probe::endpoint endpoint,
   std::optional<iobuf> payload) {
     if (payload.has_value()) {
         request_builder.with_content_length(payload.value().size_bytes());
@@ -221,6 +228,9 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
               retries_exhausted{.errors = std::move(retriable_errors)});
         }
         if (!permit.is_allowed) {
+            if (!retriable_errors.empty() && _probe) {
+                _probe->register_timeout();
+            }
             co_return tl::unexpected(
               retries_exhausted{.errors = std::move(retriable_errors)});
         }
@@ -229,6 +239,9 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
             co_return tl::unexpected(request.error());
         }
 
+        if (_probe) {
+            _probe->register_request(endpoint);
+        }
         auto response_f = co_await ss::coroutine::as_future(
           _http_client->request_and_collect_response(
             std::move(request.value()),
@@ -245,6 +258,11 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
         if (error.aborted) {
             co_return tl::unexpected(
               aborted_error{"Shutting down while evaluating retry"});
+        }
+        if (_probe) {
+            // NOTE: aborted, above, implies Redpanda itself is shutting down,
+            // so don't count them towards failed requests.
+            _probe->register_failed_request(endpoint);
         }
         if (!error.can_be_retried) {
             co_return tl::unexpected(std::move(error.err));
@@ -274,7 +292,10 @@ catalog_client::create_namespace(
     }
 
     co_return (co_await perform_request(
-                 rtc, http_request, serialize_payload_as_json(req)))
+                 rtc,
+                 http_request,
+                 client_probe::endpoint::create_namespace,
+                 serialize_payload_as_json(req)))
       .and_then(parse_json)
       .and_then(
         parse_as_expected("create_namespace", parse_create_namespace_response));
@@ -293,7 +314,10 @@ ss::future<expected<load_table_result>> catalog_client::create_table(
     }
 
     co_return (co_await perform_request(
-                 rtc, http_request, serialize_payload_as_json(req)))
+                 rtc,
+                 http_request,
+                 client_probe::endpoint::create_table,
+                 serialize_payload_as_json(req)))
       .and_then(parse_json)
       .and_then(parse_as_expected("create_table", parse_load_table_result));
 }
@@ -309,7 +333,8 @@ ss::future<expected<load_table_result>> catalog_client::load_table(
         co_return tl::unexpected(auth_result.error());
     }
 
-    co_return (co_await perform_request(rtc, http_request))
+    co_return (co_await perform_request(
+                 rtc, http_request, client_probe::endpoint::load_table))
       .and_then(parse_json)
       .and_then(parse_as_expected("load_table", parse_load_table_result));
 }
@@ -333,10 +358,12 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
         co_return tl::unexpected(auth_result.error());
     }
 
-    co_return (co_await perform_request(rtc, http_request)).map([](iobuf&&) {
-        // we expect empty response, discard it
-        return std::monostate{};
-    });
+    co_return (co_await perform_request(
+                 rtc, http_request, client_probe::endpoint::drop_table))
+      .map([](iobuf&&) {
+          // we expect empty response, discard it
+          return std::monostate{};
+      });
 }
 
 ss::future<expected<commit_table_response>> catalog_client::commit_table_update(
@@ -351,7 +378,10 @@ ss::future<expected<commit_table_response>> catalog_client::commit_table_update(
     }
 
     co_return (co_await perform_request(
-                 rtc, http_request, serialize_payload_as_json(commit_request)))
+                 rtc,
+                 http_request,
+                 client_probe::endpoint::commit_table_update,
+                 serialize_payload_as_json(commit_request)))
       .and_then(parse_json)
       .and_then(
         parse_as_expected("commit_table_update", parse_commit_table_response));

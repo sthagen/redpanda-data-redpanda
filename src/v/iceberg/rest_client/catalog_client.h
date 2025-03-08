@@ -14,6 +14,7 @@
 #include "config/types.h"
 #include "http/client.h"
 #include "http/request_builder.h"
+#include "iceberg/rest_client/client_probe.h"
 #include "iceberg/rest_client/credentials.h"
 #include "iceberg/rest_client/error.h"
 #include "iceberg/rest_client/oauth_token.h"
@@ -93,7 +94,8 @@ public:
       std::optional<oauth_token> token = std::nullopt,
       std::unique_ptr<retry_policy> retry_policy = nullptr,
       config::datalake_catalog_auth_mode auth_mode
-      = config::datalake_catalog_auth_mode::none);
+      = config::datalake_catalog_auth_mode::none,
+      ss::shared_ptr<client_probe> probe = nullptr);
     /**
      * The REST client allows interaction with Iceberg REST catalog implementing
      * the Iceberg Catalog OpenApi Specification as stated here:
@@ -185,6 +187,7 @@ private:
     ss::future<expected<iobuf>> perform_request(
       retry_chain_node& rtc,
       http::request_builder request_builder,
+      client_probe::endpoint endpoint,
       std::optional<iobuf> payload = std::nullopt);
 
     std::unique_ptr<http::abstract_client> _http_client;
@@ -194,6 +197,7 @@ private:
     std::optional<oauth_token> _oauth_token{std::nullopt};
     std::unique_ptr<retry_policy> _retry_policy;
     config::datalake_catalog_auth_mode _auth_mode;
+    ss::shared_ptr<client_probe> _probe;
 
     friend class catalog_client_tester;
 };

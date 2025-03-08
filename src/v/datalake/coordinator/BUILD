@@ -125,6 +125,7 @@ redpanda_cc_library(
         "//src/v/iceberg:filesystem_catalog",
         "//src/v/iceberg:rest_catalog",
         "//src/v/iceberg/rest_client:client",
+        "//src/v/iceberg/rest_client:client_probe",
         "//src/v/net",
         "//src/v/thirdparty/ada",
         "@abseil-cpp//absl/strings",

@@ -18,6 +18,7 @@ from rptest.clients.default import DefaultClient
 from rptest.clients.offline_log_viewer import OfflineLogViewer
 from rptest.services.cluster import cluster
 
+from rptest.clients.kcl import RawKCL
 from rptest.clients.rpk import RpkException, RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.kafka_cli_consumer import KafkaCliConsumer
@@ -56,6 +57,9 @@ class ConsumerGroupTest(RedpandaTest):
                 "default_topic_replications": 3
             },
             **kwargs)
+
+        self.rpk = RpkTool(self.redpanda)
+        self.kcl = RawKCL(self.redpanda)
 
     def make_consumer_properties(base_properties, instance_id=None):
         properties = {}
@@ -654,6 +658,97 @@ class ConsumerGroupTest(RedpandaTest):
         consumer2.stop()
         consumer2.wait()
         consumer2.free()
+
+        self.producer.wait()
+        self.producer.free()
+
+    @cluster(num_nodes=5)
+    def test_last_member_expiry_with_pending_member(self):
+        """
+        Regression test to demonstrate the behaviour in the case when the last
+        member of the consumer group expires while there are pending members in
+        the group
+        """
+        self.create_topic(20)
+        group = 'test-gr-1'
+
+        self.redpanda._admin.set_log_level("kafka", "trace")
+
+        self.redpanda.logger.info("Starting my-consumer-1")
+        consumer1 = self.create_consumer(topic=self.topic_spec.name,
+                                         group=group,
+                                         instance_name="static-consumer",
+                                         instance_id="panda-instance",
+                                         consumer_properties={
+                                             "client.id": "client-1",
+                                             "session.timeout.ms": 10000
+                                         })
+        consumer1.start()
+
+        self.redpanda.logger.info("Starting producer")
+        self.start_producer()
+
+        self.redpanda.logger.info(
+            "Waiting for the consumer group to become Stable and make progress"
+        )
+        self.wait_for_members(group, 1)
+        wait_until(
+            lambda: ConsumerGroupTest.consumed_at_least([consumer1], 50),
+            timeout_sec=30,
+            backoff_sec=2,
+            err_msg="consumer-1 did not consume messages")
+
+        self.redpanda.logger.info(
+            "Stop consumer-1, without sending LeaveGroupReq since it is a static consumer"
+        )
+        consumer1.stop()
+        consumer1.wait()
+        consumer1.free()
+
+        self.redpanda.logger.info(
+            "Send a JoinGroupReq without completing the join")
+        # This simulates the first JoinGroupRequest a new consumer sends. It
+        # does not include a member id, so the broker responds with a
+        # member_id_required error and **adds this consumer to the list of
+        # pending members**
+        resp = self.kcl.raw_join_group({
+            "Version": 5,
+            "Group": group,
+            "SessionTimeoutMillis": 60000,
+            "RebalanceTimeoutMillis": 60000,
+            "ProtocolType": "consumer",
+            "Protocols": [{
+                "Name": "range"
+            }]
+        })
+        self.redpanda.logger.debug(f"JoinGroupResponse: {resp}")
+        member_id_required = 79
+        assert resp['ErrorCode'] == member_id_required,\
+            f"Unexpected response ErrorCode: {resp}"
+
+        self.redpanda.logger.info("Wait out the session timeout of consumer-1")
+        time.sleep(10)
+
+        self.redpanda.logger.info(
+            "Verify that there is no regression: removing the expiring consumer doesn't lead to an error log, and transitions the group to Empty"
+        )
+        # ERROR ... seastar - Timer callback failed: std::runtime_error (no members in group)
+        assert self.redpanda.search_log_any("Removing member panda-instance-")
+        assert not self.redpanda.search_log_any("Timer callback failed")
+
+        self.redpanda.logger.info("Verify that the group became Empty")
+
+        def group_is_empty():
+            res = self.rpk.group_describe(group)
+            return res.members == 0 and res.state == "Empty"
+
+        wait_until(
+            group_is_empty,
+            timeout_sec=30,
+            backoff_sec=2,
+            err_msg=
+            "The consumer group should become Empty when the last member expires"
+        )
 
         self.producer.wait()
         self.producer.free()

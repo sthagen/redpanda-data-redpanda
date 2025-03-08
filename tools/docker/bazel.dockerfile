@@ -1,6 +1,7 @@
 ARG BASE_IMAGE_OS_NAME=fedora
 ARG BASE_IMAGE_OS_VERSION=38
 FROM ${BASE_IMAGE_OS_NAME}:${BASE_IMAGE_OS_VERSION}
+ARG TARGETARCH
 
 COPY --chown=0:0 bazel/install-deps.sh /
 
@@ -9,7 +10,7 @@ RUN dnf install -y wget || { apt-get update && apt install -y wget; }
 # ubuntu already has this installed by default
 RUN dnf install -y procps-ng || true
 RUN wget -O /usr/local/bin/bazel \
-        https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64 && \
+        https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${TARGETARCH} && \
         chmod +x /usr/local/bin/bazel
 
 # run after wget installation to take advantage of pkg cache cleaning

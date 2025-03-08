@@ -16,6 +16,7 @@
 #include "iceberg/filesystem_catalog.h"
 #include "iceberg/rest_catalog.h"
 #include "iceberg/rest_client/catalog_client.h"
+#include "iceberg/rest_client/client_probe.h"
 #include "net/tls.h"
 #include "net/tls_certificate_probe.h"
 #include "thirdparty/ada/ada.h"
@@ -135,8 +136,14 @@ filesystem_catalog_factory::create_catalog() {
       *remote_, bucket_, config_->iceberg_catalog_base_location());
 }
 
-rest_catalog_factory::rest_catalog_factory(config::configuration& config)
-  : config_(&config) {}
+rest_catalog_factory::~rest_catalog_factory() {}
+
+rest_catalog_factory::rest_catalog_factory(
+  config::configuration& config, ss::metrics::label_instance label)
+  : config_(&config)
+  , client_probe_(ss::make_shared<iceberg::rest_client::client_probe>(
+      net::public_metrics_disabled(config.disable_public_metrics()),
+      std::move(label))) {}
 
 rest_catalog_factory::credentials_and_token
 rest_catalog_factory::make_credentials_or_token() {
@@ -182,7 +189,8 @@ rest_catalog_factory::create_catalog() {
     }
     std::unique_ptr<http::abstract_client> http_client
       = static_cast<std::unique_ptr<http::abstract_client>>(
-        std::make_unique<http::client>(std::move(transport_config)));
+        std::make_unique<http::client>(
+          std::move(transport_config), nullptr, client_probe_));
     auto prefix_path
       = config_->iceberg_rest_catalog_prefix()
           ? std::make_optional<iceberg::rest_client::prefix_path>(
@@ -203,13 +211,13 @@ rest_catalog_factory::create_catalog() {
       std::move(http_client),
       config_->iceberg_rest_catalog_endpoint().value(),
       std::move(creds_and_token.credentials),
-      std::move(endpoint_information.base_path),          // base_path
-      std::move(prefix_path),                             // prefix
-      std::nullopt,                                       // api_version
-      std::move(creds_and_token.token),                   // token
-      nullptr,                                            // retry_policy
-      config_->iceberg_rest_catalog_authentication_mode() // auth_mode
-    );
+      std::move(endpoint_information.base_path),           // base_path
+      std::move(prefix_path),                              // prefix
+      std::nullopt,                                        // api_version
+      std::move(creds_and_token.token),                    // token
+      nullptr,                                             // retry_policy
+      config_->iceberg_rest_catalog_authentication_mode(), // auth_mode
+      client_probe_);
 
     co_return std::make_unique<iceberg::rest_catalog>(
       std::move(client),
@@ -219,14 +227,15 @@ rest_catalog_factory::create_catalog() {
 std::unique_ptr<catalog_factory> get_catalog_factory(
   config::configuration& config,
   cloud_io::remote& remote,
-  const cloud_storage_clients::bucket_name& bucket) {
+  const cloud_storage_clients::bucket_name& bucket,
+  ss::metrics::label_instance label) {
     if (
       config.iceberg_catalog_type()
       == config::datalake_catalog_type::object_storage) {
         return std::make_unique<filesystem_catalog_factory>(
           config, remote, bucket);
     } else {
-        return std::make_unique<rest_catalog_factory>(config);
+        return std::make_unique<rest_catalog_factory>(config, std::move(label));
     }
 }
 } // namespace datalake::coordinator

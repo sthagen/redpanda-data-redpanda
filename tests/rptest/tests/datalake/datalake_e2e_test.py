@@ -13,7 +13,7 @@ from random import randint
 
 from confluent_kafka import avro
 from confluent_kafka.avro import AvroProducer
-from rptest.services.redpanda import PandaproxyConfig, SchemaRegistryConfig, SISettings
+from rptest.services.redpanda import PandaproxyConfig, SchemaRegistryConfig, SISettings, MetricsEndpoint
 from rptest.services.redpanda import CloudStorageType, SISettings
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.tests.datalake.datalake_services import DatalakeServices
@@ -417,3 +417,68 @@ class DatalakeMetricsTest(RedpandaTest):
                               DatalakeMetricsTest.commit_lag,
                               0,
                               timeout_sec=45)
+
+    @cluster(num_nodes=5)
+    @matrix(cloud_storage_type=supported_storage_types())
+    def test_rest_catalog_metrics(self, cloud_storage_type):
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              include_query_engines=[],
+                              catalog_type=CatalogType.REST_JDBC) as dl:
+            commit_table_metric = "redpanda_iceberg_rest_client_num_commit_table_update_requests_total"
+            create_table_metric = "redpanda_iceberg_rest_client_num_create_table_requests_total"
+            load_table_metric = "redpanda_iceberg_rest_client_num_load_table_requests_total"
+            drop_table_metric = "redpanda_iceberg_rest_client_num_drop_table_requests_total"
+            timeouts_metric = "redpanda_iceberg_rest_client_num_request_timeouts_total"
+
+            dl.create_iceberg_enabled_topic(self.topic_name,
+                                            partitions=1,
+                                            replicas=3)
+            dl.produce_to_topic(self.topic_name, 1024, 10)
+
+            # Wait until we have committed to the table -- this implies several
+            # other metrics should be ticked as well.
+            wait_until(lambda: self.redpanda.metric_sum(
+                commit_table_metric, MetricsEndpoint.PUBLIC_METRICS) > 0,
+                       timeout_sec=30,
+                       backoff_sec=1)
+
+            create_metric_val = self.redpanda.metric_sum(
+                create_table_metric, MetricsEndpoint.PUBLIC_METRICS)
+            assert create_metric_val > 0, f"Expected >0 for {create_table_metric}: {create_metric_val}"
+
+            load_metric_val = self.redpanda.metric_sum(
+                load_table_metric, MetricsEndpoint.PUBLIC_METRICS)
+            assert load_metric_val > 0, f"Expected >0 for {load_table_metric}: {load_metric_val}"
+
+            # The metric for dropped tables should not show up until we drop
+            # the topic.
+            drop_metric_val = self.redpanda.metric_sum(
+                drop_table_metric, MetricsEndpoint.PUBLIC_METRICS)
+            assert drop_metric_val == 0, f"Expected ==0 for {drop_table_metric}: {drop_metric_val}"
+
+            rpk = RpkTool(self.redpanda)
+            rpk.delete_topic(self.topic_name)
+
+            wait_until(lambda: self.redpanda.metric_sum(
+                drop_table_metric, MetricsEndpoint.PUBLIC_METRICS) > 0,
+                       timeout_sec=30,
+                       backoff_sec=1)
+
+            # Stop the catalog to halt the translation flow
+            dl.catalog_service.stop()
+
+            # Our topic is deleted, so we shouldn't see any errors until we
+            # start producing again.
+            timeouts_metric_val = self.redpanda.metric_sum(
+                timeouts_metric, MetricsEndpoint.PUBLIC_METRICS)
+            assert timeouts_metric_val == 0, f"Expected ==0 for {timeouts_metric}: {timeouts_metric_val}"
+
+            dl.create_iceberg_enabled_topic(self.topic_name,
+                                            partitions=1,
+                                            replicas=3)
+            dl.produce_to_topic(self.topic_name, 1024, 10)
+            wait_until(lambda: self.redpanda.metric_sum(
+                timeouts_metric, MetricsEndpoint.PUBLIC_METRICS) > 0,
+                       timeout_sec=30,
+                       backoff_sec=1)

@@ -1347,7 +1347,10 @@ void application::wire_up_runtime_services(
             [bucket](cloud_io::remote& remote)
               -> std::unique_ptr<datalake::coordinator::catalog_factory> {
                 return datalake::coordinator::get_catalog_factory(
-                  config::shard_local_cfg(), remote, *bucket);
+                  config::shard_local_cfg(),
+                  remote,
+                  *bucket,
+                  ss::metrics::label_instance{"role", "coordinator"});
             },
             std::ref(cloud_io)),
           std::ref(cloud_io),
@@ -1382,7 +1385,10 @@ void application::wire_up_runtime_services(
             [bucket](cloud_io::remote& remote)
               -> std::unique_ptr<datalake::coordinator::catalog_factory> {
                 return datalake::coordinator::get_catalog_factory(
-                  config::shard_local_cfg(), remote, *bucket);
+                  config::shard_local_cfg(),
+                  remote,
+                  *bucket,
+                  ss::metrics::label_instance{"role", "translator"});
             },
             std::ref(cloud_io)),
           _schema_registry.get(),

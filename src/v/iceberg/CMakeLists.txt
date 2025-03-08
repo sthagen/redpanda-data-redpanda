@@ -93,6 +93,7 @@ v_cc_library(
     rest_client/catalog_client.cc
     rest_client/entities.cc
     rest_client/error.cc
+    rest_client/client_probe.cc
   DEPS
     Avro::avro
     v::bytes

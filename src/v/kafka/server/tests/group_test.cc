@@ -170,9 +170,9 @@ SEASTAR_THREAD_TEST_CASE(pending_members_expire) {
     BOOST_TEST(!g.contains_pending_member(kafka::member_id("m")));
 }
 
-SEASTAR_THREAD_TEST_CASE(rebalance_timeout_throws_when_empty) {
+SEASTAR_THREAD_TEST_CASE(rebalance_timeout_when_empty) {
     auto g = get();
-    BOOST_CHECK_THROW(g.rebalance_timeout(), std::runtime_error);
+    BOOST_TEST(g.rebalance_timeout() == 0s);
 }
 
 SEASTAR_THREAD_TEST_CASE(rebalance_timeout) {

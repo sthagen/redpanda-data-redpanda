@@ -531,3 +531,8 @@ class RawKCL(KCL):
         res = self._cmd(['misc', 'raw-req', '-k', '48'],
                         input=json.dumps(body))
         return json.loads(res)
+
+    def raw_join_group(self, body):
+        res = self._cmd(['misc', 'raw-req', '-k', '11'],
+                        input=json.dumps(body))
+        return json.loads(res)
