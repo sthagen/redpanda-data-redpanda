@@ -42,6 +42,7 @@ public:
 
     using include_malformed_files
       = ss::bool_class<struct include_malformed_files_tag>;
+    using include_current = ss::bool_class<struct include_current_tag>;
 
     enum class recorded_signo { sigsegv, sigabrt, sigill };
 
@@ -72,9 +73,12 @@ public:
     void finish_oom_recording();
 
     /// Returns the list of recorded crashes in increasing crash_time order
+    ///  - incl_malformed: whether to include unparseable crash files
+    ///  - incl_current: whether to include the crash file corresponding to the
+    ///    current process
     ss::future<std::vector<recorded_crash>> get_recorded_crashes(
-      include_malformed_files incl_malformed
-      = include_malformed_files::no) const;
+      include_malformed_files incl_malformed = include_malformed_files::no,
+      include_current incl_current = include_current::no) const;
 
 private:
     recorder() = default;

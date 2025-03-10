@@ -403,7 +403,7 @@ disk_log_impl::monitor_eviction(ss::abort_source& as) {
       .promise.get_future();
 }
 
-ss::future<model::offset>
+model::offset
 disk_log_impl::request_eviction_until_offset(model::offset max_offset) {
     vlog(
       gclog.debug,
@@ -419,7 +419,7 @@ disk_log_impl::request_eviction_until_offset(model::offset max_offset) {
         _eviction_monitor->promise.set_value(max_offset);
         _eviction_monitor.reset();
 
-        co_return model::next_offset(max_offset);
+        return model::next_offset(max_offset);
     } else {
         vlog(
           gclog.debug,
@@ -428,7 +428,7 @@ disk_log_impl::request_eviction_until_offset(model::offset max_offset) {
           max_offset);
     }
 
-    co_return _start_offset;
+    return _start_offset;
 }
 
 ss::future<> disk_log_impl::adjacent_merge_compact(
@@ -1587,7 +1587,7 @@ ss::future<std::optional<model::offset>> disk_log_impl::do_gc(gc_config cfg) {
           offset,
           cfg);
 
-        co_return co_await request_eviction_until_offset(offset);
+        co_return request_eviction_until_offset(offset);
     }
 
     if (!config().is_collectable()) {
@@ -1603,7 +1603,7 @@ ss::future<std::optional<model::offset>> disk_log_impl::do_gc(gc_config cfg) {
     auto max_offset = co_await maybe_adjusted_retention_offset(cfg);
 
     if (max_offset) {
-        co_return co_await request_eviction_until_offset(*max_offset);
+        co_return request_eviction_until_offset(*max_offset);
     }
 
     co_return std::nullopt;

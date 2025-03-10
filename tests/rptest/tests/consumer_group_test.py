@@ -9,6 +9,7 @@
 # by the Apache License, Version 2.0
 
 from dataclasses import dataclass
+import pytest
 import random
 import threading
 import time
@@ -40,7 +41,7 @@ from kafka.protocol.api import Request, Response
 import kafka.protocol.types as types
 from confluent_kafka.admin import AdminClient
 from confluent_kafka import ConsumerGroupState
-from confluent_kafka import Consumer
+from confluent_kafka import Consumer, Producer
 
 
 class ConsumerGroupTest(RedpandaTest):
@@ -848,6 +849,202 @@ class ConsumerGroupTest(RedpandaTest):
             c.stop()
             c.wait()
             c.free()
+
+    @cluster(num_nodes=3)
+    def test_group_lag_metrics(self):
+        """
+        Test validating the behavior of group lag metrics
+        """
+        lag_collection_interval = 5
+        topic_count = 1
+        partition_count = 20
+        consumer_count = 4
+        group = 'test-lag-metrics-group'
+        # Use a small batch size to ensure that fetches are distributed across all partitions
+        batch_size = 1
+        produce_msg_cnt_min = 50
+        consume_count = (topic_count * partition_count *
+                         produce_msg_cnt_min) // (2 * consumer_count)
+
+        self.redpanda.set_cluster_config({
+            "enable_consumer_group_metrics":
+            ["group", "partition", "consumer_lag"],
+            "consumer_group_lag_collection_interval_sec":
+            lag_collection_interval,
+        })
+
+        self.admin_client = AdminClient(
+            {"bootstrap.servers": self.redpanda.brokers()})
+
+        topics = [f"test-lag-metrics-topic-{i}" for i in range(topic_count)]
+
+        self.client().create_topic(specs=[
+            TopicSpec(name=name,
+                      partition_count=partition_count,
+                      replication_factor=3) for name in topics
+        ])
+
+        def create_consumer(instance_id: int) -> Consumer:
+            return Consumer(
+                {
+                    "group.id": group,
+                    "group.instance.id": f"consumer-{instance_id}",
+                    'bootstrap.servers': self.redpanda.brokers(),
+                    "session.timeout.ms": 10000,
+                    'auto.offset.reset': 'earliest',
+                    'enable.auto.offset.store': True,
+                    'enable.auto.commit': False,
+                    'max.partition.fetch.bytes': batch_size,
+                    'log_level': 7,
+                    'debug': 'cgrp',
+                },
+                logger=self.logger)
+
+        consumers = [create_consumer(i) for i in range(consumer_count)]
+        for consumer in consumers:
+            consumer.subscribe(topics)
+
+        self.logger.info("Waiting for group to become stable")
+        wait_until(lambda: self.admin_client
+                   .describe_consumer_groups(group_ids=[group])[group].result(
+                   ).state == ConsumerGroupState.STABLE,
+                   20,
+                   1,
+                   retry_on_exc=True,
+                   err_msg="Timeout waiting on group to reach stable state")
+
+        produced_offsets = {
+            TopicPartition(topic, partition):
+            random.randint(produce_msg_cnt_min, produce_msg_cnt_min * 2)
+            for topic in topics
+            for partition in range(partition_count)
+        }
+
+        self.logger.info("Producing")
+
+        producer = Producer({
+            "bootstrap.servers": self.redpanda.brokers(),
+            'batch.size': batch_size,
+            'acks': 'all',
+        })
+        for tp, offset in produced_offsets.items():
+            self.logger.debug(
+                f"  Producing {tp.topic}/{tp.partition} ({offset} msgs)")
+            for i in range(offset):
+                producer.produce(tp.topic,
+                                 partition=tp.partition,
+                                 key=None,
+                                 value=f"message-{i}")
+            producer.flush()
+            self.logger.debug(f"  Produced {tp} - flushed {offset} msgs")
+
+        self.logger.info("Consuming")
+        for consumer in consumers:
+            consumer.consume(num_messages=consume_count, timeout=10)
+            assert len(consumer.assignment()
+                       ) != 0, "Consumer was not assigned any partitions"
+            self.logger.debug("  Consumed")
+
+        self.logger.info("Waiting for lag_metrics")
+        time.sleep(lag_collection_interval + 1)
+
+        def get_group_metrics_from_nodes():
+            metrics = [
+                "redpanda_kafka_max_offset",
+                "redpanda_kafka_consumer_group_committed_offset",
+                "redpanda_kafka_consumer_group_lag_max",
+                "redpanda_kafka_consumer_group_lag_sum"
+            ]
+            return self.redpanda.metrics_samples(
+                metrics, self.redpanda.started_nodes(),
+                MetricsEndpoint.PUBLIC_METRICS)
+
+        def metrics_committed(metrics):
+            return [
+                s.value for s in
+                metrics["redpanda_kafka_consumer_group_committed_offset"].
+                label_filter({
+                    "redpanda_group": group
+                }).samples
+            ]
+
+        def metrics_hwm(metrics):
+            hwm_by_tp = {}
+            for s in metrics["redpanda_kafka_max_offset"].samples:
+                if s.labels["redpanda_topic"] in topics:
+                    key = tuple(
+                        (k, v) for k, v in s.labels.items() if k != "node")
+                    hwm_by_tp.setdefault(key, []).append(s.value)
+            return [max(hwm) for hwm in hwm_by_tp.values()]
+
+        def metrics_lag(metrics):
+            # Arbitrarily reduce across nodes with max, there should be only one
+            return max(
+                s.value
+                for s in metrics["redpanda_kafka_consumer_group_lag_sum"].
+                label_filter({
+                    "redpanda_group": group
+                }).samples)
+
+        expected_hwm_sum = sum(produced_offsets.values())
+        expected_hwm_len = len(produced_offsets)
+        metrics = get_group_metrics_from_nodes()
+        hwm_metrics = metrics_hwm(metrics)
+        hwm_len = len(hwm_metrics)
+        hwm_sum = sum(hwm_metrics)
+
+        assert expected_hwm_len == hwm_len, f"Expected {expected_hwm_len}, got {hwm_len}"
+        assert expected_hwm_sum == hwm_sum, f"Expected {0}, got {hwm_sum}"
+
+        # Nothing committed yet, expect no metrics
+        with pytest.raises(KeyError):
+            metrics_committed(metrics)
+
+        # Consumers that have not committed yet should have no lag
+        assert metrics_lag(metrics) == 0
+
+        self.logger.info("Committing")
+        for consumer in consumers:
+            consumer.commit(asynchronous=False)
+            self.logger.debug(
+                f"  Committed: {consumer.committed(consumer.assignment())}")
+
+        self.logger.info("Waiting for lag_metrics")
+        time.sleep(lag_collection_interval + 1)
+
+        expected_committed_sum = sum(
+            max(0, tp.offset) for consumer in consumers
+            for tp in consumer.committed(consumer.assignment()) or [])
+
+        metrics = get_group_metrics_from_nodes()
+        committed_metrics = metrics_committed(metrics)
+        committed_sum = sum(committed_metrics)
+        committed_len = len(committed_metrics)
+        hwm_metrics = metrics_hwm(metrics)
+        hwm_sum = sum(hwm_metrics)
+        hwm_len = len(hwm_metrics)
+        lag = metrics_lag(metrics)
+
+        self.logger.debug(f"Expected HWM sum: {expected_hwm_sum}")
+        self.logger.debug(f"Expected committed sum: {expected_committed_sum}")
+        self.logger.debug(f"Metrics HWM sum: {hwm_sum}")
+        self.logger.debug(f"Metrics committed sum: {committed_sum}")
+        self.logger.debug(
+            f"Expected lag: {expected_hwm_sum - expected_committed_sum}")
+        self.logger.debug(f"Calculated lag: {hwm_sum - committed_sum}")
+        self.logger.debug(f"Metrics lag: {lag}")
+
+        assert expected_hwm_len == committed_len, f"Expected {expected_hwm_len}, got {committed_len}. Not all partitions were consumed, tweak the produce and consume counts"
+
+        # Check redpanda_kafka_max_offset
+        assert expected_hwm_sum == hwm_sum, f"Expected {expected_hwm_sum}, got {hwm_sum}"
+        #Check redpanda_kafka_consumer_group_committed_offset
+        assert expected_committed_sum == committed_sum, f"Expected {expected_committed_sum}, got {committed_sum}"
+        # Check redpanda_kafka_consumer_group_lag_sum
+        assert hwm_sum - committed_sum == lag, f"Expected {hwm_sum - committed_sum}, got {lag}"
+
+        for consumer in consumers:
+            consumer.close()
 
 
 @dataclass

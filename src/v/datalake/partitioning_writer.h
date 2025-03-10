@@ -62,6 +62,7 @@ public:
         iceberg::schema::id_t schema_id;
         iceberg::partition_spec::id_t partition_spec_id;
         iceberg::partition_key partition_key;
+        remote_path partition_key_path;
 
         friend std::ostream& operator<<(std::ostream&, const partitioned_file&);
     };

@@ -58,6 +58,7 @@ v_cc_library(
     values_parquet.cc
     local_parquet_file_writer.cc
     serde_parquet_writer.cc
+    partition_key_path.cc
   DEPS
     v::cloud_io
     v::datalake_common

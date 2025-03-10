@@ -3620,6 +3620,8 @@ group::delete_offsets(std::vector<model::topic_partition> offsets) {
     return deleted_offsets;
 }
 
+void group::set_lag_metrics(consumer_lag_metrics lag) { _lag_metrics = lag; }
+
 void group::setup_metrics() {
     const auto metrics_registration = [this]() {
         if (_enable_group_metrics().group) {

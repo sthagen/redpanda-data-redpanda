@@ -536,7 +536,7 @@ func fromVirtualCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.Reso
 			ClusterName:   sc.Name,
 			AuthOrgID:     yAuth.OrgID,
 			AuthKind:      yAuth.Kind,
-			ClusterType:   publicapi.ServerlessClusterType, // Virtual clusters do not include a type in the response yet.
+			ClusterType:   config.ServerlessClusterType, // Virtual clusters do not include a type in the response yet.
 		},
 	}
 

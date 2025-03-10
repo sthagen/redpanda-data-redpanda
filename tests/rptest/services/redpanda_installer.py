@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from concurrent.futures import ThreadPoolExecutor
 import errno
 from functools import lru_cache
 import json
@@ -20,6 +21,8 @@ from time import sleep
 import requests
 
 from ducktape.utils.util import wait_until
+
+from rptest.utils.bookend_collection import BookendCollection
 
 # Match any version that may result from a redpanda binary, which may not be a
 # released version.
@@ -163,9 +166,14 @@ class RedpandaInstaller:
         Waits for each SSHOutputIter to complete.
         """
         for node in ssh_out_per_node:
-            logger.debug(f"{log_msg} for {node.account.hostname}")
-            for l in ssh_out_per_node[node]:
-                logger.debug(l)
+            logger.info(f"{log_msg} for {node.account.hostname}")
+            captured_output = BookendCollection(head=100, tail=100)
+            try:
+                for line in ssh_out_per_node[node]:
+                    captured_output.append(line)
+            except:
+                logger.error(f"Command failed: {captured_output}")
+                raise
 
     def __init__(self, redpanda):
         """
@@ -639,36 +647,16 @@ class RedpandaInstaller:
         if self._nodes_share_installs:
             nodes_to_download = [nodes[0]]
 
-        ssh_download_per_node = dict()
-        for node in nodes_to_download:
-            if not version == RedpandaInstaller.HEAD and not node.account.exists(
-                    version_root):
-                ssh_download_per_node[
-                    node] = self._async_download_on_node_unlocked(
-                        node, version)
-
-        try:
-            self.wait_for_async_ssh(self._redpanda.logger,
-                                    ssh_download_per_node,
-                                    "Finished downloading binaries")
-        except Exception as e:
-            self._redpanda.logger.error(
-                f"Exception while downloading to {version_root}, cleaning up: {str(e)}"
-            )
-            # TODO: make failure handling more fine-grained. If deploying on
-            # dedicated nodes, we only need to clean up the node that failed.
-            for node in ssh_download_per_node:
-                ssh_iter = ssh_download_per_node[node]
-                if ssh_iter.has_next():
-                    # Drain the iterator to make sure we wait for on-going
-                    # downloads to finish before cleaning up.
-                    try:
-                        [l for l in ssh_iter]
-                    except:
-                        pass
-                # Be permissive so we can clean everything.
-                node.account.remove(version_root, allow_fail=True)
-            raise e
+        # Download in parallel.
+        with ThreadPoolExecutor() as executor:
+            pending_f = []
+            for node in nodes_to_download:
+                if not version == RedpandaInstaller.HEAD:
+                    pending_f.append(
+                        executor.submit(self.download_on_node_unlocked, node,
+                                        version))
+            for f in pending_f:
+                f.result()
 
         # Regardless of whether we downloaded anything, adjust the
         # /opt/redpanda link to point to the appropriate version on all nodes.
@@ -692,16 +680,21 @@ class RedpandaInstaller:
                 f"{node.account.hostname} uname output: {uname}")
         return self._arch
 
-    def _async_download_on_node_unlocked(self, node, version):
+    def download_on_node_unlocked(self, node, version) -> None:
         """
-        Asynchonously downloads Redpanda of the given version on the given
-        node. Returns an iterator to the results.
+        Downloads Redpanda of the given version on the given node.
 
         Expects the install lock to have been taken before calling.
         """
-        version_root = self.root_for_version(version)
+        self._redpanda.logger.info(
+            f"Downloading {version} on {node.account.hostname}")
 
-        results = []
+        version_root = self.root_for_version(version)
+        if node.account.exists(version_root):
+            self._redpanda.logger.debug(
+                f"{node.account.hostname}: {version_root} already exists")
+            return
+
         tgz = "redpanda.tar.gz"
         cmds = [
             f"curl -vfsSL {self._version_package_url(version)} --retry 3 --retry-connrefused --retry-delay 2 --create-dir -o {version_root}/{tgz}",
@@ -709,8 +702,22 @@ class RedpandaInstaller:
             f"rm {version_root}/{tgz}"
         ]
         for cmd in cmds:
-            results.extend(node.account.ssh_capture(cmd))
-        return results
+            captured_output = BookendCollection(head=100, tail=100)
+            try:
+                for line in node.account.ssh_capture(cmd):
+                    captured_output.append(line)
+            except Exception as ssh_exc:
+                self._redpanda.logger.error(
+                    f"Exception while downloading to {version_root} on {node.account.hostname}, cleaning up: {str(ssh_exc)}"
+                )
+                # Debug log to avoid printing too much to the console.
+                self._redpanda.logger.debug(
+                    f"Captured output for {str(ssh_exc)} on {node.account.hostname}: {captured_output}"
+                )
+                # Be permissive so we can clean everything.
+                node.account.remove(version_root, allow_fail=True)
+                # Re-raise the exception so the caller can handle it.
+                raise ssh_exc
 
     def reset_current_install(self, nodes):
         """

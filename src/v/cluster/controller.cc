@@ -720,7 +720,10 @@ ss::future<> controller::start(
     co_await _metrics_reporter.invoke_on(0, &metrics_reporter::start);
 
     co_await _crash_reporter.start_single(
-      std::ref(_stm), std::ref(_as), std::ref(_metrics_reporter));
+      std::ref(_storage.local().kvs()),
+      std::ref(_stm),
+      std::ref(_as),
+      std::ref(_metrics_reporter));
     co_await _crash_reporter.invoke_on(
       crash_reporter::shard, &crash_reporter::start);
 

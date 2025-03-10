@@ -1,4 +1,11 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
+load("//src/v/rpc:compiler.bzl", "redpanda_cc_rpc_library")
+
+redpanda_cc_rpc_library(
+    name = "consumer_group_lag_metrics_rpc",
+    src = "consumer_group_lag_metrics_rpc.json",
+    include_prefix = "kafka/server",
+)
 
 redpanda_cc_library(
     name = "qdc_monitor_config",
@@ -14,6 +21,8 @@ redpanda_cc_library(
     srcs = [
         "client_quota_translator.cc",
         "connection_context.cc",
+        "consumer_group_lag_metrics_frontend.cc",
+        "consumer_group_lag_metrics_service.cc",
         "fetch_pid_controller.cc",
         "fetch_session_cache.cc",
         "group.cc",
@@ -65,6 +74,9 @@ redpanda_cc_library(
         "atomic_token_bucket.h",
         "client_quota_translator.h",
         "connection_context.h",
+        "consumer_group_lag_metrics_frontend.h",
+        "consumer_group_lag_metrics_rpc_types.h",
+        "consumer_group_lag_metrics_service.h",
         "coordinator_ntp_mapper.h",
         "errors.h",
         "fetch_metadata_cache.h",
@@ -159,6 +171,7 @@ redpanda_cc_library(
     include_prefix = "kafka/server",
     visibility = ["//visibility:public"],
     deps = [
+        ":consumer_group_lag_metrics_rpc",
         ":qdc_monitor_config",
         "//src/v/base",
         "//src/v/bytes",

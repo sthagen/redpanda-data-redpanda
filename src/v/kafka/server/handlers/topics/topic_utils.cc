@@ -20,6 +20,8 @@
 #include <seastar/core/do_with.hh>
 #include <seastar/core/loop.hh>
 
+#include <ranges>
+
 namespace kafka {
 
 void append_cluster_results(
@@ -48,13 +50,17 @@ ss::future<> wait_for_leaders(
             // topic already deleted
             continue;
         }
+        /**
+         * Partition space is contiguous, use integer range to iterate over all
+         * topic partitions.
+         */
+        int32_t partition_count = md->get().get_assignments().size();
         co_await ss::max_concurrent_for_each(
-          md->get().get_assignments(),
+          std::views::iota(0, partition_count),
           64,
-          [&r, &md_cache, deadline](const auto& p_as) {
+          [&r, &md_cache, deadline](int32_t p_id) {
               return md_cache
-                .get_leader(
-                  model::ntp(r.tp_ns.ns, r.tp_ns.tp, p_as.second.id), deadline)
+                .get_leader(model::ntp(r.tp_ns.ns, r.tp_ns.tp, p_id), deadline)
                 .discard_result();
           });
     }

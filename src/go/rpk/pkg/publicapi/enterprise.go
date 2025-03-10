@@ -31,7 +31,8 @@ func NewEnterpriseClientSet(host string, opts ...connect.ClientOption) *Enterpri
 	}
 	opts = append([]connect.ClientOption{
 		connect.WithInterceptors(
-			newLoggerInterceptor(), // Add logs to every request.
+			newLoggerInterceptor(),                     // Add logs to every request.
+			newAgentInterceptor(defaultRpkUserAgent()), // Add the User-Agent.
 		),
 	}, opts...)
 

@@ -18,6 +18,7 @@
 #include "cluster/simple_batch_builder.h"
 #include "cluster/topic_table.h"
 #include "config/configuration.h"
+#include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
 #include "kafka/protocol/delete_groups.h"
 #include "kafka/protocol/describe_groups.h"
@@ -25,9 +26,11 @@
 #include "kafka/protocol/offset_commit.h"
 #include "kafka/protocol/offset_delete.h"
 #include "kafka/protocol/offset_fetch.h"
-#include "kafka/protocol/wire.h"
+#include "kafka/server/consumer_group_lag_metrics_frontend.h"
+#include "kafka/server/consumer_group_lag_metrics_rpc_types.h"
 #include "kafka/server/group.h"
 #include "kafka/server/group_metadata.h"
+#include "kafka/server/group_probe.h"
 #include "kafka/server/group_recovery_consumer.h"
 #include "kafka/server/group_tx_tracker_stm.h"
 #include "kafka/server/logger.h"
@@ -45,6 +48,7 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
 
+#include <chrono>
 #include <system_error>
 
 using cluster::cloud_metadata::group_offsets;
@@ -69,6 +73,7 @@ group_manager::group_manager(
   ss::sharded<cluster::topic_table>& topic_table,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
   ss::sharded<features::feature_table>& feature_table,
+  ss::sharded<consumer_group_lag_metrics_frontend>& lag_metrics_frontend,
   group_metadata_serializer_factory serializer_factory)
   : _tp_ns(std::move(tp_ns))
   , _gm(gm)
@@ -76,10 +81,14 @@ group_manager::group_manager(
   , _topic_table(topic_table)
   , _tx_frontend(tx_frontend)
   , _feature_table(feature_table)
+  , _lag_metrics_frontend(lag_metrics_frontend)
   , _serializer_factory(std::move(serializer_factory))
   , _conf(config::shard_local_cfg())
   , _self(cluster::make_self_broker(config::node()))
-  , _offset_retention_check(_conf.group_offset_retention_check_ms.bind()) {}
+  , _offset_retention_check(_conf.group_offset_retention_check_ms.bind())
+  , _enabled_metrics(_conf.enable_consumer_group_metrics.bind())
+  , _lag_collection_interval(
+      _conf.consumer_group_lag_collection_interval.bind()) {}
 
 ss::future<> group_manager::start() {
     /*
@@ -127,16 +136,16 @@ ss::future<> group_manager::start() {
     /*
      * periodically remove expired group offsets.
      */
-    _timer.set_callback([this] {
+    _expired_group_offset_timer.set_callback([this] {
         ssx::spawn_with_gate(_gate, [this] {
             return handle_offset_expiration().finally([this] {
                 if (!_gate.is_closed()) {
-                    _timer.arm(_offset_retention_check());
+                    _expired_group_offset_timer.arm(_offset_retention_check());
                 }
             });
         });
     });
-    _timer.arm(_offset_retention_check());
+    _expired_group_offset_timer.arm(_offset_retention_check());
 
     /*
      * reschedule periodic collection of expired offsets when the configured
@@ -144,11 +153,36 @@ ss::future<> group_manager::start() {
      * longer than desired / reasonable, and then fixed (e.g. 1 year vs 1 day).
      */
     _offset_retention_check.watch([this] {
-        if (_timer.armed()) {
-            _timer.cancel();
-            _timer.arm(_offset_retention_check());
+        if (_expired_group_offset_timer.armed()) {
+            _expired_group_offset_timer.cancel();
+            _expired_group_offset_timer.arm(_offset_retention_check());
         }
     });
+
+    {
+        constexpr auto set_lag_timer = [](group_manager* me) {
+            auto has_lag_metric = enabled_metrics::from_vector(
+                                    me->_enabled_metrics())
+                                    .consumer_lag;
+            me->_lag_metrics_timer.cancel();
+            if (!me->_gate.is_closed() && has_lag_metric) {
+                me->_lag_metrics_timer.arm(me->_lag_collection_interval());
+            }
+        };
+
+        _lag_metrics_timer.set_callback([this, set_lag_timer]() {
+            ssx::spawn_with_gate(_gate, [this, set_lag_timer] {
+                return collect_consumer_lag_metrics().finally(
+                  [this, set_lag_timer] { set_lag_timer(this); });
+            });
+        });
+
+        _enabled_metrics.watch(
+          [this, set_lag_timer]() { set_lag_timer(this); });
+        _lag_collection_interval.watch(
+          [this, set_lag_timer]() { set_lag_timer(this); });
+        set_lag_timer(this);
+    }
 
     return ss::make_ready_future<>();
 }
@@ -401,7 +435,8 @@ ss::future<> group_manager::stop() {
         e.second->as.request_abort();
     }
 
-    _timer.cancel();
+    _expired_group_offset_timer.cancel();
+    _lag_metrics_timer.cancel();
 
     return _gate.close().then([this]() {
         /**
@@ -1879,6 +1914,63 @@ group_manager::get_group_producers_locally(
         }
     }
     co_return reply;
+}
+
+ss::future<> group_manager::collect_consumer_lag_metrics() {
+    vlog(klog.trace, "group_manager::collect_consumer_lag_metrics");
+
+    using lag = size_t;
+    partition_offsets_request request;
+    chunked_hash_map<kafka::group_id, partition_offsets_reply::offsets>
+      group_offsets;
+
+    // Get group offsets and partition offset request
+    for (const auto& group : _groups | std::views::values) {
+        const auto& offsets = group->offsets();
+        if (offsets.empty()) {
+            continue;
+        }
+        auto& group_offset = group_offsets[group->id()];
+        for (const auto& [tp, meta] : offsets) {
+            if (!meta) {
+                continue;
+            }
+            request.data[tp.topic].insert(tp.partition);
+            group_offset[tp.topic][tp.partition] = offset_cast(
+              meta->metadata.offset);
+        }
+    }
+
+    if (group_offsets.empty()) {
+        co_return;
+    }
+
+    auto part_offsets = co_await _lag_metrics_frontend.local()
+                          .get_partition_offsets(std::move(request));
+
+    //  Set metrics
+    for (auto& [group_id, offsets] : group_offsets) {
+        consumer_lag_metrics lag_metrics{};
+        for (auto& [tp, group_topic_offsets] : offsets) {
+            for (auto& [partition, offset] : group_topic_offsets) {
+                auto topic_it = part_offsets.data.find(tp);
+                if (topic_it == part_offsets.data.end()) {
+                    continue;
+                }
+                auto partition_it = topic_it->second.find(partition);
+                if (partition_it == topic_it->second.end()) {
+                    continue;
+                }
+                lag part_lag{static_cast<lag>(
+                  std::max(partition_it->second() - offset(), 0L))};
+                lag_metrics.sum += part_lag;
+                lag_metrics.max = std::max(lag_metrics.max, part_lag);
+            }
+        };
+        if (auto group = get_group(group_id); group != nullptr) {
+            group->set_lag_metrics(lag_metrics);
+        }
+    }
 }
 
 } // namespace kafka

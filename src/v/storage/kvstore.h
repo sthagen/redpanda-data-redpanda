@@ -104,6 +104,7 @@ public:
         stms = 6,
         shard_placement = 7,
         debug_bundle = 8,
+        crash_tracker = 9,
         /* your sub-system here */
     };
 

@@ -119,6 +119,7 @@ redpanda_cc_library(
     include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
+        ":partition_key_path",
         ":writer",
         "//src/v/container:chunked_hash_map",
         "//src/v/iceberg:datatypes",
@@ -645,6 +646,7 @@ redpanda_cc_library(
         ":logger",
         "//src/v/base",
         "//src/v/bytes:iobuf_parser",
+        "//src/v/http:utils",
         "//src/v/iceberg:partition_key",
         "//src/v/ssx:sformat",
         "//src/v/utils:base64",

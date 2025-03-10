@@ -12,6 +12,7 @@
 #include "base/vlog.h"
 #include "datalake/data_writer_interface.h"
 #include "datalake/logger.h"
+#include "datalake/partition_key_path.h"
 
 #include <exception>
 
@@ -113,6 +114,14 @@ partitioning_writer::finish() && {
             // Even on error, move on so that we can close all the writers.
             continue;
         }
+        auto partition_key_path_res = partition_key_to_path(spec_, pk);
+        if (partition_key_path_res.has_error()) {
+            vlog(
+              datalake_log.error,
+              "Failed to convert partition key to remote path - {}",
+              partition_key_path_res.error().what());
+            continue;
+        }
 
         files.push_back(partitioned_file{
           .local_file = std::move(file_res.value()),
@@ -120,7 +129,7 @@ partitioning_writer::finish() && {
           .schema_id = schema_id_,
           .partition_spec_id = spec_.spec_id,
           .partition_key = std::move(pk),
-        });
+          .partition_key_path = std::move(partition_key_path_res.value())});
     }
     if (first_error != writer_error::ok) {
         co_return first_error;

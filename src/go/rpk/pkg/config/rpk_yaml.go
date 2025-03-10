@@ -17,9 +17,7 @@ import (
 	"reflect"
 	"time"
 
-	"connectrpc.com/connect"
 	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
-	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
 	"gopkg.in/yaml.v3"
@@ -298,6 +296,7 @@ const (
 	CloudAuthUninitialized     = ""
 	CloudAuthSSO               = "sso"
 	CloudAuthClientCredentials = "client-credentials"
+	ServerlessClusterType      = "TYPE_SERVERLESS" // Configuration setting to identify a serverless cluster.
 )
 
 ///////////
@@ -359,16 +358,6 @@ func (p *RpkProfile) ActualConfig() (*RpkYaml, bool) {
 		return nil, false
 	}
 	return p.c.ActualRpkYaml()
-}
-
-// DataplaneClient creates a publicapi.DataPlaneClientSet with the information
-// loaded in the profile.
-func (p *RpkProfile) DataplaneClient(opts ...connect.ClientOption) (*publicapi.DataPlaneClientSet, error) {
-	url, err := p.CloudCluster.CheckClusterURL()
-	if err != nil {
-		return nil, fmt.Errorf("unable to get cluster information from your profile: %v", err)
-	}
-	return publicapi.NewDataPlaneClientSet(url, p.CurrentAuth().AuthToken, opts...)
 }
 
 // HasClientCredentials returns if both ClientID and ClientSecret are non-empty.
@@ -451,7 +440,7 @@ func (c *RpkCloudCluster) HasAuth(a RpkCloudAuth) bool {
 }
 
 func (c *RpkCloudCluster) IsServerless() bool {
-	return c != nil && c.ClusterType == publicapi.ServerlessClusterType
+	return c != nil && c.ClusterType == ServerlessClusterType
 }
 
 func (c *RpkCloudCluster) CheckClusterURL() (string, error) {

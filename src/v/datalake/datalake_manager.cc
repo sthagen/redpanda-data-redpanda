@@ -327,9 +327,7 @@ datalake_manager::handle_translator_state_change(const model::ntp& ntp) {
     auto record_translator = make_record_translator(mode);
     auto table_creator = translation::make_default_table_creator(
       _coordinator_frontend->local());
-    auto term = partition->term();
-    auto path = remote_path{
-      fmt::format("{}/{}/{}", iceberg_data_path_prefix, ntp.path(), term)};
+
     auto& reservations = _scheduler.reservations();
     //  make a new translator
     auto coordinator
@@ -348,7 +346,7 @@ datalake_manager::handle_translator_state_change(const model::ntp& ntp) {
         std::move(record_translator),
         std::move(table_creator),
         _location_provider,
-        std::move(path),
+        remote_path{iceberg_data_path_prefix},
         *reservations,
         _topic_table,
         _features,

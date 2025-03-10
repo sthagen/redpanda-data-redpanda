@@ -87,7 +87,8 @@ set(srcs
         health_monitor_test.cc
         metadata_dissemination_test.cc
         replicas_rebalancing_tests.cc
-        security_frontend_test.cc)
+        security_frontend_test.cc
+        crash_reporter_test.cc)
 
 foreach(cluster_test_src ${srcs})
     get_filename_component(test_name ${cluster_test_src} NAME_WE)

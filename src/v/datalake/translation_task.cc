@@ -36,7 +36,7 @@ ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
   retry_chain_node& parent_rcn,
   lazy_abort_source& lazy_as) {
     auto file_remote_path = remote_path{
-      file.table_location / remote_path_prefix
+      file.table_location / remote_path_prefix / file.partition_key_path
       / file.local_file.path().filename()};
 
     auto result = co_await _cloud_io.upload_data_file(

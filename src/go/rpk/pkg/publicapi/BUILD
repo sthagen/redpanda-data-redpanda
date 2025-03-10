@@ -12,6 +12,8 @@ go_library(
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi",
     visibility = ["//visibility:public"],
     deps = [
+        "//src/go/rpk/pkg/cli/version",
+        "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/httpapi",
         "@build_buf_gen_go_redpandadata_cloud_connectrpc_go//redpanda/api/controlplane/v1beta2/controlplanev1beta2connect",
         "@build_buf_gen_go_redpandadata_cloud_connectrpc_go//redpanda/api/iam/v1beta2/iamv1beta2connect",

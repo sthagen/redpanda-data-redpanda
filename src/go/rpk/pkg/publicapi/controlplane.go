@@ -41,8 +41,9 @@ func NewCloudClientSet(host, authToken string, opts ...connect.ClientOption) *Cl
 	}
 	opts = append([]connect.ClientOption{
 		connect.WithInterceptors(
-			newAuthInterceptor(authToken), // Add the Bearer token.
-			newLoggerInterceptor(),        // Add logs to every request.
+			newAuthInterceptor(authToken),              // Add the Bearer token.
+			newLoggerInterceptor(),                     // Add logs to every request.
+			newAgentInterceptor(defaultRpkUserAgent()), // Add the User-Agent.
 		),
 	}, opts...)
 

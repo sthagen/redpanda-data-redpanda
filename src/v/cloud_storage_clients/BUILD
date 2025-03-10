@@ -41,6 +41,7 @@ redpanda_cc_library(
         "//src/v/container:intrusive",
         "//src/v/hashing:secure",
         "//src/v/http",
+        "//src/v/http:utils",
         "//src/v/json",
         "//src/v/metrics",
         "//src/v/model",

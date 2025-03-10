@@ -28,6 +28,7 @@ go_library(
         "//src/go/rpk/pkg/cli/topic",
         "//src/go/rpk/pkg/cli/transform",
         "//src/go/rpk/pkg/cli/version",
+        "//src/go/rpk/pkg/cli/version/versioncmd",
         "//src/go/rpk/pkg/cobraext",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/out",

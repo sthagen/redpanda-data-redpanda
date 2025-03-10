@@ -357,7 +357,7 @@ private:
     // specified offest.
     //
     // Returns the new start offset of the log.
-    ss::future<model::offset> request_eviction_until_offset(model::offset);
+    model::offset request_eviction_until_offset(model::offset);
 
     // These methods search the log for the offset to evict at such that
     // the retention policy is satisfied. If no such offset is found

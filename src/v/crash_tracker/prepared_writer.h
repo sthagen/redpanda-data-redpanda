@@ -59,6 +59,13 @@ public:
     /// release()
     void reset();
 
+    /// Returns the writer's filename. It returns nullopt when the file does not
+    /// exist (eg. before initialization, or after the file has been deleted).
+    const std::optional<std::filesystem::path>&
+    get_crash_report_file_name() const {
+        return _crash_report_file_name;
+    }
+
 private:
     enum class state { uninitialized, initialized, filled, written, released };
     friend std::ostream& operator<<(std::ostream&, state);
@@ -76,7 +83,7 @@ private:
 
     crash_description _prepared_cd;
     iobuf _serde_output;
-    std::filesystem::path _crash_report_file_name;
+    std::optional<std::filesystem::path> _crash_report_file_name;
     int _fd{-1};
 };
 

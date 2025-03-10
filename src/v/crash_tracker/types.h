@@ -120,31 +120,20 @@ struct crash_description
     constexpr static size_t string_buffer_reserve = 4096;
     constexpr static size_t overhead_overestimate = 1024;
     constexpr static size_t serde_size_overestimate
-      = overhead_overestimate + 3 * string_buffer_reserve;
+      = overhead_overestimate + 2 * string_buffer_reserve;
     using reserved_string_t = reserved_string<string_buffer_reserve>;
 
     crash_type type{};
     model::timestamp crash_time;
     reserved_string_t crash_message;
     reserved_string_t stacktrace;
-
-    /// Extension to the crash_message. It can be used to add further
-    /// information about the crash that is useful for debugging but is too
-    /// verbose for telemetry.
-    /// Eg. top-N allocations
-    reserved_string_t addition_info;
     ss::sstring app_version;
 
     crash_description() = default;
 
     auto serde_fields() {
         return std::tie(
-          type,
-          crash_time,
-          crash_message,
-          stacktrace,
-          addition_info,
-          app_version);
+          type, crash_time, crash_message, stacktrace, app_version);
     }
 
     friend std::ostream& operator<<(std::ostream&, const crash_description&);

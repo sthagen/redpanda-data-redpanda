@@ -15,6 +15,7 @@ go_library(
         "//src/go/rpk/pkg/adminapi",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/out",
+        "//src/go/rpk/pkg/publicapi",
         "@build_buf_gen_go_redpandadata_dataplane_protocolbuffers_go//redpanda/api/dataplane/v1alpha2",
         "@com_connectrpc_connect//:connect",
         "@com_github_spf13_afero//:afero",

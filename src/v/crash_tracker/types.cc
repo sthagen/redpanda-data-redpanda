@@ -44,12 +44,6 @@ std::ostream& operator<<(std::ostream& os, const crash_description& cd) {
         fmt::print(os, " Backtrace: {}.", opt_stacktrace);
     }
 
-    const auto opt_add_info = cd.addition_info.c_str();
-    const auto has_add_info = strlen(opt_add_info) > 0;
-    if (has_add_info) {
-        fmt::print(os, " {}", opt_add_info);
-    }
-
     return os;
 }
 

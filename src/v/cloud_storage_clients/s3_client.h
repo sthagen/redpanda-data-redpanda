@@ -113,6 +113,8 @@ private:
     std::string
     make_target(const bucket_name& name, const object_key& key) const;
 
+    void url_encode_target(http::client::request_header& header) const;
+
     access_point_uri _ap;
 
     s3_url_style _ap_style;

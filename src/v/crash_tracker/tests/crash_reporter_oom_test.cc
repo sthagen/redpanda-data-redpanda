@@ -66,7 +66,11 @@ If you work at Redpanda please refer to https://vectorizedio.atlassian.net/l/cp/
       fmt::arg("total_memory", total_mem_str),
       fmt::arg("hard_failures", failed_allocs));
 
-    auto crashes = get_recorder().get_recorded_crashes().get();
+    auto crashes = get_recorder()
+                     .get_recorded_crashes(
+                       recorder::include_malformed_files::no,
+                       recorder::include_current::yes)
+                     .get();
     ASSERT_FALSE(crashes.empty());
     ASSERT_EQ(crashes.size(), 1);
     const auto& crash = crashes[0];

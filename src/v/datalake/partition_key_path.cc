@@ -13,6 +13,7 @@
 #include "base/vlog.h"
 #include "bytes/iobuf_parser.h"
 #include "datalake/logger.h"
+#include "http/utils.h"
 #include "ssx/sformat.h"
 #include "utils/base64.h"
 
@@ -243,17 +244,8 @@ checked<ss::sstring, partition_key_error> escape(std::string_view s) {
     if (!is_valid_utf8(s)) {
         return partition_key_error("Invalid UTF-8 string, unable to escape");
     }
-    static constexpr std::
-      array<std::pair<absl::string_view, absl::string_view>, 24>
-        encode_lut = {
-          {{"&", "%26"}, {"$", "%24"},  {"@", "%40"}, {"=", "%3D"},
-           {";", "%3B"}, {"/", "%2F"},  {":", "%3A"}, {"+", "%2B"},
-           {" ", "%20"}, {",", "%2C"},  {"?", "%3F"}, {"\"", "%22"},
-           {"#", "%23"}, {"%", "%25"},  {"<", "%3C"}, {">", "%3E"},
-           {"[", "%5B"}, {"\\", "%5C"}, {"]", "%5D"}, {"^", "%5E"},
-           {"`", "%60"}, {"{", "%7B"},  {"|", "%7C"}, {"}", "%7D"}}};
 
-    return absl::StrReplaceAll(s, encode_lut);
+    return http::uri_encode(s, http::uri_encode_slash::no);
 }
 
 checked<ss::sstring, partition_key_error> format_field_value(

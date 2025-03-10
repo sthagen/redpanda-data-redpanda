@@ -23,6 +23,10 @@
 #include "json/stringbuffer.h"
 #include "json/writer.h"
 #include "model/fundamental.h"
+#include "model/timestamp.h"
+#include "serde/rw/rw.h"
+#include "serde/serde_exception.h"
+#include "storage/kvstore.h"
 #include "utils/prefix_logger.h"
 
 #include <seastar/core/coroutine.hh>
@@ -37,6 +41,10 @@ namespace cluster {
 
 static ss::logger logger("crash-reporter");
 
+/// Key used to rate limiting metadata in the kvstore
+static constexpr std::string_view rate_limiter_kvs_key
+  = "rate_limiting_metadata";
+
 /// We can upload multiple crash reports per-request in batch, but want to limit
 /// the total request size to avoid large allocations or too large requests.
 static constexpr auto upload_req_bound = 100_KiB;
@@ -45,10 +53,12 @@ static constexpr auto max_reports_per_request = std::max<size_t>(
   upload_req_bound / crash_tracker::crash_description::serde_size_overestimate);
 
 crash_reporter::crash_reporter(
+  storage::kvstore& kvs,
   ss::sharded<controller_stm>& stm,
   ss::sharded<ss::abort_source>& as,
   ss::sharded<metrics_reporter>& mr)
-  : _controller_stm(stm)
+  : _rate_limiter(kvs)
+  , _controller_stm(stm)
   , _metrics_reporter(mr)
   , _as(as)
   , _client_logger{logger, "crash-reporter"} {}
@@ -70,6 +80,49 @@ ss::future<> crash_reporter::start() {
 ss::future<> crash_reporter::stop() {
     vlog(logger.info, "Stopping Crash Reporter...");
     co_await _gate.close();
+}
+
+/// Called before an upload
+ss::future<> crash_reporter::rate_limiter::record() {
+    auto md = crash_reporter_rate_limiting_metadata{
+      .last_upload_time = model::to_timestamp(clock::now())};
+
+    iobuf buf;
+    serde::write(buf, md);
+
+    vlog(
+      logger.trace,
+      "Recording rate limiter last upload time as: {}",
+      md.last_upload_time);
+    co_await _kvstore.put(
+      storage::kvstore::key_space::crash_tracker,
+      bytes::from_string(rate_limiter_kvs_key),
+      std::move(buf));
+}
+
+/// Called before an upload to get how long to wait before uploading
+crash_reporter::rate_limiter::clock::duration
+crash_reporter::rate_limiter::wait_time() {
+    auto buf = _kvstore.get(
+      storage::kvstore::key_space::crash_tracker,
+      bytes::from_string(rate_limiter_kvs_key));
+    if (!buf) {
+        return 0s;
+    }
+    try {
+        auto md = serde::from_iobuf<crash_reporter_rate_limiting_metadata>(
+          std::move(*buf));
+        auto rate_limit_time = model::to_time_point(md.last_upload_time)
+                               + upload_rate;
+        auto remaining = rate_limit_time - clock::now();
+        return std::clamp<clock::duration>(remaining, 0s, upload_rate);
+    } catch (const serde::serde_exception& e) {
+        vlog(
+          logger.info,
+          "Error while reading crash reporter rate limiting metadata: {}",
+          e);
+        return upload_rate;
+    }
 }
 
 ss::future<crash_reporter::crash_report_payload>
@@ -145,11 +198,20 @@ ss::future<> crash_reporter::report_crashes() {
         for (size_t i = 0; i < max_upload_attempts && !success
                            && !_as.local().abort_requested();
              ++i) {
-            success = co_await try_report_crashes(current_batch);
+            // Record the upload to the rate limiter before sending the report
+            // to ensure that if there is a crash while sending telemetry data,
+            // the rate limiter will still limit subsequent uploads
+            auto rl_wait = _rate_limiter.wait_time();
+            if (rl_wait > 0s) {
+                vlog(
+                  logger.trace,
+                  "Sleeping for {}ms for rate limit to pass",
+                  rl_wait / 1ms);
+                co_await ss::sleep_abortable(rl_wait, _as.local());
+            }
+            co_await _rate_limiter.record();
 
-            // TODO: improve rate limiting to be robust against crashes
-            constexpr auto upload_interval = 30s;
-            co_await ss::sleep_abortable(upload_interval, _as.local());
+            success = co_await try_report_crashes(current_batch);
         }
 
         if (!success) {

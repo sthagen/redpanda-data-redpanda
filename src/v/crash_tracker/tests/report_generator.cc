@@ -23,7 +23,7 @@
 
 int main(int ac, char* av[]) {
     int crash_type_int = static_cast<int>(crash_tracker::crash_type::unknown);
-    std::string message, stacktrace, additional_info;
+    std::string message, stacktrace;
     std::filesystem::path output_file;
     int64_t timestamp = 0;
     namespace po = boost::program_options;
@@ -34,9 +34,6 @@ int main(int ac, char* av[]) {
       "stacktrace",
       po::value<std::string>(&stacktrace),
       "Stack trace to print")(
-      "additional-info",
-      po::value<std::string>(&additional_info),
-      "additional information")(
       "output-file",
       po::value<std::filesystem::path>(&output_file),
       "output file")(
@@ -73,9 +70,6 @@ int main(int ac, char* av[]) {
             cd.stacktrace = crash_tracker::reserved_string<
               crash_tracker::crash_description::string_buffer_reserve>{
               stacktrace};
-            cd.addition_info = crash_tracker::reserved_string<
-              crash_tracker::crash_description::string_buffer_reserve>{
-              additional_info};
             cd.type = crash_type;
             iobuf buf;
             serde::write(buf, std::move(cd));

@@ -736,6 +736,8 @@ public:
     std::vector<model::topic_partition>
     delete_offsets(std::vector<model::topic_partition> offsets);
 
+    void set_lag_metrics(consumer_lag_metrics lag_metrics);
+
 private:
     using member_map = absl::node_hash_map<kafka::member_id, member_ptr>;
     using protocol_support = absl::node_hash_map<kafka::protocol_name, int>;

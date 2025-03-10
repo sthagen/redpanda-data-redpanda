@@ -16,8 +16,6 @@ go_library(
         "//src/go/rpk/pkg/net",
         "//src/go/rpk/pkg/os",
         "//src/go/rpk/pkg/out",
-        "//src/go/rpk/pkg/publicapi",
-        "@com_connectrpc_connect//:connect",
         "@com_github_mattn_go_isatty//:go-isatty",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
