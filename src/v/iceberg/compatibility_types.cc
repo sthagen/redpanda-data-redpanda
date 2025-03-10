@@ -10,6 +10,8 @@
 
 #include "iceberg/compatibility_types.h"
 
+#include <fmt/format.h>
+
 namespace iceberg {
 
 std::string_view to_string_view(type_promoted tp) {

@@ -2,6 +2,9 @@ load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
     name = "base",
+    srcs = [
+        "vassert.cc",
+    ],
     hdrs = [
         "likely.h",
         "oncore.h",
@@ -13,6 +16,7 @@ redpanda_cc_library(
         "units.h",
         "unreachable.h",
         "vassert.h",
+        "vassert-register.h",
         "vformat.h",
         "vlog.h",
     ],

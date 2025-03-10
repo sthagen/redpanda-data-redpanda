@@ -14,6 +14,7 @@
 #include "model/namespace.h"
 
 #include <absl/container/flat_hash_map.h>
+#include <boost/lexical_cast.hpp>
 #include <gtest/gtest.h>
 
 #include <iomanip>

@@ -307,11 +307,6 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         }
     }
 
-    // If there are no partitions to compact, return early
-    if (compaction_heuristic_to_log_metas.empty()) {
-        co_return;
-    }
-
     for (const auto& [weight, log_metas] : compaction_heuristic_to_log_metas) {
         for (auto* meta_ptr : log_metas) {
             meta_ptr->link.unlink();
@@ -333,6 +328,10 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         current_log.flags |= bflags::compaction_checked;
 
         if (is_not_set(current_log.flags, bflags::should_compact)) {
+            // Still perform gc() here on a regular `log_compaction_interval_ms`
+            // basis.
+            co_await current_log.handle->gc(
+              gc_config(collection_threshold, _config.retention_bytes()));
             continue;
         }
 

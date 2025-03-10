@@ -16,13 +16,4 @@
 #include <seastar/util/backtrace.hh>
 
 // NOLINTNEXTLINE
-#define unreachable()                                                          \
-    /* NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while) */                     \
-    do {                                                                       \
-        ::detail::g_assert_log_holder.register_event(                          \
-          ss::current_backtrace(),                                             \
-          "This code should not be reached ({}:{})",                           \
-          __FILE__,                                                            \
-          __LINE__);                                                           \
-        __builtin_trap();                                                      \
-    } while (0)
+#define unreachable() vassert(false, "This code should not be reached")

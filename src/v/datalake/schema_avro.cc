@@ -10,8 +10,10 @@
 #include "datalake/schema_avro.h"
 
 #include <seastar/util/defer.hh>
+#include <seastar/util/log.hh>
 
 #include <avro/Schema.hh>
+
 namespace datalake {
 
 namespace {

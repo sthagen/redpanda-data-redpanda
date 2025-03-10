@@ -14,6 +14,8 @@
 #include "iceberg/avro_decimal.h"
 #include "serde/avro/parser.h"
 
+#include <seastar/util/log.hh>
+
 namespace datalake {
 
 namespace {

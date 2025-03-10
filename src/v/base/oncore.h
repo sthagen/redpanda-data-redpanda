@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/seastarx.h"
 #include "base/vassert.h"
 #include "source_location.h"
 

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/seastarx.h"
 #include "container/chunked_hash_map.h"
 #include "utils/s3_fifo.h"
 

@@ -1061,6 +1061,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":transform",
+        "//src/v/base",
         "//src/v/container:fragmented_vector",
         "@seastar",
     ],

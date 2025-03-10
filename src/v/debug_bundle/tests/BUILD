@@ -21,6 +21,7 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "//src/v/utils:uuid",
         "@abseil-cpp//absl/container:flat_hash_map",
+        "@boost//:lexical_cast",
         "@fmt",
         "@googletest//:gtest",
         "@rapidjson",

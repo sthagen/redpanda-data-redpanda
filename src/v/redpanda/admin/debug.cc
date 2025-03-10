@@ -8,6 +8,7 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
+#include "base/vassert-register.h"
 #include "base/vassert.h"
 #include "cloud_storage/cache_service.h"
 #include "cluster/cloud_storage_size_reducer.h"
@@ -1075,8 +1076,7 @@ ss::future<std::unique_ptr<ss::http::reply>> admin_server::put_ctracker_va(
     auto msg = ss::sstring{doc["message"].GetString()};
 
     co_await ss::smp::submit_to(shard, [msg = std::move(msg)] {
-        ::detail::g_assert_log_holder.register_event(
-          ss::current_backtrace(), "{}", msg);
+        base::register_event(ss::current_backtrace(), msg);
     });
 
     res->set_status(ss::http::reply::status_type::ok);

@@ -217,6 +217,7 @@ redpanda_cc_gtest(
     tags = ["exclusive"],
     deps = [
         ":simple_record_fixture",
+        "//src/v/base",
         "//src/v/config",
         "//src/v/model",
         "//src/v/raft",

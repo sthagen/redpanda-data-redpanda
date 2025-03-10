@@ -23,6 +23,7 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/util/defer.hh>
+#include <seastar/util/log.hh>
 
 #include <absl/container/btree_map.h>
 #include <absl/container/btree_set.h>

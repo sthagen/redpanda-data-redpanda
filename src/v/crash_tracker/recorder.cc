@@ -11,7 +11,7 @@
 
 #include "crash_tracker/recorder.h"
 
-#include "base/vassert.h"
+#include "base/vassert-register.h"
 #include "config/node_config.h"
 #include "crash_tracker/logger.h"
 #include "crash_tracker/types.h"
@@ -152,7 +152,7 @@ ss::future<> recorder::start() {
     co_await remove_old_crashfiles();
     co_await remove_dangling_upload_markers();
     co_await _writer.initialize(co_await generate_crashfile_name());
-    ::detail::g_assert_log_holder.register_cb(
+    base::register_cb(
       [](std::string_view msg) { get_recorder().record_crash_vassert(msg); });
 }
 

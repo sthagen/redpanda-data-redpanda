@@ -110,6 +110,7 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "//src/v/utils:xid",
         "@abseil-cpp//absl/container:node_hash_map",
+        "@boost//:lexical_cast",
         "@googletest//:gtest",
     ],
 )

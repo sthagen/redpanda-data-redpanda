@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
-#include "base/vassert.h"
+#include "base/vassert-register.h"
 
 #include <seastar/util/backtrace.hh>
 
@@ -26,21 +26,18 @@ TEST_F(AssertLogHolderTest, ValidateAssertLogHolder) {
     };
 
     auto bt = ss::current_backtrace();
-    detail::g_assert_log_holder.register_event(
-      bt, "This is a test event: {}", "test");
+    base::register_event(bt, "This is a test event: test");
     EXPECT_TRUE(message.empty());
-    detail::g_assert_log_holder.register_cb(cb);
-    detail::g_assert_log_holder.register_event(
-      bt, "This is a test event: {}", "test");
+    base::register_cb(cb);
+    base::register_event(bt, "This is a test event: test");
 
     EXPECT_EQ(message, fmt::format("This is a test event: test"));
     EXPECT_TRUE(unused_message.empty());
 
     // Verify that a second call to `register_cb` does not replace the current
     // callback
-    detail::g_assert_log_holder.register_cb(unused_cb);
-    detail::g_assert_log_holder.register_event(
-      bt, "This is a second test event: {}", "test");
+    base::register_cb(unused_cb);
+    base::register_event(bt, "This is a second test event: test");
 
     EXPECT_EQ(message, fmt::format("This is a second test event: test"));
     EXPECT_TRUE(unused_message.empty());
