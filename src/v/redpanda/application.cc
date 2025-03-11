@@ -345,6 +345,18 @@ void application::shutdown() {
     if (cloud_io.local_is_initialized()) {
         cloud_io.invoke_on_all(&cloud_io::remote::request_stop).get();
     }
+    /**
+     * Shutdown the datalake services before stopping all the partitions.
+     */
+    if (_datalake_manager.local_is_initialized()) {
+        _datalake_manager.invoke_on_all(&datalake::datalake_manager::shutdown)
+          .get();
+    }
+    if (_datalake_coordinator_mgr.local_is_initialized()) {
+        _datalake_coordinator_mgr
+          .invoke_on_all(&datalake::coordinator::coordinator_manager::shutdown)
+          .get();
+    }
 
     // Stop all partitions before destructing the subsystems (transaction
     // coordinator, etc). This interrupts ongoing replication requests,

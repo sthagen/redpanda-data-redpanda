@@ -34,6 +34,15 @@ struct size_based_retention_test_spec {
 const auto delta_10_min = model::timestamp{
   model::timestamp::now().value() - std::chrono::milliseconds{10min}.count()};
 
+namespace {
+segment_spec make_segment_spec_with_uninitialized_start_offset() {
+    auto ret = segment_spec(0, 9, 1024);
+    ret.start_offset = model::offset{};
+    return ret;
+}
+
+} // namespace
+
 const std::vector<size_based_retention_test_spec> retention_tests{
   // retention disabled
   size_based_retention_test_spec{
@@ -196,6 +205,15 @@ const std::vector<size_based_retention_test_spec> retention_tests{
     .retention_duration = tristate<std::chrono::milliseconds>{5min},
     .desired_start_offset = tristate<kafka::offset>{kafka::offset(42)},
     .next_start_offset = model::offset{40}},
+
+  // Remote segment with uninitalized start offset and all sorts of retention
+  // enabled.
+  size_based_retention_test_spec{
+    .remote_segments = {make_segment_spec_with_uninitialized_start_offset()},
+    .retention_bytes = tristate<size_t>{1024},
+    .retention_duration = tristate<std::chrono::milliseconds>{100ms},
+    .desired_start_offset = tristate<kafka::offset>{},
+    .next_start_offset = std::nullopt},
 };
 
 SEASTAR_THREAD_TEST_CASE(test_retention_strategies) {

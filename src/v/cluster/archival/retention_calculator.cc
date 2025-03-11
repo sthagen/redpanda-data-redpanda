@@ -107,12 +107,14 @@ std::optional<retention_calculator> retention_calculator::factory(
           model::timestamp::now().value()
           - ntp_config.retention_duration()->count()};
 
-        if (
-          manifest.size() > 0
-          && manifest.first_addressable_segment()->max_timestamp
-               < oldest_allowed_timestamp) {
-            strats.push_back(
-              std::make_unique<time_based_strategy>(oldest_allowed_timestamp));
+        if (manifest.size() > 0) {
+            auto first_seg = manifest.first_addressable_segment();
+            if (
+              first_seg != manifest.end()
+              && first_seg->max_timestamp < oldest_allowed_timestamp) {
+                strats.push_back(std::make_unique<time_based_strategy>(
+                  oldest_allowed_timestamp));
+            }
         }
     }
     auto start_kafka_override = manifest.get_start_kafka_offset_override();

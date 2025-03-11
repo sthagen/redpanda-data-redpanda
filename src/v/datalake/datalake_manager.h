@@ -72,7 +72,7 @@ public:
     ~datalake_manager();
 
     ss::future<> start();
-    ss::future<> stop();
+    ss::future<> shutdown();
 
     /*
      * Return the amount of disk space currently in use by the datalake

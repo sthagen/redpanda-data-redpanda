@@ -273,7 +273,7 @@ ss::future<> datalake_manager::start() {
     co_await _backlog_controller->start();
 }
 
-ss::future<> datalake_manager::stop() {
+ss::future<> datalake_manager::shutdown() {
     vlog(datalake_log.debug, "Stopping datalake manager...");
     auto f = _gate.close();
     co_await _queue.shutdown();

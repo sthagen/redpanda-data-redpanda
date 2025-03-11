@@ -51,7 +51,7 @@ public:
     ~coordinator_manager();
 
     ss::future<> start();
-    ss::future<> stop();
+    ss::future<> shutdown();
 
     ss::lw_shared_ptr<coordinator> get(const model::ntp&) const;
 

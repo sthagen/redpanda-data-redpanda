@@ -513,15 +513,20 @@ redpanda_cc_library(
     hdrs = [
         "partition.h",
     ],
+    implementation_deps = [
+        ":logger",
+        "//src/v/base",
+        "@seastar",
+    ],
     include_prefix = "iceberg",
     visibility = ["//visibility:public"],
     deps = [
         ":datatypes",
         ":transform",
+        ":transform_utils",
         ":unresolved_partition_spec",
         "//src/v/container:fragmented_vector",
         "//src/v/utils:named_type",
-        "@seastar",
     ],
 )
 
@@ -1011,6 +1016,9 @@ redpanda_cc_library(
     ],
     include_prefix = "iceberg",
     visibility = ["//visibility:public"],
+    deps = [
+        ":datatypes",
+    ],
 )
 
 redpanda_cc_library(
@@ -1043,9 +1051,12 @@ redpanda_cc_library(
     ],
     include_prefix = "iceberg",
     deps = [
+        ":datatypes",
         ":time_transform_visitor",
         ":transform",
         ":values",
+        "//src/v/base",
+        "@seastar",
     ],
 )
 
