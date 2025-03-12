@@ -163,8 +163,10 @@ class DatalakeServices():
                                      partitions=1,
                                      replicas=1,
                                      iceberg_mode="key_value",
+                                     target_lag_ms=10000,
                                      config: dict[str, Any] = dict()):
         config[TopicSpec.PROPERTY_ICEBERG_MODE] = iceberg_mode
+        config[TopicSpec.PROPERTY_ICEBERG_TARGET_LAG_MS] = target_lag_ms
         rpk = RpkTool(self.redpanda)
         rpk.create_topic(topic=name,
                          partitions=partitions,
@@ -239,7 +241,7 @@ class DatalakeServices():
     def wait_for_translation(self,
                              topic,
                              msg_count,
-                             timeout=30,
+                             timeout=60,
                              backoff_sec=5,
                              table_override=None):
         table_name = topic

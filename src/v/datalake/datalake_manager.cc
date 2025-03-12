@@ -351,12 +351,16 @@ datalake_manager::handle_translator_state_change(const model::ntp& ntp) {
         _topic_table,
         _features,
         get_or_create_probe(partition->ntp()));
+    auto lag_tracker
+      = translation::translation_lag_tracker::make_default_lag_tracker(
+        partition, _topic_table->local());
 
     auto translator = std::make_unique<translation::partition_translator>(
       _sg,
       std::move(coordinator),
       std::move(data_src),
       std::move(translation_ctx),
+      std::move(lag_tracker),
       simple_time_jitter<ss::lowres_clock, std::chrono::milliseconds>{
         translation_jitter_base, translation_jitter},
       retry_max_timeout,

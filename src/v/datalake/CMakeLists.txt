@@ -33,6 +33,7 @@ v_cc_library(
     partition_spec_parser.cc
   DEPS
     v::iceberg_unresolved_partition_spec
+    Seastar::seastar
 )
 
 v_cc_library(

@@ -23,7 +23,7 @@ namespace storage {
 
 class log_failure_probes final : public finjector::probe {
 public:
-    using type = uint32_t;
+    using type = finjector::probe::bitmap_type;
 
     static constexpr std::string_view name() {
         return "storage::log::failure_probes";

@@ -9,24 +9,40 @@
  */
 #pragma once
 
+#include "utils/fixed_string.h"
+
 #include <cstdint>
 #include <ostream>
 #include <variant>
 
 namespace iceberg {
 
-struct identity_transform {};
+struct identity_transform {
+    static constexpr fixed_string key{"identity"};
+};
 struct bucket_transform {
+    static constexpr fixed_string key{"bucket"};
     uint32_t n;
 };
 struct truncate_transform {
+    static constexpr fixed_string key{"truncate"};
     uint32_t length;
 };
-struct year_transform {};
-struct month_transform {};
-struct day_transform {};
-struct hour_transform {};
-struct void_transform {};
+struct year_transform {
+    static constexpr fixed_string key{"year"};
+};
+struct month_transform {
+    static constexpr fixed_string key{"month"};
+};
+struct day_transform {
+    static constexpr fixed_string key{"day"};
+};
+struct hour_transform {
+    static constexpr fixed_string key{"hour"};
+};
+struct void_transform {
+    static constexpr fixed_string key{"void"};
+};
 
 using transform = std::variant<
   identity_transform,

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/lestrrat-go/jwx/jwa"
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwa"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/stretchr/testify/require"
 )
@@ -336,7 +336,7 @@ qaGyeeWSr7npaGhNfb59Mq++Cnk4IDPwNJYVFjw6qt9tSl0fJyBZw+iXvMPPlmxe
 				tok.Set(jwt.ExpirationKey, test.expiry) // unix epoch, 0 time
 			}
 
-			signed, err := jwt.Sign(tok, jwa.HS256, pkey)
+			signed, err := jwt.Sign(tok, jwt.WithKey(jwa.HS256, pkey))
 			if err != nil {
 				t.Errorf("unexpected error while signing: %v", err)
 				return

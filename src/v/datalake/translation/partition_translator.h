@@ -73,6 +73,7 @@ public:
       std::unique_ptr<coordinator_api>,
       std::unique_ptr<data_source>,
       std::unique_ptr<translation_context>,
+      std::unique_ptr<translation_lag_tracker>,
       jitter_t jitter,
       std::chrono::milliseconds retry_max_timeout,
       std::chrono::milliseconds retry_initial_backoff);
@@ -147,10 +148,18 @@ private:
     checkpoint_translation_result(
       retry_chain_node&, coordinator::translated_offset_range);
 
+    /**
+     * Returns true if the inflight translation should be flushed up on which
+     * all the files are rolled and uploaded to the cloud storage and the result
+     * will be checkpointed.
+     */
+    bool should_finish_inflight_translation() const;
+
     ss::scheduling_group _sg;
     std::unique_ptr<coordinator_api> _coordinator;
     std::unique_ptr<data_source> _data_source;
     std::unique_ptr<translation_context> _translation_ctx;
+    std::unique_ptr<translation_lag_tracker> _lag_tracking;
     // TODO: consider baking backoff into the scheduler on translation failure.
     jitter_t _jitter;
     std::chrono::milliseconds _retry_max_timeout;

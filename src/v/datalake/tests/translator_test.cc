@@ -26,8 +26,7 @@ class PartitionTranslatorTestFixture
             add_node();
         }
         co_await wait_for_all_members(5s);
-        reduced_commit_interval.get("iceberg_catalog_commit_interval_ms")
-          .set_value(10000ms);
+        reduced_lag.get("iceberg_target_lag_ms").set_value(10000ms);
 
         co_await create_iceberg_topic(test_topic.tp);
         // create a kafka client for the cluster.
@@ -75,7 +74,7 @@ public:
           });
     }
 
-    scoped_config reduced_commit_interval;
+    scoped_config reduced_lag;
 
     model::topic_namespace test_topic{
       model::kafka_namespace, model::topic{"test"}};

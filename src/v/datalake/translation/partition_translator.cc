@@ -12,6 +12,7 @@
 
 #include "datalake/logger.h"
 #include "resource_mgmt/io_priority.h"
+#include "utils/to_string.h"
 
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/defer.hh>
@@ -22,6 +23,14 @@ namespace {
 using namespace std::chrono_literals;
 // A simple utility to conditionally retry with backoff on failures.
 constexpr model::timeout_clock::duration wait_timeout = 5s;
+
+// Purposefully set to a low-ish value (instead of 64/128_MiB) until space
+// management is fully integrated. The low value means less concurrent bytes
+// accumulated across all translators at any point which translates to less
+// pressure on space management enforce it's eviction policies. 32_MiB is still
+// a reasonable default compared to what we had before, but will be bumped soon.
+// note: this is _per_ (partition) translator.
+static constexpr size_t partition_flushed_bytes_limit = 32_MiB;
 
 template<
   typename Func,
@@ -69,6 +78,7 @@ partition_translator::partition_translator(
   std::unique_ptr<coordinator_api> coordinator,
   std::unique_ptr<data_source> data_source,
   std::unique_ptr<translation_context> translation_ctx,
+  std::unique_ptr<translation_lag_tracker> lag_tracker,
   jitter_t jitter,
   std::chrono::milliseconds retry_max_timeout,
   std::chrono::milliseconds retry_initial_backoff)
@@ -76,6 +86,7 @@ partition_translator::partition_translator(
   , _coordinator(std::move(coordinator))
   , _data_source(std::move(data_source))
   , _translation_ctx(std::move(translation_ctx))
+  , _lag_tracking(std::move(lag_tracker))
   , _jitter{std::move(jitter)}
   , _retry_max_timeout(retry_max_timeout)
   , _retry_initial_backoff(retry_initial_backoff)
@@ -137,6 +148,7 @@ partition_translator::translate_when_notified(kafka::offset begin_offset) {
     if (!reader) {
         co_return;
     }
+    vlog(_logger.trace, "starting translation from offset: {}", begin_offset);
     ss::timer<scheduling::clock> cancellation_timer;
     cancellation_timer.set_callback([&as] { as.request_abort(); });
 
@@ -149,6 +161,18 @@ partition_translator::translate_when_notified(kafka::offset begin_offset) {
     co_await std::move(translation_f).finally([&cancellation_timer] {
         cancellation_timer.cancel();
     });
+}
+
+bool partition_translator::should_finish_inflight_translation() const {
+    auto bytes_flushed_pending_upload = _translation_ctx->flushed_bytes();
+    auto lag_window_ended = _lag_tracking->should_finish_inflight_translation();
+    vlog(
+      _logger.trace,
+      "current bytes flushed: {}, lag window roll: {}",
+      bytes_flushed_pending_upload,
+      lag_window_ended);
+    return bytes_flushed_pending_upload >= partition_flushed_bytes_limit
+           || lag_window_ended;
 }
 
 ss::future<> partition_translator::translate_until_stopped() {
@@ -188,7 +212,8 @@ ss::future<> partition_translator::translate_until_stopped() {
         if (reset_error) {
             vlog(
               _logger.warn,
-              "error updating highest translated offset: {}, translation will "
+              "error updating highest translated offset: {}, translation "
+              "will "
               "be retried",
               reset_error);
             continue;
@@ -197,57 +222,66 @@ ss::future<> partition_translator::translate_until_stopped() {
         // Update partition metrics. Note that last committed offset here
         // is NOT synchronized with outstanding commit operations. Therefore
         // if we reach this point before the most recent batch of files has
-        // been committed, the commit lag metric will be out of sync at least
-        // until 'wait_for_data' returns and we re-enter the loop.
+        // been committed, the commit lag metric will be out of sync at
+        // least until 'wait_for_data' returns and we re-enter the loop.
         _data_source->update_commit_lag(last_committed_offset);
         _data_source->update_translation_lag(last_translated_offset);
 
+        auto local_last_translated_offset = last_translated_offset;
+        if (
+          auto last_known_translated_offset
+          = _translation_ctx->last_translated_offset()) {
+            // A translation already in progress, start from where we left off.
+            local_last_translated_offset = last_known_translated_offset.value();
+        }
+
+        static constexpr auto data_wait_duration = 3s;
         // Wait until some data is ready to be translated.
         auto maybe_begin_offset
           = co_await _data_source->wait_for_data_to_translate(
-            last_translated_offset, _as);
+            local_last_translated_offset,
+            ss::lowres_clock::now() + data_wait_duration,
+            _as);
 
-        // if wait_for_data timed out (i.e. all trnaslatable records have
+        // if wait_for_data timed out (i.e. all translatable records have
         // been translated already), reenter the loop. this gives us an
         // opportunity to reconcile outstanding coordinator state, which is
         // helpful for keeping lag metrics up-to-date.
-        if (!maybe_begin_offset.has_value()) {
-            continue;
+        if (maybe_begin_offset) {
+            auto begin_offset = maybe_begin_offset.value();
+
+            // Notify the scheduler that there is some data to translate
+            _scheduler->notify_ready(id);
+
+            // wait for the scheduler to notify back that we've been given a
+            // time slice (i.e. scheduled in), then translate until the time
+            // slice expires or we run out of data
+            auto translate_f = co_await ss::coroutine::as_future<>(
+              translate_when_notified(begin_offset));
+
+            // inflight_translation_state tracks a single scheduled chunk of
+            // work, so we reset it to nullopt for the next time we're scheduled
+            // in
+            _inflight_translation_state.reset();
+
+            // Let the scheduler know we are done
+            _scheduler->notify_done(id);
+
+            if (translate_f.failed()) {
+                vlog(
+                  _logger.warn,
+                  "Translation attempt failed: {}, discarding state to reset "
+                  "translation",
+                  translate_f.get_exception());
+                co_await _translation_ctx->discard();
+                continue;
+            }
         }
 
-        auto begin_offset = maybe_begin_offset.value();
-
-        // Notify the scheduler that there is some data to translate
-        _scheduler->notify_ready(id);
-
-        // wait for the scheduler to notify back that we've been given a time
-        // slice (i.e. scheduled in), then translate until the time slice
-        // expires or we run out of data
-        auto translate_f = co_await ss::coroutine::as_future<>(
-          translate_when_notified(begin_offset));
-
-        // inflight_translation_state tracks a single scheduled chunk of work,
-        // so we reset it to nullopt for the next time we're scheduled in
-        _inflight_translation_state.reset();
-
-        // Let the scheduler know we are done
-        _scheduler->notify_done(id);
-
-        if (translate_f.failed()) {
-            vlog(
-              _logger.warn,
-              "Translation attempt failed: {}, discarding state to reset "
-              "translation",
-              translate_f.get_exception());
-            co_await _translation_ctx->discard();
+        if (!should_finish_inflight_translation()) {
+            scoped_set_jitter.cancel();
             continue;
         }
-
-        // TODO: add logic to skip finish on every iteration. This is
-        // predicated on whether we are close to the lag deadline or if too many
-        // bytes have accumulated
-        // With out this, we finish() on every translation which makes it
-        // equivalent to the logic without this patch.
 
         auto translation_result = co_await _translation_ctx->finish(rcn, _as);
         if (!translation_result) {
@@ -255,7 +289,10 @@ ss::future<> partition_translator::translate_until_stopped() {
             continue;
         }
 
-        if (begin_offset != translation_result->start_offset) {
+        // Check if the translated offset space is contiguous, if not make it
+        // so.
+        auto expected_begin = kafka::next_offset(last_translated_offset);
+        if (expected_begin != translation_result->start_offset) {
             // This is possible if there is a gap in offsets range, eg from
             // compaction. Normally that shouldn't be the case, as translation
             // enforces max_collectible_offset which prevents compaction or
@@ -268,9 +305,9 @@ ss::future<> partition_translator::translate_until_stopped() {
               _logger.info,
               "detected an offset range gap in [{}, {}), adjusting the begin "
               "offset to avoid gaps in coordinator tracked offsets.",
-              begin_offset,
+              expected_begin,
               translation_result->start_offset);
-            translation_result->start_offset = begin_offset;
+            translation_result->start_offset = expected_begin;
         }
 
         last_translated_offset = translation_result->last_offset;
@@ -311,8 +348,8 @@ ss::future<> partition_translator::init(
     _initialized = true;
     ssx::repeat_until_gate_closed_or_aborted(_gate, _as, [this] {
         return ss::with_scheduling_group(_sg, [this] {
-            return translate_until_stopped().handle_exception(
-              [this](const std::exception_ptr& ex) {
+            return translate_until_stopped()
+              .handle_exception([this](const std::exception_ptr& ex) {
                   auto log_level = ssx::is_shutdown_exception(ex)
                                      ? ss::log_level::debug
                                      : ss::log_level::warn;
@@ -322,6 +359,19 @@ ss::future<> partition_translator::init(
                     "[{}] Encountered exception in translation loop: {}",
                     ex,
                     _data_source->ntp());
+              })
+              .then([this] {
+                  // discard any inflight state and start from scratch
+                  return _translation_ctx->discard().then_wrapped(
+                    [this](ss::future<> f) {
+                        if (f.failed()) {
+                            vlog(
+                              _logger.warn,
+                              "Exception cleaning up inflight translation: {}",
+                              f.get_exception());
+                        }
+                        return ss::make_ready_future();
+                    });
               });
         });
     });

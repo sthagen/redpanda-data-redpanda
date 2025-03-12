@@ -23,6 +23,65 @@
 #include <optional>
 
 namespace raft {
+
+replicate_batcher::item::item(
+  size_t record_count,
+  chunked_vector<model::record_batch> batches,
+  ssx::semaphore_units u,
+  std::optional<model::term_id> expected_term,
+  replicate_options opts)
+  : _record_count(record_count)
+  , _data(std::move(batches))
+  , _units(std::move(u))
+  , _expected_term(expected_term)
+  , _replicate_opts(opts) {
+    _timeout_timer.set_callback([this] { expire_with_timeout(); });
+    if (_replicate_opts.timeout) {
+        _timeout_timer.arm(_replicate_opts.timeout.value());
+    }
+    if (_replicate_opts.as) [[unlikely]] {
+        _abort_sub = _replicate_opts.as->get().subscribe(
+          [this] noexcept { mark_as_aborted(); });
+        if (!_abort_sub) {
+            mark_as_aborted();
+        }
+    }
+}
+
+void replicate_batcher::item::set_value(result<replicate_result> r) {
+    if (!_ready) {
+        _timeout_timer.cancel();
+        _ready = true;
+        _promise.set_value(r);
+    }
+}
+
+void replicate_batcher::item::set_exception(const std::exception_ptr& e) {
+    if (!_ready) {
+        _timeout_timer.cancel();
+        _ready = true;
+        _promise.set_exception(e);
+    }
+}
+
+void replicate_batcher::item::expire_with_timeout() {
+    if (!_ready) {
+        _ready = true;
+        _data.clear();
+        _units.return_all();
+        _promise.set_value(errc::timeout);
+    }
+}
+
+void replicate_batcher::item::mark_as_aborted() {
+    if (!_ready) {
+        _ready = true;
+        _data.clear();
+        _units.return_all();
+        _promise.set_value(errc::shutting_down);
+    }
+}
+
 using namespace std::chrono_literals; // NOLINT
 replicate_batcher::replicate_batcher(consensus* ptr, size_t cache_size)
   : _ptr(ptr)

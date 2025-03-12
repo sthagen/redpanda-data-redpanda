@@ -158,12 +158,18 @@ private:
     void abort_current_refresh();
 
     ss::future<errc> walk_local_and_remote_reports(
-      health_monitor_backend_details::partition_leader_status_handler auto&&
+      health_monitor_backend_details::partition_leader_status_handler auto
         local_leader_handler,
-      health_monitor_backend_details::partition_leader_status_handler auto&&
+      health_monitor_backend_details::partition_leader_status_handler auto
         remote_leader_handler,
-      health_monitor_backend_details::partition_handler auto&&
+      health_monitor_backend_details::partition_handler auto
         unclaimed_partition_handler);
+
+    // read-only access to _reports
+    // unsafe across scheduling points:
+    const report_cache_t& reports() const;
+    // safe across scheduling points:
+    const ss::lw_shared_ptr<const report_cache_t> hold_reports() const;
 
     /**
      * @brief Stucture holding the aggregated results of partition status.
@@ -191,7 +197,7 @@ private:
         bool operator==(const aggregated_report&) const = default;
     };
 
-    static aggregated_report aggregate_reports(report_cache_t& reports);
+    static aggregated_report aggregate_reports(const report_cache_t& reports);
 
     ss::lw_shared_ptr<raft::consensus> _raft0;
     ss::sharded<members_table>& _members;
@@ -208,7 +214,9 @@ private:
     ss::lw_shared_ptr<abortable_refresh_request> _refresh_request;
 
     status_cache_t _status;
-    report_cache_t _reports;
+    // individual reports get inserted but never get replaced or removed,
+    // collection can also be replaced as a whole
+    ss::lw_shared_ptr<report_cache_t> _reports;
     storage::disk_space_alert _reports_data_disk_health
       = storage::disk_space_alert::ok;
     bool _restart_risks_collected = false;

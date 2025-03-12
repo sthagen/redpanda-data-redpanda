@@ -13,7 +13,6 @@
 
 #include "base/outcome.h"
 #include "container/fragmented_vector.h"
-#include "model/record_batch_reader.h"
 #include "raft/types.h"
 #include "ssx/semaphore.h"
 #include "utils/mutex.h"
@@ -33,26 +32,7 @@ public:
           chunked_vector<model::record_batch> batches,
           ssx::semaphore_units u,
           std::optional<model::term_id> expected_term,
-          replicate_options opts)
-          : _record_count(record_count)
-          , _data(std::move(batches))
-          , _units(std::move(u))
-          , _expected_term(expected_term)
-          , _replicate_opts(opts) {
-            _timeout_timer.set_callback([this] { expire_with_timeout(); });
-            if (_replicate_opts.timeout) {
-                _timeout_timer.arm(_replicate_opts.timeout.value());
-            }
-            if (_replicate_opts.as) {
-                auto& as = _replicate_opts.as->get();
-                if (as.abort_requested()) {
-                    mark_as_aborted();
-                } else {
-                    _abort_sub = as.subscribe(
-                      [this] noexcept { mark_as_aborted(); });
-                }
-            }
-        };
+          replicate_options opts);
 
         item(item&&) noexcept = default;
         item& operator=(item&&) noexcept = delete;
@@ -78,21 +58,8 @@ public:
             return std::make_tuple(std::move(_data), std::move(_units));
         }
 
-        void set_value(result<replicate_result> r) {
-            if (!_ready) {
-                _timeout_timer.cancel();
-                _ready = true;
-                _promise.set_value(r);
-            }
-        }
-
-        void set_exception(const std::exception_ptr& e) {
-            if (!_ready) {
-                _timeout_timer.cancel();
-                _ready = true;
-                _promise.set_exception(e);
-            }
-        }
+        void set_value(result<replicate_result> r);
+        void set_exception(const std::exception_ptr& e);
 
         ss::future<result<replicate_result>> get_future() {
             return _promise.get_future();
@@ -101,23 +68,8 @@ public:
         bool ready() const { return _ready; }
 
     private:
-        void expire_with_timeout() {
-            if (!_ready) {
-                _ready = true;
-                _data.clear();
-                _units.return_all();
-                _promise.set_value(errc::timeout);
-            }
-        }
-
-        void mark_as_aborted() {
-            if (!_ready) {
-                _ready = true;
-                _data.clear();
-                _units.return_all();
-                _promise.set_value(errc::shutting_down);
-            }
-        }
+        void expire_with_timeout();
+        void mark_as_aborted();
         size_t _record_count;
         chunked_vector<model::record_batch> _data;
         ssx::semaphore_units _units;

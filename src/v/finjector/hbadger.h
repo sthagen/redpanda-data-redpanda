@@ -21,6 +21,10 @@
 namespace finjector {
 
 struct probe {
+    // The type of the bitmap use to represent which injection points
+    // are enabled.
+    using bitmap_type = uint64_t;
+
     probe() = default;
     virtual ~probe() = default;
     virtual std::vector<std::string_view> points() = 0;
@@ -28,7 +32,7 @@ struct probe {
     // Bits must be distinct across points. Implementations may
     // support a pattern or wildcard for 'point', which may return
     // multiple bits set here.
-    virtual uint32_t point_to_bit(std::string_view point) const = 0;
+    virtual bitmap_type point_to_bit(std::string_view point) const = 0;
 
     [[gnu::always_inline]] bool operator()() const {
 #ifndef NDEBUG
@@ -51,16 +55,16 @@ struct probe {
         _termination_methods |= point_to_bit(point);
     }
     void unset(std::string_view point) {
-        const uint32_t m = point_to_bit(point);
+        const auto m = point_to_bit(point);
         _exception_methods &= ~m;
         _delay_methods &= ~m;
         _termination_methods &= ~m;
     }
 
 protected:
-    uint32_t _exception_methods = 0;
-    uint32_t _delay_methods = 0;
-    uint32_t _termination_methods = 0;
+    bitmap_type _exception_methods = 0;
+    bitmap_type _delay_methods = 0;
+    bitmap_type _termination_methods = 0;
 };
 
 class honey_badger {

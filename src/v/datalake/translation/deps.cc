@@ -178,12 +178,11 @@ public:
 
     ss::future<std::optional<kafka::offset>> wait_for_data_to_translate(
       std::optional<kafka::offset> last_translated_offset,
+      ss::lowres_clock::time_point deadline,
       ss::abort_source& as) final {
         // todo: add logic to wait for enough data to translate.
         // currently we just break even if a single batch of data is available
         constexpr auto poll_duration = 2s;
-        constexpr auto poll_limit = (poll_duration * 15) - 1s;
-        const auto deadline = ss::lowres_clock::now() + poll_limit;
         while (!has_more_data_to_translate(last_translated_offset)) {
             co_await ss::sleep_abortable(poll_duration, as);
             if (ss::lowres_clock::now() >= deadline) {
@@ -441,6 +440,20 @@ public:
         }
     }
 
+    size_t flushed_bytes() const final {
+        size_t result = 0;
+        if (_in_progress_translation) {
+            result = _in_progress_translation->flushed_bytes();
+        }
+        return result;
+    }
+
+    std::optional<kafka::offset> last_translated_offset() const final {
+        return _in_progress_translation
+                 ? _in_progress_translation->last_translated_offset()
+                 : std::nullopt;
+    }
+
     ss::future<> flush() final {
         if (_in_progress_translation) {
             return _in_progress_translation->flush().then_wrapped(
@@ -575,6 +588,61 @@ translation_context::make_default_translation_context(
       topics,
       features,
       std::move(probe));
+}
+
+// note: this is a temporary implementation to get the code compiling
+// to be filled with a proper implementation that tracks windows based
+// on batch timestamps + heuristics
+// Even the interface is temporary and subject to change depending on
+// the changes needed to track windows.
+class partition_lag_tracker : public translation_lag_tracker {
+public:
+    explicit partition_lag_tracker(
+      ss::lw_shared_ptr<cluster::partition> partition,
+      cluster::topic_table& topics)
+      : _partition(std::move(partition))
+      , _topics(topics)
+      , _current_window_end(scheduling::clock::now()) {
+        reset_to_next_window();
+    }
+
+    bool should_finish_inflight_translation() final {
+        auto window_ended = scheduling::clock::now() >= _current_window_end;
+        if (window_ended) {
+            reset_to_next_window();
+        }
+        return window_ended;
+    }
+
+private:
+    scheduling::clock::duration target_lag() const {
+        const auto& topic_cfg = _topics.get_topic_cfg(
+          model::topic_namespace_view{_partition->ntp()});
+        auto default_lag
+          = config::shard_local_cfg().iceberg_target_lag_ms.value();
+        if (!topic_cfg.has_value()) {
+            return std::chrono::duration_cast<scheduling::clock::duration>(
+              default_lag);
+        }
+        auto target_lag = topic_cfg->properties.iceberg_target_lag_ms.value_or(
+          default_lag);
+        return std::chrono::duration_cast<scheduling::clock::duration>(
+          target_lag);
+    }
+
+    void reset_to_next_window() { _current_window_end += target_lag(); }
+
+    ss::lw_shared_ptr<cluster::partition> _partition;
+    cluster::topic_table& _topics;
+    scheduling::clock::time_point _current_window_end;
+};
+
+std::unique_ptr<translation_lag_tracker>
+translation_lag_tracker::make_default_lag_tracker(
+  ss::lw_shared_ptr<cluster::partition> partition,
+  cluster::topic_table& topics) {
+    return std::make_unique<partition_lag_tracker>(
+      std::move(partition), topics);
 }
 
 } // namespace datalake::translation

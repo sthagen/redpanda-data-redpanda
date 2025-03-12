@@ -9,6 +9,13 @@
 
 #include "iceberg/unresolved_partition_spec.h"
 
+#include "base/vassert.h"
+#include "iceberg/transform.h"
+
+#include <fmt/format.h>
+
+#include <type_traits>
+
 namespace iceberg {
 
 bool unresolved_partition_spec::is_valid_for_default_spec() const {
@@ -33,6 +40,25 @@ bool unresolved_partition_spec::is_valid_for_default_spec() const {
         }
     }
     return true;
+}
+
+namespace {
+template<typename Transform>
+static constexpr auto transform_suffix = fixed_string{"_"} + Transform::key;
+template<>
+static constexpr auto transform_suffix<identity_transform> = fixed_string{""};
+} // namespace
+
+void unresolved_partition_spec::field::autogenerate_name() {
+    vassert(name == "", "partition already has a name");
+    name = fmt::format(
+      "{}{}",
+      fmt::join(this->source_name, "."),
+      std::visit(
+        [](auto tr) -> std::string_view {
+            return transform_suffix<decltype(tr)>;
+        },
+        transform));
 }
 
 std::ostream&

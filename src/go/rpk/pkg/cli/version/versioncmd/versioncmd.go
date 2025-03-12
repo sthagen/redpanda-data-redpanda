@@ -106,7 +106,7 @@ To get only the rpk version, use 'rpk --version'.`,
 }
 
 func printRpkVersion(rv rpkVersion) {
-	fmt.Printf(`Version:     %s
+	fmt.Printf(`rpk version: %s
 Git ref:     %s
 Build date:  %s
 OS/Arch:     %s

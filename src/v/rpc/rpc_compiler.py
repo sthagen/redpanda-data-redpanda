@@ -13,6 +13,7 @@ import sys
 import os
 import logging
 import json
+from typing import Any
 
 # 3rd party
 from jinja2 import Template
@@ -57,8 +58,8 @@ RPC_TEMPLATE = """
 
 namespace {{namespace}} {
 
-template<typename Codec>
-class {{service_name}}_service_base : public ::rpc::service {
+class {{service_name}}_service : public ::rpc::service {
+    using Codec = ::rpc::default_message_codec;
 public:
     class failure_probes;
 
@@ -66,13 +67,13 @@ public:
     static constexpr ::rpc::method_info {{method.name}}_method = {"{{service_name}}::{{method.name}}", {{method.id}}};
     {%- endfor %}
 
-    {{service_name}}_service_base(ss::scheduling_group sc, ss::smp_service_group ssg)
+    {{service_name}}_service(ss::scheduling_group sc, ss::smp_service_group ssg)
        : _sc(sc), _ssg(ssg) {}
 
-    {{service_name}}_service_base({{service_name}}_service_base&& o) noexcept = delete;
-    {{service_name}}_service_base& operator=({{service_name}}_service_base&& o) noexcept = delete;
+    {{service_name}}_service({{service_name}}_service&& o) noexcept = delete;
+    {{service_name}}_service& operator=({{service_name}}_service&& o) noexcept = delete;
 
-    virtual ~{{service_name}}_service_base() noexcept = default;
+    virtual ~{{service_name}}_service() noexcept = default;
 
     void setup_metrics() final {
         namespace sm = ss::metrics;
@@ -111,9 +112,15 @@ public:
          default: return nullptr;
        }
     }
+
+    {%- for method in methods %}
+    virtual ss::future<{{method.output_type}}>
+    {{method.name}}({{method.input_type}}, ::rpc::streaming_context&) = 0;
+    {%- endfor %}
+private:
     {%- for method in methods %}
     /// \\brief {{method.input_type}} -> {{method.output_type}}
-    virtual ss::future<::rpc::netbuf>
+    ss::future<::rpc::netbuf>
     raw_{{method.name}}(ss::input_stream<char>& in, ::rpc::streaming_context& ctx) {
       return execution_helper<{{method.input_type}},
                               {{method.output_type}},
@@ -123,10 +130,8 @@ public:
           return {{method.name}}(std::move(t), ctx);
       });
     }
-    virtual ss::future<{{method.output_type}}>
-    {{method.name}}({{method.input_type}}, ::rpc::streaming_context&) = 0;
     {%- endfor %}
-private:
+
     ss::scheduling_group _sc;
     ss::smp_service_group _ssg;
     std::array<::rpc::method, {{methods|length}}> _methods{%raw %}{{{% endraw %}
@@ -139,18 +144,14 @@ private:
     metrics::internal_metric_groups _metrics;
 };
 
-using {{service_name}}_service = {{service_name}}_service_base<::rpc::default_message_codec>;
-
-class {{service_name}}_client_protocol {
+class {{service_name}}_client_protocol {% if final_protocol %}final{% endif %} {
 public:
     explicit {{service_name}}_client_protocol(ss::lw_shared_ptr<::rpc::transport> t)
       : _transport(t) {
     }
 
-    virtual ~{{service_name}}_client_protocol() = default;
-
     {%- for method in methods %}
-    virtual inline ss::future<result<::rpc::client_context<{{method.output_type}}>>>
+    ss::future<result<::rpc::client_context<{{method.output_type}}>>>
     {{method.name}}({{method.input_type}}&& r, ::rpc::client_opts opts) {
        return _transport->send_typed<{{method.input_type}}, {{method.output_type}}>(std::move(r),
               {{service_name}}_service::{{method.name}}_method, std::move(opts));
@@ -161,16 +162,15 @@ private:
     ss::lw_shared_ptr<::rpc::transport> _transport;
 };
 
-template<typename Codec>
-class {{service_name}}_service_base<Codec>::failure_probes final : public finjector::probe {
+class {{service_name}}_service::failure_probes final : public finjector::probe {
 public:
-    using type = uint32_t;
+    using type = finjector::probe::bitmap_type;
 
     static constexpr std::string_view name() { return "{{service_name}}_service::failure_probes"; }
 
-    enum class methods: type {
+    enum class methods : type {
     {%- for method in methods %}
-        {{method.name}} = 1 << {{loop.index}}{{ "," if not loop.last }}
+        {{method.name}} = 1ULL << {{loop.index}}{{ "," if not loop.last }}
     {%- endfor %}
     };
     type point_to_bit(std::string_view point) const final {
@@ -220,13 +220,16 @@ private:
 } // namespace
 """
 
+# default values applied to service definition
+SERVICE_DEFAULTS = {"final_protocol": True}
 
-def _read_file(name):
+
+def _read_file(name: str):
     with open(name, 'r') as f:
-        return json.load(f)
+        return SERVICE_DEFAULTS | json.load(f)
 
 
-def _enrich_methods(service):
+def _enrich_methods(service: Any):
     logger.info(service)
 
     service["id"] = zlib.crc32(
@@ -244,8 +247,11 @@ def _enrich_methods(service):
     return service
 
 
-def _codegen(service, out):
+def _codegen(service: Any, out: str):
     logger.info(service)
+    # this limitation comes from the finjector bitmap which is a uint64_t
+    assert len(service["methods"]) <= 64, \
+        f"Service {service['service_name']} has too many methods to hold in a uint64_t"
     tpl = Template(RPC_TEMPLATE)
     with open(out, 'w') as f:
         f.write(tpl.render(service))
@@ -271,7 +277,7 @@ def main():
         return parser
 
     parser = generate_options()
-    options, program_options = parser.parse_known_args()
+    options = parser.parse_args()
     logger.info("%s" % options)
     _codegen(_enrich_methods(_read_file(options.service_file)),
              options.output_file)

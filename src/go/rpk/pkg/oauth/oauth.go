@@ -7,7 +7,7 @@ import (
 	"net/url"
 	"time"
 
-	"github.com/lestrrat-go/jwx/jwt"
+	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"go.uber.org/zap"
 )
@@ -198,9 +198,15 @@ func ValidateToken(token, audience string, clientIDs ...string) (expired bool, r
 		return false, errors.New("invalid empty audience")
 	}
 
-	parsed, err := jwt.Parse([]byte(token))
+	parsed, err := jwt.Parse([]byte(token), jwt.WithVerify(false))
 	if err != nil {
-		return false, fmt.Errorf("unable to parse jwt token: %w", err)
+		if errors.Is(err, jwt.ErrTokenExpired()) {
+			return true, nil
+		}
+		if errors.Is(err, jwt.ErrInvalidAudience()) {
+			return false, fmt.Errorf("token audience %v does not contain our expected audience %q", parsed.Audience(), audience)
+		}
+		return false, fmt.Errorf("unable to parse jwt token: %v", err)
 	}
 
 	// A missing "exp" field shows up as a zero time.
@@ -211,14 +217,13 @@ func ValidateToken(token, audience string, clientIDs ...string) (expired bool, r
 	err = jwt.Validate(parsed,
 		jwt.WithAudience(audience))
 	if err != nil {
-		switch err.Error() {
-		case "exp not satisfied":
+		if errors.Is(err, jwt.ErrTokenExpired()) {
 			return true, nil
-		case "aud not satisfied":
-			return false, fmt.Errorf("token audience %v does not contain our expected audience %q", parsed.Audience(), audience)
-		default:
-			return false, err
 		}
+		if errors.Is(err, jwt.ErrInvalidAudience()) {
+			return false, fmt.Errorf("token audience %v does not contain our expected audience %q", parsed.Audience(), audience)
+		}
+		return false, fmt.Errorf("token validation error: %v", err)
 	}
 
 	for _, clientID := range clientIDs {

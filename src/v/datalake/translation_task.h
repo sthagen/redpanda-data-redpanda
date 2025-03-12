@@ -58,10 +58,20 @@ public:
     translate_once(model::record_batch_reader reader, ss::abort_source&);
 
     /**
+     * Current number of bytes flushed by all the open writers.
+     */
+    size_t flushed_bytes() const;
+
+    /**
      * Flushes all the inflight translated bytes and releases memory
      * reservations. May not be called while translation is in progress.
      */
     ss::future<checked<void, errc>> flush();
+
+    /**
+     * Returns the last translated offset, if one exists
+     */
+    std::optional<kafka::offset> last_translated_offset() const;
 
     /**
      * Uploads the resulting translated files to the object store. The tasks

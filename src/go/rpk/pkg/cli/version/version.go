@@ -27,5 +27,5 @@ var (
 )
 
 func Pretty() string {
-	return fmt.Sprintf("%s (rev %s)", version, rev)
+	return fmt.Sprintf("(Redpanda CLI): %s (rev %s)", version, rev)
 }

@@ -347,14 +347,17 @@ void application::shutdown() {
     }
     /**
      * Shutdown the datalake services before stopping all the partitions.
+     * NOTE: translators may call into the coordinator via the coordinator
+     * frontend; stop the coordinators first to stop all work as quickly as
+     * possible.
      */
-    if (_datalake_manager.local_is_initialized()) {
-        _datalake_manager.invoke_on_all(&datalake::datalake_manager::shutdown)
-          .get();
-    }
     if (_datalake_coordinator_mgr.local_is_initialized()) {
         _datalake_coordinator_mgr
           .invoke_on_all(&datalake::coordinator::coordinator_manager::shutdown)
+          .get();
+    }
+    if (_datalake_manager.local_is_initialized()) {
+        _datalake_manager.invoke_on_all(&datalake::datalake_manager::shutdown)
           .get();
     }
 

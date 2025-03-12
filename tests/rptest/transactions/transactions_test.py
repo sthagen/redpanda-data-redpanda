@@ -157,7 +157,8 @@ class TransactionsTest(RedpandaTest, TransactionsMixin):
             ) == ck.KafkaError.INVALID_TRANSACTION_TIMEOUT, f"Unexpected error {kafka_error.code()}"
 
         # Bump timeout and check again.
-        rpk.cluster_config_set("transaction_max_timeout_ms", test_timeout_ms)
+        self.redpanda.set_cluster_config(
+            {"transaction_max_timeout_ms": test_timeout_ms})
         init_producer(test_timeout_ms)
 
     @cluster(num_nodes=3)

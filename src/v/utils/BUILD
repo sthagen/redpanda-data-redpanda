@@ -692,3 +692,11 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "variant",
+    hdrs = [
+        "variant.h",
+    ],
+    include_prefix = "utils",
+)

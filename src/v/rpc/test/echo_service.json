@@ -4,6 +4,7 @@
     "includes": [
         "rpc/test/rpc_gen_types.h"
     ],
+    "final_protocol": false,
     "methods": [
         {
             "name": "echo",

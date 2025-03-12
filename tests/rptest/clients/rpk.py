@@ -1139,6 +1139,17 @@ class RpkTool:
         return self._execute(cmd).strip()
 
     def cluster_config_set(self, key: str, value):
+        """
+        Note: This method returns without waiting for the configuration to be
+        applied to all shards/nodes. If you get the configuration immediately
+        after setting it, you may not see the new value yet. Similarly, if
+        interact with the cluster in a way which expects the new config to be
+        set (e.g. creating a topic with a new config), you may need to wait
+        for the configuration to be applied before proceeding.
+
+        Consider using `Redpanda.set_cluster_config` instead if you need to
+        wait for the configuration to be applied.
+        """
         cmd = [
             self._rpk_binary(), "--api-urls",
             self._admin_host(), "cluster", "config", "set", key,

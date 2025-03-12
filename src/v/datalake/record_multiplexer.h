@@ -107,6 +107,8 @@ public:
 
     size_t flushed_bytes() const;
 
+    std::optional<kafka::offset> last_translated_offset() const;
+
 private:
     // Handles the given record components of a record that is invalid for the
     // target table.

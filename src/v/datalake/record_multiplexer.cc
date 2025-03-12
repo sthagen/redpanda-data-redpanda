@@ -354,6 +354,11 @@ size_t record_multiplexer::flushed_bytes() const {
     return result;
 }
 
+std::optional<kafka::offset>
+record_multiplexer::last_translated_offset() const {
+    return _result ? std::make_optional(_result->last_offset) : std::nullopt;
+}
+
 ss::future<result<std::nullopt_t, writer_error>>
 record_multiplexer::handle_invalid_record(
   translation_probe::invalid_record_cause cause,

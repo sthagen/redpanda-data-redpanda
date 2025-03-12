@@ -145,6 +145,7 @@ redpanda_cc_library(
         "//src/v/ssx:semaphore",
         "//src/v/utils:prefix_logger",
         "//src/v/utils:retry_chain_node",
+        "//src/v/utils:to_string",
         "@seastar",
     ],
 )

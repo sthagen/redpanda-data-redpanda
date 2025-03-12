@@ -111,7 +111,9 @@ public:
      * or nullopt if there is no data to translate.
      */
     virtual ss::future<std::optional<kafka::offset>> wait_for_data_to_translate(
-      std::optional<kafka::offset> last_translated_offset, ss::abort_source&)
+      std::optional<kafka::offset> last_translated_offset,
+      ss::lowres_clock::time_point deadline,
+      ss::abort_source&)
       = 0;
 
     virtual ss::future<std::optional<model::record_batch_reader>>
@@ -181,6 +183,17 @@ public:
     virtual ss::future<> flush() = 0;
 
     /**
+     * Returns the number of bytes that are flushed to the writer from the
+     * inflight translation.
+     */
+    virtual size_t flushed_bytes() const = 0;
+
+    /**
+     * Returns the last translated offset by the translator, if one exists.
+     */
+    virtual std::optional<kafka::offset> last_translated_offset() const = 0;
+
+    /**
      * Reconciles the translator configurations.
      */
     virtual void reconcile_properties() = 0;
@@ -213,6 +226,22 @@ public:
       ss::sharded<cluster::topic_table>*,
       ss::sharded<features::feature_table>*,
       ss::lw_shared_ptr<translation_probe>);
+};
+
+class translation_lag_tracker {
+public:
+    translation_lag_tracker() = default;
+    translation_lag_tracker(const translation_lag_tracker&) = delete;
+    translation_lag_tracker& operator=(const translation_lag_tracker&) = delete;
+    translation_lag_tracker(translation_lag_tracker&&) = delete;
+    translation_lag_tracker& operator=(translation_lag_tracker&&) = delete;
+
+    virtual ~translation_lag_tracker() = default;
+
+    virtual bool should_finish_inflight_translation() = 0;
+
+    static std::unique_ptr<translation_lag_tracker> make_default_lag_tracker(
+      ss::lw_shared_ptr<cluster::partition>, cluster::topic_table&);
 };
 
 std::unique_ptr<table_creator>

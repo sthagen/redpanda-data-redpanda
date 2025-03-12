@@ -11,7 +11,6 @@
 
 #include "config/configuration.h"
 #include "metrics/metrics.h"
-#include "metrics/prometheus_sanitize.h"
 #include "ssx/sformat.h"
 
 #include <seastar/core/metrics.hh>
@@ -23,13 +22,12 @@ namespace pandaproxy {
 probe::probe(
   ss::httpd::path_description& path_desc, const ss::sstring& group_name)
   : _request_metrics()
-  , _path(path_desc)
-  , _group_name(group_name)
   , _metrics() {
-    setup_metrics();
+    setup_metrics(path_desc, group_name);
 }
 
-void probe::setup_metrics() {
+void probe::setup_metrics(
+  ss::httpd::path_description& path, const ss::sstring& group_name) {
     namespace sm = ss::metrics;
 
     using is_internal = ss::bool_class<struct is_internal_tag>;
@@ -39,7 +37,7 @@ void probe::setup_metrics() {
         std::vector<sm::label> agg;
         sm::label status;
     };
-    const auto make_labels = [this](const is_internal internal) -> Labels {
+    const auto make_labels = [&path](const is_internal internal) -> Labels {
         const auto make_label =
           [](const ss::sstring& key, const is_internal internal) {
               return internal ? sm::label(key)
@@ -51,7 +49,7 @@ void probe::setup_metrics() {
                                       sm::shard_label, operation_label};
         const auto status = make_label("status", internal);
         return {
-          .label = operation_label(_path.operations.nickname),
+          .label = operation_label(path.operations.nickname),
           .agg = agg,
           .status = status};
     };
@@ -69,41 +67,45 @@ void probe::setup_metrics() {
           });
     };
 
-    const auto make_public_request_latency = [this](const Labels& l) {
+    const auto make_public_request_latency = [this,
+                                              &group_name](const Labels& l) {
         return sm::make_histogram(
           "request_latency_seconds",
           sm::description(
-            ssx::sformat("Internal latency of request for {}", _group_name)),
+            ssx::sformat("Internal latency of request for {}", group_name)),
           {l.label},
           [this] {
               return _request_metrics.hist().public_histogram_logform();
           });
     };
 
-    const auto make_request_errors_total_5xx = [this](const Labels& l) {
+    const auto make_request_errors_total_5xx = [this,
+                                                &group_name](const Labels& l) {
         return sm::make_counter(
           "request_errors_total",
           [this] { return _request_metrics._5xx_count; },
           sm::description(
-            ssx::sformat("Total number of {} server errors", _group_name)),
+            ssx::sformat("Total number of {} server errors", group_name)),
           {l.label, l.status("5xx")});
     };
 
-    const auto make_request_errors_total_4xx = [this](const Labels& l) {
+    const auto make_request_errors_total_4xx = [this,
+                                                &group_name](const Labels& l) {
         return sm::make_counter(
           "request_errors_total",
           [this] { return _request_metrics._4xx_count; },
           sm::description(
-            ssx::sformat("Total number of {} client errors", _group_name)),
+            ssx::sformat("Total number of {} client errors", group_name)),
           {l.label, l.status("4xx")});
     };
 
-    const auto make_request_errors_total_3xx = [this](const Labels& l) {
+    const auto make_request_errors_total_3xx = [this,
+                                                &group_name](const Labels& l) {
         return sm::make_counter(
           "request_errors_total",
           [this] { return _request_metrics._3xx_count; },
           sm::description(
-            ssx::sformat("Total number of {} redirection errors", _group_name)),
+            ssx::sformat("Total number of {} redirection errors", group_name)),
           {l.label, l.status("3xx")});
     };
 
@@ -119,7 +121,7 @@ void probe::setup_metrics() {
     }
     if (!config::shard_local_cfg().disable_public_metrics()) {
         _public_metrics.add_group(
-          _group_name,
+          group_name,
           {make_public_request_latency(public_labels)
              .aggregate(public_labels.agg),
            make_request_errors_total_5xx(public_labels)
@@ -134,16 +136,15 @@ void probe::setup_metrics() {
 server_probe::server_probe(
   server::context_t& ctx, const ss::sstring& group_name)
   : _ctx(ctx)
-  , _group_name(group_name)
   , _metrics()
   , _public_metrics() {
-    setup_metrics();
+    setup_metrics(group_name);
 }
 
-void server_probe::setup_metrics() {
+void server_probe::setup_metrics(const ss::sstring& group_name) {
     namespace sm = ss::metrics;
 
-    auto setup_common = [this]<typename MetricDef>() {
+    auto setup_common = [this, &group_name]<typename MetricDef>() {
         const auto usage = [](const size_t current, const size_t max) {
             constexpr double divide_by_zero = -1.;
             constexpr double invalid_values = -2.;
@@ -167,7 +168,7 @@ void server_probe::setup_metrics() {
                 return usage(_ctx.inflight_sem.current(), _ctx.max_inflight);
             },
             sm::description(ssx::sformat(
-              "Usage ratio of in-flight requests in the {}", _group_name)))
+              "Usage ratio of in-flight requests in the {}", group_name)))
             .aggregate({}));
         defs.emplace_back(
           sm::make_gauge(
@@ -177,7 +178,7 @@ void server_probe::setup_metrics() {
             },
             sm::description(ssx::sformat(
               "Memory usage ratio of in-flight requests in the {}",
-              _group_name)))
+              group_name)))
             .aggregate({}));
         defs.emplace_back(
           sm::make_gauge(
@@ -185,14 +186,14 @@ void server_probe::setup_metrics() {
             [this] { return _ctx.mem_sem.waiters(); },
             sm::description(ssx::sformat(
               "Number of requests queued in {}, due to memory limitations",
-              _group_name)))
+              group_name)))
             .aggregate({}));
         return defs;
     };
 
     if (!config::shard_local_cfg().disable_metrics()) {
         _metrics.add_group(
-          _group_name,
+          group_name,
           setup_common
             .template operator()<ss::metrics::impl::metric_definition_impl>(),
           {},
@@ -201,7 +202,7 @@ void server_probe::setup_metrics() {
 
     if (!config::shard_local_cfg().disable_public_metrics()) {
         _public_metrics.add_group(
-          _group_name,
+          group_name,
           setup_common.template operator()<ss::metrics::metric_definition>());
     }
 }

@@ -209,6 +209,10 @@ ss::future<> translation_task::translate_once(
       std::move(reader), _read_timeout + model::timeout_clock::now(), as);
 }
 
+size_t translation_task::flushed_bytes() const {
+    return _multiplexer.flushed_bytes();
+}
+
 ss::future<checked<void, translation_task::errc>> translation_task::flush() {
     auto result = co_await _multiplexer.flush_writers();
     if (result != writer_error::ok) {
@@ -216,6 +220,10 @@ ss::future<checked<void, translation_task::errc>> translation_task::flush() {
         co_return translation_task::errc::flush_error;
     }
     co_return outcome::success();
+}
+
+std::optional<kafka::offset> translation_task::last_translated_offset() const {
+    return _multiplexer.last_translated_offset();
 }
 
 ss::future<

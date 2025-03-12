@@ -79,6 +79,23 @@ public:
 
     void translation_attempt() { _num_translation_attempts++; }
 
+    void set_should_finish_inflight_translation(bool should_finish) {
+        _should_finish_inflight_translation = should_finish;
+    }
+    bool should_finish_inflight_translation() {
+        return _should_finish_inflight_translation;
+    }
+
+    const auto& translated_files() const { return _files; }
+
+    void add_translated_files(
+      const model::topic_partition& tp, chunked_vector<data_file> files) {
+        auto& partition_files = _files[tp];
+        for (auto& file : files) {
+            partition_files.push_back(std::move(file));
+        }
+    }
+
     ss::future<> wait_for_translation_attempts(
       size_t attempts, std::chrono::seconds timeout = 10s) {
         auto target = _num_translation_attempts + attempts;
@@ -107,6 +124,10 @@ private:
     bool _error_on_translation{false};
     bool _error_on_flush{false};
     size_t _num_translation_attempts{0};
+    bool _should_finish_inflight_translation{true};
+
+    absl::flat_hash_map<model::topic_partition, chunked_vector<data_file>>
+      _files;
 };
 
 class fake_data_src : public data_source {
@@ -124,9 +145,15 @@ public:
 
     ss::future<std::optional<kafka::offset>> wait_for_data_to_translate(
       std::optional<kafka::offset> last_translated_offset,
+      ss::lowres_clock::time_point,
       ss::abort_source& as) final {
-        while (!as.abort_requested()) {
+        auto deadline = ss::lowres_clock::now() + 5ms;
+        while (!as.abort_requested() && ss::lowres_clock::now() < deadline) {
             auto offset = max_offset_for_translation();
+            vlog(
+              test_logger.trace,
+              "current max offset: {}",
+              offset.value_or(kafka::offset{}));
             if (offset && offset.value() >= kafka::offset{0} && (!last_translated_offset || offset.value() > last_translated_offset.value())) {
                 co_return last_translated_offset
                   ? kafka::next_offset(last_translated_offset.value())
@@ -140,7 +167,7 @@ public:
     ss::future<std::optional<model::record_batch_reader>> make_log_reader(
       kafka::offset o, ss::io_priority_class, ss::abort_source&) final {
         auto batches = co_await model::test::make_random_batches(
-          kafka::offset_cast(o), 5, true);
+          kafka::offset_cast(o), 500, false);
         auto reader = model::make_generating_record_batch_reader(
           [batches = std::move(batches)]() mutable {
               return ss::make_ready_future<model::record_batch_reader::data_t>(
@@ -199,6 +226,10 @@ public:
         auto it = _last_added_offsets.find(request.tp);
         if (it == _last_added_offsets.end() || it->second < last.last_offset) {
             _last_added_offsets[request.tp] = last.last_offset;
+            for (auto& range : request.ranges) {
+                _test_ctx.add_translated_files(
+                  request.tp, std::move(range.files));
+            }
         } else {
             reply.errc = errc::failed;
         }
@@ -220,6 +251,7 @@ public:
 private:
     absl::flat_hash_map<model::topic_partition, kafka::offset>
       _last_added_offsets;
+
     fake_test_ctx& _test_ctx;
 };
 
@@ -248,7 +280,9 @@ public:
         }
         auto min = model::offset_cast(batches.begin()->base_offset());
         auto max = model::offset_cast(batches.back().last_offset());
-
+        for (auto& batch : batches) {
+            _translated_bytes += batch.size_bytes();
+        }
         // keep track of translation boundaries for result propagation
         _min_offset_translated = std::min(
           min, _min_offset_translated.value_or(kafka::offset::max()));
@@ -256,10 +290,19 @@ public:
           max, _max_offset_translated.value_or(kafka::offset::min()));
     }
 
+    std::optional<kafka::offset> last_translated_offset() const final {
+        return _max_offset_translated;
+    }
+
+    size_t flushed_bytes() const final { return _flushed_bytes; }
+
     ss::future<> flush() final {
         if (_test_ctx.error_on_flush()) {
-            return ss::make_exception_future("flush error simulation");
+            return ss::make_exception_future(
+              std::runtime_error("flush error simulation"));
         }
+        _flushed_bytes += _translated_bytes;
+        _translated_bytes = 0;
         return ss::make_ready_future();
     }
 
@@ -273,20 +316,44 @@ public:
             result.start_offset = _min_offset_translated.value();
             result.last_offset = _max_offset_translated.value();
         }
+        data_file file;
+        file.file_size_bytes = _flushed_bytes;
+        result.files.push_back(std::move(file));
+        _flushed_bytes = 0;
+        _min_offset_translated.reset();
+        _max_offset_translated.reset();
         return ss::make_ready_future<std::optional<translated_offset_range>>(
           std::move(result));
     }
 
     ss::future<> discard() final {
         _inflight_translation = false;
+        _flushed_bytes = 0;
+        _min_offset_translated.reset();
+        _max_offset_translated.reset();
         return ss::make_ready_future();
     }
 
 private:
+    size_t _translated_bytes{0};
+    size_t _flushed_bytes{0};
     std::optional<kafka::offset> _min_offset_translated;
     std::optional<kafka::offset> _max_offset_translated;
     fake_test_ctx& _test_ctx;
     bool _inflight_translation{false};
+};
+
+class fake_lag_tracker : public translation_lag_tracker {
+public:
+    explicit fake_lag_tracker(fake_test_ctx& test_ctx)
+      : _test_ctx(test_ctx) {}
+
+    bool should_finish_inflight_translation() final {
+        return _test_ctx.should_finish_inflight_translation();
+    }
+
+private:
+    fake_test_ctx& _test_ctx;
 };
 
 class partition_translator_fixture : public scheduling::scheduler_fixture {
@@ -309,6 +376,7 @@ protected:
             std::make_unique<fake_coordinator_api>(ctx),
             std::make_unique<fake_data_src>(ctx),
             std::make_unique<fake_translation_ctx>(ctx),
+            std::make_unique<fake_lag_tracker>(ctx),
             simple_time_jitter<ss::lowres_clock, std::chrono::milliseconds>{
               retry_max_timeout, retry_initial_backoff},
             retry_max_timeout,
@@ -332,12 +400,12 @@ TEST_F_CORO(partition_translator_fixture, test_cleanup_on_translation_error) {
     auto& test_ctx = make_test_context();
     test_ctx.set_error_on_translation(true);
     co_await add_translator(test_ctx);
-    co_await test_ctx.wait_for_translation_attempts(30);
+    co_await test_ctx.wait_for_translation_attempts(5);
     // Ensure translation does not make any progress
     ASSERT_LT_CORO(test_ctx.max_translated_offset(), kafka::offset{0});
     // undo
     test_ctx.set_error_on_translation(false);
-    co_await test_ctx.wait_for_translation_attempts(30);
+    co_await test_ctx.wait_for_translation_attempts(5);
     ASSERT_GT_CORO(test_ctx.max_translated_offset(), kafka::offset{0});
 }
 
@@ -345,12 +413,12 @@ TEST_F_CORO(partition_translator_fixture, test_cleanup_on_flush_error) {
     auto& test_ctx = make_test_context();
     test_ctx.set_error_on_flush(true);
     co_await add_translator(test_ctx);
-    co_await test_ctx.wait_for_translation_attempts(30);
+    co_await test_ctx.wait_for_translation_attempts(5);
     // Ensure translation does not make any progress
     ASSERT_LT_CORO(test_ctx.max_translated_offset(), kafka::offset{0});
     // undo
     test_ctx.set_error_on_flush(false);
-    co_await test_ctx.wait_for_translation_attempts(30);
+    co_await test_ctx.wait_for_translation_attempts(5);
     ASSERT_GT_CORO(test_ctx.max_translated_offset(), kafka::offset{0});
 }
 
@@ -359,7 +427,6 @@ TEST_F_CORO(partition_translator_fixture, test_coordinator_retries) {
     // simulate no leader conditions
     test_ctx.set_error_on_add_translated_files(true);
     co_await add_translator(test_ctx);
-    co_await test_ctx.wait_for_translation_attempts(10);
     // Ensure translation does not make any progress
     ASSERT_LT_CORO(test_ctx.max_translated_offset(), kafka::offset{0});
     test_ctx.set_error_on_add_translated_files(false);
@@ -367,4 +434,41 @@ TEST_F_CORO(partition_translator_fixture, test_coordinator_retries) {
     ASSERT_GT_CORO(test_ctx.max_translated_offset(), kafka::offset{0});
 }
 
-// todo: add a test for batching once the functionality is checked in
+TEST_F_CORO(partition_translator_fixture, test_batching) {
+    auto& test_ctx = make_test_context();
+    // Let the translator batch to the limit
+    test_ctx.set_should_finish_inflight_translation(false);
+    co_await add_translator(test_ctx);
+
+    auto stop = false;
+    auto produce_f = ss::do_until(
+      [&stop] { return stop; },
+      [&test_ctx]() {
+          auto current = test_ctx.max_translatable_offset();
+          test_ctx.set_max_translatable_offset(
+            current + kafka::offset_delta(10000));
+          return ss::sleep(1ms);
+      });
+
+    std::exception_ptr ex = nullptr;
+    try {
+        RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [&test_ctx]() {
+            const auto& files = test_ctx.translated_files();
+            const auto it = files.find(test_ctx.ntp().tp);
+            if (it != files.end()) {
+                vlog(test_logger.trace, "translated files: {}", it->second);
+            }
+            return it != files.end() && it->second.size() >= 2
+                   && std::ranges::all_of(it->second, [](const auto& entry) {
+                          return entry.file_size_bytes >= 32_MiB;
+                      });
+        });
+    } catch (...) {
+        ex = std::current_exception();
+    }
+    stop = true;
+    co_await std::move(produce_f);
+    if (ex) {
+        RPTEST_FAIL_CORO(fmt::to_string(ex));
+    }
+}

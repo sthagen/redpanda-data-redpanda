@@ -40,11 +40,52 @@
 
 using namespace std::chrono_literals; // NOLINT
 
+namespace rpc {
+
+template<typename Protocol>
+concept RpcClientProtocol
+  = std::constructible_from<Protocol, ss::lw_shared_ptr<rpc::transport>>;
+
+template<typename... Protocol>
+requires(RpcClientProtocol<Protocol> && ...)
+class client : public Protocol... {
+public:
+    explicit client(ss::lw_shared_ptr<rpc::transport> transport)
+      : Protocol(transport)...
+      , _transport(transport) {}
+
+    ss::future<> connect(rpc::clock_type::time_point connection_timeout) {
+        return _transport->connect(connection_timeout);
+    }
+    ss::future<> stop() { return _transport->stop(); };
+    void shutdown() { _transport->shutdown(); }
+
+    [[gnu::always_inline]] bool is_valid() const {
+        return _transport->is_valid();
+    }
+
+    const net::unresolved_address& server_address() const {
+        return _transport->server_address();
+    }
+
+private:
+    ss::lw_shared_ptr<rpc::transport> _transport{nullptr};
+};
+
+template<typename... Protocol>
+rpc::client<Protocol...> make_client(
+  transport_configuration cfg,
+  std::optional<connection_cache_label> label = std::nullopt,
+  const std::optional<model::node_id> node_id = std::nullopt) {
+    return client<Protocol...>(ss::make_lw_shared<rpc::transport>(
+      std::move(cfg), std::move(label), node_id));
+}
+} // namespace rpc
+
 // Test services
-template<typename Codec>
-struct movistar final : cycling::team_movistar_service_base<Codec> {
+struct movistar final : cycling::team_movistar_service {
     movistar(ss::scheduling_group& sc, ss::smp_service_group& ssg)
-      : cycling::team_movistar_service_base<Codec>(sc, ssg) {}
+      : cycling::team_movistar_service(sc, ssg) {}
     ss::future<cycling::mount_tamalpais>
     ibis_hakka(cycling::san_francisco, rpc::streaming_context&) final {
         return ss::make_ready_future<cycling::mount_tamalpais>(
@@ -57,10 +98,9 @@ struct movistar final : cycling::team_movistar_service_base<Codec> {
     }
 };
 
-template<typename Codec>
-struct echo_impl final : echo::echo_service_base<Codec> {
+struct echo_impl final : echo::echo_service {
     echo_impl(ss::scheduling_group& sc, ss::smp_service_group& ssg)
-      : echo::echo_service_base<Codec>(sc, ssg) {}
+      : echo::echo_service(sc, ssg) {}
     ss::future<echo::echo_resp>
     prefix_echo(echo::echo_req req, rpc::streaming_context&) final {
         return ss::make_ready_future<echo::echo_resp>(
@@ -107,10 +147,9 @@ struct echo_impl final : echo::echo_service_base<Codec> {
     uint64_t cnt = 0;
 };
 
-template<typename Codec>
-struct echo_v2_impl final : echo_v2::echo_service_base<Codec> {
+struct echo_v2_impl final : echo_v2::echo_service {
     echo_v2_impl(ss::scheduling_group& sc, ss::smp_service_group& ssg)
-      : echo_v2::echo_service_base<Codec>(sc, ssg) {}
+      : echo_v2::echo_service(sc, ssg) {}
 
     ss::future<echo_v2::echo_resp>
     echo(echo_v2::echo_req req, rpc::streaming_context&) final {
@@ -125,9 +164,9 @@ public:
       : rpc_simple_integration_fixture(redpanda_rpc_port) {}
 
     void register_services() {
-        register_service<movistar<rpc::default_message_codec>>();
-        register_service<echo_impl<rpc::default_message_codec>>();
-        register_service<echo_v2_impl<rpc::default_message_codec>>();
+        register_service<movistar>();
+        register_service<echo_impl>();
+        register_service<echo_v2_impl>();
     }
 
     static constexpr uint16_t redpanda_rpc_port = 32147;
@@ -921,8 +960,8 @@ public:
       : rpc_fixture_swappable_proto(redpanda_rpc_port) {}
 
     void register_services() {
-        register_service<movistar<rpc::default_message_codec>>();
-        register_service<echo_impl<rpc::default_message_codec>>();
+        register_service<movistar>();
+        register_service<echo_impl>();
     }
 
     static constexpr uint16_t redpanda_rpc_port = 32147;
@@ -970,8 +1009,7 @@ FIXTURE_TEST(rpc_add_service, rpc_sharded_fixture) {
     server()
       .invoke_on_all([this](rpc::rpc_server& s) {
           std::vector<std::unique_ptr<rpc::service>> service;
-          service.emplace_back(
-            std::make_unique<echo_impl<rpc::default_message_codec>>(_sg, _ssg));
+          service.emplace_back(std::make_unique<echo_impl>(_sg, _ssg));
           s.add_services(std::move(service));
       })
       .get();
@@ -1115,9 +1153,7 @@ FIXTURE_TEST(rpc_mt_add_service, rpc_sharded_fixture) {
           server()
             .invoke_on_all([this](rpc::rpc_server& s) {
                 std::vector<std::unique_ptr<rpc::service>> service;
-                service.emplace_back(
-                  std::make_unique<echo_impl<rpc::default_message_codec>>(
-                    _sg, _ssg));
+                service.emplace_back(std::make_unique<echo_impl>(_sg, _ssg));
                 s.add_services(std::move(service));
             })
             .get();
@@ -1142,9 +1178,7 @@ FIXTURE_TEST(rpc_mt_add_service, rpc_sharded_fixture) {
           server()
             .invoke_on_all([this](rpc::rpc_server& s) {
                 std::vector<std::unique_ptr<rpc::service>> service;
-                service.emplace_back(
-                  std::make_unique<movistar<rpc::default_message_codec>>(
-                    _sg, _ssg));
+                service.emplace_back(std::make_unique<movistar>(_sg, _ssg));
                 s.add_services(std::move(service));
             })
             .get();

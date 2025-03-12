@@ -457,7 +457,8 @@ class DatalakeMetricsTest(RedpandaTest):
 
             dl.create_iceberg_enabled_topic(self.topic_name,
                                             partitions=1,
-                                            replicas=3)
+                                            replicas=3,
+                                            target_lag_ms=10000)
             topic_leader = self.redpanda.partitions(self.topic_name)[0].leader
             count = randint(12, 21)
             dl.produce_to_topic(self.topic_name, 1, msg_count=count)
@@ -507,7 +508,8 @@ class DatalakeMetricsTest(RedpandaTest):
 
             dl.create_iceberg_enabled_topic(self.topic_name,
                                             partitions=1,
-                                            replicas=3)
+                                            replicas=3,
+                                            target_lag_ms=10000)
             dl.produce_to_topic(self.topic_name, 1024, 10)
 
             # Wait until we have committed to the table -- this implies several
@@ -550,7 +552,8 @@ class DatalakeMetricsTest(RedpandaTest):
 
             dl.create_iceberg_enabled_topic(self.topic_name,
                                             partitions=1,
-                                            replicas=3)
+                                            replicas=3,
+                                            target_lag_ms=10000)
             dl.produce_to_topic(self.topic_name, 1024, 10)
             wait_until(lambda: self.redpanda.metric_sum(
                 timeouts_metric, MetricsEndpoint.PUBLIC_METRICS) > 0,

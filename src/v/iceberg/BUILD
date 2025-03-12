@@ -1018,6 +1018,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":datatypes",
+        "//src/v/utils:fixed_string",
     ],
 )
 
@@ -1067,6 +1068,10 @@ redpanda_cc_library(
     ],
     hdrs = [
         "unresolved_partition_spec.h",
+    ],
+    implementation_deps = [
+        "//src/v/base",
+        "@fmt",
     ],
     include_prefix = "iceberg",
     visibility = ["//visibility:public"],

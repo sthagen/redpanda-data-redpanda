@@ -96,12 +96,6 @@ class NessieCatalog(CatalogService):
             env["NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_REGION"] = self.credentials.region
             env["NESSIE_CATALOG_SERVICE_S3_DEFAULT_OPTIONS_ENDPOINT"] = self.credentials.endpoint
             env["NESSIE_CATALOG_VALIDATE_SECRETS"] = "true"
-        elif isinstance(self.credentials,
-                        cloud_storage.ABSSharedKeyCredentials):
-            env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_AUTH_TYPE"] = "STORAGE_SHARED_KEY"
-            env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_ENDPOINT"] = self.credentials.endpoint
-            env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_ACCOUNT_NAME"] = self.credentials.account_name
-            env["NESSIE_CATALOG_SERVICE_ADLS_DEFAULT_OPTIONS_ACCOUNT_SECRET"] = self.credentials.account_key
         return env
 
     def _make_java_properties(self):
@@ -122,6 +116,13 @@ class NessieCatalog(CatalogService):
         elif isinstance(self.credentials,
                         cloud_storage.GCPInstanceMetadataCredentials):
             d_flags += "-Dnessie.catalog.service.gcs.default-options.auth-type=APPLICATION_DEFAULT"
+        elif isinstance(self.credentials,
+                        cloud_storage.ABSSharedKeyCredentials):
+            d_flags += f"-Dnessie.catalog.service.adls.default-options.auth-type=STORAGE_SHARED_KEY "
+            d_flags += f"-Dnessie.catalog.service.adls.default-options.account=urn:nessie-secret:quarkus:my-secrets-default "
+            d_flags += f"-Dmy-secrets-default.name={self.credentials.account_name} "
+            d_flags += f"-Dmy-secrets-default.secret={self.credentials.account_key} "
+            d_flags += f"-Dnessie.catalog.service.adls.default-options.endpoint=https://{self.credentials.endpoint}/{self.cloud_storage_bucket}"
         return d_flags
 
     def _java_cmd(self, node):

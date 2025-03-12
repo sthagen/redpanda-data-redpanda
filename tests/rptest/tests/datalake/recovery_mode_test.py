@@ -86,8 +86,8 @@ class DatalakeRecoveryModeTest(RedpandaTest):
             dl.produce_to_topic("foo", 1024, count)
             dl.produce_to_topic("bar", 1024, count)
 
-            dl.wait_for_translation("foo", msg_count=2 * count)
-            dl.wait_for_translation("bar", msg_count=count)
+            dl.wait_for_translation("foo", msg_count=2 * count, timeout=120)
+            dl.wait_for_translation("bar", msg_count=count, timeout=120)
 
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
@@ -121,5 +121,5 @@ class DatalakeRecoveryModeTest(RedpandaTest):
             dl.produce_to_topic("foo", 1024, count)
             dl.produce_to_topic("bar", 1024, count)
 
-            dl.wait_for_translation("foo", msg_count=2 * count)
-            dl.wait_for_translation("bar", msg_count=count)
+            dl.wait_for_translation("foo", msg_count=2 * count, timeout=120)
+            dl.wait_for_translation("bar", msg_count=count, timeout=120)

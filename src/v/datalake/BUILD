@@ -215,6 +215,14 @@ redpanda_cc_library(
     hdrs = [
         "partition_spec_parser.h",
     ],
+    implementation_deps = [
+        "//src/v/container:fragmented_vector",
+        "//src/v/iceberg:transform",
+        "//src/v/utils:fixed_string",
+        "//src/v/utils:variant",
+        "@fmt",
+        "@seastar",
+    ],
     include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
