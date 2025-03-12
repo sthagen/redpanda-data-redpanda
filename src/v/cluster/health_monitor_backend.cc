@@ -792,19 +792,14 @@ ss::future<std::error_code> health_monitor_backend::collect_cluster_health() {
     for (auto& r : reports) {
         if (r) {
             const auto id = r.value().id;
-            vlog(
-              clusterlog.debug,
-              "collected node {} health report: {}",
-              id,
-              r.value());
+            vlog(clusterlog.debug, "collected node {} health report", id);
 
             std::optional<nhr_ptr> old_report;
             if (auto old_i = old_reports.find(id); old_i != old_reports.end()) {
                 vlog(
                   clusterlog.debug,
-                  "(previous node report from {}: {})",
-                  id,
-                  old_i->second);
+                  "(cache contains previous node report from {})",
+                  id);
                 old_report = old_i->second;
             } else {
                 vlog(clusterlog.debug, "(initial node report from {})", id);

@@ -33,6 +33,14 @@ replicate_stages replicate_batcher::replicate(
   std::optional<model::term_id> expected_term,
   chunked_vector<model::record_batch> batches,
   replicate_options opts) {
+    if (opts.as) [[unlikely]] {
+        if (opts.as->get().abort_requested()) {
+            return replicate_stages{
+              ss::make_exception_future<>(ss::abort_requested_exception()),
+              ss::make_ready_future<result<replicate_result>>(
+                errc::shutting_down)};
+        }
+    }
     ss::promise<> enqueued;
     auto enqueued_f = enqueued.get_future();
 

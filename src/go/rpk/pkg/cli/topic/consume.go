@@ -734,6 +734,7 @@ func (c *consumer) markPartitionEnded(t string, p int32) (done bool) {
 func (c *consumer) intoOptions(topics []string) ([]kgo.Opt, error) {
 	opts := []kgo.Opt{
 		kgo.ConsumeResetOffset(c.resetOffset),
+		kgo.DisableFetchSessions(),
 	}
 
 	if c.group != "" {

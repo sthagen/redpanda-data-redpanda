@@ -93,10 +93,6 @@ operator<<(std::ostream& os, fair_scheduling_policy::translator_group group) {
     }
 }
 
-fair_scheduling_policy::group_shares_t fair_scheduling_policy::_group_to_shares;
-fair_scheduling_policy::group_intervals_t
-  fair_scheduling_policy::_group_intervals;
-
 void fair_scheduling_policy::initialize_group_shares() {
     _group_to_shares = {
       {other, fair_scheduling_policy::default_other_shares},

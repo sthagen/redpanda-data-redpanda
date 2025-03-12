@@ -43,6 +43,15 @@ public:
             if (_replicate_opts.timeout) {
                 _timeout_timer.arm(_replicate_opts.timeout.value());
             }
+            if (_replicate_opts.as) {
+                auto& as = _replicate_opts.as->get();
+                if (as.abort_requested()) {
+                    mark_as_aborted();
+                } else {
+                    _abort_sub = as.subscribe(
+                      [this] noexcept { mark_as_aborted(); });
+                }
+            }
         };
 
         item(item&&) noexcept = default;
@@ -100,6 +109,15 @@ public:
                 _promise.set_value(errc::timeout);
             }
         }
+
+        void mark_as_aborted() {
+            if (!_ready) {
+                _ready = true;
+                _data.clear();
+                _units.return_all();
+                _promise.set_value(errc::shutting_down);
+            }
+        }
         size_t _record_count;
         chunked_vector<model::record_batch> _data;
         ssx::semaphore_units _units;
@@ -113,6 +131,7 @@ public:
         bool _ready{false};
         ss::timer<> _timeout_timer;
         ss::promise<result<replicate_result>> _promise;
+        ss::optimized_optional<ss::abort_source::subscription> _abort_sub;
     };
     using item_ptr = ss::lw_shared_ptr<item>;
     explicit replicate_batcher(consensus* ptr, size_t cache_size);

@@ -1005,3 +1005,48 @@ TEST_F_CORO(raft_fixture, test_term_conditional_replication) {
       replicate_options(consistency_level::quorum_ack, 10s));
     ASSERT_FALSE_CORO(result_without_term.has_error());
 }
+
+TEST_F_CORO(raft_fixture, test_replicate_abort_source) {
+    co_await create_simple_group(3);
+    auto leader_id = co_await wait_for_leader(10s);
+    auto& leader_node = node(leader_id);
+    // this should succeed as there were no leadership changes
+    auto result = co_await leader_node.raft()->replicate(
+      make_batches(10, 10, 128),
+      replicate_options(consistency_level::quorum_ack));
+    ASSERT_FALSE_CORO(result.has_error());
+
+    /**
+     * Block all append entries from leader to followers to prevent any
+     * subsequent replicate calls from finishing
+     */
+    leader_node.on_dispatch([](model::node_id, raft::msg_type mt) {
+        if (mt == raft::msg_type::append_entries) {
+            throw std::runtime_error("error");
+        }
+        return ss::now();
+    });
+    /**
+     * Abort after replicate
+     */
+    ss::abort_source as_1;
+    auto as_1_f = leader_node.raft()->replicate(
+      make_batches(1, 1, 128),
+      replicate_options(consistency_level::quorum_ack, std::ref(as_1)));
+    co_await ss::sleep(500ms);
+    ASSERT_FALSE_CORO(as_1_f.available());
+
+    as_1.request_abort();
+    auto r_1 = co_await std::move(as_1_f);
+    ASSERT_TRUE_CORO(r_1.has_error());
+    ASSERT_EQ_CORO(r_1.error(), raft::errc::shutting_down);
+    /**
+     * Already aborted
+     */
+    auto r_2 = co_await leader_node.raft()->replicate(
+      make_batches(1, 1, 128),
+      replicate_options(consistency_level::quorum_ack, std::ref(as_1)));
+
+    ASSERT_TRUE_CORO(r_2.has_error());
+    ASSERT_EQ_CORO(r_2.error(), raft::errc::replicate_first_stage_exception);
+}

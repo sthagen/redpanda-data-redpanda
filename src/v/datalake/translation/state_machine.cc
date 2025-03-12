@@ -20,9 +20,11 @@
 #include <seastar/core/future.hh>
 
 namespace {
-raft::replicate_options make_replicate_options() {
-    auto opts = raft::replicate_options(raft::consistency_level::quorum_ack);
+raft::replicate_options make_replicate_options(ss::abort_source& as) {
+    auto opts = raft::replicate_options(
+      raft::consistency_level::quorum_ack, std::ref(as));
     opts.set_force_flush();
+
     return opts;
 }
 
@@ -148,7 +150,7 @@ ss::future<std::error_code> translation_stm::reset_highest_translated_offset(
     auto result = co_await _raft->replicate(
       current_term,
       make_translation_state_batch(new_translated_offset, new_translated_ts),
-      make_replicate_options());
+      make_replicate_options(as));
     auto deadline = model::timeout_clock::now() + timeout;
     if (
       result

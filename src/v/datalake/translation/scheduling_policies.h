@@ -113,9 +113,9 @@ private:
     using group_intervals_t
       = absl::flat_hash_map<translator_group, std::pair<double, double>>;
 
-    static group_shares_t _group_to_shares;
-    static group_intervals_t _group_intervals;
-    static void initialize_group_shares();
+    group_shares_t _group_to_shares;
+    group_intervals_t _group_intervals;
+    void initialize_group_shares();
 
     size_t _max_concurrent_translations;
     clock::duration _translation_time_quota;
