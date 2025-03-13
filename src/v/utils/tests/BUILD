@@ -533,6 +533,19 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "arch_test",
+    timeout = "short",
+    srcs = [
+        "arch_test.cc",
+    ],
+    deps = [
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:arch",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "file_io_test",
     timeout = "short",
     srcs = ["file_io_test.cc"],

@@ -118,11 +118,10 @@ public:
 
     protocol::decoder& reader() { return _reader; }
 
+    // Return the kafka_probe associated with the request, suitable for
+    // kafka-specific metrics which do not need to be tracked per NTP.
     kafka_probe& probe() { return _conn->server().kafka_probe(); }
     sasl_probe& sasl_probe() { return _conn->server().sasl_probe(); }
-
-    // used to reach for server_probe::produce_bad_timestamp
-    net::server_probe& server_probe() { return _conn->server().probe(); }
 
     kafka::usage_manager& usage_mgr() const {
         return _conn->server().usage_mgr();

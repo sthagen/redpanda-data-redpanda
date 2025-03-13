@@ -89,6 +89,10 @@ public:
     ss::future<std::vector<shard_samples>> collect_results_for_period(
       std::chrono::milliseconds timeout, std::optional<ss::shard_id> shard_id);
 
+    // Return the configured sample period for the profiler. Note that this will
+    // return the configured value even if the profiler is currently disabled.
+    std::chrono::milliseconds sample_period() const { return _sample_period(); }
+
 private:
     // impl for the above
     ss::future<>

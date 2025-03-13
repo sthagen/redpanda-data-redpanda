@@ -19,7 +19,6 @@
 #include "cloud_storage_clients/util.h"
 #include "cloud_storage_clients/xml_sax_parser.h"
 #include "config/configuration.h"
-#include "http/utils.h"
 #include "json/document.h"
 #include "json/istreamwrapper.h"
 
@@ -187,10 +186,7 @@ result<http::client::request_header> abs_request_creator::make_get_blob_request(
     // x-ms-date:{req-datetime in RFC9110} # added by 'add_auth'
     // x-ms-version:"2023-01-23"           # added by 'add_auth'
     // Authorization:{signature}           # added by 'add_auth'
-    const auto target = fmt::format(
-      "/{}/{}",
-      name(),
-      http::uri_encode(key().string(), http::uri_encode_slash::no));
+    const auto target = fmt::format("/{}/{}", name(), key().string());
     const boost::beast::string_view host{_ap().data(), _ap().length()};
 
     http::client::request_header header{};
@@ -209,7 +205,7 @@ result<http::client::request_header> abs_request_creator::make_get_blob_request(
     if (error_code) {
         return error_code;
     }
-
+    util::url_encode_target(header);
     return header;
 }
 
@@ -222,10 +218,7 @@ result<http::client::request_header> abs_request_creator::make_put_blob_request(
     // Authorization:{signature}           # added by 'add_auth'
     // Content-Length:{payload-size}
     // Content-Type: text/plain
-    const auto target = fmt::format(
-      "/{}/{}",
-      name(),
-      http::uri_encode(key().string(), http::uri_encode_slash::no));
+    const auto target = fmt::format("/{}/{}", name(), key().string());
     const boost::beast::string_view host{_ap().data(), _ap().length()};
 
     http::client::request_header header{};
@@ -242,7 +235,7 @@ result<http::client::request_header> abs_request_creator::make_put_blob_request(
     if (error_code) {
         return error_code;
     }
-
+    util::url_encode_target(header);
     return header;
 }
 
@@ -255,9 +248,7 @@ abs_request_creator::make_get_blob_metadata_request(
     // x-ms-version:"2023-01-23"           # added by 'add_auth'
     // Authorization:{signature}           # added by 'add_auth'
     const auto target = fmt::format(
-      "/{}/{}?comp=metadata",
-      name(),
-      http::uri_encode(key().string(), http::uri_encode_slash::no));
+      "/{}/{}?comp=metadata", name(), key().string());
     const boost::beast::string_view host{_ap().data(), _ap().length()};
 
     http::client::request_header header{};
@@ -269,7 +260,7 @@ abs_request_creator::make_get_blob_metadata_request(
     if (error_code) {
         return error_code;
     }
-
+    util::url_encode_target(header);
     return header;
 }
 
@@ -281,10 +272,7 @@ abs_request_creator::make_delete_blob_request(
     // x-ms-date:{req-datetime in RFC9110} # added by 'add_auth'
     // x-ms-version:"2023-01-23"           # added by 'add_auth'
     // Authorization:{signature}           # added by 'add_auth'
-    const auto target = fmt::format(
-      "/{}/{}",
-      name(),
-      http::uri_encode(key().string(), http::uri_encode_slash::no));
+    const auto target = fmt::format("/{}/{}", name(), key().string());
 
     const boost::beast::string_view host{_ap().data(), _ap().length()};
 
@@ -298,7 +286,7 @@ abs_request_creator::make_delete_blob_request(
     if (error_code) {
         return error_code;
     }
-
+    util::url_encode_target(header);
     return header;
 }
 
@@ -348,7 +336,7 @@ abs_request_creator::make_list_blobs_request(
     if (error_code) {
         return error_code;
     }
-
+    util::url_encode_target(header);
     return header;
 }
 
@@ -367,6 +355,7 @@ abs_request_creator::make_get_account_info_request() {
     if (error_code) {
         return error_code;
     }
+    util::url_encode_target(header);
 
     return header;
 }
@@ -386,10 +375,7 @@ abs_request_creator::make_set_expiry_to_blob_request(
     auto header = http::client::request_header{};
 
     header.method(boost::beast::http::verb::put);
-    header.target(fmt::format(
-      "/{}/{}?comp=expiry",
-      name(),
-      http::uri_encode(key().string(), http::uri_encode_slash::no)));
+    header.target(fmt::format("/{}/{}?comp=expiry", name(), key().string()));
     header.set(boost::beast::http::field::host, {_ap().data(), _ap().size()});
     header.set(expiry_option_name, expiry_option_value);
     header.set(
@@ -403,6 +389,7 @@ abs_request_creator::make_set_expiry_to_blob_request(
         error_code != std::error_code{}) {
         return error_code;
     }
+    util::url_encode_target(header);
     return header;
 }
 
@@ -416,10 +403,7 @@ abs_request_creator::make_delete_file_request(
     // x-ms-date:{req-datetime in RFC9110} # added by 'add_auth'
     // x-ms-version:"2023-01-23"           # added by 'add_auth'
     // Authorization:{signature}           # added by 'add_auth'
-    const auto target = fmt::format(
-      "/{}/{}",
-      name(),
-      http::uri_encode(path().string(), http::uri_encode_slash::no));
+    const auto target = fmt::format("/{}/{}", name(), path().string());
 
     const boost::beast::string_view host{adls_ap().data(), adls_ap().length()};
 
@@ -432,7 +416,7 @@ abs_request_creator::make_delete_file_request(
     if (error_code) {
         return error_code;
     }
-
+    util::url_encode_target(header);
     return header;
 }
 

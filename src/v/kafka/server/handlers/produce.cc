@@ -199,7 +199,7 @@ auto validate_batch_timestamps(
   const model::ntp& ntp,
   const model::record_batch_header& header,
   model::timestamp_type timestamp_type,
-  net::server_probe& probe) -> std::optional<model::timestamp> {
+  kafka::kafka_probe& probe) -> std::optional<model::timestamp> {
     // we compute in std::chrono::timepoints, we print in model::timestamps
     auto broker_time = model::timestamp::now();
     auto broker_timepoint = model::duration_since_epoch(broker_time);
@@ -302,10 +302,7 @@ partition_produce_stages produce_topic_partition(
     // validate the batch timestamps by checking skew against broker time
     if (
       auto new_timestamp = validate_batch_timestamps(
-        ntp,
-        batch->header(),
-        cfg_ctx.timestamp_type,
-        octx.rctx.server_probe())) {
+        ntp, batch->header(), cfg_ctx.timestamp_type, octx.rctx.probe())) {
         batch->set_max_timestamp(
           model::timestamp_type::append_time, new_timestamp.value());
     }

@@ -175,7 +175,7 @@ def read_topic_config(rdr: Reader, version):
         'replication_factor':
         rdr.read_int16(),
         'properties':
-        rdr.read_envelope(read_topic_properties_serde, reader_version=10),
+        rdr.read_envelope(read_topic_properties_serde, reader_version=11),
     }
     if version < 1:
         # see https://github.com/redpanda-data/redpanda/pull/6613

@@ -386,8 +386,9 @@ class DatalakeE2ETests(RedpandaTest):
             def validate_data_file_path(file_url):
                 m = uri_pattern.match(file_url)
                 assert m, f"Expected file url to match URI pattern: {file_url}"
-                assert m[
-                    'bucket'] == self.si_settings.cloud_storage_bucket, f"Expected bucket {m['bucket']} to be {self.si_settings.cloud_storage_bucket}"
+                assert m['bucket'].startswith(
+                    self.si_settings.cloud_storage_bucket
+                ), f"Expected bucket {m['bucket']} to be {self.si_settings.cloud_storage_bucket}"
 
                 path_parts = m['key'].split("/")
                 partition_key = path_parts[4]

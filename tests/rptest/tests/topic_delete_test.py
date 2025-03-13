@@ -487,8 +487,7 @@ class TopicDeleteCloudStorageTest(RedpandaTest):
         quiesce_uploads(self.redpanda, [topic_name], timeout_sec=60)
 
     @skip_debug_mode  # Rely on timely uploads during leader transfers
-    @cluster(num_nodes=4,
-             log_allow_list=['Failed to fetch manifest during finalize()'])
+    @cluster(num_nodes=4)
     def topic_delete_installed_snapshots_test(self):
         """
         Test the case where a partition had remote snapshots installed prior
@@ -778,8 +777,7 @@ class TopicDeleteCloudStorageTest(RedpandaTest):
             raise AssertionError(f"Found unexpected lifecycle marker {marker}")
 
     @skip_debug_mode  # Rely on timely uploads during leader transfers
-    @cluster(num_nodes=5,
-             log_allow_list=['Failed to fetch manifest during finalize()'])
+    @cluster(num_nodes=5)
     @matrix(disable_delete=[False, True],
             cloud_storage_type=get_cloud_storage_type())
     def topic_delete_cloud_storage_test(self, disable_delete,

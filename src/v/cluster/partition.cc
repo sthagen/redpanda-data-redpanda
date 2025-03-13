@@ -1043,12 +1043,15 @@ ss::future<> partition::finalize_remote_partition(ss::abort_source& as) {
         const auto finalize = co_await should_finalize(
           as, _raft->self(), group_configuration());
 
+        const bool remote_manifest_expected
+          = _archival_meta_stm->get_last_clean_at() != model::offset();
+
         if (finalize) {
             vlog(
               clusterlog.debug,
               "Finalizing remote metadata on partition delete {}",
               ntp());
-            _cloud_storage_partition->finalize();
+            _cloud_storage_partition->finalize(remote_manifest_expected);
         }
     }
 }

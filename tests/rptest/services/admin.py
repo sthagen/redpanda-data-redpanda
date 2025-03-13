@@ -456,7 +456,7 @@ class Admin:
                  default_node: ClusterNode | None = None,
                  retry_codes: list[int] | None = None,
                  auth=None,
-                 retries_amount=5):
+                 retries_amount: int = 5):
         self.redpanda = redpanda
 
         self._session = AuthPreservingSession()
@@ -688,7 +688,7 @@ class Admin:
                  verb: str,
                  path: str,
                  node: MaybeNode = None,
-                 params: Optional[dict] = None,
+                 params: Optional[dict[str, str]] = None,
                  **kwargs: Any):
         if node is None and self._default_node is not None:
             # We were constructed with an explicit default node: use that one
@@ -1548,12 +1548,14 @@ class Admin:
 
     def stress_fiber_start(
         self,
-        node,
-        num_fibers,
-        min_spins_per_scheduling_point=None,
-        max_spins_per_scheduling_point=None,
-        min_ms_per_scheduling_point=None,
-        max_ms_per_scheduling_point=None,
+        node: MaybeNode,
+        num_fibers: int,
+        *,
+        min_spins_per_scheduling_point: int | None = None,
+        max_spins_per_scheduling_point: int | None = None,
+        min_ms_per_scheduling_point: int | None = None,
+        max_ms_per_scheduling_point: int | None = None,
+        stack_depth: int | None = None,
     ):
         p = {"num_fibers": str(num_fibers)}
         if min_spins_per_scheduling_point is not None:
@@ -1566,6 +1568,8 @@ class Admin:
             p["min_ms_per_scheduling_point"] = str(min_ms_per_scheduling_point)
         if max_ms_per_scheduling_point is not None:
             p["max_ms_per_scheduling_point"] = str(max_ms_per_scheduling_point)
+        if stack_depth is not None:
+            p["stack_depth"] = str(stack_depth)
         kwargs = {"params": p}
         return self._request("PUT",
                              "debug/stress_fiber_start",
@@ -1668,7 +1672,9 @@ class Admin:
                              node=node,
                              **kwargs).json()
 
-    def get_cpu_profile(self, node=None, wait_ms=None):
+    def get_cpu_profile(self,
+                        node: MaybeNode = None,
+                        wait_ms: int | None = None):
         """
         Get the CPU profile of a node.
         """
@@ -1676,8 +1682,8 @@ class Admin:
         params = {}
         timeout = DEFAULT_TIMEOUT
 
-        if wait_ms:
-            params["wait_ms"] = wait_ms
+        if wait_ms is not None:
+            params["wait_ms"] = str(wait_ms)
             timeout = max(2 * (int(wait_ms) // 1_000), timeout)
 
         return self._request("get",

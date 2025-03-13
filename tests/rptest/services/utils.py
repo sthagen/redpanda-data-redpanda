@@ -140,7 +140,7 @@ class LogSearch(ABC):
     def _check_if_line_allowed(self, line):
         for a in self.allow_list:
             if a.search(line) is not None:
-                self.logger.warn(f"Ignoring allow-listed log line '{line}'")
+                self.logger.info(f"Ignoring allow-listed log line '{line}'")
                 return True
         return False
 

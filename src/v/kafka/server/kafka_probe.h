@@ -21,6 +21,8 @@
 #include <chrono>
 #include <cstdint>
 
+struct prod_consume_fixture;
+
 namespace kafka {
 class kafka_probe {
 public:
@@ -72,6 +74,17 @@ public:
           },
           {},
           {sm::shard_label});
+
+        _metrics.add_group(
+          "kafka_rpc",
+          {sm::make_counter(
+            "produce_bad_create_time",
+            [this] { return _produce_bad_create_time; },
+            sm::description(
+              "number of produce requests with timestamps too far "
+              "in the future or in the past"))},
+          {},
+          {sm::shard_label});
     }
 
     void setup_public_metrics() {
@@ -98,6 +111,12 @@ public:
           });
     }
 
+    // metric used to signal a produce request with a timestamp too far into the
+    // future or too far in the past see configuration
+    // log_message_timestamp_alert_after_ms and
+    // log_message_timestamp_alert_before_ms
+    void produce_bad_create_time() { _produce_bad_create_time++; }
+
     std::unique_ptr<hist_t::measurement> auto_produce_measurement() {
         return _produce_latency.auto_measure();
     }
@@ -109,6 +128,11 @@ public:
     void record_batch(uint64_t size) { _batch_size.record(size); }
 
 private:
+    // for testing
+    friend prod_consume_fixture;
+
+    uint32_t _produce_bad_create_time = 0;
+
     hist_t _produce_latency;
     hist_t _fetch_latency;
     // non partition or topic related as that is too expensive for histograms

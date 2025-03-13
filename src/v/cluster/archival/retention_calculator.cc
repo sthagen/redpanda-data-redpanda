@@ -10,6 +10,10 @@
 
 #include "cluster/archival/retention_calculator.h"
 
+#include "base/vlog.h"
+#include "cluster/archival/logger.h"
+#include "model/timestamp.h"
+
 namespace archival {
 /*
  * Retention strategy for use with 'retention_calculator'.
@@ -75,11 +79,23 @@ std::optional<retention_calculator> retention_calculator::factory(
   const cloud_storage::partition_manifest& manifest,
   const storage::ntp_config& ntp_config) {
     if (!ntp_config.is_collectable()) {
+        vlog(
+          archival_log.trace, "{} Partition not collectible", ntp_config.ntp());
         return std::nullopt;
     }
 
     auto arch_so = manifest.get_archive_start_offset();
     auto last_so = manifest.get_start_offset();
+
+    vlog(
+      archival_log.debug,
+      "{} Creating retention calculator, ntp_config: {}, archive start offset: "
+      "{}, start offset: {}",
+      ntp_config.ntp(),
+      ntp_config,
+      arch_so,
+      last_so);
+
     if (arch_so != model::offset{} && arch_so != last_so) {
         // Retention should be applied to the archive area of the log first
         // otherwise we may end up with a gap in the log. If we will apply
@@ -99,6 +115,14 @@ std::optional<retention_calculator> retention_calculator::factory(
             auto overshot_by = stm_region_size - *total_retention_bytes;
             strats.push_back(
               std::make_unique<size_based_strategy>(overshot_by));
+            vlog(
+              archival_log.trace,
+              "{} size based retention strategy added, total retention bytes: "
+              "{}, STM regions size: {}, overshot by: {}",
+              ntp_config.ntp(),
+              total_retention_bytes,
+              stm_region_size,
+              overshot_by);
         }
     }
 
@@ -114,6 +138,14 @@ std::optional<retention_calculator> retention_calculator::factory(
               && first_seg->max_timestamp < oldest_allowed_timestamp) {
                 strats.push_back(std::make_unique<time_based_strategy>(
                   oldest_allowed_timestamp));
+                vlog(
+                  archival_log.trace,
+                  "{} time based retention strategy added, oldest allowed "
+                  "timestamp: {}, first segment: {}",
+                  ntp_config.ntp(),
+                  std::chrono::duration_cast<std::chrono::seconds>(
+                    model::duration_since_epoch(oldest_allowed_timestamp)),
+                  *first_seg);
             }
         }
     }
@@ -129,6 +161,13 @@ std::optional<retention_calculator> retention_calculator::factory(
             auto highest_to_remove = start_kafka_override - kafka::offset(1);
             strats.emplace_back(
               std::make_unique<offset_based_strategy>(highest_to_remove));
+            vlog(
+              archival_log.trace,
+              "{} offset based retention strategy added, "
+              "first segment: {}, highest offset to remove: {}",
+              ntp_config.ntp(),
+              *first_seg,
+              highest_to_remove);
         }
     }
 

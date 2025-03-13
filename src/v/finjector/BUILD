@@ -17,6 +17,7 @@ redpanda_cc_library(
         "//src/v/random:generators",
         "//src/v/ssx:future_util",
         "@abseil-cpp//absl/container:node_hash_map",
+        "@fmt",
         "@seastar",
     ],
 )

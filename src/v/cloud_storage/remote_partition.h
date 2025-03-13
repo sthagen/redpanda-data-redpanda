@@ -125,7 +125,7 @@ public:
 
     /// Do background flush metadata to object storage, prior to a topic
     /// deletion
-    void finalize();
+    void finalize(bool remote_manifest_expected);
 
     enum class erase_result { erased, failed };
 

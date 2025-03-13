@@ -116,11 +116,6 @@ void server_probe::setup_metrics(
           sm::description(ssx::sformat(
             "{}: Number of connections are blocked by connection rate",
             proto))),
-        sm::make_counter(
-          "produce_bad_create_time",
-          [this] { return _produce_bad_create_time; },
-          sm::description("number of produce requests with timestamps too far "
-                          "in the future or in the past")),
       },
       {},
       {sm::shard_label});
@@ -186,9 +181,7 @@ std::ostream& operator<<(std::ostream& o, const server_probe& p) {
       << "corrupted headers: " << p._corrupted_headers << ", "
       << "method not found errors: " << p._method_not_found_errors << ", "
       << "requests blocked by memory: " << p._requests_blocked_memory << ", "
-      << "connections wait rate: " << p._connections_wait_rate << ", "
-      << "produce bad create time: " << p._produce_bad_create_time << ", "
-      << "}";
+      << "connections wait rate: " << p._connections_wait_rate << "}";
     return o;
 }
 

@@ -30,8 +30,6 @@ from enum import Enum
 TS_LOG_ALLOW_LIST = [
     re.compile(
         "archival_metadata_stm.*Replication wait for archival STM timed out"),
-    # topic deletion may happen before data were uploaded
-    re.compile("cloud_storage.*Failed to fetch manifest during finalize().*")
 ]
 
 
