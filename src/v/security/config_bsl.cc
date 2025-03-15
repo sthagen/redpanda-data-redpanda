@@ -24,7 +24,7 @@ static constexpr const char* const rule_pattern_splitter{
 
 std::regex make_regex(std::string_view sv) {
     return std::regex{
-      sv.begin(),
+      sv.data(),
       sv.length(),
       std::regex_constants::ECMAScript | std::regex_constants::optimize};
 }
@@ -32,8 +32,8 @@ std::regex make_regex(std::string_view sv) {
 bool regex_search(
   std::string_view msg, std::cmatch& match, const std::regex& regex) {
     return std::regex_search(
-      msg.begin(),
-      msg.end(),
+      msg.data(),
+      msg.data() + msg.size(),
       match,
       regex,
       std::regex_constants::match_default);
@@ -42,8 +42,8 @@ bool regex_search(
 bool regex_match(
   std::string_view msg, std::cmatch& match, const std::regex& regex) {
     return std::regex_match(
-      msg.begin(),
-      msg.end(),
+      msg.data(),
+      msg.data() + msg.size(),
       match,
       regex,
       std::regex_constants::match_default);
@@ -115,7 +115,7 @@ std::optional<ss::sstring> rule::apply(std::string_view dn) const {
     }
 
     std::cmatch match;
-    if (!std::regex_match(dn.cbegin(), dn.cend(), match, _regex)) {
+    if (!std::regex_match(dn.data(), dn.data() + dn.size(), match, _regex)) {
         return {};
     }
 

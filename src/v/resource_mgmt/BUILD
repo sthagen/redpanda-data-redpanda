@@ -152,6 +152,7 @@ redpanda_cc_library(
         ":logger",
         "//src/v/base",
         "//src/v/config",
+        "//src/v/container:chunked_hash_map",
         "//src/v/random:generators",
         "//src/v/ssx:future_util",
         "//src/v/ssx:sformat",

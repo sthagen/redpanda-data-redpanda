@@ -91,6 +91,8 @@ public:
      */
     ss::future<checked<std::nullopt_t, translation_task::errc>> discard() &&;
 
+    size_t buffered_bytes() const;
+
 private:
     friend std::ostream& operator<<(std::ostream&, errc);
 

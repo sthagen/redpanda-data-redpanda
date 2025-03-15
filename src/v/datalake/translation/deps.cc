@@ -14,6 +14,7 @@
 #include "cluster/partition.h"
 #include "datalake/coordinator/frontend.h"
 #include "datalake/local_parquet_file_writer.h"
+#include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/record_translator.h"
 #include "datalake/serde_parquet_writer.h"
@@ -41,37 +42,39 @@ ss::future<cluster::errc> wait_stm_translated(
 }
 } // namespace
 
-ss::future<> noop_mem_tracker::maybe_reserve_memory(size_t, ss::abort_source&) {
+ss::future<>
+noop_mem_tracker::update_current_memory_usage(size_t, ss::abort_source&) {
     return ss::make_ready_future<>();
 }
-void noop_mem_tracker::update_current_memory_usage(size_t) {}
 void noop_mem_tracker::release() {}
 
-ss::future<> writer_reservations_impl::maybe_reserve_memory(
-  size_t bytes, ss::abort_source& as) {
-    while (_available_memory < bytes) {
+ss::future<> writer_reservations_impl::update_current_memory_usage(
+  size_t new_used_bytes, ss::abort_source& as) {
+    _current_used_bytes = new_used_bytes;
+    // todo: as a potential optimization we can choose to release bytes if the
+    // new usage is less than current
+    while (_current_used_bytes > _reservations.count()) {
+        // reserve any deficit
         auto reservation = co_await _reservations_tracker.reserve_memory(as);
-        _available_memory += reservation.count();
-        _total_reserved_memory += reservation.count();
-        _reservations.push_back(std::move(reservation));
+        if (_reservations.count()) {
+            _reservations.adopt(std::move(reservation));
+        } else {
+            _reservations = std::move(reservation);
+        }
     }
-    _available_memory -= bytes;
-    co_return;
-}
-
-void writer_reservations_impl::update_current_memory_usage(size_t used_bytes) {
-    vassert(
-      used_bytes <= _total_reserved_memory,
-      "Used more bytes {} than reserved {}",
-      used_bytes,
-      _total_reserved_memory);
-    _available_memory = _total_reserved_memory - used_bytes;
 }
 
 void writer_reservations_impl::release() {
-    _available_memory = 0;
-    _total_reserved_memory = 0;
-    _reservations.clear();
+    _current_used_bytes = 0;
+    _reservations.return_all();
+}
+
+size_t writer_reservations_impl::current_usage() const {
+    return _current_used_bytes;
+}
+
+size_t writer_reservations_impl::total_reserved() const {
+    return _reservations.count();
 }
 
 // Creates or alters the table by delegating to the coordinator.
@@ -153,6 +156,54 @@ coordinator_api::make_default_coordinator_api(coordinator::frontend& frontend) {
     return std::make_unique<default_coordinator_api>(frontend);
 }
 
+namespace {
+std::optional<kafka::offset> calculate_max_offset_for_translation(
+  const kafka::partition_proxy& partition_proxy) {
+    // We factor in LSO to ensure only committed transactional batches are
+    // translated.
+    auto lso = partition_proxy.last_stable_offset();
+    if (lso.has_error()) {
+        return std::nullopt;
+    }
+    return kafka::prev_offset(model::offset_cast(lso.value()));
+}
+std::chrono::milliseconds calculate_target_lag(
+  const cluster::topic_table& topics, const model::ntp& ntp) {
+    const auto& topic_cfg = topics.get_topic_cfg(
+      model::topic_namespace_view{ntp});
+    auto default_lag = config::shard_local_cfg().iceberg_target_lag_ms.value();
+    if (!topic_cfg.has_value()) {
+        return default_lag;
+    }
+    return topic_cfg->properties.iceberg_target_lag_ms.value_or(default_lag);
+}
+kafka::offset calculate_min_offset_for_translation(
+  bool read_replica_mode, const kafka::partition_proxy& partition_proxy) {
+    if (read_replica_mode) {
+        return model::offset_cast(partition_proxy.start_offset());
+    }
+    return model::offset_cast(partition_proxy.local_start_offset());
+}
+
+struct timestamped_offset {
+    explicit timestamped_offset(kafka::offset o)
+      : timestamped_offset(o, model::timestamp::now()) {}
+    timestamped_offset(kafka::offset o, model::timestamp ts)
+      : offset(o)
+      , ts(ts) {}
+    kafka::offset offset;
+    model::timestamp ts;
+
+    friend std::ostream&
+    operator<<(std::ostream& o, const timestamped_offset& to);
+};
+std::ostream& operator<<(std::ostream& o, const timestamped_offset& to) {
+    fmt::print(o, "{{offset: {}, timestamp: {}}}", to.offset, to.ts);
+    return o;
+}
+
+} // namespace
+
 class partition_data_source : public data_source {
 public:
     explicit partition_data_source(
@@ -189,13 +240,10 @@ public:
                 co_return std::nullopt;
             }
         }
-        update_translation_target();
-        auto read_begin_offset = min_offset_for_translation();
         if (last_translated_offset) {
-            read_begin_offset = kafka::next_offset(
-              last_translated_offset.value());
+            co_return kafka::next_offset(last_translated_offset.value());
         }
-        co_return read_begin_offset;
+        co_return min_offset_for_translation();
     }
 
     ss::future<std::optional<model::record_batch_reader>> make_log_reader(
@@ -224,68 +272,22 @@ public:
     }
 
     kafka::offset min_offset_for_translation() const final {
-        if (_partition->is_read_replica_mode_enabled()) {
-            return model::offset_cast(_partition_proxy->start_offset());
-        }
-        return model::offset_cast(_partition_proxy->local_start_offset());
+        return calculate_min_offset_for_translation(
+          _partition->is_read_replica_mode_enabled(), *_partition_proxy);
     }
 
     std::optional<kafka::offset> max_offset_for_translation() const final {
-        // We factor in LSO to ensure only committed transactional batches are
-        // translated.
-        auto lso = _partition_proxy->last_stable_offset();
-        if (lso.has_error()) {
-            return std::nullopt;
-        }
-        return kafka::prev_offset(model::offset_cast(lso.value()));
+        return calculate_max_offset_for_translation(*_partition_proxy);
     }
 
     ss::future<std::error_code> replicate_highest_translated_offset(
       kafka::offset new_offset,
+      std::optional<model::timestamp> translation_timestamp,
       model::term_id term,
       model::timeout_clock::duration timeout,
       ss::abort_source& as) final {
-        // _translation_target holds the max translatable offset from the last
-        // time we found new translatable records, along with the system time we
-        // found them. the general idea here is that, once we've translated
-        // up to an offset that meets or exceeds the stored target offset, any
-        // additional offsets must have become translatable at some
-        // _translation_target.ts + T. at this point, we can replicate the
-        // cached timestamp, since it provides a lower bound for when
-        // new_offset became translatable, from the perspective of the
-        // translator.
-        // If translation met or exceeded the target, also reset it to nullopt
-        // so that a new target can be set the next time fresh offsets become
-        // available for translation.
-        std::optional<model::timestamp> new_ts{};
-        if (_translation_target && new_offset >= _translation_target->offset) {
-            new_ts.emplace(
-              std::exchange(_translation_target, std::nullopt)->ts);
-        }
         return _stm->reset_highest_translated_offset(
-          new_offset, new_ts, term, timeout, as);
-    }
-
-    ss::future<std::optional<std::chrono::milliseconds>>
-    current_lag_ms(model::timeout_clock::duration timeout) final {
-        using namespace std::chrono_literals;
-        if (auto last_translated = co_await _stm->highest_translated_offset(
-              timeout);
-            !last_translated.has_value()) {
-            co_return std::nullopt;
-        } else if (last_translated.value() == max_offset_for_translation()) {
-            co_return 0ms;
-        }
-
-        if (auto last_ts = co_await _stm->last_translated_timestamp(timeout);
-            !last_ts.has_value()) {
-            co_return std::nullopt;
-        } else if (model::timestamp::now() < last_ts.value()) {
-            co_return 0ms;
-        } else {
-            co_return std::chrono::milliseconds{
-              (model::timestamp::now() - last_ts.value()).value()};
-        }
+          new_offset, translation_timestamp, term, timeout, as);
     }
 
     void update_commit_lag(
@@ -331,29 +333,6 @@ private:
     ss::shared_ptr<translation_stm> _stm;
     std::unique_ptr<kafka::partition_proxy> _partition_proxy;
     cluster::partition_flush_hook_id _partition_flush_subscription;
-
-    struct timestamped_offset {
-        kafka::offset offset;
-        model::timestamp ts;
-    };
-    // updated to max_offset_for_translation and current system time when
-    // wait_for_data_to_translated finds untranslated offsets on the input
-    // partition. the timestamp here is used as a rough approximation of
-    // the corresponding record's write time, replicated when we translate
-    // an offset meeting or exceeding target.offset.
-    std::optional<timestamped_offset> _translation_target;
-
-    void update_translation_target() {
-        // don't set a new _translation_target until the current one is cleared
-        // out. this way we can't get into a situation where we're continually
-        // chasing the tip of the log but never reaching it (e.g. due to produce
-        // resources exceeding translate resources).
-        if (auto max_o = max_offset_for_translation();
-            !_translation_target.has_value() && max_o.has_value()) {
-            _translation_target.emplace(
-              timestamped_offset{max_o.value(), model::timestamp::now()});
-        }
-    }
 };
 
 std::unique_ptr<data_source> data_source::make_default_data_source(
@@ -415,8 +394,10 @@ public:
             _discard_translated_state = false;
         }
         if (_discard_translated_state) {
-            return ss::make_exception_future(
-              "state changed, reset translation");
+            return std::move(reader).release()->finally().then([] {
+                return ss::make_exception_future(
+                  "state changed, reset translation");
+            });
         }
         return _in_progress_translation->translate_once(std::move(reader), as);
     }
@@ -494,6 +475,12 @@ public:
         co_await std::move(task.value()).discard().discard_result();
     }
 
+    size_t buffered_bytes() const final {
+        return _in_progress_translation
+                 ? _in_progress_translation->buffered_bytes()
+                 : 0;
+    }
+
 private:
     scheduling::clock::duration compute_target_lag() const {
         // todo: In addition to integrating with config subsystem, an additional
@@ -504,15 +491,7 @@ private:
         // transfer happens after half a day, we cannot just reset the interval
         // window on the new leader. That probably works for smaller lag values
         // but has some oddness with large lags.
-        const auto& topic_cfg = _topics.get_topic_cfg(
-          model::topic_namespace_view{_ntp});
-        auto default_lag
-          = config::shard_local_cfg().iceberg_target_lag_ms.value();
-        if (!topic_cfg.has_value()) {
-            return default_lag;
-        }
-        return topic_cfg->properties.iceberg_target_lag_ms.value_or(
-          default_lag);
+        return calculate_target_lag(_topics, _ntp);
     }
 
     std::unique_ptr<parquet_file_writer_factory> make_writer_factory() {
@@ -590,51 +569,181 @@ translation_context::make_default_translation_context(
       std::move(probe));
 }
 
-// note: this is a temporary implementation to get the code compiling
-// to be filled with a proper implementation that tracks windows based
-// on batch timestamps + heuristics
-// Even the interface is temporary and subject to change depending on
-// the changes needed to track windows.
 class partition_lag_tracker : public translation_lag_tracker {
 public:
     explicit partition_lag_tracker(
       ss::lw_shared_ptr<cluster::partition> partition,
       cluster::topic_table& topics)
       : _partition(std::move(partition))
+      , _partition_proxy(std::make_unique<kafka::partition_proxy>(
+          kafka::make_partition_proxy(_partition)))
       , _topics(topics)
-      , _current_window_end(scheduling::clock::now()) {
-        reset_to_next_window();
-    }
+      , _stm(_partition->raft()->stm_manager()->get<translation_stm>()) {}
 
     bool should_finish_inflight_translation() final {
-        auto window_ended = scheduling::clock::now() >= _current_window_end;
-        if (window_ended) {
-            reset_to_next_window();
+        // we finish inflight translation if the lag greater than 90% of the
+        // target lag.
+        return current_lag_ms() >= target_lag_goal();
+    }
+
+    std::chrono::milliseconds target_lag() const final {
+        return calculate_target_lag(_topics, _partition->ntp());
+    }
+
+    std::chrono::milliseconds current_lag_ms() const final {
+        static constexpr std::chrono::milliseconds no_lag{0};
+        auto max_offset_for_translation = calculate_max_offset_for_translation(
+          *_partition_proxy);
+
+        auto last_translated = _stm->cached_highest_translated_offset();
+
+        /**
+         * Everything there is to translate was translated
+         */
+        if (last_translated == max_offset_for_translation) {
+            return no_lag;
         }
-        return window_ended;
+        const auto last_ts = _stm->cached_last_translated_timestamp();
+        const auto now = model::timestamp::now();
+        // No translation happened yet, use the difference between the
+        // translation target timestamp and now
+        if (!last_ts.has_value()) {
+            // no target is set and we do not have any translated offsets, it
+            // means that the lag is 0
+            if (!_translation_target.has_value()) {
+                return no_lag;
+            }
+            return std::chrono::milliseconds{
+              std::max<int64_t>(0, (now - _translation_target->ts).value())};
+        }
+
+        return std::chrono::milliseconds{
+          std::max<int64_t>(0, (now - last_ts.value()).value())};
+    }
+
+    void notify_new_data_for_translation(
+      kafka::offset max_translatable_offset) final {
+        // don't set a new _translation_target until the current one is cleared
+        // out. this way we can't get into a situation where we're continually
+        // chasing the tip of the log but never reaching it (e.g. due to produce
+        // resources exceeding translate resources).
+        vlog(
+          datalake_log.trace,
+          "[{}] New data for translation with offset {}, current "
+          "translation_target: {}",
+          _partition->ntp(),
+          max_translatable_offset,
+          _translation_target);
+        if (!_translation_target.has_value()) {
+            _translation_target.emplace(max_translatable_offset);
+        }
+    }
+
+    void notify_data_translated(kafka::offset translated_offset) final {
+        // time we found new translatable records, along with the system time we
+        // found them. the general idea here is that, once we've translated
+        // up to an offset that meets or exceeds the stored target offset, any
+        // additional offsets must have become translatable at some
+        // _translation_target.ts + T. at this point, we can replicate the
+        // cached timestamp, since it provides a lower bound for when
+        // new_offset became translatable, from the perspective of the
+        // translator.
+        // If translation met or exceeded the target, also reset it to nullopt
+        // so that a new target can be set the next time fresh offsets become
+        // available for translation.
+        vlog(
+          datalake_log.trace,
+          "[{}] New offset translated {}, current "
+          "translation_target: {}",
+          _partition->ntp(),
+          translated_offset,
+          _translation_target);
+        if (translated_offset >= _translation_target->offset) {
+            _translation_target.reset();
+        }
+    }
+
+    std::optional<size_t> translation_backlog() const final {
+        auto highest_translated_offset
+          = _stm->cached_highest_translated_offset();
+        if (
+          !highest_translated_offset
+          || highest_translated_offset < kafka::offset{0}) {
+            return std::nullopt;
+        }
+        auto min_offset_for_translation = calculate_min_offset_for_translation(
+          _partition->is_read_replica_mode_enabled(), *_partition_proxy);
+        if (highest_translated_offset <= min_offset_for_translation) {
+            return _partition->size_bytes();
+        }
+        auto log_offset = _partition->log()->to_log_offset(
+          kafka::offset_cast(*highest_translated_offset));
+        auto size_after_translated = _partition->log()->size_bytes_after_offset(
+          log_offset);
+
+        auto size_after_max_translatable
+          = _partition->log()->size_bytes_after_offset(
+            _partition->last_stable_offset());
+
+        if (size_after_translated < size_after_max_translatable) {
+            vlog(
+              datalake_log.error,
+              "Expected partition {} size after translated offset({}) {} to be "
+              "greater than or equal to the size of log after max translatable "
+              "offset({}): {}",
+              _partition->ntp().path(),
+              log_offset,
+              size_after_translated,
+              _partition->last_stable_offset());
+            return std::nullopt;
+        }
+
+        return size_after_translated - size_after_max_translatable;
+    }
+
+    std::optional<model::timestamp> get_translated_offset_timestamp_estimate(
+      kafka::offset last_translated_offset) final {
+        if (!_translation_target) {
+            return std::nullopt;
+        }
+
+        if (last_translated_offset >= _translation_target->offset) {
+            return _translation_target->ts;
+        }
+
+        return std::nullopt;
+    }
+
+    scheduling::clock::time_point next_checkpoint_deadline() const final {
+        auto time_left = target_lag_goal() - current_lag_ms();
+        return scheduling::clock::now() + time_left;
     }
 
 private:
-    scheduling::clock::duration target_lag() const {
-        const auto& topic_cfg = _topics.get_topic_cfg(
-          model::topic_namespace_view{_partition->ntp()});
-        auto default_lag
-          = config::shard_local_cfg().iceberg_target_lag_ms.value();
-        if (!topic_cfg.has_value()) {
-            return std::chrono::duration_cast<scheduling::clock::duration>(
-              default_lag);
-        }
-        auto target_lag = topic_cfg->properties.iceberg_target_lag_ms.value_or(
-          default_lag);
+    // percentage of the target lag that we should finish inflight translation
+    // at (in range [0, 1])
+    static constexpr auto target_lag_percentage = 0.9;
+    /**
+     * Returns a duration which is a percentage of the target lag. We do not
+     * want to finish the translation at the target lag as not keeping up with
+     * the translation would trigger backpressure mechanism. In order to avoid
+     * that we use a percentage of the target lag.
+     */
+    scheduling::clock::duration target_lag_goal() const {
         return std::chrono::duration_cast<scheduling::clock::duration>(
-          target_lag);
+          target_lag_percentage * target_lag());
     }
 
-    void reset_to_next_window() { _current_window_end += target_lag(); }
-
     ss::lw_shared_ptr<cluster::partition> _partition;
+    std::unique_ptr<kafka::partition_proxy> _partition_proxy;
     cluster::topic_table& _topics;
-    scheduling::clock::time_point _current_window_end;
+    ss::shared_ptr<translation_stm> _stm;
+    // updated to max_offset_for_translation and current system time when
+    // wait_for_data_to_translated finds untranslated offsets on the input
+    // partition. the timestamp here is used as a rough approximation of
+    // the corresponding record's write time, replicated when we translate
+    // an offset meeting or exceeding target.offset.
+    std::optional<timestamped_offset> _translation_target;
 };
 
 std::unique_ptr<translation_lag_tracker>

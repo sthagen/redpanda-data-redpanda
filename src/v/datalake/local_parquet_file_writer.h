@@ -40,13 +40,14 @@ public:
 
     ss::future<writer_error> flush() final;
 
+    /**
+     * Must be called in all cases, including write errors for proper
+     * cleanup of resources.
+     */
     ss::future<result<local_file_metadata, writer_error>> finish() final;
 
 private:
-    ss::future<> abort();
-
     local_path _output_file_path;
-    ss::file _output_file;
     size_t _row_count{0};
     size_t _raw_bytes_count{0};
 
@@ -54,6 +55,8 @@ private:
     ss::shared_ptr<parquet_ostream_factory> _writer_factory;
     writer_mem_tracker& _mem_tracker;
     bool _initialized{false};
+    // set once the writer ran into an error, fences further writes.
+    writer_error _error{writer_error::ok};
 };
 
 class local_parquet_file_writer_factory : public parquet_file_writer_factory {

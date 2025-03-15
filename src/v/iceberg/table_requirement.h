@@ -35,6 +35,10 @@ struct assert_last_assigned_partition_id {
     partition_field::id_t last_assigned_partition_id;
 };
 
+struct assert_default_spec_id {
+    partition_spec::id_t default_spec_id;
+};
+
 struct assert_ref_snapshot_id {
     ss::sstring ref;
     std::optional<snapshot_id> snapshot_id;
@@ -50,6 +54,7 @@ using requirement = std::variant<
   assert_ref_snapshot_id,
   assert_table_uuid,
   last_assigned_field_match,
-  assert_last_assigned_partition_id>;
+  assert_last_assigned_partition_id,
+  assert_default_spec_id>;
 
 } // namespace iceberg::table_requirement

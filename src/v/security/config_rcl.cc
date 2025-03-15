@@ -87,8 +87,8 @@ parse_rules(const std::vector<ss::sstring>& unparsed_rules) {
         } else {
             int num_components = std::numeric_limits<int>::max();
             auto conv_rc = std::from_chars(
-              num_components_str.begin(),
-              num_components_str.end(),
+              num_components_str.data(),
+              num_components_str.data() + num_components_str.size(),
               num_components);
             if (conv_rc.ec != std::errc()) {
                 throw std::runtime_error(
@@ -192,7 +192,7 @@ parse_principal_mapping_rule(std::string_view mapping) {
     }
 
     std::regex rule_parser{
-      mapping_rule_pattern.begin(),
+      mapping_rule_pattern.data(),
       mapping_rule_pattern.length(),
       std::regex_constants::ECMAScript | std::regex_constants::optimize};
 
@@ -201,8 +201,8 @@ parse_principal_mapping_rule(std::string_view mapping) {
         auto rule_str = mapping.substr(slash);
         std::cmatch components_match;
         if (!std::regex_search(
-              rule_str.begin(),
-              rule_str.end(),
+              rule_str.data(),
+              rule_str.data() + rule_str.size(),
               components_match,
               rule_parser,
               std::regex_constants::match_default)) {

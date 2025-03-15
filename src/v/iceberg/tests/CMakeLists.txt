@@ -55,6 +55,7 @@ rp_test(
     test_table_metadata.cc
     transform_json_test.cc
     transform_utils_test.cc
+    update_partition_spec_action_test.cc
     update_schema_action_test.cc
     values_test.cc
     values_avro_test.cc

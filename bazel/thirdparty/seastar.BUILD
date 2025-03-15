@@ -561,6 +561,9 @@ cc_library(
         ":use_logger_compile_time_fmt": ["SEASTAR_LOGGER_COMPILE_TIME_FMT"],
         "//conditions:default": [],
     }) + select({
+        ":use_system_allocator": ["SEASTAR_DEFAULT_ALLOCATOR"],
+        "//conditions:default": [],
+    }) + select({
         ":with_debug": [
             "SEASTAR_DEBUG",
             "SEASTAR_DEBUG_PROMISE",
@@ -602,9 +605,6 @@ cc_library(
         # split out into a separate cc_library, but we'd need to inherit all the
         # build settings. defining for all compilation units seems harmless.
         ":use_heap_profiling": ["SEASTAR_HEAPPROF"],
-        "//conditions:default": [],
-    }) + select({
-        ":use_system_allocator": ["SEASTAR_DEFAULT_ALLOCATOR"],
         "//conditions:default": [],
     }) + select({
         ":with_shuffle_task_queue": ["SEASTAR_SHUFFLE_TASK_QUEUE"],

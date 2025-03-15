@@ -9,7 +9,7 @@
 namespace datalake {
 
 ss::future<writer_error> serde_parquet_writer::add_data_struct(
-  iceberg::struct_value value, size_t approx_size, ss::abort_source& as) {
+  iceberg::struct_value value, size_t, ss::abort_source& as) {
     auto conversion_result = co_await to_parquet_value(
       std::make_unique<iceberg::struct_value>(std::move(value)));
     if (conversion_result.has_error()) {
@@ -19,11 +19,10 @@ ss::future<writer_error> serde_parquet_writer::add_data_struct(
     auto group = std::get<serde::parquet::group_value>(
       std::move(conversion_result.value()));
     try {
-        co_await _mem_tracker.maybe_reserve_memory(approx_size, as);
         auto stats = co_await _writer.write_row(std::move(group));
         _buffered_bytes = stats.buffered_size;
         _flushed_bytes = stats.flushed_size;
-        _mem_tracker.update_current_memory_usage(_buffered_bytes);
+        co_await _mem_tracker.update_current_memory_usage(_buffered_bytes, as);
     } catch (...) {
         vlog(
           datalake_log.warn,

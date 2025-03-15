@@ -40,7 +40,7 @@ gssapi_rule::gssapi_rule(
   , _format(format)
   , _match(match)
   , _from_pattern(std::regex{
-      from_pattern.begin(),
+      from_pattern.data(),
       from_pattern.length(),
       std::regex_constants::ECMAScript | std::regex_constants::optimize})
   , _from_pattern_str(from_pattern)
@@ -191,7 +191,9 @@ std::optional<ss::sstring> gssapi_rule::replace_parameters(
         if (!index_replace.empty()) {
             std::size_t index = std::numeric_limits<std::size_t>::max();
             auto conv_result = std::from_chars(
-              index_replace.begin(), index_replace.end(), index);
+              index_replace.data(),
+              index_replace.data() + index_replace.size(),
+              index);
             if (conv_result.ec != std::errc()) {
                 vlog(
                   seclog.warn,

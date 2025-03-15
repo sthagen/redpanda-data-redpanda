@@ -375,11 +375,15 @@ create_topic_properties_update(
                 continue;
             }
             if (cfg.name == topic_property_iceberg_partition_spec) {
+                // Use std::identity as the "parser function" (i.e. pass through
+                // the raw string) because boost::lexical_cast<ss::sstring> (the
+                // default) doesn't allow spaces in the config value.
                 parse_and_set_optional(
                   update.properties.iceberg_partition_spec,
                   cfg.value,
                   op,
-                  iceberg_partition_spec_validator{});
+                  iceberg_partition_spec_validator{},
+                  std::identity{});
                 continue;
             }
             if (cfg.name == topic_property_iceberg_invalid_record_action) {

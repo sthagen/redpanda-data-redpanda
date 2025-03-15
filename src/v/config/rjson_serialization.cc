@@ -11,6 +11,7 @@
 
 #include "config/tls_config.h"
 #include "config/types.h"
+#include "json/stringbuffer.h"
 #include "model/metadata.h"
 
 namespace json {
@@ -276,6 +277,11 @@ void rjson_serialize(
 void rjson_serialize(
   json::Writer<json::StringBuffer>& w, config::datalake_catalog_auth_mode cam) {
     stringize(w, cam);
+}
+
+void rjson_serialize(
+  json::Writer<json::StringBuffer>& w, config::tls_name_format format) {
+    stringize(w, format);
 }
 
 } // namespace json

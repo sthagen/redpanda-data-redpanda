@@ -51,7 +51,11 @@ struct fixture {
 
 struct fetch_plan_fixture : redpanda_thread_fixture {
     static constexpr size_t topic_name_length = 30;
+#ifdef SEASTAR_DEFAULT_ALLOCATOR
+    static constexpr size_t total_partition_count = 100;
+#else
     static constexpr size_t total_partition_count = 800;
+#endif
     static constexpr size_t session_partition_count = 100;
 
     model::topic t;

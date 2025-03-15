@@ -30,8 +30,9 @@ local_parquet_file_writer::local_parquet_file_writer(
 ss::future<checked<std::nullopt_t, writer_error>>
 local_parquet_file_writer::initialize(const iceberg::struct_type& schema) {
     vlog(datalake_log.info, "Writing Parquet file to {}", _output_file_path);
+    ss::file output_file;
     try {
-        _output_file = co_await ss::open_file_dma(
+        output_file = co_await ss::open_file_dma(
           _output_file_path().string(),
           ss::open_flags::create | ss::open_flags::truncate
             | ss::open_flags::wo);
@@ -45,7 +46,7 @@ local_parquet_file_writer::initialize(const iceberg::struct_type& schema) {
     }
 
     auto fut = co_await ss::coroutine::as_future(
-      ss::make_file_output_stream(_output_file));
+      ss::make_file_output_stream(std::move(output_file)));
 
     if (fut.failed()) {
         vlog(
@@ -53,7 +54,6 @@ local_parquet_file_writer::initialize(const iceberg::struct_type& schema) {
           "Error making output stream for file {} - {}",
           _output_file_path,
           fut.get_exception());
-        co_await _output_file.close();
         co_return writer_error::file_io_error;
     }
 
@@ -68,6 +68,9 @@ ss::future<writer_error> local_parquet_file_writer::add_data_struct(
     if (!_initialized) {
         co_return writer_error::file_io_error;
     }
+    if (_error != writer_error::ok) {
+        co_return _error;
+    }
     auto write_result = co_await _writer->add_data_struct(
       std::move(data), sz, as);
     if (write_result != writer_error::ok) {
@@ -76,8 +79,7 @@ ss::future<writer_error> local_parquet_file_writer::add_data_struct(
           "Error writing data to file {} - {}",
           _output_file_path,
           write_result);
-
-        co_await abort();
+        _error = write_result;
         co_return write_result;
     }
     _raw_bytes_count += sz;
@@ -98,6 +100,9 @@ ss::future<writer_error> local_parquet_file_writer::flush() {
     if (!_initialized) {
         co_return writer_error::flush_error;
     }
+    if (_error != writer_error::ok) {
+        co_return _error;
+    }
     auto result = co_await ss::coroutine::as_future(_writer->flush());
     if (result.failed()) {
         auto ex = result.get_exception();
@@ -112,12 +117,28 @@ local_parquet_file_writer::finish() {
     if (!_initialized) {
         co_return writer_error::file_io_error;
     }
-    auto result = co_await _writer->finish();
-    if (result != writer_error::ok) {
-        co_await abort();
-        co_return result;
-    }
     _initialized = false;
+    auto writer_ec = writer_error::ok;
+    try {
+        writer_ec = co_await _writer->finish();
+    } catch (...) {
+        vlog(
+          datalake_log.warn,
+          "Error closing writer instance {} for path {}",
+          std::current_exception(),
+          _output_file_path);
+        writer_ec = writer_error::file_io_error;
+    }
+    if (_error == writer_error::ok && writer_ec != writer_error::ok) {
+        _error = writer_ec;
+    }
+    if (_error != writer_error::ok) {
+        auto exists = co_await ss::file_exists(_output_file_path().string());
+        if (exists) {
+            co_await ss::remove_file(_output_file_path().string());
+        }
+        co_return _error;
+    }
     try {
         auto f_size = co_await ss::file_size(_output_file_path().string());
 
@@ -134,18 +155,6 @@ local_parquet_file_writer::finish() {
           std::current_exception());
         co_return writer_error::file_io_error;
     }
-}
-
-ss::future<> local_parquet_file_writer::abort() {
-    if (!_initialized) {
-        co_return;
-    }
-    co_await _output_file.close();
-    auto exists = co_await ss::file_exists(_output_file_path().string());
-    if (exists) {
-        co_await ss::remove_file(_output_file_path().string());
-    }
-    _initialized = false;
 }
 
 local_path local_parquet_file_writer_factory::create_filename() const {

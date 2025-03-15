@@ -32,6 +32,7 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		newListCommand(fs, p),
 		newTrimPrefixCommand(fs, p),
 		newProduceCommand(fs, p),
+		newAnalyzeCommand(fs, p),
 	)
 	return cmd
 }

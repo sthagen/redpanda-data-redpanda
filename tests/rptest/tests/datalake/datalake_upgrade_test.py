@@ -61,7 +61,9 @@ class DatalakeUpgradeTest(RedpandaTest):
                 count = 100
                 dl.produce_to_topic(self.topic_name, 1024, msg_count=count)
                 total_count += count
-                dl.wait_for_translation(self.topic_name, msg_count=total_count)
+                dl.wait_for_translation(self.topic_name,
+                                        msg_count=total_count,
+                                        timeout=60)
 
             versions = self.load_version_range(self.initial_version)
             for v in self.upgrade_through_versions(versions_in=versions,

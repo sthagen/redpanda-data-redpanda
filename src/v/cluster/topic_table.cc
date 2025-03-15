@@ -64,6 +64,15 @@ topic_table::apply(create_topic_cmd cmd, model::offset offset) {
         co_return errc::topic_invalid_config;
     }
 
+    if (
+      cmd.value.cfg.properties.iceberg_mode != model::iceberg_mode::disabled
+      && !cmd.value.cfg.properties.iceberg_partition_spec) {
+        // Remember partition spec default at time of creation - i.e. make it a
+        // sticky config.
+        cmd.value.cfg.properties.iceberg_partition_spec
+          = config::shard_local_cfg().iceberg_default_partition_spec();
+    }
+
     std::optional<model::initial_revision_id> remote_revision
       = cmd.value.cfg.properties.remote_topic_properties
           ? std::make_optional(
@@ -973,6 +982,35 @@ void incremental_update(
     }
 }
 
+void incremental_update(
+  model::iceberg_mode& property,
+  std::optional<ss::sstring>& partition_spec_property,
+  property_update<model::iceberg_mode> override,
+  model::iceberg_mode default_value) {
+    switch (override.op) {
+    case incremental_update_operation::remove:
+        // remove override, fallback to default
+        property = default_value;
+        return;
+    case incremental_update_operation::set: {
+        // set new value and remember the current partition spec default if we
+        // are enabling iceberg.
+        auto old_property = property;
+        property = override.value;
+        if (
+          old_property == model::iceberg_mode::disabled
+          && property != old_property && !partition_spec_property) {
+            partition_spec_property
+              = config::shard_local_cfg().iceberg_default_partition_spec();
+        }
+        return;
+    }
+    case incremental_update_operation::none:
+        // do nothing
+        return;
+    }
+}
+
 template<typename T>
 void incremental_update(
   tristate<T>& property, property_update<tristate<T>> override) {
@@ -1093,6 +1131,7 @@ topic_properties topic_table::update_topic_properties(
     incremental_update(updated_properties.flush_bytes, overrides.flush_bytes);
     incremental_update(
       updated_properties.iceberg_mode,
+      updated_properties.iceberg_partition_spec,
       overrides.iceberg_mode,
       storage::ntp_config::default_iceberg_mode);
     incremental_update(
@@ -1103,7 +1142,9 @@ topic_properties topic_table::update_topic_properties(
       updated_properties.iceberg_delete, overrides.iceberg_delete);
     incremental_update(
       updated_properties.iceberg_partition_spec,
-      overrides.iceberg_partition_spec);
+      overrides.iceberg_partition_spec,
+      std::optional(
+        config::shard_local_cfg().iceberg_default_partition_spec()));
     incremental_update(
       updated_properties.iceberg_invalid_record_action,
       overrides.iceberg_invalid_record_action);

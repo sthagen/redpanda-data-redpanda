@@ -29,8 +29,8 @@ namespace datalake::translation {
 
 class noop_mem_tracker : public writer_mem_tracker {
 public:
-    ss::future<> maybe_reserve_memory(size_t bytes, ss::abort_source&) override;
-    void update_current_memory_usage(size_t) override;
+    ss::future<>
+    update_current_memory_usage(size_t, ss::abort_source&) override;
     void release() override;
 };
 
@@ -40,15 +40,17 @@ public:
       scheduling::reservations_tracker& scheduling_reservations)
       : _reservations_tracker(scheduling_reservations) {}
 
-    ss::future<> maybe_reserve_memory(size_t bytes, ss::abort_source&) override;
-    void update_current_memory_usage(size_t) override;
+    ss::future<>
+    update_current_memory_usage(size_t, ss::abort_source&) override;
     void release() override;
 
+    size_t current_usage() const;
+    size_t total_reserved() const;
+
 private:
-    size_t _available_memory{0};
-    size_t _total_reserved_memory{0};
+    size_t _current_used_bytes{0};
     scheduling::reservations_tracker& _reservations_tracker;
-    chunked_vector<ssx::semaphore_units> _reservations;
+    ssx::semaphore_units _reservations;
 };
 
 class coordinator_api {
@@ -109,6 +111,11 @@ public:
      * Returns the next offset for translation, either
      * min_offset_for_translation, next(last_translated_offset) if one exists,
      * or nullopt if there is no data to translate.
+     * TODO:
+     * if we decide not to return on any data appearing we need to add a
+     * callback to the method ss::noncopyable_function<void(kafka::offset)>
+     * that would notify the lag tracker about new offsets that are ready to be
+     * translated.
      */
     virtual ss::future<std::optional<kafka::offset>> wait_for_data_to_translate(
       std::optional<kafka::offset> last_translated_offset,
@@ -126,28 +133,11 @@ public:
 
     virtual ss::future<std::error_code> replicate_highest_translated_offset(
       kafka::offset new_offset,
+      std::optional<model::timestamp> translation_timestamp,
       model::term_id,
       model::timeout_clock::duration timeout,
       ss::abort_source&)
       = 0;
-
-    /**
-     * current_lag_ms - Approximation of current translation lag with respect to
-     * some data source.
-     *
-     * Calulated as the difference between current system time and a replicated
-     * underestimate for the timestamp of the last offset we translated. The
-     * intent here is to consistently _over_ estimate translation lag.
-     *
-     * returns optional<chrono::milliseconds>
-     *   - nullopt if iceberg disabled or stm is not in sync or we never caught
-     *     the tip of the log
-     *   - 0ms if last_translated_offset == max_offset_for_translation
-     *   - otherwise now() - last_catchup (in milliseconds)
-     *
-     */
-    virtual ss::future<std::optional<std::chrono::milliseconds>>
-    current_lag_ms(model::timeout_clock::duration timeout) = 0;
 
     virtual void update_commit_lag(
       std::optional<kafka::offset> max_committed_kafka_offset) const
@@ -209,6 +199,10 @@ public:
      * Cleans up state and discards an translated result.
      */
     virtual ss::future<> discard() = 0;
+    /**
+     *  Returns the number of bytes buffered for the parquet file in memory
+     */
+    virtual size_t buffered_bytes() const = 0;
 
     static std::unique_ptr<translation_context>
     make_default_translation_context(
@@ -239,6 +233,57 @@ public:
     virtual ~translation_lag_tracker() = default;
 
     virtual bool should_finish_inflight_translation() = 0;
+    /**
+     * current_lag_ms - Approximation of current translation lag with respect to
+     * some data source.
+     *
+     * Calculated as the difference between current system time and a replicated
+     * underestimate for the timestamp of the last offset we translated. The
+     * intent here is to consistently _over_ estimate translation lag.
+     *
+     */
+    virtual std::chrono::milliseconds current_lag_ms() const = 0;
+
+    /**
+     * Target lag for current partition as stated in either topic configuration
+     * or default cluster configuration.
+     */
+    virtual std::chrono::milliseconds target_lag() const = 0;
+    /**
+     * Notifies the lag tracker about new data that is ready to be translated.
+     *
+     * This triggers snapshotting the translation target if it is not already
+     * set.
+     */
+    virtual void notify_new_data_for_translation(kafka::offset) = 0;
+    /**
+     * Notifies the lag tracker about the data that has been translated.
+     *
+     * This may reset the translation target if the translated offset is greater
+     * than or equal to the target translation offset.
+     */
+    virtual void notify_data_translated(kafka::offset) = 0;
+
+    /**
+     * Returns an estimated timestamp for the batch with requested
+     * `kafka::offset`.
+     *
+     * The timestamp is returned only when passed kafka offset is greater than
+     * current target offset. This way the stm checkpoint batch contains a
+     * timestamp that can be used to  estimate the lag.
+     */
+    virtual std::optional<model::timestamp>
+      get_translated_offset_timestamp_estimate(kafka::offset) = 0;
+
+    /**
+     * Returns an estimate size of data that are ready to be translated.
+     */
+    virtual std::optional<size_t> translation_backlog() const = 0;
+    /**
+     * Returns a time point which is the deadline for the next translation
+     * checkpoint required not to miss the target lag limit.
+     */
+    virtual scheduling::clock::time_point next_checkpoint_deadline() const = 0;
 
     static std::unique_ptr<translation_lag_tracker> make_default_lag_tracker(
       ss::lw_shared_ptr<cluster::partition>, cluster::topic_table&);

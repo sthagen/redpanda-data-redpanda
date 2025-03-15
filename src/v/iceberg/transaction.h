@@ -38,6 +38,11 @@ public:
     // is assigned based on the state of the table.
     ss::future<txn_outcome> set_schema(schema);
 
+    // Adds a new partition spec and sets it as the default one. Partition
+    // source fields are resolved using the current schema and existing
+    // partition fields are reused.
+    ss::future<txn_outcome> set_partition_spec(unresolved_partition_spec);
+
     // Adds the given data files to a new snapshot for the table, potentially
     // merging manifests to reduce manifest list size.
     //
@@ -63,6 +68,11 @@ public:
     ss::future<txn_outcome> remove_expired_snapshots(model::timestamp now);
 
     std::optional<action::errc> error() const { return error_; }
+
+    bool is_noop() const {
+        return !error_ && updates_.updates.empty()
+               && updates_.requirements.empty();
+    }
 
     // NOTE: it is up to the caller to ensure the transaction has not hit any
     // errors before calling these.

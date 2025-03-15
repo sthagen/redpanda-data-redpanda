@@ -27,6 +27,9 @@ struct test_writer : datalake::parquet_ostream {
       : error_after_rows_(error_after_rows)
       , error_on_finish_(error_on_finish)
       , os_(std::move(os)) {}
+    ~test_writer() {
+        vassert(stream_closed_, "Ensure output stream is closed in all cases");
+    }
     ss::future<datalake::writer_error>
     add_data_struct(iceberg::struct_value, size_t, ss::abort_source&) final {
         if (rows_ >= error_after_rows_) {
@@ -42,16 +45,18 @@ struct test_writer : datalake::parquet_ostream {
     ss::future<> flush() final { return ss::make_ready_future<>(); }
 
     ss::future<datalake::writer_error> finish() final {
+        co_await os_.close();
+        stream_closed_ = true;
         if (error_on_finish_) {
             co_return datalake::writer_error::file_io_error;
         }
-        co_await os_.close();
         co_return datalake::writer_error::ok;
     }
 
     size_t error_after_rows_;
     bool error_on_finish_;
     size_t rows_{0};
+    bool stream_closed_;
     ss::output_stream<char> os_;
 };
 

@@ -207,6 +207,7 @@ class RedpandaInstaller:
         }
 
         # memoize result of self.arch()
+        self._arch_lock = threading.Lock()
         self._arch = None
 
     def installed_version(self, node) -> RedpandaVersion:
@@ -670,15 +671,17 @@ class RedpandaInstaller:
 
     @property
     def arch(self):
-        if self._arch is None:
-            node = self._redpanda.nodes[0]
-            self._arch = "amd64"
-            uname = str(node.account.ssh_output("uname -m"))
-            if "aarch" in uname or "arm" in uname:
-                self._arch = "arm64"
-            self._redpanda.logger.debug(
-                f"{node.account.hostname} uname output: {uname}")
-        return self._arch
+        with self._arch_lock:
+            if self._arch is None:
+                node = self._redpanda.nodes[0]
+                uname = str(node.account.ssh_output("uname -m"))
+                if "aarch" in uname or "arm" in uname:
+                    self._arch = "arm64"
+                else:
+                    self._arch = "amd64"
+                self._redpanda.logger.debug(
+                    f"{node.account.hostname} uname output: {uname}")
+            return self._arch
 
     def download_on_node_unlocked(self, node, version) -> None:
         """

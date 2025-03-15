@@ -744,7 +744,7 @@ rpk:
 pandaproxy: {}
 schema_registry: {}
 `,
-			expVirtualRpk: `version: 6
+			expVirtualRpk: `version: 7
 globals:
     prompt: ""
     no_default_cluster: false
@@ -842,7 +842,7 @@ rpk:
     tune_disk_write_cache: true
     tune_disk_irq: true
 `,
-			expVirtualRpk: `version: 6
+			expVirtualRpk: `version: 7
 globals:
     prompt: ""
     no_default_cluster: false
@@ -884,7 +884,7 @@ cloud_auth:
 		// * admin api is defaulted, using kafka broker ip
 		{
 			name: "rpk.yaml exists",
-			rpkYaml: `version: 6
+			rpkYaml: `version: 7
 globals:
     prompt: ""
     no_default_cluster: false
@@ -944,7 +944,7 @@ rpk:
 pandaproxy: {}
 schema_registry: {}
 `,
-			expVirtualRpk: `version: 6
+			expVirtualRpk: `version: 7
 globals:
     prompt: ""
     no_default_cluster: false
@@ -1008,7 +1008,7 @@ rpk:
     tune_disk_write_cache: true
     tune_disk_irq: true
 `,
-			rpkYaml: `version: 6
+			rpkYaml: `version: 7
 globals:
     prompt: ""
     no_default_cluster: false
@@ -1063,7 +1063,7 @@ rpk:
     tune_disk_irq: true
 `,
 
-			expVirtualRpk: `version: 6
+			expVirtualRpk: `version: 7
 globals:
     prompt: ""
     no_default_cluster: false
@@ -1168,6 +1168,7 @@ func TestConfig_parseDevOverrides(t *testing.T) {
 func TestParamsHelpComplete(t *testing.T) {
 	h := ParamsHelp()
 	m := maps.Clone(xflags)
+	delete(m, xCloudEnvironment) // We leave this out of the list and docs on purpose.
 	for _, line := range strings.Split(h, "\n") {
 		key := strings.Split(line, "=")[0]
 		delete(m, key)
@@ -1180,6 +1181,7 @@ func TestParamsHelpComplete(t *testing.T) {
 func TestParamsListComplete(t *testing.T) {
 	h := ParamsList()
 	m := maps.Clone(xflags)
+	delete(m, xCloudEnvironment) // We leave this out of the list and docs on purpose.
 	for _, line := range strings.Split(h, "\n") {
 		key := strings.Split(line, "=")[0]
 		delete(m, key)

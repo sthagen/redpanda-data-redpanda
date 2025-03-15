@@ -509,7 +509,7 @@ private:
             using namespace details::decomp;
             std::array<uint8_t, serialized_size<N_BITS, row_width>> buff;
 
-            auto end_iter = buff.begin();
+            auto end_iter = buff.data();
             // step 1: extract and serialize whole bytes, following
             // decomposition in words
             constexpr static auto decom = unsigned_decomposition<N_BITS>;
@@ -626,7 +626,7 @@ private:
             std::array<uint8_t, serialized_size<N_BITS, row_width>> tmp_buffer;
             _data.consume_to(tmp_buffer.size(), tmp_buffer.begin());
 
-            auto end_it = tmp_buffer.cbegin();
+            auto end_it = static_cast<const uint8_t*>(tmp_buffer.data());
             // step 1: deserialize whole bytes and paste them in place,
             // following decomposition in words
             constexpr static auto decom = unsigned_decomposition<N_BITS>;

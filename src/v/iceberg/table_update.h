@@ -50,6 +50,11 @@ struct add_spec {
     }
 };
 
+struct set_default_spec {
+    partition_spec::id_t spec_id;
+    set_default_spec copy() const { return *this; }
+};
+
 struct add_snapshot {
     snapshot snapshot;
     add_snapshot copy() const {
@@ -86,7 +91,6 @@ struct set_snapshot_ref {
 // TODO: not yet implemented
 // - assign_uuid
 // - upgrade_format_version
-// - set_default_spec
 // - add_sort_order
 // - set_default_sort_order
 // - set_location
@@ -98,6 +102,7 @@ using update = std::variant<
   add_schema,
   set_current_schema,
   add_spec,
+  set_default_spec,
   add_snapshot,
   remove_snapshots,
   remove_snapshot_ref,

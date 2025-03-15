@@ -84,7 +84,7 @@ TEST(SnappyTest, CompressedVersionHeadersSnappyJavaTest) {
       std::memcmp(
         compressed_frag->get(),
         compression::internal::snappy_java_compressor::snappy_magic::java_magic
-          .begin(),
+          .data(),
         compression::internal::snappy_java_compressor::snappy_magic::java_magic
           .size()),
       0);

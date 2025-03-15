@@ -23,7 +23,7 @@ namespace {
 
 void check_name(
   const avro::NodePtr& parent, size_t pos, std::string_view expected_name) {
-    ASSERT_STREQ(parent->nameAt(pos).c_str(), expected_name.cbegin());
+    ASSERT_EQ(std::string_view(parent->nameAt(pos)), expected_name);
 }
 
 void check_optional(const avro::NodePtr& n, avro::Type expected_type) {

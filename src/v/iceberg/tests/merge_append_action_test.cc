@@ -648,7 +648,75 @@ TEST_F(MergeAppendActionTest, TestTagWithExpiration) {
     ASSERT_EQ(long_max, tag_snap.max_ref_age_ms.value());
 }
 
+// Test appending with multiple partition specs, but not enough files to trigger
+// merging.
 TEST_F(MergeAppendActionTest, TestMultiplePartitionSpecs) {
+    transaction tx(create_table());
+
+    {
+        // Append some files
+        auto files = create_data_files(tx.table(), "foo", 2, 3);
+        merge_append_and_check(tx, std::move(files), 1, 1);
+    }
+
+    {
+        // Add second spec
+        auto new_spec = unresolved_partition_spec{};
+        new_spec.fields.push_back(unresolved_partition_spec::field{
+          .source_name = {"baz"},
+          .transform = identity_transform{},
+          .name = "baz",
+        });
+        auto res = tx.set_partition_spec(std::move(new_spec)).get();
+        ASSERT_FALSE(res.has_error()) << res.error();
+        ASSERT_EQ(tx.table().partition_specs.size(), 2);
+    }
+
+    {
+        // Append some more files with the new spec
+        auto files = create_data_files(
+          tx.table(), "foo", 2, 3, boolean_value{true});
+        merge_append_and_check(tx, std::move(files), 2, 2);
+    }
+
+    {
+        // Add third spec
+        auto new_spec = unresolved_partition_spec{};
+        new_spec.fields.push_back(unresolved_partition_spec::field{
+          .source_name = {"foo"},
+          .transform = identity_transform{},
+          .name = "foo",
+        });
+        auto res = tx.set_partition_spec(std::move(new_spec)).get();
+        ASSERT_FALSE(res.has_error()) << res.error();
+        ASSERT_EQ(tx.table().partition_specs.size(), 3);
+    }
+
+    {
+        // Append files with every partition spec in one action.
+        chunked_vector<file_to_append> files;
+        auto add_files = [&](
+                           partition_spec::id_t spec_id,
+                           primitive_value pk_value) {
+            auto to_add = create_data_files(
+              tx.table(),
+              "foo",
+              1,
+              3,
+              std::move(pk_value),
+              std::nullopt,
+              spec_id);
+            std::move(to_add.begin(), to_add.end(), std::back_inserter(files));
+        };
+        add_files(partition_spec::id_t{0}, int_value{21});
+        add_files(partition_spec::id_t{1}, boolean_value{false});
+        add_files(partition_spec::id_t{2}, string_value{iobuf::from("aaa")});
+
+        merge_append_and_check(tx, std::move(files), 3, 5);
+    }
+}
+
+TEST_F(MergeAppendActionTest, TestMergeWithMultiplePartitionSpecs) {
     const size_t num_to_merge_at
       = merge_append_action::default_min_to_merge_new_files;
     const size_t files_per_man = 2;

@@ -1,183 +1,93 @@
-FROM ubuntu:jammy AS base
+FROM debian:bullseye AS builder
 
-RUN apt update
-RUN apt upgrade -y
-RUN apt install -y git curl python3 cmake ninja-build wget lsb-release software-properties-common gnupg
-ADD --chmod=755 https://apt.llvm.org/llvm.sh /
-ARG SYSTEM_CLANG_VERSION=19
-RUN /llvm.sh ${SYSTEM_CLANG_VERSION}
+RUN apt update && apt install -y \
+    git \
+    python3 \
+    jq \
+    curl \
+    wget \
+    gnupg \
+    software-properties-common \
+    lsb-release
 
-ARG TARGETARCH
-ADD --chmod=755 https://github.com/bazelbuild/bazelisk/releases/download/v1.20.0/bazelisk-linux-${TARGETARCH} /usr/bin/bazel
-# For some reason, with high concurrency settings, clang will segfault for me sometimes. Use this automatic retry script so that's less annoying.
-ADD --chmod=755 https://github.com/kadwanev/retry/raw/20997c7712a4/retry /usr/bin/retry
+# Install latest versions using backports
+RUN echo "deb http://deb.debian.org/debian bullseye-backports main" > /etc/apt/sources.list.d/backports.list && \
+    apt-get update && \
+    apt-get install -y -t bullseye-backports \
+      cmake \
+      gcc \
+      g++ \
+      build-essential \
+      binutils-dev \
+      automake \
+      ninja-build \
+      zlib1g-dev \
+      pkg-config
 
-WORKDIR /opt
+ARG STAGE_0_LLVM_VERSION=20
 
-ARG LLVM_VERSION=19.1.7
+RUN wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && /llvm.sh ${STAGE_0_LLVM_VERSION} all
 
-RUN git clone --branch llvmorg-${LLVM_VERSION} --single-branch https://github.com/llvm/llvm-project.git
+# Set working directory
+WORKDIR /src
 
-ENV CC=clang-${SYSTEM_CLANG_VERSION}
-ENV CXX=clang++-${SYSTEM_CLANG_VERSION}
+ARG LLVM_VERSION=18
 
-ARG MAX_LINKER_JOBS=0
-ARG MAX_COMPILER_JOBS=0
+# Clone LLVM project (includes Clang, clang-tidy, clangd, and BOLT)
+RUN git clone --depth 1 --branch release/${LLVM_VERSION}.x https://github.com/llvm/llvm-project.git
 
-COPY --chmod=755 <<EOF /opt/build.sh
-#!/usr/bin/env bash
+# LTO builds take a bunch of RAM, limit them to a low number by default
+ARG MAX_LINK_JOBS=4
 
-set -ex
-
-BUILD_DIR="/tmp/$(tr -dc A-Za-z0-9 </dev/urandom | head -c 13; echo)"
-
-mkdir -p "\$BUILD_DIR"
-
-cmake -G Ninja -DLLVM_TARGETS_TO_BUILD='AArch64;X86' \\
-  -S /opt/llvm-project/llvm/ \\
-  -B "\$BUILD_DIR" \\
-  -DCMAKE_BUILD_TYPE=Release \\
-  -DLLVM_BUILD_STATIC=OFF \\
-  -DLLVM_ENABLE_PIC=ON \\
-  -DLLVM_INCLUDE_TESTS=OFF \\
-  -DLLVM_INCLUDE_EXAMPLES=OFF \\
-  -DLLVM_INCLUDE_BENCHMARKS=OFF \\
-  -DLLVM_ENABLE_BINDINGS=OFF \\
-  -DLLVM_INCLUDE_UTILS=OFF \\
-  -DLLVM_INCLUDE_DOCS=OFF \\
-  -DLLVM_ENABLE_ZLIB=ON \\
-  -DLLVM_ENABLE_ZSTD=ON \\
-  -DLLVM_USE_STATIC_ZSTD=TRUE \\
-  -DLLVM_ENABLE_Z3_SOLVER=OFF \\
-  -DLLVM_ENABLE_DIA_SDK=OFF \\
-  -DLLVM_ENABLE_LIBEDIT=OFF \\
-  -DLLVM_ENABLE_TERMINFO=OFF \\
-  -DLLVM_ENABLE_LIBXML2=OFF \\
-  -DLLVM_ENABLE_BACKTRACES=OFF \\
-  -DLLVM_ENABLE_PROJECTS="clang;lld;lldb;clang-tools-extra;bolt" \\
-  -DLLVM_ENABLE_RUNTIMES="libcxx;libcxxabi;compiler-rt" \\
-  -DLLVM_USE_LINKER=lld \\
-  -DLLVM_BUILD_TOOLS=ON \\
-  -DLLVM_ENABLE_PLUGINS=OFF \\
-  -DLLDB_ENABLE_CURSES=OFF \\
-  -DLLDB_ENABLE_LUA=OFF \\
-  -DLLDB_ENABLE_LZMA=OFF \\
-  -DLLDB_ENABLE_LIBXML2=OFF \\
-  -DLLDB_ENABLE_LIBEDIT=OFF \\
-  -DLLVM_BINUTILS_INCDIR=ON \\
-  -DLIBCLANG_BUILD_STATIC=ON \\
-  -DCLANG_PLUGIN_SUPPORT=OFF \\
-  -DCOMPILER_RT_INCLUDE_TESTS=OFF \\
-  -DCOMPILER_RT_BUILD_SANITIZERS=ON \\
-  -DCOMPILER_RT_ENABLE_IOS=OFF \\
-  -DCOMPILER_RT_ENABLE_WATCHOS=OFF \\
-  -DCOMPILER_RT_ENABLE_TVOS=OFF \\
-  -DLIBCXX_INSTALL_EXPERIMENTAL_LIBRARY=ON \\
-  -DLIBCXX_CXX_ABI=libcxxabi \\
-  -DLIBCXXABI_USE_LLVM_UNWINDER=OFF \\
-  -DLLVM_PARALLEL_COMPILE_JOBS=${MAX_COMPILER_JOBS} \\
-  -DLLVM_PARALLEL_LINK_JOBS=${MAX_LINKER_JOBS} \\
-  -DLIBCXX_ABI_UNSTABLE=ON \\
-  -DLLVM_ENABLE_LIBCXX=ON \\
-  -DLLVM_STATIC_LINK_CXX_STDLIB=ON \\
-  -DLLVM_ENABLE_LTO=On \\
-  -DLLVM_INSTALL_TOOLCHAIN_ONLY=ON \\
-  "\$@"
-
-retry --sleep=0 --tries=100 -- ninja -C "\$BUILD_DIR"
-ninja -C "\$BUILD_DIR" install
-# Save space and cleanup the build directory
-rm -rf "\$BUILD_DIR"
+COPY <<EOF /llvm.cmake
+set(CMAKE_BUILD_TYPE Release CACHE STRING "")
+set(LLVM_TARGETS_TO_BUILD Native CACHE STRING "")
+set(LLVM_INCLUDE_TESTS OFF CACHE BOOL "")
+set(LLVM_INCLUDE_EXAMPLES OFF CACHE BOOL "")
+set(LLVM_INCLUDE_UTILS OFF CACHE BOOL "")
+set(LLVM_INCLUDE_DOCS OFF CACHE BOOL "")
+set(LLVM_INCLUDE_GO_TESTS OFF CACHE BOOL "")
+set(LLVM_ENABLE_ZLIB ON CACHE BOOL "")
+set(LLVM_ENABLE_BACKTRACES OFF CACHE BOOL "")
+set(LLVM_ENABLE_PROJECTS clang bolt lld lldb clang-tools-extra CACHE STRING "")
+set(LLVM_ENABLE_RUNTIMES libcxx libcxxabi compiler-rt CACHE STRING "")
+set(LLVM_USE_LINKER lld CACHE STRING "")
+set(LLVM_BUILD_TOOLS ON CACHE BOOL "")
+set(LLVM_BINUTILS_INCDIR ON CACHE BOOL "")
+set(CLANG_INCLUDE_TESTS OFF CACHE BOOL "")
+set(CLANG_PLUGIN_SUPPORT OFF CACHE BOOL "")
+set(COMPILER_RT_INCLUDE_TESTS OFF CACHE BOOL "")
+set(COMPILER_RT_BUILD_SANITIZERS ON CACHE BOOL "")
+set(COMPILER_RT_ENABLE_IOS OFF CACHE BOOL "")
+set(COMPILER_RT_ENABLE_WATCHOS OFF CACHE BOOL "")
+set(COMPILER_RT_ENABLE_TVOS OFF CACHE BOOL "")
+set(LIBCXX_INSTALL_EXPERIMENTAL_LIBRARY ON CACHE STRING "")
+set(LIBCXX_CXX_ABI libcxxabi CACHE STRING "")
+# in clang-18 this appears to be on by default, but we don't use libunwind
+set(LIBCXXABI_USE_LLVM_UNWINDER OFF CACHE BOOL "")
+set(LLVM_INSTALL_TOOLCHAIN_ONLY ON CACHE BOOL "")
+set(LLVM_ENABLE_LTO Thin CACHE STRING "")
+set(LLVM_PARALLEL_LINK_JOBS ${MAX_LINK_JOBS} CACHE STRING "")
 EOF
 
-FROM base AS lto-build
+# Create build directory
+WORKDIR /src/build
 
-ARG LTO_MODE=On
+RUN cmake -G Ninja \
+    -C /llvm.cmake \
+    -DCMAKE_INSTALL_PREFIX=/opt/install \
+    -DCMAKE_C_COMPILER=/usr/bin/clang-${STAGE_0_LLVM_VERSION} \
+    -DCMAKE_ASM_COMPILER=/usr/bin/clang-${STAGE_0_LLVM_VERSION} \
+    -DCMAKE_CXX_COMPILER=/usr/bin/clang++-${STAGE_0_LLVM_VERSION} \
+    -DCMAKE_AR=/usr/bin/llvm-ar-${STAGE_0_LLVM_VERSION} \
+    -DCMAKE_LINKER=/usr/bin/llvm-ld-${STAGE_0_LLVM_VERSION} \
+    -DCMAKE_NM=/usr/bin/llvm-nm-${STAGE_0_LLVM_VERSION} \
+    -DCMAKE_OBJDUMP=/usr/bin/llvm-objdump-${STAGE_0_LLVM_VERSION} \
+    -DCMAKE_RANLIB=/usr/bin/llvm-ranlib-${STAGE_0_LLVM_VERSION} \
+    ../llvm-project/llvm
 
-RUN /opt/build.sh \
-  -DCMAKE_INSTALL_PREFIX=/opt/install \
-  -DLLVM_ENABLE_LTO=${LTO_MODE}
+RUN ninja -j$(nproc) && ninja install
 
-WORKDIR /opt/install
+FROM scratch
 
-FROM scratch AS lto
-
-COPY --from=lto-build /opt/install/ .
-
-FROM base AS pgo-build
-
-ARG LTO_MODE=On
-
-RUN mkdir -p /tmp/clang-pgo/data/
-
-RUN /opt/build.sh \
-  -DCMAKE_INSTALL_PREFIX=/opt/stage-1 \
-  -DLLVM_BUILD_INSTRUMENTED=IR \
-  -DLLVM_PROFILE_DATA_DIR=/tmp/clang-pgo-data/ \
-  -DLLVM_ENABLE_PROJECTS="clang;lld;bolt" \
-  -DLLVM_VP_COUNTERS_PER_SITE=6 \
-  -DLLVM_BUILD_LLVM_DYLIB=ON \
-  -DLLVM_LINK_LLVM_DYLIB=ON \
-  -DLLVM_BUILD_RUNTIME=No \
-  -DLLVM_ENABLE_LTO=${LTO_MODE}
-
-RUN git clone --branch dev --single-branch https://github.com/redpanda-data/redpanda.git
-
-WORKDIR /opt/redpanda
-
-RUN ./bazel/install-deps.sh
-
-# Append this snippet to out MODULE file
-COPY <<EOF pgo_compiler.bzl
-llvm.toolchain(
-    name = "pgo_toolchain",
-    cxx_standard = {"": CXX_STANDARD},
-    llvm_version = "${LLVM_VERSION}",
-)
-llvm.toolchain_root(
-    name = "pgo_toolchain",
-    path = "/opt/stage-1",
-)
-llvm.sysroot(
-    name = "pgo_toolchain",
-    label = "@x86_64_sysroot//:sysroot",
-    targets = ["linux-x86_64"],
-)
-llvm.sysroot(
-    name = "pgo_toolchain",
-    label = "@aarch64_sysroot//:sysroot",
-    targets = ["linux-aarch64"],
-)
-use_repo(llvm, "pgo_toolchain")
-EOF
-RUN cat pgo_compiler.bzl >> MODULE.bazel
-
-RUN bazel build \
-  --config=release \
-  --extra_toolchains=@pgo_toolchain//:all \
-  --nokeep_going \
-  --copt=-g \
-  --copt=-w \
-  --copt=-Wno-error \
-  //...
-
-RUN bazel clean --expunge
-
-WORKDIR /opt
-
-# Merge profile data
-RUN llvm-profdata-${SYSTEM_CLANG_VERSION} merge -output=/tmp/profdata.prof /tmp/clang-pgo-data/*.profraw
-
-# Rebuild clang toolchain with profile data this time
-RUN /opt/build.sh \
-  -DCMAKE_INSTALL_PREFIX=/opt/stage-2 \
-  -DLLVM_ENABLE_LTO=${LTO_MODE} \
-  -DLLVM_BUILD_LLVM_DYLIB=ON \
-  -DLLVM_LINK_LLVM_DYLIB=ON \
-  -DLLVM_PROFDATA_FILE=/tmp/profdata.prof
-
-# TODO: only copy binaries from stage 2
-
-FROM scratch AS pgo
-
-COPY --from=pgo-build /opt/stage-2/ .
+COPY --from=builder /opt/install/ .

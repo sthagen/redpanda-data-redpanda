@@ -48,6 +48,7 @@ message A {
                 message NestedPayload {
                     int32 val = 1;
                     google.protobuf.Timestamp timestamp = 2;
+                    map<string, string> properties = 3;
                 }
             }
         }

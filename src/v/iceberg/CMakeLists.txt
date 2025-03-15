@@ -82,6 +82,7 @@ v_cc_library(
     transaction.cc
     transform_json.cc
     transform_utils.cc
+    update_partition_spec_action.cc
     update_schema_action.cc
     uri.cc
     values.cc

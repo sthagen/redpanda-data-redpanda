@@ -17,6 +17,7 @@ from typing import Dict, List
 
 from rptest.clients.default import DefaultClient
 from rptest.clients.offline_log_viewer import OfflineLogViewer
+from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 
 from rptest.clients.kcl import RawKCL
@@ -977,11 +978,20 @@ class ConsumerGroupTest(RedpandaTest):
                     hwm_by_tp.setdefault(key, []).append(s.value)
             return [max(hwm) for hwm in hwm_by_tp.values()]
 
-        def metrics_lag(metrics):
+        def metrics_lag_sum(metrics):
             # Arbitrarily reduce across nodes with max, there should be only one
             return max(
                 s.value
                 for s in metrics["redpanda_kafka_consumer_group_lag_sum"].
+                label_filter({
+                    "redpanda_group": group
+                }).samples)
+
+        def metrics_lag_max(metrics):
+            # Arbitrarily reduce across nodes with max, there should be only one
+            return max(
+                s.value
+                for s in metrics["redpanda_kafka_consumer_group_lag_max"].
                 label_filter({
                     "redpanda_group": group
                 }).samples)
@@ -1001,7 +1011,8 @@ class ConsumerGroupTest(RedpandaTest):
             metrics_committed(metrics)
 
         # Consumers that have not committed yet should have no lag
-        assert metrics_lag(metrics) == 0
+        assert metrics_lag_sum(metrics) == 0
+        assert metrics_lag_max(metrics) == 0
 
         self.logger.info("Committing")
         for consumer in consumers:
@@ -1015,33 +1026,84 @@ class ConsumerGroupTest(RedpandaTest):
         expected_committed_sum = sum(
             max(0, tp.offset) for consumer in consumers
             for tp in consumer.committed(consumer.assignment()) or [])
+        expected_lag_max = max(
+            produced_offsets[TopicPartition(tp.topic, tp.partition)] -
+            tp.offset for consumer in consumers
+            for tp in (consumer.committed(consumer.assignment()) or []))
 
-        metrics = get_group_metrics_from_nodes()
-        committed_metrics = metrics_committed(metrics)
-        committed_sum = sum(committed_metrics)
-        committed_len = len(committed_metrics)
-        hwm_metrics = metrics_hwm(metrics)
-        hwm_sum = sum(hwm_metrics)
-        hwm_len = len(hwm_metrics)
-        lag = metrics_lag(metrics)
+        def check_metrics():
+            metrics = get_group_metrics_from_nodes()
+            committed_metrics = metrics_committed(metrics)
+            committed_sum = sum(committed_metrics)
+            committed_len = len(committed_metrics)
+            hwm_metrics = metrics_hwm(metrics)
+            hwm_sum = sum(hwm_metrics)
+            hwm_len = len(hwm_metrics)
+            lag_sum = metrics_lag_sum(metrics)
+            lag_max = metrics_lag_max(metrics)
 
-        self.logger.debug(f"Expected HWM sum: {expected_hwm_sum}")
-        self.logger.debug(f"Expected committed sum: {expected_committed_sum}")
-        self.logger.debug(f"Metrics HWM sum: {hwm_sum}")
-        self.logger.debug(f"Metrics committed sum: {committed_sum}")
-        self.logger.debug(
-            f"Expected lag: {expected_hwm_sum - expected_committed_sum}")
-        self.logger.debug(f"Calculated lag: {hwm_sum - committed_sum}")
-        self.logger.debug(f"Metrics lag: {lag}")
+            self.logger.debug(f"Expected HWM sum: {expected_hwm_sum}")
+            self.logger.debug(
+                f"Expected committed sum: {expected_committed_sum}")
+            self.logger.debug(f"Metrics HWM sum: {hwm_sum}")
+            self.logger.debug(f"Metrics committed sum: {committed_sum}")
+            self.logger.debug(
+                f"Expected lag: {expected_hwm_sum - expected_committed_sum}")
+            self.logger.debug(f"Calculated lag: {hwm_sum - committed_sum}")
+            self.logger.debug(f"Metrics lag sum: {lag_sum}")
+            self.logger.debug(f"Metrics lag max: {lag_max}")
 
-        assert expected_hwm_len == committed_len, f"Expected {expected_hwm_len}, got {committed_len}. Not all partitions were consumed, tweak the produce and consume counts"
+            assert expected_hwm_len == committed_len, f"Expected {expected_hwm_len}, got {committed_len}. Not all partitions were consumed, tweak the produce and consume counts"
+            assert expected_hwm_len == hwm_len, f"Expected {expected_hwm_len}, got {hwm_len}. Not all partitions were consumed, tweak the produce and consume counts"
 
-        # Check redpanda_kafka_max_offset
-        assert expected_hwm_sum == hwm_sum, f"Expected {expected_hwm_sum}, got {hwm_sum}"
-        #Check redpanda_kafka_consumer_group_committed_offset
-        assert expected_committed_sum == committed_sum, f"Expected {expected_committed_sum}, got {committed_sum}"
-        # Check redpanda_kafka_consumer_group_lag_sum
-        assert hwm_sum - committed_sum == lag, f"Expected {hwm_sum - committed_sum}, got {lag}"
+            # Check redpanda_kafka_max_offset
+            assert expected_hwm_sum == hwm_sum, f"Expected {expected_hwm_sum}, got {hwm_sum}"
+            #Check redpanda_kafka_consumer_group_committed_offset
+            assert expected_committed_sum == committed_sum, f"Expected {expected_committed_sum}, got {committed_sum}"
+            # Check redpanda_kafka_consumer_group_lag_sum
+            assert hwm_sum - committed_sum == lag_sum, f"Expected {hwm_sum - committed_sum}, got {lag_sum}"
+            # Check redpanda_kafka_consumer_group_lag_max
+            assert expected_lag_max == lag_max, f"Expected {expected_lag_max}, got {lag_max}"
+
+        check_metrics()
+
+        admin = Admin(self.redpanda)
+
+        def move_partition(topic, partition):
+            moved = admin.transfer_leadership_to(namespace="kafka",
+                                                 topic=topic,
+                                                 partition=partition,
+                                                 target_id=None)
+            assert moved, "Failed to move leader"
+            return moved
+
+        def get_coordinator():
+            return self.admin_client.describe_consumer_groups(
+                group_ids=[group])[group].result().coordinator
+
+        coordinator = get_coordinator()
+        moved = move_partition(topic="__consumer_offsets", partition=0)
+        assert moved, "Failed to move coordinator"
+        wait_until(lambda: self.admin_client
+                   .describe_consumer_groups(group_ids=[group])[group].result(
+                   ).state == ConsumerGroupState.STABLE,
+                   20,
+                   1,
+                   retry_on_exc=True,
+                   err_msg="Timeout waiting on group to reach stable state")
+
+        assert get_coordinator() != coordinator, "Coordinator did not change"
+
+        self.logger.info("Waiting for lag_metrics after coordinator move")
+        time.sleep(lag_collection_interval + 1)
+        check_metrics()
+
+        moved = move_partition(topic=topics[0], partition=0)
+        assert moved, "Failed to move partition leader"
+
+        self.logger.info("Waiting for lag_metrics after partition leader move")
+        time.sleep(lag_collection_interval + 1)
+        check_metrics()
 
         for consumer in consumers:
             consumer.close()

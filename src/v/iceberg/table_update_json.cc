@@ -35,6 +35,11 @@ struct table_update_json_serializing_visitor {
         w.Key("spec");
         json::rjson_serialize(w, update.spec);
     }
+    void operator()(const iceberg::table_update::set_default_spec& update) {
+        serialize_action("set-default-spec");
+        w.Key("spec-id");
+        w.Int(update.spec_id);
+    }
     void operator()(const iceberg::table_update::add_snapshot& update) {
         serialize_action("add-snapshot");
         w.Key("snapshot");

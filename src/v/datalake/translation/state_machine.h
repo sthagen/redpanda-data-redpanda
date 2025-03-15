@@ -65,6 +65,24 @@ public:
     ss::future<std::optional<model::timestamp>>
     last_translated_timestamp(model::timeout_clock::duration timeout);
 
+    /**
+     * Cached versions of highest_translated_offset method. These methods will
+     * not call state machine sync, risking to have the stale value if the
+     * leadership changed.
+     */
+    std::optional<kafka::offset> cached_highest_translated_offset() const {
+        return _highest_translated_offset;
+    }
+
+    /**
+     * Cached versions of last_translated_timestamp method. These methods will
+     * not call state machine sync, risking to have the stale value if the
+     * leadership changed.
+     */
+    std::optional<model::timestamp> cached_last_translated_timestamp() const {
+        return _last_translated_timestamp;
+    }
+
     ss::future<std::error_code> reset_highest_translated_offset(
       kafka::offset new_translated_offset,
       std::optional<model::timestamp> new_translated_timestamp,

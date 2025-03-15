@@ -100,6 +100,7 @@ redpanda_cc_library(
         "//src/v/cluster",
         "//src/v/datalake:local_parquet_file_writer",
         "//src/v/datalake:location",
+        "//src/v/datalake:logger",
         "//src/v/datalake:record_schema_resolver",
         "//src/v/datalake:record_translator",
         "//src/v/datalake:serde_parquet_writer",

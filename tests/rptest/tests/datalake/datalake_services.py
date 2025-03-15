@@ -37,6 +37,10 @@ class DatalakeServices():
                  warehouse_name: str = CatalogService.DEFAULT_WAREHOUSE_NAME):
         self.test_ctx = test_ctx
         self.redpanda = redpanda
+
+        # Tests may rely on setting frequent translations.
+        self.redpanda.set_environment(
+            {"__REDPANDA_TEST_DISABLE_BOUNDED_PROPERTY_CHECKS": "ON"})
         si_settings = self.redpanda.si_settings
         assert si_settings
 
@@ -241,7 +245,7 @@ class DatalakeServices():
     def wait_for_translation(self,
                              topic,
                              msg_count,
-                             timeout=60,
+                             timeout=30,
                              backoff_sec=5,
                              table_override=None):
         table_name = topic

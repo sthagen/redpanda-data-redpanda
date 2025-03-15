@@ -179,48 +179,56 @@ catalog_schema_manager::ensure_table_schema(
           load_res.error(), fmt::format("Error loading table {}", table_id));
     }
 
+    iceberg::transaction txn(std::move(load_res.value()));
+
     // Check schema compatibility
     auto type_copy = desired_type.copy();
-    auto get_res = get_ids_from_table_meta(
-      table_id, load_res.value(), type_copy);
+    auto get_res = get_ids_from_table_meta(table_id, txn.table(), type_copy);
     if (get_res.has_error()) {
         co_return get_res.error();
     }
-    if (get_res.value()) {
-        // Success! The desired schema matches one already in the table.
-        co_return std::nullopt;
-    }
 
-    // The desired schema is backwards compatible with the current table schema.
-    // Add the schema to the table.
-    iceberg::transaction txn(std::move(load_res.value()));
-    auto update_res = co_await txn.set_schema(iceberg::schema{
-      .schema_struct = std::move(type_copy),
-      .schema_id = iceberg::schema::unassigned_id,
-      .identifier_field_ids = {},
-    });
-    if (update_res.has_error()) {
-        auto msg = fmt::format(
-          "Failed trying to apply schema update to table {}: {}",
-          table_id,
-          update_res.error());
-        switch (update_res.error()) {
-        case iceberg::action::errc::shutting_down:
-            vlog(datalake_log.debug, "{}", msg);
-            co_return errc::shutting_down;
-        case iceberg::action::errc::io_failed:
-        case iceberg::action::errc::unexpected_state:
-            vlog(datalake_log.warn, "{}", msg);
-            co_return errc::failed;
+    if (!get_res.value()) {
+        // The desired schema is backwards compatible with the current table
+        // schema. Add the schema to the table.
+        auto update_res = co_await txn.set_schema(iceberg::schema{
+          .schema_struct = std::move(type_copy),
+          .schema_id = iceberg::schema::unassigned_id,
+          .identifier_field_ids = {},
+        });
+        if (update_res.has_error()) {
+            auto msg = fmt::format(
+              "Failed trying to apply schema update to table {}: {}",
+              table_id,
+              update_res.error());
+            switch (update_res.error()) {
+            case iceberg::action::errc::shutting_down:
+                vlog(datalake_log.debug, "{}", msg);
+                co_return errc::shutting_down;
+            case iceberg::action::errc::io_failed:
+            case iceberg::action::errc::unexpected_state:
+                vlog(datalake_log.warn, "{}", msg);
+                co_return errc::failed;
+            }
         }
     }
-    auto commit_res = co_await catalog_.commit_txn(table_id, std::move(txn));
-    if (commit_res.has_error()) {
-        co_return log_and_convert_catalog_err(
-          commit_res.error(),
-          fmt::format(
-            "Error while committing schema update to table {}", table_id));
+
+    auto set_spec_res = co_await txn.set_partition_spec(partition_spec.copy());
+    if (set_spec_res.has_error()) {
+        co_return errc::failed;
     }
+
+    if (!txn.is_noop()) {
+        auto commit_res = co_await catalog_.commit_txn(
+          table_id, std::move(txn));
+        if (commit_res.has_error()) {
+            co_return log_and_convert_catalog_err(
+              commit_res.error(),
+              fmt::format(
+                "Error while committing schema update to table {}", table_id));
+        }
+    }
+
     co_return std::nullopt;
 }
 

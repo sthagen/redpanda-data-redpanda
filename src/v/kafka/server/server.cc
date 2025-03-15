@@ -81,6 +81,7 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/net/api.hh>
 #include <seastar/net/socket_defs.hh>
+#include <seastar/net/tls.hh>
 #include <seastar/util/log.hh>
 
 #include <absl/algorithm/container.h>
@@ -284,8 +285,18 @@ config::broker_authn_method get_authn_method(const net::connection& conn) {
 ss::future<security::tls::mtls_state> get_mtls_principal_state(
   const security::tls::principal_mapper& pm, net::connection& conn) {
     using namespace std::chrono_literals;
+    auto format = [] {
+        auto fmt = config::shard_local_cfg().tls_certificate_name_format();
+        switch (fmt) {
+        case config::tls_name_format::legacy:
+            return ss::tls::dn_format::legacy;
+        case config::tls_name_format::rfc2253:
+            return ss::tls::dn_format::rfc2253;
+        }
+    }();
     return ss::with_timeout(
-             model::timeout_clock::now() + 5s, conn.get_distinguished_name())
+             model::timeout_clock::now() + 5s,
+             conn.get_distinguished_name(format))
       .then([&pm](std::optional<ss::session_dn> dn) {
           ss::sstring anonymous_principal;
           if (!dn.has_value()) {

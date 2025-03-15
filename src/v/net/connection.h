@@ -67,8 +67,9 @@ public:
     ///
     /// The value can only be returned by the server socket and
     /// only in case if the client authentication is enabled.
-    ss::future<std::optional<ss::session_dn>> get_distinguished_name() {
-        return ss::tls::get_dn_information(_fd);
+    ss::future<std::optional<ss::session_dn>>
+    get_distinguished_name(ss::tls::dn_format format) {
+        return ss::tls::get_dn_information(_fd, format);
     }
 
     ss::future<> wait_for_input_shutdown() {

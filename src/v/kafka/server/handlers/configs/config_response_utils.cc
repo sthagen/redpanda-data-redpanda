@@ -1007,7 +1007,8 @@ config_response_container_t make_topic_configs(
           maybe_make_documentation(
             include_documentation,
             "Partition spec of the corresponding Iceberg table."),
-          &describe_as_string<ss::sstring>);
+          &describe_as_string<ss::sstring>,
+          true);
 
         add_topic_config_if_requested(
           config_keys,

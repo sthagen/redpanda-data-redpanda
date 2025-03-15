@@ -18,8 +18,8 @@
 namespace {
 std::regex make_regex(std::string_view sv) {
     return std::regex{
-      sv.begin(),
-      sv.length(),
+      sv.data(),
+      sv.size(),
       std::regex_constants::ECMAScript | std::regex_constants::optimize};
 }
 } // namespace

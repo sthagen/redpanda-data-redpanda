@@ -71,6 +71,7 @@ const (
 	xAdminClientKey            = "admin.tls.key"
 	xCloudClientID             = "cloud.client_id"
 	xCloudClientSecret         = "cloud.client_secret"
+	xCloudEnvironment          = "cloud_environment"
 	xSchemaRegistryHosts       = "registry.hosts"
 	xSchemaRegistryTLSEnabled  = "registry.tls.enabled"
 	xSchemaRegistryTLSInsecure = "registry.tls.insecure_skip_verify"
@@ -85,7 +86,7 @@ const (
 	xkindGlobal           // configuration for rpk.yaml globals
 )
 
-const currentRpkYAMLVersion = 6
+const currentRpkYAMLVersion = 7
 
 type xflag struct {
 	path        string
@@ -389,6 +390,27 @@ var xflags = map[string]xflag{
 			return nil
 		},
 	},
+	xCloudEnvironment: {
+		"cloud_environment",
+		"production", // We don't want to document the values.
+		xkindProfile,
+		func(v string, y *RpkYaml) error {
+			p := y.Profile(y.CurrentProfile)
+			if p != nil {
+				switch strings.ToLower(v) {
+				case "integration", "ign":
+					p.CloudEnvironment = CloudEnvironmentIntegration
+				case "preprod", "ppd":
+					p.CloudEnvironment = CloudEnvironmentPreprod
+				case "production", "prod":
+					// Do nothing. Production is the default.
+				default:
+					return fmt.Errorf("invalid cloud environment %q", v)
+				}
+			}
+			return nil // TODO: check for an empty rpk.yaml
+		},
+	},
 
 	"globals.prompt": {
 		"globals.prompt",
@@ -464,6 +486,29 @@ var xflags = map[string]xflag{
 			y.Globals.KafkaProtocolReqClientID = v
 			return nil
 		},
+	},
+}
+
+var cloudEnvConfig = map[string]struct {
+	PublicAPIURL         string
+	CloudAPIURL          string
+	CloudAuthAppClientID string
+	CloudAuthURL         string
+	CloudAuthAudience    string
+}{
+	CloudEnvironmentIntegration: {
+		PublicAPIURL:         "https://api.ign.cloud.redpanda.com",
+		CloudAPIURL:          "https://cloud-api.ign.cloud.redpanda.com",
+		CloudAuthAppClientID: "OQJLrKFCXuCMfGfMfnIqzgiwiyDfoxEV",
+		CloudAuthURL:         "https://integration-cloudv2.us.auth0.com",
+		CloudAuthAudience:    "cloudv2-ign.redpanda.cloud",
+	},
+	CloudEnvironmentPreprod: {
+		PublicAPIURL:         "https://api.ppd.cloud.redpanda.com",
+		CloudAPIURL:          "https://cloud-api.ppd.cloud.redpanda.com",
+		CloudAuthAppClientID: "i6CrcBD8XX719XVeBtf574WSeAEdPjo7",
+		CloudAuthURL:         "https://preprod-cloudv2.us.auth0.com",
+		CloudAuthAudience:    "cloudv2-preprod.redpanda.cloud",
 	},
 }
 
@@ -966,6 +1011,7 @@ func (p *Params) Load(fs afero.Fs) (*Config, error) {
 	c.addUnsetRedpandaDefaults(false) // merge from Virtual redpanda.yaml redpanda section to rpk section (picks up original redpanda.yaml defaults)
 	c.mergeRedpandaIntoRpk()          // merge from redpanda.yaml rpk section back to rpk.yaml, picks up final redpanda.yaml defaults
 	c.fixSchemePorts()                // strip any scheme, default any missing ports
+	c.loadCloudEnvToOverrides()       // load cloud environment to overrides
 	c.parseDevOverrides()
 
 	if !c.rpkYaml.Globals.NoDefaultCluster {
@@ -1717,6 +1763,29 @@ func (c *Config) migrateProfileNamespace() {
 		if c.rpkYamlActual.Profiles[i].CloudCluster.Namespace != "" && c.rpkYamlActual.Profiles[i].CloudCluster.ResourceGroup == "" {
 			c.rpkYamlActual.Profiles[i].CloudCluster.ResourceGroup = c.rpkYamlActual.Profiles[i].CloudCluster.Namespace
 			c.rpkYamlActual.Profiles[i].CloudCluster.Namespace = ""
+		}
+	}
+}
+
+func (c *Config) loadCloudEnvToOverrides() {
+	if p := c.VirtualProfile(); p != nil {
+		if env := p.CloudEnvironment; env != "" {
+			switch env {
+			case "ign", CloudEnvironmentIntegration:
+				env = CloudEnvironmentIntegration
+			case "ppd", CloudEnvironmentPreprod:
+				env = CloudEnvironmentPreprod
+			}
+			if override, ok := cloudEnvConfig[env]; ok {
+				c.devOverrides.PublicAPIURL = override.PublicAPIURL
+				c.devOverrides.CloudAPIURL = override.CloudAPIURL
+				c.devOverrides.CloudAuthAppClientID = override.CloudAuthAppClientID
+				c.devOverrides.CloudAuthURL = override.CloudAuthURL
+				c.devOverrides.CloudAuthAudience = override.CloudAuthAudience
+				// The BYOC plugin uses a different environment var to set the
+				// cloud URL, and it's not part of the overrides.
+				os.Setenv("CLOUD_URL", fmt.Sprintf("%v/api/v1", override.CloudAPIURL))
+			}
 		}
 	}
 }

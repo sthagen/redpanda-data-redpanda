@@ -41,6 +41,12 @@ struct unresolved_partition_spec {
       const unresolved_partition_spec&, const unresolved_partition_spec&)
       = default;
 
+    unresolved_partition_spec copy() const {
+        return {
+          .fields = fields.copy(),
+        };
+    }
+
     friend std::ostream&
     operator<<(std::ostream&, const unresolved_partition_spec&);
 };

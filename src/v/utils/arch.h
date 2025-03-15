@@ -36,7 +36,7 @@ inline constexpr cpu_arch cpu_arch::current() {
 #if defined(__x86_64__)
     return arch::AMD64;
 #elif defined(__aarch64__)
-    return arch::ARM64
+    return arch::ARM64;
 #else
 #error unknown arch
 #endif

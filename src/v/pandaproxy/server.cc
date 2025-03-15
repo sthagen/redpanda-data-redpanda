@@ -64,7 +64,9 @@ size_t get_request_size(const ss::http::request& req) {
     size_t content_length{0};
     // Ignore failure, content_length is unchanged
     std::from_chars(
-      content_length_hdr.begin(), content_length_hdr.end(), content_length);
+      content_length_hdr.data(),
+      content_length_hdr.data() + content_length_hdr.size(),
+      content_length);
 
     return fixed_overhead + content_length;
 }

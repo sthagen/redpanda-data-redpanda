@@ -76,11 +76,6 @@ void handler_probe::setup_metrics(
       prometheus_sanitize::metrics_name("kafka_handler"),
       {
         sm::make_counter(
-          "requests_completed_total",
-          [this] { return _requests_completed; },
-          sm::description("Number of kafka requests completed"),
-          labels),
-        sm::make_counter(
           "requests_errored_total",
           [this] { return _requests_errored; },
           sm::description("Number of kafka requests errored"),
@@ -108,6 +103,18 @@ void handler_probe::setup_metrics(
       },
       {},
       {seastar::metrics::shard_label});
+
+    // Don't want to aggregate the shard label away so that we get per shard RPS
+    // in any case
+    metrics.add_group(
+      prometheus_sanitize::metrics_name("kafka_handler"),
+      {
+        sm::make_counter(
+          "requests_completed_total",
+          [this] { return _requests_completed; },
+          sm::description("Number of kafka requests completed"),
+          labels),
+      });
 }
 
 // For public metrics we only expose a small subset of the metrics for produce

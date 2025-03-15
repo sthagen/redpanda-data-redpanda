@@ -4116,6 +4116,11 @@ class RedpandaService(RedpandaServiceBase):
             self._set_trace_loggers_and_sleep(node, time_sec=sleep_sec)
             self.logger.warn(f"Node {node.name} status:")
             self._log_node_process_state(node)
+            # Kill the process if it's still running. If redpanda still runs we
+            # might fail to collect logs as the file will be modified while we
+            # (ducktape) are reading/compressing it.
+            # I.e. `tar: redpanda.log: file changed as we read it`
+            node.account.signal(pid, signal.SIGKILL, allow_fail=True)
             raise
 
         self.remove_from_started_nodes(node)

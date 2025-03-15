@@ -107,7 +107,7 @@ void json::rjson_serialize(
     if (ep.authn_method) {
         w.Key("authentication_method");
         auto authn_method = to_string_view(*ep.authn_method);
-        w.String(authn_method.begin(), authn_method.length());
+        w.String(authn_method.data(), authn_method.length());
     }
     w.EndObject();
 }

@@ -14,6 +14,7 @@
 #include "iceberg/schema.h"
 #include "iceberg/table_requirement.h"
 #include "iceberg/table_update_applier.h"
+#include "iceberg/update_partition_spec_action.h"
 #include "iceberg/update_schema_action.h"
 
 namespace iceberg {
@@ -66,6 +67,13 @@ transaction::txn_outcome transaction::update_metadata(updates_and_reqs ur) {
 
 ss::future<transaction::txn_outcome> transaction::set_schema(schema s) {
     auto a = std::make_unique<update_schema_action>(table_, std::move(s));
+    co_return co_await apply(std::move(a));
+}
+
+ss::future<transaction::txn_outcome>
+transaction::set_partition_spec(unresolved_partition_spec pspec) {
+    auto a = std::make_unique<update_partition_spec_action>(
+      table_, std::move(pspec));
     co_return co_await apply(std::move(a));
 }
 

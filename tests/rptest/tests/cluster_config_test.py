@@ -728,6 +728,10 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
             if name == "datalake_scheduler_time_slice_ms":
                 valid_value = random.choice(range(1000, 60000 + 1))
 
+            if name == "tls_certificate_name_format":
+                valid_value = random.choice(
+                    [e for e in p['enum_values'] if e != initial_value])
+
             updates[name] = valid_value
 
         patch_result = self.admin.patch_cluster_config(upsert=updates,

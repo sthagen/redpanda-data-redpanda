@@ -36,7 +36,8 @@ class CompactionGapsTest(RedpandaTest):
                 "iceberg_catalog_commit_interval_ms": 5000,
                 "datalake_coordinator_snapshot_max_delay_secs": 10,
                 "log_compaction_interval_ms": 10000,
-                "min_cleanable_dirty_ratio": 0.0
+                "min_cleanable_dirty_ratio": 0.0,
+                "cloud_storage_enable_remote_read": "false"
             },
             *args,
             **kwargs)
@@ -173,27 +174,20 @@ class CompactionTest(RedpandaTest):
         # Restart each redpanda broker to force roll segments
         self.redpanda.restart_nodes(self.redpanda.nodes)
 
-        def get_complete_sliding_window_rounds():
+        def get_dirty_segment_bytes():
             return self.redpanda.metric_sum(
-                metric_name=
-                "vectorized_storage_log_complete_sliding_window_rounds_total",
+                metric_name="vectorized_storage_log_dirty_segment_bytes",
                 metrics_endpoint=MetricsEndpoint.METRICS,
                 topic=self.topic_name)
 
-        # Sleep until the log has been fully compacted.
-        self.prev_sliding_window_rounds = -1
-
         def compaction_has_completed():
-            new_sliding_window_rounds = get_complete_sliding_window_rounds()
-            res = new_sliding_window_rounds > 0 and self.prev_sliding_window_rounds == new_sliding_window_rounds
-            self.prev_sliding_window_rounds = new_sliding_window_rounds
-            return res
+            return get_dirty_segment_bytes() == 0
 
         wait_until(
             compaction_has_completed,
             timeout_sec=180,
             backoff_sec=self.extra_rp_conf['log_compaction_interval_ms'] /
-            1000 * 4,
+            1000,
             err_msg="Compaction did not stabilize.")
 
     def verify_log_and_table(self, dl: DatalakeServices):
@@ -203,6 +197,8 @@ class CompactionTest(RedpandaTest):
             self.redpanda,
             self.topic_name,
             compacted=True,
+            debug_logs=True,
+            trace_logs=True,
             validate_latest_values=True,
         )
 

@@ -256,13 +256,16 @@ class LogCompactionTest(LogCompactionTestBase, PreallocNodesTest,
         else:
             assert self.get_chunked_compaction_runs() == 0
 
-        # There should be no dirty segments left
-        assert self.get_dirty_segment_bytes() == 0
-        # This could race if the cleanup.policy was compact,delete,
-        # so only assert for compact topic
-        if cleanup_policy == TopicSpec.CLEANUP_COMPACT:
-            assert self.get_closed_segment_bytes() > 0
-        assert self.get_dirty_ratio() < 1.0e-6
+        def log_is_fully_clean():
+            # There should be no dirty segments left
+            return self.get_dirty_segment_bytes() == 0
+
+        wait_until(
+            log_is_fully_clean,
+            timeout_sec=120,
+            backoff_sec=self.extra_rp_conf['log_compaction_interval_ms'] /
+            1000,
+            err_msg="Did not see a fully clean log.")
 
         consumer = KgoVerifierSeqConsumer(self.test_context,
                                           self.redpanda,

@@ -37,7 +37,7 @@ func defaultVirtualRpkYaml() (RpkYaml, error) {
 	path, _ := DefaultRpkYamlPath() // if err is non-nil, we fail in Write
 	y := RpkYaml{
 		fileLocation: path,
-		Version:      6,
+		Version:      currentRpkYAMLVersion,
 		Profiles:     []RpkProfile{DefaultRpkProfile()},
 		CloudAuths:   []RpkCloudAuth{DefaultRpkCloudAuth()},
 	}
@@ -68,7 +68,7 @@ func DefaultRpkCloudAuth() RpkCloudAuth {
 
 func emptyVirtualRpkYaml() RpkYaml {
 	return RpkYaml{
-		Version: 6,
+		Version: currentRpkYAMLVersion,
 	}
 }
 
@@ -141,6 +141,10 @@ type (
 		AdminAPI     RpkAdminAPI          `json:"admin_api" yaml:"admin_api"`
 		SR           RpkSchemaRegistryAPI `json:"schema_registry" yaml:"schema_registry"`
 		LicenseCheck *LicenseStatusCache  `json:"license_check,omitempty" yaml:"license_check,omitempty"`
+
+		// This is an internal configuration, not to be documented nor set
+		// as part of the RpkCloudCluster.
+		CloudEnvironment string `json:"cloud_environment,omitempty" yaml:"cloud_environment,omitempty"`
 
 		// We stash the config struct itself so that we can provide
 		// the logger / dev overrides.
@@ -293,10 +297,12 @@ func (y *RpkYaml) CurrentAuth() *RpkCloudAuth {
 }
 
 const (
-	CloudAuthUninitialized     = ""
-	CloudAuthSSO               = "sso"
-	CloudAuthClientCredentials = "client-credentials"
-	ServerlessClusterType      = "TYPE_SERVERLESS" // Configuration setting to identify a serverless cluster.
+	CloudAuthUninitialized      = ""
+	CloudAuthSSO                = "sso"
+	CloudAuthClientCredentials  = "client-credentials"
+	ServerlessClusterType       = "TYPE_SERVERLESS" // Configuration setting to identify a serverless cluster.
+	CloudEnvironmentIntegration = "integration"
+	CloudEnvironmentPreprod     = "preprod"
 )
 
 ///////////

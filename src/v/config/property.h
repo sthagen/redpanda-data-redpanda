@@ -14,6 +14,7 @@
 #include "base/type_traits.h"
 #include "config/base_property.h"
 #include "config/rjson_serialization.h"
+#include "config/tls_config.h"
 #include "config/types.h"
 #include "container/intrusive_list_helpers.h"
 #include "features/enterprise_feature_messages.h"
@@ -695,6 +696,8 @@ consteval std::string_view property_type_name() {
     } else if constexpr (std::is_same_v<
                            type,
                            config::datalake_catalog_auth_mode>) {
+        return "string";
+    } else if constexpr (std::is_same_v<type, config::tls_name_format>) {
         return "string";
     } else {
         static_assert(

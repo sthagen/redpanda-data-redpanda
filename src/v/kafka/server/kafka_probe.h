@@ -14,6 +14,7 @@
 #include "config/configuration.h"
 #include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
+#include "model/compression.h"
 #include "utils/log_hist.h"
 
 #include <seastar/core/metrics.hh>
@@ -62,6 +63,34 @@ public:
           {},
           {sm::shard_label});
 
+        for (auto compress_type : model::all_batch_compression_types) {
+            auto compress_type_name = fmt::format("{}", compress_type);
+            auto compression_label = sm::label("compression_type")(
+              compress_type_name);
+
+            _metrics.add_group(
+              "kafka",
+              {
+                sm::make_counter(
+                  "produced_bytes",
+                  sm::description("Total bytes produced, broken down by "
+                                  "compression_type label."),
+                  {compression_label},
+                  [this, compress_type] {
+                      auto idx = (size_t)compress_type;
+                      // next check should "never" fail but just be extra
+                      // careful
+                      if (idx < _bytes_by_compression.size()) {
+                          // NOLINTNEXTLINE:clang-tidy(cppcoreguidelines-pro-bounds-constant-array-index)
+                          return _bytes_by_compression[idx];
+                      }
+                      return 0UL;
+                  }),
+              },
+              {},
+              {sm::shard_label});
+        }
+
         _metrics.add_group(
           "kafka",
           {
@@ -71,9 +100,7 @@ public:
                 "Batch size across all topics measured at the kafka layer."),
               {},
               [this] { return _batch_size.batch_size_histogram_logform(); }),
-          },
-          {},
-          {sm::shard_label});
+          });
 
         _metrics.add_group(
           "kafka_rpc",
@@ -125,7 +152,14 @@ public:
         _fetch_latency.record(micros.count());
     }
 
-    void record_batch(uint64_t size) { _batch_size.record(size); }
+    void record_batch(uint64_t size, model::compression compression) {
+        _batch_size.record(size);
+        if (auto idx = (size_t)compression;
+            idx < _bytes_by_compression.size()) {
+            // NOLINTNEXTLINE:clang-tidy(cppcoreguidelines-pro-bounds-constant-array-index)
+            _bytes_by_compression[idx] += size;
+        }
+    }
 
 private:
     // for testing
@@ -137,6 +171,11 @@ private:
     hist_t _fetch_latency;
     // non partition or topic related as that is too expensive for histograms
     batch_size_hist _batch_size;
+
+    // track the number of produced bytes using each compression type
+    std::array<uint64_t, (size_t)model::compression::count>
+      _bytes_by_compression{};
+
     metrics::internal_metric_groups _metrics;
     metrics::public_metric_groups _public_metrics;
 };

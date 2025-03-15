@@ -14,6 +14,8 @@
 #include "model/tests/random_batch.h"
 #include "test_utils/async.h"
 
+#include <seastar/util/defer.hh>
+
 using namespace datalake::translation;
 using namespace datalake::coordinator;
 
@@ -112,6 +114,12 @@ public:
           _highest_translated_offset + kafka::offset_delta(100));
     }
 
+    std::optional<size_t> translation_backlog() const {
+        return _translation_backlog;
+    }
+
+    std::chrono::milliseconds target_lag() const { return 1s; }
+
 private:
     model::ntp _ntp;
     model::revision_id _rev;
@@ -128,6 +136,7 @@ private:
 
     absl::flat_hash_map<model::topic_partition, chunked_vector<data_file>>
       _files;
+    std::optional<size_t> _translation_backlog;
 };
 
 class fake_data_src : public data_source {
@@ -187,16 +196,12 @@ public:
 
     ss::future<std::error_code> replicate_highest_translated_offset(
       kafka::offset offset,
+      std::optional<model::timestamp>,
       model::term_id,
       model::timeout_clock::duration,
       ss::abort_source&) final {
         _test_ctx.update_highest_translated_offset(offset);
         co_return std::make_error_code(std::errc());
-    }
-
-    ss::future<std::optional<std::chrono::milliseconds>>
-    current_lag_ms(model::timeout_clock::duration) final {
-        co_return std::nullopt;
     }
 
     void update_commit_lag(std::optional<kafka::offset>) const final {}
@@ -334,6 +339,8 @@ public:
         return ss::make_ready_future();
     }
 
+    size_t buffered_bytes() const final { return _buffered_bytes; }
+
 private:
     size_t _translated_bytes{0};
     size_t _flushed_bytes{0};
@@ -341,6 +348,7 @@ private:
     std::optional<kafka::offset> _max_offset_translated;
     fake_test_ctx& _test_ctx;
     bool _inflight_translation{false};
+    size_t _buffered_bytes{0};
 };
 
 class fake_lag_tracker : public translation_lag_tracker {
@@ -350,6 +358,37 @@ public:
 
     bool should_finish_inflight_translation() final {
         return _test_ctx.should_finish_inflight_translation();
+    }
+
+    std::chrono::milliseconds current_lag_ms() const final {
+        return std::chrono::milliseconds(0);
+    }
+
+    virtual void notify_new_data_for_translation(kafka::offset){
+
+    };
+
+    virtual void notify_data_translated(kafka::offset){};
+
+    virtual std::optional<model::timestamp>
+    get_translated_offset_timestamp_estimate(kafka::offset) {
+        return model::timestamp::now();
+    };
+
+    /**
+     * Returns an estimate size of data that are ready to be translated.
+     */
+
+    std::chrono::milliseconds target_lag() const final {
+        return _test_ctx.target_lag();
+    }
+
+    std::optional<size_t> translation_backlog() const final {
+        return _test_ctx.translation_backlog();
+    }
+
+    scheduling::clock::time_point next_checkpoint_deadline() const final {
+        return scheduling::clock::now();
     }
 
 private:
@@ -452,7 +491,7 @@ TEST_F_CORO(partition_translator_fixture, test_batching) {
 
     std::exception_ptr ex = nullptr;
     try {
-        RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [&test_ctx]() {
+        RPTEST_REQUIRE_EVENTUALLY_CORO(20s, [&test_ctx]() {
             const auto& files = test_ctx.translated_files();
             const auto it = files.find(test_ctx.ntp().tp);
             if (it != files.end()) {
@@ -471,4 +510,63 @@ TEST_F_CORO(partition_translator_fixture, test_batching) {
     if (ex) {
         RPTEST_FAIL_CORO(fmt::to_string(ex));
     }
+}
+
+using scheduling::scheduler_fixture;
+
+TEST_F_CORO(scheduler_fixture, test_writer_reservations_accounting) {
+    auto& reservations = *_scheduler->reservations();
+    {
+        writer_reservations_impl writer{reservations};
+
+        auto cleanup = ss::defer([&writer] { writer.release(); });
+
+        ss::abort_source as;
+
+        ASSERT_EQ_CORO(writer.current_usage(), 0);
+        ASSERT_EQ_CORO(writer.total_reserved(), 0);
+
+        auto current_usage = 1_MiB;
+        // update initial usage, should result in a reservation
+        co_await writer.update_current_memory_usage(current_usage, as);
+
+        ASSERT_EQ_CORO(writer.current_usage(), current_usage);
+        ASSERT_EQ_CORO(writer.total_reserved(), block_size);
+
+        // try 3 more times, we are still within the block limit;
+        while (current_usage <= block_size) {
+            co_await writer.update_current_memory_usage(current_usage, as);
+            current_usage += 1_MiB;
+        }
+
+        ASSERT_EQ_CORO(writer.current_usage(), block_size);
+        ASSERT_EQ_CORO(writer.total_reserved(), block_size);
+
+        current_usage += 1_MiB;
+        // update again, should reserve a new block.
+        co_await writer.update_current_memory_usage(current_usage, as);
+
+        ASSERT_EQ_CORO(writer.current_usage(), current_usage);
+        ASSERT_EQ_CORO(writer.total_reserved(), 2 * block_size);
+
+        // exhaust all memory
+        while (writer.current_usage() != total_memory) {
+            current_usage += 1_MiB;
+            co_await writer.update_current_memory_usage(current_usage, as);
+        }
+
+        ss::promise<> done;
+        // update again, should block on reservations due to memory limit
+        // exhaustion.
+        auto f = ss::with_timeout(
+          ss::steady_clock_type::now() + 500ms,
+          writer.update_current_memory_usage(current_usage + 1_MiB, as)
+            .finally([&done] { done.set_value(); }));
+
+        ASSERT_THROW_CORO(co_await std::move(f), ss::timed_out_error);
+
+        as.request_abort();
+        co_await std::move(done).get_future();
+    }
+    ASSERT_EQ_CORO(reservations.allocated_memory(), 0);
 }

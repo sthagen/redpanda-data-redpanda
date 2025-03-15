@@ -12,12 +12,11 @@
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/produce.h"
-#include "kafka/protocol/wire.h"
 #include "kafka/server/handlers/produce.h"
 #include "kafka/server/snc_quota_manager.h"
 #include "kafka/server/tests/delete_records_utils.h"
-#include "kafka/server/tests/offset_for_leader_epoch_utils.h"
 #include "kafka/server/tests/produce_consume_utils.h"
+#include "model/compression.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 #include "random/generators.h"
@@ -172,6 +171,10 @@ struct prod_consume_fixture : public redpanda_thread_fixture {
     uint32_t produce_bad_ts_count() {
         return kafka_probe()._produce_bad_create_time;
     };
+
+    uint64_t bytes_by_compression(model::compression compression_type) {
+        return kafka_probe()._bytes_by_compression.at((size_t)compression_type);
+    }
 
     std::vector<model::offset> fetch_offsets;
     std::vector<kafka::client::transport> consumers;
@@ -901,4 +904,47 @@ FIXTURE_TEST(test_produce_bad_timestamps, prod_consume_fixture) {
       std::optional<std::chrono::milliseconds>{});
     produce_messages(-365 * 24h);
     BOOST_CHECK_EQUAL(bad_timestamps_metric, produce_bad_ts_count());
+}
+
+FIXTURE_TEST(test_compression_metrics, prod_consume_fixture) {
+    using ctype = model::compression;
+
+    wait_for_controller_leadership().get();
+    start();
+    auto ntp = model::ntp(test_tp_ns.ns, test_tp_ns.tp, model::partition_id(0));
+
+    auto producer = tests::kafka_produce_transport(make_kafka_client().get());
+    producer.start().get();
+
+    auto produce_messages = [&](ctype compression) {
+        producer
+          .produce_to_partition(
+            ntp.tp.topic,
+            ntp.tp.partition,
+            {{"key0", "val0"}},
+            std::nullopt,
+            compression)
+          .get();
+    };
+
+    for (auto c : model::all_batch_compression_types) {
+        BOOST_TEST_INFO("initially all bytes zero for " << c);
+        BOOST_CHECK_EQUAL(0, bytes_by_compression(c));
+    }
+
+    // this compression type and those greater are expected to have zero bytes
+    // produced, but lower ones should have non-zero bytes produced
+    for (ctype last_nonzero : model::all_batch_compression_types) {
+        produce_messages(last_nonzero);
+        for (auto ctype : model::all_batch_compression_types) {
+            if (ctype <= last_nonzero) {
+                BOOST_TEST_INFO(
+                  "testing non-zero bytes in metric for " << ctype);
+                BOOST_CHECK_GT(bytes_by_compression(ctype), 0);
+            } else {
+                BOOST_TEST_INFO("testing zero bytes in metric for " << ctype);
+                BOOST_CHECK_EQUAL(0, bytes_by_compression(ctype));
+            }
+        }
+    }
 }

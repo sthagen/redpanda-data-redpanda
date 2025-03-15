@@ -341,6 +341,7 @@ struct configuration final : public config_store {
     bounded_property<std::optional<std::chrono::milliseconds>>
       kafka_sasl_max_reauth_ms;
     property<std::optional<bool>> kafka_enable_authorization;
+    enum_property<tls_name_format> tls_certificate_name_format;
     property<std::optional<std::vector<ss::sstring>>>
       kafka_mtls_principal_mapping_rules;
     property<bool> kafka_enable_partition_reassignment;

@@ -491,6 +491,21 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "update_partition_spec_action_test",
+    timeout = "short",
+    srcs = [
+        "update_partition_spec_action_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":test_schemas",
+        "//src/v/iceberg:transaction",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "update_schema_action_test",
     timeout = "short",
     srcs = [

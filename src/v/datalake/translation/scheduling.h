@@ -157,8 +157,7 @@ public:
      * Approximation for current translation lag, in milliseconds.
      * Precise semantics are implementation defined.
      */
-    virtual ss::future<std::optional<std::chrono::milliseconds>>
-    current_lag_ms() const = 0;
+    virtual std::chrono::milliseconds current_lag_ms() const = 0;
 
     /**
      * Notification from the translator to translate until time

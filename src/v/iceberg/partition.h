@@ -34,6 +34,8 @@ struct partition_field {
 
 struct partition_spec {
     using id_t = named_type<int32_t, struct spec_id_tag>;
+    static constexpr id_t unassigned_id{-1};
+
     id_t spec_id;
     chunked_vector<partition_field> fields;
 

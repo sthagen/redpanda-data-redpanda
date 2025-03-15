@@ -70,7 +70,7 @@ sv_to_time_point(std::string_view fmt, std::string_view str) {
     using ibufstream
       = boost::iostreams::stream<boost::iostreams::basic_array_source<char>>;
 
-    ibufstream is(str.begin(), str.size());
+    ibufstream is(str.data(), str.size());
     std::tm tm{};
     is >> std::get_time(&tm, fmt.data());
     if (is.fail()) {

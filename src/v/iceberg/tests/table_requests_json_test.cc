@@ -90,6 +90,7 @@ TEST(table_requests, serialize_commit_table_request) {
     req.updates.push_back(table_update::add_schema{});
     req.updates.push_back(table_update::set_current_schema{});
     req.updates.push_back(table_update::add_spec{});
+    req.updates.push_back(table_update::set_default_spec{});
     req.updates.push_back(table_update::add_snapshot{});
     req.updates.push_back(table_update::remove_snapshots{});
     req.updates.push_back(table_update::set_snapshot_ref{});
@@ -100,6 +101,7 @@ TEST(table_requests, serialize_commit_table_request) {
     req.requirements.push_back(table_requirement::last_assigned_field_match{});
     req.requirements.push_back(
       table_requirement::assert_last_assigned_partition_id{});
+    req.requirements.push_back(table_requirement::assert_default_spec_id{});
 
     auto json_str = to_json_str(req);
 
@@ -111,16 +113,17 @@ TEST(table_requests, serialize_commit_table_request) {
     ASSERT_EQ(d["identifier"]["name"].GetString(), req.identifier.table);
 
     ASSERT_TRUE(d["updates"].IsArray());
-    ASSERT_EQ(d["updates"].GetArray().Size(), 6);
+    ASSERT_EQ(d["updates"].GetArray().Size(), 7);
     ASSERT_EQ(d["updates"].GetArray()[0]["action"], "add-schema");
     ASSERT_EQ(d["updates"].GetArray()[1]["action"], "set-current-schema");
     ASSERT_EQ(d["updates"].GetArray()[2]["action"], "add-spec");
-    ASSERT_EQ(d["updates"].GetArray()[3]["action"], "add-snapshot");
-    ASSERT_EQ(d["updates"].GetArray()[4]["action"], "remove-snapshots");
-    ASSERT_EQ(d["updates"].GetArray()[5]["action"], "set-snapshot-ref");
+    ASSERT_EQ(d["updates"].GetArray()[3]["action"], "set-default-spec");
+    ASSERT_EQ(d["updates"].GetArray()[4]["action"], "add-snapshot");
+    ASSERT_EQ(d["updates"].GetArray()[5]["action"], "remove-snapshots");
+    ASSERT_EQ(d["updates"].GetArray()[6]["action"], "set-snapshot-ref");
 
     ASSERT_TRUE(d["requirements"].IsArray());
-    ASSERT_EQ(d["requirements"].GetArray().Size(), 6);
+    ASSERT_EQ(d["requirements"].GetArray().Size(), 7);
     ASSERT_EQ(d["requirements"].GetArray()[0]["type"], "assert-create");
     ASSERT_EQ(
       d["requirements"].GetArray()[1]["type"], "assert-current-schema-id");
@@ -132,6 +135,8 @@ TEST(table_requests, serialize_commit_table_request) {
     ASSERT_EQ(
       d["requirements"].GetArray()[5]["type"],
       "assert-last-assigned-partition-id");
+    ASSERT_EQ(
+      d["requirements"].GetArray()[6]["type"], "assert-default-spec-id");
 }
 
 TEST(table_requests, parsing_load_table_result) {

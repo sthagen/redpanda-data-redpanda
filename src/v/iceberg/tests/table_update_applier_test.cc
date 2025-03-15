@@ -38,7 +38,7 @@ public:
           .schemas = std::move(schemas),
           .current_schema_id = schema::id_t{0},
           .partition_specs = {},
-          .default_spec_id = partition_spec::id_t{0},
+          .default_spec_id = partition_spec::id_t{-1},
           .last_partition_id = partition_field::id_t{-1},
         };
     }
@@ -146,24 +146,38 @@ TEST_F(UpdateApplyingVisitorTest, TestSetCurrentSchemaUnassigned) {
 
 TEST_F(UpdateApplyingVisitorTest, TestAddSpec) {
     auto table = create_table();
-    const auto make_update = [&](int32_t spec_id) -> table_update::update {
+    const auto make_update =
+      [&](
+        int32_t spec_id,
+        chunked_vector<partition_field> fields) -> table_update::update {
         return table_update::add_spec{
             .spec = partition_spec{
                 .spec_id = partition_spec::id_t{spec_id},
-                .fields = {},
+                .fields = std::move(fields),
             },
         };
     };
-    auto outcome = table_update::apply(make_update(0), table);
+    auto outcome = table_update::apply(make_update(0, {}), table);
     ASSERT_EQ(outcome, table_update::outcome::success);
     ASSERT_EQ(table.partition_specs.size(), 1);
+    ASSERT_EQ(table.last_partition_id, -1);
 
-    outcome = table_update::apply(make_update(1), table);
+    outcome = table_update::apply(
+      make_update(
+        1,
+        {partition_field{
+          .source_id = nested_field::id_t{1},
+          .field_id = partition_field::id_t{1001},
+          .name = "field",
+          .transform = identity_transform{},
+        }}),
+      table);
     ASSERT_EQ(outcome, table_update::outcome::success);
     ASSERT_EQ(table.partition_specs.size(), 2);
+    ASSERT_EQ(table.last_partition_id, 1001);
 
     // Adding an existing spec fails.
-    outcome = table_update::apply(make_update(1), table);
+    outcome = table_update::apply(make_update(1, {}), table);
     ASSERT_EQ(outcome, table_update::outcome::unexpected_state);
 }
 
@@ -348,4 +362,45 @@ TEST_F(UpdateApplyingVisitorTest, TestRemoveSnapshotReference) {
     ASSERT_EQ(outcome, table_update::outcome::success);
     ASSERT_EQ(99, table.refs->size());
     ASSERT_FALSE(table.current_snapshot_id.has_value());
+}
+
+TEST_F(UpdateApplyingVisitorTest, TestSetDefaultSpec) {
+    const auto make_update = [&](int32_t spec_id) -> table_update::update {
+        return table_update::set_default_spec{
+          .spec_id = partition_spec::id_t{spec_id},
+        };
+    };
+
+    auto table = create_table();
+    // add a couple of partition specs
+    table.partition_specs.push_back(partition_spec{
+      .spec_id = partition_spec::id_t{0},
+      .fields = {},
+    });
+    table.partition_specs.push_back(partition_spec{
+      .spec_id = partition_spec::id_t{1},
+      .fields = {},
+    });
+    table.default_spec_id = partition_spec::id_t{1};
+
+    // Sanity check for a no-op when setting to the current default spec.
+    auto outcome = table_update::apply(make_update(1), table);
+    ASSERT_EQ(outcome, table_update::outcome::success);
+    ASSERT_EQ(table.default_spec_id, 1);
+
+    // Now point to a different spec.
+    outcome = table_update::apply(make_update(0), table);
+    ASSERT_EQ(outcome, table_update::outcome::success);
+    ASSERT_EQ(table.default_spec_id, 0);
+
+    // Pointing at a spec that doesn't exist should fail.
+    outcome = table_update::apply(make_update(2), table);
+    ASSERT_EQ(outcome, table_update::outcome::unexpected_state);
+    ASSERT_EQ(table.default_spec_id, 0);
+
+    // Test setting to the latest added spec.
+    outcome = table_update::apply(
+      make_update(partition_spec::unassigned_id), table);
+    ASSERT_EQ(outcome, table_update::outcome::success);
+    ASSERT_EQ(table.default_spec_id, 1);
 }

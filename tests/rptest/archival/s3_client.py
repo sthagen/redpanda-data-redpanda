@@ -103,20 +103,24 @@ class S3Client:
            loggers list that can be included can be found in ticket: PESDLC-876         
            
         """
+
+        # If something really need debugging, add 'urllib3'
+        boto_loggers = ['boto3', 'botocore']
+
         def populate_handler(filename, level):
-            # If something really need debugging, add 'urllib3'
-            loggers_list = ['boto3', 'botocore']
-            # get logger, configure it and set handlers
-            for logger_name in loggers_list:
-                l = logging.getLogger(logger_name)
-                l.setLevel(level)
+            for logger_name in boto_loggers:
                 handler = logging.FileHandler(filename)
+                handler.setLevel(level)
                 fmt = logging.Formatter('[%(levelname)-5s - %(asctime)s - '
                                         f'{logger_name} - %(module)s - '
                                         '%(funcName)s - lineno:%(lineno)s]: '
                                         '%(message)s')
                 handler.setFormatter(fmt)
-                l.addHandler(handler)
+
+                logging.getLogger(logger_name).addHandler(handler)
+
+        for logger_name in boto_loggers:
+            logging.getLogger(logger_name).setLevel(logging.DEBUG)
 
         # Extract info from ducktape loggers
         # Assume that there is only one DEBUG and one INFO handler

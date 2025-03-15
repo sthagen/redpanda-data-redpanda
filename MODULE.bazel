@@ -135,33 +135,76 @@ COMPILE_FLAGS = {
     ] + COMMON_COMPILE_FLAGS,
 }
 
-llvm.toolchain(
-    name = "llvm_18_toolchain",
-    compile_flags = COMPILE_FLAGS,
-    cxx_standard = {"": CXX_STANDARD},
-    llvm_version = "18.1.8",
-    sha256 = {
-        "linux-aarch64": "621856db24f9b081d3d097f7b51b33f8cf096b0d103214b23c49fd5978ce2354",
-        "linux-x86_64": "b568ffa3ae21ac57b4dc5c96743b298343cc503cfb52192155f836b3b10213cf",
+COMPILERS = {
+    "18": {
+        "tars": {
+            "aarch64": {
+                "build_date": "2025-03-10",
+                "sha": "9f52789c5aee794d6f013249b6e003b50f72e4c3874fd656723a72bf9322eff9",
+            },
+            "x86_64": {
+                "build_date": "2025-03-10",
+                "sha": "51e547308112bc6671f391d03420c315b7c099238d797631e00374f1bd80712e",
+            },
+        },
+        "version": "18.1.8",
     },
-    urls = {
-        "linux-aarch64": ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-18.1.8/llvm-18.1.8-ubuntu-22.04-aarch64-2025-02-25.tar.zst"],
-        "linux-x86_64": ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-18.1.8/llvm-18.1.8-ubuntu-22.04-x86_64-2025-02-25.tar.zst"],
+    "19": {
+        "tars": {
+            "aarch64": {
+                "build_date": "2025-03-11",
+                "sha": "7c1ab3b4981a9e5ec3e3af627a78dea4e9eb4208d362dcb8e4b8f5b521e44bd2",
+            },
+            "x86_64": {
+                "build_date": "2025-03-11",
+                "sha": "808fcade0610167c0c3afbecc7d4f642e4714496ea910ea06c53dd3fee00a0b0",
+            },
+        },
+        "version": "19.1.7",
     },
-)
-llvm.sysroot(
-    name = "llvm_18_toolchain",
-    label = "@x86_64_sysroot//:sysroot",
-    targets = ["linux-x86_64"],
-)
-llvm.sysroot(
-    name = "llvm_18_toolchain",
-    label = "@aarch64_sysroot//:sysroot",
-    targets = ["linux-aarch64"],
-)
-use_repo(llvm, "llvm_18_toolchain", "llvm_18_toolchain_llvm")
+}
 
-register_toolchains("@llvm_18_toolchain//:all")
+[
+    (
+        llvm.toolchain(
+            name = "llvm_{version}_toolchain".format(version = major_version),
+            compile_flags = COMPILE_FLAGS,
+            cxx_standard = {"": CXX_STANDARD},
+            llvm_version = compiler["version"],
+            sha256 = {
+                "linux-" + arch: compiler["tars"][arch]["sha"]
+                for arch in [
+                    "aarch64",
+                    "x86_64",
+                ]
+            },
+            urls = {
+                "linux-" + arch: ["https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-{version}/llvm-{version}-debian-11-{arch}-{date}.tar.zst".format(
+                    arch = arch,
+                    date = compiler["tars"][arch]["build_date"],
+                    version = compiler["version"],
+                )]
+                for arch in [
+                    "aarch64",
+                    "x86_64",
+                ]
+            },
+        ),
+        llvm.sysroot(
+            name = "llvm_{version}_toolchain".format(version = major_version),
+            label = "@x86_64_sysroot//:sysroot",
+            targets = ["linux-x86_64"],
+        ),
+        llvm.sysroot(
+            name = "llvm_{version}_toolchain".format(version = major_version),
+            label = "@aarch64_sysroot//:sysroot",
+            targets = ["linux-aarch64"],
+        ),
+        use_repo(llvm, "llvm_{version}_toolchain".format(version = major_version)),
+        register_toolchains("@llvm_{version}_toolchain//:all".format(version = major_version)),
+    )
+    for (major_version, compiler) in COMPILERS.items()
+]
 
 # ====================================
 # Go Toolchain
@@ -292,6 +335,12 @@ crate.from_cargo(
     name = "crates",
     cargo_lockfile = "//bazel/thirdparty:Cargo.lock",
     manifests = ["//bazel/thirdparty:Cargo.toml"],
+    supported_platform_triples = [
+        # We currently only build this rust code on linux
+        # so don't fetch for other platforms
+        "aarch64-unknown-linux-gnu",
+        "x86_64-unknown-linux-gnu",
+    ],
 )
 use_repo(crate, "crates")
 crate.annotation(

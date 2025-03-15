@@ -386,12 +386,18 @@ merge_append_action::maybe_merge_mfiles_and_new_data(
     chunked_vector<manifest_file> ret;
     if (to_merge.size() < default_min_to_merge_new_files) {
         // Upload and return. This bin is too small to merge.
-        auto new_mfile_res = co_await merge_mfiles(
-          {}, std::move(new_data_entries), max_schema_id_in_added, pspec, ctx);
-        if (new_mfile_res.has_error()) {
-            co_return new_mfile_res.error();
+        if (!new_data_files.empty()) {
+            auto new_mfile_res = co_await merge_mfiles(
+              {},
+              std::move(new_data_entries),
+              max_schema_id_in_added,
+              pspec,
+              ctx);
+            if (new_mfile_res.has_error()) {
+                co_return new_mfile_res.error();
+            }
+            ret.emplace_back(std::move(new_mfile_res.value()));
         }
-        ret.emplace_back(std::move(new_mfile_res.value()));
         std::move(to_merge.begin(), to_merge.end(), std::back_inserter(ret));
         co_return ret;
     }

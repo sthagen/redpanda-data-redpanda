@@ -63,6 +63,7 @@ redpanda_test_cc_library(
         "//src/v/kafka/protocol/schemata:offset_for_leader_epoch_request",
         "//src/v/kafka/protocol/schemata:offset_for_leader_epoch_response",
         "//src/v/kafka/protocol/schemata:produce_request",
+        "//src/v/model",
         "//src/v/storage:record_batch_builder",
         "//src/v/utils:to_string",
         "@seastar",

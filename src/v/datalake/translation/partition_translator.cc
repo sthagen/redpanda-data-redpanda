@@ -202,12 +202,24 @@ ss::future<> partition_translator::translate_until_stopped() {
         }
 
         auto last_committed_offset = result.last_iceberg_committed_offset;
-        auto last_translated_offset = result.last_added_offset.value_or(
-          kafka::prev_offset(_data_source->min_offset_for_translation()));
+        // Update partition metrics. Note that last committed offset here
+        // is NOT synchronized with outstanding commit operations. Therefore
+        // if we reach this point before the most recent batch of files has
+        // been committed, the commit lag metric will be out of sync at
+        // least until 'wait_for_data' returns and we re-enter the loop.
+        _data_source->update_commit_lag(last_committed_offset);
 
+        // LTO stands for last translated offset
+        auto checkpointed_lto = result.last_added_offset.value_or(
+          kafka::prev_offset(_data_source->min_offset_for_translation()));
+        /**
+         * We do not replicate the timestamp of the highest translated offset
+         * here as this information is not present in coordinator. This is fine
+         * as the translation stm will simply use the previous timestamp value.
+         */
         auto reset_error
           = co_await _data_source->replicate_highest_translated_offset(
-            last_translated_offset, _term, wait_timeout, _as);
+            checkpointed_lto, std::nullopt, _term, wait_timeout, _as);
 
         if (reset_error) {
             vlog(
@@ -219,27 +231,26 @@ ss::future<> partition_translator::translate_until_stopped() {
             continue;
         }
 
-        // Update partition metrics. Note that last committed offset here
-        // is NOT synchronized with outstanding commit operations. Therefore
-        // if we reach this point before the most recent batch of files has
-        // been committed, the commit lag metric will be out of sync at
-        // least until 'wait_for_data' returns and we re-enter the loop.
-        _data_source->update_commit_lag(last_committed_offset);
-        _data_source->update_translation_lag(last_translated_offset);
-
-        auto local_last_translated_offset = last_translated_offset;
+        // LTO stands for last translated offset
+        auto current_translation_lto
+          = _translation_ctx->last_translated_offset();
+        /**
+         * If there is no current translation lto or checkpointed value is
+         * greater than the current translation lto update it.
+         */
         if (
-          auto last_known_translated_offset
-          = _translation_ctx->last_translated_offset()) {
-            // A translation already in progress, start from where we left off.
-            local_last_translated_offset = last_known_translated_offset.value();
+          !current_translation_lto
+          || checkpointed_lto > current_translation_lto) {
+            _lag_tracking->notify_data_translated(checkpointed_lto);
+            _data_source->update_translation_lag(checkpointed_lto);
+            current_translation_lto = checkpointed_lto;
         }
 
         static constexpr auto data_wait_duration = 3s;
         // Wait until some data is ready to be translated.
         auto maybe_begin_offset
           = co_await _data_source->wait_for_data_to_translate(
-            local_last_translated_offset,
+            current_translation_lto,
             ss::lowres_clock::now() + data_wait_duration,
             _as);
 
@@ -249,7 +260,7 @@ ss::future<> partition_translator::translate_until_stopped() {
         // helpful for keeping lag metrics up-to-date.
         if (maybe_begin_offset) {
             auto begin_offset = maybe_begin_offset.value();
-
+            _lag_tracking->notify_new_data_for_translation(*maybe_begin_offset);
             // Notify the scheduler that there is some data to translate
             _scheduler->notify_ready(id);
 
@@ -291,7 +302,7 @@ ss::future<> partition_translator::translate_until_stopped() {
 
         // Check if the translated offset space is contiguous, if not make it
         // so.
-        auto expected_begin = kafka::next_offset(last_translated_offset);
+        auto expected_begin = kafka::next_offset(checkpointed_lto);
         if (expected_begin != translation_result->start_offset) {
             // This is possible if there is a gap in offsets range, eg from
             // compaction. Normally that shouldn't be the case, as translation
@@ -310,7 +321,7 @@ ss::future<> partition_translator::translate_until_stopped() {
             translation_result->start_offset = expected_begin;
         }
 
-        last_translated_offset = translation_result->last_offset;
+        auto last_translated_offset = translation_result->last_offset;
         auto checkpoint_result = co_await checkpoint_translation_result(
           rcn, std::move(translation_result.value()));
         if (checkpoint_result.errc != coordinator::errc::ok) {
@@ -320,17 +331,35 @@ ss::future<> partition_translator::translate_until_stopped() {
               checkpoint_result);
             continue;
         }
+        /**
+         * Lag tracker will return a timestamp only if translation is cougth up
+         * with the target translation offset.
+         */
+        const auto translated_offset_ts
+          = _lag_tracking->get_translated_offset_timestamp_estimate(
+            last_translated_offset);
 
-        reset_error
+        _logger.trace(
+          "Replicating translation checkpoint with offset: {} and timestamp: "
+          "{}",
+          last_translated_offset,
+          translated_offset_ts);
+
+        auto replicate_result
           = co_await _data_source->replicate_highest_translated_offset(
-            last_translated_offset, _term, wait_timeout, _as);
-        if (reset_error) {
+            last_translated_offset,
+            translated_offset_ts,
+            _term,
+            wait_timeout,
+            _as);
+        if (replicate_result) {
             vlog(
               _logger.warn,
               "error updating highest translated offset: {}",
-              reset_error);
+              replicate_result);
             continue;
         }
+        _lag_tracking->notify_data_translated(last_translated_offset);
         scoped_set_jitter.cancel();
         needs_jitter = false;
     }
@@ -391,16 +420,16 @@ ss::future<> partition_translator::close() noexcept {
 }
 
 scheduling::translation_status partition_translator::status() const {
-    // Biggest TODO: Currently we do not track intervals of target lag.
-    // So the scheduler is pretty much scheduling on defaults
-    // Track intervals return the correct remaining duration / memory
-    // reservations. The latter is already exposed as mux::buffered_bytes()
-    return {};
+    return scheduling::translation_status{
+      .target_lag = _lag_tracking->target_lag(),
+      .next_checkpoint_deadline = _lag_tracking->next_checkpoint_deadline(),
+      .memory_bytes_reserved = _translation_ctx->buffered_bytes(),
+      .translation_backlog = _lag_tracking->translation_backlog(),
+    };
 }
 
-ss::future<std::optional<std::chrono::milliseconds>>
-partition_translator::current_lag_ms() const {
-    return _data_source->current_lag_ms(wait_timeout);
+std::chrono::milliseconds partition_translator::current_lag_ms() const {
+    return _lag_tracking->current_lag_ms();
 }
 
 void partition_translator::start_translation(

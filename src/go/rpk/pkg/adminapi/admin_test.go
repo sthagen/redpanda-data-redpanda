@@ -137,7 +137,7 @@ func writeRpkProfileToFs(t *testing.T, fs afero.Fs, p *config.RpkProfile) *confi
 	p.Name = "test"
 	rpkyaml := config.RpkYaml{
 		CurrentProfile: "test",
-		Version:        6,
+		Version:        7,
 		Profiles:       []config.RpkProfile{*p},
 	}
 	err := rpkyaml.Write(fs)

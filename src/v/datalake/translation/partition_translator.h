@@ -88,8 +88,7 @@ public:
 
     scheduling::translation_status status() const final;
 
-    ss::future<std::optional<std::chrono::milliseconds>>
-    current_lag_ms() const final;
+    std::chrono::milliseconds current_lag_ms() const final;
 
     void start_translation(scheduling::clock::duration time_slice) final;
 

@@ -1613,6 +1613,17 @@ configuration::configuration()
       "authorization is disabled.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       std::nullopt)
+  , tls_certificate_name_format(
+      *this,
+      "tls_certificate_name_format",
+      "The format of the certificates's distinguished name to use for mTLS "
+      "principal mapping.  Legacy format would appear as "
+      "'C=US,ST=California,L=San Francisco,O=Redpanda,CN=redpanda', while "
+      "rfc2253 format would appear as 'CN=redpanda,O=Redpanda,L=San "
+      "Francisco,ST=California,C=US'.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      tls_name_format::legacy,
+      {tls_name_format::legacy, tls_name_format::rfc2253})
   , kafka_mtls_principal_mapping_rules(
       *this,
       "kafka_mtls_principal_mapping_rules",
@@ -3800,7 +3811,7 @@ configuration::configuration()
       "individual commits.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::chrono::milliseconds(1min),
-      {.min = 10ms})
+      {.min = std::chrono::milliseconds{10s}})
   , iceberg_catalog_base_location(
       *this,
       "iceberg_catalog_base_location",

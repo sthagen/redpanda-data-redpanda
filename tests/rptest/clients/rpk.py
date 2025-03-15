@@ -186,6 +186,14 @@ class RpkTrimOffsetResponse(typing.NamedTuple):
     error_msg: str
 
 
+class RpkAnalyzedTopic(typing.NamedTuple):
+    topic: str
+    partitions: int
+    bytes_per_second: float
+    batches_per_second: float
+    average_bytes_per_batch: float
+
+
 @dataclass
 class RpkColumnHeader:
     name: str
@@ -642,6 +650,43 @@ class RpkTool:
         m = re.search(r"at offset (\d+)", out)
         assert m, f"Reported offset not found in: {out}"
         return int(m.group(1))
+
+    def analyze_topic(self, topic: str,
+                      time_range: str) -> Iterator[RpkAnalyzedTopic]:
+        cmd = ['analyze', topic, '-t', time_range, '--print-topics']
+        output = self._run_topic(cmd)
+        table = parse_rpk_table(output)
+
+        expected_columns = set([
+            "TOPIC", "PARTITIONS", "BYTES-PER-SECOND", "BATCHES-PER-SECOND",
+            "AVERAGE-BYTES-PER-BATCH"
+        ])
+        received_columns = set()
+
+        for column in table.columns:
+            if column.name not in expected_columns:
+                self._redpanda.logger.error(
+                    f"Unexpected column: {column.name}")
+                raise RpkException(f"Unexpected column: {column.name}")
+            received_columns.add(column.name)
+
+        missing_columns = expected_columns - received_columns
+        if len(missing_columns) != 0:
+            missing_columns = ",".join(missing_columns)
+            self._redpanda.logger.error(f"Missing columns: {missing_columns}")
+            raise RpkException(f"Missing columns: {missing_columns}")
+
+        for row in table.rows:
+            obj = dict()
+            for i in range(0, len(table.columns)):
+                obj[table.columns[i].name] = row[i]
+
+            yield RpkAnalyzedTopic(
+                topic=obj["TOPIC"],
+                partitions=int(obj["PARTITIONS"]),
+                bytes_per_second=float(obj["BYTES-PER-SECOND"]),
+                batches_per_second=float(obj["BATCHES-PER-SECOND"]),
+                average_bytes_per_batch=float(obj["AVERAGE-BYTES-PER-BATCH"]))
 
     def describe_topic(self,
                        topic: str,
@@ -1350,7 +1395,7 @@ class RpkTool:
             "acl",
             "create",
             "--allow-principal",
-            f"{principal_type}:{username}",
+            f"\"{principal_type}:{username}\"",
             "--operation",
             op,
             "--cluster",

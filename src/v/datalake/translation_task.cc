@@ -327,6 +327,10 @@ translation_task::discard() && {
     co_return std::nullopt;
 }
 
+size_t translation_task::buffered_bytes() const {
+    return _multiplexer.buffered_bytes();
+}
+
 std::ostream& operator<<(std::ostream& o, translation_task::errc ec) {
     switch (ec) {
     case translation_task::errc::file_io_error:

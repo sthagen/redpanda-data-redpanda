@@ -46,12 +46,20 @@ struct requirement_json_serializing_visitor {
         w.Key("last-assigned-field-id");
         w.Int(req.last_assigned_field_id);
     }
+
     void operator()(
       const iceberg::table_requirement::assert_last_assigned_partition_id&
         req) {
         serialize_type("assert-last-assigned-partition-id");
         w.Key("last-assigned-partition-id");
         w.Int(req.last_assigned_partition_id);
+    }
+
+    void
+    operator()(const iceberg::table_requirement::assert_default_spec_id& req) {
+        serialize_type("assert-default-spec-id");
+        w.Key("default-spec-id");
+        w.Int(req.default_spec_id);
     }
 
     void serialize_type(std::string_view type) {

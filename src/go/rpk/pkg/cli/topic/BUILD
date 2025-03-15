@@ -4,6 +4,7 @@ go_library(
     name = "topic",
     srcs = [
         "add_partitions.go",
+        "analyze.go",
         "config.go",
         "consume.go",
         "create.go",
@@ -45,6 +46,7 @@ go_test(
     name = "topic_test",
     size = "small",
     srcs = [
+        "analyze_test.go",
         "consume_test.go",
         "describe_test.go",
         "list_test.go",
