@@ -3887,12 +3887,30 @@ configuration::configuration()
       {.visibility = visibility::user},
       std::nullopt,
       &validate_non_empty_string_opt)
+  , iceberg_rest_catalog_trust(
+      *this,
+      "iceberg_rest_catalog_trust",
+      "The contents of a certificate chain to trust for the REST "
+      "Iceberg catalog. Takes precedence over "
+      "`iceberg_rest_catalog_trust_file`.",
+      {.visibility = visibility::user, .secret = is_secret::yes},
+      std::nullopt,
+      &validate_non_empty_string_opt)
   , iceberg_rest_catalog_crl_file(
       *this,
       "iceberg_rest_catalog_crl_file",
       "Path to certificate revocation list for "
       "`iceberg_rest_catalog_trust_file`.",
       {.visibility = visibility::user},
+      std::nullopt,
+      &validate_non_empty_string_opt)
+  , iceberg_rest_catalog_crl(
+      *this,
+      "iceberg_rest_catalog_crl",
+      "The contents of a certificate revocation list for "
+      "`iceberg_rest_catalog_trust`. Takes precedence over "
+      "`iceberg_rest_catalog_crl_file`.",
+      {.visibility = visibility::user, .secret = is_secret::yes},
       std::nullopt,
       &validate_non_empty_string_opt)
   , iceberg_rest_catalog_prefix(

@@ -277,7 +277,12 @@ ss::future<> datalake_manager::shutdown() {
     vlog(datalake_log.debug, "Stopping datalake manager...");
     auto f = _gate.close();
     co_await _queue.shutdown();
-    co_await _backlog_controller->stop();
+    if (_backlog_controller) {
+        co_await _backlog_controller->stop();
+    }
+    if (_catalog) {
+        co_await _catalog->stop();
+    }
     _deregistrations.clear();
     co_await _scheduler.stop();
     co_await std::move(f);

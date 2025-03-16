@@ -88,7 +88,7 @@ class PolarisCatalogSmokeTest(RedpandaTest):
             "iceberg_rest_catalog_prefix":
             catalog_prefix
         })
-        if with_tls:
+        if with_tls == "from_file":
             self.redpanda._extra_rp_conf.update({
                 "iceberg_rest_catalog_trust_file":
                 RedpandaService.TLS_CA_CRT_FILE,
@@ -98,6 +98,12 @@ class PolarisCatalogSmokeTest(RedpandaTest):
                     os.path.dirname(RedpandaService.TLS_CA_CRT_FILE))
                 n.account.copy_to(self.cert_manager.ca.crt,
                                   RedpandaService.TLS_CA_CRT_FILE)
+        elif with_tls == "direct":
+            crt = open(self.cert_manager.ca.crt).read()
+            self.redpanda._extra_rp_conf.update({
+                "iceberg_rest_catalog_trust":
+                crt,
+            })
 
         self.redpanda.start()
 
@@ -192,12 +198,12 @@ class PolarisCatalogSmokeTest(RedpandaTest):
         self.polaris = PolarisCatalog(
             ctx=self.test_context,
             node=None,
-            tls=self.cert_manager if with_tls else None)
+            tls=self.cert_manager if with_tls != "none" else None)
         self.polaris.start()
 
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
-            with_tls=[True, False])
+            with_tls=["none", "from_file", "direct"])
     def test_connecting_to_catalog(self, cloud_storage_type, with_tls):
         """The very basic test checking interaction with polaris catalog
         """
@@ -219,7 +225,7 @@ class PolarisCatalogSmokeTest(RedpandaTest):
             "warehouse": catalog_name,
         }
 
-        if with_tls:
+        if with_tls != "none":
             catalog_properties.update(
                 {"ssl": {
                     "cabundle": self.cert_manager.ca.crt

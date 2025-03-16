@@ -44,8 +44,11 @@ build_tls_credentials(config::configuration& cfg) {
       {config::tlsv1_3_ciphersuites.data(),
        config::tlsv1_3_ciphersuites.size()});
     cred_builder.set_minimum_tls_version(from_config(cfg.tls_min_version()));
-    auto trust_file = cfg.iceberg_rest_catalog_trust_file();
-    if (trust_file.has_value()) {
+    if (auto trust = cfg.iceberg_rest_catalog_trust(); trust.has_value()) {
+        vlog(datalake_log.info, "Using non-default trust");
+        cred_builder.set_x509_trust(*trust, ss::tls::x509_crt_format::PEM);
+    } else if (auto trust_file = cfg.iceberg_rest_catalog_trust_file();
+               trust_file.has_value()) {
         auto file = trust_file.value();
         vlog(datalake_log.info, "Using non-default trust file {}", file);
         co_await cred_builder.set_x509_trust_file(
@@ -68,8 +71,10 @@ build_tls_credentials(config::configuration& cfg) {
             co_await cred_builder.set_system_trust();
         }
     }
-    if (auto crl_file = cfg.iceberg_rest_catalog_crl_file();
-        crl_file.has_value()) {
+    if (auto crl = cfg.iceberg_rest_catalog_crl(); crl.has_value()) {
+        cred_builder.set_x509_crl(*crl, ss::tls::x509_crt_format::PEM);
+    } else if (auto crl_file = cfg.iceberg_rest_catalog_crl_file();
+               crl_file.has_value()) {
         co_await cred_builder.set_x509_crl_file(
           *crl_file, ss::tls::x509_crt_format::PEM);
     }
@@ -185,7 +190,16 @@ rest_catalog_factory::create_catalog() {
       .server_addr = endpoint_information.address,
     };
     if (endpoint_information.needs_tls) {
-        transport_config.credentials = co_await build_tls_credentials(*config_);
+        try {
+            transport_config.credentials = co_await build_tls_credentials(
+              *config_);
+        } catch (...) {
+            vlog(
+              datalake_log.error,
+              "Failed to create TLS credentials for Iceberg REST catalog: {}",
+              std::current_exception());
+            throw;
+        }
     }
     std::unique_ptr<http::abstract_client> http_client
       = static_cast<std::unique_ptr<http::abstract_client>>(

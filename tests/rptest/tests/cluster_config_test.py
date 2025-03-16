@@ -610,6 +610,15 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
         # and is tested elsewhere.
         exclude_settings.add('iceberg_default_partition_spec')
 
+        # Exclude iceberg catalog settings, these need to be a specific value
+        # to be valid, and if we enable iceberg and these settings things break.
+        exclude_settings.update([
+            'iceberg_rest_catalog_trust',
+            'iceberg_rest_catalog_trust_file',
+            'iceberg_rest_catalog_crl',
+            'iceberg_rest_catalog_crl_file',
+        ])
+
         # List of settings that must be odd
         odd_settings = [
             'default_topic_replications', 'minimum_topic_replications'
