@@ -577,8 +577,7 @@ controller_backend::calculate_learner_initial_offset(
         return std::nullopt;
     }
 
-    const auto cloud_storage_safe_offset
-      = p->archival_meta_stm()->max_collectible_offset();
+    const auto max_collectible_offset = p->max_collectible_offset();
     /**
      * Last offset uploaded to the cloud is target learner retention upper
      * bound. We can not start retention recover from the point which is not yet
@@ -592,10 +591,10 @@ controller_backend::calculate_learner_initial_offset(
       *retention_offset,
       p->archival_meta_stm()->manifest().get_last_offset(),
       p->archival_meta_stm()->get_last_clean_at(),
-      cloud_storage_safe_offset);
+      max_collectible_offset);
 
     return model::next_offset(
-      std::min(cloud_storage_safe_offset, *retention_offset));
+      std::min(max_collectible_offset, *retention_offset));
 }
 
 void controller_backend::process_delta(const topic_table::ntp_delta& d) {

@@ -173,6 +173,13 @@ public:
     ss::future<std::error_code>
       transfer_leadership(raft::transfer_leadership_request);
 
+    /**
+     * Returns the maximum offset that may not be delivered to the newly joining
+     * learners as claimed by the state machines implemented on top of this
+     * partition.
+     */
+    model::offset max_collectible_offset();
+
     ss::future<std::error_code> update_replica_set(
       std::vector<raft::broker_revision> brokers,
       model::revision_id new_revision_id);

@@ -1579,6 +1579,10 @@ partition::archival_meta_stm() const {
     return _archival_meta_stm;
 }
 
+model::offset partition::max_collectible_offset() {
+    return _raft->log()->stm_manager()->max_collectible_offset();
+}
+
 std::optional<model::offset> partition::kafka_start_offset_override() const {
     if (_log_eviction_stm && !is_read_replica_mode_enabled()) {
         auto o = _log_eviction_stm->kafka_start_offset_override();

@@ -419,6 +419,7 @@ redpanda_cc_bench(
         "//src/v/model",
         "//src/v/serde/avro/tests:data_generator",
         "//src/v/serde/protobuf/tests:data_generator",
+        "//src/v/storage:parser_utils",
         "@seastar",
         "@seastar//:benchmark",
     ],
