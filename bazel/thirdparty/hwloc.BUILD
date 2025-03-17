@@ -48,7 +48,8 @@ configure_make(
         "//visibility:public",
     ],
     deps = [
-        "@libpciaccess",
+        # workaround for CORE-9546
+        # "@libpciaccess",
     ],
 )
 

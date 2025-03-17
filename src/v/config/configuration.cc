@@ -3608,11 +3608,7 @@ configuration::configuration()
       {.needs_restart = needs_restart::yes, .visibility = visibility::user},
       false)
   , schema_registry_protobuf_renderer_v2(
-      *this,
-      "schema_registry_protobuf_renderer_v2",
-      "Enables experimental protobuf renderer to support normalize=true.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
-      false)
+      *this, "schema_registry_protobuf_renderer_v2")
   , pp_sr_smp_max_non_local_requests(
       *this,
       "pp_sr_smp_max_non_local_requests",

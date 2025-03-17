@@ -37,7 +37,6 @@ using default_to_global = ss::bool_class<struct default_to_global_tag>;
 using force = ss::bool_class<struct force_tag>;
 using normalize = ss::bool_class<struct normalize_tag>;
 using verbose = ss::bool_class<struct verbose_tag>;
-using protobuf_renderer_v2 = ss::bool_class<struct protobuf_renderer_v2_tag>;
 
 template<typename E>
 std::enable_if_t<std::is_enum_v<E>, std::optional<E>>

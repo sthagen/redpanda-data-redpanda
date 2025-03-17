@@ -126,31 +126,32 @@ ss::future<> seq_writer::check_mutable(const std::optional<subject>& sub) {
 }
 
 ss::future<> seq_writer::wait_for(model::offset offset) {
-    return container().invoke_on(0, _smp_opts, [offset](seq_writer& seq) {
-        if (auto waiters = seq._wait_for_sem.waiters(); waiters != 0) {
-            vlog(plog.trace, "wait_for waiting for {} waiters", waiters);
-        }
-        return ss::with_semaphore(seq._wait_for_sem, 1, [&seq, offset]() {
-            if (offset > seq._loaded_offset) {
-                vlog(
-                  plog.debug,
-                  "wait_for dirty!  Reading {}..{}",
-                  seq._loaded_offset,
-                  offset);
+    return container().invoke_on(
+      reader_shard, _smp_opts, [offset](seq_writer& seq) {
+          if (auto waiters = seq._wait_for_sem.waiters(); waiters != 0) {
+              vlog(plog.trace, "wait_for waiting for {} waiters", waiters);
+          }
+          return ss::with_semaphore(seq._wait_for_sem, 1, [&seq, offset]() {
+              if (offset > seq._loaded_offset) {
+                  vlog(
+                    plog.debug,
+                    "wait_for dirty!  Reading {}..{}",
+                    seq._loaded_offset,
+                    offset);
 
-                return kafka::client::make_client_fetch_batch_reader(
-                         seq._client.local(),
-                         model::schema_registry_internal_tp,
-                         seq._loaded_offset + model::offset{1},
-                         offset + model::offset{1})
-                  .consume(
-                    consume_to_store{seq._store, seq}, model::no_timeout);
-            } else {
-                vlog(plog.trace, "wait_for clean (offset  {})", offset);
-                return ss::make_ready_future<>();
-            }
-        });
-    });
+                  return kafka::client::make_client_fetch_batch_reader(
+                           seq._client.local(),
+                           model::schema_registry_internal_tp,
+                           seq._loaded_offset + model::offset{1},
+                           offset + model::offset{1})
+                    .consume(
+                      consume_to_store{seq._store, seq}, model::no_timeout);
+              } else {
+                  vlog(plog.trace, "wait_for clean (offset  {})", offset);
+                  return ss::make_ready_future<>();
+              }
+          });
+      });
 }
 
 /// Helper for write methods that need to check + retry if their
@@ -191,7 +192,7 @@ ss::future<bool> seq_writer::produce_and_apply(
 ss::future<> seq_writer::advance_offset(model::offset offset) {
     auto remote = [offset](seq_writer& s) { s.advance_offset_inner(offset); };
 
-    return container().invoke_on(0, _smp_opts, remote);
+    return container().invoke_on(reader_shard, _smp_opts, remote);
 }
 
 void seq_writer::advance_offset_inner(model::offset offset) {

@@ -590,13 +590,8 @@ ss::future<protobuf_schema_definition> make_protobuf_schema_definition(
   schema_getter& store, canonical_schema schema, normalize norm) {
     auto refs = schema.def().refs();
     auto impl = ss::make_shared<protobuf_schema_definition::impl>();
-    auto v2_renderer = protobuf_renderer_v2::no;
-    if (auto* s = dynamic_cast<const sharded_store*>(&store); s != nullptr) {
-        v2_renderer = s->protobuf_v2_renderer();
-    }
-    // v2_renderer is the feature flag in case this breaks somebodies workflow.
     impl->fdp = co_await import_schema(
-      impl->_dp, store, std::move(schema), normalize(norm && v2_renderer));
+      impl->_dp, store, std::move(schema), normalize(norm));
 
     if (norm) {
         std::sort(refs.begin(), refs.end());

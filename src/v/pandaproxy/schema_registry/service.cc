@@ -412,7 +412,9 @@ ss::future<> service::do_start() {
     }
     co_await container().invoke_on_all(_ctx.smp_sg, [](service& s) {
         s._is_started = true;
-        return s.fetch_internal_topic();
+        return ss::this_shard_id() == seq_writer::reader_shard
+                 ? s.fetch_internal_topic()
+                 : ss::now();
     });
 }
 

@@ -32,9 +32,8 @@ namespace pps = pp::schema_registry;
 namespace {
 
 struct simple_sharded_store {
-    explicit simple_sharded_store(
-      pps::protobuf_renderer_v2 proto_v2 = pps::protobuf_renderer_v2::no)
-      : store{proto_v2} {
+    explicit simple_sharded_store()
+      : store{} {
         store.start(pps::is_mutable::yes, ss::default_smp_service_group())
           .get();
     }
@@ -502,10 +501,8 @@ SEASTAR_THREAD_TEST_CASE(
 }
 
 auto sanitize(
-  std::string_view raw_proto,
-  pps::normalize norm = pps::normalize::no,
-  pps::protobuf_renderer_v2 proto_v2 = pps::protobuf_renderer_v2::no) {
-    simple_sharded_store s{proto_v2};
+  std::string_view raw_proto, pps::normalize norm = pps::normalize::no) {
+    simple_sharded_store s;
     iobuf buf = pps::make_canonical_protobuf_schema(
                   s.store,
                   pps::unparsed_schema{
@@ -520,10 +517,8 @@ auto sanitize(
     return parser.read_string(parser.bytes_left());
 }
 
-auto normalize(
-  std::string_view raw_proto,
-  pps::protobuf_renderer_v2 proto_v2 = pps::protobuf_renderer_v2::no) {
-    return sanitize(raw_proto, pps::normalize::yes, proto_v2);
+auto normalize(std::string_view raw_proto) {
+    return sanitize(raw_proto, pps::normalize::yes);
 }
 
 constexpr auto foobar_proto = R"(syntax = "proto3";
@@ -873,11 +868,8 @@ extend .google.protobuf.ServiceOptions {
 }
 
 )";
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      sanitized);
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), normalized);
+    BOOST_CHECK_EQUAL(sanitize(schema), sanitized);
+    BOOST_CHECK_EQUAL(normalize(schema), normalized);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_protobuf_normalize_nested_custom_options) {
@@ -994,11 +986,8 @@ extend .google.protobuf.MessageOptions {
 }
 
 )";
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      sanitized);
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), normalized);
+    BOOST_CHECK_EQUAL(sanitize(schema), sanitized);
+    BOOST_CHECK_EQUAL(normalize(schema), normalized);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_protobuf_normalize_message_custom_options) {
@@ -1069,11 +1058,8 @@ extend .google.protobuf.EnumValueOptions {
 
 )";
 
-    BOOST_REQUIRE_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      sanitized);
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), normalized);
+    BOOST_REQUIRE_EQUAL(sanitize(schema), sanitized);
+    BOOST_CHECK_EQUAL(normalize(schema), normalized);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_protobuf_normalize_extension_ranges) {
@@ -1208,11 +1194,8 @@ extend .google.protobuf.ExtensionRangeOptions {
 
 )";
 
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      sanitized);
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), normalized);
+    BOOST_CHECK_EQUAL(sanitize(schema), sanitized);
+    BOOST_CHECK_EQUAL(normalize(schema), normalized);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_protobuf_sanitize_no_syntax) {
@@ -1337,9 +1320,7 @@ import weak "google/protobuf/any.proto";
 import "google/protobuf/api.proto";
 )";
 
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(sanitize(schema), (R"(syntax = "proto3";
 package foo;
 
 import "google/protobuf/timestamp.proto";
@@ -1349,8 +1330,7 @@ import public "google/protobuf/duration.proto";
 
 
 )"));
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(normalize(schema), (R"(syntax = "proto3";
 package foo;
 
 import "google/protobuf/api.proto";
@@ -1378,9 +1358,7 @@ message HasGoogleMap {
 }
 )";
 
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(sanitize(schema), (R"(syntax = "proto3";
 package foo;
 
 import "google/protobuf/struct.proto";
@@ -1398,8 +1376,7 @@ message HasGoogleMap {
   map<string, .google.protobuf.Value> map_string_value = 1;
 }
 )"));
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(normalize(schema), (R"(syntax = "proto3";
 package foo;
 
 import "google/protobuf/any.proto";
@@ -1445,9 +1422,7 @@ message HasMap {
 }
 )";
 
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(sanitize(schema), (R"(syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 message Value {
@@ -1460,8 +1435,7 @@ message HasMap {
 }
 
 )"));
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(normalize(schema), (R"(syntax = "proto3";
 
 import "google/protobuf/timestamp.proto";
 message Value {
@@ -1496,9 +1470,7 @@ message SearchResponse {
   }
 })";
 
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      (R"(syntax = "proto2";
+    BOOST_CHECK_EQUAL(sanitize(schema), (R"(syntax = "proto2";
 
 message SearchResponse {
   repeated group Result = 1 {
@@ -1519,8 +1491,7 @@ message SearchResponse {
 }
 
 )"));
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), (R"(syntax = "proto2";
+    BOOST_CHECK_EQUAL(normalize(schema), (R"(syntax = "proto2";
 
 message SearchResponse {
   repeated group Result = 1 {
@@ -1572,9 +1543,7 @@ message WithOneOf {
 }
 
 )";
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      expected_sanitized);
+    BOOST_CHECK_EQUAL(sanitize(schema), expected_sanitized);
     auto expected_normalized = R"(syntax = "proto3";
 
 package foo;
@@ -1590,8 +1559,7 @@ message WithOneOf {
 }
 
 )";
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), expected_normalized);
+    BOOST_CHECK_EQUAL(normalize(schema), expected_normalized);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_protobuf_normalize) {
@@ -1695,9 +1663,7 @@ service FooService {
   rpc Foo(Bar) returns (Baz);
 })";
 
-    BOOST_CHECK_EQUAL(
-      sanitize(schema, pps::normalize::no, pps::protobuf_renderer_v2::yes),
-      (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(sanitize(schema), (R"(syntax = "proto3";
 package foo;
 
 import "google/protobuf/timestamp.proto";
@@ -1774,8 +1740,7 @@ service FooService {
   rpc Foo(.foo.Bar) returns (.foo.Baz);
 }
 )"));
-    BOOST_CHECK_EQUAL(
-      normalize(schema, pps::protobuf_renderer_v2::yes), (R"(syntax = "proto3";
+    BOOST_CHECK_EQUAL(normalize(schema), (R"(syntax = "proto3";
 package foo;
 
 import "google/protobuf/any.proto";

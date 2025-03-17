@@ -27,9 +27,8 @@ namespace pps = pp::schema_registry;
 namespace {
 
 struct simple_sharded_store {
-    explicit simple_sharded_store(
-      pps::protobuf_renderer_v2 proto_v2 = pps::protobuf_renderer_v2::no)
-      : store{proto_v2} {
+    explicit simple_sharded_store()
+      : store{} {
         store.start(pps::is_mutable::yes, ss::default_smp_service_group())
           .get();
     }
@@ -63,11 +62,9 @@ struct simple_sharded_store {
 
 } // namespace
 
-std::string sanitize(
-  std::string_view raw_proto,
-  pps::protobuf_renderer_v2 proto_v2 = pps::protobuf_renderer_v2::yes,
-  pps::normalize norm = pps::normalize::no) {
-    simple_sharded_store s{proto_v2};
+std::string
+sanitize(std::string_view raw_proto, pps::normalize norm = pps::normalize::no) {
+    simple_sharded_store s;
     iobuf buf = pps::make_canonical_protobuf_schema(
                   s.store,
                   pps::unparsed_schema{
@@ -82,10 +79,8 @@ std::string sanitize(
     return parser.read_string(parser.bytes_left());
 }
 
-auto normalize(
-  std::string_view raw_proto,
-  pps::protobuf_renderer_v2 proto_v2 = pps::protobuf_renderer_v2::yes) {
-    return sanitize(raw_proto, proto_v2, pps::normalize::yes);
+auto normalize(std::string_view raw_proto) {
+    return sanitize(raw_proto, pps::normalize::yes);
 }
 
 enum class SchemaType { input, sanitized, normalized };

@@ -28,6 +28,9 @@ static const int max_retries = 4;
 
 class seq_writer final : public ss::peering_sharded_service<seq_writer> {
 public:
+    // All reads of the topic must occur on shard 0
+    static constexpr ss::shard_id reader_shard = 0;
+
     seq_writer(
       model::node_id node_id,
       ss::smp_service_group smp_group,
@@ -133,9 +136,9 @@ private:
               });
         };
 
-        return container().invoke_on(0, _smp_opts, remote).then([](auto res) {
-            return std::move(res).value();
-        });
+        return container()
+          .invoke_on(reader_shard, _smp_opts, remote)
+          .then([](auto res) { return std::move(res).value(); });
     }
 
     /// The part of sequenced_write that runs on shard zero
