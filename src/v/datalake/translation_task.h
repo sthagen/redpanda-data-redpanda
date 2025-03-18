@@ -44,6 +44,7 @@ public:
         file_io_error,
         cloud_io_error,
         flush_error,
+        no_data,
     };
 
     using custom_partitioning_enabled

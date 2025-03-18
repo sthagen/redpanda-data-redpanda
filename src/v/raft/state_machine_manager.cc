@@ -455,6 +455,11 @@ ss::future<> state_machine_manager::background_apply_fiber(
           entry->stm->next(),
           _next,
           entry->name);
+        /**
+         * As the STM is catching up and not reading the tip of the log it is
+         * pointless to populate the batch cache with the read batches.
+         */
+        config.skip_batch_cache = true;
         bool error = false;
         try {
             model::record_batch_reader reader = co_await _raft->make_reader(

@@ -29,6 +29,22 @@ translation_task::errc map_error_code(cloud_data_io::errc errc) {
     }
 }
 
+translation_task::errc map_error_code(writer_error errc) {
+    switch (errc) {
+    case writer_error::ok:
+        // translation task does not have an equivalent for no error
+        vassert(
+          false, "map error code expects an errored state, got :{}", errc);
+    case writer_error::parquet_conversion_error:
+    case writer_error::file_io_error:
+        return translation_task::errc::file_io_error;
+    case writer_error::no_data:
+        return translation_task::errc::no_data;
+    case writer_error::flush_error:
+        return translation_task::errc::flush_error;
+    }
+}
+
 ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
   cloud_data_io& _cloud_io,
   const partitioning_writer::partitioned_file& file,
@@ -235,11 +251,9 @@ translation_task::finish(
   ss::abort_source& as) && {
     auto mux_result = co_await std::move(_multiplexer).finish();
     if (mux_result.has_error()) {
-        vlog(
-          datalake_log.warn,
-          "Error writing data files - {}",
-          mux_result.error());
-        co_return errc::file_io_error;
+        auto mux_err = mux_result.error();
+        vlog(datalake_log.warn, "Error writing data files - {}", mux_err);
+        co_return map_error_code(mux_err);
     }
     auto write_result = std::move(mux_result).value();
     if (datalake_log.is_enabled(seastar::log_level::trace)) {
@@ -339,6 +353,8 @@ std::ostream& operator<<(std::ostream& o, translation_task::errc ec) {
         return o << "cloud IO error";
     case translation_task::errc::flush_error:
         return o << "writer flush error";
+    case translation_task::errc::no_data:
+        return o << "no data to translate";
     }
 }
 } // namespace datalake

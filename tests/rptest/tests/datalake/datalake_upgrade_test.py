@@ -33,6 +33,7 @@ class DatalakeUpgradeTest(RedpandaTest):
 
         # Initial version that supported Iceberg.
         self.initial_version = (24, 3)
+        self.min_version_with_lag_support = (25, 1)
 
     def setUp(self):
         self.redpanda._installer.install(self.redpanda.nodes,
@@ -54,19 +55,27 @@ class DatalakeUpgradeTest(RedpandaTest):
                               redpanda=self.redpanda,
                               catalog_type=filesystem_catalog_type(),
                               include_query_engines=[query_engine]) as dl:
-            dl.create_iceberg_enabled_topic(self.topic_name, partitions=10)
+            dl.create_iceberg_enabled_topic(self.topic_name,
+                                            partitions=10,
+                                            target_lag_ms=10000)
 
             def run_workload():
                 nonlocal total_count
                 count = 100
                 dl.produce_to_topic(self.topic_name, 1024, msg_count=count)
                 total_count += count
-                dl.wait_for_translation(self.topic_name,
-                                        msg_count=total_count,
-                                        timeout=60)
+                dl.wait_for_translation(self.topic_name, msg_count=total_count)
 
+            lag_set = self.initial_version >= self.min_version_with_lag_support  # type: ignore
             versions = self.load_version_range(self.initial_version)
             for v in self.upgrade_through_versions(versions_in=versions,
                                                    already_running=True):
                 self.logger.info(f"Updated to {v}")
+                if not lag_set and v >= self.min_version_with_lag_support:
+                    # When upgrading from older versions, unsupported topic properties
+                    # are just ignored. Force a cluster config change right after upgrading
+                    # to first version with the support
+                    self.redpanda.set_cluster_config(
+                        {"iceberg_target_lag_ms": 10000})
+                    lag_set = True
                 run_workload()

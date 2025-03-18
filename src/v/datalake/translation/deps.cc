@@ -23,6 +23,23 @@
 #include "kafka/data/partition_proxy.h"
 #include "kafka/utils/txn_reader.h"
 
+namespace {
+datalake::translation::translation_errc
+map_error_code(datalake::translation_task::errc errc) {
+    using datalake::translation::translation_errc;
+    switch (errc) {
+    case datalake::translation_task::errc::file_io_error:
+        return translation_errc::file_io_error;
+    case datalake::translation_task::errc::cloud_io_error:
+        return translation_errc::cloud_io_error;
+    case datalake::translation_task::errc::flush_error:
+        return translation_errc::flush_error;
+    case datalake::translation_task::errc::no_data:
+        return translation_errc::no_data;
+    }
+}
+} // namespace
+
 namespace datalake::translation {
 
 namespace {
@@ -340,6 +357,21 @@ std::unique_ptr<data_source> data_source::make_default_data_source(
     return std::make_unique<partition_data_source>(std::move(partition));
 }
 
+std::ostream& operator<<(std::ostream& o, translation_errc ec) {
+    switch (ec) {
+    case no_data:
+        return o << "translation_errc::no_data";
+    case file_io_error:
+        return o << "translation_errc::file_io_error";
+    case cloud_io_error:
+        return o << "translation_errc::cloud_io_error";
+    case flush_error:
+        return o << "translation_errc::flush_error";
+    case discard_error:
+        return o << "translation_errc::discard_error";
+    }
+}
+
 class partition_translation_context : public translation_context {
 public:
     explicit partition_translation_context(
@@ -373,8 +405,7 @@ public:
       , _probe(std::move(probe))
       , _invalid_record_action(compute_invalid_record_action())
       , _cp_enabled(translation_task::custom_partitioning_enabled{
-          _features.is_active(features::feature::datalake_iceberg_ga)})
-      , _target_lag(compute_target_lag()) {}
+          _features.is_active(features::feature::datalake_iceberg_ga)}) {}
 
     ss::future<> translate_now(
       model::record_batch_reader reader, ss::abort_source& as) final {
@@ -405,19 +436,27 @@ public:
     void reconcile_properties() final {
         auto old_invalid_action = _invalid_record_action;
         auto old_cp_enabled = _cp_enabled;
-        auto old_target_lag = _target_lag;
 
+        // target lag changes will be picked dynamically and does not
+        // need a state reset.
         _invalid_record_action = compute_invalid_record_action();
         _cp_enabled = translation_task::custom_partitioning_enabled{
           _features.is_active(features::feature::datalake_iceberg_ga)};
-        _target_lag = compute_target_lag();
 
-        if (_in_progress_translation) {
+        auto properties_updated = old_invalid_action != _invalid_record_action
+                                  || old_cp_enabled != _cp_enabled;
+        if (properties_updated) {
+            vlog(
+              datalake_log.info,
+              "[{}] properties updated, new properties: invalid record action: "
+              "{}, custom_partition_enabled: {}",
+              _ntp,
+              _invalid_record_action,
+              _cp_enabled);
+        }
+        if (_in_progress_translation && properties_updated) {
             // discard any state so far
-            _discard_translated_state = old_invalid_action
-                                          != _invalid_record_action
-                                        || old_cp_enabled != _cp_enabled
-                                        || old_target_lag != _target_lag;
+            _discard_translated_state = properties_updated;
         }
     }
 
@@ -453,18 +492,22 @@ public:
         return ss::now();
     }
 
-    ss::future<std::optional<coordinator::translated_offset_range>>
+    ss::future<checked<coordinator::translated_offset_range, translation_errc>>
     finish(retry_chain_node& rcn, ss::abort_source& as) final {
         if (!_in_progress_translation) {
-            co_return std::nullopt;
+            co_return translation_errc::no_data;
+        }
+        if (_discard_translated_state) {
+            co_await discard().discard_result();
+            co_return translation_errc::discard_error;
         }
         auto task = std::exchange(_in_progress_translation, std::nullopt);
         auto result = co_await std::move(task.value())
                         .finish(_cp_enabled, _upload_path_prefix, rcn, as);
-        if (result.has_error() || _discard_translated_state) {
-            co_return std::nullopt;
+        if (result.has_error()) {
+            co_return map_error_code(result.error());
         }
-        co_return std::make_optional(std::move(result.value()));
+        co_return std::move(result.value());
     }
 
     ss::future<> discard() final {
@@ -530,7 +573,6 @@ private:
     ss::lw_shared_ptr<translation_probe> _probe;
     model::iceberg_invalid_record_action _invalid_record_action;
     translation_task::custom_partitioning_enabled _cp_enabled;
-    scheduling::clock::duration _target_lag;
 
     std::optional<translation_task> _in_progress_translation;
     bool _discard_translated_state{false};

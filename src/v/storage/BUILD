@@ -120,6 +120,10 @@ redpanda_cc_library(
         "@fmt",
     ],
     include_prefix = "storage",
+    visibility = [
+        "//src/v/resource_mgmt/tests:__pkg__",
+        "//src/v/storage/tests:__pkg__",
+    ],
     deps = [
         "//src/v/base",
         "//src/v/container:intrusive",

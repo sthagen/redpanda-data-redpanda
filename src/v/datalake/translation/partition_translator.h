@@ -154,6 +154,29 @@ private:
      */
     bool should_finish_inflight_translation() const;
 
+    // lto = last translated offset
+    struct translation_offsets {
+        // Last checkpointed translated offset with coordinator
+        // or previous offset to the min translatable offset
+        // if no checkpointed translation state in the coordinator
+        kafka::offset coordinator_lto;
+        // Offset to begin the next translation from.
+        // set if there is new data to translate
+        std::optional<kafka::offset> next_translation_begin_offset;
+    };
+    ss::future<std::optional<translation_offsets>>
+    fetch_translation_offsets(retry_chain_node&);
+
+    ss::future<>
+    run_one_translation_iteration(kafka::offset translation_begin_offset);
+
+    /**
+     * Returns true if the finish is successful and did not run into any
+     * unexpected errors, False otherwise.
+     */
+    ss::future<bool> finish_inflight_translation(
+      kafka::offset coordinator_lto, retry_chain_node&);
+
     ss::scheduling_group _sg;
     std::unique_ptr<coordinator_api> _coordinator;
     std::unique_ptr<data_source> _data_source;

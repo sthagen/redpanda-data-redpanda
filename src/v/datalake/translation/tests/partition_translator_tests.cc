@@ -313,7 +313,8 @@ public:
 
     void reconcile_properties() final {}
 
-    ss::future<std::optional<translated_offset_range>>
+    ss::future<
+      checked<datalake::coordinator::translated_offset_range, translation_errc>>
     finish(retry_chain_node&, ss::abort_source&) final {
         _inflight_translation = false;
         translated_offset_range result;
@@ -327,8 +328,7 @@ public:
         _flushed_bytes = 0;
         _min_offset_translated.reset();
         _max_offset_translated.reset();
-        return ss::make_ready_future<std::optional<translated_offset_range>>(
-          std::move(result));
+        co_return result;
     }
 
     ss::future<> discard() final {

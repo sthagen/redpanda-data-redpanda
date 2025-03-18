@@ -151,6 +151,16 @@ public:
       make_default_data_source(ss::lw_shared_ptr<cluster::partition>);
 };
 
+enum translation_errc {
+    no_data,
+    file_io_error,
+    cloud_io_error,
+    flush_error,
+    discard_error,
+};
+
+std::ostream& operator<<(std::ostream&, translation_errc);
+
 class translation_context {
 public:
     translation_context() = default;
@@ -192,7 +202,8 @@ public:
      * Cleans up state and uploads data to cloud storage. Should be called in
      * all cases for appropriate cleanup.
      */
-    virtual ss::future<std::optional<coordinator::translated_offset_range>>
+    virtual ss::future<
+      checked<coordinator::translated_offset_range, translation_errc>>
     finish(retry_chain_node&, ss::abort_source&) = 0;
 
     /**

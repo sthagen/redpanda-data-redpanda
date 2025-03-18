@@ -168,11 +168,218 @@ bool partition_translator::should_finish_inflight_translation() const {
     auto lag_window_ended = _lag_tracking->should_finish_inflight_translation();
     vlog(
       _logger.trace,
-      "current bytes flushed: {}, lag window roll: {}",
+      "Checking if translation can be finished, current bytes flushed: {}, lag "
+      "window roll: {}",
       bytes_flushed_pending_upload,
       lag_window_ended);
     return bytes_flushed_pending_upload >= partition_flushed_bytes_limit
            || lag_window_ended;
+}
+
+ss::future<std::optional<partition_translator::translation_offsets>>
+partition_translator::fetch_translation_offsets(retry_chain_node& rcn) {
+    // Reconcile with the coordinator
+    auto result = co_await fetch_latest_translated_offset(rcn);
+    if (result.errc != coordinator::errc::ok) {
+        vlog(_logger.warn, "Failed to fetch translated offset: {}", result);
+        co_return std::nullopt;
+    }
+
+    vlog(_logger.trace, "Latest coordinator fetch result: {}", result);
+
+    auto last_committed_offset = result.last_iceberg_committed_offset;
+    // Update partition metrics. Note that last committed offset here
+    // is NOT synchronized with outstanding commit operations. Therefore
+    // if we reach this point before the most recent batch of files has
+    // been committed, the commit lag metric will be out of sync at
+    // least until 'wait_for_data' returns and we re-enter the loop.
+    _data_source->update_commit_lag(last_committed_offset);
+
+    // LTO stands for last translated offset
+    const auto checkpointed_lto = result.last_added_offset.value_or(
+      kafka::prev_offset(_data_source->min_offset_for_translation()));
+    /**
+     * We do not replicate the timestamp of the highest translated offset
+     * here as this information is not present in coordinator. This is fine
+     * as the translation stm will simply use the previous timestamp value.
+     */
+    auto reset_error
+      = co_await _data_source->replicate_highest_translated_offset(
+        checkpointed_lto, std::nullopt, _term, wait_timeout, _as);
+
+    if (reset_error) {
+        vlog(
+          _logger.warn,
+          "error updating highest translated offset: {}, translation "
+          "will "
+          "be retried",
+          reset_error);
+        co_return std::nullopt;
+    }
+
+    auto current_translation_lto = _translation_ctx->last_translated_offset();
+    /**
+     * If there is no current translation lto or checkpointed value is
+     * greater than the current translation lto update it.
+     */
+    if (
+      !current_translation_lto || checkpointed_lto > current_translation_lto) {
+        _lag_tracking->notify_data_translated(checkpointed_lto);
+        _data_source->update_translation_lag(checkpointed_lto);
+        current_translation_lto = checkpointed_lto;
+    }
+
+    static constexpr auto data_wait_duration = 3s;
+    // Wait until some data is ready to be translated.
+    auto maybe_begin_offset = co_await _data_source->wait_for_data_to_translate(
+      current_translation_lto,
+      ss::lowres_clock::now() + data_wait_duration,
+      _as);
+
+    translation_offsets offsets;
+    offsets.coordinator_lto = checkpointed_lto;
+    if (!maybe_begin_offset) {
+        vlog(
+          _logger.trace,
+          "No new data to translate, last translated offset:{}",
+          checkpointed_lto);
+        co_return offsets;
+    }
+    offsets.next_translation_begin_offset = maybe_begin_offset.value();
+    co_return offsets;
+}
+
+ss::future<> partition_translator::run_one_translation_iteration(
+  kafka::offset begin_offset) {
+    _lag_tracking->notify_new_data_for_translation(begin_offset);
+    // Notify the scheduler that there is some data to translate
+    _scheduler->notify_ready(id());
+    // wait for the scheduler to notify back that we've been given a
+    // time slice (i.e. scheduled in), then translate until the time
+    // slice expires or we run out of data
+    std::exception_ptr ex = nullptr;
+    try {
+        co_await _ready_to_translate.wait(
+          [this] { return _inflight_translation_state.has_value(); });
+        auto& as = _inflight_translation_state->as;
+        auto reader = co_await _data_source->make_log_reader(
+          begin_offset, datalake_priority(), as);
+        if (!reader) {
+            co_return;
+        }
+        vlog(
+          _logger.trace, "starting translation from offset: {}", begin_offset);
+        ss::timer<scheduling::clock> cancellation_timer;
+        cancellation_timer.set_callback([&as] { as.request_abort(); });
+
+        auto translation_f
+          = _translation_ctx
+              ->translate_now(
+                std::move(reader.value()), _inflight_translation_state->as)
+              .finally([this] { return _translation_ctx->flush(); });
+        cancellation_timer.arm(_inflight_translation_state->translate_for);
+        co_await std::move(translation_f).finally([&cancellation_timer] {
+            cancellation_timer.cancel();
+        });
+    } catch (...) {
+        ex = std::current_exception();
+        vlog(
+          _logger.warn,
+          "Translation attempt failed: {}, discarding state to reset "
+          "translation",
+          ex);
+    }
+    // inflight_translation_state tracks a single scheduled chunk of
+    // work, so we reset it to nullopt for the next time we're scheduled
+    // in
+    _inflight_translation_state.reset();
+    // Let the scheduler know we are done
+    _scheduler->notify_done(id());
+
+    if (ex) {
+        co_await _translation_ctx->discard();
+        std::rethrow_exception(ex);
+    }
+}
+
+ss::future<bool> partition_translator::finish_inflight_translation(
+  kafka::offset coordinator_lto, retry_chain_node& rcn) {
+    auto finish_result = co_await _translation_ctx->finish(rcn, _as);
+    if (finish_result.has_error()) {
+        auto error = finish_result.error();
+        vlog(_logger.trace, "Translation finish ran into an error: {}", error);
+        if (
+          error == translation_errc::no_data
+          || error == translation_errc::discard_error) {
+            // no data -- translation is past its lag window but nothing got
+            // translated.
+            // discard -- certain properties changed that
+            // requiring a translator reset
+            co_return true;
+        }
+        vlog(
+          _logger.warn, "Failed to translate with error: {}, retrying", error);
+        co_return false;
+    }
+    auto translation_result = std::move(finish_result.value());
+    vlog(_logger.trace, "Translation finish result: {}", translation_result);
+
+    // Check if the translated offset space is contiguous, if not make it
+    // so.
+    auto expected_begin = kafka::next_offset(coordinator_lto);
+    if (expected_begin != translation_result.start_offset) {
+        // This is possible if there is a gap in offsets range, eg from
+        // compaction. Normally that shouldn't be the case, as translation
+        // enforces max_collectible_offset which prevents compaction or
+        // other forms of retention from kicking in before translation
+        // actually happens. However there could be a sequence of enabling /
+        // disabling iceberg configuration on the topic that can temporarily
+        // unblock compaction thus creating gaps. Here we adjust the offset
+        // range to so the coordinator sees a contiguous offset range.
+        vlog(
+          _logger.info,
+          "detected an offset range gap in [{}, {}), adjusting the begin "
+          "offset to avoid gaps in coordinator tracked offsets.",
+          expected_begin,
+          translation_result.start_offset);
+        translation_result.start_offset = expected_begin;
+    }
+
+    auto last_translated_offset = translation_result.last_offset;
+    auto checkpoint_result = co_await checkpoint_translation_result(
+      rcn, std::move(translation_result));
+    if (checkpoint_result.errc != coordinator::errc::ok) {
+        vlog(
+          _logger.warn,
+          "Failed to checkpoint translated files: {}",
+          checkpoint_result);
+        co_return false;
+    }
+    /**
+     * Lag tracker will return a timestamp only if translation is cougth up
+     * with the target translation offset.
+     */
+    const auto translated_offset_ts
+      = _lag_tracking->get_translated_offset_timestamp_estimate(
+        last_translated_offset);
+
+    _logger.trace(
+      "Replicating translation checkpoint with offset: {} and timestamp: "
+      "{}",
+      last_translated_offset,
+      translated_offset_ts);
+
+    auto replicate_result
+      = co_await _data_source->replicate_highest_translated_offset(
+        last_translated_offset, translated_offset_ts, _term, wait_timeout, _as);
+    if (replicate_result) {
+        vlog(
+          _logger.warn,
+          "error updating highest translated offset: {}",
+          replicate_result);
+        co_return false;
+    }
+    co_return true;
 }
 
 ss::future<> partition_translator::translate_until_stopped() {
@@ -181,185 +388,38 @@ ss::future<> partition_translator::translate_until_stopped() {
       _initialized && _scheduler && _reservations,
       "[{}] Translation started before the translator is properly initialized",
       id);
-
     bool needs_jitter = false;
     while (!_as.abort_requested()) {
         if (needs_jitter) {
             co_await ss::sleep_abortable(_jitter.next_duration(), _as);
         }
+        retry_chain_node rcn{_as, _retry_max_timeout, _retry_initial_backoff};
         // We'll keep track of if we exit early out of this iteration, in which
         // case the next iteration should see some jitter.
         auto scoped_set_jitter = ss::defer(
           [&needs_jitter] { needs_jitter = true; });
 
-        retry_chain_node rcn{_as, _retry_max_timeout, _retry_initial_backoff};
-
-        // Reconcile with the coordinator
-        auto result = co_await fetch_latest_translated_offset(rcn);
-        if (result.errc != coordinator::errc::ok) {
-            vlog(_logger.warn, "Failed to fetch translated offset: {}", result);
+        auto offsets = co_await fetch_translation_offsets(rcn);
+        if (!offsets) {
             continue;
         }
-
-        auto last_committed_offset = result.last_iceberg_committed_offset;
-        // Update partition metrics. Note that last committed offset here
-        // is NOT synchronized with outstanding commit operations. Therefore
-        // if we reach this point before the most recent batch of files has
-        // been committed, the commit lag metric will be out of sync at
-        // least until 'wait_for_data' returns and we re-enter the loop.
-        _data_source->update_commit_lag(last_committed_offset);
-
-        // LTO stands for last translated offset
-        auto checkpointed_lto = result.last_added_offset.value_or(
-          kafka::prev_offset(_data_source->min_offset_for_translation()));
-        /**
-         * We do not replicate the timestamp of the highest translated offset
-         * here as this information is not present in coordinator. This is fine
-         * as the translation stm will simply use the previous timestamp value.
-         */
-        auto reset_error
-          = co_await _data_source->replicate_highest_translated_offset(
-            checkpointed_lto, std::nullopt, _term, wait_timeout, _as);
-
-        if (reset_error) {
-            vlog(
-              _logger.warn,
-              "error updating highest translated offset: {}, translation "
-              "will "
-              "be retried",
-              reset_error);
-            continue;
-        }
-
-        // LTO stands for last translated offset
-        auto current_translation_lto
-          = _translation_ctx->last_translated_offset();
-        /**
-         * If there is no current translation lto or checkpointed value is
-         * greater than the current translation lto update it.
-         */
-        if (
-          !current_translation_lto
-          || checkpointed_lto > current_translation_lto) {
-            _lag_tracking->notify_data_translated(checkpointed_lto);
-            _data_source->update_translation_lag(checkpointed_lto);
-            current_translation_lto = checkpointed_lto;
-        }
-
-        static constexpr auto data_wait_duration = 3s;
-        // Wait until some data is ready to be translated.
-        auto maybe_begin_offset
-          = co_await _data_source->wait_for_data_to_translate(
-            current_translation_lto,
-            ss::lowres_clock::now() + data_wait_duration,
-            _as);
-
-        // if wait_for_data timed out (i.e. all translatable records have
-        // been translated already), reenter the loop. this gives us an
-        // opportunity to reconcile outstanding coordinator state, which is
-        // helpful for keeping lag metrics up-to-date.
-        if (maybe_begin_offset) {
-            auto begin_offset = maybe_begin_offset.value();
-            _lag_tracking->notify_new_data_for_translation(*maybe_begin_offset);
-            // Notify the scheduler that there is some data to translate
-            _scheduler->notify_ready(id);
-
-            // wait for the scheduler to notify back that we've been given a
-            // time slice (i.e. scheduled in), then translate until the time
-            // slice expires or we run out of data
-            auto translate_f = co_await ss::coroutine::as_future<>(
-              translate_when_notified(begin_offset));
-
-            // inflight_translation_state tracks a single scheduled chunk of
-            // work, so we reset it to nullopt for the next time we're scheduled
-            // in
-            _inflight_translation_state.reset();
-
-            // Let the scheduler know we are done
-            _scheduler->notify_done(id);
-
+        if (offsets->next_translation_begin_offset) {
+            // new data is available to translate
+            auto translate_f = co_await ss::coroutine::as_future(
+              run_one_translation_iteration(
+                offsets->next_translation_begin_offset.value()));
             if (translate_f.failed()) {
-                vlog(
-                  _logger.warn,
-                  "Translation attempt failed: {}, discarding state to reset "
-                  "translation",
-                  translate_f.get_exception());
-                co_await _translation_ctx->discard();
+                translate_f.ignore_ready_future();
                 continue;
             }
         }
-
-        if (!should_finish_inflight_translation()) {
-            scoped_set_jitter.cancel();
-            continue;
+        if (should_finish_inflight_translation()) {
+            auto success = co_await finish_inflight_translation(
+              offsets->coordinator_lto, rcn);
+            if (!success) {
+                continue;
+            }
         }
-
-        auto translation_result = co_await _translation_ctx->finish(rcn, _as);
-        if (!translation_result) {
-            vlog(_logger.warn, "Failed to translate, retrying");
-            continue;
-        }
-
-        // Check if the translated offset space is contiguous, if not make it
-        // so.
-        auto expected_begin = kafka::next_offset(checkpointed_lto);
-        if (expected_begin != translation_result->start_offset) {
-            // This is possible if there is a gap in offsets range, eg from
-            // compaction. Normally that shouldn't be the case, as translation
-            // enforces max_collectible_offset which prevents compaction or
-            // other forms of retention from kicking in before translation
-            // actually happens. However there could be a sequence of enabling /
-            // disabling iceberg configuration on the topic that can temporarily
-            // unblock compaction thus creating gaps. Here we adjust the offset
-            // range to so the coordinator sees a contiguous offset range.
-            vlog(
-              _logger.info,
-              "detected an offset range gap in [{}, {}), adjusting the begin "
-              "offset to avoid gaps in coordinator tracked offsets.",
-              expected_begin,
-              translation_result->start_offset);
-            translation_result->start_offset = expected_begin;
-        }
-
-        auto last_translated_offset = translation_result->last_offset;
-        auto checkpoint_result = co_await checkpoint_translation_result(
-          rcn, std::move(translation_result.value()));
-        if (checkpoint_result.errc != coordinator::errc::ok) {
-            vlog(
-              _logger.warn,
-              "Failed to checkpoint translated files: {}",
-              checkpoint_result);
-            continue;
-        }
-        /**
-         * Lag tracker will return a timestamp only if translation is cougth up
-         * with the target translation offset.
-         */
-        const auto translated_offset_ts
-          = _lag_tracking->get_translated_offset_timestamp_estimate(
-            last_translated_offset);
-
-        _logger.trace(
-          "Replicating translation checkpoint with offset: {} and timestamp: "
-          "{}",
-          last_translated_offset,
-          translated_offset_ts);
-
-        auto replicate_result
-          = co_await _data_source->replicate_highest_translated_offset(
-            last_translated_offset,
-            translated_offset_ts,
-            _term,
-            wait_timeout,
-            _as);
-        if (replicate_result) {
-            vlog(
-              _logger.warn,
-              "error updating highest translated offset: {}",
-              replicate_result);
-            continue;
-        }
-        _lag_tracking->notify_data_translated(last_translated_offset);
         scoped_set_jitter.cancel();
         needs_jitter = false;
     }

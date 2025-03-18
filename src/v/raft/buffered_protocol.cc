@@ -324,6 +324,8 @@ ss::future<result<append_entries_reply>> append_entries_queue::append_entries(
     // or wait until we can buffer next request, this will propagate back
     // pressure to caller
     auto sz = r.total_size();
+    // hold gate to prevent accessing state after the queue is stopped
+    auto holder = _gate.hold();
     return _dispatched.wait([this, sz] { return can_buffer_next_request(sz); })
       .then([this, r = std::move(r), opts = std::move(opts)]() mutable {
           /// consensus is no longer responsible for tracking memory usage and
@@ -334,7 +336,8 @@ ss::future<result<append_entries_reply>> append_entries_queue::append_entries(
 
           _new_requests.signal();
           return _requests.back().reply.get_future();
-      });
+      })
+      .finally([h = std::move(holder)] {});
 }
 ss::future<> append_entries_queue::stop() {
     vlog(_logger.debug, "stopping append entries queue");
