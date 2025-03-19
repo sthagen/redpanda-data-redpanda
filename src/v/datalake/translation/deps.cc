@@ -540,7 +540,7 @@ private:
     std::unique_ptr<parquet_file_writer_factory> make_writer_factory() {
         return std::make_unique<local_parquet_file_writer_factory>(
           _writer_scratch_space, // storage temp files are written to
-          "",                    // file prefix
+          fmt::to_string(_ntp.tp.partition), // file prefix
           ss::make_shared<serde_parquet_writer_factory>(),
           std::make_unique<writer_reservations_impl>(_reservations));
     }

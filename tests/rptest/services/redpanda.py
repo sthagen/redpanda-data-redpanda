@@ -3162,17 +3162,25 @@ class RedpandaService(RedpandaServiceBase):
         """
         if thread is None:
             pid = self.redpanda_pid(node)
-        else:
-            pid = self.redpanda_tid(node, thread)
-        if pid is None:
-            if idempotent and signal in {signal.SIGKILL, signal.SIGTERM}:
-                return
-            else:
-                raise RuntimeError(
-                    f"Can't signal redpanda on node {node.name}, it isn't running"
-                )
+            if pid is None:
+                if idempotent and signal in {signal.SIGKILL, signal.SIGTERM}:
+                    return
+                else:
+                    raise RuntimeError(
+                        f"Can't signal redpanda on node {node.name}, it isn't running"
+                    )
 
-        node.account.signal(pid, signal, allow_fail=False)
+            node.account.signal(pid, signal, allow_fail=False)
+        else:
+            tgid, tid = self.redpanda_tid(node, thread)
+            script_path = inject_remote_script(node, "tgkill.py")
+            cmd = shlex.join([
+                "python3", script_path,
+                str(tgid),
+                str(tid),
+                str(signal.value)
+            ])
+            node.account.ssh(cmd, allow_fail=False)
 
     def sockets_clear(self, node: RemoteClusterNode):
         """
@@ -4227,7 +4235,7 @@ class RedpandaService(RedpandaServiceBase):
             raise e
 
     def redpanda_tid(self, node, thread):
-        """Return the thread ID of the given thread"""
+        """Return the thread group ID and thread ID of the given thread"""
         cmd = "ps -C redpanda -T"
         for line in node.account.ssh_capture(cmd, timeout_sec=10):
             # Example line:
@@ -4237,7 +4245,7 @@ class RedpandaService(RedpandaServiceBase):
             parts = line.split()
             thread_name = parts[4]
             if thread == thread_name:
-                return int(parts[1])
+                return int(parts[0]), int(parts[1])
         return None
 
     def started_nodes(self) -> List[ClusterNode]:

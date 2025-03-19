@@ -782,6 +782,10 @@
                     "type": "string",
                     "description": "user backtrace"
                 },
+                "scheduling_group": {
+                    "type": "string",
+                    "description": "The scheduling group that was active when the sample was taken."
+                },
                 "occurrences": {
                     "type": "long",
                     "description": "number of times this backtrace has occurred"

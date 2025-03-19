@@ -863,7 +863,7 @@ class ConsumerGroupTest(RedpandaTest):
         group = 'test-lag-metrics-group'
         # Use a small batch size to ensure that fetches are distributed across all partitions
         batch_size = 1
-        produce_msg_cnt_min = 50
+        produce_msg_cnt_min = 1000
         consume_count = (topic_count * partition_count *
                          produce_msg_cnt_min) // (2 * consumer_count)
 

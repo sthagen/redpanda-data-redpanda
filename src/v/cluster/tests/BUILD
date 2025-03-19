@@ -737,3 +737,31 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "id_allocator_stm_test",
+    timeout = "short",
+    srcs = [
+        "id_allocator_stm_test.cc",
+    ],
+    deps = [
+        ":raft_fixture_retry_policy",
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/raft/tests:raft_fixture",
+        "//src/v/random:generators",
+        "//src/v/reflection:adl",
+        "//src/v/storage",
+        "//src/v/storage:record_batch_builder",
+        "//src/v/storage/tests:disk_log_builder",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:to_string",
+        "@googletest//:gtest",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)

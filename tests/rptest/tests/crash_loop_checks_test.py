@@ -289,10 +289,11 @@ class CrashLoopChecksTest(RedpandaTest):
             else:
                 assert False, "Test failure: not yet implemented"
 
-        assert self.redpanda.search_log_node(
-            broker,
-            f"Crash #4 at 20.* - Redpanda version: .*. {signo_prefix()} on shard {signal_shard}. Backtrace: "
-        )
+        for i in range(1, CrashLoopChecksTest.CRASH_LOOP_LIMIT + 2):
+            assert self.redpanda.search_log_node(
+                broker,
+                f"Crash #{i} at 20.* - Redpanda version: .*. {signo_prefix()} on shard {signal_shard}. Backtrace: "
+            ), f"The #{i} crash description in the crash loop limit log message is missing or malformed"
 
         report = self.read_first_crash_report()
         assert len(report['stacktrace']) > 0, \

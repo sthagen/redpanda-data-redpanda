@@ -338,9 +338,8 @@ class SaslPlainTest(BaseScramTest):
 
     def _enable_plain_authn(self):
         self.logger.debug("Enabling SASL PLAIN")
-        admin = Admin(self.redpanda)
-        admin.patch_cluster_config(
-            upsert={'sasl_mechanisms': ['PLAIN', 'SCRAM']})
+        self.redpanda.set_cluster_config(
+            {'sasl_mechanisms': ['PLAIN', 'SCRAM']})
 
     def _make_client(
         self,
@@ -525,7 +524,7 @@ class SaslPlainConfigTest(BaseScramTest):
 
         def validate_sasl_plain_mech(mechs: List[str]):
             try:
-                admin.patch_cluster_config(upsert={'sasl_mechanisms': mechs})
+                self.redpanda.set_cluster_config({'sasl_mechanisms': mechs})
                 assert False, f"Should not have been able to set {mechs}"
             except HTTPError as e:
                 assert e.response.status_code == 400, f"Expected 400, got {e.response.status_code}"
@@ -548,9 +547,8 @@ class SaslPlainConfigTest(BaseScramTest):
         wait_until_nag_is_set(
             redpanda=self.redpanda,
             check_interval_sec=self.LICENSE_CHECK_INTERVAL_SEC)
-        admin = Admin(self.redpanda)
-        admin.patch_cluster_config(
-            upsert={'sasl_mechanisms': ['SCRAM', 'PLAIN']})
+        self.redpanda.set_cluster_config(
+            {'sasl_mechanisms': ['SCRAM', 'PLAIN']})
 
         self.logger.debug("Waiting for SASL/PLAIN message")
 
@@ -583,8 +581,7 @@ class ScramLiveUpdateTest(RedpandaTest):
         assert len(unauthenticated_client.topics()) == 1
 
         # Switch on authentication
-        admin = Admin(self.redpanda)
-        admin.patch_cluster_config(upsert={'enable_sasl': True})
+        self.redpanda.set_cluster_config({'enable_sasl': True})
 
         # An unauthenticated client should be rejected
         try:
@@ -597,7 +594,7 @@ class ScramLiveUpdateTest(RedpandaTest):
             assert False
 
         # Switch off authentication
-        admin.patch_cluster_config(upsert={'enable_sasl': False})
+        self.redpanda.set_cluster_config({'enable_sasl': False})
 
         # An unauthenticated client should be accepted again
         assert len(unauthenticated_client.topics()) == 1

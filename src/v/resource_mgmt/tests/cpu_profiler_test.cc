@@ -11,6 +11,7 @@
 
 #include "config/property.h"
 #include "resource_mgmt/cpu_profiler.h"
+#include "resource_mgmt/cpu_scheduling.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/internal/cpu_profiler.hh>
@@ -19,7 +20,9 @@
 #include <seastar/core/smp.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/coroutine/maybe_yield.hh>
+#include <seastar/coroutine/switch_to.hh>
 #include <seastar/testing/thread_test_case.hh>
+#include <seastar/util/defer.hh>
 
 #include <boost/test/unit_test.hpp>
 
@@ -32,7 +35,13 @@ using shard_samples = resources::cpu_profiler::shard_samples;
 using sharded_profiler = ss::sharded<resources::cpu_profiler>;
 
 namespace {
-ss::future<> busy_loop(std::chrono::milliseconds duration) {
+ss::future<> busy_loop(
+  std::chrono::milliseconds duration,
+  std::optional<ss::scheduling_group> sg = {}) {
+    if (sg) {
+        co_await ss::coroutine::switch_to(*sg);
+    }
+
     auto end_time = ss::lowres_clock::now() + duration;
     while (ss::lowres_clock::now() < end_time) {
         // yield to allow timer to trigger and lowres_clock to update
@@ -69,6 +78,7 @@ SEASTAR_THREAD_TEST_CASE(test_cpu_profiler) {
     resources::cpu_profiler cp(
       config::mock_binding(true), config::mock_binding(2ms));
     cp.start().get();
+    auto stop = ss::defer([&] { cp.stop().get(); });
 
     // The profiler service will request samples from seastar every
     // 256ms since the sample rate is 2ms. So we need to be running
@@ -77,6 +87,51 @@ SEASTAR_THREAD_TEST_CASE(test_cpu_profiler) {
 
     auto results = cp.shard_results();
     BOOST_TEST(results.samples.size() >= 1);
+}
+
+// We should create the sgs only once and not destroy them because sgs may be
+// captured by the profiler in one test and leak into the next (e.g., because
+// they are still in the seastar-side sample buffer), where accessing them
+// would be UB as they are destroyed.
+static scheduling_groups get_sgs() {
+    static scheduling_groups sg = [] {
+        scheduling_groups sg;
+        sg.create_groups().get();
+        return sg;
+    }();
+    return sg;
+}
+
+SEASTAR_THREAD_TEST_CASE(test_cpu_scheduler_groups) {
+    scheduling_groups sg = get_sgs();
+
+    resources::cpu_profiler cp(
+      config::mock_binding(true), config::mock_binding(2ms));
+    cp.start().get();
+    auto stop = ss::defer([&] { cp.stop().get(); });
+
+    busy_loop(256ms + 10ms).get();
+
+    auto results = cp.shard_results();
+    BOOST_TEST(results.samples.size() >= 1);
+    for (auto& r : results.samples) {
+        BOOST_REQUIRE_EQUAL(r.sg, "main");
+    }
+
+    busy_loop(256ms + 10ms, sg.kafka_sg()).get();
+
+    results = cp.shard_results();
+    BOOST_TEST(results.samples.size() >= 1);
+    int found_kafka = 0;
+    for (auto& r : results.samples) {
+        // we accept both main and kafka as some internal reactor work
+        // will be recorded as main group
+        BOOST_REQUIRE_MESSAGE(
+          r.sg == "main" || r.sg == "kafka", "unexpected group: " << r.sg);
+        found_kafka += r.sg == "kafka";
+    }
+    // should get at least some kafka!
+    BOOST_REQUIRE(found_kafka > 0);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_cpu_profiler_enable_override) {

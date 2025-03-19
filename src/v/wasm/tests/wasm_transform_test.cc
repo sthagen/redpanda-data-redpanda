@@ -53,6 +53,6 @@ TEST_F(WasmTestFixture, WorksWithCpuProfiler) {
     std::vector<ss::cpu_profiler_trace> traces;
     ss::engine().profiler_results(traces);
     for (const auto& t : traces) {
-        std::cout << t.user_backtrace << "\n";
+        fmt::print("{}\n", t.user_backtrace);
     }
 }

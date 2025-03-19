@@ -604,8 +604,9 @@ admin_server::cpu_profile_handler(std::unique_ptr<ss::http::request> req) {
         samples.reserve(shard_profile.samples.size());
         for (auto& sample : shard_profile.samples) {
             ss::httpd::debug_json::cpu_profile_sample json_sample;
-            json_sample.occurrences = sample.occurrences;
             json_sample.user_backtrace = sample.user_backtrace;
+            json_sample.scheduling_group = sample.sg;
+            json_sample.occurrences = sample.occurrences;
             samples.emplace_back(std::move(json_sample));
         }
 

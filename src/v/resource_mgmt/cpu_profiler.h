@@ -50,11 +50,8 @@ class cpu_profiler : public ss::peering_sharded_service<cpu_profiler> {
 public:
     struct sample {
         ss::sstring user_backtrace;
-        size_t occurrences;
-
-        sample(ss::sstring ub, size_t o)
-          : user_backtrace(std::move(ub))
-          , occurrences(o) {}
+        ss::sstring sg;
+        size_t occurrences = 0;
     };
 
     struct shard_samples {

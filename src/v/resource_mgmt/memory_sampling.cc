@@ -62,7 +62,11 @@ ss::noncopyable_function<void(ss::memory::memory_diagnostics_writer)>
 memory_sampling::get_oom_diagnostics_callback() {
     // preallocate those so that we don't allocate on OOM
     std::vector<seastar::memory::allocation_site> allocation_sites(1000);
-    std::vector<char> format_buf(1000);
+    // a much smaller value around 1000 is generally sufficient to hold the
+    // output in release builds, but in debug or test binaries the stack traces
+    // are much larger, especially in the bazel build, due to every frame being
+    // prefixed with a large shared library path.
+    std::vector<char> format_buf(20000);
 
     return [allocation_sites = std::move(allocation_sites),
             format_buf = std::move(format_buf)](
