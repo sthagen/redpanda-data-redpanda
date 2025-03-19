@@ -20,7 +20,7 @@ class many_concurrent_translators : public scheduler_fixture {
 public:
     std::unique_ptr<scheduling_policy> make_scheduling_policy() override {
         return scheduling_policy::make_default(
-          max_concurrent_translators, task_time_quota);
+          config::mock_binding(max_concurrent_translators), task_time_quota);
     }
 
 protected:

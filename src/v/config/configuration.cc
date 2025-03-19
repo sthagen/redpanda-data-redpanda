@@ -561,7 +561,7 @@ configuration::configuration()
       *this,
       "quota_manager_gc_sec",
       "Quota manager GC frequency in milliseconds.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::chrono::milliseconds(30000))
   , target_quota_byte_rate(*this, "target_quota_byte_rate")
   , target_fetch_quota_byte_rate(*this, "target_fetch_quota_byte_rate")
@@ -4021,6 +4021,13 @@ configuration::configuration()
       "its own.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
+  , enable_host_metrics(
+      *this,
+      "enable_host_metrics",
+      "Enable exporting of some host metrics like /proc/diskstats, /proc/snmp "
+      "and /proc/net/netstat",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      false)
   , datalake_scheduler_block_size_bytes(
       *this,
       "datalake_scheduler_block_size_bytes",
@@ -4036,7 +4043,7 @@ configuration::configuration()
       "allow to run at a given time. If a translation is requested but the "
       "number of running translations exceeds this value, the request will be "
       "put to sleep temporarily, polling until capacity becomes available.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       4,
       {.min = 1, .max = 8})
   , datalake_scheduler_time_slice_ms(

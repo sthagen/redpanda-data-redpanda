@@ -23,14 +23,15 @@ static constexpr auto polling_interval = 1s;
 
 namespace datalake::translation::scheduling {
 simple_fcfs_scheduling_policy::simple_fcfs_scheduling_policy(
-  size_t max_concurrent_translators, clock::duration translation_time_quota)
-  : _max_concurrent_translations(max_concurrent_translators)
+  config::binding<size_t> max_concurrent_translators,
+  clock::duration translation_time_quota)
+  : _max_concurrent_translations(std::move(max_concurrent_translators))
   , _translation_time_quota(translation_time_quota) {
     vlog(
       datalake_log.info,
       "created simple_fcfs_scheduling_policy policy with {} translators "
       "and {} time quota",
-      max_concurrent_translators,
+      max_concurrent_translators(),
       std::chrono::duration_cast<std::chrono::milliseconds>(
         translation_time_quota));
 }
@@ -40,7 +41,7 @@ ss::future<> simple_fcfs_scheduling_policy::schedule_one_translation(
     // check the # of running translators
     while (!executor.as.abort_requested() && !executor.waiting.empty()
            && !mem_tracker.memory_exhausted()
-           && executor.running.size() >= _max_concurrent_translations) {
+           && executor.running.size() >= _max_concurrent_translations()) {
         co_await ss::sleep_abortable(polling_interval, executor.as);
     }
     if (executor.as.abort_requested() || mem_tracker.memory_exhausted()) {
@@ -66,14 +67,15 @@ ss::future<> simple_fcfs_scheduling_policy::on_resource_exhaustion(
 }
 
 fair_scheduling_policy::fair_scheduling_policy(
-  size_t max_concurrent_translators, clock::duration translation_time_quota)
-  : _max_concurrent_translations(max_concurrent_translators)
+  config::binding<size_t> max_concurrent_translators,
+  clock::duration translation_time_quota)
+  : _max_concurrent_translations(std::move(max_concurrent_translators))
   , _translation_time_quota(translation_time_quota) {
     vlog(
       datalake_log.info,
       "created fair_scheduling_policy policy with {} translators "
       "and {} time quota",
-      max_concurrent_translators,
+      max_concurrent_translators(),
       std::chrono::duration_cast<std::chrono::milliseconds>(
         translation_time_quota));
     initialize_group_shares();
@@ -142,7 +144,7 @@ ss::future<> fair_scheduling_policy::schedule_one_translation(
     // Wait until an empty slot frees up.
     while (!executor.as.abort_requested() && !executor.waiting.empty()
            && !mem_tracker.memory_exhausted()
-           && executor.running.size() >= _max_concurrent_translations) {
+           && executor.running.size() >= _max_concurrent_translations()) {
         co_await ss::sleep_abortable(polling_interval, executor.as);
     }
 

@@ -319,7 +319,7 @@ class FullDiskReclaimTest(RedpandaTest):
             metric_name=
             "vectorized_storage_manager_housekeeping_log_processed_total",
             metrics_endpoint=MetricsEndpoint.METRICS
-        ) == 0, "Housekeeping should not have run yet"
+        ) == 0, "Housekeeping should not have run"
 
         assert self.redpanda.metric_sum(
             metric_name="vectorized_storage_manager_urgent_gc_runs_total",
@@ -342,11 +342,12 @@ class FullDiskReclaimTest(RedpandaTest):
             timeout_sec=10,
             backoff_sec=2)
 
+        # Disk space alerts only triggers urgent gc, not housekeeping.
         assert self.redpanda.metric_sum(
             metric_name=
             "vectorized_storage_manager_housekeeping_log_processed_total",
             metrics_endpoint=MetricsEndpoint.METRICS
-        ) > 0, "Housekeeping should have run"
+        ) == 0, "Housekeeping should not have run"
 
         assert self.redpanda.metric_sum(
             metric_name="vectorized_storage_manager_urgent_gc_runs_total",

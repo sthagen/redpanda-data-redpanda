@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "bytes/iobuf.h"
+
 #include <cstddef>
 #include <cstdint>
 
@@ -22,6 +24,9 @@ constexpr static const uint32_t kDefaultHashingSeed = 0xFBA4C795;
 
 uint32_t murmurhash3_x86_32(
   const void* key, std::size_t len, uint32_t seed = kDefaultHashingSeed);
+
+uint32_t
+murmurhash3_x86_32(const iobuf& data, uint32_t seed = kDefaultHashingSeed);
 
 void murmurhash3_x86_128(
   const void* key,

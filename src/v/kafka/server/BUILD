@@ -17,6 +17,24 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "logger",
+    srcs = [
+        "logger.cc",
+    ],
+    hdrs = [
+        "logger.h",
+    ],
+    include_prefix = "kafka/server",
+    visibility = [":__subpackages__"],
+    deps = [
+        "//src/v/base",
+        "//src/v/kafka/protocol:logger",
+        "//src/v/utils:truncating_logger",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "server",
     srcs = [
         "client_quota_translator.cc",
@@ -59,7 +77,6 @@ redpanda_cc_library(
         "handlers/topics/topic_utils.cc",
         "handlers/topics/types.cc",
         "handlers/txn_offset_commit.cc",
-        "logger.cc",
         "member.cc",
         "protocol_utils.cc",
         "quota_manager.cc",
@@ -150,7 +167,6 @@ redpanda_cc_library(
         "handlers/topics/validators.h",
         "handlers/txn_offset_commit.h",
         "kafka_probe.h",
-        "logger.h",
         "member.h",
         "protocol_utils.h",
         "queue_depth_monitor.h",
@@ -172,6 +188,8 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":consumer_group_lag_metrics_rpc",
+        ":datalake_throttle_manager",
+        ":logger",
         ":qdc_monitor_config",
         "//src/v/base",
         "//src/v/bytes",
@@ -225,6 +243,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol:list_offset",
         "//src/v/kafka/protocol:list_partition_reassignments",
         "//src/v/kafka/protocol:list_transactions",
+        "//src/v/kafka/protocol:logger",
         "//src/v/kafka/protocol:metadata",
         "//src/v/kafka/protocol:offset_commit",
         "//src/v/kafka/protocol:offset_delete",
@@ -335,6 +354,28 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "datalake_throttle_manager",
+    srcs = [
+        "datalake_throttle_manager.cc",
+    ],
+    hdrs = [
+        "datalake_throttle_manager.h",
+    ],
+    include_prefix = "kafka/server",
+    visibility = [":__subpackages__"],
+    deps = [
+        ":logger",
+        "//src/v/base",
+        "//src/v/config",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/metrics",
+        "//src/v/ssx:future_util",
+        "//src/v/utils:absl_sstring_hash",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "errors",
     hdrs = [
         "errors.h",
@@ -361,6 +402,7 @@ redpanda_cc_library(
     include_prefix = "kafka/server",
     visibility = ["//src/v/redpanda:__pkg__"],
     deps = [
+        ":datalake_throttle_manager",
         ":qdc_monitor_config",
         "@seastar",
     ],

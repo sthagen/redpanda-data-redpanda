@@ -113,9 +113,12 @@ private:
 
 class stm_factory : public cluster::state_machine_factory {
 public:
-    stm_factory() = default;
+    explicit stm_factory(bool is_iceberg_enabled);
     bool is_applicable_for(const storage::ntp_config&) const final;
     void create(raft::state_machine_manager_builder&, raft::consensus*) final;
+
+private:
+    bool _iceberg_enabled;
 };
 
 } // namespace datalake::translation

@@ -34,7 +34,7 @@ partition_key partition_key::create(
         }
         const auto& field_val = *field_val_opt;
         const auto& transform = partition_field.transform;
-        ret_val->fields.emplace_back(apply_transform(field_val, transform));
+        ret_val->fields.push_back(apply_transform(field_val, transform));
     }
     return partition_key{std::move(ret_val)};
 }

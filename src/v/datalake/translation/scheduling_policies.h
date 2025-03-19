@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "config/property.h"
 #include "datalake/translation/scheduling.h"
 
 #include <absl/container/flat_hash_map.h>
@@ -23,7 +24,7 @@ namespace datalake::translation::scheduling {
 class simple_fcfs_scheduling_policy : public scheduling_policy {
 public:
     explicit simple_fcfs_scheduling_policy(
-      size_t max_concurrent_translators,
+      config::binding<size_t> max_concurrent_translators,
       clock::duration translation_time_quota);
 
     ss::future<> schedule_one_translation(
@@ -33,7 +34,7 @@ public:
       executor& executor, const reservations_tracker& mem_tracker) override;
 
 private:
-    size_t _max_concurrent_translations;
+    config::binding<size_t> _max_concurrent_translations;
     clock::duration _translation_time_quota;
 };
 
@@ -48,7 +49,7 @@ private:
 class fair_scheduling_policy : public scheduling_policy {
 public:
     explicit fair_scheduling_policy(
-      size_t max_concurrent_translators,
+      config::binding<size_t> max_concurrent_translators,
       clock::duration translation_time_quota);
 
     ss::future<>
@@ -117,7 +118,7 @@ private:
     group_intervals_t _group_intervals;
     void initialize_group_shares();
 
-    size_t _max_concurrent_translations;
+    config::binding<size_t> _max_concurrent_translations;
     clock::duration _translation_time_quota;
 };
 

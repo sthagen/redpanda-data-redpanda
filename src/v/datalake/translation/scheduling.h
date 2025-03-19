@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "config/property.h"
 #include "container/chunked_hash_map.h"
 #include "container/intrusive_list_helpers.h"
 #include "model/fundamental.h"
@@ -316,7 +317,7 @@ public:
     on_resource_exhaustion(executor&, const reservations_tracker&) = 0;
 
     static std::unique_ptr<scheduling_policy> make_default(
-      size_t max_concurrent_translators,
+      config::binding<size_t> max_concurrent_translators,
       clock::duration translation_time_slice);
 };
 

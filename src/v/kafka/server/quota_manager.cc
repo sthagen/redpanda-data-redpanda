@@ -160,7 +160,7 @@ quota_manager::quota_manager(
   , _replenish_threshold(
       config::shard_local_cfg().kafka_throughput_replenish_threshold.bind())
   , _translator{client_quota_store}
-  , _gc_freq(config::shard_local_cfg().quota_manager_gc_sec())
+  , _gc_freq(config::shard_local_cfg().quota_manager_gc_sec.bind())
   , _max_delay(config::shard_local_cfg().max_kafka_throttle_delay_ms.bind()) {
     if (seastar::this_shard_id() == quotas_shard) {
         _global_map = global_map_t{};
@@ -182,7 +182,7 @@ ss::future<> quota_manager::start() {
     _probe = std::make_unique<client_quotas_probe>();
     _probe->setup_metrics();
     if (ss::this_shard_id() == quotas_shard) {
-        _gc_timer.arm_periodic(_gc_freq);
+        _gc_timer.arm(_gc_freq());
 
         auto update_quotas = [this]() { update_client_quotas(); };
         _translator.watch(update_quotas);
@@ -536,15 +536,23 @@ void quota_manager::gc() {
     auto full_window = _default_num_windows() * _default_window_width();
     auto expire_threshold = clock::now() - 10 * full_window;
     ssx::background
-      = ssx::spawn_with_gate_then(_gate, [this, expire_threshold]() {
-            return container()
-              .invoke_on_all([expire_threshold](quota_manager& qm) {
-                  return qm.do_local_gc(expire_threshold);
-              })
-              .then([this]() { return do_global_gc(); });
-        }).handle_exception([](const std::exception_ptr& e) {
-            vlog(klog.warn, "Error garbage collecting quotas - {}", e);
-        });
+      = ssx::spawn_with_gate_then(
+          _gate,
+          [this, expire_threshold]() {
+              return container()
+                .invoke_on_all([expire_threshold](quota_manager& qm) {
+                    return qm.do_local_gc(expire_threshold);
+                })
+                .then([this]() { return do_global_gc(); });
+          })
+          .handle_exception([](const std::exception_ptr& e) {
+              vlog(klog.warn, "Error garbage collecting quotas - {}", e);
+          })
+          .finally([this] {
+              if (!_gate.is_closed()) {
+                  _gc_timer.arm(_gc_freq());
+              }
+          });
 }
 
 ss::future<> quota_manager::do_global_gc() {

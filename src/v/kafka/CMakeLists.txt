@@ -48,6 +48,7 @@ v_cc_library(
     server/consumer_group_lag_metrics_service.cc
     server/requests.cc
     server/member.cc
+    server/datalake_throttle_manager.cc
     server/group_stm.cc
     server/group.cc
     server/group_router.cc

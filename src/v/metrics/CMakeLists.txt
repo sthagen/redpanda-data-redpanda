@@ -5,7 +5,9 @@ v_cc_library(
     "metrics.h"
     "metrics_registry.h"
     "aggregate_metrics_watcher.h"
+    "host_metrics_watcher.h"
   SRCS
+    host_metrics_watcher.cc
     metrics.cc
     metrics_registry.cc
   DEPS

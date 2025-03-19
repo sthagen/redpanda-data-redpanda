@@ -31,5 +31,6 @@ class server;
 class snc_quota_context;
 class snc_quota_manager;
 class usage_manager;
+class datalake_throttle_manager;
 
 } // namespace kafka

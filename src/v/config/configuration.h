@@ -746,6 +746,8 @@ struct configuration final : public config_store {
     property<bool> iceberg_disable_snapshot_tagging;
     property<bool> iceberg_disable_automatic_snapshot_expiry;
 
+    property<bool> enable_host_metrics;
+
     // datalake scheduler configs
     bounded_property<size_t> datalake_scheduler_block_size_bytes;
     bounded_property<size_t> datalake_scheduler_max_concurrent_translations;

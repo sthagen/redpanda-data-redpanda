@@ -56,8 +56,8 @@ build --@seastar//:debug=True
 # =================================
 # Sanitizer
 # =================================
-build:sanitizer --copt -fsanitize=address,undefined,vptr,function
-build:sanitizer --linkopt -fsanitize=address,undefined,vptr,function
+build:sanitizer --copt -fsanitize=address,undefined,vptr,function,alignment
+build:sanitizer --linkopt -fsanitize=address,undefined,vptr,function,alignment
 build:sanitizer --linkopt -fsanitize-link-c++-runtime
 build:sanitizer --copt -O1
 build:sanitizer --//bazel:has_sanitizers=True

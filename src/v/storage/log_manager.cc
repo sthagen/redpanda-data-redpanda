@@ -19,6 +19,7 @@
 #include "resource_mgmt/memory_groups.h"
 #include "ssx/async-clear.h"
 #include "ssx/future-util.h"
+#include "ssx/watchdog.h"
 #include "storage/batch_cache.h"
 #include "storage/compacted_index_writer.h"
 #include "storage/disk_log_impl.h"
@@ -38,12 +39,14 @@
 #include "storage/storage_resources.h"
 #include "storage/types.h"
 #include "utils/directory_walker.h"
+#include "utils/mutex.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/file.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
+#include <seastar/core/loop.hh>
 #include <seastar/core/map_reduce.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/seastar.hh>
@@ -56,6 +59,7 @@
 #include <seastar/coroutine/switch_to.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/file.hh>
+#include <seastar/util/later.hh>
 
 #include <absl/container/btree_map.h>
 #include <boost/algorithm/string/predicate.hpp>
@@ -64,6 +68,7 @@
 #include <chrono>
 #include <exception>
 #include <filesystem>
+#include <functional>
 #include <optional>
 
 using namespace std::chrono_literals;
@@ -143,12 +148,12 @@ log_manager::log_manager(
   , _kvstore(kvstore)
   , _resources(resources)
   , _feature_table(feature_table)
-  , _jitter(_config.compaction_interval())
+  , _housekeeping_jitter(_config.compaction_interval())
   , _trigger_gc_jitter(0s, 5s)
   , _batch_cache(_config.reclaim_opts)
   , _probe(std::make_unique<log_manager_probe>()) {
     _config.compaction_interval.watch([this]() {
-        _jitter = simple_time_jitter<ss::lowres_clock>{
+        _housekeeping_jitter = simple_time_jitter<ss::lowres_clock>{
           _config.compaction_interval()};
         _housekeeping_sem.signal();
     });
@@ -181,13 +186,25 @@ ss::future<> log_manager::start() {
                    .log_disable_housekeeping_for_tests.value())) {
         co_return;
     }
-    ssx::spawn_with_gate(_gate, [this] { return housekeeping(); });
+
+    // The main housekeeping job loop (triggered by log_compaction_interval_ms).
+    ssx::spawn_with_gate(_gate, [this] {
+        return ss::with_scheduling_group(_config.compaction_sg, [this]() {
+            return run_housekeeping_job(
+              [this]() { return housekeeping_loop(); }, "housekeeping");
+        });
+    });
+    // The urgent garbage collection loop (triggered by disk pressure).
+    ssx::spawn_with_gate(_gate, [this] {
+        return run_housekeeping_job([this]() { return gc_loop(); }, "gc");
+    });
     co_return;
 }
 
 ss::future<> log_manager::stop() {
     _abort_source.request_abort();
     _housekeeping_sem.broken();
+    _gc_sem.broken();
 
     co_await _gate.close();
     co_await ss::coroutine::parallel_for_each(
@@ -247,6 +264,16 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         _logs_list.shift_forward();
 
         current_log.flags |= bflags::lifetime_checked;
+
+        // Obtain housekeeping lock to prevent concurrency of
+        // log->apply_segment_ms() with gc fibre.
+        auto housekeeping_lock_holder
+          = co_await current_log.housekeeping_lock.get_units();
+
+        if (!current_log.link.is_linked()) {
+            continue;
+        }
+
         // NOTE: apply_segment_ms holds _compaction_housekeeping_gate, that
         // prevents the removal of the parent object. this makes awaiting
         // apply_segment_ms safe against removal of segments from _logs_list
@@ -329,9 +356,14 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
 
         if (is_not_set(current_log.flags, bflags::should_compact)) {
             // Still perform gc() here on a regular `log_compaction_interval_ms`
-            // basis.
-            co_await current_log.handle->gc(
-              gc_config(collection_threshold, _config.retention_bytes()));
+            // basis. Use `try_get_units()` to avoid concurrent garbage
+            // collection with `gc_loop()`.
+            auto units = current_log.housekeeping_lock.try_get_units();
+            if (units.has_value()) {
+                co_await current_log.handle->gc(
+                  gc_config(collection_threshold, _config.retention_bytes()));
+            }
+
             continue;
         }
 
@@ -340,6 +372,23 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
 
         auto ntp_sanitizer_cfg = _config.maybe_get_ntp_sanitizer_config(
           current_log.handle->config().ntp());
+
+        // Obtain housekeeping lock to prevent concurrency of
+        // log->housekeeping() with gc fibre.
+        auto housekeeping_lock_holder
+          = co_await current_log.housekeeping_lock.get_units();
+
+        if (!current_log.link.is_linked()) {
+            continue;
+        }
+
+        // Until we better implement bailing out of compaction, the best thing
+        // we can do for observability is add a watchdog here.
+        ssx::watchdog wd5m(5min, [ntp = current_log.handle->config().ntp()] {
+            vlog(
+              gclog.warn, "{}: Housekeeping process exceeding 5 minutes", ntp);
+        });
+
         // NOTE: housekeeping holds _compaction_housekeeping_gate, that prevents
         // the removal of the parent object. this makes awaiting housekeeping
         // safe against removal of segments from _logs_list
@@ -353,18 +402,14 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
           std::move(ntp_sanitizer_cfg),
           _compaction_hash_key_map.get()));
         _probe->housekeeping_log_processed();
-
-        // bail out of compaction early in order to get back to gc
-        if (_gc_triggered) {
-            co_return;
-        }
     }
 }
 
-ss::future<> log_manager::housekeeping() {
+ss::future<> log_manager::run_housekeeping_job(
+  std::function<ss::future<>()> loop_func, std::string_view ctx) {
     while (!_gate.is_closed()) {
         try {
-            co_await housekeeping_loop();
+            co_await loop_func();
         } catch (...) {
             /*
              * continue on shutdown exception because it may be bubbling up from
@@ -374,12 +419,17 @@ ss::future<> log_manager::housekeeping() {
             auto e = std::current_exception();
             if (ssx::is_shutdown_exception(e)) {
                 vlog(
-                  stlog.debug,
-                  "Shutdown error caught in housekeeping(): {}",
+                  gclog.debug,
+                  "Shutdown error caught in run_housekeeping_job({}): {}",
+                  ctx,
                   e);
                 continue;
             }
-            vlog(stlog.info, "Error processing housekeeping(): {}", e);
+            vlog(
+              gclog.info,
+              "Error processing run_housekeeping_job({}): {}",
+              ctx,
+              e);
         }
     }
 }
@@ -398,21 +448,61 @@ ss::future<> log_manager::housekeeping_loop() {
      * data older than this threshold may be garbage collected
      */
     while (true) {
+        const auto prev_jitter_base = _housekeeping_jitter.base_duration();
         try {
-            const auto prev_jitter_base = _jitter.base_duration();
             co_await _housekeeping_sem.wait(
-              _jitter.next_duration(),
+              _housekeeping_jitter.next_duration(),
               std::max(_housekeeping_sem.current(), size_t(1)));
+        } catch (const ss::semaphore_timed_out&) {
+            // time for some chores
+        }
 
-            /*
-             * if it appears that the compaction interval config changed while
-             * we were sleeping then reschedule rather than run immediately.
-             * this attempts to avoid thundering herd since config changes are
-             * delivered immediately to all shards.
-             */
-            if (_jitter.base_duration() != prev_jitter_base) {
-                continue;
+        /*
+         * if it appears that the compaction interval config changed while
+         * we were sleeping then reschedule rather than run immediately.
+         * this attempts to avoid thundering herd since config changes are
+         * delivered immediately to all shards.
+         */
+        if (_housekeeping_jitter.base_duration() != prev_jitter_base) {
+            continue;
+        }
+
+        /*
+         * Perform compaction. Additional scheduling heuristics will be added
+         * here, including:
+         *
+         * - Logs can be compacted in order of most space savings first, but the
+         *   estimation will be harder, most likely based on recent compaction
+         *   ratio acehived.
+         *
+         * - It may be wise to skip compaction completely in extreme low-disk
+         *   situations because the compaction process itself requires
+         *   additional disk space to stage new segments and indices.
+         *
+         * - Enhance the `disk_usage` interface to estimate when new data will
+         *   become reclaimable and cancel non-impactful housekeeping work.
+         *
+         * - Early out compaction process if a new disk space alert arrives
+         */
+        try {
+            co_await housekeeping_scan(lowest_ts_to_retain());
+        } catch (...) {
+            auto eptr = std::current_exception();
+            if (ssx::is_shutdown_exception(eptr)) {
+                std::rethrow_exception(eptr);
             }
+            vlog(stlog.warn, "Error processing housekeeping(): {}", eptr);
+        }
+    }
+}
+
+ss::future<> log_manager::gc_loop() {
+    /*
+     * data older than this threshold may be garbage collected
+     */
+    while (true) {
+        try {
+            co_await _gc_sem.wait(std::max(_gc_sem.current(), size_t(1)));
         } catch (const ss::semaphore_timed_out&) {
             // time for some chores
         }
@@ -475,49 +565,35 @@ ss::future<> log_manager::housekeeping_loop() {
              * official log registry to avoid problems with concurrent removals
              * since the log interface does not tolerate ops on closed logs.
              */
-            for (const auto& [_, candidate] : ntp_by_gc_size) {
-                auto log = get(candidate);
-                if (!log) {
-                    continue;
-                }
-                co_await log->gc(
-                  gc_config(lowest_ts_to_retain(), _config.retention_bytes()));
-            }
+            static constexpr size_t max_concurrent_gc = 20;
+            co_await ss::max_concurrent_for_each(
+              ntp_by_gc_size.begin(),
+              ntp_by_gc_size.end(),
+              max_concurrent_gc,
+              [this](const auto& candidate) {
+                  auto* log_meta = get_log_meta(candidate.second);
+                  if (!log_meta) {
+                      return ss::now();
+                  }
+
+                  auto log = log_meta->handle;
+
+                  if (!log) {
+                      return ss::now();
+                  }
+
+                  auto& housekeeping_lock = log_meta->housekeeping_lock;
+                  auto units = housekeeping_lock.try_get_units();
+                  if (!units.has_value()) {
+                      return ss::now();
+                  }
+
+                  return log
+                    ->gc(gc_config(
+                      lowest_ts_to_retain(), _config.retention_bytes()))
+                    .finally([units = std::move(units)] {});
+              });
         }
-
-        /*
-         * Fall through for an iteration of the original housekeeping loop which
-         * will perform compaction. Additional scheduling heuristics will be
-         * added here, including:
-         *
-         * - Logs can be compacted in order of most space savings first, but the
-         *   estimation will be harder, most likely based on recent compaction
-         *   ratio acehived.
-         *
-         * - It may be wise to skip compaction completely in extreme low-disk
-         *   situations because the compaction process itself requires
-         *   additional disk space to stage new segments and indices.
-         *
-         * - Enhance the `disk_usage` interface to estimate when new data will
-         *   become reclaimable and cancel non-impactful housekeeping work.
-         *
-         * - Early out compaction process if a new disk space alert arives so
-         *   that we return this main scheduling loop.
-         */
-
-        auto prev_sg = co_await ss::coroutine::switch_to(_config.compaction_sg);
-
-        try {
-            co_await housekeeping_scan(lowest_ts_to_retain());
-        } catch (...) {
-            auto eptr = std::current_exception();
-            if (ssx::is_shutdown_exception(eptr)) {
-                std::rethrow_exception(eptr);
-            }
-            vlog(stlog.warn, "Error processing housekeeping(): {}", eptr);
-        }
-
-        co_await ss::coroutine::switch_to(prev_sg);
     }
 }
 
@@ -663,6 +739,7 @@ ss::future<> log_manager::shutdown(model::ntp ntp) {
     if (!handle) {
         co_return;
     }
+
     co_await clean_close(handle.value().second->handle);
     vlog(stlog.debug, "Shutdown: {}", ntp);
 }
@@ -675,6 +752,7 @@ ss::future<> log_manager::remove(model::ntp ntp) {
     if (!handle) {
         co_return;
     }
+
     // 'ss::shared_ptr<>' make a copy
     auto lg = handle.value().second->handle;
     vlog(stlog.info, "Removing: {}", lg);
@@ -927,7 +1005,7 @@ void log_manager::handle_disk_notification(storage::disk_space_alert alert) {
     if (_disk_space_alert != alert) {
         _disk_space_alert = alert;
         if (alert != disk_space_alert::ok) {
-            _housekeeping_sem.signal();
+            _gc_sem.signal();
         }
     }
 }
@@ -938,7 +1016,7 @@ void log_manager::trigger_gc() {
                  _trigger_gc_jitter.next_duration(), _abort_source)
           .then([this] {
               _gc_triggered = true;
-              _housekeeping_sem.signal();
+              _gc_sem.signal();
           });
     });
 }

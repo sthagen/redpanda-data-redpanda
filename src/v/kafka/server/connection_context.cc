@@ -19,6 +19,7 @@
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "kafka/protocol/sasl_authenticate.h"
+#include "kafka/server/datalake_throttle_manager.h"
 #include "kafka/server/handlers/fetch.h"
 #include "kafka/server/handlers/handler_interface.h"
 #include "kafka/server/handlers/produce.h"
@@ -560,6 +561,12 @@ connection_context::record_tp_and_calculate_throttle(
         auto produce_delay
           = co_await _server.quota_mgr().record_produce_tp_and_throttle(
             r_data.client_id, request_size, now);
+        auto datalake_produce_delay
+          = co_await _server.get_datalake_producer_throttle(r_data.client_id);
+
+        produce_delay = std::max(
+          produce_delay,
+          std::chrono::duration_cast<clock::duration>(datalake_produce_delay));
         auto produce_enforced = _throttling_state.update_produce_delay(
           produce_delay, now);
         client_quota_delay = delay_t{

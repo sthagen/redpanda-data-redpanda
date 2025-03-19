@@ -10,10 +10,14 @@
 
 #include "iceberg/transform_utils.h"
 
+#include "iceberg/bucket_transform_hashing_visitor.h"
 #include "iceberg/time_transform_visitor.h"
 #include "iceberg/transform.h"
+#include "iceberg/truncate_transform_visitor.h"
 
 #include <seastar/util/variant_utils.hh>
+
+#include <optional>
 
 namespace iceberg {
 
@@ -22,7 +26,7 @@ struct transform_applying_visitor {
       : source_val_(source_val) {}
     const value& source_val_;
 
-    value operator()(const identity_transform&) {
+    std::optional<value> operator()(const identity_transform&) {
         auto primitive = std::get_if<primitive_value>(&source_val_);
         if (primitive) {
             return make_copy(*primitive);
@@ -31,35 +35,52 @@ struct transform_applying_visitor {
           fmt::format("value {} must be primitive", source_val_));
     }
 
-    value operator()(const hour_transform&) {
+    std::optional<value> operator()(const hour_transform&) {
         int_value v{std::visit(hour_transform_visitor{}, source_val_)};
         return v;
     }
 
-    value operator()(const day_transform&) {
+    std::optional<value> operator()(const day_transform&) {
         int_value v{
           std::visit(time_transform_visitor<std::chrono::days>{}, source_val_)};
         return v;
     }
-    value operator()(const month_transform&) {
+    std::optional<value> operator()(const month_transform&) {
         int_value v{std::visit(
           time_transform_visitor<std::chrono::months>{}, source_val_)};
         return v;
     }
-    value operator()(const year_transform&) {
+    std::optional<value> operator()(const year_transform&) {
         int_value v{std::visit(
           time_transform_visitor<std::chrono::years>{}, source_val_)};
         return v;
     }
-
-    template<typename T>
-    value operator()(const T&) {
-        throw std::invalid_argument(
-          "transform_applying_visitor not implemented for transform");
+    std::optional<value> operator()(const bucket_transform& tr) {
+        auto primitive = std::get_if<primitive_value>(&source_val_);
+        if (!primitive) {
+            throw std::invalid_argument(
+              fmt::format("value {} must be primitive", source_val_));
+        }
+        auto hash = std::visit(bucket_transform_hashing_visitor{}, *primitive);
+        hash &= static_cast<uint32_t>(std::numeric_limits<int32_t>::max());
+        return int_value{static_cast<int32_t>(hash % tr.n)};
+    }
+    std::optional<value> operator()(const truncate_transform& tr) {
+        auto primitive = std::get_if<primitive_value>(&source_val_);
+        if (!primitive) {
+            throw std::invalid_argument(
+              fmt::format("value {} must be primitive", source_val_));
+        }
+        return std::visit(
+          truncate_transform_visitor{.length = tr.length}, *primitive);
+    }
+    std::optional<value> operator()(const void_transform&) {
+        return std::nullopt; // null
     }
 };
 
-value apply_transform(const value& source_val, const transform& transform) {
+std::optional<value>
+apply_transform(const value& source_val, const transform& transform) {
     return std::visit(transform_applying_visitor{source_val}, transform);
 }
 

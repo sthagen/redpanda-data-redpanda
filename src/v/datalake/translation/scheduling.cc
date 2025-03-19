@@ -429,9 +429,10 @@ ss::future<> scheduler::main() {
 
 // temporary default until a proper scheduling policy is implemented.
 std::unique_ptr<scheduling_policy> scheduling_policy::make_default(
-  size_t max_concurrent_translators, clock::duration translation_time_quota) {
+  config::binding<size_t> max_concurrent_translators,
+  clock::duration translation_time_quota) {
     return std::make_unique<fair_scheduling_policy>(
-      max_concurrent_translators, translation_time_quota);
+      std::move(max_concurrent_translators), translation_time_quota);
 }
 
 std::unique_ptr<reservations_tracker> reservations_tracker::make_default(

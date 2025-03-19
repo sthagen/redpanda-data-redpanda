@@ -137,7 +137,7 @@ public:
 
     virtual std::unique_ptr<scheduling_policy> make_scheduling_policy() {
         return scheduling_policy::make_default(
-          max_concurrent_translators, task_time_quota);
+          config::mock_binding(max_concurrent_translators), task_time_quota);
     }
 
     ss::future<> SetUpAsync() override {

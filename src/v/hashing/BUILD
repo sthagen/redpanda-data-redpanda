@@ -67,6 +67,9 @@ redpanda_cc_library(
     ],
     include_prefix = "hashing",
     visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/bytes:iobuf",
+    ],
 )
 
 redpanda_cc_library(

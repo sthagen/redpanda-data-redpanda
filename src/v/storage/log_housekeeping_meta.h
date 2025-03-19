@@ -13,6 +13,7 @@
 
 #include "container/intrusive_list_helpers.h"
 #include "storage/log.h"
+#include "utils/mutex.h"
 
 namespace storage {
 struct log_housekeeping_meta {
@@ -29,6 +30,8 @@ struct log_housekeeping_meta {
     ss::shared_ptr<log> handle;
     bitflags flags{bitflags::none};
     ss::lowres_clock::time_point last_compaction;
+    // Mutex used for handling concurrency between housekeeping and gc fibres
+    mutex housekeeping_lock{"housekeeping_lock"};
 
     intrusive_list_hook link;
 };

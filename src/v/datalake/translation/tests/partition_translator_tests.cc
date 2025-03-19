@@ -404,7 +404,7 @@ public:
     std::unique_ptr<scheduling::scheduling_policy>
     make_scheduling_policy() override {
         return scheduling::scheduling_policy::make_default(
-          max_concurrent_translators, task_quota);
+          config::mock_binding(max_concurrent_translators), task_quota);
     }
 
 protected:

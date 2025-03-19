@@ -19,7 +19,6 @@ redpanda_cc_library(
         "batch_reader.cc",
         "errors.cc",
         "kafka_batch_adapter.cc",
-        "logger.cc",
         "types.cc",
     ],
     hdrs = [
@@ -30,7 +29,6 @@ redpanda_cc_library(
         "fwd.h",
         "kafka_batch_adapter.h",
         "legacy_message.h",
-        "logger.h",
         "timeout.h",
         "topic_properties.h",
         "types.h",
@@ -39,6 +37,7 @@ redpanda_cc_library(
     include_prefix = "kafka/protocol",
     visibility = ["//visibility:public"],
     deps = [
+        ":logger",
         "//src/v/base",
         "//src/v/bytes",
         "//src/v/bytes:iobuf",
@@ -77,6 +76,22 @@ redpanda_cc_library(
         "//src/v/utils:vint",
         "@seastar",
     ] + MESSAGE_TYPES,
+)
+
+redpanda_cc_library(
+    name = "logger",
+    srcs = [
+        "logger.cc",
+    ],
+    hdrs = [
+        "logger.h",
+    ],
+    include_prefix = "kafka/protocol",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "@seastar",
+    ],
 )
 
 generate_kafka_message_libs()

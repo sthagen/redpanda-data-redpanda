@@ -19,6 +19,7 @@
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
 #include "model/tests/random_batch.h"
+#include "model/tests/randoms.h"
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
 #include "random/generators.h"
@@ -5692,4 +5693,92 @@ FIXTURE_TEST(compaction_scheduling, storage_test_fixture) {
     for (auto& log : logs) {
         auto batches = read_and_validate_all_batches(log);
     }
+}
+
+// Ensures that the log_housekeeping_meta level locking/concurrency in
+// the log_manager is race free during ntp removal, addition, and housekeeping.
+// By allowing regular housekeeping to run on a quick interval and also
+// triggering urgent garbage collection, we create contention over a log_meta's
+// housekeeping lock, all while ntps are being concurrently removed.
+FIXTURE_TEST(
+  log_manager_concurrent_housekeeping_and_removal, storage_test_fixture) {
+#ifdef NDEBUG
+    int num_rounds = 100;
+#else
+    int num_rounds = 50;
+#endif
+
+    ss::abort_source as;
+    static constexpr auto abort_func_sleep = 100ms;
+    static constexpr auto manage_func_sleep = 25ms;
+    static constexpr auto remove_func_sleep = 50ms;
+    static constexpr auto trigger_gc_func_sleep = 50ms;
+    static constexpr auto log_compaction_interval_ms = 50ms;
+
+    auto log_cfg = default_log_config(test_dir);
+    log_cfg.compaction_interval
+      = config::mock_binding<std::chrono::milliseconds>(
+        log_compaction_interval_ms);
+    storage::log_manager mgr = make_log_manager(log_cfg);
+    mgr.start().get();
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    using overrides_t = storage::ntp_config::default_overrides;
+    overrides_t ov;
+    ov.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction
+                                 | model::cleanup_policy_bitflags::deletion;
+
+    ov.min_cleanable_dirty_ratio = tristate<double>{};
+
+    auto abort_fut = ss::do_until(
+                       [&] { return num_rounds == 0; },
+                       [&]() {
+                           --num_rounds;
+                           return ss::sleep(abort_func_sleep);
+                       })
+                       .then([&]() {
+                           as.request_abort();
+                           return ss::now();
+                       });
+
+    auto manage_ntp_fut = ss::do_until(
+      [&] { return as.abort_requested(); },
+      [&]() {
+          auto ntp = model::random_ntp();
+          ntp.ns = model::kafka_namespace;
+          return mgr
+            .manage(storage::ntp_config(
+              ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov)))
+            .then([]([[maybe_unused]] auto log) {
+                return ss::sleep(manage_func_sleep);
+            });
+      });
+
+    auto remove_ntp_fut = ss::do_until(
+      [&] { return as.abort_requested(); },
+      [&]() {
+          auto managed_ntps = mgr.get_all_ntps();
+          if (managed_ntps.empty()) {
+              return ss::now();
+          }
+
+          auto ntp_to_remove = random_generators::random_choice(
+            std::vector<model::ntp>(managed_ntps.begin(), managed_ntps.end()));
+          return mgr.remove(ntp_to_remove).then([]() {
+              return ss::sleep(remove_func_sleep);
+          });
+      });
+
+    auto trigger_gc_fut = ss::do_until(
+      [&] { return as.abort_requested(); },
+      [&]() {
+          mgr.trigger_gc();
+          return ss::sleep(trigger_gc_func_sleep);
+      });
+
+    ss::when_all(
+      std::move(abort_fut),
+      std::move(manage_ntp_fut),
+      std::move(trigger_gc_fut),
+      std::move(remove_ntp_fut))
+      .get();
 }

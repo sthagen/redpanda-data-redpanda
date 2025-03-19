@@ -24,6 +24,7 @@
 #include "kafka/protocol/schemata/list_groups_response.h"
 #include "kafka/server/connection_context.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
+#include "kafka/server/datalake_throttle_manager.h"
 #include "kafka/server/errors.h"
 #include "kafka/server/group.h"
 #include "kafka/server/group_manager.h"
@@ -142,6 +143,7 @@ server::server(
   ss::sharded<cluster::security_frontend>& sec_fe,
   ss::sharded<cluster::controller_api>& controller_api,
   ss::sharded<cluster::tx_gateway_frontend>& tx_gateway_frontend,
+  ss::sharded<kafka::datalake_throttle_manager>& datalake_throttle_manager,
   std::optional<qdc_monitor_config> qdc_config,
   ssx::singleton_thread_worker& tw,
   const std::unique_ptr<pandaproxy::schema_registry::api>& sr) noexcept
@@ -178,6 +180,7 @@ server::server(
   , _security_frontend(sec_fe)
   , _controller_api(controller_api)
   , _tx_gateway_frontend(tx_gateway_frontend)
+  , _datalake_throttle_manager(datalake_throttle_manager)
   , _mtls_principal_mapper(
       config::shard_local_cfg().kafka_mtls_principal_mapping_rules.bind())
   , _gssapi_principal_mapper(
@@ -457,6 +460,27 @@ ss::future<> server::apply(ss::lw_shared_ptr<net::connection> conn) {
     }
 }
 
+void server::mark_datalake_producer(
+  const std::optional<std::string_view>& client_id) {
+    if (
+      !config::shard_local_cfg().iceberg_enabled()
+      || !_datalake_throttle_manager.local_is_initialized()) {
+        return;
+    }
+    _datalake_throttle_manager.local().mark_datalake_producer(client_id);
+}
+
+ss::future<std::chrono::milliseconds> server::get_datalake_producer_throttle(
+  std::optional<std::string_view> client_id) {
+    if (
+      !config::shard_local_cfg().iceberg_enabled()
+      || !_datalake_throttle_manager.local_is_initialized()) {
+        return ssx::now<std::chrono::milliseconds>(0ms);
+    }
+
+    return _datalake_throttle_manager.local().maybe_throttle_producer(
+      client_id);
+}
 template<>
 ss::future<response_ptr> heartbeat_handler::handle(
   request_context ctx, [[maybe_unused]] ss::smp_service_group g) {

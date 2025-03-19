@@ -31,8 +31,8 @@ public:
         return std::get<0>(GetParam());
     }
 
-    [[nodiscard]] static size_t max_concurrent_translators() {
-        return std::get<1>(GetParam());
+    [[nodiscard]] static config::binding<size_t> max_concurrent_translators() {
+        return config::mock_binding<size_t>(std::get<1>(GetParam()));
     }
 
     [[nodiscard]] static size_t total_memory() {
@@ -110,7 +110,8 @@ INSTANTIATE_TEST_SUITE_P(
 
 class simple_fair_scheduling_policy_fixture : public scheduler_fixture {
     std::unique_ptr<scheduling_policy> make_scheduling_policy() override {
-        return std::make_unique<fair_scheduling_policy>(max_translators, 10ms);
+        return std::make_unique<fair_scheduling_policy>(
+          config::mock_binding(max_translators), 10ms);
     }
 
 protected:

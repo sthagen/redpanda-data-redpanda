@@ -27,9 +27,8 @@ private:
 // Transforms the given value to its appropriate Iceberg value based on the
 // input transform.
 //
-// TODO: this is only implemented for the time transforms !
 // This will throw if used for anything else!
-value apply_transform(const value&, const transform&);
+std::optional<value> apply_transform(const value&, const transform&);
 
 // Returns true if the given transform can be applied to the given primitive
 checked<std::nullopt_t, partition_spec_field_error>

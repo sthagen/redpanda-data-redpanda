@@ -39,6 +39,7 @@
 #include "kafka/server/fwd.h"
 #include "kafka/server/snc_quota_manager.h"
 #include "metrics/aggregate_metrics_watcher.h"
+#include "metrics/host_metrics_watcher.h"
 #include "metrics/metrics.h"
 #include "net/conn_quota.h"
 #include "net/fwd.h"
@@ -188,6 +189,7 @@ public:
     std::unique_ptr<ssx::singleton_thread_worker> thread_worker;
 
     ss::sharded<crypto::ossl_context_service> ossl_context_service;
+    ss::sharded<kafka::datalake_throttle_manager> datalake_throttle_manager;
 
     ss::sharded<kafka::consumer_group_lag_metrics_frontend>
       _consumer_group_lag_metrics_frontend;
@@ -360,6 +362,8 @@ private:
     config::node_override_store _node_overrides{};
 
     std::unique_ptr<crash_tracker::service> _crash_tracker_service;
+
+    std::unique_ptr<metrics::host_metrics_watcher> _host_metrics_watcher;
 
     ss::sharded<ss::abort_source> _as;
 };

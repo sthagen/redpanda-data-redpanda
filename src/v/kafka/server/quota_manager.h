@@ -156,7 +156,7 @@ private:
     std::unique_ptr<client_quotas_probe> _probe;
 
     ss::timer<> _gc_timer;
-    clock::duration _gc_freq;
+    config::binding<std::chrono::milliseconds> _gc_freq;
     config::binding<std::chrono::milliseconds> _max_delay;
     ss::gate _gate;
     std::optional<mutex> _global_map_mutex; // Only on shard 0

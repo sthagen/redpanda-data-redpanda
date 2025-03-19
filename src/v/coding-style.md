@@ -12,7 +12,7 @@ in an `includes` directory within the library they belong to. For example, a lib
 
 Test files go in the `tests` directory of the library they belong to. That is,
 the tests for a feature named `foo` and located in `src/v/foo` will be located
-in `src/v/foo/tests`.
+in `src/v/foo/tests`. Where possible prefer Gtest over Boost for new tests.
 
 Use `snake_case` naming convention by default for files and language identifiers.
 

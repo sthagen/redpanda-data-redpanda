@@ -115,7 +115,7 @@ datalake_manager::datalake_manager(
       config::shard_local_cfg().datalake_scheduler_block_size_bytes(),
       translation::scheduling::scheduling_policy::make_default(
         config::shard_local_cfg()
-          .datalake_scheduler_max_concurrent_translations(),
+          .datalake_scheduler_max_concurrent_translations.bind(),
         std::chrono::duration_cast<translation::scheduling::clock::duration>(
           config::shard_local_cfg().datalake_scheduler_time_slice_ms())))
   , _queue(sg, [](const std::exception_ptr& ex) {
@@ -434,6 +434,23 @@ ss::future<uint64_t> datalake_manager::disk_usage() {
       });
 
     co_return total;
+}
+
+size_t datalake_manager::partitions_over_target_translation_backlog() const {
+    auto now = translation::scheduling::clock::now();
+    return std::ranges::count_if(
+      _scheduler.all_translators(), [now](const auto& entry) {
+          return entry.second.status().next_checkpoint_deadline < now;
+      });
+}
+/**
+ * Returns count of partitions that translation is blocked. This value
+ * should be 0 in normal conditions.
+ */
+size_t datalake_manager::partitions_with_translation_blocked() const {
+    // TODO: Return blocked if partition wasn't translated for a long time f.e.
+    // moret
+    return 0;
 }
 
 } // namespace datalake

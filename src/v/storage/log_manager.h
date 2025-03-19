@@ -229,6 +229,14 @@ public:
         return nullptr;
     }
 
+    /// Returns the log meta for the specified ntp.
+    log_housekeeping_meta* get_log_meta(const model::ntp& ntp) {
+        if (auto it = _logs.find(ntp); it != _logs.end()) {
+            return it->second.get();
+        }
+        return nullptr;
+    }
+
     /// Returns all ntp's managed by this instance
     absl::flat_hash_set<model::ntp> get_all_ntps() const;
 
@@ -266,15 +274,30 @@ private:
       std::vector<model::record_batch_type> translator_batch_types);
     ss::future<> clean_close(ss::shared_ptr<storage::log>);
 
-    /**
-     * \brief delete old segments and trigger compacted segments
-     *        runs inside a seastar thread
-     */
-    ss::future<> housekeeping();
+    // Kicks off a housekeeping job loop behind the local `_gate`, catching any
+    // exceptions that may occur.
+    ss::future<> run_housekeeping_job(
+      std::function<ss::future<>()> loop_func, std::string_view ctx);
+
+    // The housekeeping loop, which runs according to
+    // `log_compaction_interval_ms`. Calls into log->housekeeping() serially,
+    // which invokes garbage collection and then compaction.
     ss::future<> housekeeping_loop();
+    ss::future<> housekeeping_scan(model::timestamp);
     ssx::semaphore _housekeeping_sem{0, "log_manager::housekeeping"};
-    disk_space_alert _disk_space_alert{disk_space_alert::ok};
+
+    // The garbage collection loop, which waits for urgent garbage collection to
+    // be triggered by space management via trigger_gc(), or by an update to
+    // disk alerts via handle_disk_notification(). In order of estimated
+    // reclaimable space, per-partition garbage collection futures are kicked
+    // off and waited on. This loop runs in a detached fibre
+    // concurrently with housekeeping_loop(), and therefore considerations about
+    // scheduling/early bailing out of compaction must be taken.
+    ss::future<> gc_loop();
     bool _gc_triggered{false};
+    ssx::semaphore _gc_sem{0, "log_manager::gc"};
+
+    disk_space_alert _disk_space_alert{disk_space_alert::ok};
 
     std::optional<batch_cache_index> create_cache(with_cache);
 
@@ -282,15 +305,13 @@ private:
     ss::future<> maybe_clear_kvstore(const ntp_config&);
     ss::future<> async_clear_logs();
 
-    ss::future<> housekeeping_scan(model::timestamp);
-
     void update_log_count();
 
     log_config _config;
     kvstore& _kvstore;
     storage_resources& _resources;
     ss::sharded<features::feature_table>& _feature_table;
-    simple_time_jitter<ss::lowres_clock> _jitter;
+    simple_time_jitter<ss::lowres_clock> _housekeeping_jitter;
     simple_time_jitter<ss::lowres_clock> _trigger_gc_jitter;
     logs_type _logs;
     compaction_list_type _logs_list;

@@ -12,7 +12,7 @@
 // adapted from original:
 // https://github.com/aappleby/smhasher/blob/master/src/MurmurHash3.h
 
-namespace internal {
+namespace {
 inline uint32_t rotl32(uint32_t x, int8_t r) {
     return (x << r) | (x >> (32 - r));
 }
@@ -44,49 +44,34 @@ inline __attribute__((always_inline)) uint64_t fmix64(uint64_t k) {
 // handle aligned reads, do the conversion here
 inline __attribute__((always_inline)) uint32_t
 getblock32(const uint32_t* p, int i) {
-    return p[i];
+    uint32_t k;
+    std::memcpy(&k, reinterpret_cast<const char*>(p + i), sizeof(k));
+    return k;
 }
 inline __attribute__((always_inline)) uint64_t
 getblock64(const uint64_t* p, int i) {
-    return p[i];
+    uint64_t k;
+    std::memcpy(&k, reinterpret_cast<const char*>(p + i), sizeof(k));
+    return k;
+}
+namespace x86_32 {
+const uint32_t c1 = 0xcc9e2d51;
+const uint32_t c2 = 0x1b873593;
+
+void consume_block(uint32_t& h1, uint32_t block) {
+    block *= c1;
+    block = rotl32(block, 15);
+    block *= c2;
+
+    h1 ^= block;
+    h1 = rotl32(h1, 13);
+    h1 = h1 * 5 + 0xe6546b64;
 }
 
-} // namespace internal
-
-uint32_t murmurhash3_x86_32(const void* key, std::size_t len, uint32_t seed) {
-    const uint8_t* data = (const uint8_t*)key;
-    const int nblocks = len / 4;
-
-    uint32_t h1 = seed;
-
-    const uint32_t c1 = 0xcc9e2d51;
-    const uint32_t c2 = 0x1b873593;
-
-    //----------
-    // body
-
-    const uint32_t* blocks = (const uint32_t*)(data + nblocks * 4);
-
-    for (int i = -nblocks; i; i++) {
-        uint32_t k1 = internal::getblock32(blocks, i);
-
-        k1 *= c1;
-        k1 = internal::rotl32(k1, 15);
-        k1 *= c2;
-
-        h1 ^= k1;
-        h1 = internal::rotl32(h1, 13);
-        h1 = h1 * 5 + 0xe6546b64;
-    }
-
-    //----------
-    // tail
-
-    const uint8_t* tail = (const uint8_t*)(data + nblocks * 4);
-
+void consume_tail(uint32_t& h1, const uint8_t* tail, int len) {
     uint32_t k1 = 0;
 
-    switch (len & 3) {
+    switch (len) {
     case 3:
         k1 ^= tail[2] << 16;
     case 2:
@@ -94,17 +79,87 @@ uint32_t murmurhash3_x86_32(const void* key, std::size_t len, uint32_t seed) {
     case 1:
         k1 ^= tail[0];
         k1 *= c1;
-        k1 = internal::rotl32(k1, 15);
+        k1 = rotl32(k1, 15);
         k1 *= c2;
         h1 ^= k1;
     };
+}
 
-    //----------
-    // finalization
-
+void finalize(uint32_t& h1, int len) {
     h1 ^= len;
+    h1 = fmix32(h1);
+}
+} // namespace x86_32
+} // namespace
 
-    h1 = internal::fmix32(h1);
+uint32_t murmurhash3_x86_32(const void* key, std::size_t len, uint32_t seed) {
+    const uint8_t* data = (const uint8_t*)key;
+    const int nblocks = len / 4;
+
+    uint32_t h1 = seed;
+
+    auto blocks = reinterpret_cast<const uint32_t*>(data + nblocks * 4);
+
+    for (int i = -nblocks; i; i++) {
+        uint32_t k1 = getblock32(blocks, i);
+        x86_32::consume_block(h1, k1);
+    }
+
+    const uint8_t* tail = (const uint8_t*)(data + nblocks * 4);
+    x86_32::consume_tail(h1, tail, len & 3);
+
+    x86_32::finalize(h1, len);
+
+    return h1;
+}
+
+uint32_t murmurhash3_x86_32(const iobuf& data, uint32_t seed) {
+    uint32_t h1 = seed;
+
+    uint32_t torn_block; // murmur block split between iobuf fragments
+    auto torn_block_begin = reinterpret_cast<char*>(&torn_block);
+    auto torn_block_end = torn_block_begin + 4;
+    auto torn_block_data_end = torn_block_begin;
+
+    for (const auto& fragment : data) {
+        auto frag_begin = fragment.get();
+        auto frag_size = fragment.size();
+        auto frag_end = frag_begin + frag_size;
+
+        // torn block
+        size_t torn_remaining_capacity = torn_block_end - torn_block_data_end;
+        if (fragment.size() < torn_remaining_capacity) {
+            torn_block_data_end = std::copy(
+              frag_begin, frag_end, torn_block_data_end);
+            continue;
+        }
+
+        std::copy(
+          frag_begin,
+          frag_begin + torn_remaining_capacity,
+          torn_block_data_end);
+        x86_32::consume_block(h1, torn_block);
+
+        // rest of full blocks in fragment
+        auto blocks_begin = frag_begin + torn_remaining_capacity;
+        const ssize_t blocks_size = fragment.size() - torn_remaining_capacity;
+        auto nblocks = blocks_size / 4;
+        auto blocks_end = blocks_begin + nblocks * 4;
+        auto blocks = reinterpret_cast<const uint32_t*>(blocks_end);
+        for (ssize_t i = -nblocks; i; i++) {
+            uint32_t k1 = getblock32(blocks, i);
+            x86_32::consume_block(h1, k1);
+        }
+
+        // next torn block
+        torn_block_data_end = std::copy(blocks_end, frag_end, torn_block_begin);
+    }
+
+    auto tail = reinterpret_cast<const uint8_t*>(torn_block_begin);
+    x86_32::consume_tail(
+      h1, tail, static_cast<int>(torn_block_data_end - torn_block_begin));
+
+    x86_32::finalize(h1, data.size_bytes());
 
     return h1;
 }
@@ -129,47 +184,47 @@ void murmurhash3_x86_128(
     //----------
     // body
 
-    const uint32_t* blocks = (const uint32_t*)(data + nblocks * 16);
+    auto blocks = reinterpret_cast<const uint32_t*>(data + nblocks * 16);
 
     for (int i = -nblocks; i; i++) {
-        uint32_t k1 = internal::getblock32(blocks, i * 4 + 0);
-        uint32_t k2 = internal::getblock32(blocks, i * 4 + 1);
-        uint32_t k3 = internal::getblock32(blocks, i * 4 + 2);
-        uint32_t k4 = internal::getblock32(blocks, i * 4 + 3);
+        uint32_t k1 = getblock32(blocks, i * 4 + 0);
+        uint32_t k2 = getblock32(blocks, i * 4 + 1);
+        uint32_t k3 = getblock32(blocks, i * 4 + 2);
+        uint32_t k4 = getblock32(blocks, i * 4 + 3);
 
         k1 *= c1;
-        k1 = internal::rotl32(k1, 15);
+        k1 = rotl32(k1, 15);
         k1 *= c2;
         h1 ^= k1;
 
-        h1 = internal::rotl32(h1, 19);
+        h1 = rotl32(h1, 19);
         h1 += h2;
         h1 = h1 * 5 + 0x561ccd1b;
 
         k2 *= c2;
-        k2 = internal::rotl32(k2, 16);
+        k2 = rotl32(k2, 16);
         k2 *= c3;
         h2 ^= k2;
 
-        h2 = internal::rotl32(h2, 17);
+        h2 = rotl32(h2, 17);
         h2 += h3;
         h2 = h2 * 5 + 0x0bcaa747;
 
         k3 *= c3;
-        k3 = internal::rotl32(k3, 17);
+        k3 = rotl32(k3, 17);
         k3 *= c4;
         h3 ^= k3;
 
-        h3 = internal::rotl32(h3, 15);
+        h3 = rotl32(h3, 15);
         h3 += h4;
         h3 = h3 * 5 + 0x96cd1c35;
 
         k4 *= c4;
-        k4 = internal::rotl32(k4, 18);
+        k4 = rotl32(k4, 18);
         k4 *= c1;
         h4 ^= k4;
 
-        h4 = internal::rotl32(h4, 13);
+        h4 = rotl32(h4, 13);
         h4 += h1;
         h4 = h4 * 5 + 0x32ac3b17;
     }
@@ -192,7 +247,7 @@ void murmurhash3_x86_128(
     case 13:
         k4 ^= tail[12] << 0;
         k4 *= c4;
-        k4 = internal::rotl32(k4, 18);
+        k4 = rotl32(k4, 18);
         k4 *= c1;
         h4 ^= k4;
 
@@ -205,7 +260,7 @@ void murmurhash3_x86_128(
     case 9:
         k3 ^= tail[8] << 0;
         k3 *= c3;
-        k3 = internal::rotl32(k3, 17);
+        k3 = rotl32(k3, 17);
         k3 *= c4;
         h3 ^= k3;
 
@@ -218,7 +273,7 @@ void murmurhash3_x86_128(
     case 5:
         k2 ^= tail[4] << 0;
         k2 *= c2;
-        k2 = internal::rotl32(k2, 16);
+        k2 = rotl32(k2, 16);
         k2 *= c3;
         h2 ^= k2;
 
@@ -231,7 +286,7 @@ void murmurhash3_x86_128(
     case 1:
         k1 ^= tail[0] << 0;
         k1 *= c1;
-        k1 = internal::rotl32(k1, 15);
+        k1 = rotl32(k1, 15);
         k1 *= c2;
         h1 ^= k1;
     };
@@ -251,10 +306,10 @@ void murmurhash3_x86_128(
     h3 += h1;
     h4 += h1;
 
-    h1 = internal::fmix32(h1);
-    h2 = internal::fmix32(h2);
-    h3 = internal::fmix32(h3);
-    h4 = internal::fmix32(h4);
+    h1 = fmix32(h1);
+    h2 = fmix32(h2);
+    h3 = fmix32(h3);
+    h4 = fmix32(h4);
 
     h1 += h2;
     h1 += h3;
@@ -288,24 +343,24 @@ void murmurhash3_x64_128(
     const uint64_t* blocks = (const uint64_t*)(data);
 
     for (int i = 0; i < nblocks; i++) {
-        uint64_t k1 = internal::getblock64(blocks, i * 2 + 0);
-        uint64_t k2 = internal::getblock64(blocks, i * 2 + 1);
+        uint64_t k1 = getblock64(blocks, i * 2 + 0);
+        uint64_t k2 = getblock64(blocks, i * 2 + 1);
 
         k1 *= c1;
-        k1 = internal::rotl64(k1, 31);
+        k1 = rotl64(k1, 31);
         k1 *= c2;
         h1 ^= k1;
 
-        h1 = internal::rotl64(h1, 27);
+        h1 = rotl64(h1, 27);
         h1 += h2;
         h1 = h1 * 5 + 0x52dce729;
 
         k2 *= c2;
-        k2 = internal::rotl64(k2, 33);
+        k2 = rotl64(k2, 33);
         k2 *= c1;
         h2 ^= k2;
 
-        h2 = internal::rotl64(h2, 31);
+        h2 = rotl64(h2, 31);
         h2 += h1;
         h2 = h2 * 5 + 0x38495ab5;
     }
@@ -334,7 +389,7 @@ void murmurhash3_x64_128(
     case 9:
         k2 ^= ((uint64_t)tail[8]) << 0;
         k2 *= c2;
-        k2 = internal::rotl64(k2, 33);
+        k2 = rotl64(k2, 33);
         k2 *= c1;
         h2 ^= k2;
 
@@ -355,7 +410,7 @@ void murmurhash3_x64_128(
     case 1:
         k1 ^= ((uint64_t)tail[0]) << 0;
         k1 *= c1;
-        k1 = internal::rotl64(k1, 31);
+        k1 = rotl64(k1, 31);
         k1 *= c2;
         h1 ^= k1;
     };
@@ -369,8 +424,8 @@ void murmurhash3_x64_128(
     h1 += h2;
     h2 += h1;
 
-    h1 = internal::fmix64(h1);
-    h2 = internal::fmix64(h2);
+    h1 = fmix64(h1);
+    h2 = fmix64(h2);
 
     h1 += h2;
     h2 += h1;

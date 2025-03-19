@@ -44,6 +44,7 @@ redpanda_cc_library(
     include_prefix = "datalake/translation",
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/config",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:fragmented_vector",
         "//src/v/container:intrusive",

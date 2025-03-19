@@ -7,7 +7,10 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "bytes/bytes.h"
+#include "bytes/random.h"
 #include "hashing/crc32c.h"
+#include "hashing/murmur.h"
 #include "hashing/xx.h"
 #include "model/fundamental.h"
 #include "model/ktp.h"
@@ -16,11 +19,15 @@
 
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sstring.hh>
+#include <seastar/core/temporary_buffer.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <absl/hash/hash.h>
 #include <absl/strings/string_view.h>
 #include <boost/crc.hpp>
+
+#include <cstdint>
+#include <cstdlib>
 
 static constexpr size_t step_bytes = 57;
 
@@ -254,3 +261,60 @@ PERF_TEST(ntp_hash, absl_hash_of) {
 PERF_TEST(ntp_hash, absl_hash_value) {
     return ntp_body([](const ntp& v) { return absl::Hash<ntp>{}(v); });
 }
+
+namespace {
+
+constexpr auto BODY_LEN = 1000;
+constexpr auto TAIL_LEN = 3;
+
+bytes generate_data() {
+    bytes buf{bytes::initialized_later{}, BODY_LEN + TAIL_LEN};
+    vassert(
+      reinterpret_cast<uintptr_t>(buf.data()) % 4 == 0,
+      "bytes suddenly became unaligned; here it is only a test, but other code "
+      "(murmur2 calls?) may rely on it");
+    random_generators::fill_buffer_randomchars(
+      reinterpret_cast<char*>(buf.data()), buf.size());
+
+    perf_tests::do_not_optimize(buf);
+    return buf;
+}
+
+template<size_t... Offset>
+size_t murmurhash3_x86_32_continuous() {
+    auto buf = generate_data();
+    perf_tests::start_measuring_time();
+    for (auto i = inner_iters; i--;) {
+        (
+          [&buf]() {
+              auto s = murmurhash3_x86_32(buf.data() + Offset, BODY_LEN);
+              perf_tests::do_not_optimize(s);
+          }(),
+          ...);
+    }
+    perf_tests::stop_measuring_time();
+    return sizeof...(Offset) * inner_iters;
+}
+
+PERF_TEST(murmur_hash_x86_32, aligned) {
+    return murmurhash3_x86_32_continuous<0>();
+}
+
+PERF_TEST(murmur_hash_x86_32, unaligned) {
+    return murmurhash3_x86_32_continuous<1, 2, 3>();
+}
+
+PERF_TEST(murmur_hash_x86_32, iobuf) {
+    auto buf = generate_data();
+    iobuf split_buf = random_generators::split_as_iobuf(
+      {reinterpret_cast<const char*>(buf.data()), buf.size()}, 3);
+    perf_tests::start_measuring_time();
+    for (auto i = inner_iters; i--;) {
+        auto s = murmurhash3_x86_32(split_buf);
+        perf_tests::do_not_optimize(s);
+    }
+    perf_tests::stop_measuring_time();
+    return inner_iters;
+}
+
+} // namespace

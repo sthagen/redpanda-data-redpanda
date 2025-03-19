@@ -567,7 +567,8 @@ produce_topic(produce_ctx& octx, produce_request::topic& topic) {
         partitions_produced.push_back(std::move(pr.produced));
         partitions_dispatched.push_back(std::move(pr.dispatched));
     }
-
+    auto is_iceberg_enabled = topic_cfg.properties.iceberg_mode
+                              != model::iceberg_mode::disabled;
     // collect partition responses and build the topic response
     return topic_produce_stages{
       .dispatched = ss::when_all_succeed(
@@ -575,6 +576,15 @@ produce_topic(produce_ctx& octx, produce_request::topic& topic) {
       .produced
       = ss::when_all_succeed(
           partitions_produced.begin(), partitions_produced.end())
+          .then([&octx, is_iceberg_enabled](
+                  std::vector<produce_response::partition> parts) {
+              // if topic is iceberg enabled update iceberg throttle manager.
+              if (is_iceberg_enabled) {
+                  octx.rctx.server().local().mark_datalake_producer(
+                    octx.rctx.header().client_id);
+              }
+              return ssx::now(std::move(parts));
+          })
           .then([name = std::move(topic.name)](
                   std::vector<produce_response::partition> parts) mutable {
               return produce_response::topic{

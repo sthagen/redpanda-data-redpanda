@@ -229,8 +229,11 @@ void translation_stm::update_highest_translated_offset(
     _waiters_for_translated.notify(new_offset);
 }
 
+stm_factory::stm_factory(bool iceberg_enabled)
+  : _iceberg_enabled(iceberg_enabled) {}
+
 bool stm_factory::is_applicable_for(const storage::ntp_config& config) const {
-    return model::is_user_topic(config.ntp());
+    return _iceberg_enabled && model::is_user_topic(config.ntp());
 }
 
 void stm_factory::create(

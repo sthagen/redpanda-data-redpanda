@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "kafka/server/datalake_throttle_manager.h"
 #include "kafka/server/queue_depth_monitor_config.h"
 
 #include <seastar/core/future.hh>
@@ -103,6 +104,7 @@ public:
       seastar::sharded<cluster::security_frontend>&,
       seastar::sharded<cluster::controller_api>&,
       seastar::sharded<cluster::tx_gateway_frontend>&,
+      seastar::sharded<datalake_throttle_manager>&,
       std::optional<qdc_monitor_config>,
       ssx::singleton_thread_worker&,
       const std::unique_ptr<pandaproxy::schema_registry::api>&);
