@@ -44,7 +44,7 @@ struct simple_sharded_store {
     simple_sharded_store& operator=(simple_sharded_store&&) = delete;
 
     pps::schema_id
-    insert(const pps::canonical_schema& schema, pps::schema_version version) {
+    insert(const pps::unparsed_schema& schema, pps::schema_version version) {
         const auto id = next_id++;
         store
           .upsert(
@@ -72,9 +72,9 @@ bool check_compatible(
     simple_sharded_store store;
     store.store.set_compatibility(lvl).get();
     store.insert(
-      pandaproxy::schema_registry::canonical_schema{
+      pandaproxy::schema_registry::unparsed_schema{
         pps::subject{"sub"},
-        pps::canonical_schema_definition{writer, pps::schema_type::protobuf}},
+        pps::unparsed_schema_definition{writer, pps::schema_type::protobuf}},
       pps::schema_version{1});
     return store.store
       .is_compatible(
@@ -106,7 +106,7 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_simple) {
 
     auto schema1 = pps::canonical_schema{
       pps::subject{"simple"}, simple.share()};
-    store.insert(schema1, pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema1.share()), pps::schema_version{1});
     auto valid_simple = pps::make_protobuf_schema_definition(
                           store.store, schema1.share())
                           .get();
@@ -118,7 +118,7 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_nested) {
 
     auto schema1 = pps::canonical_schema{
       pps::subject{"nested"}, nested.share()};
-    store.insert(schema1, pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema1.share()), pps::schema_version{1});
     auto valid_nested = pps::make_protobuf_schema_definition(
                           store.store, schema1.share())
                           .get();
@@ -133,7 +133,7 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_imported_failure) {
     // imported depends on simple, which han't been inserted
     auto schema1 = pps::canonical_schema{
       pps::subject{"imported"}, imported.share()};
-    store.insert(schema1, pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema1.share()), pps::schema_version{1});
     BOOST_REQUIRE_EXCEPTION(
       pps::make_protobuf_schema_definition(store.store, schema1.share()).get(),
       pps::exception,
@@ -150,7 +150,7 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_imported_not_referenced) {
     auto schema2 = pps::canonical_schema{
       pps::subject{"imported"}, imported_no_ref.share()};
 
-    store.insert(schema1, pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema1.share()), pps::schema_version{1});
 
     auto valid_simple = pps::make_protobuf_schema_definition(
                           store.store, schema1.share())
@@ -173,9 +173,9 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_referenced) {
     auto schema3 = pps::canonical_schema{
       pps::subject{"imported-again.proto"}, imported_again.share()};
 
-    store.insert(schema1, pps::schema_version{1});
-    store.insert(schema2, pps::schema_version{1});
-    store.insert(schema3, pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema1.share()), pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema2.share()), pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema3.share()), pps::schema_version{1});
 
     auto valid_simple = pps::make_protobuf_schema_definition(
                           store.store, schema1.share())
@@ -198,9 +198,9 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_recursive_reference) {
     auto schema3 = pps::canonical_schema{
       pps::subject{"imported-twice.proto"}, imported_twice.share()};
 
-    store.insert(schema1, pps::schema_version{1});
-    store.insert(schema2, pps::schema_version{1});
-    store.insert(schema3, pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema1.share()), pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema2.share()), pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema3.share()), pps::schema_version{1});
 
     auto valid_simple = pps::make_protobuf_schema_definition(
                           store.store, schema1.share())
@@ -337,7 +337,7 @@ message well_known_types {
   confluent.type.Decimal c_decimal = 48;
 })",
         pps::schema_type::protobuf}};
-    store.insert(schema, pps::schema_version{1});
+    store.insert(pps::to_unparsed(schema.share()), pps::schema_version{1});
 
     auto valid_empty
       = pps::make_protobuf_schema_definition(store.store, schema.share()).get();

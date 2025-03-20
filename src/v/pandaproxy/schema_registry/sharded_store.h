@@ -56,13 +56,6 @@ public:
 
     ss::future<bool> upsert(
       seq_marker marker,
-      canonical_schema schema,
-      schema_id id,
-      schema_version version,
-      is_deleted deleted);
-
-    ss::future<bool> upsert(
-      seq_marker marker,
       unparsed_schema schema,
       schema_id id,
       schema_version version,
@@ -77,6 +70,10 @@ public:
     ///\brief Return a schema definition by id.
     ss::future<canonical_schema_definition>
     get_schema_definition(schema_id id) override;
+
+    ///\brief Return a schema definition by id, without any processing.
+    ss::future<unparsed_schema_definition>
+    get_unparsed_schema_definition(schema_id id);
 
     ss::future<std::optional<canonical_schema_definition>>
     maybe_get_schema_definition(schema_id id) override;
@@ -94,6 +91,16 @@ public:
       subject sub,
       std::optional<schema_version> version,
       include_deleted inc_dec) final;
+
+    ss::future<subject_schema> get_subject_schema(
+      subject sub,
+      std::optional<schema_version> version,
+      include_deleted inc_dec,
+      normalize norm);
+
+    ///\brief Return the id of a schema by subject and version (or latest).
+    ss::future<schema_id>
+    get_id(subject sub, std::optional<schema_version> version);
 
     ///\brief Return a list of subjects.
     ss::future<chunked_vector<subject>> get_subjects(
@@ -207,7 +214,7 @@ private:
       schema_version version, canonical_schema new_schema, verbose is_verbose);
 
     ss::future<bool>
-    upsert_schema(schema_id id, canonical_schema_definition def);
+    upsert_schema(schema_id id, unparsed_schema_definition def);
     ss::future<> delete_schema(schema_id id);
 
     struct insert_subject_result {

@@ -39,7 +39,7 @@ struct simple_sharded_store {
     simple_sharded_store& operator=(simple_sharded_store&&) = delete;
 
     pps::schema_id
-    insert(const pps::canonical_schema& schema, pps::schema_version version) {
+    insert(const pps::unparsed_schema& schema, pps::schema_version version) {
         const auto id = next_id++;
         store
           .upsert(

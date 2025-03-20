@@ -954,6 +954,7 @@ class StreamVerifier():
                 # Retry the command with some backoff to allow partition leadership to settle if this
                 # is encountered.
                 num_retries = 10
+                err = None
                 while num_retries > 0:
                     num_retries -= 1
                     try:
@@ -962,8 +963,11 @@ class StreamVerifier():
                                                            cached=False)
                         break
                     except ck.KafkaException as e:
+                        err = e
                         # Backoff
                         sleep(1)
+                else:
+                    raise err
 
                 hwms[p.partition] = hi
             return hwms

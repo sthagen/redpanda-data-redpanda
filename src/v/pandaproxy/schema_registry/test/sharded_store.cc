@@ -31,8 +31,8 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_referenced_by) {
     const pps::schema_version ver1{1};
 
     // Insert simple
-    auto referenced_schema = pps::canonical_schema{
-      pps::subject{"simple.proto"}, simple.share()};
+    auto referenced_schema = pps::to_unparsed(
+      {pps::subject{"simple.proto"}, simple.share()});
     store
       .upsert(
         pps::seq_marker{
@@ -44,8 +44,8 @@ SEASTAR_THREAD_TEST_CASE(test_sharded_store_referenced_by) {
       .get();
 
     // Insert referenced
-    auto importing_schema = pps::canonical_schema{
-      pps::subject{"imported.proto"}, imported.share()};
+    auto importing_schema = pps::to_unparsed(
+      {pps::subject{"imported.proto"}, imported.share()});
 
     store
       .upsert(

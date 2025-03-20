@@ -304,6 +304,11 @@ get_schemas_ids_id(server::request_t rq, server::reply_t rp) {
     auto id = parse::request_param<schema_id>(*rq.req, "id");
     rq.req.reset();
 
+    // With deferred schema validation, there might be a schema that
+    // had invalid references. These might have already been posted, so
+    // we need to sync
+    co_await rq.service().writer().read_sync();
+
     auto def = co_await get_or_load(rq, [&rq, id]() {
         return rq.service().schema_store().get_schema_definition(id);
     });

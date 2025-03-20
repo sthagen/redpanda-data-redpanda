@@ -397,7 +397,7 @@ SEASTAR_THREAD_TEST_CASE(test_json_schema_references) {
             f.store
               .upsert(
                 pps::seq_marker{},
-                canonical.share(),
+                pps::to_unparsed(canonical.share()),
                 ++id,
                 ++ver,
                 pps::is_deleted::no)

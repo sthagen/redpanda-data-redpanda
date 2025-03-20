@@ -36,8 +36,7 @@ class CompactionGapsTest(RedpandaTest):
                 "iceberg_catalog_commit_interval_ms": 5000,
                 "datalake_coordinator_snapshot_max_delay_secs": 10,
                 "log_compaction_interval_ms": 10000,
-                "min_cleanable_dirty_ratio": 0.0,
-                "cloud_storage_enable_remote_read": "false"
+                "min_cleanable_dirty_ratio": 0.0
             },
             *args,
             **kwargs)
@@ -128,6 +127,9 @@ class CompactionGapsTest(RedpandaTest):
 
 class CompactionTest(RedpandaTest):
     def __init__(self, test_ctx, *args, **kwargs):
+        # Tiered storage read permissions are disabled in order to ensure that
+        # the KgoVerifierSeqConsumer used does not fail to validate a perfectly compacted
+        # local log due to reads of un-compacted data in TS.
         self.extra_rp_conf = {
             "iceberg_enabled": "true",
             "iceberg_catalog_commit_interval_ms": 5000,
@@ -135,7 +137,8 @@ class CompactionTest(RedpandaTest):
             "log_compaction_interval_ms": 4000,
             "log_segment_size": 2 * 1024**2,  # 2 MiB
             "compacted_log_segment_size": 1024**2,  # 1 MiB
-            "min_cleanable_dirty_ratio": 0.0
+            "min_cleanable_dirty_ratio": 0.0,
+            "cloud_storage_enable_remote_read": "false"
         }
 
         super(CompactionTest,

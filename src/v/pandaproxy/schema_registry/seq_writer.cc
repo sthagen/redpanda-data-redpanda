@@ -434,17 +434,17 @@ ss::future<std::optional<bool>> seq_writer::do_delete_subject_version(
         throw as_exception(has_references(sub, version));
     }
 
-    auto s_res = co_await _store.get_subject_schema(
-      sub, version, include_deleted::yes);
-    subject_schema ss = std::move(s_res);
+    schema_id s_id = co_await _store.get_id(sub, version);
+    unparsed_schema_definition schema
+      = co_await _store.get_unparsed_schema_definition(s_id);
 
     auto key = schema_key{
       .seq{write_at}, .node{_node_id}, .sub{sub}, .version{version}};
     vlog(plog.debug, "seq_writer::delete_subject_version {}", key);
-    auto value = canonical_schema_value{
-      .schema{std::move(ss.schema)},
+    unparsed_schema_value value{
+      .schema{unparsed_schema{sub, std::move(schema)}},
       .version{version},
-      .id{ss.id},
+      .id{s_id},
       .deleted{is_deleted::yes}};
 
     batch_builder rb(write_at, sub);

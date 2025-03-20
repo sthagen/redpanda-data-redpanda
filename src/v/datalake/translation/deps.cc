@@ -736,7 +736,8 @@ public:
               _partition->ntp().path(),
               log_offset,
               size_after_translated,
-              _partition->last_stable_offset());
+              _partition->last_stable_offset(),
+              size_after_max_translatable);
             return std::nullopt;
         }
 

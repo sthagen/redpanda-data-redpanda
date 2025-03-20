@@ -203,6 +203,9 @@ using unparsed_schema_definition
 using canonical_schema_definition
   = typed_schema_definition<struct canonical_schema_definition_tag>;
 
+///\brief Util function for when a canonical schema need to be re-ingested
+unparsed_schema_definition to_unparsed(canonical_schema_definition&&);
+
 static const unparsed_schema_definition invalid_schema_definition{
   "", schema_type::avro};
 
@@ -467,16 +470,25 @@ private:
 using unparsed_schema = typed_schema<unparsed_schema_definition::tag>;
 using canonical_schema = typed_schema<canonical_schema_definition::tag>;
 
-///\brief Complete description of a subject and schema for a version.
-struct subject_schema {
-    canonical_schema schema;
+///\brief Util function for when a canonical schema need to be re-ingested
+unparsed_schema to_unparsed(canonical_schema&&);
+
+template<typename tag>
+struct typed_subject_schema {
+    typed_schema<tag> schema;
     schema_version version{invalid_schema_version};
     schema_id id{invalid_schema_id};
     is_deleted deleted{false};
-    subject_schema share() const {
+    typed_subject_schema share() const {
         return {schema.share(), version, id, deleted};
     }
 };
+///\brief Complete description of a subject and schema for a version, as stored
+/// in store
+using unparsed_subject_schema
+  = typed_subject_schema<unparsed_schema_definition::tag>;
+///\brief Complete description of a subject and schema for a version.
+using subject_schema = typed_subject_schema<canonical_schema_definition::tag>;
 
 enum class compatibility_level {
     none = 0,
@@ -592,6 +604,14 @@ template<typename Buffer>
 void rjson_serialize(
   json::iobuf_writer<Buffer>& w,
   const pandaproxy::schema_registry::canonical_schema_definition::raw_string&
+    def) {
+    w.String(def());
+}
+
+template<typename Buffer>
+void rjson_serialize(
+  json::iobuf_writer<Buffer>& w,
+  const pandaproxy::schema_registry::unparsed_schema_definition::raw_string&
     def) {
     w.String(def());
 }

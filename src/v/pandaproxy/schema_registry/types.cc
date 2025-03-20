@@ -93,4 +93,15 @@ std::ostream& operator<<(std::ostream& os, const compatibility_result& res) {
     return os;
 }
 
+unparsed_schema_definition
+to_unparsed(canonical_schema_definition&& canonical) {
+    auto [raw, type, refs] = std::move(canonical).destructure();
+    return {std::move(raw), type, std::move(refs)};
+}
+
+unparsed_schema to_unparsed(canonical_schema&& canonical) {
+    auto [sub, def] = std::move(canonical).destructure();
+    return {std::move(sub), to_unparsed(std::move(def))};
+}
+
 } // namespace pandaproxy::schema_registry

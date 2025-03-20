@@ -87,7 +87,7 @@ public:
     /// version.
     ///
     /// return the schema_version and schema_id, and whether it's new.
-    insert_result insert(canonical_schema schema) {
+    insert_result insert(unparsed_schema schema) {
         auto [sub, def] = std::move(schema).destructure();
         auto id = insert_schema(std::move(def)).id;
         auto [version, inserted] = insert_subject(std::move(sub), id);
@@ -95,7 +95,7 @@ public:
     }
 
     ///\brief Return a schema definition by id.
-    result<canonical_schema_definition>
+    result<unparsed_schema_definition>
     get_schema_definition(const schema_id& id) const {
         auto it = _schemas.find(id);
         if (it == _schemas.end()) {
@@ -157,7 +157,7 @@ public:
     }
 
     ///\brief Return a schema by subject and version.
-    result<subject_schema> get_subject_schema(
+    result<unparsed_subject_schema> get_subject_schema(
       const subject& sub,
       std::optional<schema_version> version,
       include_deleted inc_del) const {
@@ -166,7 +166,7 @@ public:
 
         auto def = BOOST_OUTCOME_TRYX(get_schema_definition(v_id.id));
 
-        return subject_schema{
+        return unparsed_subject_schema{
           .schema = {sub, std::move(def)},
           .version = v_id.version,
           .id = v_id.id,
@@ -614,7 +614,7 @@ public:
         schema_id id;
         bool inserted;
     };
-    insert_schema_result insert_schema(canonical_schema_definition def) {
+    insert_schema_result insert_schema(unparsed_schema_definition def) {
         const auto s_it = std::find_if(
           _schemas.begin(), _schemas.end(), [&](const auto& s) {
               const auto& entry = s.second;
@@ -630,7 +630,7 @@ public:
         return {id, inserted};
     }
 
-    bool upsert_schema(schema_id id, canonical_schema_definition def) {
+    bool upsert_schema(schema_id id, unparsed_schema_definition def) {
         return _schemas.insert_or_assign(id, schema_entry(std::move(def)))
           .second;
     }
@@ -776,10 +776,10 @@ public:
 
 private:
     struct schema_entry {
-        explicit schema_entry(canonical_schema_definition definition)
+        explicit schema_entry(unparsed_schema_definition definition)
           : definition{std::move(definition)} {}
 
-        canonical_schema_definition definition;
+        unparsed_schema_definition definition;
     };
 
     class subject_entry {
