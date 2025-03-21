@@ -26,6 +26,10 @@ enum class writer_error {
     file_io_error,
     no_data,
     flush_error,
+    oom_error,
+    time_limit_exceeded,
+    shutting_down,
+    unknown_error,
 };
 std::ostream& operator<<(std::ostream&, const writer_error&);
 
@@ -44,8 +48,17 @@ inline std::error_code make_error_code(writer_error e) noexcept {
     return {static_cast<int>(e), data_writer_error_category::error_category()};
 }
 
+enum reservation_error {
+    ok = 0,
+    shutting_down = 1,
+    out_of_memory = 2,
+    time_quota_exceeded = 3,
+    unknown = 4,
+};
+
+writer_error map_to_writer_error(reservation_error);
 /**
- * Interface to track memory used by the parquet writer. The reservations are
+ * Interface to track memory used by the parquet writers. The reservations are
  * held until the tracker object is alive or release is explicitly called.
  */
 class writer_mem_tracker {
@@ -59,14 +72,15 @@ public:
     virtual ~writer_mem_tracker() = default;
 
     /**
-     * Notify the mem tracker of current memory usage. The writer may
-     * choose to compress/shrink memory upon which the tracker must be
-     * notified of the current usage. May not be called concurrently with
-     * other methods.
+     * Reserves passed input bytes.
      */
-    virtual ss::future<>
-    update_current_memory_usage(size_t current_bytes_usage, ss::abort_source&)
-      = 0;
+    virtual ss::future<reservation_error>
+    reserve_bytes(size_t bytes, ss::abort_source&) noexcept = 0;
+
+    /**
+     * Frees up passed input bytes.
+     */
+    virtual ss::future<> free_bytes(size_t bytes, ss::abort_source&) = 0;
 
     /**
      * Releases all the reservations. After this caller, the reserved bytes
@@ -173,7 +187,8 @@ public:
 
     virtual ss::future<
       result<std::unique_ptr<parquet_file_writer>, writer_error>>
-    create_writer(const iceberg::struct_type& /* schema */) = 0;
+    create_writer(const iceberg::struct_type& /* schema */, ss::abort_source&)
+      = 0;
 };
 
 } // namespace datalake

@@ -60,7 +60,14 @@ public:
             co_return std::move(opt_units.value());
         }
         _notifier.notify_memory_exhausted();
-        co_return co_await ss::get_units(_available_memory, nr, as);
+        try {
+            co_return co_await ss::get_units(_available_memory, nr, as);
+        } catch (...) {
+            // propagate the exception in abort source, if any
+            as.check();
+            // else, rethrow generic exception
+            std::rethrow_exception(std::current_exception());
+        }
     }
 
     size_t allocated_memory() const override {

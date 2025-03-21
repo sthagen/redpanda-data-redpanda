@@ -15,6 +15,10 @@
 #include "iceberg/schema.h"
 #include "utils/uuid.h"
 
+namespace iceberg {
+struct table_metadata;
+}
+
 namespace iceberg::table_requirement {
 
 struct assert_create {};
@@ -56,5 +60,11 @@ using requirement = std::variant<
   last_assigned_field_match,
   assert_last_assigned_partition_id,
   assert_default_spec_id>;
+
+// Check if the requirement is satisfied. If the requirement fails, return a
+// string describing the problem. nullptr opt_metadata means that there is no
+// table yet.
+checked<std::nullopt_t, ss::sstring>
+check(const requirement&, const table_metadata* opt_metadata);
 
 } // namespace iceberg::table_requirement

@@ -65,10 +65,10 @@ public:
       local_path base_directory,
       ss::sstring file_name_prefix,
       ss::shared_ptr<parquet_ostream_factory>,
-      std::unique_ptr<writer_mem_tracker>);
+      writer_mem_tracker&);
 
     ss::future<result<std::unique_ptr<parquet_file_writer>, writer_error>>
-    create_writer(const iceberg::struct_type& schema) final;
+    create_writer(const iceberg::struct_type& schema, ss::abort_source&) final;
 
 private:
     local_path create_filename() const;
@@ -76,7 +76,7 @@ private:
     local_path _base_directory;
     ss::sstring _file_name_prefix;
     ss::shared_ptr<parquet_ostream_factory> _writer_factory;
-    std::unique_ptr<writer_mem_tracker> _mem_tracker;
+    writer_mem_tracker& _mem_tracker;
 };
 
 } // namespace datalake

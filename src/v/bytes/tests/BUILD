@@ -114,6 +114,8 @@ redpanda_cc_bench(
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/bytes:random",
         "//src/v/random:generators",
         "@seastar//:benchmark",
     ],

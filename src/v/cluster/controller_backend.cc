@@ -530,8 +530,7 @@ controller_backend::calculate_learner_initial_offset(
      *   initial retention settings and configured move policy.
      */
     const bool no_initial_retention_settings = !(
-      initial_retention_bytes.has_value()
-      || initial_retention_bytes.has_value());
+      initial_retention_bytes.has_value() || initial_retention_ms.has_value());
 
     bool full_move = policy == reconfiguration_policy::full_local_retention
                      || no_initial_retention_settings;

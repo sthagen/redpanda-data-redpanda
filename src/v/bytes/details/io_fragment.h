@@ -76,6 +76,11 @@ public:
         return _buf.share(pos, len);
     }
 
+    // destructive move. most of the time share() will suffice.
+    ss::temporary_buffer<char> unoptimized_release() && {
+        _buf.trim(_used_bytes);
+        return std::move(_buf);
+    }
     /// destructive move. place special care when calling this method
     /// on a shared iobuf. most of the time you want share() instead of release
     ss::temporary_buffer<char> release() && {
@@ -365,7 +370,7 @@ private:
 #endif
 };
 
-inline void __attribute__((noinline)) dispose_io_fragment(io_fragment* f) {
+inline void dispose_io_fragment(io_fragment* f) {
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wfree-nonheap-object"
     delete f; // NOLINT

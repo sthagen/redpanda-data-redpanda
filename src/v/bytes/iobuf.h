@@ -189,7 +189,7 @@ public:
      * Since this call may perform zero-copy operations, the sharing-mutation
      * caveat in the class comment applies.
      */
-    void append(iobuf);
+    void append(iobuf&&);
 
     /*
      * Appends the contents of the passed buffer to this one.
@@ -249,6 +249,8 @@ private:
     size_t available_bytes() const;
     void create_new_fragment(size_t);
     size_t last_allocation_size() const;
+
+    bool try_copy_append(const char* ptr, size_t size);
 
     container _frags;
     size_t _size{0};
@@ -359,11 +361,10 @@ iobuf::append(const uint8_t* src, size_t len) {
     }
 }
 
-/// appends the contents of buffer; might pack values into existing space
-[[gnu::always_inline]] inline void iobuf::append(ss::temporary_buffer<char> b) {
-    if (unlikely(!b.size())) {
-        return;
-    }
+// tries to copy the buffer into the iobuf if the heuristic described below is
+// satisfied
+[[gnu::always_inline]] inline bool
+iobuf::try_copy_append(const char* ptr, size_t size) {
     const size_t last_asz = last_allocation_size();
     // The following is a heuristic to decide between copying and zero-copy
     // append of the source buffer. The rule we apply is if the buffer we are
@@ -375,11 +376,24 @@ iobuf::append(const uint8_t* src, size_t len) {
     // full-sized fragments is in practice a common operation when buffers
     // grow beyond the maximum fragment size.
     if (
-      b.size() <= last_asz
-      && b.size() < details::io_allocation_size::max_chunk_size) {
-        append(b.get(), b.size());
+      size <= last_asz && size < details::io_allocation_size::max_chunk_size) {
+        append(ptr, size);
+        return true;
+    }
+
+    return false;
+}
+
+/// appends the contents of buffer; might pack values into existing space
+[[gnu::always_inline]] inline void iobuf::append(ss::temporary_buffer<char> b) {
+    if (unlikely(!b.size())) {
         return;
     }
+
+    if (try_copy_append(b.get(), b.size())) {
+        return;
+    }
+
     if (available_bytes() > 0) {
         if (_frags.back().is_empty()) {
             pop_back();
@@ -389,14 +403,31 @@ iobuf::append(const uint8_t* src, size_t len) {
     }
     append(std::make_unique<fragment>(std::move(b)));
 }
+
 /// appends the contents of buffer; might pack values into existing space
-inline void iobuf::append(iobuf o) {
-    while (!o._frags.empty()) {
-        fragment* f = &o._frags.front();
-        o._frags.pop_front();
-        append(f->share());
-        details::dispose_io_fragment(f);
+inline void iobuf::append(iobuf&& o) {
+    for (auto& f : o._frags) {
+        auto fsize = f.size();
+
+        if (unlikely(!fsize)) {
+            continue;
+        }
+
+        if (try_copy_append(f.get(), fsize)) {
+            continue;
+        }
+
+        if (available_bytes() > 0) {
+            if (_frags.back().is_empty()) {
+                pop_back();
+            } else {
+                _frags.back().trim();
+            }
+        }
+
+        append(std::move(f).unoptimized_release());
     }
+    o.clear();
 }
 
 inline void iobuf::append_fragments(iobuf o) {

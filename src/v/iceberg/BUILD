@@ -873,8 +873,15 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "table_requirement",
+    srcs = [
+        "table_requirement.cc",
+    ],
     hdrs = [
         "table_requirement.h",
+    ],
+    implementation_deps = [
+        "//src/v/base",
+        "//src/v/utils:to_string",
     ],
     include_prefix = "iceberg",
     deps = [
@@ -882,6 +889,7 @@ redpanda_cc_library(
         ":manifest_entry",
         ":partition",
         ":schema",
+        ":table_metadata",
         "//src/v/utils:uuid",
     ],
 )

@@ -77,17 +77,23 @@ public:
     /**
      * Multiplex the data from a reader into writers per schema and partition.
      * Can be called multiple times in succession before calling finish().
+     *
+     * start_offset controls minimum offset from which multiplexer can work. If
+     * the previous translation stopped in the middle of a batch, we do not want
+     * to multiplex already translated offsets in the batch, start_offset helps
+     * solve that problem.
      */
     ss::future<> multiplex(
       model::record_batch_reader reader,
+      kafka::offset start_offset,
       model::timeout_clock::time_point deadline,
       ss::abort_source& as);
 
     /**
      * Abortable multiplexing on a single batch. Visible for testing.
      */
-    ss::future<ss::stop_iteration>
-    do_multiplex(model::record_batch batch, ss::abort_source&);
+    ss::future<ss::stop_iteration> do_multiplex(
+      model::record_batch batch, kafka::offset start_offset, ss::abort_source&);
 
     /**
      * Forces a flush on all the underlying file writers resulting in freeing

@@ -147,7 +147,20 @@ filesystem_catalog::commit_txn(
 
     // Apply the updates to the latest version of the table, since it may have
     // been updated since the transaction was constructed.
-    // TODO: also check the table requirements all pass.
+
+    for (const auto& req : txn.updates().requirements) {
+        auto check_res = table_requirement::check(req, &new_tmeta);
+        if (check_res.has_error()) {
+            vlog(
+              log.warn,
+              "Current version of table {} metadata doesn't satisfy tx "
+              "requirement: {}",
+              table_ident.table,
+              check_res.error());
+            co_return errc::unexpected_state;
+        }
+    }
+
     for (const auto& update : txn.updates().updates) {
         auto res = table_update::apply(update, new_tmeta);
         if (res != table_update::outcome::success) {

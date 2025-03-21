@@ -73,6 +73,7 @@ rp_test(
     v::datalake_writer
     v::cloud_io_utils
     v::s3_imposter
+    v::model_test_utils
   LABELS datalake
   ARGS "-- -c 1"
 )

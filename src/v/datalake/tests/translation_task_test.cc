@@ -93,7 +93,7 @@ public:
           datalake::local_path(tmp_dir.get_path()),
           "test-prefix",
           ss::make_shared<datalake::serde_parquet_writer_factory>(),
-          std::make_unique<datalake::noop_mem_tracker>());
+          noop_tracker);
     }
 
     template<typename R>
@@ -153,6 +153,7 @@ public:
     std::unique_ptr<table_creator> t_creator;
     datalake::location_provider location_provider;
     translation_probe probe;
+    datalake::noop_mem_tracker noop_tracker;
 };
 
 struct deleter {
@@ -185,10 +186,16 @@ private:
 
 TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
     datalake::translation_task task = create_task();
-    task.translate_once(make_batches(10, 16), as).get();
+    task.translate_once(make_batches(10, 16), kafka::offset{0}, as).get();
     auto flush_result = task.flush().get();
     ASSERT_FALSE(flush_result.has_error());
-    task.translate_once(make_batches(10, 16, model::offset{160}), as).get();
+    auto start_offset = 160;
+    task
+      .translate_once(
+        make_batches(10, 16, model::offset{start_offset}),
+        kafka::offset{start_offset},
+        as)
+      .get();
     auto result = std::move(task)
                     .finish(
                       translation_task::custom_partitioning_enabled::yes,
@@ -219,7 +226,7 @@ TEST_F(TranslateTaskTest, TestDataFileMissing) {
     deleter del(tmp_dir.get_path().string());
     del.start();
     auto stop_deleter = ss::defer([&del] { del.stop().get(); });
-    task.translate_once(make_batches(10, 16), as).get();
+    task.translate_once(make_batches(10, 16), kafka::offset{0}, as).get();
     auto result = std::move(task)
                     .finish(
                       translation_task::custom_partitioning_enabled::yes,
@@ -254,7 +261,7 @@ TEST_F(TranslateTaskTest, TestUploadError) {
         .body = "failed!",
         .status = ss::http::reply::status_type::internal_server_error});
 
-    task.translate_once(make_batches(10, 16), as).get();
+    task.translate_once(make_batches(10, 16), kafka::offset{0}, as).get();
     auto result = std::move(task)
                     .finish(
                       translation_task::custom_partitioning_enabled::yes,

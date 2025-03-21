@@ -25,6 +25,29 @@
 
 #include <seastar/core/loop.hh>
 
+namespace {
+
+// Recoverable errors are the class of errors that donot leave the underlying
+// writers in a bad shape. Upon recoverable errors the translator may choose to
+// flush and continue as if nothing happened, so we preserve the state to
+// facilitate that.
+bool is_recoverable_error(datalake::writer_error err) {
+    switch (err) {
+    case datalake::writer_error::ok:
+    case datalake::writer_error::oom_error:
+    case datalake::writer_error::time_limit_exceeded:
+        return true;
+    case datalake::writer_error::parquet_conversion_error:
+    case datalake::writer_error::file_io_error:
+    case datalake::writer_error::no_data:
+    case datalake::writer_error::flush_error:
+    case datalake::writer_error::shutting_down:
+    case datalake::writer_error::unknown_error:
+        return false;
+    }
+}
+}; // namespace
+
 namespace datalake {
 
 namespace {
@@ -72,17 +95,19 @@ record_multiplexer::record_multiplexer(
 
 ss::future<> record_multiplexer::multiplex(
   model::record_batch_reader reader,
+  kafka::offset start_offset,
   model::timeout_clock::time_point deadline,
   ss::abort_source& as) {
     co_await std::move(reader).consume(
-      relaying_consumer{[this, &as](model::record_batch b) mutable {
-          return do_multiplex(std::move(b), as);
-      }},
+      relaying_consumer{
+        [this, start_offset, &as](model::record_batch b) mutable {
+            return do_multiplex(std::move(b), start_offset, as);
+        }},
       deadline);
 }
 
 ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
-  model::record_batch batch, ss::abort_source& as) {
+  model::record_batch batch, kafka::offset start_offset, ss::abort_source& as) {
     if (batch.compressed()) {
         batch = co_await storage::internal::decompress_batch(std::move(batch));
     }
@@ -99,6 +124,9 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
         auto timestamp = model::timestamp{
           first_timestamp + record.timestamp_delta()};
         kafka::offset offset{batch.base_offset()() + record.offset_delta()};
+        if (offset < start_offset) {
+            continue;
+        }
         int64_t estimated_size = (key ? key->size_bytes() : 0)
                                  + (val ? val->size_bytes() : 0);
         chunked_vector<std::pair<std::optional<iobuf>, std::optional<iobuf>>>
@@ -259,6 +287,22 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
             writer_iter = iter;
         }
 
+        auto& writer = writer_iter->second;
+        auto add_data_result = co_await writer->add_data(
+          std::move(record_data_res.value()), estimated_size, as);
+
+        if (add_data_result != writer_error::ok) {
+            vlog(
+              _log.warn,
+              "Error adding data to writer for record {}: {}",
+              offset,
+              add_data_result);
+            _error = add_data_result;
+            // If a write fails, the writer is left in an indeterminate state,
+            // we cannot continue in this case.
+            co_return ss::stop_iteration::yes;
+        }
+
         // TODO: we want to ensure we're using an offset translating reader so
         // that these will be Kafka offsets, not Raft offsets.
         if (!_result.has_value()) {
@@ -266,30 +310,13 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
               .start_offset = offset,
             };
         }
-
         _result.value().last_offset = offset;
-
-        auto& writer = writer_iter->second;
-        auto write_result = co_await writer->add_data(
-          std::move(record_data_res.value()), estimated_size, as);
-
-        if (write_result != writer_error::ok) {
-            vlog(
-              _log.warn,
-              "Error adding data to writer for record {}: {}",
-              offset,
-              write_result);
-            _error = write_result;
-            // If a write fails, the writer is left in an indeterminate state,
-            // we cannot continue in this case.
-            co_return ss::stop_iteration::yes;
-        }
     }
     co_return ss::stop_iteration::no;
 }
 
 ss::future<writer_error> record_multiplexer::flush_writers() {
-    if (_error) {
+    if (_error && !is_recoverable_error(_error.value())) {
         co_return *_error;
     }
     auto result = co_await ss::coroutine::as_future(ss::max_concurrent_for_each(
@@ -304,10 +331,6 @@ ss::future<writer_error> record_multiplexer::flush_writers() {
 
 ss::future<result<record_multiplexer::write_result, writer_error>>
 record_multiplexer::finish() && {
-    if (!_result) {
-        // no batches were processed.
-        co_return writer_error::no_data;
-    }
     auto writers = std::move(_writers);
     for (auto& [id, writer] : writers) {
         auto res = co_await std::move(*writer).finish();
@@ -315,16 +338,20 @@ record_multiplexer::finish() && {
             _error = res.error();
             continue;
         }
-        auto& files = res.value();
-        std::move(
-          files.begin(), files.end(), std::back_inserter(_result->data_files));
+        if (_result) {
+            auto& files = res.value();
+            std::move(
+              files.begin(),
+              files.end(),
+              std::back_inserter(_result->data_files));
+        }
     }
     if (_invalid_record_writer) {
         auto writer = std::move(_invalid_record_writer);
         auto res = co_await std::move(*writer).finish();
         if (res.has_error()) {
             _error = res.error();
-        } else {
+        } else if (_result) {
             auto& files = res.value();
             std::move(
               files.begin(),
@@ -332,8 +359,12 @@ record_multiplexer::finish() && {
               std::back_inserter(_result->dlq_files));
         }
     }
-    if (_error) {
+    if (_error && !is_recoverable_error(_error.value())) {
         co_return *_error;
+    }
+    if (!_result) {
+        // no batches were processed.
+        co_return writer_error::no_data;
     }
     co_return std::move(*_result);
 }

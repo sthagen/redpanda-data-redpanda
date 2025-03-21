@@ -271,8 +271,8 @@ public:
           "finish() must be called in all cases for cleanup");
     }
 
-    ss::future<>
-    translate_now(model::record_batch_reader rdr, ss::abort_source&) final {
+    ss::future<> translate_now(
+      model::record_batch_reader rdr, kafka::offset, ss::abort_source&) final {
         _test_ctx.translation_attempt();
         _inflight_translation = true;
         auto batches = co_await model::consume_reader_to_fragmented_memory(
@@ -517,42 +517,44 @@ using scheduling::scheduler_fixture;
 TEST_F_CORO(scheduler_fixture, test_writer_reservations_accounting) {
     auto& reservations = *_scheduler->reservations();
     {
-        writer_reservations_impl writer{reservations};
+        translator_mem_tracker writer{reservations};
 
         auto cleanup = ss::defer([&writer] { writer.release(); });
 
         ss::abort_source as;
 
-        ASSERT_EQ_CORO(writer.current_usage(), 0);
+        size_t total_usage = 0;
+        ASSERT_EQ_CORO(writer.current_usage(), total_usage);
         ASSERT_EQ_CORO(writer.total_reserved(), 0);
 
-        auto current_usage = 1_MiB;
+        auto bytes = 1_MiB;
         // update initial usage, should result in a reservation
-        co_await writer.update_current_memory_usage(current_usage, as);
+        co_await writer.reserve_bytes(bytes, as);
+        total_usage += bytes;
 
-        ASSERT_EQ_CORO(writer.current_usage(), current_usage);
+        ASSERT_EQ_CORO(writer.current_usage(), total_usage);
         ASSERT_EQ_CORO(writer.total_reserved(), block_size);
 
         // try 3 more times, we are still within the block limit;
-        while (current_usage <= block_size) {
-            co_await writer.update_current_memory_usage(current_usage, as);
-            current_usage += 1_MiB;
+        while (total_usage < block_size) {
+            co_await writer.reserve_bytes(bytes, as);
+            total_usage += bytes;
         }
 
         ASSERT_EQ_CORO(writer.current_usage(), block_size);
         ASSERT_EQ_CORO(writer.total_reserved(), block_size);
 
-        current_usage += 1_MiB;
         // update again, should reserve a new block.
-        co_await writer.update_current_memory_usage(current_usage, as);
+        co_await writer.reserve_bytes(bytes, as);
+        total_usage += bytes;
 
-        ASSERT_EQ_CORO(writer.current_usage(), current_usage);
+        ASSERT_EQ_CORO(writer.current_usage(), total_usage);
         ASSERT_EQ_CORO(writer.total_reserved(), 2 * block_size);
 
         // exhaust all memory
         while (writer.current_usage() != total_memory) {
-            current_usage += 1_MiB;
-            co_await writer.update_current_memory_usage(current_usage, as);
+            co_await writer.reserve_bytes(bytes, as);
+            total_usage += 1_MiB;
         }
 
         ss::promise<> done;
@@ -560,8 +562,8 @@ TEST_F_CORO(scheduler_fixture, test_writer_reservations_accounting) {
         // exhaustion.
         auto f = ss::with_timeout(
           ss::steady_clock_type::now() + 500ms,
-          writer.update_current_memory_usage(current_usage + 1_MiB, as)
-            .finally([&done] { done.set_value(); }));
+          writer.reserve_bytes(bytes, as).finally(
+            [&done] { done.set_value(); }));
 
         ASSERT_THROW_CORO(co_await std::move(f), ss::timed_out_error);
 

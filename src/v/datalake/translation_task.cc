@@ -42,6 +42,14 @@ translation_task::errc map_error_code(writer_error errc) {
         return translation_task::errc::no_data;
     case writer_error::flush_error:
         return translation_task::errc::flush_error;
+    case writer_error::oom_error:
+        return translation_task::errc::oom_error;
+    case writer_error::time_limit_exceeded:
+        return translation_task::errc::time_limit_exceeded;
+    case writer_error::shutting_down:
+        return translation_task::errc::shutting_down;
+    case writer_error::unknown_error:
+        return translation_task::errc::file_io_error;
     }
 }
 
@@ -220,9 +228,14 @@ translation_task::translation_task(
       *_translation_probe) {}
 
 ss::future<> translation_task::translate_once(
-  model::record_batch_reader reader, ss::abort_source& as) {
+  model::record_batch_reader reader,
+  kafka::offset start_offset,
+  ss::abort_source& as) {
     return _multiplexer.multiplex(
-      std::move(reader), _read_timeout + model::timeout_clock::now(), as);
+      std::move(reader),
+      start_offset,
+      _read_timeout + model::timeout_clock::now(),
+      as);
 }
 
 size_t translation_task::flushed_bytes() const {
@@ -355,6 +368,12 @@ std::ostream& operator<<(std::ostream& o, translation_task::errc ec) {
         return o << "writer flush error";
     case translation_task::errc::no_data:
         return o << "no data to translate";
+    case translation_task::errc::oom_error:
+        return o << "memory exhausted";
+    case translation_task::errc::time_limit_exceeded:
+        return o << "time limit exceeded";
+    case translation_task::errc::shutting_down:
+        return o << "shutting down";
     }
 }
 } // namespace datalake

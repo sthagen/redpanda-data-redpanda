@@ -10,6 +10,7 @@
 
 #include "datalake/local_parquet_file_writer.h"
 
+#include "base/units.h"
 #include "base/vlog.h"
 #include "datalake/logger.h"
 
@@ -167,17 +168,40 @@ local_parquet_file_writer_factory::local_parquet_file_writer_factory(
   local_path base_directory,
   ss::sstring file_name_prefix,
   ss::shared_ptr<parquet_ostream_factory> writer_factory,
-  std::unique_ptr<writer_mem_tracker> mem_tracker)
+  writer_mem_tracker& mem_tracker)
   : _base_directory(std::move(base_directory))
   , _file_name_prefix(std::move(file_name_prefix))
   , _writer_factory(std::move(writer_factory))
-  , _mem_tracker(std::move(mem_tracker)) {}
+  , _mem_tracker(mem_tracker) {}
 
 ss::future<result<std::unique_ptr<parquet_file_writer>, writer_error>>
 local_parquet_file_writer_factory::create_writer(
-  const iceberg::struct_type& schema) {
+  const iceberg::struct_type& schema, ss::abort_source& as) {
+    // There is a per writer cost associated which includes stuff like
+    // - local path string
+    // - associated partition key
+    // - schema
+    // - stats tracked about the writer
+    // - data structure overhead
+    //
+    // This limit is in place to avoid an explosion of writer instances,
+    // example partition_by(offset) which creates a writer per offset.
+    //
+    // Additionally one other contributor per writer is the buffer used
+    // in the output stream which defaults to 8_KiB, which is only released
+    // on output stream close().
+    //
+    // TODO: This is just a conservative estimate to prevent pathological cases
+    // of too many writers, needs empirical evaluation to determine the correct
+    // sizing.
+    static constexpr size_t WRITER_RESERVATION_OVERHEAD = 10_KiB;
+    auto reservation_err = co_await _mem_tracker.reserve_bytes(
+      WRITER_RESERVATION_OVERHEAD, as);
+    if (reservation_err != reservation_error::ok) {
+        co_return map_to_writer_error(reservation_err);
+    }
     auto writer = std::make_unique<local_parquet_file_writer>(
-      create_filename(), _writer_factory, *_mem_tracker);
+      create_filename(), _writer_factory, _mem_tracker);
 
     auto res = co_await writer->initialize(schema);
     if (res.has_error()) {

@@ -20,9 +20,23 @@ ss::future<writer_error> serde_parquet_writer::add_data_struct(
       std::move(conversion_result.value()));
     try {
         auto stats = co_await _writer.write_row(std::move(group));
-        _buffered_bytes = stats.buffered_size;
+        auto new_buffered_bytes = stats.buffered_size;
+        if (new_buffered_bytes > _buffered_bytes) {
+            auto reservation_result = co_await _mem_tracker.reserve_bytes(
+              new_buffered_bytes - _buffered_bytes, as);
+            if (reservation_result != reservation_error::ok) {
+                co_return map_to_writer_error(reservation_result);
+            }
+        } else if (new_buffered_bytes < _buffered_bytes) {
+            // underlying writer may choose to compress data when
+            // a page worth of data is batched, at which point the
+            // resulting compressed size is smaller than before and
+            // allows us to free up some bytes.
+            co_await _mem_tracker.free_bytes(
+              _buffered_bytes - new_buffered_bytes, as);
+        }
+        _buffered_bytes = new_buffered_bytes;
         _flushed_bytes = stats.flushed_size;
-        co_await _mem_tracker.update_current_memory_usage(_buffered_bytes, as);
     } catch (...) {
         vlog(
           datalake_log.warn,
@@ -45,12 +59,10 @@ ss::future<> serde_parquet_writer::flush() {
       _buffered_bytes == 0,
       "Memory buffered in the writer after flush: {}",
       _buffered_bytes);
-    _mem_tracker.release();
 }
 
 ss::future<writer_error> serde_parquet_writer::finish() {
     co_await _writer.close();
-    _mem_tracker.release();
     _buffered_bytes = _flushed_bytes = 0;
     co_return writer_error::ok;
 }

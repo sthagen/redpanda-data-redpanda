@@ -78,7 +78,10 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
             std::move(batches));
       });
 
-    multiplexer.multiplex(std::move(reader), model::no_timeout, as).get();
+    multiplexer
+      .multiplex(
+        std::move(reader), kafka::offset{start_offset}, model::no_timeout, as)
+      .get();
     auto result = std::move(multiplexer).finish().get();
 
     ASSERT_TRUE(result.has_value());
@@ -123,7 +126,9 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
           return ss::make_ready_future<model::record_batch_reader::data_t>(
             std::move(batches));
       });
-    multiplexer.multiplex(std::move(reader), model::no_timeout, as).get();
+    multiplexer
+      .multiplex(std::move(reader), kafka::offset{0}, model::no_timeout, as)
+      .get();
     auto res = std::move(multiplexer).finish().get();
     ASSERT_TRUE(res.has_error());
     EXPECT_EQ(res.error(), datalake::writer_error::parquet_conversion_error);
@@ -139,12 +144,12 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
     int record_count = 50;
     int batch_count = 20;
     int start_offset = 1005;
-
+    noop_mem_tracker tracker;
     auto writer_factory = std::make_unique<local_parquet_file_writer_factory>(
       datalake::local_path(tmp_dir.get_path()),
       "data",
       ss::make_shared<datalake::serde_parquet_writer_factory>(),
-      std::make_unique<noop_mem_tracker>());
+      tracker);
 
     translation_probe probe(ntp);
     datalake::record_multiplexer multiplexer(
@@ -174,7 +179,10 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
             std::move(batches));
       });
 
-    multiplexer.multiplex(std::move(reader), model::no_timeout, as).get();
+    multiplexer
+      .multiplex(
+        std::move(reader), kafka::offset{start_offset}, model::no_timeout, as)
+      .get();
     auto result = std::move(multiplexer).finish().get();
 
     ASSERT_TRUE(result.has_value());
@@ -265,12 +273,12 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
     auto reader = model::make_memory_record_batch_reader(std::move(batches));
 
     temporary_dir tmp_dir("datalake_multiplexer_test");
-
+    noop_mem_tracker tracker;
     auto writer_factory = std::make_unique<local_parquet_file_writer_factory>(
       datalake::local_path(tmp_dir.get_path()),
       "data",
       ss::make_shared<datalake::serde_parquet_writer_factory>(),
-      std::make_unique<noop_mem_tracker>());
+      tracker);
     translation_probe probe(ntp);
     record_multiplexer mux(
       ntp,
@@ -283,7 +291,10 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
       model::iceberg_invalid_record_action::dlq_table,
       location_provider(scoped_remote->remote.local().provider(), bucket_name),
       probe);
-    mux.multiplex(std::move(reader), model::no_timeout, as).get();
+    mux
+      .multiplex(
+        std::move(reader), kafka::offset{start_offset}, model::no_timeout, as)
+      .get();
     auto res = std::move(mux).finish().get();
     ASSERT_FALSE(res.has_error()) << res.error();
     EXPECT_EQ(res.value().start_offset(), start_offset());

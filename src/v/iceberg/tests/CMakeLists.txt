@@ -51,6 +51,7 @@ rp_test(
     struct_accessor_test.cc
     table_metadata_json_test.cc
     table_requests_json_test.cc
+    table_requirements_test.cc
     table_update_applier_test.cc
     test_table_metadata.cc
     transform_json_test.cc

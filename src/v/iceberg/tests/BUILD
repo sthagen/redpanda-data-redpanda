@@ -631,6 +631,22 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "table_requirements_test",
+    timeout = "short",
+    srcs = [
+        "table_requirements_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":test_schemas",
+        "//src/v/iceberg:table_metadata",
+        "//src/v/iceberg:table_requirement",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "rest_catalog_test",
     timeout = "short",
     srcs = [

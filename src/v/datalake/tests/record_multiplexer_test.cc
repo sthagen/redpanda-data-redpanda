@@ -21,6 +21,7 @@
 #include "iceberg/filesystem_catalog.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
+#include "model/tests/random_batch.h"
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 #include "storage/record_batch_builder.h"
@@ -104,6 +105,21 @@ public:
       , type_resolver(registry)
       , t_creator(type_resolver, schema_mgr) {}
 
+    record_multiplexer make_mux() {
+        return record_multiplexer(
+          ntp,
+          topic_rev,
+          std::make_unique<test_data_writer_factory>(false),
+          schema_mgr,
+          type_resolver,
+          translator,
+          t_creator,
+          model::iceberg_invalid_record_action::dlq_table,
+          location_provider(
+            scoped_remote->remote.local().provider(), bucket_name),
+          *get_or_create_probe(ntp));
+    }
+
     // Runs the multiplexer on records generated with cb() based on the test
     // parameters.
     std::optional<record_multiplexer::write_result> mux(
@@ -132,18 +148,7 @@ public:
                 batches.emplace_back(std::move(batch_builder).build());
             }
         }
-        record_multiplexer mux(
-          ntp,
-          topic_rev,
-          std::make_unique<test_data_writer_factory>(false),
-          schema_mgr,
-          type_resolver,
-          translator,
-          t_creator,
-          model::iceberg_invalid_record_action::dlq_table,
-          location_provider(
-            scoped_remote->remote.local().provider(), bucket_name),
-          *get_or_create_probe(ntp));
+        record_multiplexer mux = make_mux();
         // randomly split batches into multiple readers
         size_t total_batches = batches.size();
         size_t total_split_batches = 0;
@@ -158,7 +163,13 @@ public:
             total_split_batches += subset.size();
             auto reader = model::make_memory_record_batch_reader(
               std::move(subset));
-            mux.multiplex(std::move(reader), model::no_timeout, as).get();
+            mux
+              .multiplex(
+                std::move(reader),
+                kafka::offset{start_offset},
+                model::no_timeout,
+                as)
+              .get();
             mux.flush_writers().get();
         }
         EXPECT_EQ(total_batches, total_split_batches);
@@ -495,4 +506,28 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
         translation_probe::invalid_record_cause::
           failed_iceberg_schema_resolution),
       default_param.num_records());
+}
+
+TEST_F(RecordMultiplexerTest, TestMultiplexingFromMiddleOfBatch) {
+    // Ensures that we can multiplex from the middle of a batch and respects
+    // input start offset
+    auto mux = make_mux();
+    auto batches = model::test::make_random_batches(
+                     {
+                       .offset = model::offset{0},
+                       .count = 1,
+                       .records = 100,
+                     })
+                     .get();
+    auto start_offset = model::offset(random_generators::get_int(0, 100));
+    auto last_offset = batches.back().last_offset();
+    auto reader = model::make_memory_record_batch_reader(std::move(batches));
+    mux
+      .multiplex(
+        std::move(reader), kafka::offset{start_offset}, model::no_timeout, as)
+      .get();
+    auto result = std::move(mux).finish().get();
+    EXPECT_FALSE(result.has_error()) << result.error();
+    EXPECT_EQ(result.value().start_offset(), start_offset);
+    EXPECT_EQ(result.value().last_offset(), last_offset);
 }

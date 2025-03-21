@@ -25,8 +25,8 @@ public:
 private:
     serde::parquet::writer _writer;
     writer_mem_tracker& _mem_tracker;
-    size_t _buffered_bytes{0};
-    size_t _flushed_bytes{0};
+    int64_t _buffered_bytes{0};
+    int64_t _flushed_bytes{0};
 };
 
 class serde_parquet_writer_factory : public parquet_ostream_factory {

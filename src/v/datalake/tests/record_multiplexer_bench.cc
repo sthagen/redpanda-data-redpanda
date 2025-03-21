@@ -254,7 +254,7 @@ struct counting_consumer {
     ss::abort_source& as;
     ss::future<ss::stop_iteration> operator()(model::record_batch&& batch) {
         total_bytes += batch.size_bytes();
-        return mux.do_multiplex(std::move(batch), as);
+        return mux.do_multiplex(std::move(batch), kafka::offset{}, as);
     }
     ss::future<counting_consumer> end_of_stream() {
         auto res = co_await std::move(mux).finish();

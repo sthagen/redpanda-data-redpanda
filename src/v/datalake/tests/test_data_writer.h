@@ -23,8 +23,11 @@
 namespace datalake {
 class noop_mem_tracker : public writer_mem_tracker {
 public:
-    ss::future<>
-    update_current_memory_usage(size_t, ss::abort_source&) override {
+    ss::future<reservation_error>
+    reserve_bytes(size_t, ss::abort_source&) noexcept override {
+        return ss::make_ready_future<reservation_error>(reservation_error::ok);
+    }
+    ss::future<> free_bytes(size_t, ss::abort_source&) override {
         return ss::make_ready_future<>();
     }
     void release() override {}
@@ -73,7 +76,8 @@ public:
       : _return_error{return_error} {}
 
     ss::future<result<std::unique_ptr<parquet_file_writer>, writer_error>>
-    create_writer(const iceberg::struct_type& schema) override {
+    create_writer(
+      const iceberg::struct_type& schema, ss::abort_source&) override {
         co_return std::make_unique<test_data_writer>(
           std::move(schema), _return_error);
     }
@@ -122,7 +126,8 @@ private:
 class test_serde_parquet_writer_factory : public parquet_file_writer_factory {
 public:
     ss::future<result<std::unique_ptr<parquet_file_writer>, writer_error>>
-    create_writer(const iceberg::struct_type& schema) override {
+    create_writer(
+      const iceberg::struct_type& schema, ss::abort_source&) override {
         auto ostream_writer = co_await _serde_parquet_factory.create_writer(
           schema, utils::make_null_output_stream(), _mem_tracker);
 

@@ -1997,9 +1997,10 @@ ss::future<> disk_log_impl::force_roll(ss::io_priority_class iopc) {
     if (!ptr->has_appender()) {
         co_return co_await new_segment(next_offset, t, iopc);
     }
+
+    add_segment_bytes(ptr, ptr->size_bytes());
     co_return co_await ptr->release_appender(_readers_cache.get())
-      .then([this, ptr, next_offset, t, iopc] {
-          add_segment_bytes(ptr, ptr->size_bytes());
+      .then([this, next_offset, t, iopc] {
           return new_segment(next_offset, t, iopc);
       });
 }
@@ -2024,8 +2025,8 @@ ss::future<> disk_log_impl::maybe_roll_unlocked(
         size_should_roll = true;
     }
     if (t != term() || size_should_roll) {
-        co_await ptr->release_appender(_readers_cache.get());
         add_segment_bytes(ptr, ptr->size_bytes());
+        co_await ptr->release_appender(_readers_cache.get());
         co_await new_segment(next_offset, t, iopc);
     }
 }
@@ -2100,8 +2101,8 @@ ss::future<> disk_log_impl::apply_segment_ms() {
     auto pc = last->appender()
                 .get_priority_class(); // note: has_appender is true, the
                                        // bouncer condition checked this
-    co_await last->release_appender(_readers_cache.get());
     add_segment_bytes(last, last->size_bytes());
+    co_await last->release_appender(_readers_cache.get());
     auto offsets = last->offsets();
     auto new_so = model::next_offset(offsets.get_committed_offset());
     co_await new_segment(new_so, offsets.get_term(), pc);
