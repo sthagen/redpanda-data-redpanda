@@ -15,7 +15,7 @@ import (
 	"os"
 	"strings"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
@@ -64,7 +64,7 @@ Use filter to list only migrations in a specific state
 				cl, err := publicapi.DataplaneClientFromRpkProfile(p)
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
-				resp, err := cl.CloudStorage.ListMountTasks(cmd.Context(), connect.NewRequest(&dataplanev1alpha2.ListMountTasksRequest{}))
+				resp, err := cl.CloudStorage.ListMountTasks(cmd.Context(), connect.NewRequest(&dataplanev1.ListMountTasksRequest{}))
 				out.MaybeDie(err, "unable to list mount/unmount operations: %v", err)
 
 				if resp != nil {
@@ -183,7 +183,7 @@ type migrationState struct {
 	Topics        []string `json:"topics" yaml:"topics"`
 }
 
-func listMountTaskToAdminMigrationState(resp *dataplanev1alpha2.ListMountTasksResponse) []rpadmin.MigrationState {
+func listMountTaskToAdminMigrationState(resp *dataplanev1.ListMountTasksResponse) []rpadmin.MigrationState {
 	var migrations []rpadmin.MigrationState
 	if resp != nil {
 		for _, task := range resp.Tasks {
@@ -204,11 +204,11 @@ func listMountTaskToAdminMigrationState(resp *dataplanev1alpha2.ListMountTasksRe
 
 // mountTaskTopicsToNamespacedOrInboundTopics converts the dataplane's
 // mountTaskTopics to the rpadmin's equivalent.
-func mountTaskTopicsToNamespacedOrInboundTopics(taskTopics []*dataplanev1alpha2.MountTask_Topic, taskType dataplanev1alpha2.MountTask_Type) []rpadmin.NamespacedOrInboundTopic {
+func mountTaskTopicsToNamespacedOrInboundTopics(taskTopics []*dataplanev1.MountTask_Topic, taskType dataplanev1.MountTask_Type) []rpadmin.NamespacedOrInboundTopic {
 	var topics []rpadmin.NamespacedOrInboundTopic
 	for _, topic := range taskTopics {
 		// Inbound == Mount.
-		if taskType == dataplanev1alpha2.MountTask_TYPE_MOUNT {
+		if taskType == dataplanev1.MountTask_TYPE_MOUNT {
 			topics = append(topics, rpadmin.NamespacedOrInboundTopic{
 				InboundTopic: rpadmin.InboundTopic{
 					SourceTopicReference: rpadmin.NamespacedTopic{

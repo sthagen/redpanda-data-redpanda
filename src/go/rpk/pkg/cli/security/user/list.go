@@ -10,7 +10,7 @@
 package user
 
 import (
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -39,7 +39,7 @@ func newListUsersCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				cl, err := publicapi.DataplaneClientFromRpkProfile(p)
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
-				listUsers, err := cl.User.ListUsers(cmd.Context(), connect.NewRequest(&dataplanev1alpha2.ListUsersRequest{}))
+				listUsers, err := cl.User.ListUsers(cmd.Context(), connect.NewRequest(&dataplanev1.ListUsersRequest{}))
 				out.MaybeDie(err, "unable to list users: %v", err)
 				if listUsers != nil {
 					users = dataplaneListUserToString(listUsers.Msg)
@@ -64,7 +64,7 @@ func newListUsersCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	}
 }
 
-func dataplaneListUserToString(resp *dataplanev1alpha2.ListUsersResponse) []string {
+func dataplaneListUserToString(resp *dataplanev1.ListUsersResponse) []string {
 	var users []string
 	if resp != nil {
 		for _, u := range resp.Users {

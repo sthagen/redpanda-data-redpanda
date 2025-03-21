@@ -208,8 +208,11 @@ ss::future<> log_manager::stop() {
 
     co_await _gate.close();
     co_await ss::coroutine::parallel_for_each(
-      _logs, [this](logs_type::value_type& entry) {
-          return clean_close(entry.second->handle);
+      _logs, [this](logs_type::value_type& entry) -> ss::future<> {
+          auto close_fut = entry.second->housekeeping_gate.close();
+          return clean_close(entry.second->handle)
+            .then(
+              [f = std::move(close_fut)]() mutable { return std::move(f); });
       });
     co_await _batch_cache.stop();
     co_await ssx::async_clear(_logs);
@@ -264,6 +267,10 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         _logs_list.shift_forward();
 
         current_log.flags |= bflags::lifetime_checked;
+
+        // Hold the housekeeping gate to prevent issues with concurrent removal
+        // of the log meta.
+        auto gate = current_log.housekeeping_gate.hold();
 
         // Obtain housekeeping lock to prevent concurrency of
         // log->apply_segment_ms() with gc fibre.
@@ -353,6 +360,10 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         _logs_list.shift_forward();
 
         current_log.flags |= bflags::compaction_checked;
+
+        // Hold the housekeeping gate to prevent issues with concurrent removal
+        // of the log meta.
+        auto gate = current_log.housekeeping_gate.hold();
 
         if (is_not_set(current_log.flags, bflags::should_compact)) {
             // Still perform gc() here on a regular `log_compaction_interval_ms`
@@ -540,6 +551,17 @@ ss::future<> log_manager::gc_loop() {
                  * applying segment.ms will make reclaimable data from the
                  * active segment visible.
                  */
+
+                // Hold the housekeeping gate to prevent issues with concurrent
+                // removal of the log meta.
+                auto gate = log_meta.housekeeping_gate.hold();
+
+                auto housekeeping_lock_holder
+                  = co_await log_meta.housekeeping_lock.get_units();
+                if (!log_meta.link.is_linked()) {
+                    continue;
+                }
+
                 co_await log_meta.handle->apply_segment_ms();
                 if (!log_meta.link.is_linked()) {
                     continue;
@@ -580,6 +602,10 @@ ss::future<> log_manager::gc_loop() {
                       return ss::now();
                   }
 
+                  // Hold the housekeeping gate to prevent issues with
+                  // concurrent removal of the log meta.
+                  auto gate = log_meta->housekeeping_gate.hold();
+
                   auto& housekeeping_lock = log_meta->housekeeping_lock;
                   auto units = housekeeping_lock.try_get_units();
                   if (!units.has_value()) {
@@ -589,7 +615,8 @@ ss::future<> log_manager::gc_loop() {
                   return log
                     ->gc(gc_config(
                       lowest_ts_to_retain(), _config.retention_bytes()))
-                    .finally([units = std::move(units)] {});
+                    .finally(
+                      [units = std::move(units), g = std::move(gate)] {});
               });
         }
     }
@@ -738,7 +765,11 @@ ss::future<> log_manager::shutdown(model::ntp ntp) {
         co_return;
     }
 
+    auto close_fut = handle->second->housekeeping_gate.close();
+
     co_await clean_close(handle.value().second->handle);
+
+    co_await std::move(close_fut);
     vlog(stlog.debug, "Shutdown: {}", ntp);
 }
 
@@ -750,6 +781,8 @@ ss::future<> log_manager::remove(model::ntp ntp) {
     if (!handle) {
         co_return;
     }
+
+    auto close_fut = handle->second->housekeeping_gate.close();
 
     // 'ss::shared_ptr<>' make a copy
     auto lg = handle.value().second->handle;
@@ -790,6 +823,8 @@ ss::future<> log_manager::remove(model::ntp ntp) {
     // We always dispatch topic directory deletion to core 0 as requests may
     // come from different cores
     co_await dispatch_topic_dir_deletion(topic_dir);
+
+    co_await std::move(close_fut);
 }
 
 ss::future<> remove_orphan_partition_files(

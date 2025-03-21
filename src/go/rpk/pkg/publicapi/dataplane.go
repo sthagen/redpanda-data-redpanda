@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"buf.build/gen/go/redpandadata/dataplane/connectrpc/go/redpanda/api/dataplane/v1alpha2/dataplanev1alpha2connect"
+	"buf.build/gen/go/redpandadata/dataplane/connectrpc/go/redpanda/api/dataplane/v1/dataplanev1connect"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 )
@@ -22,8 +22,8 @@ import (
 // the data plane endpoints of the Public API.
 type DataPlaneClientSet struct {
 	Transform    transformServiceClient
-	CloudStorage dataplanev1alpha2connect.CloudStorageServiceClient
-	User         dataplanev1alpha2connect.UserServiceClient
+	CloudStorage dataplanev1connect.CloudStorageServiceClient
+	User         dataplanev1connect.UserServiceClient
 }
 
 // NewDataPlaneClientSet creates a Public API client set with the service
@@ -42,8 +42,8 @@ func NewDataPlaneClientSet(host, authToken string, opts ...connect.ClientOption)
 
 	return &DataPlaneClientSet{
 		Transform:    newTransformServiceClient(http.DefaultClient, host, authToken, opts...),
-		CloudStorage: dataplanev1alpha2connect.NewCloudStorageServiceClient(http.DefaultClient, host, opts...),
-		User:         dataplanev1alpha2connect.NewUserServiceClient(http.DefaultClient, host, opts...),
+		CloudStorage: dataplanev1connect.NewCloudStorageServiceClient(http.DefaultClient, host, opts...),
+		User:         dataplanev1connect.NewUserServiceClient(http.DefaultClient, host, opts...),
 	}, nil
 }
 

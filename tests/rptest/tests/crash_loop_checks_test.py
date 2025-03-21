@@ -106,6 +106,13 @@ class CrashLoopChecksTest(RedpandaTest):
         assert len(crash_reports) > 0, "No crash reports found"
         report = next(iter(crash_reports.values()))
         self.logger.debug(f'First report: {report}')
+
+        # Run some standard checks across all crash reports we read
+        assert len(report['app_version']) > 0, \
+            f'Unexpected empty app_version for report: {report}'
+        assert len(report['arch']) > 0, \
+            f'Unexpected empty arch for report: {report}'
+
         return report
 
     @cluster(num_nodes=1, log_allow_list=CRASH_LOOP_LOG)
@@ -234,8 +241,6 @@ class CrashLoopChecksTest(RedpandaTest):
             'crash_message'], f'Unexpected crash message: {report["crash_message"]}'
         assert len(report['stacktrace']) > 0, \
             f'Unexpected empty stacktrace for report: {report}'
-        assert len(report['app_version']) > 0, \
-            f'Unexpected empty app_version for report: {report}'
 
     @cluster(num_nodes=1, log_allow_list=CRASH_LOOP_LOG + SIGNAL_CRASH_LOG)
     @matrix(signo=[signal.SIGSEGV, signal.SIGABRT, signal.SIGILL],

@@ -128,12 +128,13 @@ struct crash_description
     reserved_string_t crash_message;
     reserved_string_t stacktrace;
     ss::sstring app_version;
+    ss::sstring arch;
 
     crash_description() = default;
 
     auto serde_fields() {
         return std::tie(
-          type, crash_time, crash_message, stacktrace, app_version);
+          type, crash_time, crash_message, stacktrace, app_version, arch);
     }
 
     friend std::ostream& operator<<(std::ostream&, const crash_description&);

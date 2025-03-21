@@ -17,7 +17,7 @@ import (
 	"sort"
 	"strings"
 
-	controlplanev1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1beta2"
+	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	container "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -385,7 +385,7 @@ nameLookup:
 			}
 			return CloudClusterOutputs{}, fmt.Errorf("unable to request details for cluster %q: %w", clusterID, err)
 		}
-		if cluster.State != controlplanev1beta2.Cluster_STATE_READY {
+		if cluster.State != controlplanev1.Cluster_STATE_READY {
 			return CloudClusterOutputs{}, fmt.Errorf("selected cluster %q is not ready for profile creation yet; you may run this command again once the cluster is running", clusterID)
 		}
 		rg, err := cpCl.ResourceGroupForID(ctx, cluster.GetResourceGroupId())
@@ -434,9 +434,9 @@ func clusterNameToID(ctx context.Context, cl *publicapi.CloudClientSet, name str
 
 // Iterates across vcs and cs and returns all clusters that match the given
 // name.
-func findNamedCluster(name string, nss []*controlplanev1beta2.ResourceGroup, vcs []*controlplanev1beta2.ServerlessCluster, cs []*controlplanev1beta2.Cluster) map[string]resourceGroupCluster {
+func findNamedCluster(name string, nss []*controlplanev1.ResourceGroup, vcs []*controlplanev1.ServerlessCluster, cs []*controlplanev1.Cluster) map[string]resourceGroupCluster {
 	ret := make(map[string]resourceGroupCluster)
-	namespaceIDs := make(map[string]*controlplanev1beta2.ResourceGroup, len(nss))
+	namespaceIDs := make(map[string]*controlplanev1.ResourceGroup, len(nss))
 	for _, ns := range nss {
 		namespaceIDs[ns.Id] = ns
 	}
@@ -470,7 +470,7 @@ func findNamedCluster(name string, nss []*controlplanev1beta2.ResourceGroup, vcs
 
 // fromCloudCluster returns an rpk profile from a cloud cluster, as well
 // as if the cluster requires mtls or sasl.
-func fromCloudCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.ResourceGroup, c *controlplanev1beta2.Cluster) CloudClusterOutputs {
+func fromCloudCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1.ResourceGroup, c *controlplanev1.Cluster) CloudClusterOutputs {
 	p := config.RpkProfile{
 		Name:      c.Name,
 		FromCloud: true,
@@ -511,7 +511,7 @@ func fromCloudCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.Resour
 	}
 }
 
-func fromVirtualCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1beta2.ResourceGroup, sc *controlplanev1beta2.ServerlessCluster) CloudClusterOutputs {
+func fromVirtualCluster(yAuth *config.RpkCloudAuth, rg *controlplanev1.ResourceGroup, sc *controlplanev1.ServerlessCluster) CloudClusterOutputs {
 	p := config.RpkProfile{
 		Name:      sc.Name,
 		FromCloud: true,
@@ -659,7 +659,7 @@ func PromptCloudClusterProfile(ctx context.Context, yAuth *config.RpkCloudAuth, 
 	return o, nil
 }
 
-func findResourceGroupByID(rgs []*controlplanev1beta2.ResourceGroup, id string) *controlplanev1beta2.ResourceGroup {
+func findResourceGroupByID(rgs []*controlplanev1.ResourceGroup, id string) *controlplanev1.ResourceGroup {
 	for _, r := range rgs {
 		if r.Id == id {
 			return r
@@ -672,8 +672,8 @@ func findResourceGroupByID(rgs []*controlplanev1beta2.ResourceGroup, id string) 
 // <namespace>/<cluster-name> and the cluster type (virtual, normal).
 type nameAndCluster struct {
 	name string
-	c    *controlplanev1beta2.Cluster
-	sc   *controlplanev1beta2.ServerlessCluster
+	c    *controlplanev1.Cluster
+	sc   *controlplanev1.ServerlessCluster
 }
 
 func (nc *nameAndCluster) clusterID() string {
@@ -696,7 +696,7 @@ func (ncs namesAndClusters) names() []string {
 // combineClusterNames combines the names of Virtual Clusters and Clusters,
 // sorted alphabetically, and returns a list of nameAndCluster structs
 // representing the combined clusters (VClusters first, then Clusters).
-func combineClusterNames(rgs []*controlplanev1beta2.ResourceGroup, scs []*controlplanev1beta2.ServerlessCluster, cs []*controlplanev1beta2.Cluster) namesAndClusters {
+func combineClusterNames(rgs []*controlplanev1.ResourceGroup, scs []*controlplanev1.ServerlessCluster, cs []*controlplanev1.Cluster) namesAndClusters {
 	rgIDToName := make(map[string]string, len(rgs))
 	for _, rg := range rgs {
 		if rg != nil {
@@ -709,7 +709,7 @@ func combineClusterNames(rgs []*controlplanev1beta2.ResourceGroup, scs []*contro
 	for _, sc := range scs {
 		if sc != nil {
 			sc := sc
-			if sc.State != controlplanev1beta2.ServerlessCluster_STATE_READY {
+			if sc.State != controlplanev1.ServerlessCluster_STATE_READY {
 				continue
 			}
 			sNameAndCs = append(sNameAndCs, nameAndCluster{
@@ -726,7 +726,7 @@ func combineClusterNames(rgs []*controlplanev1beta2.ResourceGroup, scs []*contro
 	var nameAndCs []nameAndCluster
 	for _, c := range cs {
 		c := c
-		if c.State != controlplanev1beta2.Cluster_STATE_READY {
+		if c.State != controlplanev1.Cluster_STATE_READY {
 			continue
 		}
 		nameAndCs = append(nameAndCs, nameAndCluster{
@@ -744,8 +744,8 @@ func combineClusterNames(rgs []*controlplanev1beta2.ResourceGroup, scs []*contro
 // resourceGroupCluster ties a cluster or serverless cluster to its resource
 // group.
 type resourceGroupCluster struct {
-	resourceGroup       *controlplanev1beta2.ResourceGroup
-	cluster             *controlplanev1beta2.Cluster
-	sCluster            *controlplanev1beta2.ServerlessCluster
+	resourceGroup       *controlplanev1.ResourceGroup
+	cluster             *controlplanev1.Cluster
+	sCluster            *controlplanev1.ServerlessCluster
 	isServerlessCluster bool
 }

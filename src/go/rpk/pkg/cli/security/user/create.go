@@ -15,7 +15,7 @@ import (
 	"math/big"
 	"strings"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -106,8 +106,8 @@ acl help text for more info.
 				cl, err := publicapi.DataplaneClientFromRpkProfile(p)
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 				req := connect.NewRequest(
-					&dataplanev1alpha2.CreateUserRequest{
-						User: &dataplanev1alpha2.CreateUserRequest_User{
+					&dataplanev1.CreateUserRequest{
+						User: &dataplanev1.CreateUserRequest_User{
 							Name:      user,
 							Password:  pass,
 							Mechanism: stringToDataplaneMechanism(mechanism),

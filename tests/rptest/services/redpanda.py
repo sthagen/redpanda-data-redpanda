@@ -418,7 +418,7 @@ class ResourceSettings:
     def num_cpus(self):
         return self._num_cpus
 
-    def to_cli(self, *, dedicated_node):
+    def to_cli(self, *, dedicated_node: bool):
         """
 
         Generate Redpanda CLI flags based on the settings passed in at construction
@@ -439,12 +439,9 @@ class ResourceSettings:
         else:
             memory_mb = self._memory_mb
 
-        if self._bypass_fsync is None and not dedicated_node:
-            bypass_fsync = True
-        else:
-            bypass_fsync = self._bypass_fsync
+        bypass_fsync = True if dedicated_node else self._bypass_fsync
 
-        args = []
+        args: list[str] = []
         if not dedicated_node:
             args.extend([
                 "--kernel-page-cache=true", "--overprovisioned ",
@@ -459,9 +456,8 @@ class ResourceSettings:
             args.append(f"--smp={num_cpus}")
         if memory_mb is not None:
             args.append(f"--memory={memory_mb}M")
-        if bypass_fsync is not None:
-            args.append(
-                f"--unsafe-bypass-fsync={'1' if bypass_fsync else '0'}")
+
+        args.append(f"--unsafe-bypass-fsync={'1' if bypass_fsync else '0'}")
 
         return preamble, " ".join(args)
 

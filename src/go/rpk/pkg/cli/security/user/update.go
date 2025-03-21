@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -39,8 +39,8 @@ func newUpdateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
 				req := connect.NewRequest(
-					&dataplanev1alpha2.UpdateUserRequest{
-						User: &dataplanev1alpha2.UpdateUserRequest_User{
+					&dataplanev1.UpdateUserRequest{
+						User: &dataplanev1.UpdateUserRequest_User{
 							Name:      user,
 							Password:  newPass,
 							Mechanism: stringToDataplaneMechanism(mechanism),

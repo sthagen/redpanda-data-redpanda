@@ -12,8 +12,7 @@ package resourcegroup
 import (
 	"fmt"
 
-	controlplanev1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1beta2"
-
+	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
@@ -51,8 +50,8 @@ func deleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 
 			cl := publicapi.NewCloudClientSet(cfg.DevOverrides().PublicAPIURL, authToken)
 			name := args[0]
-			listed, err := cl.ResourceGroup.ListResourceGroups(cmd.Context(), connect.NewRequest(&controlplanev1beta2.ListResourceGroupsRequest{
-				Filter: &controlplanev1beta2.ListResourceGroupsRequest_Filter{Name: name},
+			listed, err := cl.ResourceGroup.ListResourceGroups(cmd.Context(), connect.NewRequest(&controlplanev1.ListResourceGroupsRequest{
+				Filter: &controlplanev1.ListResourceGroupsRequest_Filter{NameContains: name},
 			}))
 			out.MaybeDie(err, "unable to find resource group %q: %v", name, err)
 			if len(listed.Msg.ResourceGroups) == 0 {
@@ -72,7 +71,7 @@ func deleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				}
 			}
 
-			_, err = cl.ResourceGroup.DeleteResourceGroup(cmd.Context(), connect.NewRequest(&controlplanev1beta2.DeleteResourceGroupRequest{Id: resourceGroup.Id}))
+			_, err = cl.ResourceGroup.DeleteResourceGroup(cmd.Context(), connect.NewRequest(&controlplanev1.DeleteResourceGroupRequest{Id: resourceGroup.Id}))
 			out.MaybeDie(err, "unable to delete resource group %q: %v", name, err)
 			res := deleteResponse{resourceGroup.Name, resourceGroup.Id}
 			if isText, _, s, err := f.Format(res); !isText {

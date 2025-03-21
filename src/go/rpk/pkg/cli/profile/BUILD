@@ -30,7 +30,7 @@ go_library(
         "//src/go/rpk/pkg/os",
         "//src/go/rpk/pkg/out",
         "//src/go/rpk/pkg/publicapi",
-        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1beta2",
+        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1:controlplane",
         "@com_github_fatih_color//:color",
         "@com_github_rs_xid//:xid",
         "@com_github_spf13_afero//:afero",
@@ -48,7 +48,7 @@ go_test(
     ],
     embed = [":profile"],
     deps = [
-        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1beta2",
+        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1:controlplane",
         "@com_github_fatih_color//:color",
         "@com_github_stretchr_testify//require",
     ],

@@ -66,6 +66,8 @@ public:
         return _crash_report_file_name;
     }
 
+    bool initialized() const { return _state != state::uninitialized; }
+
 private:
     enum class state { uninitialized, initialized, filled, written, released };
     friend std::ostream& operator<<(std::ostream&, state);

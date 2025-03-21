@@ -118,9 +118,13 @@ ss::future<> coordinator::run_until_abort() {
         auto term_fut = co_await ss::coroutine::as_future(
           run_until_term_change(synced_term));
         if (term_fut.failed()) {
-            vlog(
-              datalake_log.error,
-              "Coordinator hit exception while running in term {}: {}",
+            auto lvl = ssx::is_shutdown_exception(term_fut.get_exception())
+                         ? ss::log_level::debug
+                         : ss::log_level::error;
+            vlogl(
+              datalake_log,
+              lvl,
+              "Coordinator exception in term {}: {}",
               synced_term,
               term_fut.get_exception());
             continue;

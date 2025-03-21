@@ -4028,7 +4028,7 @@ configuration::configuration()
       "Enable exporting of some host metrics like /proc/diskstats, /proc/snmp "
       "and /proc/net/netstat",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
-      false)
+      true)
   , datalake_scheduler_block_size_bytes(
       *this,
       "datalake_scheduler_block_size_bytes",

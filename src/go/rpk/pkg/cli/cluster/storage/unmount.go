@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strings"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
@@ -70,7 +70,7 @@ Unmount topic 'my-topic' from the cluster in the 'my-namespace'
 				resp, err := cl.CloudStorage.UnmountTopics(
 					cmd.Context(),
 					connect.NewRequest(
-						&dataplanev1alpha2.UnmountTopicsRequest{
+						&dataplanev1.UnmountTopicsRequest{
 							Topics: []string{t},
 						}),
 				)

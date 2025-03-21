@@ -226,7 +226,8 @@ private:
         }
 
         auto group_label = metrics::make_namespaced_label("group");
-        std::vector<sm::label_instance> labels{group_label(group_id())};
+        std::vector<sm::label_instance> labels{
+          group_label(group_id()), sm::shard_label("")};
 
         _public_consumer_lag_metrics.value().add_group(
           prometheus_sanitize::metrics_name("kafka:consumer:group"),

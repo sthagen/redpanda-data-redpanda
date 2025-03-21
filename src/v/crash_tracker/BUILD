@@ -33,6 +33,7 @@ redpanda_cc_library(
         "//src/v/serde:iobuf",
         "//src/v/serde:sstring",
         "//src/v/serde:vector",
+        "//src/v/utils:arch",
         "//src/v/utils:directory_walker",
         "//src/v/utils:file_io",
         "//src/v/version",

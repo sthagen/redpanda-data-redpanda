@@ -17,20 +17,20 @@ import (
 	"sync"
 	"time"
 
-	"buf.build/gen/go/redpandadata/cloud/connectrpc/go/redpanda/api/controlplane/v1beta2/controlplanev1beta2connect"
-	"buf.build/gen/go/redpandadata/cloud/connectrpc/go/redpanda/api/iam/v1beta2/iamv1beta2connect"
-	controlplanev1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1beta2"
-	iamv1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1beta2"
+	"buf.build/gen/go/redpandadata/cloud/connectrpc/go/redpanda/api/controlplane/v1/controlplanev1connect"
+	"buf.build/gen/go/redpandadata/cloud/connectrpc/go/redpanda/api/iam/v1/iamv1connect"
+	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
+	iamv1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1"
 	"connectrpc.com/connect"
 )
 
 // CloudClientSet holds the respective service clients to interact with
 // the control plane endpoints of the Public API.
 type CloudClientSet struct {
-	Cluster       controlplanev1beta2connect.ClusterServiceClient
-	Organization  iamv1beta2connect.OrganizationServiceClient
-	ResourceGroup controlplanev1beta2connect.ResourceGroupServiceClient
-	Serverless    controlplanev1beta2connect.ServerlessClusterServiceClient
+	Cluster       controlplanev1connect.ClusterServiceClient
+	Organization  iamv1connect.OrganizationServiceClient
+	ResourceGroup controlplanev1connect.ResourceGroupServiceClient
+	Serverless    controlplanev1connect.ServerlessClusterServiceClient
 }
 
 // NewCloudClientSet creates a Public API client set with the service
@@ -50,17 +50,17 @@ func NewCloudClientSet(host, authToken string, opts ...connect.ClientOption) *Cl
 	httpCl := &http.Client{Timeout: 30 * time.Second}
 
 	return &CloudClientSet{
-		Cluster:       controlplanev1beta2connect.NewClusterServiceClient(httpCl, host, opts...),
-		Organization:  iamv1beta2connect.NewOrganizationServiceClient(httpCl, host, opts...),
-		ResourceGroup: controlplanev1beta2connect.NewResourceGroupServiceClient(httpCl, host, opts...),
-		Serverless:    controlplanev1beta2connect.NewServerlessClusterServiceClient(httpCl, host, opts...),
+		Cluster:       controlplanev1connect.NewClusterServiceClient(httpCl, host, opts...),
+		Organization:  iamv1connect.NewOrganizationServiceClient(httpCl, host, opts...),
+		ResourceGroup: controlplanev1connect.NewResourceGroupServiceClient(httpCl, host, opts...),
+		Serverless:    controlplanev1connect.NewServerlessClusterServiceClient(httpCl, host, opts...),
 	}
 }
 
 // ResourceGroupForID gets the resource group for a given ID and handles the
 // error if the returned resource group is nil.
-func (cpCl *CloudClientSet) ResourceGroupForID(ctx context.Context, ID string) (*controlplanev1beta2.ResourceGroup, error) {
-	rg, err := cpCl.ResourceGroup.GetResourceGroup(ctx, connect.NewRequest(&controlplanev1beta2.GetResourceGroupRequest{
+func (cpCl *CloudClientSet) ResourceGroupForID(ctx context.Context, ID string) (*controlplanev1.ResourceGroup, error) {
+	rg, err := cpCl.ResourceGroup.GetResourceGroup(ctx, connect.NewRequest(&controlplanev1.GetResourceGroupRequest{
 		Id: ID,
 	}))
 	if err != nil {
@@ -76,10 +76,10 @@ func (cpCl *CloudClientSet) ResourceGroupForID(ctx context.Context, ID string) (
 
 // ResourceGroups returns all the ResourceGroups using the pagination feature
 // to traverse all pages of the list.
-func (cpCl *CloudClientSet) ResourceGroups(ctx context.Context) ([]*controlplanev1beta2.ResourceGroup, error) {
+func (cpCl *CloudClientSet) ResourceGroups(ctx context.Context) ([]*controlplanev1.ResourceGroup, error) {
 	maxPages := 200
-	fetchPage := func(ctx context.Context, pageToken string) ([]*controlplanev1beta2.ResourceGroup, string, error) {
-		req := connect.NewRequest(&controlplanev1beta2.ListResourceGroupsRequest{PageToken: pageToken, PageSize: 100})
+	fetchPage := func(ctx context.Context, pageToken string) ([]*controlplanev1.ResourceGroup, string, error) {
+		req := connect.NewRequest(&controlplanev1.ListResourceGroupsRequest{PageToken: pageToken, PageSize: 100})
 		resp, err := cpCl.ResourceGroup.ListResourceGroups(ctx, req)
 		if err != nil {
 			return nil, "", err
@@ -91,10 +91,10 @@ func (cpCl *CloudClientSet) ResourceGroups(ctx context.Context) ([]*controlplane
 
 // ServerlessClusters returns all the ServerlessClusters using the pagination
 // feature to traverse all pages of the list.
-func (cpCl *CloudClientSet) ServerlessClusters(ctx context.Context) ([]*controlplanev1beta2.ServerlessCluster, error) {
+func (cpCl *CloudClientSet) ServerlessClusters(ctx context.Context) ([]*controlplanev1.ServerlessCluster, error) {
 	maxPages := 500
-	fetchPage := func(ctx context.Context, pageToken string) ([]*controlplanev1beta2.ServerlessCluster, string, error) {
-		req := connect.NewRequest(&controlplanev1beta2.ListServerlessClustersRequest{PageToken: pageToken, PageSize: 100})
+	fetchPage := func(ctx context.Context, pageToken string) ([]*controlplanev1.ServerlessCluster, string, error) {
+		req := connect.NewRequest(&controlplanev1.ListServerlessClustersRequest{PageToken: pageToken, PageSize: 100})
 		resp, err := cpCl.Serverless.ListServerlessClusters(ctx, req)
 		if err != nil {
 			return nil, "", err
@@ -104,8 +104,8 @@ func (cpCl *CloudClientSet) ServerlessClusters(ctx context.Context) ([]*controlp
 	return Paginate(ctx, maxPages, fetchPage)
 }
 
-func (cpCl *CloudClientSet) ServerlessClusterForID(ctx context.Context, ID string) (*controlplanev1beta2.ServerlessCluster, error) {
-	c, err := cpCl.Serverless.GetServerlessCluster(ctx, connect.NewRequest(&controlplanev1beta2.GetServerlessClusterRequest{
+func (cpCl *CloudClientSet) ServerlessClusterForID(ctx context.Context, ID string) (*controlplanev1.ServerlessCluster, error) {
+	c, err := cpCl.Serverless.GetServerlessCluster(ctx, connect.NewRequest(&controlplanev1.GetServerlessClusterRequest{
 		Id: ID,
 	}))
 	if err != nil {
@@ -119,10 +119,10 @@ func (cpCl *CloudClientSet) ServerlessClusterForID(ctx context.Context, ID strin
 
 // Clusters returns all the Clusters using the pagination feature to traverse
 // all pages of the list.
-func (cpCl *CloudClientSet) Clusters(ctx context.Context) ([]*controlplanev1beta2.Cluster, error) {
+func (cpCl *CloudClientSet) Clusters(ctx context.Context) ([]*controlplanev1.Cluster, error) {
 	maxPages := 500
-	fetchPage := func(ctx context.Context, pageToken string) ([]*controlplanev1beta2.Cluster, string, error) {
-		req := connect.NewRequest(&controlplanev1beta2.ListClustersRequest{PageToken: pageToken, PageSize: 100})
+	fetchPage := func(ctx context.Context, pageToken string) ([]*controlplanev1.Cluster, string, error) {
+		req := connect.NewRequest(&controlplanev1.ListClustersRequest{PageToken: pageToken, PageSize: 100})
 		resp, err := cpCl.Cluster.ListClusters(ctx, req)
 		if err != nil {
 			return nil, "", err
@@ -134,8 +134,8 @@ func (cpCl *CloudClientSet) Clusters(ctx context.Context) ([]*controlplanev1beta
 
 // ClusterForID gets the Cluster for a given ID and handles the error if the
 // returned cluster is nil.
-func (cpCl *CloudClientSet) ClusterForID(ctx context.Context, ID string) (*controlplanev1beta2.Cluster, error) {
-	c, err := cpCl.Cluster.GetCluster(ctx, connect.NewRequest(&controlplanev1beta2.GetClusterRequest{
+func (cpCl *CloudClientSet) ClusterForID(ctx context.Context, ID string) (*controlplanev1.Cluster, error) {
+	c, err := cpCl.Cluster.GetCluster(ctx, connect.NewRequest(&controlplanev1.GetClusterRequest{
 		Id: ID,
 	}))
 	if err != nil {
@@ -150,15 +150,15 @@ func (cpCl *CloudClientSet) ClusterForID(ctx context.Context, ID string) (*contr
 // OrgResourceGroupsClusters is a helper function to concurrently query many
 // APIs at once. Any non-nil error result is returned, as well as
 // an errors.Joined error.
-func (cpCl *CloudClientSet) OrgResourceGroupsClusters(ctx context.Context) (*iamv1beta2.Organization, []*controlplanev1beta2.ResourceGroup, []*controlplanev1beta2.ServerlessCluster, []*controlplanev1beta2.Cluster, error) {
+func (cpCl *CloudClientSet) OrgResourceGroupsClusters(ctx context.Context) (*iamv1.Organization, []*controlplanev1.ResourceGroup, []*controlplanev1.ServerlessCluster, []*controlplanev1.Cluster, error) {
 	var (
-		org    *iamv1beta2.Organization
+		org    *iamv1.Organization
 		orgErr error
-		rgs    []*controlplanev1beta2.ResourceGroup
+		rgs    []*controlplanev1.ResourceGroup
 		rgsErr error
-		vcs    []*controlplanev1beta2.ServerlessCluster
+		vcs    []*controlplanev1.ServerlessCluster
 		vcErr  error
-		cs     []*controlplanev1beta2.Cluster
+		cs     []*controlplanev1.Cluster
 		cErr   error
 
 		wg sync.WaitGroup
@@ -168,7 +168,7 @@ func (cpCl *CloudClientSet) OrgResourceGroupsClusters(ctx context.Context) (*iam
 	wg.Add(4)
 	go func() {
 		defer wg.Done()
-		resp, err := cpCl.Organization.GetCurrentOrganization(ctx, connect.NewRequest(&iamv1beta2.GetCurrentOrganizationRequest{}))
+		resp, err := cpCl.Organization.GetCurrentOrganization(ctx, connect.NewRequest(&iamv1.GetCurrentOrganizationRequest{}))
 		if err != nil {
 			orgErr = fmt.Errorf("organization query failure: %w", err)
 			cancel()

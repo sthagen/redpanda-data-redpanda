@@ -18,9 +18,9 @@ import (
 	"mime/multipart"
 	"net/http"
 
-	commonv1alpha1 "buf.build/gen/go/redpandadata/common/protocolbuffers/go/redpanda/api/common/v1alpha1"
-	"buf.build/gen/go/redpandadata/dataplane/connectrpc/go/redpanda/api/dataplane/v1alpha2/dataplanev1alpha2connect"
-	v1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	commonv1 "buf.build/gen/go/redpandadata/common/protocolbuffers/go/redpanda/api/common/v1"
+	"buf.build/gen/go/redpandadata/dataplane/connectrpc/go/redpanda/api/dataplane/v1/dataplanev1connect"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/httpapi"
 )
@@ -28,15 +28,15 @@ import (
 const transformPath = "/v1alpha1/transforms"
 
 // transformServiceClient is an extension of the
-// dataplanev1alpha1connect.TransformServiceClient to support the
+// dataplanev1connect.TransformServiceClient to support the
 // DeployTransform request.
 type transformServiceClient struct {
-	tCl    dataplanev1alpha2connect.TransformServiceClient
+	tCl    dataplanev1connect.TransformServiceClient
 	httpCl *httpapi.Client
 }
 
 type DeployTransformRequest struct {
-	Metadata   *v1alpha2.DeployTransformRequest
+	Metadata   *dataplanev1.DeployTransformRequest
 	WasmBinary io.Reader
 }
 
@@ -50,20 +50,20 @@ func newTransformServiceClient(httpClient *http.Client, host, authToken string, 
 		}),
 	}
 	return transformServiceClient{
-		tCl:    dataplanev1alpha2connect.NewTransformServiceClient(httpClient, host, opts...),
+		tCl:    dataplanev1connect.NewTransformServiceClient(httpClient, host, opts...),
 		httpCl: httpapi.NewClient(httpOpts...),
 	}
 }
 
-func (tsc *transformServiceClient) ListTransforms(ctx context.Context, r *connect.Request[v1alpha2.ListTransformsRequest]) (*connect.Response[v1alpha2.ListTransformsResponse], error) {
+func (tsc *transformServiceClient) ListTransforms(ctx context.Context, r *connect.Request[dataplanev1.ListTransformsRequest]) (*connect.Response[dataplanev1.ListTransformsResponse], error) {
 	return tsc.tCl.ListTransforms(ctx, r)
 }
 
-func (tsc *transformServiceClient) GetTransform(ctx context.Context, r *connect.Request[v1alpha2.GetTransformRequest]) (*connect.Response[v1alpha2.GetTransformResponse], error) {
+func (tsc *transformServiceClient) GetTransform(ctx context.Context, r *connect.Request[dataplanev1.GetTransformRequest]) (*connect.Response[dataplanev1.GetTransformResponse], error) {
 	return tsc.tCl.GetTransform(ctx, r)
 }
 
-func (tsc *transformServiceClient) DeleteTransform(ctx context.Context, r *connect.Request[v1alpha2.DeleteTransformRequest]) (*connect.Response[v1alpha2.DeleteTransformResponse], error) {
+func (tsc *transformServiceClient) DeleteTransform(ctx context.Context, r *connect.Request[dataplanev1.DeleteTransformRequest]) (*connect.Response[dataplanev1.DeleteTransformResponse], error) {
 	return tsc.tCl.DeleteTransform(ctx, r)
 }
 
@@ -107,7 +107,7 @@ func (tsc *transformServiceClient) DeployTransform(ctx context.Context, r Deploy
 
 // ConnectError is the error returned by the data plane API.
 type ConnectError struct {
-	commonv1alpha1.ErrorStatus
+	commonv1.ExternalError
 	StatusCode int
 }
 

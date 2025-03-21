@@ -92,3 +92,5 @@ class CrashReporterTest(RedpandaTest):
             f"Unexpected: {crash['description']}"
         assert len(crash['app_version']) > 0, \
             f"Unexpected: {crash['app_version']}"
+        assert len(crash['arch']) > 0, \
+            f"Unexpected: {crash['arch']}"

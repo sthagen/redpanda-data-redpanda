@@ -45,12 +45,12 @@ def assert_profile_good_v2(profile: dict[str, Any],
 
 
 class CPUProfilerAdminAPITest(RedpandaTest):
-    topics = (TopicSpec(partition_count=30, replication_factor=3), )
+    topics = (TopicSpec(partition_count=30, replication_factor=1), )
 
     def __init__(self, test_context):
         super(CPUProfilerAdminAPITest, self).__init__(
             test_context=test_context,
-            num_brokers=3,
+            num_brokers=1,
             log_config=LoggingConfig('info',
                                      logger_levels={'resources': 'trace'}),
             extra_rp_conf={
@@ -60,7 +60,7 @@ class CPUProfilerAdminAPITest(RedpandaTest):
 
         self.admin = Admin(self.redpanda)
 
-    @cluster(num_nodes=4)
+    @cluster(num_nodes=2)
     def test_get_cpu_profile_with_override(self):
         # Provide traffic so there is something to sample.
         with repeater_traffic(context=self.test_context,
@@ -72,7 +72,7 @@ class CPUProfilerAdminAPITest(RedpandaTest):
             profile = self.admin.get_cpu_profile(wait_ms=30 * 1_000)
             assert_profile_good_v2(profile)
 
-    @cluster(num_nodes=3)
+    @cluster(num_nodes=1)
     def test_get_cpu_profile_with_override_limits(self):
         try:
             self.admin.get_cpu_profile(wait_ms=16 * 60 * 1_000)
@@ -88,27 +88,11 @@ class CPUProfilerAdminAPITest(RedpandaTest):
         else:
             assert False, "call with wait_ms < 1ms should have failed"
 
-
-class CPUProfilerStressTest(RedpandaTest):
-    def __init__(self, test_context):
-        super().__init__(test_context=test_context,
-                         num_brokers=1,
-                         log_config=LoggingConfig(
-                             'info', logger_levels={'resources': 'trace'}),
-                         extra_rp_conf={
-                             "cpu_profiler_enabled": False,
-                             "cpu_profiler_sample_period_ms": 1,
-                         })
-
-        self.admin = Admin(self.redpanda)
-
-        self.redpanda.set_resource_settings(
-            ResourceSettings(memory_mb=4096, num_cpus=10))
-
     @cluster(num_nodes=1)
     def test_cpu_profile_stress(self):
         self.redpanda.set_cluster_config({
             "cpu_profiler_enabled": True,
+            "cpu_profiler_sample_period_ms": 1,
         })
 
         node0 = self.redpanda.nodes[0]
@@ -147,4 +131,3 @@ class CPUProfilerStressTest(RedpandaTest):
         # are some other frames outside of the recursive ones added by the stress
         # tool)
         assert max_frames == 64, f"max samples too low: {max_frames}"
-        # self.logger.warn(f"xxx\n {json.dumps(shard_sample, indent=2)}")

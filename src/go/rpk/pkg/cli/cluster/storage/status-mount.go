@@ -18,7 +18,7 @@ import (
 	"strconv"
 	"strings"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
@@ -70,7 +70,7 @@ Status for a mount/unmount operation
 				resp, err := cl.CloudStorage.GetMountTask(
 					cmd.Context(),
 					connect.NewRequest(
-						&dataplanev1alpha2.GetMountTaskRequest{
+						&dataplanev1.GetMountTaskRequest{
 							Id: int32(migrationID),
 						},
 					),
@@ -110,7 +110,7 @@ func printDetailedStatusMount(f config.OutFormatter, d migrationState, w io.Writ
 	tw.Print(d.ID, d.State, d.MigrationType, strings.Join(d.Topics, ", "))
 }
 
-func mountTaskToAdminMigrationState(resp *dataplanev1alpha2.GetMountTaskResponse) rpadmin.MigrationState {
+func mountTaskToAdminMigrationState(resp *dataplanev1.GetMountTaskResponse) rpadmin.MigrationState {
 	var state rpadmin.MigrationState
 	if resp != nil {
 		task := resp.Task

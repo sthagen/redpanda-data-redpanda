@@ -30,7 +30,7 @@ group_recovery_consumer::handle_raft_data(model::record_batch batch) {
 ss::future<> group_recovery_consumer::handle_tx_offsets(
   model::record_batch_header hdr, kafka::group_tx::offsets_metadata data) {
     vlog(
-      klog.trace,
+      cg_klog.trace,
       "[group: {}] recovered update tx offsets: {}",
       data.group_id,
       data);
@@ -44,7 +44,7 @@ ss::future<> group_recovery_consumer::handle_fence_v0(
     auto pid = model::producer_identity{
       header.producer_id, header.producer_epoch};
     vlog(
-      klog.trace,
+      cg_klog.trace,
       "[group: {}] recovered tx fence version: {} for producer: {}",
       data.group_id,
       group::fence_control_record_v0_version,
@@ -59,7 +59,7 @@ ss::future<> group_recovery_consumer::handle_fence_v1(
     auto pid = model::producer_identity{
       header.producer_id, header.producer_epoch};
     vlog(
-      klog.trace,
+      cg_klog.trace,
       "[group: {}] recovered tx fence version: {} for producer: {} - {}",
       data.group_id,
       group::fence_control_record_v1_version,
@@ -83,7 +83,7 @@ ss::future<> group_recovery_consumer::handle_fence(
     auto group_it = _state.groups.find(data.group_id);
     if (group_it == _state.groups.end()) {
         vlog(
-          klog.trace,
+          cg_klog.trace,
           "[group: {}] group does not exist, ignoring tx fence version: {} for "
           "producer: {} - {}",
           data.group_id,
@@ -93,7 +93,7 @@ ss::future<> group_recovery_consumer::handle_fence(
         co_return;
     }
     vlog(
-      klog.trace,
+      cg_klog.trace,
       "[group: {}] recovered tx fence version: {} for producer: {} - {}",
       data.group_id,
       group::fence_control_record_version,
@@ -116,7 +116,7 @@ ss::future<> group_recovery_consumer::handle_abort(
     auto group_it = _state.groups.find(data.group_id);
     if (group_it == _state.groups.end()) {
         vlog(
-          klog.trace,
+          cg_klog.trace,
           "[group: {}] group does not exist, ignoring abort for "
           "producer: {} - sequence {}",
           data.group_id,
@@ -125,7 +125,7 @@ ss::future<> group_recovery_consumer::handle_abort(
         co_return;
     }
     vlog(
-      klog.trace,
+      cg_klog.trace,
       "[group: {}] recovered abort tx_seq: {}",
       data.group_id,
       data.tx_seq);
@@ -140,21 +140,21 @@ ss::future<> group_recovery_consumer::handle_commit(
     auto group_it = _state.groups.find(data.group_id);
     if (group_it == _state.groups.end()) {
         vlog(
-          klog.trace,
+          cg_klog.trace,
           "[group: {}] group does not exist, ignoring commit for "
           "producer: {}",
           data.group_id,
           pid);
         co_return;
     }
-    vlog(klog.trace, "[group: {}] recovered commit tx", data.group_id);
+    vlog(cg_klog.trace, "[group: {}] recovered commit tx", data.group_id);
     group_it->second.commit(pid);
     co_return;
 }
 
 ss::future<> group_recovery_consumer::handle_version_fence(
   features::feature_table::version_fence fence) {
-    vlog(klog.trace, "recovered version fence");
+    vlog(cg_klog.trace, "recovered version fence");
     if (
       fence.active_version
       >= to_cluster_version(features::release_version::v23_1_1)) {
@@ -192,7 +192,7 @@ void group_recovery_consumer::handle_record(model::record r) {
         __builtin_unreachable();
     } catch (...) {
         vlog(
-          klog.error,
+          cg_klog.error,
           "error handling group metadata record - {}",
           std::current_exception());
     }
@@ -203,14 +203,16 @@ void group_recovery_consumer::handle_group_metadata(group_metadata_kv md) {
         // until we switch over to a compacted topic or use raft snapshots,
         // always take the latest entry in the log.
         vlog(
-          klog.trace, "[group: {}] recovered group metadata", md.key.group_id);
+          cg_klog.trace,
+          "[group: {}] recovered group metadata",
+          md.key.group_id);
 
         auto [group_it, _] = _state.groups.try_emplace(
           md.key.group_id, group_stm());
         group_it->second.overwrite_metadata(std::move(*md.value));
     } else {
         // tombstone
-        vlog(klog.trace, "[group: {}] recovered tombstone", md.key.group_id);
+        vlog(cg_klog.trace, "[group: {}] recovered tombstone", md.key.group_id);
         _state.groups.erase(md.key.group_id);
     }
 }
@@ -219,7 +221,7 @@ void group_recovery_consumer::handle_offset_metadata(offset_metadata_kv md) {
     model::topic_partition tp(md.key.topic, md.key.partition);
     if (md.value) {
         vlog(
-          klog.trace,
+          cg_klog.trace,
           "[group: {}] recovered {}/{} committed offset: {}",
           md.key.group_id,
           md.key.topic,
@@ -236,7 +238,7 @@ void group_recovery_consumer::handle_offset_metadata(offset_metadata_kv md) {
           tp, _batch_base_offset, std::move(*md.value));
     } else {
         vlog(
-          klog.trace,
+          cg_klog.trace,
           "[group: {}] recovered {}/{} committed offset tombstone",
           md.key.group_id,
           md.key.topic,

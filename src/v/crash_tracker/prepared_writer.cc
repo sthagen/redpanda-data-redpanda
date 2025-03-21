@@ -15,6 +15,7 @@
 #include "crash_tracker/types.h"
 #include "hashing/xx.h"
 #include "model/timestamp.h"
+#include "utils/arch.h"
 #include "version/version.h"
 
 #include <seastar/core/file-types.hh>
@@ -79,6 +80,7 @@ prepared_writer::initialize(std::filesystem::path crash_file_path) {
     }
 
     _prepared_cd.app_version = ss::sstring{redpanda_version()};
+    _prepared_cd.arch = ss::sstring{util::cpu_arch::current().name};
 
     // Update _state as the last step in initialize() to make earlier changes
     // visible across threads.

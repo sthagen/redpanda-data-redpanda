@@ -17,4 +17,5 @@ cloud:
     - redpanda_cloud_tests/rolling_restart_test.py
     - redpanda_cloud_tests/omb_validation_test.py::OMBValidationTest
     - redpanda_cloud_tests/cloud_self_test.py
+    - tests/host_metrics_test.py
     - tests/services_self_test.py::SimpleSelfTest.test_cloud

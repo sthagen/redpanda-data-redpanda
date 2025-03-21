@@ -13,8 +13,7 @@ import (
 	"fmt"
 	"os"
 
-	controlplanev1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1beta2"
-
+	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
@@ -55,8 +54,8 @@ func createCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 				exit1 bool
 			)
 			for _, name := range args {
-				n, err := cl.ResourceGroup.CreateResourceGroup(cmd.Context(), connect.NewRequest(&controlplanev1beta2.CreateResourceGroupRequest{
-					ResourceGroup: &controlplanev1beta2.ResourceGroupCreate{
+				n, err := cl.ResourceGroup.CreateResourceGroup(cmd.Context(), connect.NewRequest(&controlplanev1.CreateResourceGroupRequest{
+					ResourceGroup: &controlplanev1.ResourceGroupCreate{
 						Name: name,
 					},
 				}))

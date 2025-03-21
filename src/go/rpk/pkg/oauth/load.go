@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	iamv1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1beta2"
+	iamv1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
@@ -69,10 +69,10 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 	}
 
 	var (
-		org     *iamv1beta2.Organization
+		org     *iamv1.Organization
 		orgErr  error
 		orgOnce bool
-		getOrg  = func() (*iamv1beta2.Organization, error) {
+		getOrg  = func() (*iamv1.Organization, error) {
 			if orgOnce {
 				return org, orgErr
 			}
@@ -80,8 +80,8 @@ func LoadFlow(ctx context.Context, fs afero.Fs, cfg *config.Config, cl Client, n
 
 			cl := publicapi.NewCloudClientSet(cfg.DevOverrides().PublicAPIURL, tok.AccessToken)
 
-			var resp *connect.Response[iamv1beta2.GetCurrentOrganizationResponse]
-			resp, orgErr = cl.Organization.GetCurrentOrganization(ctx, connect.NewRequest(&iamv1beta2.GetCurrentOrganizationRequest{}))
+			var resp *connect.Response[iamv1.GetCurrentOrganizationResponse]
+			resp, orgErr = cl.Organization.GetCurrentOrganization(ctx, connect.NewRequest(&iamv1.GetCurrentOrganizationRequest{}))
 			if orgErr != nil {
 				return nil, fmt.Errorf("unable to retrieve the organization for this token: %w", orgErr)
 			}

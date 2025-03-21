@@ -257,6 +257,13 @@ void recorder::record_crash_exception(std::exception_ptr eptr) {
         return;
     }
 
+    if (!_writer.initialized()) {
+        // We are unable to record any exceptions that happen before the writer
+        // has been initialized
+        print_skipping();
+        return;
+    }
+
     auto* cd_opt = _writer.fill();
     if (!cd_opt) {
         // The writer has already been consumed by another crash

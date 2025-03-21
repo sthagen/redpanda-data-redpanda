@@ -13,7 +13,7 @@ import (
 	"fmt"
 	"strconv"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
@@ -51,9 +51,9 @@ Cancel a mount/unmount operation
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
 				req := connect.NewRequest(
-					&dataplanev1alpha2.UpdateMountTaskRequest{
+					&dataplanev1.UpdateMountTaskRequest{
 						Id:     int32(migrationID),
-						Action: dataplanev1alpha2.UpdateMountTaskRequest_ACTION_CANCEL,
+						Action: dataplanev1.UpdateMountTaskRequest_ACTION_CANCEL,
 					},
 				)
 				_, err = cl.CloudStorage.UpdateMountTask(cmd.Context(), req)

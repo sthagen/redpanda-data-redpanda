@@ -97,7 +97,8 @@ class ConsumerGroupTest(RedpandaTest):
                          topic,
                          group,
                          static_members,
-                         consumer_properties={}):
+                         consumer_properties={},
+                         err_msg=""):
 
         consumers = []
         for i in range(0, consumer_count):
@@ -117,7 +118,7 @@ class ConsumerGroupTest(RedpandaTest):
             gr = rpk.group_describe(group=group, summary=True)
             return gr.members == consumer_count and gr.state == "Stable"
 
-        wait_until(group_is_ready, 60, 1)
+        wait_until(group_is_ready, 60, 1, err_msg)
         return consumers
 
     def consumed_at_least(consumers, count):
@@ -163,6 +164,7 @@ class ConsumerGroupTest(RedpandaTest):
         """
         self.create_topic(20)
         group = 'test-gr-1'
+
         # use 2 consumers
         consumers = self.create_consumers(2,
                                           self.topic_spec.name,
@@ -756,18 +758,21 @@ class ConsumerGroupTest(RedpandaTest):
         self.producer.free()
 
     @cluster(num_nodes=6)
-    @parametrize(enabled_group_metrics=[])
-    @parametrize(enabled_group_metrics=["group"])
-    @parametrize(enabled_group_metrics=["partition"])
-    @parametrize(enabled_group_metrics=["consumer_lag"])
-    @parametrize(enabled_group_metrics=["group", "partition"])
-    @parametrize(enabled_group_metrics=["group", "consumer_lag"])
-    @parametrize(enabled_group_metrics=["partition", "consumer_lag"])
-    @parametrize(enabled_group_metrics=["group", "partition", "consumer_lag"])
-    def test_group_metrics(self, enabled_group_metrics):
+    @parametrize(metrics=[])
+    @parametrize(metrics=["group"])
+    @parametrize(metrics=["partition"])
+    @parametrize(metrics=["consumer_lag"])
+    @parametrize(metrics=["group", "partition"])
+    @parametrize(metrics=["group", "consumer_lag"])
+    @parametrize(metrics=["partition", "consumer_lag"])
+    @parametrize(metrics=["group", "partition", "consumer_lag"])
+    def test_group_metrics(self, metrics):
         """
         Test validating the behavior of group metrics
         """
+        #Make a copy as we modify it later
+        enabled_group_metrics = metrics[:]
+
         def flip_option(option):
             if option in enabled_group_metrics:
                 enabled_group_metrics.remove(option)
@@ -778,12 +783,14 @@ class ConsumerGroupTest(RedpandaTest):
             {"enable_consumer_group_metrics": enabled_group_metrics})
 
         self.create_topic(20)
-        group = 'test-gr-1'
+        group = f'test-gr-{"-".join(metrics)}-{random.randint(1, 1000)}'
         # use 2 consumers
-        consumers = self.create_consumers(2,
-                                          self.topic_spec.name,
-                                          group,
-                                          static_members=False)
+        consumers = self.create_consumers(
+            2,
+            self.topic_spec.name,
+            group,
+            static_members=False,
+            err_msg=f"Failed to create consumers for group {group}")
 
         self.start_producer()
         # wait for some messages

@@ -12,7 +12,7 @@ package user
 import (
 	"fmt"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -57,7 +57,7 @@ delete any ACLs that may exist for this user.
 				cl, err := publicapi.DataplaneClientFromRpkProfile(p)
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
-				req := connect.NewRequest(&dataplanev1alpha2.DeleteUserRequest{Name: user})
+				req := connect.NewRequest(&dataplanev1.DeleteUserRequest{Name: user})
 				_, err = cl.User.DeleteUser(cmd.Context(), req)
 				out.MaybeDie(err, "unable to delete user %q: %s", user, err)
 			} else {

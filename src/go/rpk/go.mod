@@ -6,11 +6,11 @@ go 1.23.1
 replace github.com/hamba/avro/v2 => github.com/redpanda-data/go-avro/v2 v2.0.0-20240405204525-77b1144dc525
 
 require (
-	buf.build/gen/go/redpandadata/cloud/connectrpc/go v1.18.1-20241024195046-353ea4645e3d.1
-	buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.5-20241024195046-353ea4645e3d.1
+	buf.build/gen/go/redpandadata/cloud/connectrpc/go v1.18.1-20250320090119-84779f9e5085.1
+	buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.5-20250320090119-84779f9e5085.1
 	buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.5-20240917150400-3f349e63f44a.1
-	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.18.1-20250130154455-4402ea5c9bd9.1
-	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.5-20250130154455-4402ea5c9bd9.1
+	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.18.1-20250319124900-5103d6dd4791.1
+	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.5-20250319124900-5103d6dd4791.1
 	buf.build/gen/go/redpandadata/gatekeeper/connectrpc/go v1.18.1-20241209180130-05cf059c71c1.1
 	buf.build/gen/go/redpandadata/gatekeeper/protocolbuffers/go v1.36.5-20241209180130-05cf059c71c1.1
 	cloud.google.com/go/compute/metadata v0.6.0
@@ -71,7 +71,7 @@ require (
 )
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.5-20250130201111-63bb56e20495.1 // indirect
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.5-20250307204501-0409229c3780.1 // indirect
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.5-20241220201140-4c5ba75caaf8.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BurntSushi/toml v1.4.1-0.20240526193622-a339e1f7089c // indirect
@@ -143,9 +143,9 @@ require (
 	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/time v0.10.0 // indirect
 	golang.org/x/tools v0.29.0 // indirect
-	google.golang.org/genproto v0.0.0-20250207221924-e9438ea467c6 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20250207221924-e9438ea467c6 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250207221924-e9438ea467c6 // indirect
+	google.golang.org/genproto v0.0.0-20250313205543-e70fdf4c4cb4 // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20250313205543-e70fdf4c4cb4 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250313205543-e70fdf4c4cb4 // indirect
 	gopkg.in/evanphx/json-patch.v4 v4.12.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gotest.tools/v3 v3.0.3 // indirect

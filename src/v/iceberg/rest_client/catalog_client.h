@@ -157,7 +157,7 @@ public:
     commit_table_update(commit_table_request, retry_chain_node&);
 
     // Must be called before destroying the client to prevent resource leak
-    ss::future<> shutdown() { return _http_client->shutdown_and_stop(); }
+    ss::future<> shutdown();
 
 private:
     // The root url calculated from base url, prefix and api version. Given a
@@ -190,6 +190,7 @@ private:
       client_probe::endpoint endpoint,
       std::optional<iobuf> payload = std::nullopt);
 
+    ss::gate _gate;
     std::unique_ptr<http::abstract_client> _http_client;
     ss::sstring _endpoint;
     std::optional<credentials> _credentials;

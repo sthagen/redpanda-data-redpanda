@@ -94,6 +94,20 @@ TEST_F(RecorderTest, TestUploadMarkers) {
     }
 }
 
+TEST_F(RecorderTest, TestUninitializedCrashTracker) {
+    auto rec = get_test_recorder();
+
+    // Assume that there is an exception while starting the recorder. This could
+    // happen for example if the data directory is not writable while the
+    // recorder tries to create the crash reports directory.
+
+    // Now simulate that we attempt to record this exception. This should be
+    // gracefully skipped, since the crash recorder is not initialized.
+    const auto test_eptr = std::make_exception_ptr(
+      std::runtime_error{"Test filesystem error"});
+    ASSERT_NO_THROW(rec.record_crash_exception(test_eptr));
+}
+
 namespace {
 
 size_t count_upload_markers() {

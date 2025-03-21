@@ -149,7 +149,11 @@ catalog_client::acquire_token(retry_chain_node& rtc) {
 ss::sstring catalog_client::root_path() const {
     return _path_components.root_path();
 }
-
+ss::future<> catalog_client::shutdown() {
+    auto gate_f = _gate.close();
+    co_await _http_client->shutdown_and_stop();
+    co_await std::move(gate_f);
+}
 ss::future<expected<ss::sstring>>
 catalog_client::ensure_token(retry_chain_node& rtc) {
     const bool need_token = !_oauth_token.has_value()
@@ -283,6 +287,7 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
 ss::future<expected<create_namespace_response>>
 catalog_client::create_namespace(
   create_namespace_request req, retry_chain_node& rtc) {
+    auto gh = _gate.hold();
     auto http_request = namespaces{root_path()}.create().with_content_type(
       json_content_type);
 
@@ -305,6 +310,7 @@ ss::future<expected<load_table_result>> catalog_client::create_table(
   const chunked_vector<ss::sstring>& ns,
   create_table_request req,
   retry_chain_node& rtc) {
+    auto gh = _gate.hold();
     auto http_request = table{root_path(), ns}.create().with_content_type(
       json_content_type);
 
@@ -326,6 +332,7 @@ ss::future<expected<load_table_result>> catalog_client::load_table(
   const chunked_vector<ss::sstring>& ns,
   const ss::sstring& table_name,
   retry_chain_node& rtc) {
+    auto gh = _gate.hold();
     auto http_request = table(root_path(), ns).get(table_name);
 
     auto auth_result = co_await maybe_add_bearer_auth(http_request, rtc);
@@ -344,6 +351,7 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
   const ss::sstring& table_name,
   std::optional<bool> purge_requested,
   retry_chain_node& rtc) {
+    auto gh = _gate.hold();
     http::rest_client::rest_entity::optional_query_params params;
     if (purge_requested.has_value()) {
         params.emplace();
@@ -368,6 +376,7 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
 
 ss::future<expected<commit_table_response>> catalog_client::commit_table_update(
   commit_table_request commit_request, retry_chain_node& rtc) {
+    auto gh = _gate.hold();
     auto http_request = table(root_path(), commit_request.identifier.ns)
                           .update(commit_request.identifier.table)
                           .with_content_type(json_content_type);

@@ -32,6 +32,7 @@ struct log_housekeeping_meta {
     ss::lowres_clock::time_point last_compaction;
     // Mutex used for handling concurrency between housekeeping and gc fibres
     mutex housekeeping_lock{"housekeeping_lock"};
+    ss::gate housekeeping_gate;
 
     intrusive_list_hook link;
 };

@@ -38,6 +38,7 @@ public:
             ss::sstring reason;
             ss::sstring description;
             ss::sstring app_version;
+            ss::sstring arch;
         };
 
         ss::sstring cluster_uuid;

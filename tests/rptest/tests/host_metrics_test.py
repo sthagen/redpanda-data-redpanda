@@ -8,15 +8,12 @@
 # by the Apache License, Version 2.0
 
 from rptest.services.cluster import cluster
-from rptest.tests.redpanda_test import RedpandaTest
+from rptest.tests.redpanda_test import RedpandaMixedTest
 
 
-class HostMetricsTest(RedpandaTest):
+class HostMetricsTest(RedpandaMixedTest):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args,
-                         num_brokers=1,
-                         extra_rp_conf={"enable_host_metrics": True},
-                         **kwargs)
+        super().__init__(*args, min_brokers=1, **kwargs)
 
     @cluster(num_nodes=1)
     def test_basic_hoststats(self):

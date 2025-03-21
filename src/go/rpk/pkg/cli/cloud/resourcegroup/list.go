@@ -15,8 +15,7 @@ import (
 	"sort"
 	"strings"
 
-	controlplanev1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1beta2"
-
+	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
@@ -74,10 +73,10 @@ func listCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 func listAllResourceGroups(ctx context.Context, cl *publicapi.CloudClientSet) ([]listResponse, error) {
 	var (
 		pageToken string
-		listed    []*controlplanev1beta2.ResourceGroup
+		listed    []*controlplanev1.ResourceGroup
 	)
 	for {
-		l, err := cl.ResourceGroup.ListResourceGroups(ctx, connect.NewRequest(&controlplanev1beta2.ListResourceGroupsRequest{PageToken: pageToken}))
+		l, err := cl.ResourceGroup.ListResourceGroups(ctx, connect.NewRequest(&controlplanev1.ListResourceGroupsRequest{PageToken: pageToken}))
 		if err != nil {
 			return nil, err
 		}

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	iamv1beta2 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1beta2"
+	iamv1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/iam/v1"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
@@ -97,8 +97,8 @@ func TestLoadFlow(t *testing.T) {
 			handler := func() http.HandlerFunc {
 				return func(w http.ResponseWriter, r *http.Request) {
 					if strings.Contains(r.URL.Path, "GetCurrentOrganization") {
-						resp := &iamv1beta2.GetCurrentOrganizationResponse{
-							Organization: &iamv1beta2.Organization{
+						resp := &iamv1.GetCurrentOrganizationResponse{
+							Organization: &iamv1.Organization{
 								Id:   "no-url-org-id",
 								Name: "no-url-org",
 							},

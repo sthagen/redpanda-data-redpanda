@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	dataplanev1alpha2 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1alpha2"
+	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/common-go/rpadmin"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
@@ -45,7 +45,7 @@ List all mountable topics:
 				cl, err := publicapi.DataplaneClientFromRpkProfile(p)
 				out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
-				resp, err := cl.CloudStorage.ListMountableTopics(cmd.Context(), connect.NewRequest(&dataplanev1alpha2.ListMountableTopicsRequest{}))
+				resp, err := cl.CloudStorage.ListMountableTopics(cmd.Context(), connect.NewRequest(&dataplanev1.ListMountableTopicsRequest{}))
 				out.MaybeDie(err, "unable to list mountable topics: %v", err)
 				if resp != nil {
 					mountableTopics = dataplaneToAdminMountableTopics(resp.Msg)
@@ -102,13 +102,13 @@ func rpadminMountableTopicsToMountableTopicState(in []rpadmin.MountableTopic) []
 	return resp
 }
 
-func dataplaneToAdminMountableTopics(resp *dataplanev1alpha2.ListMountableTopicsResponse) []rpadmin.MountableTopic {
+func dataplaneToAdminMountableTopics(resp *dataplanev1.ListMountableTopicsResponse) []rpadmin.MountableTopic {
 	var topics []rpadmin.MountableTopic
 	if resp != nil {
 		for _, topic := range resp.Topics {
 			topics = append(topics, rpadmin.MountableTopic{
 				TopicLocation: topic.TopicLocation,
-				Topic:         topic.Name,
+				Topic:         topic.TopicName,
 			})
 		}
 	}

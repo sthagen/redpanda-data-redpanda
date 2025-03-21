@@ -142,6 +142,7 @@ crash_reporter::build_crash_report_payload(
             r.stacktrace = ss::sstring{report.crash->stacktrace.c_str()};
             r.reason = fmt::format("{}", report.crash->type);
             r.app_version = report.crash->app_version;
+            r.arch = report.crash->arch;
 
             if (
               report.crash->type
@@ -302,6 +303,8 @@ void rjson_serialize(
     w.String(report.description);
     w.Key("app_version");
     w.String(report.app_version);
+    w.Key("arch");
+    w.String(report.arch);
     w.EndObject();
 }
 

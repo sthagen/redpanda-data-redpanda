@@ -16,7 +16,7 @@ go_library(
         "//src/go/rpk/pkg/oauth/providers/auth0",
         "//src/go/rpk/pkg/out",
         "//src/go/rpk/pkg/publicapi",
-        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1beta2",
+        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1:controlplane",
         "@com_connectrpc_connect//:connect",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
