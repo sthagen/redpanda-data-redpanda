@@ -219,8 +219,11 @@ read_committed_reader::do_load_slice(
     }
     // Mark stream as filtered by deleting the tracker.
     _tracker = nullptr;
+
+    co_await _underlying->finally();
     _underlying = make_txn_filtered_reader(
       std::move(batches), aborted_txn_markers);
+
     co_return co_await _underlying->do_load_slice(deadline);
 }
 
