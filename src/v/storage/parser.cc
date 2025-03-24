@@ -37,7 +37,7 @@ namespace storage {
 using stop_parser = batch_consumer::stop_parser;
 // make sure that `msg` parameter is a static string or it is not removed before
 // this function finishes
-static ss::future<result<iobuf>> verify_read_iobuf(
+static ss::future<result<iobuf, parser_errc>> verify_read_iobuf(
   ss::input_stream<char>& in,
   size_t expected,
   const char* msg,
@@ -204,15 +204,25 @@ ss::future<result<stop_parser>> continuous_batch_parser::consume_records() {
     auto sz = _header->size_bytes - model::packed_record_batch_header_size;
     return verify_read_iobuf(
              get_stream(), sz, "parser::consume_records", _recovery)
-      .then([this](result<iobuf> record) -> ss::future<result<stop_parser>> {
-          if (!record) {
-              return ss::make_ready_future<result<stop_parser>>(record.error());
-          }
-          _consumer->consume_records(std::move(record.value()));
-          return _consumer->consume_batch_end().then([](stop_parser sp) {
-              return ss::make_ready_future<result<stop_parser>>(sp);
-          });
-      });
+      .then(
+        [this](result<iobuf, parser_errc> record)
+          -> ss::future<result<stop_parser>> {
+            if (unlikely(!record)) {
+                vlog(
+                  stlog.error,
+                  "parser::consume_records error: {} (record_batch_header: {}, "
+                  "batch consumer: {}) ",
+                  to_string(record.error()),
+                  *_header,
+                  *_consumer);
+                return ss::make_ready_future<result<stop_parser>>(
+                  record.error());
+            }
+            _consumer->consume_records(std::move(record.value()));
+            return _consumer->consume_batch_end().then([](stop_parser sp) {
+                return ss::make_ready_future<result<stop_parser>>(sp);
+            });
+        });
 }
 
 static constexpr std::array<parser_errc, 3> benign_error_codes{

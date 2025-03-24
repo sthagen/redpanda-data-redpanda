@@ -45,7 +45,8 @@ api::api(
 api::~api() noexcept = default;
 
 ss::future<> api::start() {
-    _store = std::make_unique<sharded_store>();
+    _store = std::make_unique<sharded_store>(
+      normalize{config::shard_local_cfg().schema_registry_always_normalize});
     co_await _store->start(is_mutable(_cfg.mode_mutability), _sg);
     co_await _schema_id_validation_probe.start();
     co_await _schema_id_validation_probe.invoke_on_all(

@@ -706,6 +706,8 @@ public:
       const std::optional<group_instance_id>&,
       const ss::sstring&) const;
 
+    // Cancel metrics to prevent double_mtrics registration;
+    void pre_shutdown();
     // shutdown group. cancel all pending operations
     ss::future<> shutdown();
 

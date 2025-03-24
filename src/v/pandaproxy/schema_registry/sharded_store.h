@@ -25,7 +25,8 @@ class store;
 /// subject or schema_id
 class sharded_store final : public schema_getter {
 public:
-    explicit sharded_store() = default;
+    explicit sharded_store(normalize always_normalize = normalize::no)
+      : _always_normalize(always_normalize) {}
     ~sharded_store() override = default;
     ss::future<> start(is_mutable mut, ss::smp_service_group sg);
     ss::future<> stop();
@@ -239,6 +240,7 @@ private:
 
     ///\brief Access must occur only on shard 0.
     schema_id _next_schema_id{1};
+    normalize _always_normalize;
 };
 
 } // namespace pandaproxy::schema_registry

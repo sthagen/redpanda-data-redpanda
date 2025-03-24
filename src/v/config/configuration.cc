@@ -3601,11 +3601,14 @@ configuration::configuration()
       "Per-shard capacity of the cache for validating schema IDs.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       128)
-  , schema_registry_normalize_on_startup(
+  , schema_registry_always_normalize(
       *this,
-      "schema_registry_normalize_on_startup",
-      "Normalize schemas as they are read from the topic on startup.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      "schema_registry_always_normalize",
+      "Always normalize schemas. If set, this overrides the "
+      "normalize parameter in API requests.",
+      {.needs_restart = needs_restart::yes,
+       .visibility = visibility::user,
+       .aliases = {"schema_registry_normalize_on_startup"}},
       false)
   , schema_registry_protobuf_renderer_v2(
       *this, "schema_registry_protobuf_renderer_v2")

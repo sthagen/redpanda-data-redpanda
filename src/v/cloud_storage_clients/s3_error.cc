@@ -288,6 +288,129 @@ std::ostream& operator<<(std::ostream& o, s3_error_code code) {
     case s3_error_code::no_such_configuration:
         o << "NoSuchConfiguration";
         break;
+    case s3_error_code::authorization_query_parameters_error:
+        o << "AuthorizationQueryParametersError";
+        break;
+    case s3_error_code::access_point_already_owned_by_you:
+        o << "AccessPointAlreadyOwnedByYou";
+        break;
+    case s3_error_code::access_control_list_not_supported:
+        o << "AccessControlListNotSupported";
+        break;
+    case s3_error_code::endpoint_not_found:
+        o << "EndpointNotFound";
+        break;
+    case s3_error_code::device_not_active_error:
+        o << "DeviceNotActiveError";
+        break;
+    case s3_error_code::conditional_request_conflict:
+        o << "ConditionalRequestConflict";
+        break;
+    case s3_error_code::connection_closed_by_requester:
+        o << "ConnectionClosedByRequester";
+        break;
+    case s3_error_code::client_token_conflict:
+        o << "ClientTokenConflict";
+        break;
+    case s3_error_code::bucket_has_access_points_attached:
+        o << "BucketHasAccessPointsAttached";
+        break;
+    case s3_error_code::invalid_access_point_alias_error:
+        o << "InvalidAccessPointAliasError";
+        break;
+    case s3_error_code::incorrect_endpoint:
+        o << "IncorrectEndpoint";
+        break;
+    case s3_error_code::invalid_http_method:
+        o << "InvalidHttpMethod";
+        break;
+    case s3_error_code::invalid_host_header:
+        o << "InvalidHostHeader";
+        break;
+    case s3_error_code::invalid_bucket_owner_aws_account_id:
+        o << "InvalidBucketOwnerAWSAccountID";
+        break;
+    case s3_error_code::invalid_bucket_acl_with_object_ownership:
+        o << "InvalidBucketAclWithObjectOwnership";
+        break;
+    case s3_error_code::invalid_session_exception:
+        o << "InvalidSessionException";
+        break;
+    case s3_error_code::invalid_signature:
+        o << "InvalidSignature";
+        break;
+    case s3_error_code::kms_disabled_exception:
+        o << "KMS.DisabledException";
+        break;
+    case s3_error_code::kms_invalid_key_usage_exception:
+        o << "KMS.InvalidKeyUsageException";
+        break;
+    case s3_error_code::kms_invalid_state_exception:
+        o << "KMS.KMSInvalidStateException";
+        break;
+    case s3_error_code::kms_not_found_exception:
+        o << "KMS.NotFoundException";
+        break;
+    case s3_error_code::missing_authentication_token:
+        o << "MissingAuthenticationToken";
+        break;
+    case s3_error_code::no_such_async_request:
+        o << "NoSuchAsyncRequest";
+        break;
+    case s3_error_code::no_such_cors_configuration:
+        o << "NoSuchCORSConfiguration";
+        break;
+    case s3_error_code::no_such_multi_region_access_point:
+        o << "NoSuchMultiRegionAccessPoint";
+        break;
+    case s3_error_code::no_such_object_lock_configuration:
+        o << "NoSuchObjectLockConfiguration";
+        break;
+    case s3_error_code::no_such_website_configuration:
+        o << "NoSuchWebsiteConfiguration";
+        break;
+    case s3_error_code::not_modified:
+        o << "NotModified";
+        break;
+    case s3_error_code::not_device_owner_error:
+        o << "NotDeviceOwnerError";
+        break;
+    case s3_error_code::no_transformation_defined:
+        o << "NoTransformationDefined";
+        break;
+    case s3_error_code::object_lock_configuration_not_found_error:
+        o << "ObjectLockConfigurationNotFoundError";
+        break;
+    case s3_error_code::ownership_controls_not_found_error:
+        o << "OwnershipControlsNotFoundError";
+        break;
+    case s3_error_code::permanent_redirect_control_error:
+        o << "PermanentRedirectControlError";
+        break;
+    case s3_error_code::response_interrupted:
+        o << "ResponseInterrupted";
+        break;
+    case s3_error_code::token_code_invalid_error:
+        o << "TokenCodeInvalidError";
+        break;
+    case s3_error_code::too_many_multi_region_access_pointregions_error:
+        o << "TooManyMultiRegionAccessPointregionsError";
+        break;
+    case s3_error_code::too_many_multi_region_access_points:
+        o << "TooManyMultiRegionAccessPoints";
+        break;
+    case s3_error_code::unauthorized_access_error:
+        o << "UnauthorizedAccessError";
+        break;
+    case s3_error_code::unexpected_ip_error:
+        o << "UnexpectedIPError";
+        break;
+    case s3_error_code::unsupported_signature:
+        o << "UnsupportedSignature";
+        break;
+    case s3_error_code::unsupported_argument:
+        o << "UnsupportedArgument";
+        break;
     case s3_error_code::_unknown:
         o << "_unknown_error_code_";
         break;
@@ -401,7 +524,64 @@ static const std::map<ss::sstring, s3_error_code> known_aws_error_codes = {
   {"NoSuchAccessPoint", s3_error_code::no_such_access_point},
   {"InvalidTag", s3_error_code::invalid_tag},
   {"MalformedPolicy", s3_error_code::malformed_policy},
-  {"NoSuchConfiguration", s3_error_code::no_such_configuration}};
+  {"NoSuchConfiguration", s3_error_code::no_such_configuration},
+  {"AuthorizationQueryParametersError",
+   s3_error_code::authorization_query_parameters_error},
+  {"AccessPointAlreadyOwnedByYou",
+   s3_error_code::access_point_already_owned_by_you},
+  {"AccessControlListNotSupported",
+   s3_error_code::access_control_list_not_supported},
+  {"EndpointNotFound", s3_error_code::endpoint_not_found},
+  {"DeviceNotActiveError", s3_error_code::device_not_active_error},
+  {"ConditionalRequestConflict", s3_error_code::conditional_request_conflict},
+  {"ConnectionClosedByRequester",
+   s3_error_code::connection_closed_by_requester},
+  {"ClientTokenConflict", s3_error_code::client_token_conflict},
+  {"BucketHasAccessPointsAttached",
+   s3_error_code::bucket_has_access_points_attached},
+  {"InvalidAccessPointAliasError",
+   s3_error_code::invalid_access_point_alias_error},
+  {"IncorrectEndpoint", s3_error_code::incorrect_endpoint},
+  {"InvalidHttpMethod", s3_error_code::invalid_http_method},
+  {"InvalidHostHeader", s3_error_code::invalid_host_header},
+  {"InvalidBucketOwnerAWSAccountID",
+   s3_error_code::invalid_bucket_owner_aws_account_id},
+  {"InvalidBucketAclWithObjectOwnership",
+   s3_error_code::invalid_bucket_acl_with_object_ownership},
+  {"InvalidSessionException", s3_error_code::invalid_session_exception},
+  {"InvalidSignature", s3_error_code::invalid_signature},
+  {"KMS.DisabledException", s3_error_code::kms_disabled_exception},
+  {"KMS.InvalidKeyUsageException",
+   s3_error_code::kms_invalid_key_usage_exception},
+  {"KMS.KMSInvalidStateException", s3_error_code::kms_invalid_state_exception},
+  {"KMS.NotFoundException", s3_error_code::kms_not_found_exception},
+  {"MissingAuthenticationToken", s3_error_code::missing_authentication_token},
+  {"NoSuchAsyncRequest", s3_error_code::no_such_async_request},
+  {"NoSuchCORSConfiguration", s3_error_code::no_such_cors_configuration},
+  {"NoSuchMultiRegionAccessPoint",
+   s3_error_code::no_such_multi_region_access_point},
+  {"NoSuchObjectLockConfiguration",
+   s3_error_code::no_such_object_lock_configuration},
+  {"NoSuchWebsiteConfiguration", s3_error_code::no_such_website_configuration},
+  {"NotModified", s3_error_code::not_modified},
+  {"NotDeviceOwnerError", s3_error_code::not_device_owner_error},
+  {"NoTransformationDefined", s3_error_code::no_transformation_defined},
+  {"ObjectLockConfigurationNotFoundError",
+   s3_error_code::object_lock_configuration_not_found_error},
+  {"OwnershipControlsNotFoundError",
+   s3_error_code::ownership_controls_not_found_error},
+  {"PermanentRedirectControlError",
+   s3_error_code::permanent_redirect_control_error},
+  {"ResponseInterrupted", s3_error_code::response_interrupted},
+  {"TokenCodeInvalidError", s3_error_code::token_code_invalid_error},
+  {"TooManyMultiRegionAccessPointregionsError",
+   s3_error_code::too_many_multi_region_access_pointregions_error},
+  {"TooManyMultiRegionAccessPoints",
+   s3_error_code::too_many_multi_region_access_points},
+  {"UnauthorizedAccessError", s3_error_code::unauthorized_access_error},
+  {"UnexpectedIPError", s3_error_code::unexpected_ip_error},
+  {"UnsupportedSignature", s3_error_code::unsupported_signature},
+  {"UnsupportedArgument", s3_error_code::unsupported_argument}};
 
 std::istream& operator>>(std::istream& i, s3_error_code& code) {
     ss::sstring c;

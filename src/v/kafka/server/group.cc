@@ -1374,7 +1374,15 @@ void group::remove_pending_member(kafka::member_id member_id) {
     }
 }
 
+void group::pre_shutdown() {
+    _probe.reset();
+    for (auto& p : _offsets) {
+        p.second->probe.reset();
+    }
+}
+
 ss::future<> group::shutdown() {
+    pre_shutdown();
     _auto_abort_timer.cancel();
     co_await _gate.close();
     // cancel join timer

@@ -3268,6 +3268,70 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
                               subjects[subject]["schema_ids"],
                               subjects[subject]["subject_versions"])
 
+    @cluster(num_nodes=3)
+    def test_always_normalize_option(self):
+
+        # Post a schema with normalization set to off
+        result_raw = self._post_subjects_subject_versions(
+            subject="test_subject",
+            data=json.dumps({
+                "schema": imported_schema_proto_def,
+                "schemaType": "PROTOBUF"
+            }))
+        assert result_raw.status_code == requests.codes.ok, \
+            f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup"
+
+        def test_schemas_ids_id(expected_schema):
+            result_raw = self._request("GET",
+                                       f"schemas/ids/1",
+                                       headers=HTTP_GET_HEADERS)
+            result = result_raw.json()["schema"].strip()
+            assert result_raw.status_code == requests.codes.ok, \
+                f"Expected {requests.codes.ok} but got {result_raw.status_code}, "\
+                f"with content {result_raw.content}"
+            assert result == expected_schema, \
+                    f"Expected:\n{expected_schema}\ngot:\n{result}"
+
+        def test_subjects_subject(schema, expected_version=None, norm=False):
+            result_raw = self._post_subjects_subject(subject="test_subject",
+                                                     data=json.dumps({
+                                                         "schema":
+                                                         schema,
+                                                         "schemaType":
+                                                         "PROTOBUF",
+                                                     }),
+                                                     normalize=norm)
+            if expected_version:
+                assert result_raw.status_code == requests.codes.ok, \
+                    f"Expected {requests.codes.ok} but got {result_raw.status_code}, "\
+                    f"with content {result_raw.content}"
+                result = result_raw.json()["version"]
+                assert result == expected_version, \
+                        f"Expected version {expected_version} but got {result}"
+            else:
+                assert result_raw.status_code == 404, \
+                    f"Expected 404 but got {result_raw.status_code}, "\
+                    f"with content {result_raw.content}"
+
+        sanitized = imported_schema_sanitized_proto_def.strip()
+        normalized = imported_schema_normalized_proto_def.strip()
+
+        test_schemas_ids_id(sanitized)
+        test_subjects_subject(sanitized, expected_version=1)
+        test_subjects_subject(sanitized, expected_version=1, norm=True)
+        test_subjects_subject(normalized, expected_version=None)
+        test_subjects_subject(normalized, expected_version=1, norm=True)
+
+        #Update always_normalize and re-run all tests
+        self.redpanda.set_cluster_config(
+            {'schema_registry_always_normalize': True}, expect_restart=True)
+
+        test_schemas_ids_id(imported_schema_normalized_proto_def.strip())
+        test_subjects_subject(sanitized, expected_version=1)
+        test_subjects_subject(sanitized, expected_version=1, norm=True)
+        test_subjects_subject(normalized, expected_version=1)
+        test_subjects_subject(normalized, expected_version=1, norm=True)
+
 
 class SchemaRegistryModeNotMutableTest(SchemaRegistryEndpoints):
     """

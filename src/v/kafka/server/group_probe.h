@@ -78,6 +78,11 @@ public:
     }
     void deregister_public_metrics() { _public_metrics.reset(); }
 
+    void reset() {
+        deregister_metrics();
+        deregister_public_metrics();
+    }
+
 private:
     void _setup_metrics(
       const kafka::group_id& group_id, const model::topic_partition& tp) {
@@ -189,6 +194,11 @@ public:
 
     void deregister_consumer_lag_metrics() {
         _public_consumer_lag_metrics.reset();
+    }
+
+    void reset() {
+        deregister_group_metrics();
+        deregister_consumer_lag_metrics();
     }
 
 private:
