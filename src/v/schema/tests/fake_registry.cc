@@ -11,6 +11,8 @@
 
 #include "schema/tests/fake_registry.h"
 
+#include "pandaproxy/schema_registry/types.h"
+
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 
@@ -19,6 +21,13 @@ namespace {
 static ss::logger dummy_logger("schema_test_logger");
 
 namespace ppsr = pandaproxy::schema_registry;
+
+bool same_schema(
+  const ppsr::unparsed_schema& unparsed,
+  const ppsr::canonical_schema& canonical) {
+    // Wrong, but works good enough for our simple testing.
+    return unparsed.def().raw()() == canonical.def().raw()();
+}
 
 } // namespace
 
@@ -87,14 +96,19 @@ schema::fake_registry::create_schema(ppsr::unparsed_schema unparsed) {
     maybe_throw_injected_failure();
     // This is wrong, but simple for our testing.
     for (const auto& s : _store.schemas) {
-        if (s.schema.def().raw()() == unparsed.def().raw()()) {
+        if (
+          same_schema(unparsed, s.schema) && s.schema.sub() == unparsed.sub()) {
             co_return s.id;
         }
     }
+    auto id = ppsr::schema_id(int32_t(_store.schemas.size() + 1));
     auto version = ppsr::schema_version(0);
     for (const auto& s : _store.schemas) {
+        if (same_schema(unparsed, s.schema)) {
+            id = s.id;
+        }
         if (s.schema.sub() == unparsed.sub()) {
-            version = std::max(version, s.version);
+            version = std::max(version, s.version + 1);
         }
     }
     // TODO: validate references too
@@ -107,8 +121,8 @@ schema::fake_registry::create_schema(ppsr::unparsed_schema unparsed) {
           ppsr::canonical_schema_definition::raw_string{std::move(def)()},
           type,
           std::move(refs))),
-      .version = version + 1,
-      .id = ppsr::schema_id(int32_t(_store.schemas.size() + 1)),
+      .version = version,
+      .id = id,
       .deleted = ppsr::is_deleted::no,
     });
     co_return _store.schemas.back().id;

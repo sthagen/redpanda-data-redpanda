@@ -1812,6 +1812,23 @@ error_code group_manager::validate_group_status(
               ntp);
             return error_code::not_coordinator;
         }
+        /**
+         * Check if term changed, this can happen if a node that stepped down
+         * became a leader again.
+         */
+        if (it->second->partition->term() != it->second->term()) {
+            vlog(
+              cg_klog.info,
+              "Group {} operation {} for partition {} processed while term "
+              "changed. "
+              "Group term: {} current term: {}",
+              group,
+              api,
+              ntp,
+              it->second->term(),
+              it->second->partition->term());
+            return error_code::not_coordinator;
+        }
 
         if (it->second->loading) {
             vlog(

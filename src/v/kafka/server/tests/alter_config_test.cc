@@ -1289,8 +1289,15 @@ FIXTURE_TEST(test_iceberg_property, alter_config_test_fixture) {
 
     {
         // alter the iceberg config of an existing topic, should work.
-        for (const auto& prop :
-             {"disabled", "key_value", "value_schema_id_prefix"}) {
+        for (const auto& prop : {
+               "disabled",
+               "key_value",
+               "value_schema_id_prefix",
+               "value_subject_latest",
+               "value_subject_latest:protobuf_name=com.redpanda.Example",
+               "value_subject_latest:protobuf_name=Example,subject=foo",
+               "value_subject_latest:subject=foo",
+             }) {
             absl::flat_hash_map<ss::sstring, ss::sstring> properties;
             properties.emplace("redpanda.iceberg.mode", prop);
 
@@ -1310,8 +1317,15 @@ FIXTURE_TEST(test_iceberg_property, alter_config_test_fixture) {
 
     {
         // same as above, with incremental alter
-        for (const auto& prop :
-             {"disabled", "key_value", "value_schema_id_prefix"}) {
+        for (const auto& prop : {
+               "disabled",
+               "key_value",
+               "value_schema_id_prefix",
+               "value_subject_latest",
+               "value_subject_latest:protobuf_name=com.redpanda.Example",
+               "value_subject_latest:protobuf_name=Example,subject=foo",
+               "value_subject_latest:subject=foo",
+             }) {
             absl::flat_hash_map<
               ss::sstring,
               std::pair<

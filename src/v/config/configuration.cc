@@ -3811,6 +3811,14 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::chrono::milliseconds(1min),
       {.min = std::chrono::milliseconds{10s}})
+  , iceberg_latest_schema_cache_ttl_ms(
+      *this,
+      "iceberg_latest_schema_cache_ttl_ms",
+      "The TTL for the cache in translation that stores the latest schema when "
+      "using the `latest_protobuf_value` iceberg mode.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      std::chrono::milliseconds(5min),
+      {.min = std::chrono::milliseconds{1ms}})
   , iceberg_catalog_base_location(
       *this,
       "iceberg_catalog_base_location",

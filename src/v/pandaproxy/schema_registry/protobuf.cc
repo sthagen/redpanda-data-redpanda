@@ -573,6 +573,21 @@ descriptor(
     return *d;
 }
 
+::result<
+  std::reference_wrapper<const google::protobuf::Descriptor>,
+  kafka::error_code>
+descriptor(const protobuf_schema_definition& def, std::string_view full_name) {
+    if (full_name.empty()) {
+        return kafka::error_code::invalid_record;
+    }
+    const google::protobuf::Descriptor* d = def()._dp.FindMessageTypeByName(
+      full_name);
+    if (!d) {
+        return kafka::error_code::invalid_record;
+    }
+    return *d;
+}
+
 bool operator==(
   const protobuf_schema_definition& lhs,
   const protobuf_schema_definition& rhs) {

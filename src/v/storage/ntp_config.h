@@ -33,8 +33,8 @@ public:
     // is handled during adl/serde decode).
     static constexpr bool default_remote_delete{true};
     static constexpr bool legacy_remote_delete{false};
-    static constexpr model::iceberg_mode default_iceberg_mode
-      = model::iceberg_mode::disabled;
+    static inline model::iceberg_mode default_iceberg_mode
+      = model::iceberg_mode{};
     static constexpr bool default_cloud_topic_enabled{false};
 
     static constexpr std::chrono::milliseconds read_replica_retention{3600000};

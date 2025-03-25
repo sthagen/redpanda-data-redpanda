@@ -48,4 +48,15 @@ compatibility_result check_compatible(
   kafka::error_code>
 descriptor(const protobuf_schema_definition&, const std::vector<int>& fields);
 
+// Returns a reference to the `Descriptor` via the message's full name
+// specified by `full_name`.
+//
+// Note that the returned reference to is an object owned by
+// `protobuf_schema_definition` and therefore should only be used
+// while that object is alive.
+::result<
+  std::reference_wrapper<const google::protobuf::Descriptor>,
+  kafka::error_code>
+descriptor(const protobuf_schema_definition&, std::string_view full_name);
+
 } // namespace pandaproxy::schema_registry

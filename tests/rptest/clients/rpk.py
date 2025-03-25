@@ -1718,7 +1718,7 @@ class RpkTool:
         with tempfile.NamedTemporaryFile(suffix=f".{schema_suffix}") as tf:
             tf.write(bytes(schema, 'UTF-8'))
             tf.flush()
-            self.create_schema(subject, tf.name)
+            return self.create_schema(subject, tf.name)
 
     def get_schema(self,
                    subject=None,

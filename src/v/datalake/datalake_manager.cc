@@ -40,29 +40,45 @@ namespace datalake {
 namespace {
 
 static std::unique_ptr<type_resolver> make_type_resolver(
-  model::iceberg_mode mode, schema::registry& sr, schema_cache& cache) {
-    switch (mode) {
-    case model::iceberg_mode::disabled:
+  const model::iceberg_mode& mode,
+  model::topic_view topic_name,
+  schema::registry& sr,
+  schema_cache& cache) {
+    switch (mode.kind()) {
+    case model::iceberg_mode::variant::disabled:
         vassert(
           false,
           "Cannot make record translator when iceberg is disabled, logic bug.");
-    case model::iceberg_mode::key_value:
+    case model::iceberg_mode::variant::key_value:
         return std::make_unique<binary_type_resolver>();
-    case model::iceberg_mode::value_schema_id_prefix:
+    case model::iceberg_mode::variant::value_schema_id_prefix:
         return std::make_unique<record_schema_resolver>(sr, cache);
+    case model::iceberg_mode::variant::value_subject_latest:
+        auto subject = pandaproxy::schema_registry::subject(
+          fmt::format("{}-value", topic_name));
+        if (auto explicit_subject = mode.subject_name()) {
+            subject = pandaproxy::schema_registry::subject(*explicit_subject);
+        }
+        return std::make_unique<latest_subject_schema_resolver>(
+          sr,
+          subject,
+          mode.protobuf_full_name(),
+          config::shard_local_cfg().iceberg_latest_schema_cache_ttl_ms.bind(),
+          cache);
     }
 }
 
 static std::unique_ptr<record_translator>
-make_record_translator(model::iceberg_mode mode) {
-    switch (mode) {
-    case model::iceberg_mode::disabled:
+make_record_translator(const model::iceberg_mode& mode) {
+    switch (mode.kind()) {
+    case model::iceberg_mode::variant::disabled:
         vassert(
           false,
           "Cannot make record translator when iceberg is disabled, logic bug.");
-    case model::iceberg_mode::key_value:
+    case model::iceberg_mode::variant::key_value:
         return std::make_unique<key_value_translator>();
-    case model::iceberg_mode::value_schema_id_prefix:
+    case model::iceberg_mode::variant::value_schema_id_prefix:
+    case model::iceberg_mode::variant::value_subject_latest:
         return std::make_unique<structured_data_translator>();
     }
 }
@@ -99,7 +115,6 @@ datalake_manager::datalake_manager(
   , _location_provider(cloud_io->local().provider(), bucket_name)
   , _schema_registry(schema::registry::make_default(sr_api))
   , _catalog_factory(std::move(catalog_factory))
-  , _type_resolver(std::make_unique<record_schema_resolver>(*_schema_registry))
   // TODO: The cache size is currently arbitrary. Figure out a more reasoned
   // size and allocate a share of the datalake memory semaphore to this cache.
   , _schema_cache(std::make_unique<chunked_schema_cache>(
@@ -329,7 +344,7 @@ datalake_manager::handle_translator_state_change(const model::ntp& ntp) {
 
     auto mode = topic_cfg->properties.iceberg_mode;
     auto type_resolver = make_type_resolver(
-      mode, *_schema_registry, *_schema_cache);
+      mode, ntp.tp.topic, *_schema_registry, *_schema_cache);
     auto record_translator = make_record_translator(mode);
     auto table_creator = translation::make_default_table_creator(
       _coordinator_frontend->local());

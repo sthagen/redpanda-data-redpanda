@@ -291,14 +291,17 @@ metrics_reporter::build_metrics_snapshot() {
 
         snapshot.topic_count++;
         snapshot.partition_count += md.get_configuration().partition_count;
-        switch (md.get_configuration().properties.iceberg_mode) {
-        case model::iceberg_mode::disabled:
+        switch (md.get_configuration().properties.iceberg_mode.kind()) {
+        case model::iceberg_mode::variant::disabled:
             break;
-        case model::iceberg_mode::key_value:
+        case model::iceberg_mode::variant::key_value:
             ++snapshot.topics_with_iceberg_kv;
             break;
-        case model::iceberg_mode::value_schema_id_prefix:
+        case model::iceberg_mode::variant::value_schema_id_prefix:
             ++snapshot.topics_with_iceberg_sr;
+            break;
+        case model::iceberg_mode::variant::value_subject_latest:
+            ++snapshot.topics_with_iceberg_pb;
             break;
         }
     }
@@ -608,6 +611,8 @@ void rjson_serialize(
     w.Uint64(snapshot.topics_with_iceberg_kv);
     w.Key("topics_with_iceberg_value_schema_id_prefix");
     w.Uint64(snapshot.topics_with_iceberg_sr);
+    w.Key("topics_with_iceberg_latest_protobuf_value");
+    w.Uint64(snapshot.topics_with_iceberg_pb);
 
     w.Key("partition_count");
     w.Uint64(snapshot.partition_count);

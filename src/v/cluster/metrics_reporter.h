@@ -96,6 +96,7 @@ public:
 
         uint32_t topics_with_iceberg_kv{0};
         uint32_t topics_with_iceberg_sr{0};
+        uint32_t topics_with_iceberg_pb{0};
 
         cluster_version active_logical_version{invalid_version};
         cluster_version original_logical_version{invalid_version};

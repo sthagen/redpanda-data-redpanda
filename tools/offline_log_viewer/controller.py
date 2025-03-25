@@ -138,7 +138,7 @@ def read_topic_properties_serde(rdr: Reader, version):
         }
     if version >= 10:
         topic_properties |= {
-            'iceberg_mode': rdr.read_serde_enum(),
+            'iceberg_mode': read_iceberg_mode(rdr),
             'leaders_preference': rdr.read_optional(read_leaders_preference),
             'cloud_topic_enabled': rdr.read_bool(),
             'delete_retention_ms': rdr.read_tristate(Reader.read_int64),
@@ -162,6 +162,14 @@ def read_topic_properties_serde(rdr: Reader, version):
         }
 
     return topic_properties
+
+
+def read_iceberg_mode(rdr: Reader):
+    variant = rdr.read_serde_enum()
+    protobuf_value = None
+    if variant == 3:
+        protobuf_value = rdr.read_string()
+    return {"variant": variant, "protobuf_value": protobuf_value}
 
 
 def read_topic_config(rdr: Reader, version):
@@ -319,7 +327,7 @@ def read_incremental_topic_update_serde(rdr: Reader):
             }
         if version >= 7:
             incr_obj |= {
-                'iceberg_mode': rdr.read_serde_enum(),
+                'iceberg_mode': read_iceberg_mode(rdr),
                 'leaders_preference':
                 rdr.read_optional(read_leaders_preference),
                 'iceberg_delete': rdr.read_optional(Reader.read_bool),

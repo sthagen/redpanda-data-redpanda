@@ -140,6 +140,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
         if (val_type_res.has_error()) {
             switch (val_type_res.error()) {
             case type_resolver::errc::registry_error:
+            case type_resolver::errc::invalid_config:
                 _error = writer_error::parquet_conversion_error;
                 co_return ss::stop_iteration::yes;
             case type_resolver::errc::bad_input:

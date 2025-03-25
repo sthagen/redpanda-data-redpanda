@@ -119,7 +119,6 @@ private:
     std::unique_ptr<coordinator::catalog_factory> _catalog_factory;
     std::unique_ptr<iceberg::catalog> _catalog;
     std::unique_ptr<datalake::schema_manager> _schema_mgr;
-    std::unique_ptr<datalake::type_resolver> _type_resolver;
     std::unique_ptr<datalake::schema_cache> _schema_cache;
     std::unique_ptr<backlog_controller> _backlog_controller;
     chunked_hash_map<model::ntp, ss::lw_shared_ptr<class translation_probe>>

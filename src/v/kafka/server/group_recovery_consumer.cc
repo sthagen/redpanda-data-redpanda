@@ -34,7 +34,8 @@ ss::future<> group_recovery_consumer::handle_tx_offsets(
       "[group: {}] recovered update tx offsets: {}",
       data.group_id,
       data);
-    auto [group_it, _] = _state.groups.try_emplace(data.group_id);
+    auto [group_it, _] = _state.groups.try_emplace(
+      data.group_id, data.group_id);
     group_it->second.update_tx_offset(hdr.last_offset(), data);
     co_return;
 }
@@ -49,7 +50,8 @@ ss::future<> group_recovery_consumer::handle_fence_v0(
       data.group_id,
       group::fence_control_record_v0_version,
       pid);
-    auto [group_it, _] = _state.groups.try_emplace(data.group_id);
+    auto [group_it, _] = _state.groups.try_emplace(
+      data.group_id, data.group_id);
     group_it->second.try_set_fence(pid.get_id(), pid.get_epoch());
     co_return;
 }
@@ -65,7 +67,8 @@ ss::future<> group_recovery_consumer::handle_fence_v1(
       group::fence_control_record_v1_version,
       pid,
       data);
-    auto [group_it, _] = _state.groups.try_emplace(data.group_id);
+    auto [group_it, _] = _state.groups.try_emplace(
+      data.group_id, data.group_id);
     group_it->second.try_set_fence(
       pid.get_id(),
       pid.get_epoch(),
@@ -208,7 +211,7 @@ void group_recovery_consumer::handle_group_metadata(group_metadata_kv md) {
           md.key.group_id);
 
         auto [group_it, _] = _state.groups.try_emplace(
-          md.key.group_id, group_stm());
+          md.key.group_id, md.key.group_id);
         group_it->second.overwrite_metadata(std::move(*md.value));
     } else {
         // tombstone
@@ -230,7 +233,7 @@ void group_recovery_consumer::handle_offset_metadata(offset_metadata_kv md) {
         // until we switch over to a compacted topic or use raft snapshots,
         // always take the latest entry in the log.
         auto [group_it, _] = _state.groups.try_emplace(
-          md.key.group_id, group_stm());
+          md.key.group_id, md.key.group_id);
         if (_state.has_offset_retention_feature_fence) {
             md.value->non_reclaimable = false;
         }

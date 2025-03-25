@@ -14,6 +14,8 @@
 #include "model/metadata.h"
 #include "model/record.h"
 
+#include <stdexcept>
+
 namespace json {
 
 inline void rjson_serialize(
@@ -320,6 +322,58 @@ inline void rjson_serialize(
 
 inline void read_value(const json::Value& rd, model::record_attributes& out) {
     out = model::record_attributes(rd.GetInt());
+}
+
+inline void rjson_serialize(
+  json::Writer<json::StringBuffer>& wr, const model::iceberg_mode& m) {
+    wr.StartObject();
+    wr.Key("kind");
+    rjson_serialize(wr, m.kind());
+    if (m.kind() == model::iceberg_mode::variant::value_subject_latest) {
+        wr.Key("protobuf_full_name");
+        rjson_serialize(wr, m.protobuf_full_name().value_or(""));
+        wr.Key("subject_name");
+        rjson_serialize(wr, m.subject_name().value_or(""));
+    }
+    wr.EndObject();
+}
+
+inline void read_value(const json::Value& rd, model::iceberg_mode& m) {
+    const auto& obj = rd.GetObject();
+    auto it = obj.FindMember("kind");
+    if (it == obj.MemberEnd()) {
+        throw std::runtime_error("missing kind member from iceberg_mode json");
+    }
+    model::iceberg_mode::variant v = model::iceberg_mode::variant::disabled;
+    read_value(it->value, v);
+    switch (v) {
+    case model::iceberg_mode::variant::disabled:
+        m = model::iceberg_mode::disabled;
+        break;
+    case model::iceberg_mode::variant::key_value:
+        m = model::iceberg_mode::key_value;
+        break;
+    case model::iceberg_mode::variant::value_schema_id_prefix:
+        m = model::iceberg_mode::value_schema_id_prefix;
+        break;
+    case model::iceberg_mode::variant::value_subject_latest:
+        it = obj.FindMember("protobuf_full_name");
+        if (it == obj.MemberEnd()) {
+            throw std::runtime_error(
+              "missing protobuf_full_name member from iceberg_mode json");
+        }
+        ss::sstring name;
+        read_value(it->value, name);
+        it = obj.FindMember("subject_name");
+        if (it == obj.MemberEnd()) {
+            throw std::runtime_error(
+              "missing subject_name member from iceberg_mode json");
+        }
+        ss::sstring subject;
+        read_value(it->value, subject);
+        m = model::iceberg_mode::value_subject_latest(name, subject);
+        break;
+    }
 }
 
 inline void rjson_serialize(

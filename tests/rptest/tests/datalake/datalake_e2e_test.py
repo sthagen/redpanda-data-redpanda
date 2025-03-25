@@ -12,8 +12,9 @@ import time
 from rptest.clients.rpk import RpkTool
 from rptest.services.cluster import cluster
 from random import randint
+import json
 
-from confluent_kafka import avro
+from confluent_kafka import avro, Producer
 from confluent_kafka.avro import AvroProducer
 from rptest.services.redpanda import PandaproxyConfig, SchemaRegistryConfig, SISettings, MetricsEndpoint
 from rptest.services.redpanda import CloudStorageType, SISettings
@@ -26,6 +27,8 @@ from ducktape.mark import matrix, ignore
 from ducktape.utils.util import wait_until
 from rptest.services.metrics_check import MetricCheck
 from rptest.services.catalog_service import CatalogType
+from google import protobuf
+from google.protobuf import text_format as pb_text_format, json_format as pb_json_format
 
 avro_schema_str = """
 {
@@ -129,6 +132,176 @@ class DatalakeE2ETests(RedpandaTest):
                                       ('', '', ''), ('# Partitioning', '', ''),
                                       ('Part 0', 'hours(redpanda.timestamp)',
                                        '')]
+                spark_describe_out = spark.run_query_fetch_all(
+                    f"describe {table_name}")
+                assert spark_describe_out == spark_expected_out, str(
+                    spark_describe_out)
+
+    @cluster(num_nodes=3)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
+            catalog_type=supported_catalog_types())
+    def test_latest_protobuf_schema(self, cloud_storage_type, query_engine,
+                                    catalog_type):
+        count = 100
+        table_name = f"redpanda.{self.topic_name}"
+
+        protobuf_schema_v1 = """
+        syntax = "proto3";
+
+        message Person {
+          string name = 1;
+          int32 id = 2;
+          string email = 3;
+        }
+        """
+        protobuf_schema_v2 = """
+        syntax = "proto3";
+
+        message Address {
+          string street = 1;
+          string city = 2;
+          string state = 3;
+          string zip = 4;
+        }
+
+        message Person {
+          string name = 1;
+          int32 id = 2;
+          string email = 3;
+          Address address = 4;  // Nested message
+        }
+        """
+        # The text format of the above protobuf as to not have to bother setting up protoc for this test.
+        protobuf_file_descriptor = """
+        name: "example.proto"
+        message_type {
+          name: "Address"
+          field { name: "street" number: 1 label: LABEL_OPTIONAL type: TYPE_STRING }
+          field { name: "city" number: 2 label: LABEL_OPTIONAL type: TYPE_STRING }
+          field { name: "state" number: 3 label: LABEL_OPTIONAL type: TYPE_STRING }
+          field { name: "zip" number: 4 label: LABEL_OPTIONAL type: TYPE_STRING }
+        }
+        message_type {
+          name: "Person"
+          field { name: "name" number: 1 label: LABEL_OPTIONAL type: TYPE_STRING }
+          field { name: "id" number: 2 label: LABEL_OPTIONAL type: TYPE_INT32 }
+          field { name: "email" number: 3 label: LABEL_OPTIONAL type: TYPE_STRING }
+          field { name: "address" number: 4 label: LABEL_OPTIONAL type: TYPE_MESSAGE type_name: ".Address" }
+        }
+        """
+
+        # Using the protobuf text format, parse the raw descriptor and create a dynamic message from it.
+        file_desc_pb = protobuf.descriptor_pb2.FileDescriptorProto()
+        pb_text_format.Merge(protobuf_file_descriptor, file_desc_pb)
+        pool = protobuf.descriptor_pool.DescriptorPool()
+        pool.Add(file_desc_pb)
+        factory = protobuf.message_factory.MessageFactory(pool)
+        person_desc = pool.FindMessageTypeByName("Person")
+        Person = factory.GetPrototype(person_desc)
+
+        def produce_protos():
+            producer = Producer({'bootstrap.servers': self.redpanda.brokers()})
+            for i in range(count):
+                record = json.dumps({
+                    "name": f"Bob{i} Protopants",
+                    "id": 1 + i,
+                    "email": f"foobar{i}@gmail.com",
+                    "address": {
+                        "street": f"{i} Main St.",
+                        "city": "Protoville" if i % 2 == 0 else "Buftown",
+                        "state": "District 13" if i % 3 == 0 else "Hooli",
+                        "zip": "8675309" if i % 4 == 0 else "12345"
+                    }
+                })
+                person_proto = Person()
+                pb_json_format.Parse(record, person_proto)
+                producer.produce(topic=self.topic_name,
+                                 value=person_proto.SerializeToString())
+            producer.flush()
+
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              include_query_engines=[query_engine],
+                              catalog_type=catalog_type) as dl:
+            rpk = RpkTool(self.redpanda)
+            rpk.create_schema_from_str(
+                subject=f"{self.topic_name}-value",
+                schema=protobuf_schema_v1,
+                schema_suffix="proto",
+            )
+            dl.create_iceberg_enabled_topic(
+                self.topic_name,
+                iceberg_mode="value_subject_latest:protobuf_name=Person")
+            produce_protos()
+            dl.wait_for_translation(self.topic_name, msg_count=count)
+
+            if query_engine == QueryEngineType.TRINO:
+                trino = dl.trino()
+                trino_expected_out = [
+                    ('redpanda', 'row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)', '', ''),
+                    ('name', 'varchar', '', ''),
+                    ('id', 'integer', '', ''),
+                    ('email', 'varchar', '', ''),
+                ] # yapf: disable
+                trino_describe_out = trino.run_query_fetch_all(
+                    f"describe {table_name}")
+                assert trino_describe_out == trino_expected_out, str(
+                    trino_describe_out)
+            else:
+                spark = dl.spark()
+                spark_expected_out = [
+                    ('redpanda', 'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>', None),
+                    ('name', 'string', None),
+                    ('id', 'int', None),
+                    ('email', 'string', None),
+                    ('', '', ''),
+                    ('# Partitioning', '', ''),
+                    ('Part 0', 'hours(redpanda.timestamp)', '')
+                ] # yapf: disable
+                spark_describe_out = spark.run_query_fetch_all(
+                    f"describe {table_name}")
+                assert spark_describe_out == spark_expected_out, str(
+                    spark_describe_out)
+
+            # Be absolutely sure that the latest schema is being used by the
+            # translator by waiting for the cache to expire the latest schema.
+            rpk.create_schema_from_str(
+                subject=f"{self.topic_name}-value",
+                schema=protobuf_schema_v2,
+                schema_suffix="proto",
+            )
+            rpk.cluster_config_set('iceberg_latest_schema_cache_ttl_ms', '500')
+            time.sleep(1)
+            produce_protos()
+            dl.wait_for_translation_until_offset(self.topic_name,
+                                                 2 * count - 1)
+
+            if query_engine == QueryEngineType.TRINO:
+                trino = dl.trino()
+                trino_expected_out = [
+                    ('redpanda', 'row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)', '', ''),
+                    ('name', 'varchar', '', ''),
+                    ('id', 'integer', '', ''),
+                    ('email', 'varchar', '', ''),
+                    ('address', 'row(street varchar, city varchar, state varchar, zip varchar)', '', ''),
+                ] # yapf: disable
+                trino_describe_out = trino.run_query_fetch_all(
+                    f"describe {table_name}")
+                assert trino_describe_out == trino_expected_out, str(
+                    trino_describe_out)
+            else:
+                spark = dl.spark()
+                spark_expected_out = [
+                    ('redpanda', 'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>', None),
+                    ('name', 'string', None),
+                    ('id', 'int', None),
+                    ('email', 'string', None),
+                    ('address', 'struct<street:string,city:string,state:string,zip:string>', None),
+                    ('', '', ''),
+                    ('# Partitioning', '', ''),
+                    ('Part 0', 'hours(redpanda.timestamp)', '')
+                ] # yapf: disable
                 spark_describe_out = spark.run_query_fetch_all(
                     f"describe {table_name}")
                 assert spark_describe_out == spark_expected_out, str(

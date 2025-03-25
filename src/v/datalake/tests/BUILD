@@ -288,6 +288,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/base",
         "//src/v/bytes",
+        "//src/v/config",
         "//src/v/datalake:logger",
         "//src/v/datalake:record_schema_resolver",
         "//src/v/iceberg:datatypes",

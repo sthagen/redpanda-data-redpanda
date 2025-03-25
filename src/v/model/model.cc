@@ -16,7 +16,10 @@
 #include "model/record_batch_types.h"
 #include "model/timestamp.h"
 #include "model/validation.h"
+#include "serde/rw/enum.h"
 #include "serde/rw/rw.h"
+#include "serde/rw/sstring.h"
+#include "serde/serde_exception.h"
 #include "strings/string_switch.h"
 #include "utils/to_string.h"
 
@@ -24,9 +27,12 @@
 #include <seastar/net/inet_address.hh>
 #include <seastar/net/ip.hh>
 
+#include <absl/container/flat_hash_map.h>
+#include <absl/strings/str_split.h>
 #include <fmt/ostream.h>
 
 #include <iostream>
+#include <optional>
 #include <type_traits>
 
 namespace model {
@@ -582,27 +588,137 @@ std::istream& operator>>(std::istream& is, recovery_validation_mode& vm) {
     return is;
 }
 
-std::ostream& operator<<(std::ostream& os, const iceberg_mode& mode) {
-    switch (mode) {
-    case iceberg_mode::disabled:
-        return os << "disabled";
-    case iceberg_mode::key_value:
-        return os << "key_value";
-    case iceberg_mode::value_schema_id_prefix:
-        return os << "value_schema_id_prefix";
+iceberg_mode iceberg_mode::disabled
+  = iceberg_mode::make<iceberg_mode::variant::disabled>();
+iceberg_mode iceberg_mode::key_value
+  = iceberg_mode::make<iceberg_mode::variant::key_value>();
+iceberg_mode iceberg_mode::value_schema_id_prefix
+  = iceberg_mode::make<iceberg_mode::variant::value_schema_id_prefix>();
+
+void write(iobuf& out, const iceberg_mode& m) {
+    using serde::write;
+    write(out, m.kind());
+    if (m.kind() == iceberg_mode::variant::value_subject_latest) {
+        write(out, m.protobuf_full_name().value_or(""));
+        write(out, m.subject_name().value_or(""));
     }
 }
 
+void read_nested(
+  iobuf_parser& in, iceberg_mode& m, const std::size_t bytes_left_limit) {
+    using serde::read_nested;
+    iceberg_mode::variant v = iceberg_mode::variant::disabled;
+    read_nested(in, v, bytes_left_limit);
+    switch (v) {
+    case iceberg_mode::variant::disabled:
+        m = iceberg_mode::disabled;
+        return;
+    case iceberg_mode::variant::key_value:
+        m = iceberg_mode::key_value;
+        return;
+    case iceberg_mode::variant::value_schema_id_prefix:
+        m = iceberg_mode::value_schema_id_prefix;
+        return;
+    case iceberg_mode::variant::value_subject_latest:
+        ss::sstring msg_name;
+        read_nested(in, msg_name, bytes_left_limit);
+        ss::sstring subject;
+        read_nested(in, subject, bytes_left_limit);
+        m = iceberg_mode::value_subject_latest(msg_name, subject);
+        return;
+    }
+    throw serde::serde_exception(
+      fmt::format("unknown iceberg_mode variant: {}", std::to_underlying(v)));
+}
+
+std::ostream& operator<<(std::ostream& os, const iceberg_mode& mode) {
+    switch (mode.kind()) {
+    case iceberg_mode::variant::disabled:
+        return os << "disabled";
+    case iceberg_mode::variant::key_value:
+        return os << "key_value";
+    case iceberg_mode::variant::value_schema_id_prefix:
+        return os << "value_schema_id_prefix";
+    case iceberg_mode::variant::value_subject_latest:
+        os << "value_subject_latest";
+        bool delimiter = false;
+        auto emit_delimiter = [&delimiter, &os]() {
+            os << (delimiter ? "," : ":");
+            delimiter = true;
+        };
+        if (auto protobuf_name = mode.protobuf_full_name()) {
+            emit_delimiter();
+            os << "protobuf_name=" << protobuf_name.value();
+        }
+        if (auto subject = mode.subject_name()) {
+            emit_delimiter();
+            os << "subject=" << subject.value();
+        }
+        return os;
+    }
+}
+
+namespace {
+// Parse configuration options for iceberg_mode's value_subject_latest, which
+// is a grammar like: `:(<name>=<value>)+`
+std::optional<absl::flat_hash_map<std::string, std::string>>
+parse_config_options(std::string_view str) {
+    if (str.empty()) {
+        return absl::flat_hash_map<std::string, std::string>{};
+    }
+    if (!absl::ConsumePrefix(&str, ":")) {
+        return std::nullopt;
+    }
+    if (str.empty()) {
+        return std::nullopt;
+    }
+    absl::flat_hash_map<std::string, std::string> result;
+    for (std::string_view pair : absl::StrSplit(str, ",")) {
+        auto [it, inserted] = result.insert(
+          absl::StrSplit(pair, absl::MaxSplits("=", 1)));
+        // Don't allow duplicates
+        if (!inserted) {
+            return std::nullopt;
+        }
+        // Don't allow empty keys or values
+        if (it->first.empty() || it->second.empty()) {
+            return std::nullopt;
+        }
+    }
+    return result;
+}
+} // namespace
+
 std::istream& operator>>(std::istream& is, iceberg_mode& mode) {
-    using enum iceberg_mode;
     ss::sstring s;
     is >> s;
-    try {
-        mode = string_switch<iceberg_mode>(s)
-                 .match("disabled", disabled)
-                 .match("key_value", key_value)
-                 .match("value_schema_id_prefix", value_schema_id_prefix);
-    } catch (const std::runtime_error&) {
+    if (s == "disabled") {
+        mode = iceberg_mode::disabled;
+    } else if (s == "key_value") {
+        mode = iceberg_mode::key_value;
+    } else if (s == "value_schema_id_prefix") {
+        mode = iceberg_mode::value_schema_id_prefix;
+    } else if (s.starts_with("value_subject_latest")) {
+        s = s.substr(std::strlen("value_subject_latest"));
+        auto options = parse_config_options(s);
+        if (!options.has_value()) {
+            is.setstate(std::ios::failbit);
+            return is;
+        }
+        std::string_view protobuf_name;
+        std::string_view subject;
+        for (const auto& [key, value] : options.value()) {
+            if (key == "protobuf_name") {
+                protobuf_name = value;
+            } else if (key == "subject") {
+                subject = value;
+            } else {
+                is.setstate(std::ios::failbit);
+                return is;
+            }
+        }
+        mode = iceberg_mode::value_subject_latest(protobuf_name, subject);
+    } else {
         is.setstate(std::ios::failbit);
     }
     return is;
