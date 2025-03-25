@@ -260,6 +260,11 @@ void replicated_partition_probe::setup_public_metrics(const model::ntp& ntp) {
       partition_label(ntp.tp.partition()),
     };
 
+    const sm::description request_bytes_description(
+      "Total number of bytes read from or written to the partitions of a "
+      "topic. The total may include fetched bytes that are not returned to the "
+      "client.");
+
     _public_metrics.add_group(
       prometheus_sanitize::metrics_name("kafka"),
       {
@@ -309,7 +314,7 @@ void replicated_partition_probe::setup_public_metrics(const model::ntp& ntp) {
         sm::make_total_bytes(
           "request_bytes_total",
           [this] { return _bytes_produced; },
-          sm::description("Total number of bytes produced per topic"),
+          request_bytes_description,
           {request_label("produce"),
            ns_label(ntp.ns()),
            topic_label(ntp.tp.topic()),
@@ -318,8 +323,7 @@ void replicated_partition_probe::setup_public_metrics(const model::ntp& ntp) {
         sm::make_total_bytes(
           "request_bytes_total",
           [this] { return _bytes_fetched; },
-          sm::description("Total number of bytes fetched (not all "
-                          "might be returned to the client)"),
+          request_bytes_description,
           {request_label("consume"),
            ns_label(ntp.ns()),
            topic_label(ntp.tp.topic()),
