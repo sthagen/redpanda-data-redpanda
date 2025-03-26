@@ -52,7 +52,7 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			}
 			if len(subjects) == 0 {
 				subjects, err = cl.Subjects(ctx)
-				out.MaybeDieErr(err)
+				out.MaybeDie(err, "unable to list all subjects: %v", err)
 			}
 
 			type res struct {

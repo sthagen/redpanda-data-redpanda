@@ -27,6 +27,7 @@ namespace {
 // NOLINTBEGIN(cppcoreguidelines-avoid-non-const-global-variables,cert-err58-cpp)
 ss::logger assert_logger{"assert"};
 std::atomic<assert_cb_func> _cb_func{nullptr};
+std::once_flag _cb_func_onceflag{};
 // NOLINTEND(cppcoreguidelines-avoid-non-const-global-variables,cert-err58-cpp)
 
 void assert_handler(const ss::saved_backtrace& bt, std::string_view text) {
@@ -35,7 +36,7 @@ void assert_handler(const ss::saved_backtrace& bt, std::string_view text) {
 
     auto cb_func = _cb_func.load();
     if (cb_func != nullptr) {
-        cb_func(text);
+        std::call_once(_cb_func_onceflag, [cb_func, text]() { cb_func(text); });
     }
 }
 

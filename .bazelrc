@@ -110,6 +110,7 @@ build:release --copt -flto=thin --copt -ffat-lto-objects
 build:release --copt -g --strip=never
 
 build:stamp --stamp --workspace_status_command=./bazel/stamp_vars.sh
+build:stamp-full --stamp --workspace_status_command='./bazel/stamp_vars.sh full'
 
 # =================================
 # Coverage

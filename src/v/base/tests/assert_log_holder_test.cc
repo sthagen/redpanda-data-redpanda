@@ -28,17 +28,14 @@ TEST_F(AssertLogHolderTest, ValidateAssertLogHolder) {
     auto bt = ss::current_backtrace();
     base::register_event(bt, "This is a test event: test");
     EXPECT_TRUE(message.empty());
-    base::register_cb(cb);
-    base::register_event(bt, "This is a test event: test");
 
-    EXPECT_EQ(message, fmt::format("This is a test event: test"));
-    EXPECT_TRUE(unused_message.empty());
+    base::register_cb(cb);
 
     // Verify that a second call to `register_cb` does not replace the current
     // callback
     base::register_cb(unused_cb);
-    base::register_event(bt, "This is a second test event: test");
 
+    base::register_event(bt, "This is a second test event: test");
     EXPECT_EQ(message, fmt::format("This is a second test event: test"));
     EXPECT_TRUE(unused_message.empty());
 }

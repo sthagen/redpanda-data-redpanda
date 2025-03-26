@@ -30,6 +30,14 @@ class backlog_controller {
 public:
     using sampling_fn = ss::noncopyable_function<long double()>;
     backlog_controller(sampling_fn, ss::scheduling_group sg);
+    /**
+     * Returns true if the datalake scheduling group has reached the maximum
+     * allowed priority. Indicates that translation backlog is growing and
+     * translators can not keep up.
+     */
+    bool max_shares_assigned() const {
+        return static_cast<int>(_scheduling_group.get_shares()) == _max_shares;
+    }
 
     ss::future<> start();
     ss::future<> stop();

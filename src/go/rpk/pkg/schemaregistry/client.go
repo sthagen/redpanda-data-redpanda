@@ -5,8 +5,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/oauth/providers/auth0"
 	"github.com/spf13/afero"
 	"github.com/twmb/franz-go/pkg/sr"
 )
@@ -52,8 +55,31 @@ func NewClient(fs afero.Fs, p *config.RpkProfile) (*sr.Client, error) {
 		opts = append(opts, sr.DialTLSConfig(tc))
 	}
 
-	if p.HasSASLCredentials() {
+	switch {
+	case p.HasSASLCredentials() && p.KafkaAPI.SASL.Mechanism != adminapi.CloudOIDC:
 		opts = append(opts, sr.BasicAuth(p.KafkaAPI.SASL.User, p.KafkaAPI.SASL.Password))
+	case p.KafkaAPI.SASL != nil && p.KafkaAPI.SASL.Mechanism == adminapi.CloudOIDC:
+		a := p.CurrentAuth()
+		if a == nil || len(a.AuthToken) == 0 {
+			return nil, errors.New("no current cloud token found in your profile, please login with 'rpk cloud login'")
+		}
+		expired, err := oauth.ValidateToken(
+			a.AuthToken,
+			auth0.NewClient(p.DevOverrides()).Audience(),
+			a.ClientID,
+		)
+		if err != nil {
+			if errors.Is(err, oauth.ErrMissingToken) {
+				return nil, err
+			}
+			return nil, fmt.Errorf("unable to validate cloud token, please login again using 'rpk cloud login': %v", err)
+		}
+		if expired {
+			return nil, fmt.Errorf("your cloud token has expired, please login again using 'rpk cloud login'")
+		}
+		opts = append(opts, sr.BearerToken(a.AuthToken))
+	default:
+		// do nothing
 	}
 	return sr.NewClient(opts...)
 }

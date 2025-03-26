@@ -10,6 +10,7 @@ using namespace testing;
 using namespace std::chrono_literals;
 
 struct shard_local_state {
+    bool max_shares_assigned{false};
     size_t blocked_translation{0};
     size_t not_keeping_up{0};
     config::mock_property<std::chrono::milliseconds> producer_gc_threshold{
@@ -22,7 +23,7 @@ struct IcebergThrottlingManagerTest : ::testing::Test {
         shard_state.start().get();
         manager
           .start(
-            [this] { return sample_backlog(); },
+            [this] { return sample(); },
             ss::sharded_parameter(
               [this] { return shard_state.local().max_throttle.bind(); }),
             ss::sharded_parameter([this] {
@@ -37,10 +38,10 @@ struct IcebergThrottlingManagerTest : ::testing::Test {
         shard_state.stop().get();
     }
 
-    ss::future<kafka::datalake_throttle_manager::backlog_status>
-    sample_backlog() {
-        co_return kafka::datalake_throttle_manager::backlog_status{
-          .partitions_backlog_limit_breached
+    ss::future<kafka::datalake_throttle_manager::status> sample() {
+        co_return kafka::datalake_throttle_manager::status{
+          .max_shares_assigned = shard_state.local().max_shares_assigned,
+          .overdue_translation_partition_count
           = shard_state.local().not_keeping_up,
           .partitions_translation_blocked
           = shard_state.local().blocked_translation};
@@ -93,9 +94,17 @@ TEST_F(IcebergThrottlingManagerTest, TestThrottlingIcebergEnabledProducer) {
     ASSERT_EQ(
       manager.local().maybe_throttle_producer("producer-20").get(), 0ms);
     // set the backlog above the threshold on one shards, the throttling should
-    // be applied
+    // not be applied as no max shares is assigned
     shard_state
       .invoke_on(0, [](shard_local_state& state) { state.not_keeping_up++; })
+      .get();
+
+    ASSERT_EQ(
+      manager.local().maybe_throttle_producer("producer-20").get(), 0ms);
+    // set max shares assigned, the throttling should be applied
+    shard_state
+      .invoke_on(
+        0, [](shard_local_state& state) { state.max_shares_assigned = true; })
       .get();
     wait_for_producer_throttling("producer-20", 10ms).get();
 
@@ -118,7 +127,12 @@ TEST_F(IcebergThrottlingManagerTest, TestProducerEviction) {
     // wait for state to propagate
     ss::sleep(500ms).get();
     shard_state
-      .invoke_on(0, [](shard_local_state& state) { state.not_keeping_up++; })
+      .invoke_on(
+        0,
+        [](shard_local_state& state) {
+            state.max_shares_assigned = true;
+            state.not_keeping_up++;
+        })
       .get();
     wait_for_producer_throttling("producer-20", 10ms).get();
     shard_state
@@ -143,7 +157,12 @@ TEST_F(IcebergThrottlingManagerTest, TestHandlingAnonymousProducers) {
       .get();
 
     shard_state
-      .invoke_on(0, [](shard_local_state& state) { state.not_keeping_up++; })
+      .invoke_on(
+        0,
+        [](shard_local_state& state) {
+            state.max_shares_assigned = true;
+            state.not_keeping_up++;
+        })
       .get();
     // check if anonymous producer is throttled
     wait_for_producer_throttling(std::nullopt, 10ms).get();
@@ -159,7 +178,11 @@ TEST_F(IcebergThrottlingManagerTest, TestHandlingBlockedPartitions) {
     // be applied
     shard_state
       .invoke_on(
-        0, [](shard_local_state& state) { state.blocked_translation++; })
+        0,
+        [](shard_local_state& state) {
+            state.max_shares_assigned = true;
+            state.blocked_translation++;
+        })
       .get();
     // the max throttle should be applied,
     wait_for_producer_throttling("producer-20", 30s).get();

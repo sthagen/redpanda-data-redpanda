@@ -15,3 +15,7 @@ RUN wget -O /usr/local/bin/bazel \
 
 # run after wget installation to take advantage of pkg cache cleaning
 RUN CLEAN_PKG_CACHE=true /install-deps.sh && rm /install-deps.sh
+
+# CI will run this container as root, but a non-root user will clone the repo and set it up,
+# so we should just ignore these warnings for now.
+RUN git config --global --add safe.directory '*'

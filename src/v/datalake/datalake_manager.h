@@ -86,12 +86,16 @@ public:
      * Returns the number of partitions that the translator is not able to keep
      * up with.
      */
-    size_t partitions_over_target_translation_backlog() const;
+    size_t overdue_translation_partition_count() const;
     /**
      * Returns count of partitions that translation is blocked. This value
      * should be 0 in normal conditions.
      */
     size_t partitions_with_translation_blocked() const;
+    /**
+     * Returns true if datalake translation runs with maximum allowed priority.
+     */
+    bool max_shares_assigned() const;
 
 private:
     using translator = std::unique_ptr<translation::partition_translator>;

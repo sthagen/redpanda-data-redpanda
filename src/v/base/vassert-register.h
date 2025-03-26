@@ -31,6 +31,8 @@ using assert_cb_func = void (*)(std::string_view);
 // register_event calls.
 // Only the first registration has any effect, calls to this function do
 // nothing.
+// The callback is only called once, only for the first vassert crash. This is
+// to avoid a potential infinite loop if the callback triggers another vassert.
 void register_cb(assert_cb_func cb);
 
 /**

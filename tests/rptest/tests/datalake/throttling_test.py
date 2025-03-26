@@ -62,9 +62,8 @@ class DatalakeThrottlingTest(RedpandaTest):
             total += s.value
         return total
 
-    def producer_throttled(self):
-        rpk = RpkTool(self.redpanda)
-        rpk.produce(self.topic_name, "key", "value")
+    def producer_throttled(self, dl: DatalakeServices):
+        dl.produce_to_topic(self.topic_name, 128, 10240)
         throttle = self._total_throttle()
         return throttle > 0
 
@@ -89,11 +88,15 @@ class DatalakeThrottlingTest(RedpandaTest):
             ) == 0, "There should be no throttling in baseline conditions"
 
             # Block translation by setting the max number of translations to 0
-            self.redpanda.set_cluster_config(
-                {"datalake_scheduler_max_concurrent_translations": 0})
+            self.redpanda.set_cluster_config({
+                "datalake_scheduler_max_concurrent_translations":
+                0,
+                "iceberg_target_backlog_size":
+                1000
+            })
+
             # Produce some more messages
-            dl.produce_to_topic(self.topic_name, 1024, msg_cnt)
-            wait_until(lambda: self.producer_throttled(), timeout_sec=30)
+            wait_until(lambda: self.producer_throttled(dl), timeout_sec=60)
 
             # Validate that non Iceberg related producers are not throttled
             current_throttle = self._total_throttle()

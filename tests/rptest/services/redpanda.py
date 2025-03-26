@@ -439,8 +439,6 @@ class ResourceSettings:
         else:
             memory_mb = self._memory_mb
 
-        bypass_fsync = True if dedicated_node else self._bypass_fsync
-
         args: list[str] = []
         if not dedicated_node:
             args.extend([
@@ -457,7 +455,8 @@ class ResourceSettings:
         if memory_mb is not None:
             args.append(f"--memory={memory_mb}M")
 
-        args.append(f"--unsafe-bypass-fsync={'1' if bypass_fsync else '0'}")
+        args.append(
+            f"--unsafe-bypass-fsync={'1' if self._bypass_fsync else '0'}")
 
         return preamble, " ".join(args)
 

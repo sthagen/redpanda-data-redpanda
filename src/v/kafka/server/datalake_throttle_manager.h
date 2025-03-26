@@ -34,14 +34,15 @@ namespace kafka {
 class datalake_throttle_manager
   : public ss::peering_sharded_service<datalake_throttle_manager> {
 public:
-    struct backlog_status {
-        size_t partitions_backlog_limit_breached{0};
+    struct status {
+        bool max_shares_assigned{false};
+        size_t overdue_translation_partition_count{0};
         size_t partitions_translation_blocked{0};
 
-        bool has_no_issues() const;
-        backlog_status operator+(const backlog_status& o) const;
+        bool needs_throttling() const;
+        status operator+(const status& o) const;
 
-        friend std::ostream& operator<<(std::ostream&, const backlog_status&);
+        friend std::ostream& operator<<(std::ostream&, const status&);
     };
 
     using clock_type = ss::lowres_clock;
@@ -49,8 +50,7 @@ public:
      * The function should return a number reflecting the current backlog of
      * Iceberg translation on a shard.
      */
-    using status_provider_fn
-      = ss::noncopyable_function<ss::future<backlog_status>()>;
+    using status_provider_fn = ss::noncopyable_function<ss::future<status>()>;
 
     datalake_throttle_manager(
       status_provider_fn,
@@ -100,7 +100,7 @@ private:
     // global producers are maintained only on shard 0.
     producers_map_t _global_producers;
     // backlog status, calculated on shard 0 but updated on every shard
-    backlog_status _translation_status;
+    status _translation_status;
     // shard local producers map used to quickly update the state of producer.
     // The global map is updated by the background task.
     producers_map_t _shard_local_producers;
