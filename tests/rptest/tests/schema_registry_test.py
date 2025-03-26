@@ -3324,7 +3324,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
 
         #Update always_normalize and re-run all tests
         self.redpanda.set_cluster_config(
-            {'schema_registry_always_normalize': True}, expect_restart=True)
+            {'schema_registry_always_normalize': True})
 
         test_schemas_ids_id(imported_schema_normalized_proto_def.strip())
         test_subjects_subject(sanitized, expected_version=1)

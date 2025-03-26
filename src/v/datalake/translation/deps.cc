@@ -766,14 +766,27 @@ public:
         if (highest_translated_offset <= min_offset_for_translation) {
             return _partition->size_bytes();
         }
-        auto log_offset = _partition->log()->to_log_offset(
-          kafka::offset_cast(*highest_translated_offset));
+        const auto highest_translated_log_offset
+          = _partition->log()->to_log_offset(
+            kafka::offset_cast(*highest_translated_offset));
+        const auto max_translatable_offset = _partition->last_stable_offset();
+        if (highest_translated_log_offset == max_translatable_offset) {
+            return 0;
+        }
+        /**
+         * It is possible that the last stable offset is not yet established or
+         * simply smaller than the highest translated offset. f.e. during the
+         * partition movement. In such cases, we cannot calculate the backlog.
+         */
+        if (highest_translated_log_offset > max_translatable_offset) {
+            return std::nullopt;
+        }
+
         auto size_after_translated = _partition->log()->size_bytes_after_offset(
-          log_offset);
+          highest_translated_log_offset);
 
         auto size_after_max_translatable
-          = _partition->log()->size_bytes_after_offset(
-            _partition->last_stable_offset());
+          = _partition->log()->size_bytes_after_offset(max_translatable_offset);
 
         if (size_after_translated < size_after_max_translatable) {
             vlog(
@@ -782,9 +795,9 @@ public:
               "greater than or equal to the size of log after max translatable "
               "offset({}): {}",
               _partition->ntp().path(),
-              log_offset,
+              highest_translated_log_offset,
               size_after_translated,
-              _partition->last_stable_offset(),
+              max_translatable_offset,
               size_after_max_translatable);
             return std::nullopt;
         }

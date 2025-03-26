@@ -3606,7 +3606,7 @@ configuration::configuration()
       "schema_registry_always_normalize",
       "Always normalize schemas. If set, this overrides the "
       "normalize parameter in API requests.",
-      {.needs_restart = needs_restart::yes,
+      {.needs_restart = needs_restart::no,
        .visibility = visibility::user,
        .aliases = {"schema_registry_normalize_on_startup"}},
       false)

@@ -83,7 +83,9 @@ ss::future<> sharded_store::stop() { return _store.stop(); }
 
 ss::future<canonical_schema>
 sharded_store::make_canonical_schema(unparsed_schema schema, normalize norm) {
-    norm = norm || _always_normalize;
+    norm = norm
+           || normalize{
+             config::shard_local_cfg().schema_registry_always_normalize()};
     switch (schema.type()) {
     case schema_type::avro: {
         auto [sub, unparsed] = std::move(schema).destructure();
