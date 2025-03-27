@@ -71,7 +71,14 @@ public:
       size_t memory_limit);
     ~datalake_manager();
 
+    /*
+     * Call prepare_staging_directory before starting. Preparation involves
+     * clearing out the directory, and since start() will be invoked on all
+     * cores we expect the caller to prepare the directory to avoid potential
+     * affects of concurrent file creates and deletes.
+     */
     ss::future<> start();
+
     ss::future<> shutdown();
 
     /*
@@ -96,6 +103,14 @@ public:
      * Returns true if datalake translation runs with maximum allowed priority.
      */
     bool max_shares_assigned() const;
+
+    /*
+     * Ensure that the datalake scratch directory exists and is empty. The
+     * directory isn't required to be empty when starting up, but there is no
+     * way for translators to resume processing files so clearing the directory
+     * is a convenient way to deal with orphaned files.
+     */
+    static ss::future<> prepare_staging_directory(std::filesystem::path);
 
 private:
     using translator = std::unique_ptr<translation::partition_translator>;

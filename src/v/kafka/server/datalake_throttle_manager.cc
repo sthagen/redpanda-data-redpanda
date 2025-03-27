@@ -11,6 +11,7 @@
 
 #include "config/configuration.h"
 #include "kafka/server/logger.h"
+#include "metrics/prometheus_sanitize.h"
 #include "ssx/future-util.h"
 namespace kafka {
 using namespace std::chrono_literals;
@@ -230,7 +231,7 @@ void datalake_throttle_manager::setup_metrics() {
     }
     namespace sm = ss::metrics;
     _metrics.add_group(
-      "kafka:datalake:throttle",
+      prometheus_sanitize::metrics_name("kafka:datalake:throttle"),
       {
         sm::make_counter(
           "total_throttle",

@@ -4095,6 +4095,14 @@ class RedpandaService(RedpandaServiceBase):
             self.logger.warn(f"Error setting trace loggers: {e}")
 
     def stop_node(self, node, timeout=None, forced=False):
+        # Assume node is stopped once we enter this path. If stopping succeeds
+        # it is the obvious thing to do. If stopping fails we can't differentiate
+        # between a node that stopped or will eventually stop so for all intents
+        # and purposes we consider it stopped not to trip other logic that expects
+        # started to contain nodes that _must_ be running. E.g. crash detection
+        # at end of test which iterates through "started nodes".
+        self.remove_from_started_nodes(node)
+
         pid = self.redpanda_pid(node)
         if pid is not None:
             node.account.signal(pid,
@@ -4125,8 +4133,6 @@ class RedpandaService(RedpandaServiceBase):
             # I.e. `tar: redpanda.log: file changed as we read it`
             node.account.signal(pid, signal.SIGKILL, allow_fail=True)
             raise
-
-        self.remove_from_started_nodes(node)
 
     def remove_from_started_nodes(self, node):
         if node in self._started:

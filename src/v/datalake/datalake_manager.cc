@@ -26,6 +26,7 @@
 #include "raft/group_manager.h"
 #include "schema/registry.h"
 #include "utils/directory_walker.h"
+#include "utils/human.h"
 
 #include <memory>
 
@@ -170,25 +171,6 @@ datalake_manager::get_or_create_probe(const model::ntp& ntp) {
 }
 
 ss::future<> datalake_manager::start() {
-    /*
-     * Ensure that datalake scratch space directory exists. This is run on each
-     * core (as opposed to only on core-0) because shard initialization happens
-     * in parallel, but the race is handled by ignoring EEXIST.
-     */
-    try {
-        co_await ss::make_directory(
-          config::node().datalake_staging_path().string());
-    } catch (const std::filesystem::filesystem_error& e) {
-        if (e.code() != std::errc::file_exists) {
-            vlog(
-              datalake_log.error,
-              "Could not create datalake staging directory: {}: {}",
-              config::node().datalake_staging_path(),
-              e);
-            throw;
-        }
-    }
-
     _catalog = co_await _catalog_factory->create_catalog();
     _schema_mgr = std::make_unique<catalog_schema_manager>(*_catalog);
     // partition managed notification, this is particularly
@@ -286,6 +268,56 @@ ss::future<> datalake_manager::start() {
     _backlog_controller = std::make_unique<backlog_controller>(
       [this] { return average_translation_backlog(); }, _sg);
     co_await _backlog_controller->start();
+}
+
+ss::future<>
+datalake_manager::prepare_staging_directory(std::filesystem::path path) {
+    try {
+        co_await ss::make_directory(path.string());
+    } catch (const std::filesystem::filesystem_error& e) {
+        if (e.code() != std::errc::file_exists) {
+            vlog(
+              datalake_log.error,
+              "Could not create datalake staging directory: {}: {}",
+              config::node().datalake_staging_path(),
+              e);
+            throw;
+        }
+    }
+
+    chunked_vector<std::filesystem::path> files;
+    co_await directory_walker::walk(
+      path.string(), [&files, path](const ss::directory_entry& de) {
+          if (de.type == ss::directory_entry_type::regular) {
+              files.push_back(path / std::filesystem::path(de.name));
+          }
+          return ss::now();
+      });
+
+    uint64_t total = 0;
+    co_await ss::max_concurrent_for_each(
+      files.begin(),
+      files.end(),
+      config::shard_local_cfg().space_management_max_log_concurrency(),
+      [&total](const std::filesystem::path& path) {
+          return ss::file_size(path.string())
+            .then([&total](uint64_t size) { total += size; })
+            .finally([path] { return ss::remove_file(path.string()); })
+            .handle_exception([path](std::exception_ptr e) {
+                vlog(
+                  datalake_log.warn,
+                  "Error clearing datalake staging file {}: {}",
+                  path,
+                  e);
+            });
+      });
+
+    if (total) {
+        vlog(
+          datalake_log.info,
+          "Cleared datalake staging directory: {}",
+          human::bytes(total));
+    }
 }
 
 ss::future<> datalake_manager::shutdown() {

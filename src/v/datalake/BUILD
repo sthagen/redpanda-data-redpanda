@@ -202,6 +202,7 @@ redpanda_cc_library(
         "//src/v/ssx:semaphore",
         "//src/v/ssx:work_queue",
         "//src/v/utils:directory_walker",
+        "//src/v/utils:human",
         "@fmt",
         "@seastar",
     ],

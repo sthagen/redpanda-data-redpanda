@@ -124,15 +124,19 @@ consumer_group_lag_metrics_frontend::get_partition_offsets(
 ss::future<partition_offsets_reply>
 consumer_group_lag_metrics_frontend::get_local_partition_offsets(
   partition_offsets_request req) {
-    auto ktps = request_as_ktps(req);
+    // const because don't share mutable state between threads.
+    const auto ktps = request_as_ktps(req);
 
     auto gate_holder = _gate.hold();
 
     // gather all cores
     co_return co_await container().map_reduce0(
-      [&ktps](auto& me) {
+      [ktps](auto& me) {
+          // take a copy of ktps since it is an input_range, which requires it
+          // to be mutated by for_each, and this lambda cannot be mutable.
+          auto copy = ktps;
           partition_offsets_reply reply;
-          std::ranges::for_each(ktps, [&](ktp_view ktp) {
+          std::ranges::for_each(copy, [&](ktp_view ktp) {
               auto part = make_partition_proxy(
                 ktp.ktp(), me._partition_manager.local());
               if (part.has_value()) {

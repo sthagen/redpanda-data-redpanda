@@ -1414,6 +1414,9 @@ void application::wire_up_runtime_services(
           sched_groups.datalake_sg(),
           memory_groups().datalake_max_memory())
           .get();
+        datalake::datalake_manager::prepare_staging_directory(
+          config::node().datalake_staging_path())
+          .get();
         _datalake_manager.invoke_on_all(&datalake::datalake_manager::start)
           .get();
 

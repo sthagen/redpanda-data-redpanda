@@ -142,7 +142,11 @@ class IcebergRESTCatalog(CatalogService):
             env["AWS_ACCESS_KEY_ID"] = self.credentials.access_key
             env["AWS_SECRET_ACCESS_KEY"] = self.credentials.secret_key
             env["AWS_REGION"] = self.credentials.region
-            env["CATALOG_S3_ENDPOINT"] = self.credentials.endpoint
+            if self.credentials.endpoint is not None:
+                # Running the catalog in manually-configured CDT does not like
+                # this set to None.
+                # TODO: figure out why this isn't a problem in CI CDT.
+                env["CATALOG_S3_ENDPOINT"] = self.credentials.endpoint
         elif isinstance(self.credentials,
                         cloud_storage.AWSInstanceMetadataCredentials):
             env["CATALOG_IO__IMPL"] = "org.apache.iceberg.aws.s3.S3FileIO"

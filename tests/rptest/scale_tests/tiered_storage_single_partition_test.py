@@ -222,6 +222,7 @@ class TieredStorageSinglePartitionTest(RedpandaTest):
         #   clean.
         # - 1 per upload round (i.e. per 1-4 segments) for updating the highest
         #   producer ID.
+        # - 1 per upload round (i.e. per 1-4 segments) for rw-fence
         # - 1 per raft term, for raft config batches written by new leaders
         #
         # This helps to assure us that ntp_archiver and archival_metadata_stm
@@ -242,12 +243,31 @@ class TieredStorageSinglePartitionTest(RedpandaTest):
             f"Delta: {offset_delta}, Segments: {segment_count}, Last term {last_term}"
         )
 
-        # If we upload in batches of four segments at a time
-        min_offset_delta = (segment_count * 1.5) + last_term
+        # If we upload in batches of four segments at a time.
+        # Number of record batches per segment is calculated as:
+        # N = 7 records / 4 segments = 1.75 records per segment
+        # where 7 records are:
+        # 4 add_segment commands
+        # 1 rw_fence command
+        # 1 mark_clean command
+        # 1 update_highest_producer_id command
+        # We need to take term into account because we are replicating
+        # raft config batches in the beginning of each term.
+        min_offset_delta = (segment_count * 1.75) + last_term
 
-        # If we upload one segment at a time
-        max_offset_delta = (segment_count * 3) + last_term
-        assert min_offset_delta <= offset_delta <= max_offset_delta
+        # If we upload one segment at a time.
+        # Number of record batches per segment is calculated as:
+        # N = 4 records / 1 segments = 4 records per segment
+        # where 4 records are:
+        # 1 add_segment command
+        # 1 rw_fence command
+        # 1 mark_clean command
+        # 1 update_highest_producer_id command
+        # We need to take term into account because we are replicating
+        # raft config batches in the beginning of each term.
+        max_offset_delta = (segment_count * 4) + last_term
+        assert min_offset_delta <= offset_delta <= max_offset_delta, \
+            f"Offset delta {offset_delta} not in range {min_offset_delta} - {max_offset_delta}. Are any new archival_metadata_stm commands added recently?"
 
         # +3 because:
         # - 1 empty upload at start
