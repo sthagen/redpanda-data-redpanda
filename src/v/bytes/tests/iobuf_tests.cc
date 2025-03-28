@@ -12,9 +12,9 @@
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
-#include "bytes/random.h"
 #include "bytes/scattered_message.h"
 #include "bytes/streambuf.h"
+#include "test_utils/random_bytes.h"
 #include "utils.h"
 
 #include <seastar/core/memory.hh>
@@ -238,7 +238,7 @@ SEASTAR_THREAD_TEST_CASE(copy_iobuf_equality_comparator) {
 }
 SEASTAR_THREAD_TEST_CASE(gen_bytes_view) {
     auto fbuf = iobuf();
-    auto b = random_generators::get_bytes();
+    auto b = tests::random_bytes();
     auto bv = bytes_view(b);
     int32_t x = 42;
     fbuf.append(reinterpret_cast<const char*>(&x), sizeof(x));
@@ -471,7 +471,7 @@ SEASTAR_THREAD_TEST_CASE(test_appending_frament_takes_ownership) {
     const auto b = random_generators::gen_alphanum_string(1024);
     target.append(b.c_str(), b.size());
     auto target_frags_cnt = std::distance(target.begin(), target.end());
-    iobuf other = bytes_to_iobuf(random_generators::get_bytes(256));
+    iobuf other = bytes_to_iobuf(tests::random_bytes(256));
     auto other_frags_cnt = std::distance(other.begin(), other.end());
     target.append_fragments(std::move(other));
 

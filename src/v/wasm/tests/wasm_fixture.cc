@@ -22,6 +22,7 @@
 #include "schema/registry.h"
 #include "schema/tests/fake_registry.h"
 #include "storage/record_batch_builder.h"
+#include "test_utils/random_bytes.h"
 #include "wasm/engine.h"
 #include "wasm/tests/wasm_fixture.h"
 #include "wasm/tests/wasm_logger.h"
@@ -165,7 +166,7 @@ model::record_batch WasmTestFixture::make_tiny_batch() {
 model::record_batch WasmTestFixture::make_tiny_batch(iobuf record_value) {
     storage::record_batch_builder b(
       model::record_batch_type::raft_data, model::offset(1));
-    b.add_raw_kv(model::test::make_iobuf(), std::move(record_value));
+    b.add_raw_kv(tests::random_iobuf(), std::move(record_value));
     return std::move(b).build();
 }
 const std::vector<pandaproxy::schema_registry::subject_schema>&

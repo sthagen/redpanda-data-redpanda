@@ -10,19 +10,19 @@
  */
 #pragma once
 
-#include "bytes/random.h"
 #include "random/generators.h"
 #include "security/acl.h"
 #include "security/scram_credential.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 
 namespace tests {
 
 inline security::scram_credential random_credential() {
     return security::scram_credential(
-      random_generators::get_bytes(256),
-      random_generators::get_bytes(256),
-      random_generators::get_bytes(256),
+      tests::random_bytes(256),
+      tests::random_bytes(256),
+      tests::random_bytes(256),
       random_generators::get_int(1, 10));
 }
 

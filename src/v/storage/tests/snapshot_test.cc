@@ -8,9 +8,9 @@
 // by the Apache License, Version 2.0
 
 #include "base/seastarx.h"
-#include "bytes/random.h"
 #include "random/generators.h"
 #include "storage/snapshot.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/testing/thread_test_case.hh>
 
@@ -101,7 +101,7 @@ SEASTAR_THREAD_TEST_CASE(reader_verifies_metadata_crc) {
     }
 
     auto writer = mgr.start_snapshot().get();
-    auto metadata = bytes_to_iobuf(random_generators::get_bytes(10));
+    auto metadata = bytes_to_iobuf(tests::random_bytes(10));
     writer.write_metadata(std::move(metadata)).get();
     writer.close().get();
     mgr.finish_snapshot(writer).get();
@@ -139,7 +139,7 @@ SEASTAR_THREAD_TEST_CASE(read_write) {
     } catch (...) {
     }
 
-    auto metadata_orig = bytes_to_iobuf(random_generators::get_bytes(33));
+    auto metadata_orig = bytes_to_iobuf(tests::random_bytes(33));
 
     const auto blob = random_generators::gen_alphanum_string(1234);
 

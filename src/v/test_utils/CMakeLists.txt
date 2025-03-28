@@ -19,6 +19,11 @@ v_cc_library(
     runfiles.cc
   DEPS v_gtest_utils)
 
+v_cc_library(
+  NAME test_random_bytes
+  SRCS
+    random_bytes.cc
+  DEPS v::bytes)
 
 add_subdirectory(go/kreq-gen)
 add_subdirectory(tests)

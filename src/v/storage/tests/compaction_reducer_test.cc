@@ -8,10 +8,10 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#include "bytes/random.h"
 #include "random/generators.h"
 #include "storage/compacted_index.h"
 #include "storage/compaction_reducers.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/testing/thread_test_case.hh>
 
@@ -21,7 +21,7 @@ SEASTAR_THREAD_TEST_CASE(compaction_reducer_key_clash_test) {
 
     storage::internal::compaction_key_reducer reducer{16_KiB};
 
-    auto key = random_generators::get_bytes(20);
+    auto key = tests::random_bytes(20);
 
     // natural offset 0, rp offset 0
     storage::compacted_index::entry entry_at_0(
@@ -59,7 +59,7 @@ SEASTAR_THREAD_TEST_CASE(compaction_reducer_max_mem_usage_test) {
     // Empirically, 200 of the entries below use 16KiB of memory.
     // Test that the index stays within the memory usage bounds.
     for (size_t i = 0; i < 1000; ++i) {
-        auto key = random_generators::get_bytes(20);
+        auto key = tests::random_bytes(20);
         storage::compacted_index::entry entry(
           storage::compacted_index::entry_type::key,
           storage::compaction_key(std::move(key)),

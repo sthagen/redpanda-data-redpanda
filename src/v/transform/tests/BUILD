@@ -122,10 +122,10 @@ redpanda_cc_gtest(
     deps = [
         ":test_fixture",
         "//src/v/base",
-        "//src/v/bytes:random",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random_bytes",
         "//src/v/transform:impl",
         "//src/v/transform:logger",
         "//src/v/utils:human",

@@ -9,13 +9,13 @@
  */
 
 #include "bytes/iobuf.h"
-#include "bytes/random.h"
 #include "iceberg/bucket_transform_hashing_visitor.h"
 #include "iceberg/transform.h"
 #include "iceberg/transform_utils.h"
 #include "iceberg/values.h"
 #include "model/timestamp.h"
 #include "random/generators.h"
+#include "test_utils/random_bytes.h"
 
 #include <absl/numeric/int128.h>
 #include <fmt/chrono.h>
@@ -510,7 +510,7 @@ TEST(TestTransformApplication, BinaryTruncateTransform) {
             random_bytes[i] = random_generators::get_int(
               std::numeric_limits<uint8_t>::max());
         }
-        auto split = random_generators::split_as_iobuf(
+        auto split = tests::fragmented_iobuf(
           random_bytes, random_generators::get_int(10));
 
         uint32_t truncate_len = random_generators::get_int(input_len + 3);
@@ -547,7 +547,7 @@ TEST(TestTransformApplication, TextTruncateTransform) {
               random_generators::random_choice(available_symbols));
         }
         std::string str{std::from_range, chosen_symbols | std::views::join};
-        auto split = random_generators::split_as_iobuf(
+        auto split = tests::fragmented_iobuf(
           str, random_generators::get_int(5));
 
         uint32_t truncate_len = random_generators::get_int(input_len + 3);

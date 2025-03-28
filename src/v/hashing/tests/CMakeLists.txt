@@ -32,6 +32,6 @@ rp_test(
   BENCHMARK_TEST
   BINARY_NAME hashing_bench
   SOURCES hash_bench.cc
-  LIBRARIES Seastar::seastar_perf_testing v::hashing v::random v::bytes_random absl::hash v::bytes
+  LIBRARIES Seastar::seastar_perf_testing v::hashing v::random v::test_random_bytes absl::hash v::bytes
   LABELS hashing
 )

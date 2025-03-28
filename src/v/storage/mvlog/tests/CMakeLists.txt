@@ -21,6 +21,7 @@ rp_test(
     v::mvlog
     v::random
     v::storage
+    v::test_random_bytes
   ARGS "-- -c1"
 )
 

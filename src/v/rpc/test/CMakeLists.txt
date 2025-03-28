@@ -74,7 +74,7 @@ rp_test(
   UNIT_TEST
   BINARY_NAME rpcgenerator_cycling
   SOURCES rpc_gen_cycling_test.cc
-  LIBRARIES v::seastar_testing_main v::rpc_testing
+  LIBRARIES v::seastar_testing_main v::rpc_testing v::test_random_bytes
   LABELS rpc
   INPUT_FILES ${CMAKE_CURRENT_BINARY_DIR}/redpanda.crt
               ${CMAKE_CURRENT_BINARY_DIR}/redpanda.key

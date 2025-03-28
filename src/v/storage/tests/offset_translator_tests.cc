@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/random.h"
 #include "model/fundamental.h"
 #include "raft/fundamental.h"
 #include "random/generators.h"
@@ -18,6 +17,7 @@
 #include "storage/offset_translator.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/fixture.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/gate.hh>
@@ -38,7 +38,7 @@ static model::record_batch create_batch(
     for (size_t i = 0; i < length; ++i) {
         iobuf value;
         if (data_size > 0) {
-            value = random_generators::make_iobuf(data_size);
+            value = tests::random_iobuf(data_size);
         }
         b.add_raw_kv(iobuf{}, std::move(value));
     }

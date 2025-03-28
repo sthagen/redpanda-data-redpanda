@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/random.h"
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 #include "rpc/backoff_policy.h"
@@ -22,6 +21,7 @@
 #include "rpc/types.h"
 #include "test_utils/async.h"
 #include "test_utils/fixture.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/metrics_api.hh>
@@ -841,7 +841,7 @@ FIXTURE_TEST(corrupted_data_at_server, rpc_integration_fixture) {
     nb.set_compression(rpc::compression_type::none);
     nb.set_correlation_id(10);
     nb.set_service_method(echo::echo_service::echo_method);
-    auto bytes = random_generators::get_bytes();
+    auto bytes = tests::random_bytes();
     nb.buffer().append(bytes.data(), bytes.size());
 
     BOOST_TEST_MESSAGE("Request with invalid payload");

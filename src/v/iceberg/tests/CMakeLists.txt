@@ -12,6 +12,7 @@ v_cc_library(
     value_generator.cc
   DEPS
     v::iceberg
+    v::test_random_bytes
 )
 
 rp_test(
@@ -75,6 +76,7 @@ rp_test(
     v::cloud_io_utils
     v::s3_imposter
     v::iceberg_test_utils
+    v::test_random_bytes
   INPUT_FILES
     "${testdata_dir}/nested_manifest.avro"
   ARGS "-- -c1"
@@ -89,6 +91,7 @@ rp_test(
   LIBRARIES
     v::gtest_main
     v::iceberg_test_utils
+    v::test_random_bytes
 )
 
 rp_test(

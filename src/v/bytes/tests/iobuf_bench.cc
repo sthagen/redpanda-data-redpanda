@@ -10,8 +10,8 @@
 #include "base/units.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
-#include "bytes/random.h"
 #include "random/generators.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/testing/perf_tests.hh>
 
@@ -36,7 +36,7 @@ size_t move_bench() {
 // used in the datalake impl.
 template<int Bufs, size_t BufSize>
 size_t append_bench() {
-    iobuf_parser parser(random_generators::make_iobuf(Bufs * BufSize));
+    iobuf_parser parser(tests::random_iobuf(Bufs * BufSize));
 
     std::vector<iobuf> buffers;
     buffers.reserve(Bufs);

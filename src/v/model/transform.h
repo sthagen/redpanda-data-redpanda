@@ -442,6 +442,11 @@ public:
      */
     size_t memory_usage() const;
 
+    /**
+     * the estimated size in bytes when serialized
+     */
+    size_t estimated_serialized_size() const;
+
     bool operator==(const transformed_data&) const = default;
 
     /**

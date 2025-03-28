@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/random.h"
 #include "model/fundamental.h"
 #include "model/record_utils.h"
 #include "model/tests/random_batch.h"
@@ -20,6 +19,7 @@
 #include "storage/segment.h"
 #include "storage/segment_appender.h"
 #include "storage/segment_reader.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
@@ -29,7 +29,7 @@ using namespace std::chrono_literals; // NOLINT
 using namespace storage;              // NOLINT
 
 void write_garbage(segment_appender& ptr) {
-    auto b = random_generators::get_bytes(100);
+    auto b = tests::random_bytes(100);
     // NOLINTNEXTLINE
     ptr.append(reinterpret_cast<const char*>(b.data()), b.size()).get();
     ptr.flush().get();

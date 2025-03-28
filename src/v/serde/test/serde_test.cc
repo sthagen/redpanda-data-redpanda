@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/random.h"
 #include "container/fragmented_vector.h"
 #include "hashing/crc32c.h"
 #include "model/fundamental.h"
@@ -28,6 +27,7 @@
 #include "serde/rw/set.h"
 #include "serde/rw/sstring.h"
 #include "serde/rw/variant.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 #include "utils/tristate.h"
 
@@ -839,7 +839,7 @@ SEASTAR_THREAD_TEST_CASE(serde_topic_namespace_test) {
 
 SEASTAR_THREAD_TEST_CASE(serde_bytes_test) {
     iobuf b;
-    bytes bt = random_generators::get_bytes(128);
+    bytes bt = tests::random_bytes(128);
 
     b = serde::to_iobuf(bt);
 

@@ -10,7 +10,6 @@
 #include "base/vlog.h"
 #include "bytes/bytes.h"
 #include "bytes/iostream.h"
-#include "bytes/random.h"
 #include "cloud_io/io_result.h"
 #include "cloud_io/remote.h"
 #include "cloud_topics/batcher/batcher.h"
@@ -26,6 +25,7 @@
 #include "remote_mock.h"
 #include "storage/record_batch_builder.h"
 #include "storage/record_batch_utils.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
@@ -67,8 +67,8 @@ get_random_reader(int num_batches, int num_records) { // NOLINT
           model::record_batch_type::raft_data, model::offset(offset));
 
         for (int r = 0; r < num_records; r++) {
-            auto k = random_generators::make_iobuf(32);
-            auto v = random_generators::make_iobuf(256);
+            auto k = tests::random_iobuf(32);
+            auto v = tests::random_iobuf(256);
             keys.push_back(iobuf_to_bytes(k.copy()));
             records.push_back(iobuf_to_bytes(v.copy()));
             builder.add_raw_kv(std::move(k), std::move(v));

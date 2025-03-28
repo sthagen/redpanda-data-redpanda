@@ -7,11 +7,11 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/random.h"
 #include "model/fundamental.h"
 #include "random/generators.h"
 #include "storage/compacted_index.h"
 #include "storage/compaction_reducers.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/loop.hh>
 #include <seastar/core/reactor.hh>
@@ -28,7 +28,7 @@ struct reducer_bench {
 
 PERF_TEST_F(reducer_bench, compaction_key_reducer_test) {
     model::offset o{0};
-    auto key = random_generators::get_bytes(20);
+    auto key = tests::random_bytes(20);
 
     storage::compacted_index::entry entry(
       storage::compacted_index::entry_type::key,

@@ -72,11 +72,23 @@ set(srcs
 
 rp_test(
   FIXTURE_TEST
-  BINARY_NAME kafka_server
-  SOURCES ${srcs}
-  LIBRARIES v::seastar_testing_main v::application v::raft v::kafka v::config v::storage_test_utils v::kafka_test_utils
-  ARGS "-- -c 1"
-  LABELS kafka
+  BINARY_NAME
+    kafka_server
+  SOURCES
+    ${srcs}
+  LIBRARIES
+    v::seastar_testing_main
+    v::application
+    v::raft
+    v::kafka
+    v::config
+    v::storage_test_utils
+    v::kafka_test_utils
+    v::test_random_bytes
+  ARGS
+    "-- -c 1"
+  LABELS
+    kafka
 )
 
 rp_test(

@@ -389,11 +389,27 @@ ss::future<> processor::run_producer_loop(
                   latest_offset = offset;
               });
         }
-        if (!records.empty()) {
-            // TODO(rockwood): Limit batch sizes so we don't overshoot
-            // max batch size limits.
+        while (!records.empty()) {
+            // TODO(rockwood): Lookup the output topic size instead of
+            // hardcoding the default value.
+            static constexpr size_t default_batch_size_limit = 1_MiB;
+            size_t current_size = 0;
+            ss::chunked_fifo<model::transformed_data> batch_records;
+            while (!records.empty()) {
+                auto& next = records.front();
+                size_t next_size = current_size
+                                   + next.estimated_serialized_size();
+                if (
+                  !batch_records.empty()
+                  && next_size > default_batch_size_limit) {
+                    break;
+                }
+                current_size = next_size;
+                batch_records.push_back(std::move(next));
+                records.pop_front();
+            }
             auto batch = model::transformed_data::make_batch(
-              model::timestamp::now(), std::move(records));
+              model::timestamp::now(), std::move(batch_records));
             if (_meta.compression_mode != model::compression::none) {
                 batch = co_await storage::internal::compress_batch(
                   _meta.compression_mode, std::move(batch));
@@ -425,8 +441,9 @@ ss::future<> processor::when_all_shutdown(T&&... futs) {
 ss::future<> processor::handle_processor_task(ss::future<> fut) {
     try {
         co_await std::move(fut);
-    } catch (const processor_shutdown_exception&) {
+    } catch (const processor_shutdown_exception& e) {
         // Do nothing, this is an expected error on shutdown
+        std::ignore = e;
     } catch (const std::exception& ex) {
         vlog(_logger.warn, "error running transform: {}", ex);
         _state_callback(_id, _ntp, state::errored);
@@ -448,8 +465,7 @@ bool processor::is_running() const {
 }
 
 int64_t processor::current_lag() const {
-    return *std::max_element(
-      _last_reported_lag.begin(), _last_reported_lag.end());
+    return *std::ranges::max_element(_last_reported_lag);
 }
 
 size_t transformed_output::memory_usage() const {

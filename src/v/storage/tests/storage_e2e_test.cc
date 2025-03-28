@@ -10,7 +10,6 @@
 #include "base/units.h"
 #include "base/vassert.h"
 #include "bytes/bytes.h"
-#include "bytes/random.h"
 #include "config/mock_property.h"
 #include "finjector/stress_fiber.h"
 #include "model/fundamental.h"
@@ -39,6 +38,7 @@
 #include "storage/tests/utils/log_gap_analysis.h"
 #include "storage/types.h"
 #include "test_utils/async.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 #include "test_utils/tmp_dir.h"
 #include "utils/directory_walker.h"
@@ -943,7 +943,7 @@ ss::future<storage::append_result> append_exactly(
 
     for (size_t i = 0; i < batch_count; ++i) {
         storage::record_batch_builder builder(batch_type, model::offset{});
-        iobuf value = bytes_to_iobuf(random_generators::get_bytes(val_sz));
+        iobuf value = bytes_to_iobuf(tests::random_bytes(val_sz));
         builder.add_raw_kv(key_buf.copy(), std::move(value));
 
         batches.push_back(std::move(builder).build());
@@ -1335,7 +1335,7 @@ void append_single_record_batch(
         iobuf key = iobuf::from(key_str.c_str());
         bytes val_bytes;
         if (val_size > 0) {
-            val_bytes = random_generators::get_bytes(val_size);
+            val_bytes = tests::random_bytes(val_size);
         } else {
             ss::sstring v = ssx::sformat("v-{}", i);
             val_bytes = bytes::from_string(v.c_str());
@@ -2320,8 +2320,8 @@ model::record_batch make_batch() {
       model::record_batch_type::raft_data, model::offset(0));
     for (auto i = 0; i < 2; ++i) {
         builder.add_raw_kv(
-          bytes_to_iobuf(random_generators::get_bytes(128)),
-          bytes_to_iobuf(random_generators::get_bytes(10_KiB)));
+          bytes_to_iobuf(tests::random_bytes(128)),
+          bytes_to_iobuf(tests::random_bytes(10_KiB)));
     }
     return std::move(builder).build();
 }
@@ -2462,7 +2462,7 @@ FIXTURE_TEST(changing_cleanup_policy_back_and_forth, storage_test_fixture) {
                     key_str = "key";
                 }
                 iobuf key = iobuf::from(key_str.c_str());
-                bytes val_bytes = random_generators::get_bytes(1024);
+                bytes val_bytes = tests::random_bytes(1024);
 
                 iobuf value = bytes_to_iobuf(val_bytes);
                 storage::record_batch_builder builder(
@@ -3105,7 +3105,7 @@ FIXTURE_TEST(
         for (int i = 0; i < num_records; i++) {
             builder.add_raw_kv(
               reflection::to_iobuf(ssx::sformat("key-{}", i)),
-              bytes_to_iobuf(random_generators::get_bytes(5)));
+              bytes_to_iobuf(tests::random_bytes(5)));
         }
         auto reader = model::make_memory_record_batch_reader(
           std::move(builder).build());
@@ -3208,7 +3208,7 @@ FIXTURE_TEST(compaction_truncation_corner_cases, storage_test_fixture) {
 
         builder.add_raw_kv(
           reflection::to_iobuf(ssx::sformat("key-{}", key)),
-          bytes_to_iobuf(random_generators::get_bytes(33_KiB)));
+          bytes_to_iobuf(tests::random_bytes(33_KiB)));
         return std::move(builder).build();
     };
 
@@ -3537,7 +3537,7 @@ do_compact_test(const compact_test_args args, storage_test_fixture& f) {
                           std::optional<int> segment_id = std::nullopt) {
         const auto key_str = ssx::sformat("key{}", segment_id.value_or(-1));
         iobuf key = iobuf::from(key_str.data());
-        iobuf value = random_generators::make_iobuf(100);
+        iobuf value = tests::random_iobuf(100);
 
         storage::record_batch_builder builder(
           model::record_batch_type::raft_data, model::offset(0));
@@ -3907,11 +3907,10 @@ FIXTURE_TEST(issue_8091, storage_test_fixture) {
           if (bt == model::record_batch_type::raft_data) {
               builder.add_raw_kv(
                 reflection::to_iobuf("key"),
-                bytes_to_iobuf(random_generators::get_bytes(16 * 1024)));
+                bytes_to_iobuf(tests::random_bytes(16 * 1024)));
           } else {
               builder.add_raw_kv(
-                std::nullopt,
-                bytes_to_iobuf(random_generators::get_bytes(128)));
+                std::nullopt, bytes_to_iobuf(tests::random_bytes(128)));
           }
           batches.push_back(std::move(builder).build());
 

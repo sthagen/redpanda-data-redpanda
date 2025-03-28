@@ -7,10 +7,10 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "bytes/random.h"
 #include "cloud_topics/reconciler/range_batch_consumer.h"
 #include "model/record_batch_reader.h"
 #include "storage/record_batch_builder.h"
+#include "test_utils/random_bytes.h"
 
 #include <gtest/gtest.h>
 
@@ -23,7 +23,7 @@ model::record_batch_reader make_reader(
         storage::record_batch_builder b(
           model::record_batch_type::raft_data, model::offset(offset));
         for (int j = 0; j < records_per_batch; j++) {
-            b.add_raw_kv(random_generators::make_iobuf(record_size), iobuf());
+            b.add_raw_kv(tests::random_iobuf(record_size), iobuf());
             offset += 1;
         }
         batches.push_back(std::move(b).build());

@@ -9,10 +9,10 @@
  * by the Apache License, Version 2.0
  */
 
-#include "bytes/random.h"
 #include "kafka/protocol/types.h"
 #include "kafka/protocol/wire.h"
 #include "random/generators.h"
+#include "test_utils/random_bytes.h"
 #include "utils/base64.h"
 
 #include <seastar/core/thread.hh>
@@ -25,7 +25,7 @@
 kafka::tagged_fields make_random_tags(size_t n) {
     kafka::tagged_fields::type tags;
     for (uint32_t i = 0; i < n; ++i) {
-        tags.emplace(n, random_generators::get_bytes());
+        tags.emplace(n, tests::random_bytes());
     }
     return kafka::tagged_fields(std::move(tags));
 }
@@ -163,7 +163,7 @@ SEASTAR_THREAD_TEST_CASE(serde_flex_types) {
     };
     {
         /// uuid
-        auto bytes = random_generators::get_bytes(16);
+        auto bytes = tests::random_bytes(16);
         auto encoded = bytes_to_base64(bytes);
         auto uuid = kafka::uuid::from_string(encoded);
         auto rt = serde_flex(uuid);
@@ -188,7 +188,7 @@ SEASTAR_THREAD_TEST_CASE(serde_flex_types) {
     }
     {
         /// flex bytes
-        auto b = random_generators::get_bytes();
+        auto b = tests::random_bytes();
         BOOST_CHECK(b == serde_flex(b));
     }
     {

@@ -11,9 +11,9 @@
 #include "bytes/bytes.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "bytes/random.h"
 #include "random/generators.h"
 #include "test_utils/iostream.h"
+#include "test_utils/random_bytes.h"
 #include "utils/stream_utils.h"
 
 #include <seastar/core/abort_source.hh>
@@ -42,7 +42,7 @@ void test_sync_read(
     iobuf input;
     for (int i = 0; i < 20; i++) {
         int sz = random_generators::get_int(100, 32 * 1024);
-        auto b = random_generators::get_bytes(sz);
+        auto b = tests::random_bytes(sz);
         input.append(bytes_to_iobuf(b));
     }
     auto szfull = input.size_bytes();
@@ -81,7 +81,7 @@ void test_async_read(
     [[maybe_unused]] int szfull = 0;
     for (int i = 0; i < 20; i++) {
         int sz = random_generators::get_int(100, 8 * 1024);
-        auto b = random_generators::get_bytes(sz);
+        auto b = tests::random_bytes(sz);
         input.append(bytes_to_iobuf(b));
         copy.append(bytes_to_iobuf(b));
         szfull += sz;
@@ -155,7 +155,7 @@ void test_detached_consumer(
     iobuf input;
     for (int i = 0; i < 20; i++) {
         int sz = random_generators::get_int(100, 32 * 1024);
-        auto b = random_generators::get_bytes(sz);
+        auto b = tests::random_bytes(sz);
         input.append(bytes_to_iobuf(b));
     }
     auto szfull = input.size_bytes();
@@ -198,7 +198,7 @@ SEASTAR_THREAD_TEST_CASE(test_mid_read_detach) {
     iobuf input;
     for (int i = 0; i < 20; i++) {
         int sz = random_generators::get_int(100, 32 * 1024);
-        auto b = random_generators::get_bytes(sz);
+        auto b = tests::random_bytes(sz);
         input.append(bytes_to_iobuf(b));
     }
     auto is = make_iobuf_input_stream(std::move(input));

@@ -38,27 +38,33 @@ rp_test(
     compaction_reducer_test.cc
     batch_consumer_utils_test.cc
     compaction_fuzz_test.cc
-  LIBRARIES v::seastar_testing_main v::storage_test_utils v::model_test_utils
+  LIBRARIES v::seastar_testing_main v::storage_test_utils v::model_test_utils v::test_random_bytes
   LABELS storage
   ARGS "-- -c 1"
 )
 
-
 rp_test(
-        UNIT_TEST
-        BINARY_NAME storage_e2e_single_thread
-        SOURCES
-        storage_e2e_test.cc
-        LIBRARIES v::seastar_testing_main v::storage_test_utils v::model_test_utils
-        LABELS storage
-        ARGS "-- -c 1"
+  UNIT_TEST
+  BINARY_NAME
+    storage_e2e_single_thread
+  SOURCES
+    storage_e2e_test.cc
+  LIBRARIES
+    v::seastar_testing_main
+    v::storage_test_utils
+    v::model_test_utils
+    v::test_random_bytes
+  LABELS
+    storage
+  ARGS
+    "-- -c 1"
 )
 
 rp_test(
   UNIT_TEST
   BINARY_NAME test_offset_translator
   SOURCES offset_translator_tests.cc
-  LIBRARIES v::seastar_testing_main v::storage_test_utils
+  LIBRARIES v::seastar_testing_main v::storage_test_utils v::test_random_bytes
   LABELS kafka
   ARGS "-- -c 8"
 )
@@ -94,7 +100,7 @@ rp_test(
     batch_cache_test.cc
     record_batch_builder_test.cc
     snapshot_test.cc
-  LIBRARIES v::seastar_testing_main v::storage_test_utils
+  LIBRARIES v::seastar_testing_main v::storage_test_utils v::test_random_bytes
   LABELS storage
   ARGS "-- -c 8"
 )
@@ -115,7 +121,7 @@ rp_test(
   BENCHMARK_TEST
   BINARY_NAME storage
   SOURCES compaction_idx_bench.cc
-  LIBRARIES Seastar::seastar_perf_testing v::storage v::bytes_random
+  LIBRARIES Seastar::seastar_perf_testing v::storage v::test_random_bytes
   LABELS storage
 )
 

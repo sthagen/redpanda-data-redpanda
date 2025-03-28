@@ -43,7 +43,7 @@ rp_test(
   UNIT_TEST
   BINARY_NAME ${test_name}
   SOURCES ${cluster_test_src}
-  LIBRARIES v::seastar_testing_main v::application v::storage_test_utils v::cluster v::http_test_utils
+  LIBRARIES v::seastar_testing_main v::application v::storage_test_utils v::cluster v::http_test_utils v::test_random_bytes
   LABELS cluster
 )
 endforeach()

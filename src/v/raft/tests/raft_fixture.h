@@ -11,7 +11,6 @@
  */
 
 #pragma once
-#include "bytes/random.h"
 #include "config/mock_property.h"
 #include "config/property.h"
 #include "features/feature_table.h"
@@ -30,6 +29,7 @@
 #include "raft/types.h"
 #include "ssx/sformat.h"
 #include "storage/api.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/test.h"
 #include "utils/prefix_logger.h"
 
@@ -436,8 +436,7 @@ public:
             for (int r_idx : boost::irange(batch_record_count)) {
                 builder.add_raw_kv(
                   serde::to_iobuf(ssx::sformat("r-{}-{}", b_idx, r_idx)),
-                  serde::to_iobuf(
-                    random_generators::get_bytes(record_payload_size)));
+                  serde::to_iobuf(tests::random_bytes(record_payload_size)));
             }
             batches.push_back(std::move(builder).build());
         }

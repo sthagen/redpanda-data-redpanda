@@ -10,12 +10,12 @@
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "bytes/random.h"
 #include "config/configuration.h"
 #include "random/generators.h"
 #include "storage/chunk_cache.h"
 #include "storage/segment_appender.h"
 #include "storage/storage_resources.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/reactor.hh>
@@ -111,7 +111,7 @@ make_segment_appender(ss::file file, storage::storage_resources& resources) {
 }
 
 iobuf make_random_data(size_t len) {
-    return bytes_to_iobuf(random_generators::get_bytes(len));
+    return bytes_to_iobuf(tests::random_bytes(len));
 }
 
 // fill an iobuf with len copies of char c

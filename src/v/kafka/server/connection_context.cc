@@ -939,7 +939,9 @@ connection_context::client_protocol_state::do_process_responses(
     auto msg = response_as_scattered(std::move(resp_and_res.response));
     if (resp_and_res.resources->request_data.request_key == fetch_api::key) {
         co_await connection_ctx->_server.quota_mgr().record_fetch_tp(
-          resp_and_res.resources->request_data.client_id, msg.size());
+          resp_and_res.resources->request_data.client_id,
+          msg.size(),
+          quota_manager::clock::now());
     }
     // Respose sizes only take effect on throttling at the next
     // request processing. The better way was to measure throttle

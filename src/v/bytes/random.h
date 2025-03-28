@@ -11,19 +11,8 @@
 #pragma once
 
 #include "bytes/bytes.h"
-#include "bytes/iobuf.h"
-
-#include <string_view>
-
 namespace random_generators {
 
-bytes get_bytes(size_t n = 128 * 1024);
-
 bytes get_crypto_bytes(size_t n = 128 * 1024, bool use_private_rng = false);
-
-// Makes an random alphanumeric string, encoded in an iobuf.
-iobuf make_iobuf(size_t n = 128);
-
-iobuf split_as_iobuf(std::string_view str, int n_fragments);
 
 } // namespace random_generators

@@ -36,6 +36,7 @@ rp_test(
     v::kafka
     v::storage_test_utils
     v::application
+    v::test_random_bytes
   ARGS "-- -c 1"
   LABELS
     kafka

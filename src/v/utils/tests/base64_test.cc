@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0
 
 #include "bytes/iobuf_parser.h"
-#include "bytes/random.h"
 #include "random/generators.h"
+#include "test_utils/random_bytes.h"
 #include "utils/base64.h"
 
 #include <boost/test/unit_test.hpp>
@@ -42,7 +42,7 @@ BOOST_AUTO_TEST_CASE(iobuf_type) {
     // test with multiple iobuf fragments
     iobuf buf;
     while (std::distance(buf.begin(), buf.end()) < 3) {
-        auto data = random_generators::get_bytes(128);
+        auto data = tests::random_bytes(128);
         buf.append(data.data(), data.size());
     }
 

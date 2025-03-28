@@ -10,7 +10,6 @@
 #include "base/units.h"
 #include "bytes/bytes.h"
 #include "bytes/iobuf_parser.h"
-#include "bytes/random.h"
 #include "model/tests/randoms.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
@@ -22,6 +21,7 @@
 #include "storage/segment_utils.h"
 #include "storage/spill_key_index.h"
 #include "test_utils/fixture.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 #include "test_utils/tmpbuf_file.h"
 #include "utils/vint.h"
@@ -53,7 +53,7 @@ bytes extract_record_key(bytes prefixed_key) {
 FIXTURE_TEST(format_verification, compacted_topic_fixture) {
     tmpbuf_file::store_t index_data;
     auto idx = make_dummy_compacted_index(index_data, 1_KiB, resources);
-    const auto key = random_generators::get_bytes(1024);
+    const auto key = tests::random_bytes(1024);
     auto bt = tests::random_batch_type();
     auto is_control_type = tests::random_bool();
     idx->index(bt, is_control_type, bytes(key), model::offset(42), 66).get();
@@ -87,7 +87,7 @@ FIXTURE_TEST(format_verification, compacted_topic_fixture) {
 FIXTURE_TEST(format_verification_max_key, compacted_topic_fixture) {
     tmpbuf_file::store_t index_data;
     auto idx = make_dummy_compacted_index(index_data, 1_MiB, resources);
-    const auto key = random_generators::get_bytes(1_MiB);
+    const auto key = tests::random_bytes(1_MiB);
     auto bt = tests::random_batch_type();
     auto is_control = tests::random_bool();
     idx->index(bt, is_control, bytes(key), model::offset(42), 66).get();
@@ -120,7 +120,7 @@ FIXTURE_TEST(format_verification_max_key, compacted_topic_fixture) {
 FIXTURE_TEST(format_verification_roundtrip, compacted_topic_fixture) {
     tmpbuf_file::store_t index_data;
     auto idx = make_dummy_compacted_index(index_data, 1_MiB, resources);
-    const auto key = random_generators::get_bytes(20);
+    const auto key = tests::random_bytes(20);
     auto bt = tests::random_batch_type();
     auto is_control = tests::random_bool();
     idx->index(bt, is_control, bytes(key), model::offset(42), 66).get();
@@ -148,7 +148,7 @@ FIXTURE_TEST(
   format_verification_roundtrip_exceeds_capacity, compacted_topic_fixture) {
     tmpbuf_file::store_t index_data;
     auto idx = make_dummy_compacted_index(index_data, 1_MiB, resources);
-    const auto key = random_generators::get_bytes(1_MiB);
+    const auto key = tests::random_bytes(1_MiB);
     auto bt = tests::random_batch_type();
     auto is_control = tests::random_bool();
     idx->index(bt, is_control, bytes(key), model::offset(42), 66).get();
@@ -181,8 +181,8 @@ FIXTURE_TEST(key_reducer_no_truncate_filter, compacted_topic_fixture) {
     // 1 KiB to FORCE eviction with every key basically
     auto idx = make_dummy_compacted_index(index_data, 1_KiB, resources);
 
-    const auto key1 = random_generators::get_bytes(1_KiB);
-    const auto key2 = random_generators::get_bytes(1_KiB);
+    const auto key1 = tests::random_bytes(1_KiB);
+    const auto key2 = tests::random_bytes(1_KiB);
     auto bt = tests::random_batch_type();
     auto is_control = tests::random_bool();
     for (auto i = 0; i < 100; ++i) {
@@ -224,8 +224,8 @@ FIXTURE_TEST(key_reducer_max_mem, compacted_topic_fixture) {
     // 1 KiB to FORCE eviction with every key basically
     auto idx = make_dummy_compacted_index(index_data, 1_KiB, resources);
 
-    const auto key1 = random_generators::get_bytes(1_KiB);
-    const auto key2 = random_generators::get_bytes(1_KiB);
+    const auto key1 = tests::random_bytes(1_KiB);
+    const auto key2 = tests::random_bytes(1_KiB);
     auto bt = tests::random_batch_type();
     auto is_control = tests::random_bool();
     for (auto i = 0; i < 100; ++i) {
@@ -292,8 +292,8 @@ FIXTURE_TEST(index_filtered_copy_tests, compacted_topic_fixture) {
     // 1 KiB to FORCE eviction with every key basically
     auto idx = make_dummy_compacted_index(index_data, 1_KiB, resources);
 
-    const auto key1 = random_generators::get_bytes(128_KiB);
-    const auto key2 = random_generators::get_bytes(1_KiB);
+    const auto key1 = tests::random_bytes(128_KiB);
+    const auto key2 = tests::random_bytes(1_KiB);
     auto bt = tests::random_batch_type();
     auto is_control = tests::random_bool();
     for (auto i = 0; i < 100; ++i) {
@@ -383,7 +383,7 @@ struct index_footer_v1 {
 FIXTURE_TEST(footer_v1_compatibility, compacted_topic_fixture) {
     tmpbuf_file::store_t store;
     auto idx = make_dummy_compacted_index(store, 1_KiB, resources);
-    const auto key = random_generators::get_bytes(1024);
+    const auto key = tests::random_bytes(1024);
     auto bt = tests::random_batch_type();
     auto is_control = tests::random_bool();
     idx->index(bt, is_control, bytes(key), model::offset(42), 66).get();
@@ -481,7 +481,7 @@ FIXTURE_TEST(v1_footers_compatibility, compacted_topic_fixture) {
         // index with some keys
         tmpbuf_file::store_t store;
         auto idx = make_dummy_compacted_index(store, 1_KiB, resources);
-        const auto key = random_generators::get_bytes(1024);
+        const auto key = tests::random_bytes(1024);
         auto bt = tests::random_batch_type();
         auto is_control = tests::random_bool();
         idx->index(bt, is_control, bytes(key), model::offset(42), 66).get();
@@ -518,7 +518,7 @@ FIXTURE_TEST(v0_footers_compatibility, compacted_topic_fixture) {
         // index with some keys
         tmpbuf_file::store_t store;
         auto idx = make_dummy_compacted_index(store, 1_KiB, resources);
-        const auto key = random_generators::get_bytes(1024);
+        const auto key = tests::random_bytes(1024);
         auto bt = tests::random_batch_type();
         auto is_control = tests::random_bool();
         idx->index(bt, is_control, bytes(key), model::offset(42), 66).get();

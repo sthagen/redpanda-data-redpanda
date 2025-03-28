@@ -9,7 +9,6 @@
  * by the Apache License, Version 2.0
  */
 
-#include "bytes/random.h"
 #include "gmock/gmock.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -18,6 +17,7 @@
 #include "model/timestamp.h"
 #include "model/transform.h"
 #include "test_utils/async.h"
+#include "test_utils/random_bytes.h"
 #include "transform/tests/test_fixture.h"
 #include "transform/transform_processor.h"
 
@@ -174,7 +174,7 @@ public:
         std::vector<model::record> records;
         std::generate_n(std::back_inserter(records), n, [&records] {
             return model::test::make_random_record(
-              int(records.size()), random_generators::make_iobuf());
+              int(records.size()), tests::random_iobuf());
         });
         return records;
     }

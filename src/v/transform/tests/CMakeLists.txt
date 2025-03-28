@@ -22,6 +22,7 @@ rp_test(
   LIBRARIES 
     v::gtest_main
     v::transform_test_fixture
+    v::test_random_bytes
   ARGS "-- -c 1"
   LABELS transform
 )

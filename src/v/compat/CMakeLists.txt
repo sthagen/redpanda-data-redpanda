@@ -8,6 +8,7 @@ v_cc_library(
     v::cluster
     v::utils
     v::raft
-    v::model_test_utils)
+    v::model_test_utils
+    v::test_random_bytes)
 
 add_subdirectory(tests)

@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #include "base/units.h"
-#include "bytes/random.h"
+#include "test_utils/random_bytes.h"
 #include "utils/file_io.h"
 
 #include <gtest/gtest.h>
@@ -17,7 +17,7 @@
 class ReadFully : public ::testing::TestWithParam<size_t> {};
 
 TEST_P(ReadFully, RoundTrip) {
-    const auto input = random_generators::make_iobuf(GetParam());
+    const auto input = tests::random_iobuf(GetParam());
     write_fully("out.dat", input.copy()).get();
     const auto output = read_fully("out.dat").get();
     EXPECT_EQ(input, output);

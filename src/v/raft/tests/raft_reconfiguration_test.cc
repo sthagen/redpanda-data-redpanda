@@ -118,7 +118,7 @@ struct reconfiguration_test
                   auto r_size = random_generators::get_int<size_t>(32, 1_KiB);
                   builder.add_raw_kv(
                     serde::to_iobuf(fmt::format("{}-{}", b_idx, i)),
-                    bytes_to_iobuf(random_generators::get_bytes(r_size)));
+                    bytes_to_iobuf(tests::random_bytes(r_size)));
               }
 
               return std::move(builder).build();

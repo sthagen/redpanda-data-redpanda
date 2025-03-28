@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "bytes/bytes.h"
-#include "bytes/random.h"
 #include "kafka/protocol/wire.h"
 #include "kafka/server/group_metadata.h"
 #include "kafka/server/server.h"
@@ -21,6 +20,7 @@
 #include "reflection/adl.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/fixture.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/sstring.hh>
 #include <seastar/util/log.hh>
@@ -77,8 +77,8 @@ kafka::member_state random_member_state() {
     state.client_host = random_named_string<kafka::client_host>();
     state.rebalance_timeout = random_named_int<std::chrono::milliseconds>();
     state.session_timeout = random_named_int<std::chrono::milliseconds>();
-    state.subscription = bytes_to_iobuf(random_generators::get_bytes());
-    state.assignment = bytes_to_iobuf(random_generators::get_bytes());
+    state.subscription = bytes_to_iobuf(tests::random_bytes());
+    state.assignment = bytes_to_iobuf(tests::random_bytes());
 
     return state;
 }

@@ -8,13 +8,13 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "bytes/random.h"
 #include "gmock/gmock.h"
 #include "iceberg/tests/test_schemas.h"
 #include "iceberg/values.h"
 #include "iceberg/values_json.h"
 #include "json/document.h"
 #include "json/json.h"
+#include "test_utils/random_bytes.h"
 
 #include <absl/numeric/int128.h>
 #include <gtest/gtest.h>
@@ -96,7 +96,7 @@ ss::sstring json_str(T v) {
 }
 
 static auto some_uuid = uuid_t::create();
-static auto some_random_bytes = random_generators::get_bytes();
+static auto some_random_bytes = tests::random_bytes();
 
 static const std::vector<values_json_test_case> test_cases{
   values_json_test_case{

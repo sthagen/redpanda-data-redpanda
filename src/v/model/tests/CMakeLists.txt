@@ -10,7 +10,7 @@ v_cc_library(
     v::random
     v::compression
     v::bytes
-    v::bytes_random
+    v::test_random_bytes
 )
 
 rp_test(
@@ -50,5 +50,6 @@ rp_test(
     v::model_test_utils
     v::gtest_main
     v::model
+    v::test_random_bytes
   LABELS model
 )

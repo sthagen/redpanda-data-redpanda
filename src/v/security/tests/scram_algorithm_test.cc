@@ -9,6 +9,7 @@
 #define BOOST_TEST_MODULE kafka_security
 #include "random/generators.h"
 #include "security/scram_algorithm.h"
+#include "test_utils/random_bytes.h"
 #include "utils/base64.h"
 
 #include <seastar/testing/thread_test_case.hh>
@@ -177,7 +178,7 @@ BOOST_AUTO_TEST_CASE(client_first_message_invalid) {
 BOOST_AUTO_TEST_CASE(server_first_message_ctor) {
     const auto client_nonce = make_nonce();
     const auto server_nonce = make_nonce();
-    auto salt = random_generators::get_bytes(30);
+    auto salt = tests::random_bytes(30);
     auto iterations = 33;
 
     server_first_message m(client_nonce, server_nonce, salt, iterations);
@@ -193,7 +194,7 @@ BOOST_AUTO_TEST_CASE(server_first_message_ctor) {
 
 BOOST_AUTO_TEST_CASE(client_final_message_valid) {
     auto random_base64_bytes = [] {
-        auto bytes = random_generators::get_bytes(30);
+        auto bytes = tests::random_bytes(30);
         return bytes_to_base64(bytes);
     };
 
@@ -228,7 +229,7 @@ BOOST_AUTO_TEST_CASE(client_final_message_valid) {
 
 BOOST_AUTO_TEST_CASE(client_final_message_invalid) {
     auto random_base64_bytes = [] {
-        auto bytes = random_generators::get_bytes(30);
+        auto bytes = tests::random_bytes(30);
         return bytes_to_base64(bytes);
     };
 
@@ -275,7 +276,7 @@ BOOST_AUTO_TEST_CASE(client_final_message_invalid) {
 }
 
 BOOST_AUTO_TEST_CASE(server_final_message_ctor) {
-    auto signature = random_generators::get_bytes(30);
+    auto signature = tests::random_bytes(30);
 
     {
         server_final_message m(std::nullopt, signature);

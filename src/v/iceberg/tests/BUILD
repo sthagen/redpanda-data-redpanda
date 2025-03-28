@@ -37,11 +37,11 @@ redpanda_test_cc_library(
     include_prefix = "iceberg/tests",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/bytes:random",
         "//src/v/iceberg:datatypes",
         "//src/v/iceberg:values",
         "//src/v/random:generators",
         "//src/v/test_utils:random",
+        "//src/v/test_utils:random_bytes",
     ],
 )
 
@@ -83,12 +83,12 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":test_schemas",
-        "//src/v/bytes:random",
         "//src/v/iceberg:json_writer",
         "//src/v/iceberg:values",
         "//src/v/iceberg:values_json",
         "//src/v/json",
         "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random_bytes",
         "@abseil-cpp//absl/numeric:int128",
         "@googletest//:gtest",
     ],
@@ -481,7 +481,6 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/bytes:iobuf",
-        "//src/v/bytes:random",
         "//src/v/iceberg:bucket_transform_hashing_visitor",
         "//src/v/iceberg:transform",
         "//src/v/iceberg:transform_utils",
@@ -489,6 +488,7 @@ redpanda_cc_gtest(
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random_bytes",
         "@abseil-cpp//absl/numeric:int128",
         "@fmt",
         "@googletest//:gtest",

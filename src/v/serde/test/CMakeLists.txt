@@ -3,7 +3,7 @@ rp_test(
   BINARY_NAME serde
   SOURCES serde_test.cc
   DEFINITIONS BOOST_TEST_DYN_LINK SERDE_TEST
-  LIBRARIES v::seastar_testing_main v::serde
+  LIBRARIES v::seastar_testing_main v::serde v::test_random_bytes
   LABELS serde
 )
 rp_test(

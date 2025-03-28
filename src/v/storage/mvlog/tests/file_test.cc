@@ -7,10 +7,10 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/random.h"
 #include "container/fragmented_vector.h"
 #include "storage/mvlog/file.h"
 #include "test_utils/gtest_utils.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/seastar.hh>
@@ -129,7 +129,7 @@ TEST_F_CORO(FileTest, TestAppend) {
 
     iobuf expected_buf;
     for (int i = 0; i < 10; i++) {
-        auto buf = random_generators::make_iobuf();
+        auto buf = tests::random_iobuf();
         co_await created->append(buf.copy());
         expected_buf.append(std::move(buf));
         ASSERT_EQ_CORO(created->size(), expected_buf.size_bytes());
@@ -155,14 +155,14 @@ TEST_F(FileDeathTest, TestAppendAfterClose) {
     // Clean up the files in the test body. Death tests may not run teardown.
     ss::recursive_remove_directory(std::filesystem::path{base_dir_}).get();
 
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     ASSERT_DEATH(created->append(buf.copy()).get(), "file has been closed");
 }
 
 TEST_F(FileDeathTest, TestStreamAfterClose) {
     const auto path = test_path("foo");
     auto created = file_mgr_->create_file(path).get();
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     created->append(buf.copy()).get();
     created->close().get();
 
@@ -181,7 +181,7 @@ TEST_F_CORO(FileTest, TestReadStream) {
     const auto file_size = append_len * num_appends;
     iobuf expected_full;
     for (int i = 0; i < num_appends; i++) {
-        auto buf = random_generators::make_iobuf(append_len);
+        auto buf = tests::random_iobuf(append_len);
         co_await file->append(buf.copy());
         expected_full.append(std::move(buf));
     }
@@ -209,7 +209,7 @@ TEST_F_CORO(FileTest, TestReadStreamNearEnd) {
     const auto path = test_path("foo");
     auto file = co_await tracked_create_file(path);
     const auto file_size = 128;
-    auto buf = random_generators::make_iobuf(file_size);
+    auto buf = tests::random_iobuf(file_size);
     co_await file->append(buf.copy());
     ASSERT_EQ_CORO(file->size(), file_size);
 

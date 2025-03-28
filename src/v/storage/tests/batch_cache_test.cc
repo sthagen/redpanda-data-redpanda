@@ -7,13 +7,13 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/random.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "random/generators.h"
 #include "storage/batch_cache.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/fixture.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/sharded.hh>
 #include <seastar/testing/thread_test_case.hh>
@@ -42,8 +42,7 @@ make_batch(size_t size = 10, model::offset offset = model::offset(0)) {
 static model::record_batch make_random_batch(
   size_t max_size = 10, model::offset offset = model::offset(0)) {
     storage::record_batch_builder b(model::record_batch_type(1), offset);
-    b.add_raw_kv(
-      iobuf{}, bytes_to_iobuf(random_generators::get_bytes(max_size)));
+    b.add_raw_kv(iobuf{}, bytes_to_iobuf(tests::random_bytes(max_size)));
 
     return std::move(b).build();
 }

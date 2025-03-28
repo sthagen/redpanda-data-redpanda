@@ -101,6 +101,23 @@ redpanda_test_cc_library(
 )
 
 redpanda_test_cc_library(
+    name = "random_bytes",
+    srcs = ["random_bytes.cc"],
+    hdrs = [
+        "random_bytes.h",
+    ],
+    implementation_deps = [
+        "//src/v/random:generators",
+    ],
+    include_prefix = "test_utils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/bytes",
+        "//src/v/bytes:iobuf",
+    ],
+)
+
+redpanda_test_cc_library(
     name = "scoped_config",
     hdrs = [
         "scoped_config.h",

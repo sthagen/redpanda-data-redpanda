@@ -62,12 +62,13 @@ redpanda_cc_library(
     hdrs = [
         "random.h",
     ],
+    implementation_deps = [
+        "//src/v/random:generators",
+    ],
     include_prefix = "bytes",
     visibility = ["//visibility:public"],
     deps = [
         ":bytes",
-        ":iobuf",
-        "//src/v/random:generators",
         "@seastar",
     ],
 )

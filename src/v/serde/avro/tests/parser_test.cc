@@ -11,10 +11,9 @@
 
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
-#include "bytes/random.h"
-#include "random/generators.h"
 #include "serde/avro/parser.h"
 #include "serde/avro/tests/data_generator.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/runfiles.h"
 #include "utils/file_io.h"
 
@@ -364,7 +363,7 @@ TEST_F(AvroParserTest, TestTooManyBytes) {
     ::avro::GenericDatum random_value = gen.generate_datum(valid_schema.root());
 
     iobuf buffer = serialize_with_avro(random_value, valid_schema);
-    buffer.append(random_generators::make_iobuf(128));
+    buffer.append(tests::random_iobuf(128));
 
     ASSERT_THROW(
       serde::avro::parse(std::move(buffer), valid_schema).get(),
@@ -375,8 +374,7 @@ TEST_F(AvroParserTest, TestRandomBytes) {
     auto valid_schema = load_json_schema("record2");
     // check if parser is safe to parse completely random bytes
     ASSERT_THROW(
-      serde::avro::parse(random_generators::make_iobuf(512), valid_schema)
-        .get(),
+      serde::avro::parse(tests::random_iobuf(512), valid_schema).get(),
       std::invalid_argument);
 }
 

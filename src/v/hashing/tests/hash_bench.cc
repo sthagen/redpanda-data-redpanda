@@ -8,7 +8,6 @@
 // by the Apache License, Version 2.0
 
 #include "bytes/bytes.h"
-#include "bytes/random.h"
 #include "hashing/crc32c.h"
 #include "hashing/murmur.h"
 #include "hashing/xx.h"
@@ -16,6 +15,7 @@
 #include "model/ktp.h"
 #include "model/namespace.h"
 #include "random/generators.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sstring.hh>
@@ -306,7 +306,7 @@ PERF_TEST(murmur_hash_x86_32, unaligned) {
 
 PERF_TEST(murmur_hash_x86_32, iobuf) {
     auto buf = generate_data();
-    iobuf split_buf = random_generators::split_as_iobuf(
+    iobuf split_buf = tests::fragmented_iobuf(
       {reinterpret_cast<const char*>(buf.data()), buf.size()}, 3);
     perf_tests::start_measuring_time();
     for (auto i = inner_iters; i--;) {

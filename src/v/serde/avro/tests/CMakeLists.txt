@@ -25,6 +25,7 @@ rp_test(
     Boost::iostreams
     v::avro_test_utils
     v::bytes
+    v::test_random_bytes
     v::gtest_main
     v::serde_avro
     v::utils

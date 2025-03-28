@@ -8,9 +8,9 @@ redpanda_test_cc_library(
     include_prefix = "security/tests",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/bytes:random",
         "//src/v/security",
         "//src/v/test_utils:random",
+        "//src/v/test_utils:random_bytes",
     ],
 )
 
@@ -23,6 +23,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/random:generators",
         "//src/v/security",
+        "//src/v/test_utils:random_bytes",
         "//src/v/utils:base64",
         "@boost//:algorithm",
         "@boost//:test",

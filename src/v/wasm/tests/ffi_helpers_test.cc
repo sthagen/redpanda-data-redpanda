@@ -9,11 +9,10 @@
  * by the Apache License, Version 2.0
  */
 
-#include "bytes/iobuf.h"
-#include "bytes/random.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "random/generators.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/test.h"
 #include "wasm/ffi.h"
 
@@ -57,7 +56,7 @@ TEST(FFIHelpers, CanRoundTrip) {
     flubber input{
       .foo = -1,
       .bar = "asdf",
-      .baz = random_generators::make_iobuf(),
+      .baz = tests::random_iobuf(),
       .qux = std::numeric_limits<uint64_t>::max()};
     sizer s;
     serialize_flubber(input, &s);

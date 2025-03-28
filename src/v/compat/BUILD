@@ -73,13 +73,13 @@ redpanda_test_cc_library(
     include_prefix = "compat",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/bytes:random",
         "//src/v/cluster",
         "//src/v/cluster/tests:randoms",
         "//src/v/container:json",
         "//src/v/json",
         "//src/v/model/tests:random",
         "//src/v/security/tests:utils",
+        "//src/v/test_utils:random_bytes",
         "@seastar",
     ],
 )

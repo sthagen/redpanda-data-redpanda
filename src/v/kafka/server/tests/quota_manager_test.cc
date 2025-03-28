@@ -29,20 +29,22 @@ using cluster::client_quota::entity_value;
 
 static const auto default_key = entity_key(
   entity_key::client_id_default_match{});
-static const auto client_id = "franz-go";
+static const auto cid = "franz-go";
 static const auto franz_go_key = entity_key{
   entity_key::client_id_prefix_match{"franz-go"}};
 static const auto not_franz_go_key = entity_key{
   entity_key::client_id_prefix_match{"not-franz-go"}};
 
+namespace kafka {
+
 struct fixture {
     ss::sharded<cluster::client_quota::store> quota_store;
-    ss::sharded<kafka::quota_manager> sqm;
+    ss::sharded<quota_manager> sqm;
 
     fixture() {
         quota_store.start().get();
         sqm.start(std::ref(quota_store)).get();
-        sqm.invoke_on_all(&kafka::quota_manager::start).get();
+        sqm.invoke_on_all(&quota_manager::start).get();
     }
 
     ~fixture() {
@@ -84,10 +86,11 @@ SEASTAR_THREAD_TEST_CASE(quota_manager_fetch_no_throttling) {
     fixture f;
 
     auto& qm = f.sqm.local();
+    const auto now = quota_manager::clock::now();
 
     // Test that if fetch throttling is disabled, we don't throttle
-    qm.record_fetch_tp(client_id, 10000000000000).get();
-    auto delay = qm.throttle_fetch_tp(client_id).get();
+    qm.record_fetch_tp(cid, 10000000000000, now).get();
+    auto delay = qm.throttle_fetch_tp(cid, now).get();
 
     BOOST_CHECK_EQUAL(0ms, delay);
 }
@@ -102,25 +105,25 @@ SEASTAR_THREAD_TEST_CASE(quota_manager_fetch_throttling) {
 
     auto& qm = f.sqm.local();
 
-    auto now = kafka::quota_manager::clock::now();
+    auto now = quota_manager::clock::now();
 
     // Test that below the fetch quota we don't throttle
-    qm.record_fetch_tp(client_id, 99, now).get();
-    auto delay = qm.throttle_fetch_tp(client_id, now).get();
+    qm.record_fetch_tp(cid, 99, now).get();
+    auto delay = qm.throttle_fetch_tp(cid, now).get();
 
     BOOST_CHECK_EQUAL(delay, 0ms);
 
     // Test that above the fetch quota we throttle
-    qm.record_fetch_tp(client_id, 10, now).get();
-    delay = qm.throttle_fetch_tp(client_id, now).get();
+    qm.record_fetch_tp(cid, 10, now).get();
+    delay = qm.throttle_fetch_tp(cid, now).get();
 
     BOOST_CHECK_GT(delay, 0ms);
 
     // Test that once we wait out the throttling delay, we don't
     // throttle again (as long as we stay under the limit)
     now += 1s;
-    qm.record_fetch_tp(client_id, 10, now).get();
-    delay = qm.throttle_fetch_tp(client_id, now).get();
+    qm.record_fetch_tp(cid, 10, now).get();
+    delay = qm.throttle_fetch_tp(cid, now).get();
 
     BOOST_CHECK_EQUAL(delay, 0ms);
 }
@@ -146,11 +149,12 @@ SEASTAR_THREAD_TEST_CASE(quota_manager_fetch_stress_test) {
     // discover segfaults caused by data races/use-after-free
     f.sqm
       .invoke_on_all(
-        ss::coroutine::lambda([](kafka::quota_manager& qm) -> ss::future<> {
+        ss::coroutine::lambda([](quota_manager& qm) -> ss::future<> {
             for (size_t i = 0; i < 1000; ++i) {
-                co_await qm.record_fetch_tp(client_id, 1);
+                co_await qm.record_fetch_tp(
+                  cid, 1, quota_manager::clock::now());
                 auto delay [[maybe_unused]] = co_await qm.throttle_fetch_tp(
-                  client_id);
+                  cid, quota_manager::clock::now());
                 co_await ss::maybe_yield();
             }
         }))
@@ -158,21 +162,20 @@ SEASTAR_THREAD_TEST_CASE(quota_manager_fetch_stress_test) {
 }
 
 SEASTAR_THREAD_TEST_CASE(static_config_test) {
-    using k_client_id = kafka::k_client_id;
-    using k_group_name = kafka::k_group_name;
     fixture f;
 
     f.set_basic_quotas();
 
     auto& buckets_map = f.sqm.local().get_global_map_for_testing();
+    const auto now = quota_manager::clock::now();
 
     BOOST_REQUIRE_EQUAL(buckets_map->size(), 0);
 
     {
         ss::sstring client_id = "franz-go";
-        f.sqm.local().record_fetch_tp(client_id, 1).get();
-        f.sqm.local().record_produce_tp_and_throttle(client_id, 1).get();
-        f.sqm.local().record_partition_mutations(client_id, 1).get();
+        f.sqm.local().record_fetch_tp(client_id, 1, now).get();
+        f.sqm.local().record_produce_tp_and_throttle(client_id, 1, now).get();
+        f.sqm.local().record_partition_mutations(client_id, 1, now).get();
         auto it = buckets_map->find(k_group_name{client_id});
         BOOST_REQUIRE(it != buckets_map->end());
         BOOST_REQUIRE(it->second->tp_produce_rate.has_value());
@@ -183,9 +186,9 @@ SEASTAR_THREAD_TEST_CASE(static_config_test) {
     }
     {
         ss::sstring client_id = "not-franz-go";
-        f.sqm.local().record_fetch_tp(client_id, 1).get();
-        f.sqm.local().record_produce_tp_and_throttle(client_id, 1).get();
-        f.sqm.local().record_partition_mutations(client_id, 1).get();
+        f.sqm.local().record_fetch_tp(client_id, 1, now).get();
+        f.sqm.local().record_produce_tp_and_throttle(client_id, 1, now).get();
+        f.sqm.local().record_partition_mutations(client_id, 1, now).get();
         auto it = buckets_map->find(k_group_name{client_id});
         BOOST_REQUIRE(it != buckets_map->end());
         BOOST_REQUIRE(it->second->tp_produce_rate.has_value());
@@ -196,9 +199,9 @@ SEASTAR_THREAD_TEST_CASE(static_config_test) {
     }
     {
         ss::sstring client_id = "unconfigured";
-        f.sqm.local().record_fetch_tp(client_id, 1).get();
-        f.sqm.local().record_produce_tp_and_throttle(client_id, 1).get();
-        f.sqm.local().record_partition_mutations(client_id, 1).get();
+        f.sqm.local().record_fetch_tp(client_id, 1, now).get();
+        f.sqm.local().record_produce_tp_and_throttle(client_id, 1, now).get();
+        f.sqm.local().record_partition_mutations(client_id, 1, now).get();
         auto it = buckets_map->find(k_client_id{client_id});
         BOOST_REQUIRE(it != buckets_map->end());
         BOOST_REQUIRE(it->second->tp_produce_rate.has_value());
@@ -211,9 +214,7 @@ SEASTAR_THREAD_TEST_CASE(static_config_test) {
 }
 
 SEASTAR_THREAD_TEST_CASE(update_test) {
-    using clock = kafka::quota_manager::clock;
-    using k_group_name = kafka::k_group_name;
-    using k_client_id = kafka::k_client_id;
+    using clock = quota_manager::clock;
     fixture f;
 
     f.set_basic_quotas();
@@ -319,3 +320,4 @@ SEASTAR_THREAD_TEST_CASE(update_test) {
         BOOST_CHECK_EQUAL(it->second->tp_fetch_rate->rate(), 16384);
     }
 }
+} // namespace kafka

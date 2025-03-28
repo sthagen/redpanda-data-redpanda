@@ -9,10 +9,10 @@
 
 #include "base/units.h"
 #include "bytes/iostream.h"
-#include "bytes/random.h"
 #include "random/generators.h"
 #include "storage/mvlog/file.h"
 #include "storage/mvlog/skipping_data_source.h"
+#include "test_utils/random_bytes.h"
 
 #include <seastar/core/seastar.hh>
 #include <seastar/util/short_streams.hh>
@@ -70,7 +70,7 @@ protected:
 };
 
 TEST_F(SkippingStreamTest, TestEmptyReadList) {
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     write_buf(std::move(buf)).get();
 
     // Empty read list.
@@ -80,7 +80,7 @@ TEST_F(SkippingStreamTest, TestEmptyReadList) {
 }
 
 TEST_F(SkippingStreamTest, TestEmptyInterval) {
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     write_buf(std::move(buf)).get();
 
     // Bogus list.
@@ -92,7 +92,7 @@ TEST_F(SkippingStreamTest, TestEmptyInterval) {
 }
 
 TEST_F(SkippingStreamTest, TestOutOfBounds) {
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     write_buf(buf.copy()).get();
 
     // Bogus list.
@@ -107,7 +107,7 @@ TEST_F(SkippingStreamTest, TestOutOfBounds) {
 }
 
 TEST_F(SkippingStreamTest, TestFullInterval) {
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     write_buf(buf.copy()).get();
 
     // Read exactly the right sized buffer.
@@ -120,7 +120,7 @@ TEST_F(SkippingStreamTest, TestFullInterval) {
 }
 
 TEST_F(SkippingStreamTest, TestOversizedInterval) {
-    const auto buf = random_generators::make_iobuf();
+    const auto buf = tests::random_iobuf();
     write_buf(buf.copy()).get();
 
     for (size_t i = 0; i < buf.size_bytes(); i++) {
@@ -145,7 +145,7 @@ TEST_F(SkippingStreamTest, TestOversizedInterval) {
 }
 
 TEST_F(SkippingStreamTest, TestSkipFront) {
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     write_buf(buf.copy()).get();
 
     // Skip the beginning.
@@ -161,7 +161,7 @@ TEST_F(SkippingStreamTest, TestSkipFront) {
 }
 
 TEST_F(SkippingStreamTest, TestSkipBack) {
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     write_buf(buf.copy()).get();
 
     // Skip the back.
@@ -177,7 +177,7 @@ TEST_F(SkippingStreamTest, TestSkipBack) {
 }
 
 TEST_F(SkippingStreamTest, TestUnorderedReads) {
-    auto buf = random_generators::make_iobuf();
+    auto buf = tests::random_iobuf();
     write_buf(buf.copy()).get();
 
     skipping_data_source::read_list_t reads;
@@ -210,7 +210,7 @@ TEST_F(SkippingStreamTest, TestRandomOrderedReads) {
     iobuf buf;
     for (int i = 0; i < random_generators::get_int(1, 100); i++) {
         const size_t size = random_generators::get_int(0, 10);
-        auto random_buf = random_generators::make_iobuf(size);
+        auto random_buf = tests::random_iobuf(size);
         bool should_read = random_generators::get_int(0, 1);
         if (should_read) {
             // Build the expected output with just the intervals that are read.

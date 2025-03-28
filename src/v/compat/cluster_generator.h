@@ -16,6 +16,7 @@
 #include "model/metadata.h"
 #include "model/tests/randoms.h"
 #include "random/generators.h"
+#include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 #include "utils/tristate.h"
 
@@ -588,7 +589,7 @@ struct instance_generator<cluster::remote_topic_properties> {
 template<>
 struct instance_generator<cluster::topic_properties> {
     static xid random_xid() {
-        auto data = random_generators::get_bytes(12);
+        auto data = tests::random_bytes(12);
         xid::data_t array;
         std::copy(std::begin(data), std::end(data), array.begin());
 

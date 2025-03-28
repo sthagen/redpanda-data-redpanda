@@ -12,3 +12,16 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "test_random_bytes_test",
+    timeout = "short",
+    srcs = [
+        "random_bytes_test.cc",
+    ],
+    deps = [
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random_bytes",
+        "@googletest//:gtest",
+    ],
+)

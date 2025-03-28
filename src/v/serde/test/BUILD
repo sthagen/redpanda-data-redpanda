@@ -28,7 +28,6 @@ redpanda_cc_btest(
         "SERDE_TEST",
     ],
     deps = [
-        "//src/v/bytes:random",
         "//src/v/container:fragmented_vector",
         "//src/v/hashing:crc32c",
         "//src/v/model",
@@ -46,6 +45,7 @@ redpanda_cc_btest(
         "//src/v/serde:sstring",
         "//src/v/serde:variant",
         "//src/v/test_utils:random",
+        "//src/v/test_utils:random_bytes",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:tristate",
         "@abseil-cpp//absl/container:btree",

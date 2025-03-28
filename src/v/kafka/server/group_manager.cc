@@ -48,6 +48,8 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
 
+#include <fmt/ranges.h>
+
 #include <chrono>
 #include <system_error>
 
@@ -287,26 +289,34 @@ ss::future<> group_manager::handle_offset_expiration() {
      * build a light-weight snapshot of the groups to process. the snapshot
      * allows us to avoid concurrent modifications to _groups container.
      */
-    fragmented_vector<group_ptr> groups;
+    fragmented_vector<std::pair<group_ptr, size_t>> groups;
     for (auto& group : _groups) {
-        groups.push_back(group.second);
+        groups.emplace_back(group.second, 0);
     }
 
-    size_t total = 0;
     co_await ss::max_concurrent_for_each(
       groups,
       max_concurrent_expirations,
-      [this, &total, retention_period = retention_period.value()](auto group) {
-          return delete_expired_offsets(group, retention_period)
-            .then([&total](auto removed) { total += removed; });
+      [this, retention_period = retention_period.value()](auto& group_count) {
+          return delete_expired_offsets(group_count.first, retention_period)
+            .then(
+              [&group_count](auto removed) { group_count.second = removed; });
       });
 
-    if (total) {
+    auto groups_with_expired_offsets
+      = groups | std::ranges::views::filter([](auto& group_count) {
+            return group_count.second > 0;
+        })
+        | std::ranges::views::transform([](auto& group_count) {
+              return std::pair<std::string_view, size_t>(
+                group_count.first->id()(), group_count.second);
+          });
+
+    if (!groups_with_expired_offsets.empty()) {
         vlog(
           cg_klog.info,
-          "Removed {} offsets from {} groups",
-          total,
-          groups.size());
+          "Removed (group, offsets) {} due to offset retention",
+          groups_with_expired_offsets);
     }
 }
 
