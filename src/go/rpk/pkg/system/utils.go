@@ -40,17 +40,17 @@ func UnameAndDistro(timeout time.Duration) (string, error) {
 // depending on how large the input is.
 func BitsToHuman(bytes float64) string {
 	bits := bytes * 8
-	asGib := bits / (1 << 30)
-	asMib := bits / (1 << 20)
-	asKib := bits / (1 << 10)
-	if asGib > 1.0 {
-		return fmt.Sprintf("%.2fGib", asGib)
+	asGb := bits / 1000000000
+	asMb := bits / 1000000
+	asKb := bits / 1000
+	if asGb > 1.0 {
+		return fmt.Sprintf("%.2fGbit", asGb)
 	}
-	if asMib > 1.0 {
-		return fmt.Sprintf("%.2fMib", asMib)
+	if asMb > 1.0 {
+		return fmt.Sprintf("%.2fMbit", asMb)
 	}
-	if asKib > 1.0 {
-		return fmt.Sprintf("%.2fKib", asKib)
+	if asKb > 1.0 {
+		return fmt.Sprintf("%.2fKbit", asKb)
 	}
-	return fmt.Sprintf("%v", bytes)
+	return fmt.Sprintf("%vbit", bits)
 }

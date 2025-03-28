@@ -48,11 +48,38 @@ chunked_vector<translated_offset_range> make_pending_files(
     return files;
 }
 
+void add_partition_state(
+  std::vector<pairs_t> offset_bounds_by_pid,
+  topic_state& state,
+  model::offset added_at,
+  bool with_files,
+  bool dlq) {
+    for (size_t i = 0; i < offset_bounds_by_pid.size(); i++) {
+        auto pid = static_cast<model::partition_id>(i);
+        auto& p_state = state.pid_to_pending_files[pid];
+        for (auto& f :
+             make_pending_files(offset_bounds_by_pid[i], with_files, dlq)) {
+            p_state.pending_entries.emplace_back(pending_entry{
+              .data = std::move(f), .added_pending_at = added_at});
+        }
+    }
+}
+topic_state make_topic_state(
+  std::vector<pairs_t> offset_bounds_by_pid,
+  model::offset added_at,
+  bool with_files,
+  bool dlq) {
+    topic_state state;
+    add_partition_state(
+      std::move(offset_bounds_by_pid), state, added_at, with_files, dlq);
+    return state;
+}
+
 void check_partition(
   const topics_state& state,
   const model::topic_partition& tp,
   std::optional<int64_t> expected_committed,
-  const std::vector<std::pair<int64_t, int64_t>>& offset_bounds) {
+  const pairs_t& offset_bounds) {
     auto prt_state_opt = state.partition_state(tp);
     ASSERT_TRUE(prt_state_opt.has_value());
     const auto& prt_state = prt_state_opt.value().get();

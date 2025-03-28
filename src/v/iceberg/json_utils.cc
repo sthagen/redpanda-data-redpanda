@@ -51,6 +51,9 @@ parse_optional(const json::Value& v, std::string_view member_name) {
     if (iter == v.MemberEnd()) {
         return std::nullopt;
     }
+    if (iter->value.IsNull()) {
+        return std::nullopt;
+    }
     return iter->value;
 }
 

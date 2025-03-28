@@ -166,7 +166,7 @@ coordinator::run_until_term_change(model::term_id term) {
                 // TODO: consider decoupling this from the commit interval.
                 auto removal_res
                   = co_await snapshot_remover_.remove_expired_snapshots(
-                    t, model::timestamp::now());
+                    t, stm_->state(), model::timestamp::now());
                 if (removal_res.has_error()) {
                     switch (removal_res.error()) {
                     case snapshot_remover::errc::shutting_down:

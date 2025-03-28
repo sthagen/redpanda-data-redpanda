@@ -39,34 +39,6 @@ using namespace datalake::coordinator;
 namespace {
 const model::topic topic{"test-topic"};
 const iceberg::table_identifier table_ident{.ns = {"redpanda"}, .table = topic};
-using pairs_t = std::vector<std::pair<int64_t, int64_t>>;
-void add_partition_state(
-  std::vector<pairs_t> offset_bounds_by_pid,
-  topic_state& state,
-  model::offset added_at,
-  bool with_files,
-  bool dlq = false) {
-    for (size_t i = 0; i < offset_bounds_by_pid.size(); i++) {
-        auto pid = static_cast<model::partition_id>(i);
-        partition_state p_state;
-        for (auto& f :
-             make_pending_files(offset_bounds_by_pid[i], with_files, dlq)) {
-            p_state.pending_entries.emplace_back(pending_entry{
-              .data = std::move(f), .added_pending_at = added_at});
-        }
-        state.pid_to_pending_files[pid] = std::move(p_state);
-    }
-}
-topic_state make_topic_state(
-  std::vector<pairs_t> offset_bounds_by_pid,
-  model::offset added_at = model::offset{1000},
-  bool with_files = false,
-  bool dlq = false) {
-    topic_state state;
-    add_partition_state(
-      std::move(offset_bounds_by_pid), state, added_at, with_files, dlq);
-    return state;
-}
 
 // Simulates a coordinator repeatedly committing a fixed sequence of data
 // files.

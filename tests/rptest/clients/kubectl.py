@@ -261,7 +261,7 @@ class KubectlTool:
         if self._redpanda_operator_v2:
             return 'redpanda-broker-0'
         else:
-            return f'rp-{self._cluster_id}-0'
+            return f'rp-{self._cluster_id}-blue-a-0'
 
     def _ssh_cmd(
             self,

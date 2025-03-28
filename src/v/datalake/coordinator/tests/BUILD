@@ -96,6 +96,7 @@ redpanda_cc_gtest(
     cpu = 1,
     tags = ["exclusive"],
     deps = [
+        ":state_test_utils",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_io/tests:scoped_remote",

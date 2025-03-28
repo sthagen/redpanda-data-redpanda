@@ -56,19 +56,33 @@ snapshot_remover::errc log_and_convert_action_errc(
 
 ss::future<checked<std::nullopt_t, snapshot_remover::errc>>
 iceberg_snapshot_remover::remove_expired_snapshots(
-  model::topic topic, model::timestamp ts) const {
-    std::optional<snapshot_remover::errc> error;
-    auto dlq_res = co_await remove_expired_snapshots(
-      topic, table_id_provider::dlq_table_id(topic), ts);
-    if (dlq_res.has_error()) {
-        error = dlq_res.error();
+  model::topic topic, const topics_state& state, model::timestamp ts) const {
+    auto tp_iter = state.topic_to_state.find(topic);
+    if (tp_iter == state.topic_to_state.end()) {
+        co_return std::nullopt;
     }
-    auto main_res = co_await remove_expired_snapshots(
-      topic, table_id_provider::table_id(topic), ts);
-    // Arbitrarily favor returning the error from the main table if they both
-    // return errors.
-    if (main_res.has_error()) {
-        error = main_res.error();
+    // We primarily care about avoiding ending up with a ton of snapshots, so
+    // we remove snapshots when we know there is soon to be a new snapshot.
+    // This also avoids extraneous calls to the catalog when there is no work
+    // to be done.
+    auto has_dlq_entries = tp_iter->second.has_pending_dlq_entries();
+    auto has_main_entries = tp_iter->second.has_pending_main_entries();
+    std::optional<snapshot_remover::errc> error;
+    if (has_dlq_entries) {
+        auto dlq_res = co_await remove_expired_snapshots(
+          topic, table_id_provider::dlq_table_id(topic), ts);
+        if (dlq_res.has_error()) {
+            error = dlq_res.error();
+        }
+    }
+    if (has_main_entries) {
+        auto main_res = co_await remove_expired_snapshots(
+          topic, table_id_provider::table_id(topic), ts);
+        // Arbitrarily favor returning the error from the main table if they
+        // both return errors.
+        if (main_res.has_error()) {
+            error = main_res.error();
+        }
     }
     if (error.has_value()) {
         co_return *error;

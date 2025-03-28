@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("@rules_python//python:defs.bzl", "py_binary")
 
@@ -23,6 +24,11 @@ buildifier(
     mode = "fix",
 )
 
+native_binary(
+    name = "minio",
+    src = "@minio//file",
+)
+
 # Run a dev_cluster, by default the data directory is in the repository root.
 #
 #     bazel run //tools:dev_cluster -- --nodes 1
@@ -34,14 +40,18 @@ py_binary(
     ],
     args = [
         "-e $(rootpath //src/v/redpanda:redpanda)",
+        "-o $(rootpath :minio)",
     ],
     data = [
+        ":minio",
         "//src/v/redpanda",
     ],
     visibility = ["//visibility:public"],
     deps = [
+        "@python_deps//aioboto3",
         "@python_deps//psutil",
         "@python_deps//pyyaml",
+        "@python_deps//s3transfer",
     ],
 )
 

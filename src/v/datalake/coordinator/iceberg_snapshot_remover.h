@@ -27,8 +27,8 @@ public:
       , io_(io) {}
     ~iceberg_snapshot_remover() override = default;
 
-    ss::future<checked<std::nullopt_t, errc>>
-      remove_expired_snapshots(model::topic, model::timestamp) const final;
+    ss::future<checked<std::nullopt_t, errc>> remove_expired_snapshots(
+      model::topic, const topics_state&, model::timestamp) const final;
 
 private:
     // Remove snapshots that have expired as of `ts` for the given table within

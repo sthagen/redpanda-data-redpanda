@@ -11,6 +11,7 @@
 
 #include "base/outcome.h"
 #include "base/seastarx.h"
+#include "datalake/coordinator/state.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 
@@ -25,15 +26,17 @@ public:
         failed,
         shutting_down,
     };
-    virtual ss::future<checked<std::nullopt_t, errc>>
-      remove_expired_snapshots(model::topic, model::timestamp) const = 0;
+    virtual ss::future<checked<std::nullopt_t, errc>> remove_expired_snapshots(
+      model::topic, const topics_state&, model::timestamp) const
+      = 0;
     virtual ~snapshot_remover() = default;
 };
 
 class noop_snapshot_remover : public snapshot_remover {
 public:
     ss::future<checked<std::nullopt_t, snapshot_remover::errc>>
-    remove_expired_snapshots(model::topic, model::timestamp) const final {
+    remove_expired_snapshots(
+      model::topic, const topics_state&, model::timestamp) const final {
         co_return std::nullopt;
     }
     ~noop_snapshot_remover() override = default;

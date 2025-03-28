@@ -248,6 +248,7 @@ redpanda_cc_library(
     ],
     include_prefix = "datalake/coordinator",
     deps = [
+        ":state",
         "//src/v/base",
         "//src/v/model",
         "@seastar",

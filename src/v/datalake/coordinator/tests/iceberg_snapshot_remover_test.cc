@@ -11,6 +11,7 @@
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "datalake/coordinator/iceberg_snapshot_remover.h"
+#include "datalake/coordinator/tests/state_test_utils.h"
 #include "datalake/table_definition.h"
 #include "datalake/tests/test_utils.h"
 #include "iceberg/filesystem_catalog.h"
@@ -46,6 +47,23 @@ public:
       , manifest_io(remote(), bucket_name)
       , remover(catalog, manifest_io) {
         set_expectations_and_listen({});
+
+        // Since snapshot removal is not run when there are no pending entries,
+        // create entries for both the main and DLQ state so tests can expect
+        // snapshot removal to run.
+        auto& topic_state = state.topic_to_state[test_topic];
+        add_partition_state(
+          {{{0, 9}}},
+          topic_state,
+          model::offset{1000},
+          /*with_files=*/true,
+          /*dlq=*/false);
+        add_partition_state(
+          {{{10, 19}}},
+          topic_state,
+          model::offset{1001},
+          /*with_files=*/true,
+          /*dlq=*/true);
     }
     cloud_io::remote& remote() { return sr->remote.local(); }
     ss::future<> create_table(const iceberg::table_identifier& table_id) {
@@ -120,6 +138,7 @@ public:
     std::unique_ptr<cloud_io::scoped_remote> sr;
     iceberg::filesystem_catalog catalog;
     iceberg::manifest_io manifest_io;
+    topics_state state;
     iceberg_snapshot_remover remover;
 
 protected:
@@ -142,7 +161,7 @@ TEST_F(SnapshotRemoverTest, TestSimpleRemoval) {
       add_ts.value()
       + iceberg::remove_snapshots_action::default_max_snapshot_age_ms};
     auto remove_res
-      = remover.remove_expired_snapshots(test_topic, cleanup_ts).get();
+      = remover.remove_expired_snapshots(test_topic, state, cleanup_ts).get();
     ASSERT_FALSE(remove_res.has_error());
 
     // The manifest lists should be removed.
@@ -177,7 +196,7 @@ TEST_F(SnapshotRemoverTest, TestRemovalInParallel) {
     futs.reserve(num_fibers);
     for (int i = 0; i < num_fibers; ++i) {
         futs.emplace_back(
-          remover.remove_expired_snapshots(test_topic, cleanup_ts));
+          remover.remove_expired_snapshots(test_topic, state, cleanup_ts));
     }
     // Some may fail because of the contending removals, but the end result
     // should be the same: that the table has had its old snapshots removed.
@@ -223,7 +242,7 @@ TEST_F(SnapshotRemoverTest, TestRemoveMissingFiles) {
     // Run removal far enough in the future to expire files. Even though our
     // files are missing, this should succeed.
     auto remove_res
-      = remover.remove_expired_snapshots(test_topic, cleanup_ts).get();
+      = remover.remove_expired_snapshots(test_topic, state, cleanup_ts).get();
     ASSERT_FALSE(remove_res.has_error());
 
     ASSERT_EQ(
@@ -232,10 +251,123 @@ TEST_F(SnapshotRemoverTest, TestRemoveMissingFiles) {
 }
 
 TEST_F(SnapshotRemoverTest, TestRemoveFromMissingTable) {
-    auto remove_res
-      = remover.remove_expired_snapshots(test_topic, model::timestamp::now())
-          .get();
+    auto remove_res = remover
+                        .remove_expired_snapshots(
+                          test_topic, state, model::timestamp::now())
+                        .get();
     ASSERT_FALSE(remove_res.has_error());
+}
+
+TEST_F(SnapshotRemoverTest, TestDontRemoveNoPendingDLQ) {
+    create_table(test_table_id).get();
+    add_snapshots(test_table_id, 7).get();
+
+    create_table(test_dlq_table_id).get();
+    add_snapshots(test_dlq_table_id, 5).get();
+
+    auto add_ts = model::timestamp::now();
+    auto before_snaps = get_snapshots(test_table_id).get();
+    auto before_snaps_dlq = get_snapshots(test_dlq_table_id).get();
+
+    ASSERT_EQ(before_snaps.size(), 7);
+    ASSERT_EQ(before_snaps_dlq.size(), 5);
+    for (const auto& s : before_snaps) {
+        ASSERT_TRUE(has_object(s.manifest_list_path));
+    }
+    for (const auto& s : before_snaps_dlq) {
+        ASSERT_TRUE(has_object(s.manifest_list_path));
+    }
+
+    // Remove the DLQ entry.
+    auto& pending_entries = state.topic_to_state[test_topic]
+                              .pid_to_pending_files[model::partition_id{0}]
+                              .pending_entries;
+    ASSERT_FALSE(pending_entries.back().data.dlq_files.empty());
+    pending_entries.pop_back();
+    model::timestamp cleanup_ts{
+      add_ts.value()
+      + iceberg::remove_snapshots_action::default_max_snapshot_age_ms};
+    auto remove_res
+      = remover.remove_expired_snapshots(test_topic, state, cleanup_ts).get();
+    ASSERT_FALSE(remove_res.has_error());
+
+    size_t num_snaps = 0;
+    for (const auto& s : before_snaps) {
+        if (has_object(s.manifest_list_path)) {
+            ++num_snaps;
+        }
+    }
+    size_t num_snaps_dlq = 0;
+    for (const auto& s : before_snaps_dlq) {
+        if (has_object(s.manifest_list_path)) {
+            ++num_snaps_dlq;
+        }
+    }
+    // We should remove snapshots from the main table but not the DLQ because
+    // we've removed the pending DLQ entry.
+    ASSERT_EQ(
+      num_snaps,
+      iceberg::remove_snapshots_action::default_min_snapshots_retained);
+    ASSERT_EQ(num_snaps_dlq, 5);
+
+    ASSERT_EQ(num_snaps, get_snapshots(test_table_id).get().size());
+    ASSERT_EQ(num_snaps_dlq, get_snapshots(test_dlq_table_id).get().size());
+}
+
+TEST_F(SnapshotRemoverTest, TestDontRemoveNoPendingMain) {
+    create_table(test_table_id).get();
+    add_snapshots(test_table_id, 7).get();
+
+    create_table(test_dlq_table_id).get();
+    add_snapshots(test_dlq_table_id, 5).get();
+
+    auto add_ts = model::timestamp::now();
+    auto before_snaps = get_snapshots(test_table_id).get();
+    auto before_snaps_dlq = get_snapshots(test_dlq_table_id).get();
+
+    ASSERT_EQ(before_snaps.size(), 7);
+    ASSERT_EQ(before_snaps_dlq.size(), 5);
+    for (const auto& s : before_snaps) {
+        ASSERT_TRUE(has_object(s.manifest_list_path));
+    }
+    for (const auto& s : before_snaps_dlq) {
+        ASSERT_TRUE(has_object(s.manifest_list_path));
+    }
+
+    // Remove the main entry.
+    auto& pending_entries = state.topic_to_state[test_topic]
+                              .pid_to_pending_files[model::partition_id{0}]
+                              .pending_entries;
+    ASSERT_FALSE(pending_entries.front().data.files.empty());
+    pending_entries.pop_front();
+    model::timestamp cleanup_ts{
+      add_ts.value()
+      + iceberg::remove_snapshots_action::default_max_snapshot_age_ms};
+    auto remove_res
+      = remover.remove_expired_snapshots(test_topic, state, cleanup_ts).get();
+    ASSERT_FALSE(remove_res.has_error());
+
+    size_t num_snaps = 0;
+    for (const auto& s : before_snaps) {
+        if (has_object(s.manifest_list_path)) {
+            ++num_snaps;
+        }
+    }
+    size_t num_snaps_dlq = 0;
+    for (const auto& s : before_snaps_dlq) {
+        if (has_object(s.manifest_list_path)) {
+            ++num_snaps_dlq;
+        }
+    }
+    // We should remove snapshots from the DLQ table but not the main table
+    // because we've removed the pending main entry.
+    ASSERT_EQ(num_snaps, 7);
+    ASSERT_EQ(
+      num_snaps_dlq,
+      iceberg::remove_snapshots_action::default_min_snapshots_retained);
+
+    ASSERT_EQ(num_snaps, get_snapshots(test_table_id).get().size());
+    ASSERT_EQ(num_snaps_dlq, get_snapshots(test_dlq_table_id).get().size());
 }
 
 TEST_F(SnapshotRemoverTest, TestRemoveFromBothTables) {
@@ -262,7 +394,7 @@ TEST_F(SnapshotRemoverTest, TestRemoveFromBothTables) {
       add_ts.value()
       + iceberg::remove_snapshots_action::default_max_snapshot_age_ms};
     auto remove_res
-      = remover.remove_expired_snapshots(test_topic, cleanup_ts).get();
+      = remover.remove_expired_snapshots(test_topic, state, cleanup_ts).get();
     ASSERT_FALSE(remove_res.has_error());
 
     // The manifest lists should be retained for both the main and DLQ tables.

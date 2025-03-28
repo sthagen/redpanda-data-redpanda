@@ -18,6 +18,147 @@
 
 using namespace iceberg;
 
+namespace {
+// Sample metadata created by Unity Catalog (tweaked location).
+auto uc_metadata_json = R"JSON({
+  "format-version" : 2,
+  "table-uuid" : "1a09d6a4-a3ca-45e9-a537-465e36564895",
+  "location" : "s3://redpanda-bucket/location",
+  "last-sequence-number" : 0,
+  "last-updated-ms" : 1743125941877,
+  "last-column-id" : 10,
+  "current-schema-id" : 0,
+  "schemas" : [ {
+    "type" : "struct",
+    "schema-id" : 0,
+    "fields" : [ {
+      "id" : 1,
+      "name" : "redpanda",
+      "required" : true,
+      "type" : {
+        "type" : "struct",
+        "fields" : [ {
+          "id" : 3,
+          "name" : "partition",
+          "required" : true,
+          "type" : "int"
+        }, {
+          "id" : 4,
+          "name" : "offset",
+          "required" : true,
+          "type" : "long"
+        }, {
+          "id" : 5,
+          "name" : "timestamp",
+          "required" : true,
+          "type" : "timestamp"
+        }, {
+          "id" : 6,
+          "name" : "headers",
+          "required" : false,
+          "type" : {
+            "type" : "list",
+            "element-id" : 8,
+            "element" : {
+              "type" : "struct",
+              "fields" : [ {
+                "id" : 9,
+                "name" : "key",
+                "required" : false,
+                "type" : "binary"
+              }, {
+                "id" : 10,
+                "name" : "value",
+                "required" : false,
+                "type" : "binary"
+              } ]
+            },
+            "element-required" : true
+          }
+        }, {
+          "id" : 7,
+          "name" : "key",
+          "required" : false,
+          "type" : "binary"
+        } ]
+      }
+    }, {
+      "id" : 2,
+      "name" : "value",
+      "required" : false,
+      "type" : "binary"
+    } ]
+  } ],
+  "default-spec-id" : 0,
+  "partition-specs" : [ {
+    "spec-id" : 0,
+    "fields" : [ {
+      "name" : "redpanda.timestamp_hour",
+      "transform" : "hour",
+      "source-id" : 5,
+      "field-id" : 1000
+    } ]
+  } ],
+  "last-partition-id" : 1000,
+  "default-sort-order-id" : 0,
+  "sort-orders" : [ {
+    "order-id" : 0,
+    "fields" : [ ]
+  } ],
+  "properties" : {
+    "write.object-storage.enabled" : "true",
+    "write.metadata.compression-codec" : "gzip",
+    "write.summary.partition-limit" : "100",
+    "write.parquet.compression-codec" : "zstd"
+  },
+  "current-snapshot-id" : null,
+  "refs" : { },
+  "snapshots" : [ ],
+  "statistics" : [ ],
+  "partition-statistics" : [ ],
+  "snapshot-log" : [ ],
+  "metadata-log" : [ ]
+})JSON";
+} // anonymous namespace
+
+// Parse metadata from Unity Catalog.
+TEST(TableMetadataJsonSerde, TestUCMetadata) {
+    const auto test_str = uc_metadata_json;
+    json::Document parsed_orig_json;
+    parsed_orig_json.Parse(test_str);
+    const auto parsed = parse_table_meta(parsed_orig_json);
+    ASSERT_EQ(format_version::v2, parsed.format_version);
+    ASSERT_EQ(
+      uuid_t::from_string("1a09d6a4-a3ca-45e9-a537-465e36564895"),
+      parsed.table_uuid);
+    ASSERT_EQ("s3://redpanda-bucket/location", parsed.location);
+    ASSERT_EQ(0, parsed.last_sequence_number());
+    ASSERT_EQ(1743125941877, parsed.last_updated_ms.value());
+    ASSERT_EQ(10, parsed.last_column_id());
+    ASSERT_EQ(0, parsed.current_schema_id());
+    ASSERT_EQ(1, parsed.schemas.size());
+    ASSERT_EQ(2, parsed.schemas[0].schema_struct.fields.size());
+    ASSERT_EQ(0, parsed.default_spec_id());
+    ASSERT_EQ(1, parsed.partition_specs.size());
+    ASSERT_EQ(0, parsed.partition_specs[0].spec_id());
+    ASSERT_EQ(1, parsed.partition_specs[0].fields.size());
+    ASSERT_EQ(1000, parsed.last_partition_id());
+    ASSERT_EQ(0, parsed.default_sort_order_id());
+    ASSERT_EQ(1, parsed.sort_orders.size());
+    ASSERT_EQ(0, parsed.sort_orders[0].order_id());
+    ASSERT_EQ(0, parsed.sort_orders[0].fields.size());
+    ASSERT_TRUE(parsed.properties.has_value());
+    ASSERT_EQ(4, parsed.properties->size());
+
+    // Regression test for not handling "null".
+    ASSERT_FALSE(parsed.current_snapshot_id.has_value());
+
+    ASSERT_TRUE(parsed.snapshots.has_value());
+    ASSERT_EQ(0, parsed.snapshots->size());
+    ASSERT_TRUE(parsed.refs.has_value());
+    ASSERT_TRUE(parsed.refs->empty());
+}
+
 TEST(TableMetadataJsonSerde, TestTableMetadata) {
     const auto test_str = test_table_meta_json;
     json::Document parsed_orig_json;

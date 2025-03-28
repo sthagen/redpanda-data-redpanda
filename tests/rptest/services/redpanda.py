@@ -4459,6 +4459,9 @@ class RedpandaService(RedpandaServiceBase):
             # it doesn't appear in older configurations
             conf.pop('cloud_storage_credentials_source', None)
 
+        if cur_ver != RedpandaInstaller.HEAD and cur_ver < (25, 1, 1):
+            conf.pop('iceberg_target_lag_ms', None)
+
         if self._security.enable_sasl:
             self.logger.debug("Enabling SASL in cluster configuration")
             conf.update(dict(enable_sasl=True))

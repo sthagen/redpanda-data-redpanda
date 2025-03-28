@@ -76,11 +76,30 @@ chunked_vector<translated_offset_range> make_pending_files(
   bool with_file = false,
   bool dlq = false);
 
+// Adds the given partition-id-indexed pairs of offsets as pending files to
+// `state`, with the files being added at the given coordinator offset.
+using pairs_t = std::vector<std::pair<int64_t, int64_t>>;
+void add_partition_state(
+  std::vector<pairs_t> offset_bounds_by_pid,
+  topic_state& state,
+  model::offset added_at,
+  bool with_files,
+  bool dlq = false);
+
+// Creates topic state with the given partition-id-indexed pairs of offsets as
+// pending files to `state`, with the files being added at the given
+// coordinator offset.
+topic_state make_topic_state(
+  std::vector<pairs_t> offset_bounds_by_pid,
+  model::offset added_at = model::offset{1000},
+  bool with_files = false,
+  bool dlq = false);
+
 // Asserts that the given state has the expected partition state.
 void check_partition(
   const topics_state& state,
   const model::topic_partition& tp,
   std::optional<int64_t> expected_committed,
-  const std::vector<std::pair<int64_t, int64_t>>& offset_bounds);
+  const pairs_t& offset_bounds);
 
 } // namespace datalake::coordinator
