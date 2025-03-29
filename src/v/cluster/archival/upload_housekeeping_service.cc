@@ -450,7 +450,7 @@ ss::future<> housekeeping_workflow::run_jobs_bg() {
         if (_pending.empty()) {
             auto full_time = ss::lowres_clock::now() - start_time;
             vlog(
-              archival_log.info,
+              archival_log.debug,
               "housekeeping_workflow, transition to idle state from {}, {} "
               "jobs executed, {} jobs failed. Housekeeping round lasted "
               "approx. {} sec. Job execution time in the round: {} sec",

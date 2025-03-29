@@ -355,11 +355,13 @@ ss::future<housekeeping_job::run_result> purger::run(run_quota_t quota) {
 
     const auto my_global_position = get_global_position();
 
-    vlog(
-      archival_log.info,
-      "Running with {} quota, {} topic lifecycle markers",
-      result.remaining,
-      markers.size());
+    if (markers.size() > 0) {
+        vlog(
+          archival_log.info,
+          "Running with {} quota, {} topic lifecycle markers",
+          result.remaining,
+          markers.size());
+    }
     for (auto& [nt_revision, marker] : markers) {
         // Double check the topic config is elegible for remote deletion
         if (!marker.config.properties.requires_remote_erase()) {

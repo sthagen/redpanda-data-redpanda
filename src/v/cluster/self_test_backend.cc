@@ -35,7 +35,7 @@ self_test_backend::self_test_backend(
   , _st_sg(sg)
   , _disk_test(nlm)
   , _network_test(self, connections)
-  , _cloud_test(cloud_storage_api) {}
+  , _cloud_test(self, cloud_storage_api) {}
 
 ss::future<> self_test_backend::start() {
     co_await _disk_test.start();

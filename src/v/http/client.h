@@ -108,8 +108,12 @@ public:
     client(
       const net::base_transport::configuration& cfg,
       const ss::abort_source* as,
+      ss::shared_ptr<client_probe> probe);
+    client(
+      const net::base_transport::configuration& cfg,
+      const ss::abort_source* as,
       ss::shared_ptr<client_probe> probe,
-      ss::lowres_clock::duration max_idle_time = {});
+      ss::lowres_clock::duration max_idle_time);
 
     /// Stop must be called before destroying the client object.
     ss::future<> stop();
