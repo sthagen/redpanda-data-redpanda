@@ -234,6 +234,7 @@ translation_status mock_translator::status() const {
     status.next_checkpoint_deadline = _next_checkpoint;
     if (_translation_state) {
         status.memory_bytes_reserved = total_bytes_reserved();
+        status.disk_bytes_flushed = total_bytes_reserved();
     }
     return status;
 }

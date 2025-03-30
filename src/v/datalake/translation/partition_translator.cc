@@ -10,6 +10,7 @@
 
 #include "datalake/translation/partition_translator.h"
 
+#include "config/configuration.h"
 #include "datalake/logger.h"
 #include "resource_mgmt/io_priority.h"
 #include "utils/to_string.h"
@@ -23,14 +24,6 @@ namespace {
 using namespace std::chrono_literals;
 // A simple utility to conditionally retry with backoff on failures.
 constexpr model::timeout_clock::duration wait_timeout = 5s;
-
-// Purposefully set to a low-ish value (instead of 64/128_MiB) until space
-// management is fully integrated. The low value means less concurrent bytes
-// accumulated across all translators at any point which translates to less
-// pressure on space management enforce it's eviction policies. 32_MiB is still
-// a reasonable default compared to what we had before, but will be bumped soon.
-// note: this is _per_ (partition) translator.
-static constexpr size_t partition_flushed_bytes_limit = 32_MiB;
 
 template<
   typename Func,
@@ -137,6 +130,13 @@ partition_translator::checkpoint_translation_result(
       });
 }
 
+/*
+ * datalake_translator_flush_bytes (per partition): finish after a flush limit
+ * is reached. this is in place as a safety net for controlling disk usage.
+ * TODO: this limit can be removed and the configuration option be deprecated
+ * after we gain more confidence in the ability of space management to control
+ * datalake disk usage.
+ */
 bool partition_translator::should_finish_inflight_translation() const {
     auto bytes_flushed_pending_upload = _translation_ctx->flushed_bytes();
     auto lag_window_ended = _lag_tracking->should_finish_inflight_translation();
@@ -146,7 +146,8 @@ bool partition_translator::should_finish_inflight_translation() const {
       "window roll: {}",
       bytes_flushed_pending_upload,
       lag_window_ended);
-    return bytes_flushed_pending_upload >= partition_flushed_bytes_limit
+    return bytes_flushed_pending_upload
+             >= config::shard_local_cfg().datalake_translator_flush_bytes()
            || lag_window_ended;
 }
 
@@ -485,6 +486,7 @@ scheduling::translation_status partition_translator::status() const {
       .target_lag = _lag_tracking->target_lag(),
       .next_checkpoint_deadline = _lag_tracking->next_checkpoint_deadline(),
       .memory_bytes_reserved = _translation_ctx->buffered_bytes(),
+      .disk_bytes_flushed = _translation_ctx->flushed_bytes(),
       .translation_backlog = _lag_tracking->translation_backlog(),
     };
 }

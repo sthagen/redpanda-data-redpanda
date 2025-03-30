@@ -4078,6 +4078,15 @@ configuration::configuration()
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       30s,
       {.min = 1s, .max = 60s})
+  , datalake_translator_flush_bytes(
+      *this,
+      "datalake_translator_flush_bytes",
+      "Size, in bytes, of the amount of per translator data that may be "
+      "flushed to disk before the translator will upload and remove its "
+      "current on disk data.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      32_MiB,
+      {.min = 1_MiB})
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

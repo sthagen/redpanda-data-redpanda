@@ -61,6 +61,7 @@ redpanda_cc_library(
         "//src/v/config",
         "//src/v/container:fragmented_vector",
         "//src/v/model",
+        "@abseil-cpp//absl/hash",
         "@seastar",
     ],
 )

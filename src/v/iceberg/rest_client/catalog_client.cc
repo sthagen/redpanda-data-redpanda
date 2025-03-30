@@ -114,9 +114,9 @@ catalog_client::catalog_client(
 
 ss::future<expected<std::monostate>>
 catalog_client::maybe_configure(retry_chain_node& rtc) {
-    auto gh = _gate.hold();
-    if (_configured) {
-        co_return std::monostate{};
+    auto gh = maybe_gate();
+    if (!gh.has_value()) {
+        co_return tl::unexpected(gh.error());
     }
     vlog(log.debug, "Configuring Iceberg REST catalog client");
     auto http_request = http::request_builder{}
@@ -171,6 +171,13 @@ catalog_client::maybe_configure(retry_chain_node& rtc) {
     _path_components.reset_prefix(std::move(prefix));
     _configured = true;
     co_return std::monostate{};
+}
+
+expected<ss::gate::holder> catalog_client::maybe_gate() {
+    if (_gate.is_closed()) {
+        return tl::unexpected(aborted_error("catalog_client::_gate closed"));
+    }
+    return _gate.hold();
 }
 
 ss::future<expected<oauth_token>>
@@ -264,7 +271,7 @@ ss::future<expected<std::monostate>> catalog_client::maybe_add_bearer_auth(
 }
 
 ss::future<expected<iobuf>> catalog_client::perform_request(
-  retry_chain_node& rtc,
+  retry_chain_node& parent_rtc,
   http::request_builder request_builder,
   const ss::sstring& host,
   client_probe::endpoint endpoint,
@@ -272,7 +279,7 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
     if (payload.has_value()) {
         request_builder.with_content_length(payload.value().size_bytes());
     }
-
+    retry_chain_node rtc(&parent_rtc);
     std::vector<http_call_error> retriable_errors{};
 
     while (true) {
@@ -361,7 +368,10 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
 ss::future<expected<create_namespace_response>>
 catalog_client::create_namespace(
   create_namespace_request req, retry_chain_node& rtc) {
-    auto gh = _gate.hold();
+    auto gh = maybe_gate();
+    if (!gh.has_value()) {
+        co_return tl::unexpected(gh.error());
+    }
     auto config_result = co_await maybe_configure(rtc);
     if (!config_result.has_value()) {
         co_return tl::unexpected(config_result.error());
@@ -389,7 +399,10 @@ ss::future<expected<load_table_result>> catalog_client::create_table(
   const chunked_vector<ss::sstring>& ns,
   create_table_request req,
   retry_chain_node& rtc) {
-    auto gh = _gate.hold();
+    auto gh = maybe_gate();
+    if (!gh.has_value()) {
+        co_return tl::unexpected(gh.error());
+    }
     auto config_result = co_await maybe_configure(rtc);
     if (!config_result.has_value()) {
         co_return tl::unexpected(config_result.error());
@@ -416,7 +429,10 @@ ss::future<expected<load_table_result>> catalog_client::load_table(
   const chunked_vector<ss::sstring>& ns,
   const ss::sstring& table_name,
   retry_chain_node& rtc) {
-    auto gh = _gate.hold();
+    auto gh = maybe_gate();
+    if (!gh.has_value()) {
+        co_return tl::unexpected(gh.error());
+    }
     auto config_result = co_await maybe_configure(rtc);
     if (!config_result.has_value()) {
         co_return tl::unexpected(config_result.error());
@@ -440,7 +456,10 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
   const ss::sstring& table_name,
   std::optional<bool> purge_requested,
   retry_chain_node& rtc) {
-    auto gh = _gate.hold();
+    auto gh = maybe_gate();
+    if (!gh.has_value()) {
+        co_return tl::unexpected(gh.error());
+    }
     auto config_result = co_await maybe_configure(rtc);
     if (!config_result.has_value()) {
         co_return tl::unexpected(config_result.error());
@@ -470,7 +489,10 @@ ss::future<expected<std::monostate>> catalog_client::drop_table(
 
 ss::future<expected<commit_table_response>> catalog_client::commit_table_update(
   commit_table_request commit_request, retry_chain_node& rtc) {
-    auto gh = _gate.hold();
+    auto gh = maybe_gate();
+    if (!gh.has_value()) {
+        co_return tl::unexpected(gh.error());
+    }
     auto config_result = co_await maybe_configure(rtc);
     if (!config_result.has_value()) {
         co_return tl::unexpected(config_result.error());

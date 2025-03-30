@@ -97,6 +97,11 @@ struct translation_status {
     clock::time_point next_checkpoint_deadline;
     // Current memory byte reservation, if a translation is running
     std::optional<size_t> memory_bytes_reserved;
+    // Current bytes flushed to disk, if a translation is running. This is not
+    // an counter, and it is expected that if translators have subtracted from
+    // or otherwise reset this value then the translator has or is in the
+    // process of removing an equivalent amount of data (e.g. upload + delete).
+    std::optional<size_t> disk_bytes_flushed;
 
     std::optional<size_t> translation_backlog;
 };

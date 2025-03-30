@@ -83,14 +83,6 @@ private:
     scheduling_notifications& _notifier;
 };
 
-std::unique_ptr<reservations_tracker> make_default(
-  size_t total_memory,
-  size_t memory_block_size,
-  scheduling_notifications& notifier) {
-    return std::make_unique<default_reservations_tracker>(
-      total_memory, memory_block_size, notifier);
-}
-
 std::ostream& operator<<(std::ostream& os, const translation_status& status) {
     fmt::print(
       os,

@@ -175,6 +175,8 @@ public:
     ss::future<expected<std::monostate>> maybe_configure(retry_chain_node&);
 
 private:
+    expected<ss::gate::holder> maybe_gate();
+
     // The root url calculated from base url, prefix and api version. Given a
     // base url of "/b", an api version "v2" and a prefix of "x/y", the root url
     // is "/b/v2/x/y/". The root url is prefixed before rest entities used when
@@ -200,7 +202,7 @@ private:
     // the request with optional payload, and takes care of retrying according
     // to policy
     ss::future<expected<iobuf>> perform_request(
-      retry_chain_node& rtc,
+      retry_chain_node& parent_rtc,
       http::request_builder request_builder,
       const ss::sstring& host,
       client_probe::endpoint endpoint,

@@ -18,6 +18,8 @@
 #include "datalake/fwd.h"
 #include "model/fundamental.h"
 
+#include <absl/hash/hash.h>
+
 namespace datalake::coordinator {
 
 // Public interface that provides access to the coordinator STM. Conceptually,
@@ -88,6 +90,32 @@ public:
     bool leader_loop_running() const { return term_as_.has_value(); }
 
 private:
+    // Key used to deduplicate requests for the same table.
+    struct table_key {
+        model::topic topic;
+        model::revision_id topic_revision;
+        record_schema_components record_comps;
+        bool operator==(const table_key&) const = default;
+        template<typename H>
+        friend H AbslHashValue(H h, const table_key& k) {
+            return H::combine(
+              std::move(h), k.topic, k.topic_revision, k.record_comps);
+        }
+    };
+    // Functions to help avoid piling up duplicate requests for the same table
+    // key. The caller adds a waiter to an existing list of waiters if one
+    // exists, in which case they are expected to wait on the returned future.
+    // Otherwise, the caller may proceed immediately to make the request and
+    // _must_ notify the waiters upon finishing.
+    using ensure_table_result_t = checked<std::nullopt_t, errc>;
+    using ensure_table_map_t = chunked_hash_map<
+      table_key,
+      chunked_vector<ss::promise<ensure_table_result_t>>>;
+    static std::optional<ss::future<ensure_table_result_t>>
+    maybe_add_waiter(const table_key&, ensure_table_map_t&);
+    static ensure_table_result_t notify_waiters_and_erase(
+      const table_key&, ensure_table_map_t&, ensure_table_result_t);
+
     checked<ss::gate::holder, errc> maybe_gate();
 
     // Waits for leadership, and then reconciles STM state with external state
@@ -132,6 +160,9 @@ private:
     // Abort source that can be used to stop work in a given term.
     // Is only set if there is an on-going call to run_until_term_change().
     std::optional<std::reference_wrapper<ss::abort_source>> term_as_;
+
+    ensure_table_map_t in_flight_main_;
+    ensure_table_map_t in_flight_dlq_;
 };
 std::ostream& operator<<(std::ostream&, coordinator::errc);
 

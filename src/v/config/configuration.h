@@ -756,6 +756,7 @@ struct configuration final : public config_store {
     bounded_property<size_t> datalake_scheduler_max_concurrent_translations;
     bounded_property<std::chrono::milliseconds>
       datalake_scheduler_time_slice_ms;
+    bounded_property<size_t> datalake_translator_flush_bytes;
 
     configuration();
 

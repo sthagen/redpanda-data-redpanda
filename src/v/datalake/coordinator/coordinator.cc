@@ -47,6 +47,39 @@ coordinator::errc convert_stm_errc(coordinator_stm::errc e) {
 }
 } // namespace
 
+coordinator::ensure_table_result_t coordinator::notify_waiters_and_erase(
+  const coordinator::table_key& key,
+  coordinator::ensure_table_map_t& in_flight_map,
+  ensure_table_result_t res) {
+    auto it = in_flight_map.find(key);
+    if (it == in_flight_map.end()) {
+        // Unexpected, but benign.
+        return res;
+    }
+    for (auto& prom : it->second) {
+        prom.set_value(res);
+    }
+    in_flight_map.erase(it);
+    return res;
+}
+
+std::optional<ss::future<coordinator::ensure_table_result_t>>
+coordinator::maybe_add_waiter(
+  const table_key& key, coordinator::ensure_table_map_t& in_flight_map) {
+    auto it = in_flight_map.find(key);
+    if (it != in_flight_map.end()) {
+        // There's an in-flight request already. Attach to it and wait for it
+        // to complete.
+        auto& proms = it->second;
+        ss::promise<ensure_table_result_t> res_prom;
+        auto res_fut = res_prom.get_future();
+        proms.emplace_back(std::move(res_prom));
+        return std::move(res_fut);
+    }
+    in_flight_map.insert({key, {}});
+    return std::nullopt;
+}
+
 std::ostream& operator<<(std::ostream& o, coordinator::errc e) {
     switch (e) {
     case coordinator::errc::not_leader:
@@ -295,8 +328,6 @@ coordinator::do_ensure_table_exists(
         co_return convert_stm_errc(sync_res.error());
     }
 
-    // TODO: add mutex to protect against the thundering herd problem
-
     auto topic_md = topic_table_.get_topic_metadata_ref(
       model::topic_namespace_view{model::kafka_namespace, topic});
     if (!topic_md || topic_md->get().get_revision() != topic_revision) {
@@ -424,12 +455,29 @@ coordinator::sync_ensure_table_exists(
   model::topic topic,
   model::revision_id topic_revision,
   record_schema_components comps) {
-    co_return co_await do_ensure_table_exists(
+    // If there's already an inflight request for this table, attach it to the
+    // in-flight request.
+    table_key key{
+      .topic = topic, .topic_revision = topic_revision, .record_comps = comps};
+    auto waiter_fut = maybe_add_waiter(key, in_flight_main_);
+    if (waiter_fut.has_value()) {
+        co_return co_await std::move(*waiter_fut);
+    }
+    auto res_fut = co_await ss::coroutine::as_future(do_ensure_table_exists(
       topic,
       topic_revision,
       std::move(comps),
       "sync_ensure_table_exists",
-      main_table_schema_provider{*this});
+      main_table_schema_provider{*this}));
+
+    if (res_fut.failed()) {
+        // NOTE: we don't expect any exceptions given we're using result types,
+        // but be conservative to guarantee fulfilling the promises.
+        auto ex = res_fut.get_exception();
+        vlog(datalake_log.error, "Exception ensuring table: {}", ex);
+        co_return notify_waiters_and_erase(key, in_flight_main_, errc::failed);
+    }
+    co_return notify_waiters_and_erase(key, in_flight_main_, res_fut.get());
 }
 
 struct coordinator::dlq_table_schema_provider
@@ -457,12 +505,27 @@ struct coordinator::dlq_table_schema_provider
 ss::future<checked<std::nullopt_t, coordinator::errc>>
 coordinator::sync_ensure_dlq_table_exists(
   model::topic topic, model::revision_id topic_revision) {
-    co_return co_await do_ensure_table_exists(
+    table_key key{
+      .topic = topic, .topic_revision = topic_revision, .record_comps = {}};
+    auto waiter_fut = maybe_add_waiter(key, in_flight_dlq_);
+    if (waiter_fut.has_value()) {
+        co_return co_await std::move(*waiter_fut);
+    }
+    auto res_fut = co_await ss::coroutine::as_future(do_ensure_table_exists(
       topic,
       topic_revision,
       record_schema_components{},
       "sync_ensure_dlq_table_exists",
-      dlq_table_schema_provider{*this});
+      dlq_table_schema_provider{*this}));
+
+    if (res_fut.failed()) {
+        // NOTE: we don't expect any exceptions given we're using result types,
+        // but be conservative to guarantee fulfilling the promises.
+        auto ex = res_fut.get_exception();
+        vlog(datalake_log.error, "Exception ensuring DLQ table: {}", ex);
+        co_return notify_waiters_and_erase(key, in_flight_dlq_, errc::failed);
+    }
+    co_return notify_waiters_and_erase(key, in_flight_dlq_, res_fut.get());
 }
 
 ss::future<checked<std::nullopt_t, coordinator::errc>>

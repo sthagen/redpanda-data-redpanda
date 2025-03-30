@@ -138,6 +138,7 @@ redpanda_cc_library(
         ":utils",
         "//src/v/base",
         "//src/v/cluster",
+        "//src/v/config",
         "//src/v/datalake:logger",
         "//src/v/features",
         "//src/v/model",
