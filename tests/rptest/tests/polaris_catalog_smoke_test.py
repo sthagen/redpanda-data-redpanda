@@ -85,8 +85,8 @@ class PolarisCatalogSmokeTest(RedpandaTest):
             client_secret,
             "iceberg_catalog_commit_interval_ms":
             10000,
-            "iceberg_rest_catalog_prefix":
-            catalog_prefix
+            "iceberg_rest_catalog_warehouse":
+            catalog_prefix,
         })
         if with_tls == "from_file":
             self.redpanda._extra_rp_conf.update({

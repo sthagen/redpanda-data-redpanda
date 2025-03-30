@@ -3,6 +3,20 @@ load("//bazel:build.bzl", "redpanda_cc_library")
 package(default_visibility = ["//src/v/iceberg:__subpackages__"])
 
 redpanda_cc_library(
+    name = "catalog_config",
+    hdrs = [
+        "catalog_config.h",
+    ],
+    include_prefix = "iceberg/rest_client",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/container:chunked_hash_map",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "client_probe",
     srcs = [
         "client_probe.cc",
@@ -48,6 +62,7 @@ redpanda_cc_library(
     ],
     include_prefix = "iceberg/rest_client",
     deps = [
+        ":catalog_config",
         ":oauth_token",
         "//src/v/iceberg:json_utils",
         "//src/v/json",
@@ -67,6 +82,7 @@ redpanda_cc_library(
     include_prefix = "iceberg/rest_client",
     deps = [
         ":error",
+        "//src/v/bytes:streambuf",
         "//src/v/http",
         "//src/v/net",
     ],

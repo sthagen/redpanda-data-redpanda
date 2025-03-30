@@ -31,13 +31,13 @@ namespace iceberg::rest_client {
 
 using base_path = named_type<ss::sstring, struct base_path_t>;
 using prefix_path = named_type<ss::sstring, struct prefix_t>;
+using warehouse = named_type<ss::sstring, struct warehouse_t>;
 using api_version = named_type<ss::sstring, struct api_version_t>;
 
 // Holds parts of a root path used by catalog client
 struct path_components {
     path_components(
       std::optional<base_path> base = std::nullopt,
-      std::optional<prefix_path> prefix = std::nullopt,
       std::optional<api_version> api_version = std::nullopt);
 
     // Returns root path for use in API calls not related to oauth token, joins
@@ -49,9 +49,18 @@ struct path_components {
     // /api/catalog/v1/oauth/tokens
     ss::sstring token_api_path() const;
 
+    // Same as root path but does not include the prefix, e.g.
+    // /api/catalog/v1/config
+    ss::sstring config_api_path() const;
+
+    // Resets the prefix. Guaranteed to leave the prefix non-null.
+    void reset_prefix(std::optional<prefix_path> path);
+
 private:
     base_path _base;
-    prefix_path _prefix;
+
+    // Null if not yet initialized.
+    std::optional<prefix_path> _prefix;
     api_version _api_version;
 };
 
@@ -89,7 +98,7 @@ public:
       ss::sstring endpoint,
       std::optional<credentials> credentials = std::nullopt,
       std::optional<base_path> base_path = std::nullopt,
-      std::optional<prefix_path> prefix = std::nullopt,
+      std::optional<warehouse> warehouse = std::nullopt,
       std::optional<api_version> api_version = std::nullopt,
       std::optional<oauth_token> token = std::nullopt,
       std::unique_ptr<retry_policy> retry_policy = nullptr,
@@ -105,7 +114,6 @@ public:
      * Public method documentation will refer to the endpoints listed in the
      * specification.
      */
-
     /**
      * Create namespace API
      *
@@ -159,6 +167,13 @@ public:
     // Must be called before destroying the client to prevent resource leak
     ss::future<> shutdown();
 
+    // Configures this client based on configs from /v1/config in the catalog.
+    // Sets the prefix. Must be called before calls that use the prefix.
+    //
+    // TODO: honor more configs. As implemented, we only support getting the
+    // prefix.
+    ss::future<expected<std::monostate>> maybe_configure(retry_chain_node&);
+
 private:
     // The root url calculated from base url, prefix and api version. Given a
     // base url of "/b", an api version "v2" and a prefix of "x/y", the root url
@@ -187,18 +202,21 @@ private:
     ss::future<expected<iobuf>> perform_request(
       retry_chain_node& rtc,
       http::request_builder request_builder,
+      const ss::sstring& host,
       client_probe::endpoint endpoint,
       std::optional<iobuf> payload = std::nullopt);
 
     ss::gate _gate;
     std::unique_ptr<http::abstract_client> _http_client;
-    ss::sstring _endpoint;
+    const ss::sstring _endpoint;
     std::optional<credentials> _credentials;
     path_components _path_components;
+    std::optional<warehouse> _warehouse;
     std::optional<oauth_token> _oauth_token{std::nullopt};
     std::unique_ptr<retry_policy> _retry_policy;
     config::datalake_catalog_auth_mode _auth_mode;
     ss::shared_ptr<client_probe> _probe;
+    bool _configured{false};
 
     friend class catalog_client_tester;
 };

@@ -23,7 +23,10 @@ using namespace std::chrono_literals;
 using namespace testing;
 namespace {
 constexpr auto endpoint = "http://localhost:8181";
-const r::credentials credentials{.client_id = "id", .client_secret = "secret"};
+const r::credentials credentials{
+  .client_id = "id",
+  .client_secret = "secret",
+  .oauth2_scope = "PRINCIPAL_ROLE:ALL"};
 
 template<typename Variant, typename Outer>
 void assert_type_and_value(Outer input, Variant expected) {
@@ -74,32 +77,65 @@ private:
 } // namespace iceberg::rest_client
 
 TEST(path_components, path_with_base_and_prefix) {
-    r::path_components pc{
-      r::base_path{"b"}, r::prefix_path{"pre"}, r::api_version{"v1"}};
+    r::path_components pc{r::base_path{"b"}, r::api_version{"v1"}};
+    pc.reset_prefix(r::prefix_path{"pre"});
     ASSERT_EQ(pc.root_path(), "b/v1/pre/");
     ASSERT_EQ(pc.token_api_path(), "b/v1/oauth/tokens");
 }
 
 TEST(path_components, path_with_no_optional_parts) {
     r::path_components pc{};
+    pc.reset_prefix(std::nullopt);
     ASSERT_EQ(pc.root_path(), "v1/");
     ASSERT_EQ(pc.token_api_path(), "v1/oauth/tokens");
 }
 
 TEST(path_components, path_with_prefix) {
-    r::path_components pc{std::nullopt, r::prefix_path{"pre"}};
+    r::path_components pc{};
+    pc.reset_prefix(r::prefix_path{"pre"});
     ASSERT_EQ(pc.root_path(), "v1/pre/");
     ASSERT_EQ(pc.token_api_path(), "v1/oauth/tokens");
 }
 
 TEST(client, root_url_computed) {
+    auto ret = [](
+                 [[maybe_unused]] bh::request_header<>&& r,
+                 [[maybe_unused]] std::optional<iobuf> payload,
+                 [[maybe_unused]] ss::lowres_clock::duration timeout) {
+        return ss::make_ready_future<http::downloaded_response>(
+          http::downloaded_response{
+            .status = bh::status::ok, .body = iobuf::from(R"({
+              "defaults": {"prefix": "x"},
+              "overrides": {"prefix": ""}
+            })")});
+    };
+
     r::catalog_client cc{
-      make_http_client([](mock_client&) {}),
+      make_http_client([&ret](mock_client& m) {
+          EXPECT_CALL(
+            m,
+            request_and_collect_response(
+              AllOf(
+                Property(
+                  &boost::beast::http::request_header<>::target,
+                  EndsWith("/config?warehouse=x")),
+                Property(
+                  &boost::beast::http::request_header<>::method,
+                  Eq(boost::beast::http::verb::get))),
+              _,
+              _))
+            .WillRepeatedly(ret);
+      }),
       endpoint,
       credentials,
       r::base_path{"api/catalog/"},
-      r::prefix_path{"x"},
+      r::warehouse{"x"},
       r::api_version{"v2"}};
+    ss::abort_source as;
+    retry_chain_node rtc(as, 1s, 100ms);
+    auto conf_res = cc.maybe_configure(rtc).get();
+    ASSERT_TRUE(conf_res.has_value());
+
     r::catalog_client_tester t{cc};
     ASSERT_EQ(t.root_path(), "api/catalog/v2/x/");
 }

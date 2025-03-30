@@ -188,6 +188,20 @@ void client_probe::setup_public_metrics(
                           "endpoint that failed"),
           labels)
           .aggregate({sm::shard_label}),
+        sm::make_counter(
+          "num_get_config_requests",
+          [this] { return num_get_config_requests; },
+          sm::description("Total number of requests sent to the "
+                          "config endpoint"),
+          labels)
+          .aggregate({sm::shard_label}),
+        sm::make_counter(
+          "num_get_config_requests_failed",
+          [this] { return num_get_config_requests_failed; },
+          sm::description("Number of requests sent to the config "
+                          "endpoint that failed"),
+          labels)
+          .aggregate({sm::shard_label}),
       });
 }
 
@@ -212,6 +226,9 @@ void client_probe::register_request(endpoint e) {
     case commit_table_update:
         ++num_commit_table_update_requests;
         return;
+    case get_config:
+        ++num_get_config_requests;
+        return;
     }
 }
 
@@ -235,6 +252,9 @@ void client_probe::register_failed_request(endpoint e) {
         return;
     case commit_table_update:
         ++num_commit_table_update_requests_failed;
+        return;
+    case get_config:
+        ++num_get_config_requests_failed;
         return;
     }
 }

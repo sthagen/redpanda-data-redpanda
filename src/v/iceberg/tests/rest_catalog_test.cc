@@ -45,6 +45,7 @@ iceberg::rest_client::credentials get_credentials() {
     return {
       .client_id = "redpanda",
       .client_secret = "being_cute",
+      .oauth2_scope = "PRINCIPAL_ROLE:ALL",
     };
 }
 struct RestCatalogTest
@@ -67,7 +68,7 @@ struct RestCatalogTest
           endpoint,
           get_credentials(),
           iceberg::rest_client::base_path{"/catalog"},
-          std::nullopt,
+          iceberg::rest_client::warehouse{"x"},
           iceberg::rest_client::api_version("v1"),
           std::nullopt,
           nullptr,
@@ -276,11 +277,38 @@ void setup_token_request_expectations(client_mock& mock) {
         _))
       .WillOnce(handle_token_request);
 }
+void setup_config_expectations(client_mock& mock) {
+    auto ret = [](
+                 [[maybe_unused]] boost::beast::http::request_header<>&& r,
+                 [[maybe_unused]] std::optional<iobuf> payload,
+                 [[maybe_unused]] ss::lowres_clock::duration timeout) {
+        return ss::make_ready_future<http::downloaded_response>(
+          http::downloaded_response{
+            .status = boost::beast::http::status::ok, .body = iobuf::from(R"({
+              "defaults": {"prefix": "x"},
+              "overrides": {"prefix": ""}
+            })")});
+    };
+    EXPECT_CALL(
+      mock,
+      request_and_collect_response(
+        AllOf(
+          Property(
+            &boost::beast::http::request_header<>::target,
+            EndsWith("/config?warehouse=x")),
+          Property(
+            &boost::beast::http::request_header<>::method,
+            Eq(boost::beast::http::verb::get))),
+        _,
+        _))
+      .WillRepeatedly(ret);
+}
 } // namespace
 
 TEST_F(RestCatalogTest, CheckLoadTableHappyPath) {
     auto client = make_catalog_client({[](client_mock& m) {
         setup_token_request_expectations(m);
+        setup_config_expectations(m);
 
         EXPECT_CALL(
           m,
@@ -321,6 +349,7 @@ ss::future<http::downloaded_response> handle_create_table(
 TEST_F(RestCatalogTest, CheckCreateTableHappyPath) {
     auto client = make_catalog_client({[](client_mock& m) {
         setup_token_request_expectations(m);
+        setup_config_expectations(m);
 
         EXPECT_CALL(
           m,
@@ -421,6 +450,7 @@ iceberg::table_metadata create_empty_table_metadata(const ss::sstring& bucket) {
 TEST_F(RestCatalogTest, CommitTxnHappyPath) {
     auto client = make_catalog_client({[](client_mock& m) {
         setup_token_request_expectations(m);
+        setup_config_expectations(m);
 
         EXPECT_CALL(
           m,
@@ -510,6 +540,7 @@ ss::future<http::downloaded_response> handle_load_table_check_concurrency(
 TEST_F(RestCatalogTest, TestConcurrentAccesses) {
     auto client = make_catalog_client({[](client_mock& m) {
         setup_token_request_expectations(m);
+        setup_config_expectations(m);
         // setup mock to always reply in a
         EXPECT_CALL(
           m,

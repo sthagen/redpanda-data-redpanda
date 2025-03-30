@@ -25,6 +25,7 @@ public:
         load_table,
         drop_table,
         commit_table_update,
+        get_config,
     };
     client_probe(
       net::public_metrics_disabled public_disable, ss::metrics::label_instance);
@@ -58,6 +59,9 @@ private:
 
     size_t num_commit_table_update_requests{0};
     size_t num_commit_table_update_requests_failed{0};
+
+    size_t num_get_config_requests{0};
+    size_t num_get_config_requests_failed{0};
 };
 
 } // namespace iceberg::rest_client

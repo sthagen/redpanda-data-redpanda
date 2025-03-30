@@ -43,4 +43,11 @@ oauth_token parse_oauth_token(const json::Document& doc) {
     return ret;
 }
 
+catalog_config parse_catalog_config(const json::Document& doc) {
+    catalog_config ret;
+    ret.defaults = parse_required_string_map(doc, "defaults");
+    ret.overrides = parse_required_string_map(doc, "overrides");
+    return ret;
+}
+
 } // namespace iceberg::rest_client

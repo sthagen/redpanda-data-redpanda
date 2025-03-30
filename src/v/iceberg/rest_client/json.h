@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "iceberg/rest_client/catalog_config.h"
 #include "iceberg/rest_client/oauth_token.h"
 #include "json/document.h"
 
@@ -17,5 +18,7 @@ namespace iceberg::rest_client {
 
 // Parses oauth token from a JSON response sent from catalog server
 oauth_token parse_oauth_token(const json::Document& doc);
+// Parses the catalog configfrom a JSON response sent from catalog server
+catalog_config parse_catalog_config(const json::Document& doc);
 
 } // namespace iceberg::rest_client

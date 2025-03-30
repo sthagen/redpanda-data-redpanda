@@ -23,6 +23,7 @@ struct failure {
     // NOTE: takes precedence over can_be_retried.
     bool aborted{false};
     http_call_error err;
+    std::string err_msg;
     bool is_transport_error() const;
 };
 

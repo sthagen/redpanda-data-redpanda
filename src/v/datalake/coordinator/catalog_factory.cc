@@ -171,7 +171,8 @@ rest_catalog_factory::make_credentials_or_token() {
           = std::make_optional<iceberg::rest_client::credentials>(
             config_->iceberg_rest_catalog_client_id().value(),
             config_->iceberg_rest_catalog_client_secret().value(),
-            config_->iceberg_rest_catalog_oauth2_server_uri());
+            config_->iceberg_rest_catalog_oauth2_server_uri(),
+            config_->iceberg_rest_catalog_oauth2_scope());
         break;
     }
     }
@@ -205,28 +206,27 @@ rest_catalog_factory::create_catalog() {
       = static_cast<std::unique_ptr<http::abstract_client>>(
         std::make_unique<http::client>(
           std::move(transport_config), nullptr, client_probe_));
-    auto prefix_path
-      = config_->iceberg_rest_catalog_prefix()
-          ? std::make_optional<iceberg::rest_client::prefix_path>(
-              config_->iceberg_rest_catalog_prefix().value())
-          : std::nullopt;
 
     auto creds_and_token = make_credentials_or_token();
 
+    auto warehouse = config_->iceberg_rest_catalog_warehouse()
+                       ? std::make_optional<iceberg::rest_client::warehouse>(
+                           *config_->iceberg_rest_catalog_warehouse())
+                       : std::nullopt;
     vlog(
       datalake_log.info,
-      "Creating rest Iceberg catalog connected to: {}, with base path: {} and "
-      "prefix: {}",
+      "Creating rest Iceberg catalog connected to: {}, with base path: {}, "
+      "warehouse: {}",
       endpoint_information.address,
       endpoint_information.base_path,
-      prefix_path);
+      warehouse);
     // TODO: support OAuth token here
     auto client = std::make_unique<iceberg::rest_client::catalog_client>(
       std::move(http_client),
       config_->iceberg_rest_catalog_endpoint().value(),
       std::move(creds_and_token.credentials),
       std::move(endpoint_information.base_path),           // base_path
-      std::move(prefix_path),                              // prefix
+      std::move(warehouse),                                // warehouse
       std::nullopt,                                        // api_version
       std::move(creds_and_token.token),                    // token
       nullptr,                                             // retry_policy

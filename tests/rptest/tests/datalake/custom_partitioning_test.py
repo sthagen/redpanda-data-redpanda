@@ -36,7 +36,8 @@ from rptest.utils.rpcn_utils import counter_stream_config
 
 OOM_ALLOW_LIST = [
     # partitioning_writer.cc:65 - Failed to create new writer: Memory exhausted
-    re.compile("Failed to create new writer: Memory exhausted")
+    re.compile("Failed to create new writer: Memory exhausted"),
+    "UpdateRequirement\\$Assert",
 ]
 
 
@@ -318,7 +319,9 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
                 "translation_parquet_rows_added"] == msg_count
             assert metric2value_sum["translation_parquet_bytes_added"] > 0
 
-    @cluster(num_nodes=6)
+    @cluster(num_nodes=6, log_allow_list=[
+        "UpdateRequirement\\$Assert",
+    ])
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())
     def test_spec_evolution(self, cloud_storage_type, catalog_type):
@@ -489,7 +492,9 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
             ]
             assert describe_partitioning == expected_partitioning
 
-    @cluster(num_nodes=7)
+    @cluster(num_nodes=7, log_allow_list=[
+        "UpdateRequirement\\$Assert",
+    ])
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())
     def test_spec_evolution_rpcn(self, cloud_storage_type, catalog_type):

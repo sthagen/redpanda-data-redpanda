@@ -3921,12 +3921,14 @@ configuration::configuration()
       {.visibility = visibility::user, .secret = is_secret::yes},
       std::nullopt,
       &validate_non_empty_string_opt)
-  , iceberg_rest_catalog_prefix(
+  , iceberg_rest_catalog_warehouse(
       *this,
-      "iceberg_rest_catalog_prefix",
-      "Prefix part of the Iceberg REST catalog URL. Prefix is appended to the "
-      "catalog path f.e. '/v1/{prefix}/namespaces'",
-      {.visibility = visibility::user},
+      "iceberg_rest_catalog_warehouse",
+      "Warehouse to use for the Iceberg REST catalog. Redpanda will query the "
+      "catalog for configurations specific to the warehouse, for example, "
+      "using it to automatically configure the appropriate prefix.",
+      {.visibility = visibility::user,
+       .aliases = {"iceberg_rest_catalog_prefix"}},
       std::nullopt,
       &validate_non_empty_string_opt)
   , iceberg_rest_catalog_oauth2_server_uri(
@@ -3938,6 +3940,14 @@ configuration::configuration()
       {.visibility = visibility::user},
       std::nullopt,
       &validate_non_empty_string_opt)
+  , iceberg_rest_catalog_oauth2_scope(
+      *this,
+      "iceberg_rest_catalog_oauth2_scope",
+      "The OAuth scope used to retrieve access tokens for Iceberg catalog "
+      "authentication. Only meaningful when "
+      "`iceberg_rest_catalog_authentication_mode` is set to `oauth2`",
+      {.visibility = visibility::user},
+      "PRINCIPAL_ROLE:ALL")
   , iceberg_rest_catalog_authentication_mode(
       *this,
       "iceberg_rest_catalog_authentication_mode",

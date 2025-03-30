@@ -97,7 +97,9 @@ class DatalakeManyTopicsTest(RedpandaTest):
 
         self._execute_in_parallel(topics, produce_batch)
 
-    @cluster(num_nodes=8)
+    @cluster(num_nodes=8, log_allow_list=[
+        "UpdateRequirement\\$Assert",
+    ])
     @matrix(cloud_storage_type=supported_storage_types())
     def test_basic(self, cloud_storage_type):
         with DatalakeServices(self.test_context,

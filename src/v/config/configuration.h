@@ -733,8 +733,9 @@ struct configuration final : public config_store {
     property<std::optional<ss::sstring>> iceberg_rest_catalog_trust;
     property<std::optional<ss::sstring>> iceberg_rest_catalog_crl_file;
     property<std::optional<ss::sstring>> iceberg_rest_catalog_crl;
-    property<std::optional<ss::sstring>> iceberg_rest_catalog_prefix;
+    property<std::optional<ss::sstring>> iceberg_rest_catalog_warehouse;
     property<std::optional<ss::sstring>> iceberg_rest_catalog_oauth2_server_uri;
+    property<ss::sstring> iceberg_rest_catalog_oauth2_scope;
     enum_property<datalake_catalog_auth_mode>
       iceberg_rest_catalog_authentication_mode;
     property<double> iceberg_backlog_controller_p_coeff;
