@@ -543,6 +543,15 @@ public:
         return _configuration_manager.has_configuration_override();
     }
 
+    // start/stop simulating failed requests (for debug purposes)
+    void toggle_append_entries_error_injection(bool inject_error) {
+        vlog(
+          _ctxlog.warn,
+          "toggle_append_entries_error_injection block={}",
+          inject_error);
+        _inject_error_in_append_entries = inject_error;
+    }
+
 private:
     friend replication_monitor;
     friend replicate_entries_stm;
@@ -798,6 +807,9 @@ private:
 
     void validate_offset_translator_delta(
       const protocol_metadata&, const storage::offset_stats& lstats);
+
+    std::optional<model::offset>
+      adjust_learner_initial_offset(std::optional<model::offset>);
     // args
     vnode _self;
     raft::group_id _group;
@@ -945,6 +957,9 @@ private:
     ss::timer<ss::lowres_clock> _deferred_flusher;
 
     replication_monitor _replication_monitor;
+
+    // simulate storage issues
+    bool _inject_error_in_append_entries = false;
 
     friend std::ostream& operator<<(std::ostream&, const consensus&);
 };

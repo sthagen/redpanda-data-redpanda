@@ -87,7 +87,8 @@ struct health_bench : health_report_accessor {
                     partition_status status{
                       .id{pid},
                       .leader_id = std::nullopt,
-                      .under_replicated_replicas = 1};
+                      .under_replicated_replicas = 1,
+                      .followers_stats = {{}}};
                     statuses.at(nid).partitions.emplace_back(std::move(status));
                 }
             }

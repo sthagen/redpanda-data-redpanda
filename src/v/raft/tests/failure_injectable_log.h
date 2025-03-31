@@ -84,8 +84,10 @@ public:
 
     std::optional<model::offset>
       get_term_last_offset(model::term_id) const final;
-
     std::optional<model::offset> index_lower_bound(model::offset o) const final;
+
+    std::optional<model::offset>
+    index_batch_base_offset_lower_bound(model::offset o) const final;
 
     ss::future<model::offset> monitor_eviction(ss::abort_source&) final;
 

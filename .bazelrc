@@ -68,6 +68,19 @@ build:sanitizer --@seastar//:system_allocator=True
 build:sanitizer --@krb5//:sanitizers=address,undefined,vptr,function,alignment
 
 # =================================
+# ODR Finder
+# =================================
+build:odr-finder --cxxopt -stdlib=libc++
+build:odr-finder --copt -g
+build:odr-finder --copt -O0
+build:odr-finder --linkopt -fuse-ld=gold
+build:odr-finder --linkopt -Wl,--detect-odr-violations
+build:odr-finder --linkopt -lc++
+build:odr-finder --linkopt -lc++abi
+build:odr-finder --strip never
+build:odr-finder --@krb5//:linker=gold
+
+# =================================
 # clang-tidy
 # =================================
 build:clang-tidy --aspects @bazel_clang_tidy//clang_tidy:clang_tidy.bzl%clang_tidy_aspect

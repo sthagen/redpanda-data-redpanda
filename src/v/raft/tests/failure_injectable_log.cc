@@ -155,6 +155,12 @@ failure_injectable_log::index_lower_bound(model::offset o) const {
     return _underlying_log->index_lower_bound(o);
 }
 
+std::optional<model::offset>
+failure_injectable_log::index_batch_base_offset_lower_bound(
+  model::offset o) const {
+    return _underlying_log->index_batch_base_offset_lower_bound(o);
+}
+
 ss::future<model::offset>
 failure_injectable_log::monitor_eviction(ss::abort_source& as) {
     return _underlying_log->monitor_eviction(as);

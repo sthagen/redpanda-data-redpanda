@@ -1242,6 +1242,47 @@ consensus::remove_member(vnode node, model::revision_id new_revision) {
       });
 }
 
+std::optional<model::offset> consensus::adjust_learner_initial_offset(
+  std::optional<model::offset> learner_start_offset) {
+    if (!learner_start_offset) {
+        return learner_start_offset;
+    }
+    /**
+     * We need to adjust the offset to the full batch boundary. This
+     * is required as the last offset included in the snapshot MUST be
+     * the last offset in a batch. If that wouldn't be the case Raft
+     * leader would not be able to recover follower as Raft delivers
+     * whole batches not individual records. We are looking for the last offset
+     * of a batch that is smaller than the requested learner_start_offset.
+     *
+     *
+     * The following invariant MUST hold:
+     * adjusted_offset <= last_included_offset
+     */
+    auto adjusted_learner_initial_offset
+      = _log->index_batch_base_offset_lower_bound(*learner_start_offset);
+    if (!adjusted_learner_initial_offset) {
+        vlog(
+          _ctxlog.warn,
+          "failed to adjust last included offset {} to the batch "
+          "boundary. Log offsets: {}",
+          learner_start_offset,
+          _log->offsets());
+        return std::nullopt;
+    }
+
+    if (adjusted_learner_initial_offset != learner_start_offset) {
+        vlog(
+          _ctxlog.info,
+          "Adjusted learner start offset {} to the batch boundary. "
+          "Adjusted offset: {}.",
+          learner_start_offset,
+          *adjusted_learner_initial_offset);
+    }
+
+    return adjusted_learner_initial_offset;
+}
+
 ss::future<std::error_code> consensus::replace_configuration(
   std::vector<vnode> nodes,
   model::revision_id new_revision,
@@ -1251,6 +1292,8 @@ ss::future<std::error_code> consensus::replace_configuration(
         group_configuration current) mutable {
           auto old = current;
           try_updating_configuration_version(current);
+          learner_start_offset = adjust_learner_initial_offset(
+            learner_start_offset);
           current.replace(nodes, new_revision, learner_start_offset);
           vlog(
             _ctxlog.debug,
@@ -2246,6 +2289,16 @@ consensus::do_append_entries(append_entries_request&& r) {
             _hbeat = clock_type::now();
         });
         validate_offset_translator_delta(request_metadata, lstats);
+
+        // simulate disk error
+        if (unlikely(_inject_error_in_append_entries)) {
+            vlog(
+              _ctxlog.warn,
+              "simulating an error in append_entries request from {}",
+              r.source_node());
+            throw std::runtime_error("injected error");
+        }
+
         storage::append_result ofs = co_await disk_append(
           std::move(r).release_batches(), update_last_quorum_index::no);
         auto last_visible = std::min(

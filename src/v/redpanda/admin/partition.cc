@@ -537,6 +537,31 @@ admin_server::force_set_partition_replicas_handler(
 }
 
 ss::future<ss::json::json_return_type>
+admin_server::toggle_append_entries_error_injection(
+  std::unique_ptr<ss::http::request> req, bool inject) {
+    auto ntp = parse_ntp_from_request(req->param);
+    auto shard = _shard_table.local().shard_for(ntp);
+    if (!shard) {
+        throw ss::httpd::bad_request_exception(fmt_with_ctx(
+          fmt::format, "Partition {} not found on this node", ntp));
+    }
+
+    co_return co_await _partition_manager.invoke_on(
+      *shard,
+      [ntp = std::move(ntp), inject](cluster::partition_manager& pm) mutable
+      -> ss::future<ss::json::json_return_type> {
+          auto partition = pm.get(ntp);
+          if (!partition) {
+              return ss::make_exception_future<ss::json::json_return_type>(
+                ss::httpd::bad_request_exception(fmt_with_ctx(
+                  fmt::format, "Partition {} not found on this node", ntp)));
+          }
+          partition->raft()->toggle_append_entries_error_injection(inject);
+          return ssx::now<ss::json::json_return_type>(ss::json::json_void());
+      });
+}
+
+ss::future<ss::json::json_return_type>
 admin_server::set_partition_replicas_handler(
   std::unique_ptr<ss::http::request> req) {
     auto ntp = parse_ntp_from_request(req->param);
@@ -591,7 +616,6 @@ admin_server::set_partition_replicas_handler(
 }
 
 namespace {
-
 json::validator make_set_replica_core_validator() {
     const std::string schema = R"(
 {
@@ -802,6 +826,18 @@ void admin_server::register_partition_routes() {
       ss::httpd::debug_json::force_update_partition_replicas,
       [this](std::unique_ptr<ss::http::request> req) {
           return force_set_partition_replicas_handler(std::move(req));
+      });
+
+    register_route<superuser>(
+      ss::httpd::debug_json::enable_append_entries_error_injection,
+      [this](std::unique_ptr<ss::http::request> req) {
+          return toggle_append_entries_error_injection(std::move(req), true);
+      });
+
+    register_route<superuser>(
+      ss::httpd::debug_json::disable_append_entries_error_injection,
+      [this](std::unique_ptr<ss::http::request> req) {
+          return toggle_append_entries_error_injection(std::move(req), false);
       });
 
     register_route<superuser>(
@@ -1089,7 +1125,6 @@ admin_server::get_majority_lost_partitions(
 }
 
 namespace {
-
 json::validator make_node_id_array_validator() {
     const std::string schema = R"(
     {

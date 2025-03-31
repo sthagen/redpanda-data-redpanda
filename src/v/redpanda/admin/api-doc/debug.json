@@ -491,6 +491,74 @@
             ]
         },
         {
+            "path": "/v1/debug/partitions/{namespace}/{topic}/{partition}/enable_error_injection/append_entries",
+            "operations": [
+                {
+                    "method": "POST",
+                    "summary": "Enable error simulation on raft append_entries request on this node",
+                    "type": "void",
+                    "nickname": "enable_append_entries_error_injection",
+                    "produces": [
+                        "application/json"
+                    ],
+                    "parameters": [
+                        {
+                            "name": "namespace",
+                            "in": "path",
+                            "required": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "topic",
+                            "in": "path",
+                            "required": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "partition",
+                            "in": "path",
+                            "required": true,
+                            "type": "integer"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "path": "/v1/debug/partitions/{namespace}/{topic}/{partition}/disable_error_injection/append_entries",
+            "operations": [
+                {
+                    "method": "POST",
+                    "summary": "Disable error simulation on raft append_entries request on this node",
+                    "type": "void",
+                    "nickname": "disable_append_entries_error_injection",
+                    "produces": [
+                        "application/json"
+                    ],
+                    "parameters": [
+                        {
+                            "name": "namespace",
+                            "in": "path",
+                            "required": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "topic",
+                            "in": "path",
+                            "required": true,
+                            "type": "string"
+                        },
+                        {
+                            "name": "partition",
+                            "in": "path",
+                            "required": true,
+                            "type": "integer"
+                        }
+                    ]
+                }
+            ]
+        },
+        {
             "path": "/v1/debug/unsafe_reset_metadata/{topic}/{partition}",
             "operations": [
                 {

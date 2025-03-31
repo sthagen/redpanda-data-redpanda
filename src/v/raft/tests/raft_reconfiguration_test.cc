@@ -215,7 +215,7 @@ TEST_P_CORO(reconfiguration_test, configuration_replace_test) {
       [this, consistency_lvl](raft_node_instance& leader_node) {
           return leader_node.raft()
             ->replicate(
-              make_random_batches(), replicate_options(consistency_lvl))
+              make_batches(100, 100, 128), replicate_options(consistency_lvl))
             .then([this](::result<replicate_result> r) {
                 if (!r) {
                     return ss::make_ready_future<::result<model::offset>>(
@@ -264,9 +264,16 @@ TEST_P_CORO(reconfiguration_test, configuration_replace_test) {
     std::optional<model::offset> learner_start_offset;
     if (use_learner_start_offset) {
         learner_start_offset = co_await with_leader(
-          30s, [](raft_node_instance& leader_node) {
-              return leader_node.random_batch_base_offset(
-                leader_node.raft()->dirty_offset() - model::offset(1));
+          30s, [this](raft_node_instance& leader_node) {
+              return leader_node
+                .random_batch_base_offset(
+                  leader_node.raft()->dirty_offset() - model::offset(1),
+                  std::max(
+                    model::offset(300), leader_node.raft()->start_offset()))
+                .then([this](model::offset base_offset) {
+                    logger().info("Random batch base offset: {}", base_offset);
+                    return base_offset;
+                });
           });
         if (learner_start_offset != model::offset{}) {
             start_offset = *learner_start_offset;
@@ -392,7 +399,8 @@ TEST_P_CORO(reconfiguration_test, configuration_replace_test) {
         ASSERT_TRUE_CORO(cfg.current_config().learners.empty());
 
         if (learner_start_offset && added_nodes.contains(n.get_vnode())) {
-            ASSERT_EQ_CORO(n.raft()->start_offset(), learner_start_offset);
+            ASSERT_LE_CORO(n.raft()->start_offset(), learner_start_offset);
+            ASSERT_GT_CORO(n.raft()->start_offset(), model::offset(0));
         }
     }
 
@@ -669,4 +677,104 @@ TEST_F_CORO(raft_fixture, test_force_reconfiguration) {
           o,
           kafka_offsets);
     }
+}
+
+TEST_F_CORO(raft_fixture, test_initial_learner_offset_adjustment) {
+    // create a group with 1 node
+    co_await create_simple_group(1);
+    auto leader = co_await wait_for_leader(10s);
+    // replicate some data
+    while (node(leader).raft()->dirty_offset() < model::offset(10000)) {
+        auto leader_opt = get_leader();
+        if (!leader_opt) {
+            vlog(logger().info, "no leader");
+            co_await ss::sleep(100ms);
+            continue;
+        }
+        leader = leader_opt.value();
+        co_await node(leader)
+          .raft()
+          ->replicate(
+            make_batches(10, 10, 128),
+            replicate_options(raft::consistency_level::quorum_ack))
+          .then([this](result<replicate_result> result) {
+              if (result.has_error()) {
+                  vlog(
+                    logger().info,
+                    "error(replicating): {}",
+                    result.error().message());
+              }
+          });
+    }
+
+    auto current_nodes = all_vnodes();
+
+    absl::flat_hash_set<raft::vnode> added_nodes;
+    co_await ss::coroutine::parallel_for_each(boost::irange(4), [&](int i) {
+        auto& n = add_node(model::node_id(i + 1), model::revision_id(0));
+        current_nodes.push_back(n.get_vnode());
+        added_nodes.emplace(n.get_vnode());
+        return n.init_and_start({});
+    });
+
+    model::offset learner_start_offset{random_generators::get_int(2000, 6000)};
+    // update group configuration
+    auto success = co_await retry_with_leader(
+      model::timeout_clock::now() + 30s,
+      [current_nodes, learner_start_offset](raft_node_instance& leader_node) {
+          return leader_node.raft()
+            ->replace_configuration(
+              current_nodes, model::revision_id(0), learner_start_offset)
+            .then([](std::error_code ec) {
+                if (ec) {
+                    return ::result<bool>(ec);
+                }
+                return ::result<bool>(true);
+            });
+      });
+    ASSERT_TRUE_CORO(success);
+    co_await with_leader(30s, [this](raft_node_instance& leader_node) {
+        return wait_for_committed_offset(
+          leader_node.raft()->committed_offset(), 30s);
+    });
+
+    RPTEST_REQUIRE_EVENTUALLY_CORO(60s, [this] {
+        for (auto& [id, node] : nodes()) {
+            if (
+              node->raft()->config().get_state()
+              != raft::configuration_state::simple) {
+                return false;
+            }
+        }
+        return true;
+    });
+
+    absl::flat_hash_set<raft::vnode> current_nodes_set(
+      current_nodes.begin(), current_nodes.end());
+    model::offset start_offset = model::offset(0);
+    // validate configuration
+    for (auto& [id, n] : nodes()) {
+        auto cfg = n->raft()->config();
+        auto cfg_vnodes = cfg.all_nodes();
+        ASSERT_EQ_CORO(
+          current_nodes_set,
+          absl::flat_hash_set<raft::vnode>(
+            cfg_vnodes.begin(), cfg_vnodes.end()));
+        ASSERT_FALSE_CORO(cfg.old_config().has_value());
+        ASSERT_TRUE_CORO(cfg.current_config().learners.empty());
+
+        if (learner_start_offset && added_nodes.contains(n->get_vnode())) {
+            ASSERT_LE_CORO(n->raft()->start_offset(), learner_start_offset);
+            ASSERT_GT_CORO(n->raft()->start_offset(), model::offset(0));
+            start_offset = std::max(start_offset, n->raft()->start_offset());
+        }
+    }
+
+    co_await assert_logs_equal(start_offset);
+
+    std::vector<raft_node_instance*> current_node_ptrs;
+    for (auto& [id, node] : nodes()) {
+        current_node_ptrs.push_back(node.get());
+    }
+    assert_offset_translator_state_is_consistent(current_node_ptrs);
 }

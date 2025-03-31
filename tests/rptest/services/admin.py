@@ -1190,6 +1190,21 @@ class Admin:
         path = f"debug/partitions/{namespace}/{topic}/{partition}/force_replicas"
         return self._request('post', path, node=node, json=replicas)
 
+    def toggle_failure_injection(
+        self,
+        topic,
+        partition,
+        op,
+        *,
+        inject: bool,
+        node,
+        namespace="kafka",
+    ):
+        assert op == "append_entries"
+        verb = "enable" if inject else "disable"
+        path = f"debug/partitions/{namespace}/{topic}/{partition}/{verb}_error_injection/{op}"
+        return self._request('post', path, node=node)
+
     def cancel_partition_move(self,
                               topic,
                               partition,
