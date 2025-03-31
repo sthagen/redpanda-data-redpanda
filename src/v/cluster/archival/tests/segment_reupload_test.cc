@@ -8,22 +8,27 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "archival/archival_policy.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/types.h"
 #include "cluster/archival/adjacent_segment_merger.h"
 #include "cluster/archival/segment_reupload.h"
 #include "cluster/archival/tests/service_fixture.h"
+#include "model/fundamental.h"
 #include "model/metadata.h"
 #include "storage/log_manager.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/archival.h"
 #include "test_utils/tmp_dir.h"
 
+#include <seastar/core/io_priority_class.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
 #include <boost/test/tools/old/interface.hpp>
+
+#include <variant>
 
 using namespace archival;
 
@@ -1425,4 +1430,56 @@ SEASTAR_THREAD_TEST_CASE(test_adjacent_segment_collection_x_term) {
     BOOST_REQUIRE_EQUAL(run.num_segments, 2);
     BOOST_REQUIRE_EQUAL(run.meta.base_offset(), 0);
     BOOST_REQUIRE_EQUAL(run.meta.committed_offset(), 400);
+}
+
+SEASTAR_THREAD_TEST_CASE(test_segment_concurrent_compaction) {
+    cloud_storage::partition_manifest m;
+    m.update(
+       cloud_storage::manifest_format::json, make_manifest_stream(manifest))
+      .get();
+
+    temporary_dir tmp_dir("concat_segment_read");
+    auto data_path = tmp_dir.get_path();
+    using namespace storage;
+
+    auto b = make_log_builder(data_path.string());
+    b | start(ntp_config{{"test_ns", "test_tpc", 0}, {data_path}});
+    auto defer = ss::defer([&b] { b.stop().get(); });
+
+    // Local disk log starts before manifest and ends after manifest. First
+    // three segments are compacted.
+    populate_log(
+      b,
+      {.segment_starts = {0, 20, 30, 40},
+       .compacted_segment_indices = {},
+       .last_segment_num_records = 10});
+
+    // Should be aligned to the manifest segments.
+    archival::segment_collector collector{
+      model::offset{10},
+      m,
+      b.get_disk_log_impl(),
+      max_upload_size,
+      model::offset{39}};
+
+    collector.collect_segments(segment_collector_mode::collect_non_compacted);
+    BOOST_REQUIRE_EQUAL(collector.begin_inclusive(), model::offset{10});
+    BOOST_REQUIRE_EQUAL(collector.end_inclusive(), model::offset{39});
+
+    // Simulate concurrent compaction.
+    // The collector already stores collected segments. After the compaction
+    // the segments are still valid, but segment sizes could be different so
+    // the collection should be retried.
+    for (auto& s : b.get_disk_log_impl().segments()) {
+        s->advance_generation();
+    }
+
+    // The three compacted segments are collected, with the begin and end
+    // markers set to align with manifest segment.
+    auto candidate
+      = collector.make_upload_candidate(ss::default_priority_class(), 1s).get();
+    BOOST_REQUIRE(std::holds_alternative<candidate_creation_error>(candidate));
+    BOOST_REQUIRE(
+      std::get<candidate_creation_error>(candidate)
+      == candidate_creation_error::concurrency_error);
 }

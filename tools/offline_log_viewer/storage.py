@@ -241,7 +241,7 @@ class BatchIterator:
 
     def __next__(self):
         b = Batch.from_stream(self.file, self.idx)
-        if not b:
+        if b is None:
             fsize = os.stat(self.path).st_size
             if fsize != self.file.tell():
                 logger.warn(

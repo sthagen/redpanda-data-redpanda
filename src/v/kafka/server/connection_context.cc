@@ -37,6 +37,7 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/scattered_message.hh>
+#include <seastar/core/semaphore.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/core/sstring.hh>
@@ -921,6 +922,12 @@ ss::future<> connection_context::client_protocol_state::handle_response(
 ss::future<ss::stop_iteration>
 connection_context::client_protocol_state::do_process_responses(
   ss::lw_shared_ptr<connection_context> connection_ctx) {
+    // Because this method may be called from multiple background fibres
+    // concurrently, this semaphore ensures that scheduling points inside this
+    // method cannot lead to responses being writtent to the connection out of
+    // order.
+    auto units = co_await ss::get_units(_resp_sem, 1);
+
     auto it = _responses.find(_next_response);
     if (it == _responses.end()) {
         co_return ss::stop_iteration::yes;

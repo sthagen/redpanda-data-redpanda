@@ -36,6 +36,8 @@ enum class segment_collector_mode {
 class segment_collector {
 public:
     using segment_seq = std::vector<ss::lw_shared_ptr<storage::segment>>;
+    using generation_seq = std::vector<uint64_t>;
+    using sizes_seq = std::vector<uint64_t>;
 
     /// C-tor
     ///
@@ -125,6 +127,8 @@ private:
     const storage::log& _log;
     const storage::ntp_config* _ntp_cfg{};
     segment_seq _segments;
+    generation_seq _generations;
+    sizes_seq _sizes;
     bool _can_replace_manifest_segment{false};
 
     size_t _max_uploaded_segment_size;

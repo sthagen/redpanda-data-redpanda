@@ -207,6 +207,8 @@ void segment_collector::do_collect(segment_collector_mode mode) {
         }
 
         _segments.push_back(result.segment);
+        _generations.push_back(result.segment->get_generation_id()());
+        _sizes.push_back(result.segment->size_bytes());
         current_segment_end = result.segment->offsets().get_committed_offset();
         start = current_segment_end + model::offset{1};
         _collected_size += segment_size;
@@ -472,6 +474,43 @@ ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
 
     auto locks_resolved = co_await ss::when_all_succeed(
       locks.begin(), locks.end());
+
+    std::vector<uint64_t> current_gen;
+    current_gen.reserve(_segments.size());
+    std::transform(
+      _segments.begin(),
+      _segments.end(),
+      std::back_inserter(current_gen),
+      [](const auto& seg) { return seg->get_generation_id()(); });
+
+    if (_generations != current_gen) {
+        std::stringstream sstr;
+        for (size_t i = 0; i < _segments.size(); i++) {
+            if (_generations.at(i) != current_gen.at(i)) {
+                // Segment was updated concurrently while we were waiting
+                // for the locks.
+                fmt::print(
+                  sstr,
+                  "segment {}-{} (seq: {}, old gen: {}, new gen: {}, old size: "
+                  "{}, new size: {}); ",
+                  _segments.at(i)->offsets().get_base_offset(),
+                  _segments.at(i)->offsets().get_committed_offset(),
+                  i,
+                  _generations.at(i),
+                  current_gen.at(i),
+                  _sizes.at(i),
+                  _segments.at(i)->size_bytes());
+            }
+        }
+        // The segment was updated while we were waiting for the locks.
+        // It's a race condition so we should fail the upload and retry.
+        vlog(
+          archival_log.info,
+          "Segment generation mismatch for {}: {}",
+          _manifest.get_ntp(),
+          sstr.str());
+        co_return candidate_creation_error::concurrency_error;
+    }
 
     auto first = _segments.front();
     auto head_seek_result = co_await storage::convert_begin_offset_to_file_pos(

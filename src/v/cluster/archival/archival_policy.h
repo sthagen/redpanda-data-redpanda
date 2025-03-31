@@ -34,6 +34,7 @@ enum class candidate_creation_error {
     missing_ntp_config,
     failed_to_get_file_range,
     zero_content_length,
+    concurrency_error,
 };
 
 std::ostream& operator<<(std::ostream&, candidate_creation_error);
