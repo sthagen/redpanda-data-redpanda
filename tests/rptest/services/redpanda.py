@@ -4615,7 +4615,8 @@ class RedpandaService(RedpandaServiceBase):
     def node_storage(self,
                      node,
                      sizes: bool = False,
-                     scan_cache: bool = True) -> NodeStorage:
+                     scan_cache: bool = True,
+                     compaction_footers: bool = False) -> NodeStorage:
         """
         Retrieve a summary of storage on a node.
 
@@ -4635,6 +4636,8 @@ class RedpandaService(RedpandaServiceBase):
         ]
         if sizes:
             cmd.append("--sizes")
+        if compaction_footers:
+            cmd.append("--compaction-footers")
         output = node.account.ssh_output(shlex.join(cmd),
                                          combine_stderr=False,
                                          timeout_sec=10)
@@ -4649,10 +4652,12 @@ class RedpandaService(RedpandaServiceBase):
                     partition_path = os.path.join(topic_path, part)
                     partition = topic.add_partition(part, node, partition_path)
                     partition.add_files(list(segments.keys()))
-                    if not sizes:
-                        continue
                     for segment, data in segments.items():
-                        partition.set_segment_size(segment, data["size"])
+                        if "size" in data:
+                            partition.set_segment_size(segment, data["size"])
+                        if "compaction_footer" in data:
+                            partition.set_segment_compaction_footer(
+                                segment, data["compaction_footer"])
 
         if scan_cache and self._si_settings is not None and node.account.exists(
                 store.cache_dir):

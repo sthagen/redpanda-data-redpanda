@@ -22,6 +22,7 @@
 #include "iceberg/values.h"
 #include "model/fundamental.h"
 
+#include <absl/container/flat_hash_set.h>
 #include <avro/Generic.hh>
 #include <avro/GenericDatum.hh>
 
@@ -195,9 +196,23 @@ structured_data_translator::build_type(std::optional<resolved_type> val_type) {
         // permissive allowance for schema evolution which is certainly a
         // superset superset of what any particular schema language allows.
         // TODO(iceberg): this behavior could be made configurable
+        //
+        // Keys must be marked as required per the Iceberg spec:
+        // https://iceberg.apache.org/spec/#nested-types.
+        // This approach of storing the `key` fields in a set below is
+        // guaranteed to work because `iceberg::for_each_field()` is a depth
+        // first traversal of the fields, i.e., the parent `map` field will be
+        // visited before the child `key` field.
+        absl::flat_hash_set<iceberg::nested_field*> map_keys;
         std::ignore = iceberg::for_each_field(
-          struct_type, [](iceberg::nested_field* f) {
-              f->required = iceberg::field_required::no;
+          struct_type, [&map_keys](iceberg::nested_field* f) {
+              f->required = map_keys.contains(f) ? iceberg::field_required::yes
+                                                 : iceberg::field_required::no;
+
+              if (std::holds_alternative<iceberg::map_type>(f->type)) {
+                  auto& kv = std::get<iceberg::map_type>(f->type);
+                  map_keys.insert(kv.key_field.get());
+              }
           });
         for (auto& field : struct_type.fields) {
             if (field->name == rp_struct_name) {

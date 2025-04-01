@@ -116,3 +116,48 @@ class DatalakeThrottlingTest(RedpandaTest):
             dl.produce_to_topic(self.topic_name, 1024, msg_cnt)
             assert self._total_throttle(
             ) == current_throttle, "Total throttle should not increase as the translation is progressing"
+
+    @cluster(num_nodes=4)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            catalog_type=supported_catalog_types())
+    def test_backlog_metric(self, cloud_storage_type, catalog_type):
+        def collect_backlog_metric():
+            sample = self.redpanda.metrics_sample(
+                "vectorized_iceberg_backlog_controller_backlog_size")
+            assert sample is not None, "iceberg_backlog metric not found"
+            total = 0
+            for s in sample.samples:
+                self.logger.info(f"backlog metrics sample : {s}")
+                total += s.value
+            return total
+
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              include_query_engines=[QueryEngineType.SPARK],
+                              catalog_type=catalog_type) as dl:
+
+            dl.create_iceberg_enabled_topic(self.topic_name, partitions=1)
+            # execute few iterations to verify backlog calculation
+            for i in range(1, 5):
+                self.redpanda.set_cluster_config(
+                    {"datalake_scheduler_max_concurrent_translations": 0})
+                dl.produce_to_topic(self.topic_name, 1024, 20000)
+
+                wait_until(lambda: collect_backlog_metric() > 10240,
+                           timeout_sec=30,
+                           backoff_sec=2)
+
+                self.redpanda.set_cluster_config(
+                    {"datalake_scheduler_max_concurrent_translations": 10})
+                dl.wait_for_translation(self.topic_name, msg_count=i * 20000)
+                # after everything is translated reported backlog should be 0
+                wait_until(lambda: collect_backlog_metric() == 0,
+                           timeout_sec=30,
+                           backoff_sec=2)
+                # restart all nodes
+                self.redpanda.restart_nodes(self.redpanda.nodes)
+                # check backlog again
+                for _ in range(0, 5):
+                    assert collect_backlog_metric(
+                    ) == 0, "Backlog should be 0 as all data are translated"
+                    time.sleep(1)

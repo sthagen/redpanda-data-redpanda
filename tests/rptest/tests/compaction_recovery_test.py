@@ -18,6 +18,7 @@ from rptest.clients.kafka_cli_tools import KafkaCliTools
 from rptest.util import produce_until_segments
 
 import os.path
+from collections import namedtuple
 
 
 class CompactionRecoveryTest(RedpandaTest):
@@ -147,8 +148,9 @@ class CompactionRecoveryUpgradeTest(RedpandaTest):
         # all the way to HEAD
         next_version = self.installer.latest_for_line(release_line=(23, 1))[0]
 
-        def get_storage_partition(node):
-            storage = self.redpanda.node_storage(node, sizes=True)
+        def get_storage_partition(node, compaction_footers=False):
+            storage = self.redpanda.node_storage(
+                node, sizes=True, compaction_footers=compaction_footers)
             partitions = storage.partitions('kafka', self.topic)
             assert len(partitions) == 1
             return partitions[0]
@@ -164,25 +166,30 @@ class CompactionRecoveryUpgradeTest(RedpandaTest):
                                    record_size=1024,
                                    batch_size=2048)
 
-            def no_big_closed_segments():
+            def finished_compaction():
                 partition = get_storage_partition(node)
                 return not any(
                     seg.base_index and seg.size > (self.SEGMENT_SIZE / 2)
                     for seg in partition.segments.values())
 
-            wait_until(no_big_closed_segments, timeout_sec=30, backoff_sec=2)
+            wait_until(finished_compaction, timeout_sec=30, backoff_sec=2)
 
         def get_closed_segment2mtime(node):
-            partition = get_storage_partition(node)
-
+            partition = get_storage_partition(node, compaction_footers=True)
             seg2mtime = dict()
+            mtime_and_version = namedtuple("mtime_and_version",
+                                           ["mtime", "version"])
             for sname, seg in partition.segments.items():
-                if seg.base_index:
+                if seg.compaction_footer:
                     path = os.path.join(partition.path, seg.data_file)
-                    seg2mtime[path] = partition.get_mtime(seg.data_file)
+                    seg2mtime[path] = mtime_and_version(
+                        partition.get_mtime(seg.data_file),
+                        seg.compaction_footer["version"])
 
             for k, v in sorted(seg2mtime.items()):
-                self.logger.debug(f"mtime for closed segment {k}: {v}")
+                self.logger.debug(
+                    f"mtime & compaction footer version for closed segment {k}: {v}"
+                )
 
             return seg2mtime
 
@@ -192,27 +199,38 @@ class CompactionRecoveryUpgradeTest(RedpandaTest):
         self.logger.info(f"will test node {to_restart.account.hostname}")
 
         produce_and_wait_for_compaction(to_restart, 2)
+
+        self.installer.install([to_restart], next_version)
+        self.redpanda.stop_node(to_restart)
+
         seg2mtime_1 = get_closed_segment2mtime(to_restart)
         assert len(seg2mtime_1) >= 2
 
-        self.installer.install([to_restart], next_version)
-        self.redpanda.restart_nodes([to_restart])
+        self.redpanda.start_node(to_restart)
         self.redpanda.wait_for_membership(first_start=False)
 
         # After restart we produce and wait for the new segments to be compacted.
         # Because redpanda compacts segments from the beginning, this means that
         # all earlier segments have been either recovered or rebuilt after restart.
         produce_and_wait_for_compaction(to_restart, 2)
+
+        self.installer.install([to_restart], self.OLD_VERSION)
+        self.redpanda.stop_node(to_restart)
+
         seg2mtime_2 = get_closed_segment2mtime(to_restart)
         assert len(seg2mtime_2) >= len(seg2mtime_1) + 2
 
         for index in seg2mtime_1.keys():
-            # v1 compacted segments should be left intact
             assert index in seg2mtime_2
-            assert seg2mtime_1[index] == seg2mtime_2[index]
+            # v1 compacted segments should be left intact
+            if seg2mtime_2[index].version == 1:
+                assert seg2mtime_2[index].mtime == seg2mtime_1[
+                    index].mtime, f"Expected segment index {index} mtime {seg2mtime_2[index].mtime} == {seg2mtime_1[index].mtime}"
+            else:
+                assert seg2mtime_2[index].mtime > seg2mtime_1[
+                    index].mtime, f"Expected segment index {index} mtime {seg2mtime_2[index].mtime} > {seg2mtime_1[index].mtime}"
 
-        self.installer.install([to_restart], self.OLD_VERSION)
-        self.redpanda.restart_nodes([to_restart])
+        self.redpanda.start_node(to_restart)
         self.redpanda.wait_for_membership(first_start=False)
 
         produce_and_wait_for_compaction(to_restart, 2)
@@ -220,12 +238,19 @@ class CompactionRecoveryUpgradeTest(RedpandaTest):
         assert len(seg2mtime_3) >= len(seg2mtime_2) + 2
         for index in seg2mtime_2.keys():
             assert index in seg2mtime_3
-            if index in seg2mtime_1:
+            if seg2mtime_2[index].version == 1:
                 # v1-compacted segments should not be rewritten
-                assert seg2mtime_3[index] == seg2mtime_2[index]
+                assert seg2mtime_3[index].mtime == seg2mtime_2[
+                    index].mtime, f"Expected segment index {index} mtime {seg2mtime_3[index].mtime} == {seg2mtime_2[index].mtime}"
             else:
-                # old version should rebuild v2 indices and re-compact segments
-                assert seg2mtime_3[index] > seg2mtime_2[index]
+                # old version should rebuild v2 indices and re-compact segments.
+                if seg2mtime_3[index].version == 1:
+                    assert seg2mtime_3[index].mtime > seg2mtime_2[
+                        index].mtime, f"Expected segment index {index} mtime {seg2mtime_3[index].mtime} > {seg2mtime_2[index].mtime}"
+                else:
+                    # The rebuild hasn't happened yet, check that segment index is untouched
+                    assert seg2mtime_3[index].mtime == seg2mtime_2[
+                        index].mtime, f"Expected segment index {index} mtime {seg2mtime_3[index].mtime} == {seg2mtime_2[index].mtime}"
 
         # Now that we are back at the old version, proceed to upgrade all the way to HEAD
         remaining_versions = self.load_version_range(self.OLD_VERSION)[1:]

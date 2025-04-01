@@ -12,6 +12,8 @@ import struct
 import collections
 import hashlib
 import subprocess
+import os
+
 from typing import Iterator
 
 
@@ -141,7 +143,7 @@ def compute_size_for_file(file: Path, calc_md5: bool):
 
 
 def compute_size(data_dir: Path, sizes: bool, calculate_md5: bool,
-                 print_flat: bool):
+                 print_flat: bool, compaction_footers: bool):
     output = {}
     for ns in safe_listdir(data_dir):
         if not safe_isdir(ns):
@@ -170,11 +172,86 @@ def compute_size(data_dir: Path, sizes: bool, calculate_md5: bool,
                             # It's valid to have a segment deleted
                             # at anytime
                             continue
+                    if compaction_footers:
+                        try:
+                            if segment.suffix == ".compaction_index":
+                                seg_output[
+                                    "compaction_footer"] = read_compaction_footer(
+                                        segment)
+                        except FileNotFoundError:
+                            # It's valid to have a segment deleted
+                            # at anytime
+                            continue
                     part_output[segment.name] = seg_output
                 topic_output[partition.name] = part_output
             ns_output[topic.name] = topic_output
         output[ns.name] = ns_output
     return output
+
+
+def read_compaction_footer(file_path):
+    compacted_index_file = open(file_path, "rb")
+    fsize = os.stat(file_path).st_size
+    # Keep up to date with compacted_index::footer impl
+    # Footers are encoded with little-endian.
+
+    # v1: uint32_t, uint32_t, uint32_t, uint32_t, int8_t
+    u64 = 8
+    u32 = 4
+    i8 = 1
+    FOOTER_SIZE_V1 = sum([u32 + u32 + u32 + u32 + i8])
+    FOOTER_V1 = "<IIIIb"
+
+    # v2/v3: uint64_t, uint64_t, uint32_t, uint32_t, uint32_t, uint32_t, int8_t
+    FOOTER_SIZE_V2 = sum([u64 + u64 + u32 + u32 + u32 + u32 + i8])
+    FOOTER_V2 = "<QQIIIIb"
+
+    assert fsize >= FOOTER_SIZE_V1, f"Error reading compaction footer {file_path}, file size too small ({fsize})"
+
+    footer_buf_size = min(fsize, FOOTER_SIZE_V2)
+    offset = fsize - footer_buf_size
+    compacted_index_file.seek(offset)
+    footer = compacted_index_file.read(footer_buf_size)
+    FOOTER_FLAG_TRUNCATION = 1
+    FOOTER_FLAG_SELF_COMPACTION = 1 << 1
+    FOOTER_FLAG_INCOMPLETE = 1 << 2
+    res = dict()
+    # Try to parse as V1
+    try:
+        footer_v1 = footer[footer_buf_size - FOOTER_SIZE_V1:]
+        unpacked_footer = struct.unpack(FOOTER_V1, footer_v1)
+        res["size"] = unpacked_footer[0]
+        res["keys"] = unpacked_footer[1]
+        res["truncation"] = bool(
+            (unpacked_footer[2]
+             & FOOTER_FLAG_TRUNCATION) == FOOTER_FLAG_TRUNCATION)
+        res["self_compaction"] = bool(
+            (unpacked_footer[2]
+             & FOOTER_FLAG_SELF_COMPACTION) == FOOTER_FLAG_SELF_COMPACTION)
+        res["incomplete"] = bool(
+            (unpacked_footer[2]
+             & FOOTER_FLAG_INCOMPLETE) == FOOTER_FLAG_INCOMPLETE)
+        res["crc"] = unpacked_footer[3]
+        res["version"] = unpacked_footer[4]
+    except:
+        footer_v2 = footer[:]
+        unpacked_footer = struct.unpack(FOOTER_V2, footer_v2)
+        res["size"] = unpacked_footer[0]
+        res["keys"] = unpacked_footer[1]
+        # Deprecated size [2]
+        # Deprecated keys [3]
+        res["truncation"] = bool(
+            (unpacked_footer[4]
+             & FOOTER_FLAG_TRUNCATION) == FOOTER_FLAG_TRUNCATION)
+        res["self_compaction"] = bool(
+            (unpacked_footer[4]
+             & FOOTER_FLAG_SELF_COMPACTION) == FOOTER_FLAG_SELF_COMPACTION)
+        res["incomplete"] = bool(
+            (unpacked_footer[4]
+             & FOOTER_FLAG_INCOMPLETE) == FOOTER_FLAG_INCOMPLETE)
+        res["crc"] = unpacked_footer[5]
+        res["version"] = unpacked_footer[6]
+    return res
 
 
 if __name__ == "__main__":
@@ -191,6 +268,10 @@ if __name__ == "__main__":
                         action="store_true",
                         help='Also compute md5 checksums')
     parser.add_argument(
+        '--compaction-footers',
+        action="store_true",
+        help='Also read footers for compacted indices (if they exist)')
+    parser.add_argument(
         '--print-flat',
         action="store_true",
         help='Print output for each file instead of returning as json')
@@ -198,6 +279,7 @@ if __name__ == "__main__":
 
     data_dir = Path(args.data_dir)
     assert data_dir.exists(), f"{data_dir} must exist"
-    output = compute_size(data_dir, args.sizes, args.md5, args.print_flat)
+    output = compute_size(data_dir, args.sizes, args.md5, args.print_flat,
+                          args.compaction_footers)
     if not args.print_flat:
         json.dump(output, sys.stdout)

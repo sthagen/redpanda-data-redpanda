@@ -303,6 +303,19 @@ public:
     virtual void notify_data_translated(kafka::offset) = 0;
 
     /**
+     * Notifies the lag tracker about the data that is currently being
+     * translated.
+     * The inflight translation offset is used to calculate the translation
+     * backlog.
+     *
+     * This state is in memory only and may be lost if the translation state is
+     * discarded.
+     */
+    virtual void
+      notify_inflight_translation_iteration(std::optional<kafka::offset>)
+      = 0;
+
+    /**
      * Returns an estimated timestamp for the batch with requested
      * `kafka::offset`.
      *

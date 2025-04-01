@@ -446,6 +446,7 @@ redpanda_cc_library(
         "//src/v/iceberg:avro_utils",
         "//src/v/iceberg:compatibility_utils",
         "//src/v/iceberg:values",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@avro",
         "@protobuf",
         "@seastar",

@@ -370,6 +370,9 @@ public:
 
     virtual void notify_data_translated(kafka::offset){};
 
+    virtual void
+      notify_inflight_translation_iteration(std::optional<kafka::offset>){};
+
     virtual std::optional<model::timestamp>
     get_translated_offset_timestamp_estimate(kafka::offset) {
         return model::timestamp::now();

@@ -30,6 +30,19 @@ from rptest.services.catalog_service import CatalogType
 from google import protobuf
 from google.protobuf import text_format as pb_text_format, json_format as pb_json_format
 
+
+class AvroSchema:
+    def __init__(self, schema_str, record_generator, expected_trino,
+                 expected_spark):
+        self.schema_str = schema_str
+        self.record_generator = record_generator
+        self.expected_trino = expected_trino
+        self.expected_spark = expected_spark
+
+    def generate_record(self, t):
+        return self.record_generator(t)
+
+
 avro_schema_str = """
 {
     "type": "record",
@@ -41,6 +54,65 @@ avro_schema_str = """
     ]
 }
 """
+
+avro_schema_with_map_str = """
+{
+    "type": "record",
+    "namespace": "com.redpanda.examples.avro",
+    "name": "ClickEvent",
+    "fields": [
+        {"name": "number", "type": "long"},
+        {"name": "timestamp_us", "type": {"type": "long", "logicalType": "timestamp-micros"}},
+        {"name": "kv", "type": {"type": "map", "values": "long"}}
+    ]
+}
+"""
+
+AVRO_SCHEMA_TEST_CASES = {
+    "basic":
+    AvroSchema(
+        schema_str=avro_schema_str,
+        record_generator=lambda t: {
+            "number": int(t),
+            "timestamp_us": int(t * 1000000)
+        },
+        expected_trino=
+        [('redpanda',
+          'row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)',
+          '', ''), ('number', 'bigint', '', ''),
+         ('timestamp_us', 'timestamp(6)', '', '')],
+        expected_spark=
+        [('redpanda',
+          'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>',
+          None), ('number', 'bigint', None),
+         ('timestamp_us', 'timestamp_ntz', None), ('', '', ''),
+         ('# Partitioning', '', ''),
+         ('Part 0', 'hours(redpanda.timestamp)', '')]),
+    "with_map":
+    AvroSchema(
+        schema_str=avro_schema_with_map_str,
+        record_generator=lambda t: {
+            "number": int(t),
+            "timestamp_us": int(t * 1000000),
+            "kv": {
+                str(t): int(t)
+            }
+        },
+        expected_trino=
+        [('redpanda',
+          'row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)',
+          '', ''), ('number', 'bigint', '', ''),
+         ('timestamp_us', 'timestamp(6)', '', ''),
+         ('kv', 'map(varchar, bigint)', '', '')],
+        expected_spark=
+        [('redpanda',
+          'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>',
+          None), ('number', 'bigint', None),
+         ('timestamp_us', 'timestamp_ntz', None),
+         ('kv', 'map<string,bigint>', None), ('', '', ''),
+         ('# Partitioning', '', ''),
+         ('Part 0', 'hours(redpanda.timestamp)', '')]),
+}
 
 
 class DatalakeE2ETests(RedpandaTest):
@@ -84,8 +156,10 @@ class DatalakeE2ETests(RedpandaTest):
     @cluster(num_nodes=3)
     @matrix(cloud_storage_type=supported_storage_types(),
             query_engine=[QueryEngineType.SPARK, QueryEngineType.TRINO],
-            catalog_type=supported_catalog_types())
-    def test_avro_schema(self, cloud_storage_type, query_engine, catalog_type):
+            catalog_type=supported_catalog_types(),
+            test_case=list(AVRO_SCHEMA_TEST_CASES.keys()))
+    def test_avro_schema(self, cloud_storage_type, query_engine, catalog_type,
+                         test_case):
         count = 100
         table_name = f"redpanda.{self.topic_name}"
 
@@ -95,43 +169,32 @@ class DatalakeE2ETests(RedpandaTest):
                               catalog_type=catalog_type) as dl:
             dl.create_iceberg_enabled_topic(
                 self.topic_name, iceberg_mode="value_schema_id_prefix")
-
-            schema = avro.loads(avro_schema_str)
+            schema = AVRO_SCHEMA_TEST_CASES[test_case]
+            raw_schema = avro.loads(schema.schema_str)
             producer = AvroProducer(
                 {
                     'bootstrap.servers': self.redpanda.brokers(),
                     'schema.registry.url':
                     self.redpanda.schema_reg().split(",")[0]
                 },
-                default_value_schema=schema)
+                default_value_schema=raw_schema)
             for _ in range(count):
                 t = time.time()
-                record = {"number": int(t), "timestamp_us": int(t * 1000000)}
+                record = schema.generate_record(t)
                 producer.produce(topic=self.topic_name, value=record)
             producer.flush()
             dl.wait_for_translation(self.topic_name, msg_count=count)
 
             if query_engine == QueryEngineType.TRINO:
                 trino = dl.trino()
-                trino_expected_out = [(
-                    'redpanda',
-                    'row(partition integer, offset bigint, timestamp timestamp(6), headers array(row(key varbinary, value varbinary)), key varbinary)',
-                    '', ''), ('number', 'bigint', '', ''),
-                                      ('timestamp_us', 'timestamp(6)', '', '')]
+                trino_expected_out = schema.expected_trino
                 trino_describe_out = trino.run_query_fetch_all(
                     f"describe {table_name}")
                 assert trino_describe_out == trino_expected_out, str(
                     trino_describe_out)
             else:
                 spark = dl.spark()
-                spark_expected_out = [(
-                    'redpanda',
-                    'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>',
-                    None), ('number', 'bigint', None),
-                                      ('timestamp_us', 'timestamp_ntz', None),
-                                      ('', '', ''), ('# Partitioning', '', ''),
-                                      ('Part 0', 'hours(redpanda.timestamp)',
-                                       '')]
+                spark_expected_out = schema.expected_spark
                 spark_describe_out = spark.run_query_fetch_all(
                     f"describe {table_name}")
                 assert spark_describe_out == spark_expected_out, str(

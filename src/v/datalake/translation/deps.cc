@@ -19,6 +19,7 @@
 #include "datalake/record_translator.h"
 #include "datalake/serde_parquet_writer.h"
 #include "datalake/translation/state_machine.h"
+#include "datalake/translation/utils.h"
 #include "datalake/translation_task.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/utils/txn_reader.h"
@@ -751,26 +752,47 @@ public:
         if (translated_offset >= _translation_target->offset) {
             _translation_target.reset();
         }
+        // Reset inflight translation lto. The lag tracker is notified about
+        // completed translation.
+        _inflight_translation_lto.reset();
+    }
+
+    void notify_inflight_translation_iteration(
+      std::optional<kafka::offset> translated_offset) final {
+        vlog(
+          datalake_log.trace,
+          "[{}] Inflight translation iteration with offset {} ",
+          _partition->ntp(),
+          translated_offset);
+        if (!translated_offset) {
+            _inflight_translation_lto.reset();
+            return;
+        }
+        _inflight_translation_lto.emplace(translated_offset.value());
     }
 
     std::optional<size_t> translation_backlog() const final {
-        auto highest_translated_offset
-          = _stm->cached_highest_translated_offset();
-        if (
-          !highest_translated_offset
-          || highest_translated_offset < kafka::offset{0}) {
-            return std::nullopt;
-        }
+        auto checkpointed_lto = _stm->cached_highest_translated_offset();
+
+        const auto final_lto
+          = _inflight_translation_lto
+              ? std::max(checkpointed_lto, *_inflight_translation_lto)
+              : checkpointed_lto;
+
         auto min_offset_for_translation = calculate_min_offset_for_translation(
           _partition->is_read_replica_mode_enabled(), *_partition_proxy);
-        if (highest_translated_offset <= min_offset_for_translation) {
+
+        if (final_lto <= min_offset_for_translation) {
             return _partition->size_bytes();
         }
-        const auto highest_translated_log_offset
-          = _partition->log()->to_log_offset(
-            kafka::offset_cast(*highest_translated_offset));
-        const auto max_translatable_offset = _partition->last_stable_offset();
-        if (highest_translated_log_offset == max_translatable_offset) {
+
+        const auto log_lto = highest_log_offset_below_next(
+          _partition->log(), final_lto);
+
+        const auto max_translatable_offset = model::prev_offset(
+          _partition->last_stable_offset());
+
+        if (log_lto == max_translatable_offset) {
             return 0;
         }
         /**
@@ -778,12 +800,12 @@ public:
          * simply smaller than the highest translated offset. f.e. during the
          * partition movement. In such cases, we cannot calculate the backlog.
          */
-        if (highest_translated_log_offset > max_translatable_offset) {
+        if (log_lto > max_translatable_offset) {
             return std::nullopt;
         }
 
         auto size_after_translated = _partition->log()->size_bytes_after_offset(
-          highest_translated_log_offset);
+          log_lto);
 
         auto size_after_max_translatable
           = _partition->log()->size_bytes_after_offset(max_translatable_offset);
@@ -795,7 +817,7 @@ public:
               "greater than or equal to the size of log after max translatable "
               "offset({}): {}",
               _partition->ntp().path(),
-              highest_translated_log_offset,
+              log_lto,
               size_after_translated,
               max_translatable_offset,
               size_after_max_translatable);
@@ -848,6 +870,7 @@ private:
     // the corresponding record's write time, replicated when we translate
     // an offset meeting or exceeding target.offset.
     std::optional<timestamped_offset> _translation_target;
+    std::optional<kafka::offset> _inflight_translation_lto;
 };
 
 std::unique_ptr<translation_lag_tracker>

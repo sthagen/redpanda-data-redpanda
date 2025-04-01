@@ -181,16 +181,12 @@ class OffsetsLog:
         self.ntp = ntp
 
     def __iter__(self):
-        paths = []
-        for path in self.ntp.segments:
-            paths.append(path)
-        paths.sort()
         # 1 - raft_data - regular offset commits
         # 10 - tx_fence - tx offset commits
         # 15 - group_commit_tx
         # 16 - group_abort_tx
         accepted_batch_types = set([1, 10, 15, 16])
-        for path in paths:
+        for path in self.ntp.segments:
             s = Segment(path)
             for b in s:
                 if b.header.type not in accepted_batch_types:

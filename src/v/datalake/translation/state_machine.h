@@ -70,7 +70,7 @@ public:
      * not call state machine sync, risking to have the stale value if the
      * leadership changed.
      */
-    std::optional<kafka::offset> cached_highest_translated_offset() const {
+    kafka::offset cached_highest_translated_offset() const {
         return _highest_translated_offset;
     }
 

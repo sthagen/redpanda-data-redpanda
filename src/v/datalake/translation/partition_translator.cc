@@ -193,6 +193,8 @@ partition_translator::fetch_translation_offsets(retry_chain_node& rcn) {
     }
 
     auto current_translation_lto = _translation_ctx->last_translated_offset();
+    _lag_tracking->notify_inflight_translation_iteration(
+      current_translation_lto);
     /**
      * If there is no current translation lto or checkpointed value is
      * greater than the current translation lto update it.

@@ -21,6 +21,7 @@ class Segment:
         self.data_file = None
         self.base_index = None
         self.compaction_index = None
+        self.compaction_footer = None
 
         # Size of data_file, if caller chooses to populate it via set_size
         self.size = None
@@ -54,6 +55,9 @@ class Segment:
 
     def set_size(self, s: int):
         self.size = s
+
+    def set_compaction_footer(self, compaction_footer: dict):
+        self.compaction_footer = compaction_footer
 
     def __repr__(self):
         return "{}:{}{}{}".format(self.name, "D" if self.data_file else "d",
@@ -90,6 +94,14 @@ class Partition:
         if not (re.match(r"^\d+\-\d+\-v\d+$", seg) and ext == ".log"):
             return
         self.segments[seg].set_size(size)
+
+    def set_segment_compaction_footer(self, segment_name: str,
+                                      compaction_footer: dict):
+        seg, ext = os.path.splitext(segment_name)
+        if not (re.match(r"^\d+\-\d+\-v\d+$", seg)
+                and ext == ".compaction_index"):
+            return
+        self.segments[seg].set_compaction_footer(compaction_footer)
 
     def delete_segment(self, segment_name: str):
         try:
