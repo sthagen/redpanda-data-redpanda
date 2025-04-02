@@ -370,7 +370,9 @@ redpanda_cc_library(
         "//src/v/container:chunked_hash_map",
         "//src/v/metrics",
         "//src/v/ssx:future_util",
+        "//src/v/storage",
         "//src/v/utils:absl_sstring_hash",
+        "//src/v/utils:human",
         "@seastar",
     ],
 )

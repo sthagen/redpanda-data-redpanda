@@ -13,6 +13,7 @@
 #include "kafka/server/logger.h"
 #include "metrics/prometheus_sanitize.h"
 #include "ssx/future-util.h"
+#include "utils/human.h"
 namespace kafka {
 using namespace std::chrono_literals;
 namespace {
@@ -44,37 +45,41 @@ datalake_throttle_manager::status datalake_throttle_manager::status::operator+(
   const datalake_throttle_manager::status& o) const {
     return datalake_throttle_manager::status{
       .max_shares_assigned = max_shares_assigned || o.max_shares_assigned,
-      .overdue_translation_partition_count
-      = overdue_translation_partition_count
-        + o.overdue_translation_partition_count,
-      .partitions_translation_blocked = partitions_translation_blocked
-                                        + o.partitions_translation_blocked};
+      .total_translation_backlog = total_translation_backlog
+                                   + o.total_translation_backlog};
 }
 
-bool datalake_throttle_manager::status::needs_throttling() const {
-    return max_shares_assigned
-           && (overdue_translation_partition_count > 0 || partitions_translation_blocked > 0);
+bool datalake_throttle_manager::needs_throttling() const {
+    // check if disk space info is already available
+    if (!_disk_space_info) [[unlikely]] {
+        return false;
+    }
+    return _translation_status.max_shares_assigned
+           && _translation_status.total_translation_backlog
+                > _backlog_size_throttling_ratio() * _disk_space_info->total;
 }
 
 std::ostream&
 operator<<(std::ostream& o, const datalake_throttle_manager::status& s) {
     fmt::print(
       o,
-      "{{max_shares_assigned: {}, overdue_translation_partition_count: {}, "
-      "partitions_translation_blocked: {}}}",
+      "{{max_shares_assigned: {}, total_translation_backlog: {}}}",
       s.max_shares_assigned,
-      s.overdue_translation_partition_count,
-      s.partitions_translation_blocked);
+      human::bytes(s.total_translation_backlog));
     return o;
 }
 
 datalake_throttle_manager::datalake_throttle_manager(
   status_provider_fn status_provider,
+  ss::sharded<storage::node>& storage_node,
   config::binding<std::chrono::milliseconds> producer_gc_threshold,
-  config::binding<std::chrono::milliseconds> max_kafka_throttle)
+  config::binding<std::chrono::milliseconds> max_kafka_throttle,
+  config::binding<double> backlog_size_throttling_ratio)
   : _shard_status_provider(std::move(status_provider))
+  , _storage_node(storage_node)
   , _producer_gc_threshold(std::move(producer_gc_threshold))
-  , _max_kafka_throttle(std::move(max_kafka_throttle)) {
+  , _max_kafka_throttle(std::move(max_kafka_throttle))
+  , _backlog_size_throttling_ratio(std::move(backlog_size_throttling_ratio)) {
     _update_timer.set_callback([this] {
         ssx::spawn_with_gate(
           _gate, [this] { return gc_and_update_global_producers_map(); });
@@ -89,10 +94,21 @@ void datalake_throttle_manager::start() {
      */
     if (ss::this_shard_id() == 0) {
         _update_timer.arm_periodic(100ms);
+        // storage node is only available on shard 0
+        _storage_node_notification
+          = _storage_node.local().register_disk_notification(
+            storage::node::disk_type::data,
+            [this](storage::node::disk_space_info dsi) {
+                _disk_space_info = dsi;
+            });
     }
 }
 
 ss::future<> datalake_throttle_manager::stop() {
+    if (ss::this_shard_id() == 0) {
+        _storage_node.local().unregister_disk_notification(
+          storage::node::disk_type::data, _storage_node_notification);
+    }
     _update_timer.cancel();
     return _gate.close();
 }
@@ -116,10 +132,15 @@ ss::future<> datalake_throttle_manager::gc_and_update_global_producers_map() {
       },
       status{},
       [](status acc, status shard_status) { return acc + shard_status; });
-    if (!_translation_status.needs_throttling()) {
+
+    if (!needs_throttling()) {
         _last_no_issues_timestamp = clock_type::now();
     }
-    if (_translation_status.needs_throttling()) [[unlikely]] {
+    /*
+     * Info level log if throttling may be applied, this should be a rare
+     * condition.
+     */
+    if (needs_throttling()) [[unlikely]] {
         vlog(
           client_quota_log.info,
           "Translation status updated: {}, throttling may be applied.",
@@ -134,8 +155,10 @@ ss::future<> datalake_throttle_manager::gc_and_update_global_producers_map() {
       boost::irange(ss::smp::count), [this](auto shard_id) {
           return container().invoke_on(
             shard_id,
-            [status = _translation_status](datalake_throttle_manager& other) {
+            [status = _translation_status, disk_space_info = _disk_space_info](
+              datalake_throttle_manager& other) {
                 other._translation_status = status;
+                other._disk_space_info = disk_space_info;
                 return std::exchange(other._shard_local_producers, {});
             });
       });
@@ -155,7 +178,7 @@ datalake_throttle_manager::maybe_throttle_producer(
   std::optional<std::string_view> client_id) {
     // fast path, backlog is below the threshold
 
-    if (!_translation_status.needs_throttling()) [[likely]] {
+    if (!needs_throttling()) [[likely]] {
         co_return no_throttling;
     }
 
@@ -166,15 +189,23 @@ datalake_throttle_manager::maybe_throttle_producer(
               vlog(
                 client_quota_log.debug,
                 "Throttling producer {} for {}ms, current "
-                "status: {}",
+                "status: {}, disk total space: {}, translation backlog "
+                "throttling threshold: {}",
                 client_id,
                 throttle_ms,
-                shard_0_manager._translation_status);
+                shard_0_manager._translation_status,
+                human::bytes(shard_0_manager._disk_space_info->total),
+                human::bytes(
+                  shard_0_manager._backlog_size_throttling_ratio()
+                  * shard_0_manager._disk_space_info->total));
           }
           return throttle_ms;
       });
     // record throttle for exposing a metric
     _total_throttle += throttle_ms.count();
+    if (throttle_ms > 0ms) {
+        _throttled_requests++;
+    }
     co_return throttle_ms;
 }
 
@@ -182,7 +213,7 @@ std::chrono::milliseconds datalake_throttle_manager::get_producer_throttle(
   const std::optional<std::string_view>& client_id) {
     vassert(
       ss::this_shard_id() == 0, "Throttle can only be calculate on shard 0");
-    if (!_translation_status.needs_throttling()) [[likely]] {
+    if (!needs_throttling()) [[likely]] {
         return no_throttling;
     }
     auto effective_client_id = get_effective_client_id(client_id);
@@ -200,29 +231,26 @@ std::chrono::milliseconds
 datalake_throttle_manager::calculate_throttle() const {
     vassert(
       ss::this_shard_id() == 0, "Throttle can only be calculate on shard 0");
-    if (_translation_status.partitions_translation_blocked > 0) {
-        // if translation is blocked (this should never really be the case),
-        // use max throttle
-        return _max_kafka_throttle();
+
+    if (!needs_throttling()) {
+        return no_throttling;
     }
     // Heuristic:
     // we apply the incremental throttle based on time spent in the degraded
     // translation state, the longer the time the more we throttle. The
-    // throttle is set to max after 5 minutes
+    // throttle is set to max after 50 minutes
+    auto time_in_degraded_state
+      = std::chrono::duration_cast<std::chrono::milliseconds>(
+        ss::lowres_clock::now() - _last_no_issues_timestamp);
 
-    if (_translation_status.overdue_translation_partition_count > 0) {
-        auto time_in_degraded_state
-          = std::chrono::duration_cast<std::chrono::milliseconds>(
-            ss::lowres_clock::now() - _last_no_issues_timestamp);
+    static constexpr auto max_throttle_time = std::chrono::milliseconds(50min);
+    const auto max_throttle_ratio = std::min(
+      static_cast<double>(time_in_degraded_state.count())
+        / max_throttle_time.count(),
+      1.0);
 
-        const auto max_throttle_ratio = std::min(
-          double(time_in_degraded_state.count()) / 300000, 1.0);
-
-        return std::chrono::milliseconds(static_cast<size_t>(
-          max_throttle_ratio * _max_kafka_throttle().count()));
-    }
-
-    return 0ms;
+    return std::chrono::milliseconds(
+      static_cast<size_t>(max_throttle_ratio * _max_kafka_throttle().count()));
 }
 
 void datalake_throttle_manager::setup_metrics() {
@@ -238,6 +266,10 @@ void datalake_throttle_manager::setup_metrics() {
           [this] { return _total_throttle; },
           sm::description(
             "Total datalake producer throttle time in milliseconds")),
+        sm::make_counter(
+          "throttled_requests",
+          [this] { return _throttled_requests; },
+          sm::description("Number of requests throttled")),
       });
 }
 

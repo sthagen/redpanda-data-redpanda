@@ -54,6 +54,7 @@ private:
      * group.
      */
     config::binding<double> _proportional_coeff;
+    config::binding<double> _integral_coeff;
     /**
      * The target backlog size for the controller to keep. The controller will
      * adjust the scheduling group shares keep the average backlog size close to
@@ -65,6 +66,9 @@ private:
     // Current value of the backlog (currently it is average size of data to
     // translate for datalake enabled partitions)
     long double _current_sample{0};
+    long double _total_err{0};
+    std::chrono::steady_clock::time_point _last_sample_time
+      = std::chrono::steady_clock::now();
     /**
      * Limits for controlled scheduling group shares.
      */
@@ -72,5 +76,6 @@ private:
     int _max_shares{1000};
     ss::abort_source _as;
     metrics::internal_metric_groups _metrics;
+    void reset();
 };
 } // namespace datalake

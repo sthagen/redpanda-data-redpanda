@@ -55,7 +55,7 @@ static std::unique_ptr<type_resolver> make_type_resolver(
         return std::make_unique<binary_type_resolver>();
     case model::iceberg_mode::variant::value_schema_id_prefix:
         return std::make_unique<record_schema_resolver>(sr, cache);
-    case model::iceberg_mode::variant::value_subject_latest:
+    case model::iceberg_mode::variant::value_schema_latest:
         auto subject = pandaproxy::schema_registry::subject(
           fmt::format("{}-value", topic_name));
         if (auto explicit_subject = mode.subject_name()) {
@@ -80,7 +80,7 @@ make_record_translator(const model::iceberg_mode& mode) {
     case model::iceberg_mode::variant::key_value:
         return std::make_unique<key_value_translator>();
     case model::iceberg_mode::variant::value_schema_id_prefix:
-    case model::iceberg_mode::variant::value_subject_latest:
+    case model::iceberg_mode::variant::value_schema_latest:
         return std::make_unique<structured_data_translator>();
     }
 }
@@ -147,25 +147,12 @@ datalake_manager::datalake_manager(
       config::shard_local_cfg().datalake_disk_space_monitor_interval.bind()) {}
 datalake_manager::~datalake_manager() = default;
 
-double datalake_manager::average_translation_backlog() {
-    size_t total_lag = 0;
-    size_t translators_with_backlog = 0;
-    const auto& translators = _scheduler.all_translators();
-    for (const auto& [_, translator] : translators) {
-        auto backlog_size = translator.status().translation_backlog;
-        // skip over translators that are not yet ready to report anything
-        if (!backlog_size) {
-            continue;
-        }
-        total_lag += backlog_size.value();
-        translators_with_backlog++;
+size_t datalake_manager::total_translation_backlog() const {
+    size_t total_backlog = 0;
+    for (const auto& [_, translator] : _scheduler.all_translators()) {
+        total_backlog += translator.status().translation_backlog.value_or(0);
     }
-
-    if (translators_with_backlog == 0) {
-        return 0;
-    }
-
-    return total_lag / translators_with_backlog;
+    return total_backlog;
 }
 
 ss::lw_shared_ptr<class translation_probe>
@@ -273,7 +260,7 @@ ss::future<> datalake_manager::start() {
 
     _schema_cache->start();
     _backlog_controller = std::make_unique<backlog_controller>(
-      [this] { return average_translation_backlog(); }, _sg);
+      [this] { return total_translation_backlog(); }, _sg);
     co_await _backlog_controller->start();
 
     /*

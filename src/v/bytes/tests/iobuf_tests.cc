@@ -460,7 +460,7 @@ SEASTAR_THREAD_TEST_CASE(test_next_chunk_allocation_append_iobuf) {
     }
     // slow but tha'ts life.
     auto distance = std::distance(buf.begin(), buf.end());
-    BOOST_REQUIRE_EQUAL(distance, 323);
+    BOOST_REQUIRE_EQUAL(distance, 322);
     constexpr size_t sz = 40000 * 1024;
     auto msg = iobuf_as_scattered(std::move(buf));
     BOOST_REQUIRE_EQUAL(msg.size(), sz);

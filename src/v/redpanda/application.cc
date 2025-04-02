@@ -1425,18 +1425,22 @@ void application::wire_up_runtime_services(
           [&mgr = _datalake_manager] {
               return ssx::now(kafka::datalake_throttle_manager::status{
                 .max_shares_assigned = mgr.local().max_shares_assigned(),
-                .overdue_translation_partition_count
-                = mgr.local().overdue_translation_partition_count(),
-                .partitions_translation_blocked
-                = mgr.local().partitions_with_translation_blocked(),
+                .total_translation_backlog
+                = mgr.local().total_translation_backlog(),
+
               });
           },
+          std::ref(storage_node),
           ss::sharded_parameter([] {
               return config::shard_local_cfg()
                 .max_kafka_throttle_delay_ms.bind();
           }),
           ss::sharded_parameter([] {
               return config::shard_local_cfg().quota_manager_gc_sec.bind();
+          }),
+          ss::sharded_parameter([] {
+              return config::shard_local_cfg()
+                .iceberg_throttle_backlog_size_ratio.bind();
           }))
           .get();
 

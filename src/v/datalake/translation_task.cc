@@ -272,10 +272,12 @@ translation_task::finish(
     if (datalake_log.is_enabled(seastar::log_level::trace)) {
         vlog(
           datalake_log.trace,
-          "translation result base offset: {}, last offset: {}, data files: {}",
+          "translation result base offset: {}, last offset: {}, data files: "
+          "{}, dlq files: {}",
           write_result.start_offset,
           write_result.last_offset,
-          fmt::join(write_result.data_files, ", "));
+          write_result.data_files.size(),
+          write_result.dlq_files.size());
     }
 
     size_t rows_added = 0;

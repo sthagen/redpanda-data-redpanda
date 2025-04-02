@@ -438,7 +438,7 @@ class DatalakeE2ETests(RedpandaTest):
             )
             dl.create_iceberg_enabled_topic(
                 self.topic_name,
-                iceberg_mode="value_subject_latest:protobuf_name=Person")
+                iceberg_mode="value_schema_latest:protobuf_name=Person")
             produce_protos()
             dl.wait_for_translation(self.topic_name, msg_count=count)
 

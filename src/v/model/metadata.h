@@ -612,7 +612,7 @@ public:
         // TopicNamingStrategy (<topic>-value) and if protobuf the 0th message
         // in the file descriptor. However these can both be overridden by the
         // user.
-        value_subject_latest = 3,
+        value_schema_latest = 3,
     };
     static iceberg_mode disabled;
 
@@ -622,7 +622,7 @@ public:
 
     // Creates a new iceberg mode with the latest protobuf value kind and the
     // protobuf full name.
-    static iceberg_mode value_subject_latest(
+    static iceberg_mode value_schema_latest(
       std::string_view protobuf_full_name, std::string_view subject_name) {
         return {latest_protobuf_value_t{}, protobuf_full_name, subject_name};
     }

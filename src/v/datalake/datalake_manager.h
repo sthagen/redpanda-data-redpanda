@@ -112,12 +112,16 @@ public:
      */
     static ss::future<> prepare_staging_directory(std::filesystem::path);
 
+    /**
+     * Returns total number of bytes that are ready to be translated for all
+     * datalake enabled partitions on a current shard.
+     */
+    size_t total_translation_backlog() const;
+
 private:
     using translator = std::unique_ptr<translation::partition_translator>;
 
     ss::future<> handle_translator_state_change(const model::ntp&);
-
-    double average_translation_backlog();
 
     /// \note The probe is created on the first use.
     ss::lw_shared_ptr<translation_probe> get_or_create_probe(const model::ntp&);

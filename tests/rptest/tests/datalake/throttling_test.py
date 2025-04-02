@@ -11,6 +11,7 @@ import re
 import time
 from rptest.clients.default import DefaultClient
 from rptest.clients.rpk import RpkTool, TopicSpec
+from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from random import randint
 
@@ -58,14 +59,24 @@ class DatalakeThrottlingTest(RedpandaTest):
         sample = self.redpanda.metrics_sample("total_throttle")
         assert sample is not None, "total_throttle metric not found"
         for s in sample.samples:
-            self.logger.debug(f"metrics sample: {s}")
+            self.logger.debug(f"total throttle - metrics sample: {s}")
+            total += s.value
+        return total
+
+    def _throttled_requests(self):
+        total = 0
+        sample = self.redpanda.metrics_sample("throttled_requests")
+        assert sample is not None, "throttled_requests metric not found"
+        for s in sample.samples:
+            self.logger.debug(f"requests throttled - metrics sample: {s}")
             total += s.value
         return total
 
     def producer_throttled(self, dl: DatalakeServices):
         dl.produce_to_topic(self.topic_name, 128, 10240)
         throttle = self._total_throttle()
-        return throttle > 0
+        throttled_requests = self._throttled_requests()
+        return throttle > 0 and throttled_requests > 0
 
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
@@ -92,9 +103,23 @@ class DatalakeThrottlingTest(RedpandaTest):
                 "datalake_scheduler_max_concurrent_translations":
                 0,
                 "iceberg_target_backlog_size":
-                1000
+                1000,
+                "iceberg_backlog_controller_p_coeff":
+                1.0,
+                "iceberg_throttle_backlog_size_ratio":
+                0.0005
             })
+            admin = Admin(self.redpanda)
 
+            # Set the disk space to relatively small value
+            new_total = 20 * (1024 * 1024 * 1024)
+            new_free = 10 * (1024 * 1024 * 1024)
+            admin.set_disk_stat_override(
+                "data",
+                self.redpanda.nodes[0],
+                total_bytes=new_total,
+                free_bytes=new_free,
+            )
             # Produce some more messages
             wait_until(lambda: self.producer_throttled(dl), timeout_sec=60)
 

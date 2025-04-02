@@ -3971,20 +3971,34 @@ configuration::configuration()
       "iceberg_backlog_controller_p_coeff",
       "Proportional coefficient for the Iceberg backlog controller. Number of "
       "shares assigned to the datalake scheduling group will be proportional "
-      "to the backlog size error. More negative value means larger and faster "
-      "changes in the number of shares in the datalake scheduling group.",
+      "to the backlog size error.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      -0.0003)
+      0.00001)
+  , iceberg_backlog_controller_i_coeff(
+      *this,
+      "iceberg_backlog_controller_i_coeff",
+      "Integral coefficient for the Iceberg backlog controller. The error is "
+      "integrated (accumulated) over time and the aggregated value contributes "
+      "to the datalake translation priority with this coefficient.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      0.005)
   , iceberg_target_backlog_size(
       *this,
       "iceberg_target_backlog_size",
-      "Average size of the datalake translation backlog, per partition, that "
+      "Total size of the datalake translation backlog that "
       "the backlog controller will try to maintain. When a backlog size is "
       "larger than the setpoint a backlog controller will increase the "
       "translation scheduling group priority.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      5_MiB,
+      100_MiB,
       {.min = 0, .max = std::numeric_limits<uint32_t>::max()})
+  , iceberg_throttle_backlog_size_ratio(
+      *this,
+      "iceberg_throttle_backlog_size_ratio",
+      "Ration of the total backlog size to the disk space at which the "
+      "throttle to iceberg producers is applied",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      0.3)
   , iceberg_delete(
       *this,
       "iceberg_delete",

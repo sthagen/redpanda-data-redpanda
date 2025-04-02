@@ -251,6 +251,11 @@ private:
     size_t last_allocation_size() const;
 
     bool try_copy_append(const char* ptr, size_t size);
+    // the pointer passed to this function should be "owning".
+    // iobuf will manage it's lifetime after its been passed.
+    // this function is only used internally by other `iobuf::append`
+    // functions in order to centralize some logic.
+    void append(fragment*);
 
     container _frags;
     size_t _size{0};
@@ -289,14 +294,15 @@ inline size_t iobuf::last_allocation_size() const {
     return _frags.empty() ? details::io_allocation_size::default_chunk_size
                           : _frags.back().capacity();
 }
-inline void iobuf::append(std::unique_ptr<fragment> f) {
+inline void iobuf::append(fragment* f) {
     if (!_frags.empty()) {
         _frags.back().trim();
     }
     // NOTE: this _must_ be size and _not_ capacity
     _size += f->size();
-    _frags.push_back(*f.release());
+    _frags.push_back(*f);
 }
+inline void iobuf::append(std::unique_ptr<fragment> f) { append(f.release()); }
 inline void iobuf::prepend(std::unique_ptr<fragment> f) {
     _size += f->size();
     _frags.push_front(*f.release());
@@ -394,38 +400,29 @@ iobuf::try_copy_append(const char* ptr, size_t size) {
         return;
     }
 
-    if (available_bytes() > 0) {
-        if (_frags.back().is_empty()) {
-            pop_back();
-        } else {
-            _frags.back().trim();
-        }
+    if (unlikely(available_bytes() > 0 && _frags.back().is_empty())) {
+        pop_back();
     }
     append(std::make_unique<fragment>(std::move(b)));
 }
 
 /// appends the contents of buffer; might pack values into existing space
 inline void iobuf::append(iobuf&& o) {
-    for (auto& f : o._frags) {
-        auto fsize = f.size();
+    while (!o._frags.empty()) {
+        fragment* f = &o._frags.front();
+        o._frags.pop_front();
 
-        if (unlikely(!fsize)) {
+        auto fsize = f->size();
+        if (!fsize || try_copy_append(f->get(), fsize)) {
+            details::dispose_io_fragment(f);
             continue;
         }
 
-        if (try_copy_append(f.get(), fsize)) {
-            continue;
+        if (unlikely(!_frags.empty() && _frags.back().is_empty())) {
+            pop_back();
         }
 
-        if (available_bytes() > 0) {
-            if (_frags.back().is_empty()) {
-                pop_back();
-            } else {
-                _frags.back().trim();
-            }
-        }
-
-        append(std::move(f).unoptimized_release());
+        append(f);
     }
     o.clear();
 }

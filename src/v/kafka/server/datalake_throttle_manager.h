@@ -12,6 +12,7 @@
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
 #include "metrics/metrics.h"
+#include "storage/node.h"
 #include "utils/absl_sstring_hash.h"
 
 #include <seastar/core/future.hh>
@@ -36,10 +37,8 @@ class datalake_throttle_manager
 public:
     struct status {
         bool max_shares_assigned{false};
-        size_t overdue_translation_partition_count{0};
-        size_t partitions_translation_blocked{0};
+        size_t total_translation_backlog{0};
 
-        bool needs_throttling() const;
         status operator+(const status& o) const;
 
         friend std::ostream& operator<<(std::ostream&, const status&);
@@ -54,8 +53,10 @@ public:
 
     datalake_throttle_manager(
       status_provider_fn,
+      ss::sharded<storage::node>&,
       config::binding<std::chrono::milliseconds>,
-      config::binding<std::chrono::milliseconds>);
+      config::binding<std::chrono::milliseconds>,
+      config::binding<double>);
 
     void start();
     ss::future<> stop();
@@ -89,9 +90,13 @@ private:
 
     void setup_metrics();
 
+    bool needs_throttling() const;
+
     status_provider_fn _shard_status_provider;
+    ss::sharded<storage::node>& _storage_node;
     config::binding<std::chrono::milliseconds> _producer_gc_threshold;
     config::binding<std::chrono::milliseconds> _max_kafka_throttle;
+    config::binding<double> _backlog_size_throttling_ratio;
 
     // Timestamp marking a last time when the Iceberg translation reported no
     // issues. This timestamp is used to calculate the throttle, the longer the
@@ -106,7 +111,12 @@ private:
     producers_map_t _shard_local_producers;
     ss::timer<clock_type> _update_timer;
     size_t _total_throttle{0};
+    size_t _throttled_requests{0};
     metrics::internal_metric_groups _metrics;
+    storage::node::notification_id _storage_node_notification;
+    // The disk space info is set by the notification on shard 0 and then
+    // propagated to other shards in the update task.
+    std::optional<storage::node::disk_space_info> _disk_space_info;
     ss::gate _gate;
 };
 } // namespace kafka

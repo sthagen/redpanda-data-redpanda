@@ -329,7 +329,7 @@ inline void rjson_serialize(
     wr.StartObject();
     wr.Key("kind");
     rjson_serialize(wr, m.kind());
-    if (m.kind() == model::iceberg_mode::variant::value_subject_latest) {
+    if (m.kind() == model::iceberg_mode::variant::value_schema_latest) {
         wr.Key("protobuf_full_name");
         rjson_serialize(wr, m.protobuf_full_name().value_or(""));
         wr.Key("subject_name");
@@ -356,7 +356,7 @@ inline void read_value(const json::Value& rd, model::iceberg_mode& m) {
     case model::iceberg_mode::variant::value_schema_id_prefix:
         m = model::iceberg_mode::value_schema_id_prefix;
         break;
-    case model::iceberg_mode::variant::value_subject_latest:
+    case model::iceberg_mode::variant::value_schema_latest:
         it = obj.FindMember("protobuf_full_name");
         if (it == obj.MemberEnd()) {
             throw std::runtime_error(
@@ -371,7 +371,7 @@ inline void read_value(const json::Value& rd, model::iceberg_mode& m) {
         }
         ss::sstring subject;
         read_value(it->value, subject);
-        m = model::iceberg_mode::value_subject_latest(name, subject);
+        m = model::iceberg_mode::value_schema_latest(name, subject);
         break;
     }
 }
