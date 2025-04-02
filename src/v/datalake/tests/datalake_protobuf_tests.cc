@@ -178,6 +178,15 @@ TEST_CORO(SchemaProtobuf, TestMessageWithOneOfField) {
         IsField(4, "oneof_bool", boolean_type{})));
 }
 
+TEST_CORO(SchemaProtobuf, TestMessageWithTimestamp) {
+    auto d = StructWithTimestamp::GetDescriptor();
+    auto result = datalake::type_to_iceberg(*d);
+    ASSERT_FALSE_CORO(result.has_error());
+    auto field = std::move(result.value());
+    EXPECT_THAT(
+      field.fields, ElementsAre(IsField(1, "timestamp", timestamp_type{})));
+}
+
 TEST_CORO(SchemaProtobuf, TestProtoTestMessages) {
     auto d = protobuf_test_messages::editions::TestAllTypesEdition2023::
       GetDescriptor();
@@ -553,6 +562,22 @@ TEST(values_protobuf, TestUInt64Fallback) {
             OptionalIcebergPrimitive<long_value>(-123),
             OptionalIcebergPrimitive<string_value>("123")));
     }
+}
+
+TEST(values_protobuf, TestTimestamp) {
+    StructWithTimestamp ts;
+    ts.mutable_timestamp()->set_seconds(1743540027);
+    ts.mutable_timestamp()->set_nanos(1635902);
+    auto result = serialize_and_convert(ts).get();
+    ASSERT_TRUE(result.has_value());
+    auto r_opt = std::move(result.value());
+    ASSERT_TRUE(r_opt.has_value());
+    auto struct_v = std::get<std::unique_ptr<iceberg::struct_value>>(
+      std::move(r_opt.value()));
+
+    ASSERT_THAT(
+      struct_v->fields,
+      ElementsAre(OptionalIcebergPrimitive<timestamp_value>(1743540027001635)));
 }
 
 TEST_CORO(values_protobuf, TestNotSupportedMessageType) {

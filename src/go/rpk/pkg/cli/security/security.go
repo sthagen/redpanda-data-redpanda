@@ -12,6 +12,7 @@ package security
 import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/security/acl"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/security/role"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/security/secret"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/security/user"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/spf13/afero"
@@ -29,6 +30,7 @@ func NewCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		acl.NewCommand(fs, p),
 		role.NewCommand(fs, p),
 		user.NewCommand(fs, p),
+		secret.NewCommand(fs, p),
 	)
 	return cmd
 }

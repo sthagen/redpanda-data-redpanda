@@ -294,6 +294,7 @@ redpanda_cc_library(
         "//src/v/iceberg:values",
         "//src/v/serde/protobuf",
         "//src/v/ssx:future_util",
+        "@abseil-cpp//absl/time",
         "@fmt",
         "@protobuf",
         "@seastar",

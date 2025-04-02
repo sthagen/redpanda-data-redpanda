@@ -1018,9 +1018,9 @@ configuration::configuration()
       "The topic property `min.cleanable.dirty.ratio` overrides the value of "
       "`min_cleanable_dirty_ratio` at the topic level.",
       {.needs_restart = needs_restart::no,
-       .example = "0.5",
+       .example = "0.2",
        .visibility = visibility::user},
-      0.5,
+      0.2,
       {.min = 0.0, .max = 1.0})
   , log_disable_housekeeping_for_tests(
       *this,
@@ -4084,9 +4084,43 @@ configuration::configuration()
       "Size, in bytes, of the amount of per translator data that may be "
       "flushed to disk before the translator will upload and remove its "
       "current on disk data.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       32_MiB,
       {.min = 1_MiB})
+  , datalake_disk_space_monitor_enable(
+      *this,
+      "datalake_disk_space_monitor_enable",
+      "Option to explicitly disable enforcement of datalake disk space usage",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      true)
+  , datalake_disk_space_monitor_interval(
+      *this,
+      "datalake_disk_space_monitor_interval",
+      "The amount of time between invocations of the datalake disk space usage "
+      "monitor which examines disk usage and dispatches requests to "
+      "translators to reduce their usage if it is above the configured "
+      "threshold.",
+      {.needs_restart = needs_restart::no,
+       .example = "3600000",
+       .visibility = visibility::tunable},
+      30s,
+      {.min = 2s})
+  , datalake_scratch_space_size_bytes(
+      *this,
+      "datalake_scratch_space_size_bytes",
+      "Size, in bytes, of the amount of scratch space datalake should use.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      5_GiB)
+  , datalake_disk_usage_overage_coeff(
+      *this,
+      "datalake_disk_usage_overage_coeff",
+      "The datalake disk usage monitor reclaims the overage multiplied by "
+      "this this coefficient to compensate for data that is written during the "
+      "idle period between control loop invocations.",
+      {.needs_restart = needs_restart::no,
+       .example = "1.8",
+       .visibility = visibility::tunable},
+      2.0)
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

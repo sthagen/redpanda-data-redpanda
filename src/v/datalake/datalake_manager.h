@@ -122,6 +122,18 @@ private:
     /// \note The probe is created on the first use.
     ss::lw_shared_ptr<translation_probe> get_or_create_probe(const model::ntp&);
 
+    /*
+     * Background loop that periodically invokes `check_disk_space`.
+     */
+    ss::future<> disk_space_monitor();
+
+    /*
+     * Checks disk space usage across all translators, and if the total usage
+     * exceeds the configured limits for datalake, request schedulers to finish
+     * translations and free disk space.
+     */
+    ss::future<> check_and_manage_disk_space();
+
 private:
     model::node_id _self;
     ss::sharded<raft::group_manager>* _group_mgr;
@@ -153,6 +165,8 @@ private:
     std::filesystem::path _writer_scratch_space;
     translation::scheduling::scheduler _scheduler;
     ssx::work_queue _queue;
+    ssx::semaphore _disk_space_monitor_sem{0, "datalake::disk_space_monitor"};
+    config::binding<std::chrono::milliseconds> _disk_usage_interval;
 };
 
 } // namespace datalake

@@ -15,6 +15,7 @@
 #include "iceberg/datatypes.h"
 
 #include <seastar/core/sstring.hh>
+#include <seastar/util/defer.hh>
 
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/descriptor.pb.h>
@@ -59,7 +60,9 @@ struct_outcome struct_from_protobuf(
           msg.DebugString(),
           max_recursion_depth));
     }
+
     stack.push_back(&msg);
+    auto pop_stack = ss::defer([&stack] { stack.pop_back(); });
     iceberg::struct_type struct_t;
     struct_t.fields.reserve(msg.field_count());
     for (int i = 0; i < msg.field_count(); ++i) {
@@ -146,15 +149,12 @@ field_outcome from_protobuf(
           fd.type_name()));
     case pb::FieldDescriptor::TYPE_MESSAGE: {
         auto msg_t = fd.message_type();
-
         // special case for handling google.protobuf.Timestamp
         if (
           msg_t->well_known_type() == pb::Descriptor::WELLKNOWNTYPE_TIMESTAMP) {
             return success(fd, iceberg::timestamp_type{});
         }
-
         auto st_result = struct_from_protobuf(*msg_t, stack);
-        stack.pop_back();
         if (st_result.has_error()) {
             return st_result.error();
         }

@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "google/protobuf/timestamp.proto";
+
 enum State {
     ACTIVE = 0;
     DISABLED = 1;
@@ -53,4 +55,8 @@ message StructWithOneOf {
         bytes oneof_bytes = 3;
         bool oneof_bool = 4;
     }
+}
+
+message StructWithTimestamp {
+    google.protobuf.Timestamp timestamp = 1;
 }

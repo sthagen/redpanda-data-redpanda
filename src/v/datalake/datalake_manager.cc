@@ -29,6 +29,7 @@
 #include "utils/human.h"
 
 #include <memory>
+#include <ranges>
 
 constexpr std::chrono::milliseconds translation_jitter{500};
 constexpr std::chrono::milliseconds translation_jitter_base{5000};
@@ -134,10 +135,16 @@ datalake_manager::datalake_manager(
           .datalake_scheduler_max_concurrent_translations.bind(),
         std::chrono::duration_cast<translation::scheduling::clock::duration>(
           config::shard_local_cfg().datalake_scheduler_time_slice_ms())))
-  , _queue(sg, [](const std::exception_ptr& ex) {
-      vlog(
-        datalake_log.error, "unexpected error in managing translator: {}", ex);
-  }) {}
+  , _queue(
+      sg,
+      [](const std::exception_ptr& ex) {
+          vlog(
+            datalake_log.error,
+            "unexpected error in managing translator: {}",
+            ex);
+      })
+  , _disk_usage_interval(
+      config::shard_local_cfg().datalake_disk_space_monitor_interval.bind()) {}
 datalake_manager::~datalake_manager() = default;
 
 double datalake_manager::average_translation_backlog() {
@@ -268,6 +275,158 @@ ss::future<> datalake_manager::start() {
     _backlog_controller = std::make_unique<backlog_controller>(
       [this] { return average_translation_backlog(); }, _sg);
     co_await _backlog_controller->start();
+
+    /*
+     * Start the global disk space usage monitor loop
+     */
+    const ss::shard_id disk_space_monitor_core = 0;
+    if (ss::this_shard_id() == disk_space_monitor_core) {
+        ssx::spawn_with_gate(_gate, [this] { return disk_space_monitor(); });
+    }
+
+    _disk_usage_interval.watch([this] { _disk_space_monitor_sem.signal(); });
+}
+
+ss::future<> datalake_manager::disk_space_monitor() {
+    while (!_gate.is_closed()) {
+        const auto interval = _disk_usage_interval();
+        try {
+            co_await _disk_space_monitor_sem.wait(
+              interval, std::max(_disk_space_monitor_sem.current(), size_t(1)));
+        } catch (const ss::semaphore_timed_out& ex) {
+            std::ignore = ex;
+            // drop through to perform work
+        }
+
+        if (_disk_usage_interval() != interval) {
+            // configuration change
+            continue;
+        }
+
+        if (!config::shard_local_cfg().datalake_disk_space_monitor_enable()) {
+            continue;
+        }
+
+        try {
+            co_await check_and_manage_disk_space();
+        } catch (...) {
+            vlog(
+              datalake_log.info,
+              "Recoverable error checking datalake disk space: {}",
+              std::current_exception());
+        }
+    }
+}
+
+ss::future<> datalake_manager::check_and_manage_disk_space() {
+    using translator_id = translation::scheduling::translator_id;
+    using translator_info = std::pair<ss::shard_id, translator_id>;
+    using index_type = absl::btree_multimap<size_t, translator_info>;
+
+    /*
+     * Collect disk usage from all translators managed by the scheduler, and
+     * combine these usages from across all cores to create a global set of
+     * translators ordered by their disk usage.
+     */
+    auto usage = co_await container().map_reduce0(
+      [](datalake_manager& mgr) {
+          index_type usage;
+          for (const auto& it : mgr._scheduler.all_translators()) {
+              auto status = it.second.status();
+              auto size = status.disk_bytes_flushed.value_or(0);
+              usage.emplace(
+                size, std::make_tuple(ss::this_shard_id(), it.first));
+          }
+          return usage;
+      },
+      index_type{},
+      [](index_type acc, index_type usage) {
+          acc.merge(usage);
+          return acc;
+      });
+
+    const size_t target_size
+      = config::shard_local_cfg().datalake_scratch_space_size_bytes();
+
+    const auto total_bytes = std::reduce(
+      usage.begin(),
+      usage.end(),
+      size_t(0),
+      [](const auto acc, const auto& elem) { return acc + elem.first; });
+
+    // the amount of disk usage over the target
+    const auto real_target_excess = total_bytes < target_size
+                                      ? 0
+                                      : total_bytes - target_size;
+
+    /*
+     * do nothing if we are over the limit, but only by a "small" amount, which
+     * increases the chances of having meaningful work to do and avoid some
+     * thrashing scenarios. this is the same strategy used in space management
+     * to avoid thrashing (see resource_mgm/storage.cc).
+     */
+    const size_t min_size_threshold = 64_MiB;
+    if (real_target_excess <= min_size_threshold) {
+        vlog(
+          datalake_log.trace,
+          "Disk monitor total {} target {} excess",
+          human::bytes(total_bytes),
+          human::bytes(target_size),
+          human::bytes(real_target_excess));
+        co_return;
+    }
+
+    const double coeff
+      = config::shard_local_cfg().datalake_disk_usage_overage_coeff();
+
+    const auto adjusted_target_excess = static_cast<size_t>(
+      real_target_excess * coeff);
+
+    /*
+     * Generate a schedule of translators that should be finished immediately so
+     * that their on disk data is uploaded and deleted locally. Iteration is
+     * from largest usage to smallest usage, and that order is preserved in the
+     * per-core vector constructed for `scheduler::request_immediate_finish`.
+     */
+    size_t num_translators = 0;
+    size_t schedule_total_bytes = 0;
+    absl::flat_hash_map<
+      ss::shard_id,
+      chunked_vector<std::pair<translator_id, size_t>>>
+      schedule;
+    for (auto& it : std::ranges::reverse_view(usage)) {
+        if (schedule_total_bytes >= adjusted_target_excess) {
+            break;
+        }
+        schedule[it.second.first].push_back(
+          std::make_pair(it.second.second, it.first));
+        schedule_total_bytes += it.first;
+        num_translators++;
+    }
+
+    vlog(
+      datalake_log.info,
+      "Requesting {} translators to reclaim {}. Current total {} target {}/{} "
+      "excess {}",
+      num_translators,
+      human::bytes(schedule_total_bytes),
+      human::bytes(total_bytes),
+      human::bytes(target_size),
+      human::bytes(real_target_excess),
+      human::bytes(adjusted_target_excess));
+
+    /*
+     * Make the request to each core with translators in the schedule.
+     */
+    co_await ss::parallel_for_each(
+      schedule.begin(), schedule.end(), [this](auto& it) {
+          return container().invoke_on(
+            it.first,
+            [translators = std::move(it.second)](
+              datalake_manager& mgr) mutable {
+                mgr._scheduler.request_immediate_finish(std::move(translators));
+            });
+      });
 }
 
 ss::future<>
@@ -322,6 +481,7 @@ datalake_manager::prepare_staging_directory(std::filesystem::path path) {
 
 ss::future<> datalake_manager::shutdown() {
     vlog(datalake_log.debug, "Stopping datalake manager...");
+    _disk_space_monitor_sem.broken();
     auto f = _gate.close();
     co_await _queue.shutdown();
     if (_backlog_controller) {

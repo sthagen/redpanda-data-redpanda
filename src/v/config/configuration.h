@@ -757,6 +757,11 @@ struct configuration final : public config_store {
     bounded_property<std::chrono::milliseconds>
       datalake_scheduler_time_slice_ms;
     bounded_property<size_t> datalake_translator_flush_bytes;
+    property<bool> datalake_disk_space_monitor_enable;
+    bounded_property<std::chrono::milliseconds>
+      datalake_disk_space_monitor_interval;
+    property<size_t> datalake_scratch_space_size_bytes;
+    property<double> datalake_disk_usage_overage_coeff;
 
     configuration();
 

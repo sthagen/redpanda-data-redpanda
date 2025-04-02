@@ -11,7 +11,6 @@ package secret
 
 import (
 	"fmt"
-	"strings"
 
 	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
@@ -22,15 +21,17 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func newUpdateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
-	var secretName, secretValue string
+func newDeleteCommand(fs afero.Fs, p *config.Params) *cobra.Command {
+	var secretName string
 
 	cmd := &cobra.Command{
-		Use:   "update",
-		Short: "Update an existing secret",
-		Long:  "Update an existing secret for your Redpanda Cloud cluster",
+		Use:   "delete",
+		Short: "Delete an existing secret",
+		Long:  "Delete an existing secret from your Redpanda Cloud cluster",
 		Run: func(cmd *cobra.Command, _ []string) {
-			out.MaybeDie(validateSecretName(secretName), "invalid secret name: %v")
+			err := validateSecretName(secretName)
+			out.MaybeDie(err, "invalid secret name: %v", err)
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			if !p.FromCloud {
@@ -49,22 +50,18 @@ func newUpdateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			cl, err := publicapi.NewDataPlaneClientSet(url, p.CurrentAuth().AuthToken)
 			out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
-			request := &dataplanev1.UpdateSecretRequest{
-				Id:         strings.ToUpper(secretName),
-				SecretData: []byte(secretValue),
-				// this params is going to be remove in the future
-				Scopes: []dataplanev1.Scope{dataplanev1.Scope_SCOPE_REDPANDA_CONNECT},
+			request := &dataplanev1.DeleteSecretRequest{
+				Id: secretName,
 			}
-			response, err := cl.Secrets.UpdateSecret(cmd.Context(), connect.NewRequest(request))
-			out.MaybeDie(err, "unable to update secret: %v", err)
-			fmt.Printf("Secret %s updated successfully \n", response.Msg.Secret.Id)
+			_, err = cl.Secrets.DeleteSecret(cmd.Context(), &connect.Request[dataplanev1.DeleteSecretRequest]{Msg: request})
+			out.MaybeDie(err, "unable to delete secret: %v", err)
+
+			fmt.Printf("Secret %s deleted successfully \n", secretName)
 		},
 	}
 
-	cmd.Flags().StringVar(&secretName, "name", "", "Name of the secret, must be uppercase and can only contain letters, digits, and underscores")
-	cmd.Flags().StringVar(&secretValue, "value", "", "New secret value of the secret")
+	cmd.Flags().StringVar(&secretName, "name", "", "Name of the secret to delete, must be uppercase and can only contain letters, digits, and underscores")
 	cmd.MarkFlagRequired("name")
-	cmd.MarkFlagRequired("value")
 
 	return cmd
 }

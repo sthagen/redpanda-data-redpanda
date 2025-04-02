@@ -49,6 +49,7 @@ py_binary(
     visibility = ["//visibility:public"],
     deps = [
         "@python_deps//aioboto3",
+        "@python_deps//boto3",
         "@python_deps//psutil",
         "@python_deps//pyyaml",
         "@python_deps//s3transfer",

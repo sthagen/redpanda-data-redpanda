@@ -9,6 +9,7 @@ proto_library(
 proto_library(
     name = "complex_proto",
     srcs = ["testdata/complex.proto"],
+    deps = ["@protobuf//:timestamp_proto"],
 )
 
 proto_library(

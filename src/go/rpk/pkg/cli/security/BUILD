@@ -8,6 +8,7 @@ go_library(
     deps = [
         "//src/go/rpk/pkg/cli/security/acl",
         "//src/go/rpk/pkg/cli/security/role",
+        "//src/go/rpk/pkg/cli/security/secret",
         "//src/go/rpk/pkg/cli/security/user",
         "//src/go/rpk/pkg/config",
         "@com_github_spf13_afero//:afero",

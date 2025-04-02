@@ -1567,3 +1567,18 @@ class CloudCluster():
         return self.cloudv2._http_post(base_url=self.config.admin_api_url,
                                        endpoint='/ScaleCluster',
                                        json=payload)
+
+    def set_cluster_config_overrides(self, cluster_id, config_values):
+        """
+        Set configuration overrides for a specific Redpanda cloud cluster using Admin API
+
+        :param cluster_id: str - The ID of the Redpanda cluster to configure.
+        :param config_values: list of dict - A list of dictionaries with `name` and `value` keys.
+            Example: [{"name": "iceberg_enabled", "value": "true"}]
+        :return: Response object from the cloud admin API.
+        """
+        payload = {'cluster_id': cluster_id, 'values': config_values}
+
+        return self.cloudv2._http_post(base_url=self.config.admin_api_url,
+                                       endpoint='/SetClusterConfigOverrides',
+                                       json=payload)

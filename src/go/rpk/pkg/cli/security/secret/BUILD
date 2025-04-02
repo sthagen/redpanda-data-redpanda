@@ -9,7 +9,7 @@ go_library(
         "secret.go",
         "update.go",
     ],
-    importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cloud/security/secret",
+    importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/security/secret",
     visibility = ["//visibility:public"],
     deps = [
         "//src/go/rpk/pkg/config",

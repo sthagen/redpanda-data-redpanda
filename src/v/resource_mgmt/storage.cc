@@ -501,6 +501,7 @@ ss::future<storage::usage_report> disk_space_manager::disk_usage() {
       = co_await datalake::datalake_manager::disk_usage();
     vlog(rlog.debug, "Datalake usage: {}", human::bytes(datalake_usage));
 
+    _probe.set_total_datalake_usage(datalake_usage);
     report.usage.data += datalake_usage;
 
     co_return report;
@@ -711,6 +712,11 @@ void disk_space_manager::probe::setup_metrics() {
       [this]() { return _total_usage; },
       sm::description(
         "Total amount of disk usage under control of space management.")));
+
+    defs.emplace_back(sm::make_gauge(
+      "datalake_disk_usage_bytes",
+      [this]() { return _total_datalake_usage; },
+      sm::description("Total amount of disk usage by datalake.")));
 
     defs.emplace_back(sm::make_gauge(
       "retention_reclaimable_bytes",

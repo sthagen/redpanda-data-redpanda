@@ -34,6 +34,8 @@ std::optional<ss::sstring> is_disconnect_exception(std::exception_ptr);
 
 bool is_auth_error(std::exception_ptr);
 
+bool is_invalid_character_error(std::exception_ptr);
+
 class connection : public boost::intrusive::list_base_hook<> {
 public:
     connection(

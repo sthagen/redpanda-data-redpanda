@@ -241,6 +241,18 @@ partition_translator::run_one_translation_iteration(
         co_await _ready_to_translate.wait(
           [this] { return _inflight_translation_state.has_value(); });
         auto& as = _inflight_translation_state->as;
+        /*
+         * before going to the trouble of building a reader and poking the
+         * translation context, check if an abort has been requested. this
+         * enables the scheduler to execute:
+         *
+         *    start_translation();
+         *    stop_translation();
+         *
+         * to realize a very fast responsiveness for driving a translator state
+         * change such as finishing the on-going translation.
+         */
+        as.check();
         auto reader = co_await _data_source->make_log_reader(
           begin_offset, datalake_priority(), as);
         if (!reader) {
@@ -268,10 +280,18 @@ partition_translator::run_one_translation_iteration(
     } catch (const translator_out_of_memory_error&) {
         // We just swallow the exception because the underlying result state
         // is still safe to be flushed.
-        vlog(
-          _logger.warn,
-          "Translation exceeded memory budget, result will be flushed "
-          "immediately");
+        if (_finish_translation_requested) {
+            vlog(_logger.debug, "Translation requested to finish immediately");
+        } else {
+            // `translator_out_of_memory_error is pulling double duty for
+            // preemption requests and out-of-memory requests. until stop
+            // translation is more expressive, we silence the out-of-memory
+            // warning if a finish translation request was also made.
+            vlog(
+              _logger.warn,
+              "Translation exceeded memory budget, result will be flushed "
+              "immediately");
+        }
         // We force a finish immediately to make forward progress and avoid
         // cases where the translator is stuck in this memory exhaustion loop.
         result = finish_immediately::yes;
@@ -399,13 +419,27 @@ ss::future<> partition_translator::translate_until_stopped() {
         // case the next iteration should see some jitter.
         auto scoped_set_jitter = ss::defer(
           [&needs_jitter] { needs_jitter = true; });
+        // Clear the flag as it is a one-shot request, and since
+        // translate_until_stopped can be restarted, for example if this
+        // workloop throws. This avoids clearing the flag before running
+        // run_one_translation_iteration which uses the flag to silence the
+        // out-of-memory warning message.
+        auto clear_finish_request = ss::defer(
+          [this] { _finish_translation_requested = false; });
 
         auto offsets = co_await fetch_translation_offsets(rcn);
-        if (!offsets) {
+        // this test of the finish translation request flag works here because
+        // we are executing in a polling loop.
+        auto finish_now = _finish_translation_requested
+                            ? finish_immediately::yes
+                            : finish_immediately::no;
+        if (finish_now) {
+            vlog(_logger.debug, "Requested for immediate finish");
+        }
+        if (!offsets && !finish_now) {
             continue;
         }
-        auto finish_now = finish_immediately::no;
-        if (offsets->next_translation_begin_offset) {
+        if (offsets->next_translation_begin_offset && !finish_now) {
             // new data is available to translate
             auto translate_f = co_await ss::coroutine::as_future(
               run_one_translation_iteration(
@@ -522,4 +556,13 @@ void partition_translator::stop_translation() {
     _inflight_translation_state->as.request_abort_ex(
       translator_out_of_memory_error{});
 }
+
+void partition_translator::set_finish_translation() {
+    _finish_translation_requested = true;
+}
+
+bool partition_translator::get_finish_translation() {
+    return _finish_translation_requested;
+}
+
 } // namespace datalake::translation

@@ -30,7 +30,9 @@ func newCreateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		Short: "Create a new secret",
 		Long:  "Create a new secret for your Redpanda Cloud cluster",
 		Run: func(cmd *cobra.Command, _ []string) {
-			out.MaybeDie(validateSecretName(secretName), "invalid secret name: %v")
+			err := validateSecretName(secretName)
+			out.MaybeDie(err, "invalid secret name: %v", err)
+
 			p, err := p.LoadVirtualProfile(fs)
 			out.MaybeDie(err, "rpk unable to load config: %v", err)
 			if !p.FromCloud {
@@ -52,8 +54,7 @@ func newCreateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			request := &dataplanev1.CreateSecretRequest{
 				Id:         strings.ToUpper(secretName),
 				SecretData: []byte(secretValue),
-				// this params is going to be remove in the future
-				Scopes: []dataplanev1.Scope{dataplanev1.Scope_SCOPE_REDPANDA_CONNECT},
+				Scopes:     []dataplanev1.Scope{dataplanev1.Scope_SCOPE_REDPANDA_CONNECT},
 			}
 			response, err := cl.Secrets.CreateSecret(cmd.Context(), connect.NewRequest(request))
 			out.MaybeDie(err, "unable to create secret: %v", err)

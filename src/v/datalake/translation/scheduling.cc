@@ -331,7 +331,8 @@ void scheduler::notify_done(const translator_id& id) noexcept {
 }
 
 bool scheduler::requires_scheduling_actions() const {
-    return !_executor.waiting.empty() || _mem_tracker->memory_exhausted();
+    return !_executor.waiting.empty() || _mem_tracker->memory_exhausted()
+           || !_executor.translators_for_immediate_finish.empty();
 }
 
 void scheduler::notify_memory_exhausted() {
@@ -407,6 +408,24 @@ size_t scheduler::running_translators() const {
     return _executor.running.size();
 }
 
+void scheduler::request_immediate_finish(
+  chunked_vector<std::pair<translator_id, size_t>> translators) {
+    _executor.translators_for_immediate_finish.clear();
+    // `i` captures both priority (lowest is highest), and serves as a unique
+    // identifer. see `on_resource_exhaustion` for how this property is used.
+    for (size_t i = 0; i < translators.size(); ++i) {
+        // the flush size of the translator is thrown away here, but preserved
+        // at the scheduler API level for future use by the scheduler.
+        _executor.translators_for_immediate_finish.emplace(
+          i, std::move(translators[i].first));
+    }
+    // there is no mechanism for backing out a request to finish, so there isn't
+    // any additional work that can be done if the requests are cleared.
+    if (!_executor.translators_for_immediate_finish.empty()) {
+        _state_changed_cvar.signal();
+    }
+}
+
 ss::future<> scheduler::main() {
     vlog(datalake_log.trace, "Starting scheduling loop");
     auto holder = _executor.gate.hold();
@@ -415,9 +434,12 @@ ss::future<> scheduler::main() {
           [this] { return requires_scheduling_actions(); });
         vlog(
           datalake_log.trace,
-          "scheduler tick,  memory_exhausted: {}",
-          _mem_tracker->memory_exhausted());
-        if (_mem_tracker->memory_exhausted()) {
+          "scheduler tick,  memory_exhausted: {} finish: {}",
+          _mem_tracker->memory_exhausted(),
+          _executor.translators_for_immediate_finish.size());
+        if (
+          _mem_tracker->memory_exhausted()
+          || !_executor.translators_for_immediate_finish.empty()) {
             co_await _scheduling_policy->on_resource_exhaustion(
               _executor, *_mem_tracker);
         }

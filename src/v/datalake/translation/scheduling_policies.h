@@ -120,6 +120,50 @@ private:
 
     config::binding<size_t> _max_concurrent_translations;
     clock::duration _translation_time_quota;
+
+    /*
+     * state maintained for tracking the choice of which translator to finish
+     * when servicing requests for immediate translator finish.
+     *
+     * id: translator id
+     * status: status of the chosen translator
+     */
+    struct finish_choice_info {
+        enum class status {
+            running,
+            waiting,
+            idle,
+        };
+
+        std::string_view status_name() const {
+            switch (status) {
+            case status::running:
+                return "running";
+            case status::waiting:
+                return "waiting";
+            case status::idle:
+                return "idle";
+            }
+        }
+
+        // return the status of the translator
+        static status translator_status(const translator_executable&);
+
+        translator_id id;
+        status status;
+    };
+
+    /*
+     * select a translator from the set of translators requested for immediate
+     * finish, if any. if a selection is made, it is removed from the
+     * translators_for_immediate_finish index.
+     */
+    std::optional<finish_choice_info> choose_translator_to_finish(executor&);
+
+    /*
+     * process a translator choice to finish immediately
+     */
+    ss::future<> finish_translator(executor&, finish_choice_info);
 };
 
 } // namespace datalake::translation::scheduling

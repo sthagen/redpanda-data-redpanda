@@ -2234,7 +2234,7 @@
         "usagesDigest": "w/4oKk2OAM/M7lcmdc7YdBkwIxjG2XrXTu3iGgs17Kk=",
         "recordedFileInputs": {
           "@@rules_python~//tools/publish/requirements_linux.txt": "8175b4c8df50ae2f22d1706961884beeb54e7da27bd2447018314a175981997d",
-          "@@//bazel/thirdparty/requirements.txt": "2bd1bb6cd18214adb65b00d8f15e0aadd90cc38abfe3006206df7f92eaefbc68",
+          "@@//bazel/thirdparty/requirements.txt": "d77924940843bb2f8358654d886d7c7d856625c6150ad25d8eaf7e673b1df103",
           "@@rules_fuzzing~//fuzzing/requirements.txt": "ab04664be026b632a0d2a2446c4f65982b7654f5b6851d2f9d399a19b7242a5b",
           "@@rules_python~//tools/publish/requirements_windows.txt": "7673adc71dc1a81d3661b90924d7a7c0fc998cd508b3cb4174337cef3f2de556",
           "@@protobuf~//python/requirements.txt": "983be60d3cec4b319dcab6d48aeb3f5b2f7c3350f26b3a9e97486c37967c73c5",
@@ -2448,6 +2448,19 @@
               "python_interpreter_target": "@@rules_python~~python~python_3_12_host//:python",
               "repo": "python_deps_312",
               "requirement": "attrs==22.2.0 --hash=sha256:29e95c7f6778868dbd49170f98f8818f78f3dc5e0e37c0b1f474e3561b240836"
+            }
+          },
+          "python_deps_312_boto3": {
+            "bzlFile": "@@rules_python~//python/private/pypi:whl_library.bzl",
+            "ruleClassName": "whl_library",
+            "attributes": {
+              "dep_template": "@python_deps//{name}:{target}",
+              "extra_pip_args": [
+                "--require-hashes"
+              ],
+              "python_interpreter_target": "@@rules_python~~python~python_3_12_host//:python",
+              "repo": "python_deps_312",
+              "requirement": "boto3==1.37.24 --hash=sha256:2f2b8f82a5d7f89283973bf2cab771b90c09348799e78b2a25c60cd22c443514"
             }
           },
           "python_deps_312_botocore": {
@@ -5217,6 +5230,7 @@
                 "aioitertools": "{\"python_deps_312_aioitertools\":[{\"version\":\"3.12\"}]}",
                 "aiosignal": "{\"python_deps_312_aiosignal\":[{\"version\":\"3.12\"}]}",
                 "attrs": "{\"python_deps_312_attrs\":[{\"version\":\"3.12\"}]}",
+                "boto3": "{\"python_deps_312_boto3\":[{\"version\":\"3.12\"}]}",
                 "botocore": "{\"python_deps_312_botocore\":[{\"version\":\"3.12\"}]}",
                 "frozenlist": "{\"python_deps_312_frozenlist\":[{\"version\":\"3.12\"}]}",
                 "idna": "{\"python_deps_312_idna\":[{\"version\":\"3.12\"}]}",
@@ -5245,6 +5259,7 @@
                 "aioitertools",
                 "aiosignal",
                 "attrs",
+                "boto3",
                 "botocore",
                 "frozenlist",
                 "idna",

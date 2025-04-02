@@ -96,6 +96,10 @@ public:
 
     void reconcile_properties() noexcept final;
 
+    void set_finish_translation() final;
+
+    bool get_finish_translation() final;
+
 private:
     /**
      * inflight_translation_state
@@ -203,5 +207,10 @@ private:
     // scheduler calls start_translation, waking up translate_when_notified as a
     // result.
     ss::condition_variable _ready_to_translate;
+
+    // true if this translator has been requested to finish. when set, the
+    // translator should work towards uploading and removing its staging data.
+    // the translator can clear this bit. it may be reset by future requests.
+    bool _finish_translation_requested{false};
 };
 } // namespace datalake::translation
