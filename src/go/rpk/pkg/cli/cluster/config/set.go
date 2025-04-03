@@ -45,6 +45,7 @@ func (s *anySlice) UnmarshalYAML(n *yaml.Node) error {
 }
 
 func newSetCommand(fs afero.Fs, p *config.Params) *cobra.Command {
+	var noConfirm bool
 	cmd := &cobra.Command{
 		Use:   "set [KEY] [VALUE]",
 		Short: "Set a single cluster configuration property",
@@ -57,7 +58,9 @@ You may also use <key>=<value> notation for setting configuration properties:
 
   rpk cluster config set log_retention_ms=-1
 
-If an empty string is given as the value, the property is reset to its default.`,
+If an empty string is given as the value, the property is reset to its default.
+Use the flag '--no-confirm' to avoid the confirmation prompt.`,
+
 		Args: cobra.MinimumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
 			var key, value string
@@ -68,6 +71,16 @@ If an empty string is given as the value, the property is reset to its default.`
 				key, value = args[0], args[1]
 			} else {
 				out.Die("invalid arguments: %v, please use one of 'rpk cluster config set <key> <value>' or 'rpk cluster config set <key>=<value>'", args)
+			}
+			// Disabling Tiered Storage requires a confirmation from the user because it may lead to data loss.
+			if key == "cloud_storage_enable_remote_write" && value == "false" {
+				if !noConfirm {
+					confirmed, err := out.Confirm("Warning: disabling Tiered Storage may lead to data loss. If you only want to pause Tiered Storage temporarily, use the 'cloud_storage_enable_segment_uploads' option. Abort?")
+					out.MaybeDie(err, "unable to read user input: %v", err)
+					if confirmed {
+						out.Die("Aborted by user.")
+					}
+				}
 			}
 
 			p, err := p.LoadVirtualProfile(fs)
@@ -146,6 +159,6 @@ If an empty string is given as the value, the property is reset to its default.`
 			}
 		},
 	}
-
+	cmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Disable confirmation prompt")
 	return cmd
 }

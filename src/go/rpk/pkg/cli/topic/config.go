@@ -29,7 +29,8 @@ func newAlterConfigCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 		appends   []string // key=val
 		subtracts []string // key=val
 
-		dry bool
+		dry       bool
+		noConfirm bool
 	)
 
 	cmd := &cobra.Command{
@@ -49,7 +50,7 @@ Incremental altering supports four operations:
 
 The --dry option will validate whether the requested configuration change is
 valid, but does not apply it.
-`,
+Use the flag '--no-confirm' to avoid the confirmation prompt.`,
 		Args: cobra.MinimumNArgs(1),
 		Run: func(_ *cobra.Command, topics []string) {
 			p, err := p.LoadVirtualProfile(fs)
@@ -103,6 +104,16 @@ valid, but does not apply it.
 				}
 
 				delete(setKVs, "redpanda.remote.write")
+			}
+			// Disabling Tiered Storage requires a confirmation from the user because it may lead to data loss.
+			if isRRW && wv == "false" {
+				if !noConfirm {
+					confirmed, err := out.Confirm("Warning: disabling Tiered Storage may lead to data loss. If you only want to pause Tiered Storage temporarily, use the 'cloud_storage_enable_segment_uploads' option. Abort?")
+					out.MaybeDie(err, "unable to read user input: %v", err)
+					if confirmed {
+						out.Die("Aborted by user.")
+					}
+				}
 			}
 
 			req := kmsg.NewPtrIncrementalAlterConfigsRequest()
@@ -174,6 +185,7 @@ valid, but does not apply it.
 	cmd.Flags().StringArrayVar(&subtracts, "subtract", nil, "key=value; Value to remove from list-of-values key (repeatable)")
 
 	cmd.Flags().BoolVar(&dry, "dry", false, "Dry run: validate the alter request, but do not apply")
+	cmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Disable confirmation prompt")
 
 	return cmd
 }

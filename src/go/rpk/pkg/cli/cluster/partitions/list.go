@@ -30,6 +30,12 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+type response struct {
+	LeaderDistributions  []LeaderDistribution       `json:"leader_distribution" yaml:"leader_distribution"`
+	ReplicaDistributions []ReplicaDistribution      `json:"replica_distribution" yaml:"replica_distribution"`
+	Partitions           []rpadmin.ClusterPartition `json:"partitions" yaml:"partitions"`
+}
+
 func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var (
 		all             bool
@@ -86,7 +92,7 @@ List all in json format.
 `,
 		Run: func(cmd *cobra.Command, topics []string) {
 			f := p.Formatter
-			if h, ok := f.Help([]rpadmin.ClusterPartition{}); ok {
+			if h, ok := f.Help(response{}); ok {
 				out.Exit(h)
 			}
 			if len(topics) == 0 && !all {
@@ -172,40 +178,62 @@ List all in json format.
 }
 
 func printClusterPartitions(f config.OutFormatter, clusterPartitions []rpadmin.ClusterPartition) {
+	leaderDist := buildLeaderPerBroker(clusterPartitions)
+	replicaDist := buildReplicaPerBroker(clusterPartitions)
+	types.Sort(leaderDist)
+	types.Sort(replicaDist)
 	types.Sort(clusterPartitions)
-	if isText, _, formatted, err := f.Format(clusterPartitions); !isText {
+	resp := buildResponse(clusterPartitions, leaderDist, replicaDist)
+	if isText, _, formatted, err := f.Format(resp); !isText {
 		out.MaybeDie(err, "unable to print partitions in the required format %q: %v", f.Kind, err)
 		fmt.Println(formatted)
 		return
 	}
-	tw := out.NewTable("NAMESPACE", "TOPIC", "PARTITION", "LEADER-ID", "REPLICA-CORE", "DISABLED")
-	defer tw.Flush()
-	for _, p := range clusterPartitions {
-		var leader, disabled string
-		var replicas []string
-		if p.LeaderID == nil {
-			leader = "-"
-		} else {
-			leader = strconv.Itoa(*p.LeaderID)
-		}
-		if p.Disabled == nil {
-			disabled = "-"
-		} else {
-			disabled = strconv.FormatBool(*p.Disabled)
-		}
 
-		for _, r := range p.Replicas {
-			replicas = append(replicas, fmt.Sprintf("%v-%v", r.NodeID, r.Core))
+	const (
+		secLeaderDist        = "Leader distribution"
+		secReplicaDist       = "Replica distribution"
+		secClusterPartitions = "List of partitions"
+	)
+	sections := out.NewSections(
+		out.ConditionalSectionHeaders(map[string]bool{
+			secLeaderDist:        true,
+			secReplicaDist:       true,
+			secClusterPartitions: true,
+		})...,
+	)
+	sections.Add(secLeaderDist, func() { printLeaderDistribution(leaderDist) })
+	sections.Add(secReplicaDist, func() { printReplicaDistribution(replicaDist) })
+	sections.Add(secClusterPartitions, func() {
+		tw := out.NewTable("NAMESPACE", "TOPIC", "PARTITION", "LEADER-ID", "REPLICA-CORE", "DISABLED")
+		defer tw.Flush()
+		for _, p := range clusterPartitions {
+			var leader, disabled string
+			var replicas []string
+			if p.LeaderID == nil {
+				leader = "-"
+			} else {
+				leader = strconv.Itoa(*p.LeaderID)
+			}
+			if p.Disabled == nil {
+				disabled = "-"
+			} else {
+				disabled = strconv.FormatBool(*p.Disabled)
+			}
+
+			for _, r := range p.Replicas {
+				replicas = append(replicas, fmt.Sprintf("%v-%v", r.NodeID, r.Core))
+			}
+			tw.PrintStructFields(struct {
+				Namespace string
+				Topic     string
+				Partition int
+				LeaderID  string
+				Replicas  []string
+				Disabled  string
+			}{p.Ns, p.Topic, p.PartitionID, leader, replicas, disabled})
 		}
-		tw.PrintStructFields(struct {
-			Namespace string
-			Topic     string
-			Partition int
-			LeaderID  string
-			Replicas  []string
-			Disabled  string
-		}{p.Ns, p.Topic, p.PartitionID, leader, replicas, disabled})
-	}
+	})
 }
 
 // nsTopic splits a topic string consisting of <namespace>/<topicName> and
@@ -283,4 +311,12 @@ func replicaOnBroker(replicas rpadmin.Replicas, nodeIDs []int) bool {
 		}
 	}
 	return foundCount == len(nodeIDs)
+}
+
+func buildResponse(clusterPartitions []rpadmin.ClusterPartition, leaderDist []LeaderDistribution, replicaDist []ReplicaDistribution) response {
+	return response{
+		LeaderDistributions:  leaderDist,
+		ReplicaDistributions: replicaDist,
+		Partitions:           clusterPartitions,
+	}
 }

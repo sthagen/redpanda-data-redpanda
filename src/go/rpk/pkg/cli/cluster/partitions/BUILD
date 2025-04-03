@@ -14,6 +14,7 @@ go_library(
         "toggle.go",
         "transfer_leadership.go",
         "unsafe_recover.go",
+        "util.go",
     ],
     importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cluster/partitions",
     visibility = ["//visibility:public"],

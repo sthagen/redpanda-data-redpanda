@@ -13,6 +13,7 @@ import (
 	"fmt"
 
 	"github.com/redpanda-data/common-go/rpadmin"
+	"github.com/twmb/types"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -31,7 +32,8 @@ If continuous partition balancing is enabled, redpanda will continuously
 reassign partitions from both unavailable nodes and from nodes using more disk
 space than the configured limit.
 
-This command can be used to monitor the partition balancer status.
+Use this command to monitor the partition balancer status and
+the partition distribution across brokers in the cluster.
 
 FIELDS
 
@@ -89,25 +91,48 @@ investigation. A few areas to investigate:
 			status, err := cl.GetPartitionStatus(cmd.Context())
 			out.MaybeDie(err, "unable to request balancer status: %v", err)
 
-			printBalancerStatus(status)
+			var clusterPartitions []rpadmin.ClusterPartition
+			clusterPartitions, err = cl.AllClusterPartitions(cmd.Context(), true, false)
+			if err != nil {
+				fmt.Printf("unable to query all partitions in the cluster: %v", err)
+			}
+
+			printBalancerStatus(status, clusterPartitions)
 		},
 	}
 
 	return cmd
 }
 
-func printBalancerStatus(pbs rpadmin.PartitionBalancerStatus) {
-	tw := out.NewTable()
-	defer tw.Flush()
-	tw.Print("Status:", pbs.Status)
-	tw.Print("Seconds Since Last Tick:", pbs.SecondsSinceLastTick)
-	tw.Print("Current Reassignment Count:", pbs.CurrentReassignmentsCount)
-	if pbs.PartitionsPendingForceRecovery != nil && pbs.PartitionsPendingRecoveryList != nil {
-		tw.Print(fmt.Sprintf("Partitions Pending Recovery (%v):", *pbs.PartitionsPendingForceRecovery), pbs.PartitionsPendingRecoveryList)
-	}
-	v := pbs.Violations
-	if len(v.OverDiskLimitNodes) > 0 || len(v.UnavailableNodes) > 0 {
-		tw.Print("Unavailable Nodes:", v.UnavailableNodes)
-		tw.Print("Over Disk Limit Nodes:", v.OverDiskLimitNodes)
-	}
+func printBalancerStatus(pbs rpadmin.PartitionBalancerStatus, clusterPartitions []rpadmin.ClusterPartition) {
+	const (
+		secBalancerStatus = "Balancer status"
+		secReplicaDist    = "Replica distribution"
+	)
+	sections := out.NewSections(
+		out.ConditionalSectionHeaders(map[string]bool{
+			secBalancerStatus: true,
+			secReplicaDist:    true,
+		})...,
+	)
+	sections.Add(secBalancerStatus, func() {
+		tw := out.NewTable()
+		defer tw.Flush()
+		tw.Print("Status:", pbs.Status)
+		tw.Print("Seconds Since Last Tick:", pbs.SecondsSinceLastTick)
+		tw.Print("Current Reassignment Count:", pbs.CurrentReassignmentsCount)
+		if pbs.PartitionsPendingForceRecovery != nil && pbs.PartitionsPendingRecoveryList != nil {
+			tw.Print(fmt.Sprintf("Partitions Pending Recovery (%v):", *pbs.PartitionsPendingForceRecovery), pbs.PartitionsPendingRecoveryList)
+		}
+		v := pbs.Violations
+		if len(v.OverDiskLimitNodes) > 0 || len(v.UnavailableNodes) > 0 {
+			tw.Print("Unavailable Nodes:", v.UnavailableNodes)
+			tw.Print("Over Disk Limit Nodes:", v.OverDiskLimitNodes)
+		}
+	})
+	sections.Add(secReplicaDist, func() {
+		replicaDist := buildReplicaPerBroker(clusterPartitions)
+		types.Sort(replicaDist)
+		printReplicaDistribution(replicaDist)
+	})
 }

@@ -794,7 +794,10 @@ class RpkTool:
         return res
 
     def alter_topic_config(self, topic, set_key, set_value):
-        cmd = ['alter-config', topic, "--set", f"{set_key}={set_value}"]
+        cmd = [
+            'alter-config', topic, "--set", f"{set_key}={set_value}",
+            "--no-confirm"
+        ]
         out = self._run_topic(cmd)
         lines = out.splitlines()
         lines = list(map(lambda x: x.strip(), lines))
@@ -1198,7 +1201,7 @@ class RpkTool:
         cmd = [
             self._rpk_binary(), "--api-urls",
             self._admin_host(), "cluster", "config", "set", key,
-            str(value)
+            str(value), "--no-confirm"
         ]
         return self._execute(cmd)
 

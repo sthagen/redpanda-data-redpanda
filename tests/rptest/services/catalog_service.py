@@ -120,7 +120,7 @@ class CatalogService(abc.ABC, Service):
             conf["adlfs.account-key"] = self.credentials.account_key
             # Modern pyiceberg https://github.com/apache/iceberg-python/issues/866
             conf["adls.account-name"] = self.credentials.account_name
-            conf["alds.account-key"] = self.credentials.account_key
+            conf["adls.account-key"] = self.credentials.account_key
         else:
             raise ValueError(
                 f"Unsupported credential type: {type(self.credentials)}")
