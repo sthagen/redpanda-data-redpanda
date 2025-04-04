@@ -604,7 +604,7 @@ class OpenMessagingBenchmark(Service):
         assert isinstance(v, int), f"value {v} for {key} was not an int"
         return v
 
-    def benchmark_time(self) -> int:
+    def benchmark_time_mins(self) -> int:
         """An estimate of the runtime of the test in minutes. This simply sums the warmup and test runtime so
         is always an underestimate (unless the run fails early), so you should add a few minutes of
         buffer to the returned value to set timeouts."""

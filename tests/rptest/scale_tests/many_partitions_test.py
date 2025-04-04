@@ -716,7 +716,7 @@ class ManyPartitionsTest(PreallocNodesTest):
             node=bench_node,
             worker_nodes=worker_nodes)
         benchmark.start()
-        benchmark_time_min = benchmark.benchmark_time() + 5
+        benchmark_time_min = benchmark.benchmark_time_mins() + 5
         benchmark.wait(timeout_sec=benchmark_time_min * 60)
         benchmark.check_succeed()
 

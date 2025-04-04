@@ -48,7 +48,7 @@ class OpenBenchmarkSelfTest(RedpandaTest):
         benchmark = OpenMessagingBenchmark(self.test_context, self.redpanda,
                                            driver, workload)
         benchmark.start()
-        benchmark_time_min = benchmark.benchmark_time(
+        benchmark_time_min = benchmark.benchmark_time_mins(
         ) + self.BENCHMARK_WAIT_TIME_MIN
         benchmark.wait(timeout_sec=benchmark_time_min * 60)
         # docker runs have high variance in perf numbers, check only in dedicate node

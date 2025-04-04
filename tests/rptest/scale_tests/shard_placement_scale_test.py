@@ -97,7 +97,7 @@ class ShardPlacementScaleTest(RedpandaTest):
         return [t for t in rpk.list_topics() if t.startswith('test-topic-')]
 
     def finish_omb(self):
-        benchmark_time_min = self._benchmark.benchmark_time() + 2
+        benchmark_time_min = self._benchmark.benchmark_time_mins() + 2
         self._benchmark.wait(timeout_sec=benchmark_time_min * 60)
         self._benchmark.check_succeed()
 

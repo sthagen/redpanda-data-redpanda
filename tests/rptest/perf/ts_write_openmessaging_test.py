@@ -83,7 +83,7 @@ class TSWriteOpenmessagingTest(RedpandaTest):
                                            driver=driver,
                                            workload=(workload, validator))
         benchmark.start()
-        benchmark_time_min = benchmark.benchmark_time(
+        benchmark_time_min = benchmark.benchmark_time_mins(
         ) + TSWriteOpenmessagingTest.BENCHMARK_WAIT_TIME_MIN
         benchmark.wait(timeout_sec=benchmark_time_min * 60)
         benchmark.check_succeed()

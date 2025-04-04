@@ -93,7 +93,7 @@ class OMBValidationTest(RedpandaCloudTest):
             self.logger.info(
                 f"Starting benchmark attempt {try_count}/{max_retries}.")
             benchmark.start()
-            benchmark_time_min = benchmark.benchmark_time() + 5
+            benchmark_time_min = benchmark.benchmark_time_mins() + 5
             benchmark.wait(timeout_sec=benchmark_time_min * 60)
 
             res = benchmark.check_succeed(raise_exceptions=False)
@@ -471,15 +471,15 @@ class OMBValidationTest(RedpandaCloudTest):
 
         # run the OMB portion of the benchmark and ensure it succeeded
         benchmark.start()
-        omb_seconds = benchmark.benchmark_time() * 60
+        omb_seconds = benchmark.benchmark_time_mins() * 60
         benchmark.wait(timeout_sec=omb_seconds + 300)
 
         assert_no_rejected()
 
         body_runtime = time() - time_before_body
 
-        assert body_runtime >= benchmark.benchmark_time(), \
-            f"unexpectedly short runtime: {body_runtime} vs {benchmark.benchmark_time()}"
+        assert body_runtime >= benchmark.benchmark_time_mins(), \
+            f"unexpectedly short runtime: {body_runtime} vs {benchmark.benchmark_time_mins()}"
 
         assert time() - time_before_swarm < swarm_runtime, (
             f"test ran too long and so swarm will have stopped: "
@@ -650,7 +650,7 @@ class OMBValidationTest(RedpandaCloudTest):
                                            num_workers=self.CLUSTER_NODES - 1,
                                            topology="ensemble")
         benchmark.start()
-        benchmark_time_min = benchmark.benchmark_time() + 5
+        benchmark_time_min = benchmark.benchmark_time_mins() + 5
         benchmark.wait(timeout_sec=benchmark_time_min * 60)
 
         # check if omb gave errors, but don't process metrics

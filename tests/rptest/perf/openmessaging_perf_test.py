@@ -71,6 +71,6 @@ class RedPandaOpenMessagingBenchmarkPerf(RedpandaTest):
                                            topology="ensemble")
 
         benchmark.start()
-        benchmark_time_min = benchmark.benchmark_time() + 5
+        benchmark_time_min = benchmark.benchmark_time_mins() + 5
         benchmark.wait(timeout_sec=benchmark_time_min * 60)
         benchmark.check_succeed()

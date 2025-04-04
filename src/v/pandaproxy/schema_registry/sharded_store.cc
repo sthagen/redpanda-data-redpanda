@@ -503,7 +503,7 @@ ss::future<subject_schema> sharded_store::get_subject_schema(
           plog.warn,
           "Failed to parse stored schema, subject {}, version {}: {}",
           sub,
-          v_id.id,
+          v_id.version,
           e.what());
         throw;
     }
