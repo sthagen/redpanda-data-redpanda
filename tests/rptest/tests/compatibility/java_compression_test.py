@@ -166,17 +166,7 @@ class JavaCompressionTest(EndToEndTest):
             expected_num_segments, compression_type=compression_type.value)
         self.wait_for_compacted_segments(expected_num_segments - 1)
 
-        if compression_type == TopicSpec.CompressionTypes.SNAPPY:
-            # Refer to the Github issue in the function comment above re: the issue with
-            # `snappy` compression for `redpanda` versions pre 25.1 and `kafka-python`
-            # versions pre-fix in https://github.com/dpkp/kafka-python/pull/2483. We should see
-            # consume fail here due to the little-endian encoding of version fields in
-            # the `snappy` header. If the version of `kafka-python` used in ducktape is bumped
-            # to include the above fix, this `expect_exception()` can be removed.
-            with expect_exception(Exception, lambda e: True):
-                self.consume()
-        else:
-            self.consume()
+        self.consume()
 
         # Install the latest version of `redpanda` and restart nodes
         self.redpanda._installer.install(self.redpanda.nodes,

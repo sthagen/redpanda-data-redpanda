@@ -15,7 +15,7 @@ setup(
     install_requires=[
         'ducktape@git+https://github.com/redpanda-data/ducktape.git@a87a474ed802e46a9e3af879240ac41eeebbc905',
         'prometheus-client==0.9.0',
-        'kafka-python==2.0.2',
+        'kafka-python==2.0.6',
         'crc32c==2.2',
         'confluent-kafka==2.6.1',
         'zstandard==0.15.2',
