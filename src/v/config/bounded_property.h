@@ -14,6 +14,7 @@
 
 #include <cstdlib>
 #include <optional>
+#include <type_traits>
 
 namespace config {
 
@@ -276,6 +277,10 @@ private:
     /*
      * Pre-generate an example for docs/api, if the explicit property
      * metadata does not provide one.
+     *
+     * The stringified value must be valid YAML that can be parsed as a
+     * property value (i.e. by \ref bounded_property::set_value). Also see
+     * \ref base_property::example.
      */
     ss::sstring generate_example() {
         auto parent = property<T>::example();
@@ -303,7 +308,16 @@ private:
                 guess = property<T>::_default;
             }
         }
-        return fmt::format("{}", guess);
+
+        if constexpr (::detail::
+                        is_specialization_of_v<I, std::chrono::duration>) {
+            return fmt::format("{}", guess.count());
+        } else if constexpr (std::is_arithmetic_v<I>) {
+            return fmt::format("{}", guess);
+        } else {
+            static_assert(
+              false, "type does not have a valid example generation strategy");
+        }
     }
 
     B<I> _bounds;

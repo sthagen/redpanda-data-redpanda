@@ -232,13 +232,15 @@ std::string_view as_string_view(const json::Value& v) {
 
 ss::future<> check_references(sharded_store& store, canonical_schema schema) {
     for (const auto& ref : schema.def().refs()) {
-        co_await store.is_subject_version_deleted(ref.sub, ref.version)
-          .handle_exception([](auto) { return is_deleted::yes; })
-          .then([&](is_deleted d) {
-              if (d) {
+        co_await store.get_id(ref.sub, ref.version)
+          .handle_exception_type([&](const exception& e) -> schema_id {
+              if (
+                e.code() == error_code::subject_not_found
+                || e.code() == error_code::schema_id_not_found) {
                   throw as_exception(
                     no_reference_found_for(schema, ref.sub, ref.version));
               }
+              throw;
           });
     }
 }

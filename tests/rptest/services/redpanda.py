@@ -129,6 +129,11 @@ DEFAULT_LOG_ALLOW_LIST = [
     # which is not present in typical CI runs, which results in the following
     # error message from the debug bundle service
     re.compile(r"Current specified RPK location"),
+
+    # Tests that use Iceberg REST catalogs may log error messages coming from
+    # the catalog that have "Assert" in them. These are typically benign and
+    # just indicate a race in committing to Iceberg.
+    re.compile(r"UpdateRequirement.*Assert"),
 ]
 
 # Log errors that are expected in tests that restart nodes mid-test

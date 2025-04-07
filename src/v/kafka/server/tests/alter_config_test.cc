@@ -849,8 +849,7 @@ FIXTURE_TEST(test_alter_single_topic_config, alter_config_test_fixture) {
     BOOST_REQUIRE_EQUAL(resp.data.responses[0].resource_name, test_tp);
 
     auto describe_resp = describe_configs(test_tp);
-    assert_property_value(
-      test_tp, "retention.ms", fmt::format("{}", 1234ms), describe_resp);
+    assert_property_value(test_tp, "retention.ms", "1234", describe_resp);
     assert_property_value(test_tp, "cleanup.policy", "compact", describe_resp);
     assert_property_value(
       test_tp, "redpanda.remote.read", "true", describe_resp);
@@ -893,8 +892,7 @@ FIXTURE_TEST(test_alter_multiple_topics_config, alter_config_test_fixture) {
     BOOST_REQUIRE_EQUAL(resp.data.responses[1].resource_name, topic_2);
 
     auto describe_resp_1 = describe_configs(topic_1);
-    assert_property_value(
-      topic_1, "retention.ms", fmt::format("{}", 1234ms), describe_resp_1);
+    assert_property_value(topic_1, "retention.ms", "1234", describe_resp_1);
     assert_property_value(
       topic_1, "cleanup.policy", "compact", describe_resp_1);
     assert_property_value(topic_1, "write.caching", "true", describe_resp_1);
@@ -979,8 +977,7 @@ FIXTURE_TEST(
     BOOST_REQUIRE_EQUAL(resp.data.responses[0].resource_name, test_tp);
 
     auto describe_resp = describe_configs(test_tp);
-    assert_property_value(
-      test_tp, "retention.ms", fmt::format("{}", 1234ms), describe_resp);
+    assert_property_value(test_tp, "retention.ms", "1234", describe_resp);
     assert_property_value(test_tp, "write.caching", "true", describe_resp);
     assert_property_value(test_tp, "flush.ms", "225", describe_resp);
     assert_property_value(test_tp, "flush.bytes", "32468", describe_resp);
@@ -1006,7 +1003,8 @@ FIXTURE_TEST(
       test_tp,
       "retention.ms",
       fmt::format(
-        "{}", config::shard_local_cfg().log_retention_ms().value_or(-1ms)),
+        "{}",
+        config::shard_local_cfg().log_retention_ms().value_or(-1ms).count()),
       new_describe_resp);
     assert_property_value(
       test_tp, "retention.bytes", "4096", new_describe_resp);
@@ -1050,8 +1048,7 @@ FIXTURE_TEST(test_incremental_alter_config, alter_config_test_fixture) {
     BOOST_REQUIRE_EQUAL(resp.data.responses[0].resource_name, test_tp);
 
     auto describe_resp = describe_configs(test_tp);
-    assert_property_value(
-      test_tp, "retention.ms", fmt::format("{}", 1234ms), describe_resp);
+    assert_property_value(test_tp, "retention.ms", "1234", describe_resp);
     assert_property_value(test_tp, "write.caching", "true", describe_resp);
     assert_property_value(test_tp, "flush.ms", "1234", describe_resp);
     assert_property_value(test_tp, "flush.bytes", "5678", describe_resp);
@@ -1077,8 +1074,7 @@ FIXTURE_TEST(test_incremental_alter_config, alter_config_test_fixture) {
 
     auto new_describe_resp = describe_configs(test_tp);
     // retention.ms should stay untouched
-    assert_property_value(
-      test_tp, "retention.ms", fmt::format("{}", 1234ms), new_describe_resp);
+    assert_property_value(test_tp, "retention.ms", "1234", new_describe_resp);
     assert_property_value(
       test_tp, "retention.bytes", "4096", new_describe_resp);
     assert_property_value(test_tp, "write.caching", "false", new_describe_resp);
@@ -1142,8 +1138,7 @@ FIXTURE_TEST(test_incremental_alter_config_remove, alter_config_test_fixture) {
     BOOST_REQUIRE_EQUAL(resp.data.responses[0].resource_name, test_tp);
 
     auto describe_resp = describe_configs(test_tp);
-    assert_property_value(
-      test_tp, "retention.ms", fmt::format("{}", 1234ms), describe_resp);
+    assert_property_value(test_tp, "retention.ms", "1234", describe_resp);
     assert_property_value(test_tp, "write.caching", "true", describe_resp);
     assert_property_value(test_tp, "flush.ms", "9999", describe_resp);
     assert_property_value(test_tp, "flush.bytes", "8888", describe_resp);
@@ -1186,7 +1181,8 @@ FIXTURE_TEST(test_incremental_alter_config_remove, alter_config_test_fixture) {
       test_tp,
       "retention.ms",
       fmt::format(
-        "{}", config::shard_local_cfg().log_retention_ms().value_or(-1ms)),
+        "{}",
+        config::shard_local_cfg().log_retention_ms().value_or(-1ms).count()),
       new_describe_resp);
     assert_property_value(
       test_tp,
@@ -1214,7 +1210,10 @@ FIXTURE_TEST(test_incremental_alter_config_remove, alter_config_test_fixture) {
       "delete.retention.ms",
       fmt::format(
         "{}",
-        config::shard_local_cfg().tombstone_retention_ms().value_or(-1ms)),
+        config::shard_local_cfg()
+          .tombstone_retention_ms()
+          .value_or(-1ms)
+          .count()),
       new_describe_resp);
 }
 

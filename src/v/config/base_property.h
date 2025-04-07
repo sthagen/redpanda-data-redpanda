@@ -140,6 +140,11 @@ public:
     virtual std::optional<std::string_view> units_name() const = 0;
     virtual bool is_nullable() const = 0;
     virtual bool is_array() const = 0;
+    /**
+     * Example of correct syntax for this property. In most cases, this value
+     * should be accepted by the config api (JSON API/YAML parser) as a valid
+     * value for this property.
+     */
     virtual std::optional<std::string_view> example() const = 0;
     virtual std::vector<ss::sstring> enum_values() const { return {}; };
 

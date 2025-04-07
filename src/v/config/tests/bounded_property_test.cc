@@ -31,6 +31,8 @@ struct test_config : public config::config_store {
       bounded_double_opt;
     config::bounded_property<std::optional<std::chrono::milliseconds>>
       bounded_opt_ms;
+    config::bounded_property<std::optional<std::chrono::milliseconds>>
+      minmax_bounded_opt_ms;
 
     test_config()
       : bounded_int(
@@ -74,7 +76,14 @@ struct test_config : public config::config_store {
           "An optional duration",
           {},
           std::nullopt,
-          {.min = 5ms}) {}
+          {.min = 5ms})
+      , minmax_bounded_opt_ms(
+          *this,
+          "bounded_opt_ms",
+          "An optional duration",
+          {},
+          std::nullopt,
+          {.min = 5ms, .max = 100ms}) {}
 };
 
 SEASTAR_THREAD_TEST_CASE(numeric_integral_bounds) {
@@ -175,6 +184,15 @@ SEASTAR_THREAD_TEST_CASE(numeric_fp_bounds) {
     // Too high: clamp to maximum
     cfg.bounded_double.set_value(YAML::Load("1000000"));
     BOOST_TEST(cfg.bounded_double() == 2.236067977);
+}
+
+SEASTAR_THREAD_TEST_CASE(bounded_property_example) {
+    auto cfg = test_config();
+
+    BOOST_CHECK_EQUAL(cfg.bounded_int.example(), "18432");
+    BOOST_CHECK_EQUAL(cfg.bounded_int_opt.example(), "18432");
+    BOOST_CHECK(cfg.bounded_opt_ms.example()->empty());
+    BOOST_CHECK_EQUAL(cfg.minmax_bounded_opt_ms.example(), "52");
 }
 
 SEASTAR_THREAD_TEST_CASE(bounded_property_set_value) {
