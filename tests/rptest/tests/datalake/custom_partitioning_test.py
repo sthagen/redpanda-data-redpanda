@@ -624,7 +624,7 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
                              "number": n,
                              "timestamp_us": int(t + n),
                          },
-                         wait_time_s=300)
+                         wait_time_s=900)
 
             describe_partitioning = self.describe_partitioning(dl, topic_name)
             expected_partitioning = [

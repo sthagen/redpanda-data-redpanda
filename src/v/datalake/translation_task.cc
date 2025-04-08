@@ -13,10 +13,14 @@
 #include "datalake/logger.h"
 #include "datalake/record_multiplexer.h"
 #include "iceberg/values_bytes.h"
+#include "utils/retry_chain_node.h"
 
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>
 namespace datalake {
+
+using namespace std::chrono_literals;
+
 namespace {
 
 translation_task::errc map_error_code(cloud_data_io::errc errc) {
@@ -63,8 +67,17 @@ ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
       file.table_location / remote_path_prefix / file.partition_key_path
       / file.local_file.path().filename()};
 
+    // (Approximate because I'm ignoring backoff) ~5 retries at 1
+    // MiB/s with 10s overhead for acquiring/waiting/connecting a connection
+    // from the client pool. Very conservative.
+    const auto expected_upload_duration
+      = 5 * (10s + file.local_file.size_bytes / 1_MiB * 1s);
+
+    auto upload_rcn = retry_chain_node(
+      expected_upload_duration, 100ms, &parent_rcn);
+
     auto result = co_await _cloud_io.upload_data_file(
-      file.local_file, file_remote_path, parent_rcn, lazy_as);
+      file.local_file, file_remote_path, upload_rcn, lazy_as);
     if (result.has_error()) {
         vlog(
           datalake_log.warn,

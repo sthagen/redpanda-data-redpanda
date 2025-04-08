@@ -228,6 +228,8 @@ public:
     /**
      * Cleans up state and uploads data to cloud storage. Should be called in
      * all cases for appropriate cleanup.
+     * This is called outside of translation scheduler context so it does not
+     * block translation of other partitions.
      */
     virtual ss::future<
       checked<coordinator::translated_offset_range, translation_errc>>

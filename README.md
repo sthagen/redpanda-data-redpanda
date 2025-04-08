@@ -3,8 +3,6 @@
 [![Documentation](https://img.shields.io/badge/documentation-black)](https://redpanda.com/documentation)
 [![Slack](https://img.shields.io/badge/slack-purple)](https://redpanda.com/slack)
 [![Twitter](https://img.shields.io/twitter/follow/redpandadata.svg?style=social&label=Follow)](https://twitter.com/intent/follow?screen_name=redpandadata)
-![Go](https://github.com/redpanda-data/redpanda/workflows/Go/badge.svg)
-![C++](https://github.com/redpanda-data/redpanda/workflows/build-test/badge.svg)
 [![Redpanda University](https://img.shields.io/badge/Redpanda%20University-black)](https://university.redpanda.com/)
 <p align="center">
 <a href="https://redpanda.com/redpanda"><img src="docs/PANDA_sitting.png" alt="redpanda sitting" width="400"></a>
@@ -69,17 +67,17 @@ For amd64:
 
 ```
 curl -LO \
-  https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/raw/names/redpanda-amd64/versions/23.3.6/redpanda-24.2.7-amd64.tar.gz
+  https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/raw/names/redpanda-amd64/versions/25.1.1/redpanda-25.1.1-amd64.tar.gz
 ```
 
 For arm64:
 
 ```
 curl -LO \
-  https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/raw/names/redpanda-arm64/versions/23.3.6/redpanda-24.2.7-arm64.tar.gz
+  https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/raw/names/redpanda-arm64/versions/25.1.1/redpanda-25.1.1-arm64.tar.gz
 ```
 
-Replace `24.2.7` with the version you want to download. See [Release Notes](https://github.com/redpanda-data/redpanda/releases).
+Replace `25.1.1` with the version you want to download. See [Release Notes](https://github.com/redpanda-data/redpanda/releases).
 
 ## Build Manually
 
@@ -131,32 +129,25 @@ sudo yum install redpanda
 
 ### RC releases on Docker
 
-Example with `v23.1.1-rc1`:
+Example with `v25.1.1-rc1`:
 
 ```bash
-docker pull docker.redpanda.com/redpandadata/redpanda-unstable:v23.1.1-rc1
+docker pull docker.redpanda.com/redpandadata/redpanda-unstable:v25.1.1-rc1
 ```
 
 # Community
 
-[Slack](https://redpanda.com/slack): This is the primary way the community interacts in real time. :)
-
-[Github Discussions](https://github.com/redpanda-data/redpanda/discussions): This is for longer, async, thoughtful discussions.
-
-[GitHub Issues](https://github.com/redpanda-data/redpanda/issues): This is reserved only for actual issues. Please use the mailing list for discussions.
-
-[Code of Conduct](./CODE_OF_CONDUCT.md)
-
-[Contribute to the Code](./CONTRIBUTING.md)
+- [Slack](https://redpanda.com/slack): This is the primary way the community interacts in real time. :)
+- [Github Discussions](https://github.com/redpanda-data/redpanda/discussions): This is for longer, async, thoughtful discussions.
+- [GitHub Issues](https://github.com/redpanda-data/redpanda/issues): This is reserved only for actual issues. Please use the mailing list for discussions.
+- [Code of Conduct](./CODE_OF_CONDUCT.md)
+- [Contribute to the Code](./CONTRIBUTING.md)
 
 # Resources
 
-[Redpanda Documentation](https://docs.redpanda.com/home/)
+- [Redpanda Documentation](https://docs.redpanda.com/home/)
+- [Redpanda Blog](https://www.redpanda.com/blog)
+- [Upcoming Redpanda Events](https://www.redpanda.com/events)
+- [Redpanda Support](https://support.redpanda.com/)
+- [Redpanda University](https://university.redpanda.com/)
 
-[Redpanda Blog](https://www.redpanda.com/blog)
-
-[Upcoming Redpanda Events](https://www.redpanda.com/events)
-
-[Redpanda Support](https://support.redpanda.com/)
-
-[Redpanda University](https://university.redpanda.com/)

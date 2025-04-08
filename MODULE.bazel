@@ -18,7 +18,7 @@ use_repo(
 )
 
 bazel_dep(name = "gazelle", version = "0.42.0")
-bazel_dep(name = "abseil-cpp", version = "20240722.0")
+bazel_dep(name = "abseil-cpp", version = "20250127.1")
 bazel_dep(name = "bazel_skylib", version = "1.7.1")
 bazel_dep(name = "crc32c", version = "1.1.0")
 bazel_dep(name = "fmt", version = "9.1.0")

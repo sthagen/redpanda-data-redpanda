@@ -129,6 +129,9 @@ redpanda_cc_library(
     hdrs = [
         "partition_translator.h",
     ],
+    implementation_deps = [
+        "//src/v/ssx:watchdog",
+    ],
     include_prefix = "datalake/translation",
     visibility = ["//visibility:public"],
     deps = [

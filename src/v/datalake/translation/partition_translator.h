@@ -74,9 +74,7 @@ public:
       std::unique_ptr<data_source>,
       std::unique_ptr<translation_context>,
       std::unique_ptr<translation_lag_tracker>,
-      jitter_t jitter,
-      std::chrono::milliseconds retry_max_timeout,
-      std::chrono::milliseconds retry_initial_backoff);
+      jitter_t jitter);
 
     const scheduling::translator_id& id() const final;
 
@@ -189,8 +187,6 @@ private:
     std::unique_ptr<translation_lag_tracker> _lag_tracking;
     // TODO: consider baking backoff into the scheduler on translation failure.
     jitter_t _jitter;
-    std::chrono::milliseconds _retry_max_timeout;
-    std::chrono::milliseconds _retry_initial_backoff;
     model::term_id _term;
     prefix_logger _logger;
     bool _initialized = false;

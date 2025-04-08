@@ -420,9 +420,7 @@ protected:
             std::make_unique<fake_translation_ctx>(ctx),
             std::make_unique<fake_lag_tracker>(ctx),
             simple_time_jitter<ss::lowres_clock, std::chrono::milliseconds>{
-              retry_max_timeout, retry_initial_backoff},
-            retry_max_timeout,
-            retry_initial_backoff));
+              retry_max_timeout, retry_initial_backoff}));
     }
 
     fake_test_ctx& make_test_context() {
