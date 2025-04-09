@@ -198,7 +198,7 @@ struct retry_permit {
 /// It can also receive its own timeout value and backoff interval. The
 /// timeout value have to be smaller that the one of the parent node.
 template<class Clock = ss::lowres_clock>
-class basic_retry_chain_node {
+class [[gnu::warn_unused]] basic_retry_chain_node {
 public:
     using clock = Clock;
     using duration = typename clock::duration;

@@ -54,7 +54,7 @@ set(srcs
     tm_stm_tests.cc
     data_migration_table_test.cc
     manual_log_deletion_test.cc
-    eviction_stm_test.cc
+    log_eviction_stm_test.cc
     )
 
 foreach(cluster_test_src ${srcs})

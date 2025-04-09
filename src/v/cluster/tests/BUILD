@@ -611,10 +611,10 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
-    name = "eviction_stm_test",
+    name = "log_eviction_stm_test",
     timeout = "short",
     srcs = [
-        "eviction_stm_test.cc",
+        "log_eviction_stm_test.cc",
     ],
     deps = [
         "//src/v/cluster",
@@ -622,7 +622,6 @@ redpanda_cc_gtest(
         "//src/v/model",
         "//src/v/raft",
         "//src/v/raft/tests:raft_fixture",
-        "//src/v/storage",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:to_string",
         "@googletest//:gtest",

@@ -9,7 +9,6 @@
 
 #include "cluster/log_eviction_stm.h"
 #include "raft/tests/raft_fixture.h"
-#include "storage/disk_log_impl.h"
 #include "test_utils/async.h"
 
 ss::logger logger("eviction_stm_test");

@@ -131,7 +131,6 @@ void wait_for_job_execution(
 }
 
 SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_stop) {
-    retry_chain_node rtc(abort_never);
     archival::housekeeping_workflow wf(mock_quota);
     mock_job job1(10s);
     mock_job job2(10s);
@@ -152,7 +151,6 @@ SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_stop) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_pause) {
-    retry_chain_node rtc(abort_never);
     archival::housekeeping_workflow wf(mock_quota);
     mock_job job1(10ms);
     mock_job job2(10ms);
@@ -179,7 +177,6 @@ SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_pause) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_drain) {
-    retry_chain_node rtc(abort_never);
     archival::housekeeping_workflow wf(mock_quota);
     mock_job job1(10ms);
     mock_job job2(10ms);
@@ -210,7 +207,6 @@ SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_drain) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_interrupt) {
-    retry_chain_node rtc(abort_never);
     archival::housekeeping_workflow wf(mock_quota);
     mock_job job1(10s);
     mock_job job2(10ms);
@@ -229,7 +225,6 @@ SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_interrupt) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_no_jobs) {
-    retry_chain_node rtc(abort_never);
     archival::housekeeping_workflow wf(mock_quota);
     {
         mock_job job1(10s);
@@ -254,7 +249,6 @@ SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_no_jobs) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_housekeeping_workflow_job_throws) {
-    retry_chain_node rtc(abort_never);
     archival::housekeeping_workflow wf(mock_quota);
     {
         mock_job job1; // This job will throw
