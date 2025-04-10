@@ -862,6 +862,7 @@ redpanda_cc_bench(
     ],
     duration = 1,
     memory = "4GiB",
+    redirect_stderr = True,
     runs = 1,
     tags = ["exclusive"],
     deps = [

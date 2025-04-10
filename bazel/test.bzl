@@ -353,7 +353,8 @@ def redpanda_cc_bench(
         duration = None,
         data = [],
         tags = [],
-        target_compatible_with = []):
+        target_compatible_with = [],
+        redirect_stderr = False):
     """
     Create a seastar benchmark target
 
@@ -372,6 +373,8 @@ def redpanda_cc_bench(
       tags: custom tags for the test
       timeout: the timeout for smoke testing the benchmark
       target_compatible_with: constraints for the test target
+      redirect_stderr: if True, redirects stdout (seastar logging, mostly) to a file
+                       so that it does not overwhelm the result output
     """
 
     # We require this naming convention as we do things like extract
@@ -409,14 +412,15 @@ def redpanda_cc_bench(
 
     tags = tags + ["bench"]
 
+    binary_name = name + "_binary"
+
     native.cc_binary(
-        name = name,
+        name = binary_name,
         srcs = srcs,
         defines = defines,
         deps = deps,
         testonly = True,
         copts = redpanda_copts(),
-        args = args + binary_args,
         features = [
             "layering_check",
         ],
@@ -424,6 +428,28 @@ def redpanda_cc_bench(
         env = env,
         data = data,
     )
+
+    args = ["$(rootpath :{})".format(binary_name)] + args
+
+    env = env | {
+        "MB_REDIRECT_STDERR_DEFAULT": "1" if redirect_stderr else "0",
+    }
+
+    # to run a benchmark in the right way, we need to wrap it in bench-wrapper.sh,
+    # which can cd to the right location and make other adjustments
+    native.sh_binary(
+        name = name,
+        srcs = ["//tools:bench_wrapper"],
+        args = args,
+        data = data + [
+            ":" + binary_name,
+        ],
+        env = env,
+        testonly = True,
+    )
+
+    # we write a wrapper to test the benchmark, which tries to
+    # run it as quickly as possible in order to smoke test it
     write_file(
         name = name + "_test_script",
         out = name + "_test_wrapper.sh",
@@ -439,11 +465,9 @@ def redpanda_cc_bench(
         tags = resource_tags + tags,
         srcs = [name + "_test_script"],
         env = env | test_env,
-        args = [
-            "$(rootpath :{})".format(name),
-        ] + args,
+        args = args,
         data = [
-            ":" + name,
+            ":" + binary_name,
         ] + data + test_data,
         target_compatible_with = target_compatible_with,
     )

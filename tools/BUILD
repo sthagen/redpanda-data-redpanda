@@ -75,3 +75,9 @@ alias(
     name = "format_clang",
     actual = ":clang_format",
 )
+
+filegroup(
+    name = "bench_wrapper",
+    srcs = ["bench-wrapper.sh"],
+    visibility = ["//visibility:public"],
+)
