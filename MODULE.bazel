@@ -400,5 +400,5 @@ http_file(
     name = "minio",
     executable = True,
     integrity = "sha256-zr1iiuhZtGcN6cBLDL9WAKSYFm2iAxrWNMmHII2JrpQ=",
-    urls = ["https://dl.min.io/server/minio/release/linux-amd64/minio.RELEASE.2025-04-03T14-56-28Z"],
+    urls = ["https://dl.min.io/server/minio/release/linux-amd64/archive/minio.RELEASE.2025-04-03T14-56-28Z"],
 )

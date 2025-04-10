@@ -83,7 +83,7 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_bench(
-    name = "pipeline_bench",
+    name = "pipeline_rpbench",
     timeout = "short",
     srcs = [
         "pipeline_bench.cc",

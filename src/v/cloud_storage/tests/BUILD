@@ -292,7 +292,7 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_bench(
-    name = "tx_range_manifest_bench",
+    name = "tx_range_manifest_rpbench",
     srcs = ["tx_range_manifest_bench.cc"],
     deps = [
         "//src/v/base",

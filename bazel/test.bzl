@@ -373,6 +373,12 @@ def redpanda_cc_bench(
       timeout: the timeout for smoke testing the benchmark
       target_compatible_with: constraints for the test target
     """
+
+    # We require this naming convention as we do things like extract
+    # the list of all benchmarks using a name-based query.
+    if not name.endswith("_rpbench"):
+        fail("benchmark names must end with _rpbench")
+
     args = [
         "--blocked-reactor-notify-ms 2000000",
         "--abort-on-seastar-bad-alloc",
