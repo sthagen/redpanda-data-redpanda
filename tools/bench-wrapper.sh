@@ -49,6 +49,7 @@ if [[ $rc -ne 0 ]]; then
   else
     echo "$msg"
   fi
+  exit $rc
 else
   echo "[bench-wrapper] benchmark completed successfully"
 fi
