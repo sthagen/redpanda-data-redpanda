@@ -148,6 +148,7 @@ class LiveClusterParams:
     cluster_id: str = ""
     _isAlive: bool = False
     connection_type: str = 'public'
+    namespace: str | None = None
     namespace_uuid: str | None = None
     name: str | None = None
     last_status: str = ""
@@ -181,10 +182,10 @@ class LiveClusterParams:
 
 
 @dataclass
-class ProductInfo:
+class ThroughputTierInfo:
     max_ingress: int
     max_egress: int
-    max_connection_count: int
+    max_connections_count: int
     max_partition_count: int
 
 
@@ -231,7 +232,7 @@ class CloudCluster():
             self.config.config_profile_name = TIER_DEFAULTS[
                 self.config.provider]
         # Init API client
-        self.cloudv2 = RpCloudApiClient(self.config, logger)
+        self.rpcloud = RpCloudApiClient(self.config, logger)
 
         # copy the regular config, but override the api_url to point
         # to the public API instead
@@ -355,8 +356,9 @@ class CloudCluster():
     @property
     def isAlive(self):
         _c = self._get_cluster(self.current.cluster_id)
-        self.current._isAlive = True if _c['status'][
-            'health'] == 'healthy' else False
+        # the public API does not seem to return cluster health information
+        # self.current._isAlive = _c['status']['health'] == 'healthy'
+        self.current._isAlive = _c['state'] == 'STATE_READY'
         return self.current._isAlive
 
     def _get_cloud_users(self):
@@ -365,7 +367,7 @@ class CloudCluster():
         _total = 1
         while _offset < _total:
             _params = {'offset': _offset}
-            _r = self.cloudv2._http_get(endpoint="/api/v1/users",
+            _r = self.rpcloud._http_get(endpoint="/api/v1/users",
                                         params=_params)
             if _r is None:
                 return {}
@@ -375,7 +377,7 @@ class CloudCluster():
         return _users
 
     def _get_cluster_users(self):
-        _r = self.cloudv2._http_get(
+        _r = self.rpcloud._http_get(
             base_url=self.current.consoleUrl,
             endpoint="/api/users",
         )
@@ -416,7 +418,7 @@ class CloudCluster():
         _id = r['resource_group']['id']
         self._logger.debug(f"created namespaceUuid {_id}")
         # save namespace name
-        self.config.namespace = name
+        self.current.namespace = name
         return _id
 
     def _cluster_ready(self):
@@ -430,31 +432,30 @@ class CloudCluster():
         # Check state and raise error if anything critical happens
         self._logger.debug(f"Cluster status: {c['state']}")
         self.current.last_status = c['state']
-        if c['state'] == 'ready':
-            return True
-        elif c['state'] == 'unknown':
-            raise RuntimeError("Creation failed (state 'unknown') "
-                               f"for '{self.config.provider}'")
-        elif c['state'] == 'deleting':
-            raise RuntimeError("Creation failed (state 'deleting') "
-                               f"for '{self.config.provider}'")
+        match c['state']:
+            case 'STATE_READY':
+                return True
+            case 'STATE_UNKNOWN':
+                raise RuntimeError("Creation failed (state 'unknown') "
+                                   f"for '{self.config.provider}'")
+            case 'STATE_DELETING':
+                raise RuntimeError("Creation failed (state 'deleting') "
+                                   f"for '{self.config.provider}'")
+            case _:
+                return False
 
-        return False
-
-    def _cluster_status(self, status):
-        _cluster = self.cloudv2._http_get(
-            endpoint=f'/api/v1/clusters/{self.current.cluster_id}')
-        return _cluster['state'] == status
+    def _cluster_state(self, state: str):
+        _cluster = self.rpcloud.get_cluster(self.current.cluster_id)
+        return _cluster['state'] == state
 
     def _get_cluster_console_url(self):
-        cluster = self.cloudv2._http_get(
-            endpoint=f'/api/v1/clusters/{self.current.cluster_id}')
-        return cluster['status']['listeners']['redpandaConsole']['default'][
-            'urls'][0]
+        cluster = self.rpcloud.get_cluster(self.current.cluster_id)
+        return cluster['redpanda_console']['url']
 
-    def _get_network(self):
-        return self.cloudv2._http_get(
-            endpoint=f"/api/v1/networks/{self.current.network_id}")
+    def _get_network(self) -> dict[str, Any] | None:
+        if type(self.current.network_id) is not str:
+            return None
+        return self.rpcloud.get_network(self.current.network_id)
 
     def _get_latest_install_pack_ver(self):
         """Get latest certified install pack ver by searching list of avail.
@@ -462,7 +463,7 @@ class CloudCluster():
         :return: version, e.g. '23.2.20230707135118', or None if not found
         """
 
-        versions = self.cloudv2._http_get(
+        versions = self.rpcloud._http_get(
             endpoint='/api/v1/clusters-resources/install-pack-versions')
         latest_version = ''
         for v in versions:
@@ -491,33 +492,32 @@ class CloudCluster():
             filter(lambda r: r['name'] == self.current.region,
                    regions['regions']), {'id': None})['id']
 
-    def _get_product_name(self, config_profile_name):
+    def _get_tier_name(self, config_profile_name):
         """Get the product name for the first matching config
         profile name using filter parameters.
         Uses self.current as a source of params
-            provider: cloud provider filter, e.g. 'AWS'
-            cluster_type: cluster type filter, e.g. 'FMC'
+            provider: cloud provider filter, e.g. 'CLOUD_PROVIDER_AWS'
+            cluster_type: cluster type filter, e.g. 'TYPE_BYOC'
             region: region name filter, e.g. 'us-west-2'
-            install_pack_ver: install pack version filter,
-               e.g. '23.2.20230707135118'
 
         :param config_profile_name: config profile name, e.g. 'tier-1-aws'
-        :return: productId, e.g. 'chqrd4q37efgkmohsbdg'
+        :return: product_name, e.g. 'tier-1-aws-v3-arm'
         """
 
+        _provider = f'CLOUD_PROVIDER_{self.config.provider}'
+        _type = 'TYPE_BYOC' if self.config.type == 'BYOC' else 'TYPE_DEDICATED'
         params = {
-            'cloud_provider': self.config.provider,
-            'cluster_type': self.config.type,
-            'region': self.config.region,
-            'install_pack_version': self.current.install_pack_ver
+            'filter.cloud_provider': _provider,
+            'filter.cluster_type': _type,
+            'filter.region': self.config.region,
         }
-        products = self.cloudv2._http_get(
-            endpoint='/api/v1/clusters-resources/products', params=params)
-        for p in products:
-            if p['redpandaConfigProfileName'] == config_profile_name:
-                return p['name']
-        self._logger.warning("Could not find product for install pack, "
-                             f"request: '{params}', response:\n{products}")
+        tiers = self.public_api._http_get(endpoint='/v1beta2/tiers',
+                                          params=params)
+        for t in tiers['throughput_tiers']:
+            if t['name'] == config_profile_name:
+                return t['name']
+        self._logger.warning("Could not find throughput tier, "
+                             f"request: '{params}', response:\n{tiers}")
         return None
 
     def _create_network_payload(self):
@@ -551,19 +551,24 @@ class CloudCluster():
             "zones": self.current.zones
         }
 
-    def _get_cluster(self, _id) -> dict[str, Any]:
+    def _get_cluster(self, _id: str) -> dict[str, Any]:
         """
-        Calls CloudV2 API to get cluster info
+        Calls public API to get cluster info
         """
-        _endpoint = f"/api/v1/clusters/{_id}"
-        return self.cloudv2._http_get(endpoint=_endpoint)
+        return self.rpcloud.get_cluster(_id)
+
+    def _get_legacy_cluster(self, _id: str) -> dict[str, Any]:
+        """
+        Calls deprecated cloud API to get cluster info
+        """
+        return self.rpcloud.get_legacy_cluster(_id)
 
     def _update_live_cluster_info(self):
         """
         Update info from existing cluster (BYOC)
         """
-        # get cluster data
-        _c = self._get_cluster(self.current.cluster_id)
+        # get cluster data (needs legacy data, revisit for DEVPROD-2525)
+        _c = self._get_legacy_cluster(self.current.cluster_id)
         # Fill in immediate configuration
         self.current._isAlive = True if _c['status'][
             'health'] == 'healthy' else False
@@ -588,15 +593,16 @@ class CloudCluster():
         :return: string or None if failure
         """
 
-        cluster = self._get_cluster(self.current.cluster_id)
-        base_url = cluster['status']['listeners']['redpandaConsole'][
-            'default']['urls'][0]
-        username = cluster['spec']['consolePrometheusCredentials']['username']
-        password = cluster['spec']['consolePrometheusCredentials']['password']
+        base_url = self._get_cluster_console_url()
+        # revisit when there's a public API endpoint for prometheus
+        # credentials (DEVPROD-2525)
+        legacy = self._get_legacy_cluster(self.current.cluster_id)
+        username = legacy['spec']['consolePrometheusCredentials']['username']
+        password = legacy['spec']['consolePrometheusCredentials']['password']
         b64 = base64.b64encode(bytes(f'{username}:{password}', 'utf-8'))
         token = b64.decode('utf-8')
         headers = {'Authorization': f'Basic {token}'}
-        return self.cloudv2._http_get(
+        return self.rpcloud._http_get(
             endpoint=f'/api/cloud/prometheus/public_metrics',
             base_url=base_url,
             override_headers=headers,
@@ -616,10 +622,6 @@ class CloudCluster():
     def _cid_file(self):
         return os.path.join(self._ctx.session_context.results_dir,
                             self._cid_filename)
-
-    def _cluster_id_updated(self, uuid):
-        _cluster = self.cloudv2._http_get(endpoint=f'/api/v1/clusters/{uuid}')
-        return _cluster['id'] != uuid
 
     def rm_cluster_id_file(self):
         """
@@ -695,7 +697,7 @@ class CloudCluster():
             self.provider_cli.get_single_zone(self.current.region)
         ]
         # Call CloudV2 API to determine Product ID
-        self.current.product_name = self._get_product_name(
+        self.current.product_name = self._get_tier_name(
             self.config.config_profile_name)
         if self.current.product_name is None:
             raise RuntimeError("ProductID failed to be determined for "
@@ -715,7 +717,7 @@ class CloudCluster():
         n = self.public_api._http_post(endpoint='/v1beta2/networks',
                                        json=_body)
         if n is None:
-            raise RuntimeError(self.cloudv2.lasterror)
+            raise RuntimeError(self.rpcloud.lasterror)
         netop_id = n['operation']['id']
         self.current.network_id = self._wait_for_netop_id(netop_id)
 
@@ -730,7 +732,7 @@ class CloudCluster():
                                        json=_body)
         # handle error on CloudV2 side
         if r is None:
-            raise RuntimeError(self.cloudv2.lasterror)
+            raise RuntimeError(self.rpcloud.lasterror)
         netop_id = r['operation']['id']
 
         try:
@@ -790,8 +792,7 @@ class CloudCluster():
     @cache
     def panda_proxy_url(self):
         cluster = self._get_cluster(self.current.cluster_id)
-        return cluster['status']['listeners']['pandaProxy']['panda-proxy'][
-            'urls'][0]
+        return cluster['http_proxy']['url']
 
     def _query_panda_proxy(self, path):
         # Prepare credentials
@@ -800,7 +801,7 @@ class CloudCluster():
         b64 = base64.b64encode(bytes(f'{_u}:{_p}', 'utf-8'))
         token = b64.decode('utf-8')
         headers = {'Authorization': f'Basic {token}'}
-        return self.cloudv2._http_get(path,
+        return self.rpcloud._http_get(path,
                                       base_url=self.panda_proxy_url(),
                                       override_headers=headers)
 
@@ -832,15 +833,13 @@ class CloudCluster():
 
         # list cluster specs
         self._logger.info(f"Cluster '{self.current.cluster_id}': "
-                          f"health = '{cluster['status']['health']}', "
                           f"state = '{cluster['state']}'")
 
         # Check if panda-proxy is available
-        if not 'panda-proxy' in cluster['status']['listeners']['pandaProxy']:
+        if not 'url' in cluster['http_proxy']:
             return warn_and_return("Panda-Proxy listener is not available")
         else:
-            _u = cluster['status']['listeners']['pandaProxy']['panda-proxy'][
-                'urls'][0]
+            _u = self.panda_proxy_url()
             self._logger.info(f"Panda-Proxy listener: '{_u}'")
 
         # Check that cluster is operational
@@ -987,7 +986,7 @@ class CloudCluster():
                 # Populate self.current from cluster info
                 self._update_live_cluster_info()
                 # Fill in additional info based on collected from cluster
-                self.current.product_name = self._get_product_name(
+                self.current.product_name = self._get_tier_name(
                     self.config.config_profile_name)
         else:
             # Just create new cluster
@@ -1036,9 +1035,8 @@ class CloudCluster():
                 pass
 
         self._logger.info("Deleting cluster")
-        resp = self.cloudv2._http_get(
-            endpoint=f'/api/v1/clusters/{self.current.cluster_id}')
-        namespace_uuid = resp['namespaceUuid']
+        resp = self.rpcloud.get_cluster(self.current.cluster_id)
+        namespace_uuid = resp['resource_group_id']
 
         # For FMC, just delete the cluster and the rest will happen
         # by itself
@@ -1048,13 +1046,13 @@ class CloudCluster():
         # 2. Wait for status "delete agent"
         # 3. Use rpk to delete agent
 
-        resp = self.cloudv2._http_delete(
-            endpoint=f'/api/v1/clusters/{self.current.cluster_id}')
+        resp = self.rpcloud._http_delete(
+            endpoint=self.rpcloud.cluster_endpoint(self.current.cluster_id))
         self._logger.debug(f'resp: {json.dumps(resp)}')
 
         # Check if this is a BYOC and delete agent
         if self.config.type == CLOUD_TYPE_BYOC:
-            wait_until(lambda: self._cluster_status('deleting_agent'),
+            wait_until(lambda: self._cluster_state('STATE_DELETING_AGENT'),
                        timeout_sec=self.CHECK_TIMEOUT_SEC,
                        backoff_sec=self.CHECK_BACKOFF_SEC,
                        err_msg='Timeout waiting for deletion '
@@ -1066,8 +1064,8 @@ class CloudCluster():
         self.current.cluster_id = ''
         # skip namespace deletion to avoid error because cluster delete not complete yet
         if self._delete_namespace:
-            resp = self.cloudv2._http_delete(
-                endpoint=f'/api/v1/namespaces/{namespace_uuid}')
+            resp = self.public_api._http_delete(
+                endpoint=f'/v1beta2/resource-groups/{namespace_uuid}')
             self._logger.debug(f'resp: {json.dumps(resp)}')
 
     def _create_user(self, user: SaslCredentials):
@@ -1079,7 +1077,7 @@ class CloudCluster():
             'username': user.username,
         }
         # use the console api url to create sasl users; uses the same auth token
-        return self.cloudv2._http_post(base_url=self.current.consoleUrl,
+        return self.rpcloud._http_post(base_url=self.current.consoleUrl,
                                        endpoint='/api/users',
                                        json=payload)
 
@@ -1087,10 +1085,7 @@ class CloudCluster():
         """Create ACLs for user
         """
 
-        cluster = self.cloudv2._http_get(
-            endpoint=f'/api/v1/clusters/{self.current.cluster_id}')
-        base_url = cluster['status']['listeners']['redpandaConsole'][
-            'default']['urls'][0]
+        base_url = self._get_cluster_console_url()
         for rt in ('Topic', 'Group', 'TransactionalID'):
             payload = {
                 'host': '*',
@@ -1101,7 +1096,7 @@ class CloudCluster():
                 'resourcePatternType': 'Literal',
                 'resourceType': rt,
             }
-            self.cloudv2._http_post(base_url=base_url,
+            self.rpcloud._http_post(base_url=base_url,
                                     endpoint='/api/acls',
                                     json=payload)
 
@@ -1114,17 +1109,16 @@ class CloudCluster():
             'resourcePatternType': 'Literal',
             'resourceType': 'Cluster',
         }
-        self.cloudv2._http_post(base_url=base_url,
+        self.rpcloud._http_post(base_url=base_url,
                                 endpoint='/api/acls',
                                 json=payload)
 
     def get_broker_address(self):
-        cluster = self.cloudv2._http_get(
-            endpoint=f'/api/v1/clusters/{self.current.cluster_id}')
-        return cluster['status']['listeners']['kafka']['default']['urls'][0]
+        cluster = self.rpcloud.get_cluster(self.current.cluster_id)
+        return cluster['kafka_api']['seed_brokers'][0]
 
     def get_install_pack_version(self):
-        cluster = self.cloudv2._http_get(
+        cluster = self.rpcloud._http_get(
             endpoint=f'/api/v1/clusters/{self.current.cluster_id}')
         return cluster['status']['installPackVersion']
 
@@ -1213,7 +1207,7 @@ class CloudCluster():
         Get VPC peering connection from CloudV2
         """
         _endpoint = f"{endpoint}/{self.vpc_peering['id']}"
-        return self.cloudv2._http_get(endpoint=_endpoint)
+        return self.rpcloud._http_get(endpoint=_endpoint)
 
     def _check_peering_status_cluster(self, endpoint, state):
         """
@@ -1324,13 +1318,13 @@ class CloudCluster():
             self._logger.debug(f"body: '{_body}'")
 
             # Create peering
-            resp = self.cloudv2._http_post(
+            resp = self.rpcloud._http_post(
                 endpoint=self.current.network_endpoint, json=_body)
             if resp is None:
                 # Check if such peering exists
                 # self._logger.warning(self.cloudv2.lasterror)
-                if "network peering already exists" in self.cloudv2.lasterror:
-                    self.vpc_peering = self.cloudv2._http_get(
+                if "network peering already exists" in self.rpcloud.lasterror:
+                    self.vpc_peering = self.rpcloud._http_get(
                         endpoint=self.current.network_endpoint)[0]
                     # State should be ready at this point
                     self._logger.warning(
@@ -1349,7 +1343,7 @@ class CloudCluster():
                             self.provider_cli.get_vpc_peering_connection(
                                 self.current.vpc_peering_id)
                 else:
-                    raise RuntimeError(self.cloudv2.lasterror)
+                    raise RuntimeError(self.rpcloud.lasterror)
             else:
                 self._logger.debug(f"Created VPC peering: '{resp}'")
                 self.vpc_peering = resp
@@ -1382,7 +1376,7 @@ class CloudCluster():
             self._logger.debug(f"body: '{_body}'")
 
             # Create peering
-            resp = self.cloudv2._http_post(
+            resp = self.rpcloud._http_post(
                 endpoint=self.current.network_endpoint, json=_body)
             self._logger.debug(f"Created VPC peering: '{resp}'")
             self.vpc_peering = resp
@@ -1399,12 +1393,12 @@ class CloudCluster():
             self._logger.debug(f"body: '{_body}'")
 
             # Create peering
-            resp = self.cloudv2._http_post(
+            resp = self.rpcloud._http_post(
                 endpoint=self.current.network_endpoint, json=_body)
             if resp is None:
                 # Check if such peering exists
-                if "network peering already exists" in self.cloudv2.lasterror:
-                    self.vpc_peering = self.cloudv2._http_get(
+                if "network peering already exists" in self.rpcloud.lasterror:
+                    self.vpc_peering = self.rpcloud._http_get(
                         endpoint=self.current.network_endpoint)[0]
                     self._logger.warning(
                         "Found Cloud VPC peering connection "
@@ -1421,7 +1415,7 @@ class CloudCluster():
                             self.provider_cli.get_vpc_peering_connection(
                                 self.current.vpc_peering_id)
                 else:
-                    raise RuntimeError(self.cloudv2.lasterror)
+                    raise RuntimeError(self.rpcloud.lasterror)
             else:
                 self._logger.debug(f"Created VPC peering: '{resp}'")
                 self.vpc_peering = resp
@@ -1520,40 +1514,26 @@ class CloudCluster():
 
         return
 
-    def get_product(self) -> ProductInfo | None:
-        """ Get product information.
+    def get_tier(self) -> ThroughputTierInfo | None:
+        """ Get throughput tier information.
 
-        Returns dict with info of product, including advertised limits.
-        Returns none if product info for the tier is not found.
+        Returns dict with info of tier, including advertised limits.
+        Returns none if info for the tier is not found.
         """
 
-        if self.config.install_pack_ver == 'latest':
-            install_pack_ver = self._get_latest_install_pack_ver()
-        else:
-            install_pack_ver = self.config.install_pack_ver
-        params = {
-            'cloud_provider': self.config.provider,
-            'cluster_type': self.config.type,
-            'region': self.config.region,
-            'install_pack_version': install_pack_ver
-        }
-        products = self.cloudv2._http_get(
-            endpoint='/api/v1/clusters-resources/products', params=params)
-        for product in products:
-            if product[
-                    'redpandaConfigProfileName'] == self.config.config_profile_name:
-                return ProductInfo(
-                    max_ingress=int(product['advertisedMaxIngress']),
-                    max_egress=int(product['advertisedMaxEgress']),
-                    # note that despite the name advertisedMaxClientCount is actually
-                    # the advertised connection count, which is a much different value
-                    # (clients may make many connections to a single cluster)
-                    max_connection_count=int(
-                        product['advertisedMaxClientCount']),
-                    max_partition_count=int(
-                        product['advertisedMaxPartitionCount']))
+        tier_name = self._get_tier_name(self.config.config_profile_name)
+        tier = self.public_api._http_get(
+            endpoint=f'/v1beta2/tiers/{tier_name}')
 
-        return None
+        if 'throughput_tier' not in tier:
+            return None
+
+        tier = tier['throughput_tier']
+        return ThroughputTierInfo(
+            max_ingress=int(tier['max_ingress_bytes_per_second']),
+            max_egress=int(tier['max_egress_bytes_per_second']),
+            max_connections_count=int(tier['max_connections_count']),
+            max_partition_count=int(tier['max_partition_count']))
 
     def scale_cluster(self, nodes_count):
         """Scale out/in cluster to specified number of nodes.
@@ -1564,7 +1544,7 @@ class CloudCluster():
             'cluster_id': self.cluster_id,
             'nodes_count': str(nodes_count)
         }
-        return self.cloudv2._http_post(base_url=self.config.admin_api_url,
+        return self.rpcloud._http_post(base_url=self.config.admin_api_url,
                                        endpoint='/ScaleCluster',
                                        json=payload)
 

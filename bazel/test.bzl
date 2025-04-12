@@ -354,7 +354,8 @@ def redpanda_cc_bench(
         data = [],
         tags = [],
         target_compatible_with = [],
-        redirect_stderr = False):
+        redirect_stderr = False,
+        exec_in_shm = False):
     """
     Create a seastar benchmark target
 
@@ -375,6 +376,10 @@ def redpanda_cc_bench(
       target_compatible_with: constraints for the test target
       redirect_stderr: if True, redirects stdout (seastar logging, mostly) to a file
                        so that it does not overwhelm the result output
+      exec_in_shm: if True, the benchmark will execute in a subdir in /dev/shm which leads
+                   to very fast IO, but the inability to resolve paths relative to the bazel
+                   workspace root, so False is useful for benchmarks that need to access their
+                   runfiles
     """
 
     # We require this naming convention as we do things like extract
@@ -432,6 +437,7 @@ def redpanda_cc_bench(
     args = ["$(rootpath :{})".format(binary_name)] + args
 
     env = env | {
+        "MB_EXEC_IN_SHM": "1" if exec_in_shm else "0",
         "MB_REDIRECT_STDERR_DEFAULT": "1" if redirect_stderr else "0",
     }
 

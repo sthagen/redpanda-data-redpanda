@@ -16,81 +16,82 @@
 #include <algorithm>
 #include <bit>
 #include <climits>
+#include <type_traits>
 
 namespace serde::parquet {
 
-iobuf encode_plain(const chunked_vector<boolean_value>& vals) {
-    iobuf buf;
-    size_t i = 0;
-    while (i < vals.size()) {
-        size_t pass_size = std::min<size_t>(vals.size() - i, CHAR_BIT);
-        uint8_t tmp = 0;
-        size_t shift = 0;
-        for (; shift < pass_size; ++i, ++shift) {
-            if (vals[i].val) {
-                tmp |= 1U << shift;
-            }
-        }
-        buf.append(&tmp, 1);
+void plain_encoder<boolean_value>::add_value(boolean_value v) {
+    bits |= static_cast<unsigned>(v.val) << shift;
+    shift = ++shift % CHAR_BIT;
+    if (shift == 0) {
+        buf.append(&bits, 1);
+        bits = 0;
     }
-    return buf;
 }
 
-iobuf encode_plain(const chunked_vector<int32_value>& vals) {
-    iobuf buf;
-    for (const auto& v : vals) {
-        int32_t i = ss::cpu_to_le(v.val);
-        // NOLINTNEXTLINE(*reinterpret-cast*)
-        buf.append(reinterpret_cast<const uint8_t*>(&i), sizeof(int32_t));
+iobuf plain_encoder<boolean_value>::get_encoded_buf() {
+    if (shift != 0) {
+        buf.append(&bits, 1);
+        bits = 0;
+        shift = 0;
     }
-    return buf;
+    return std::exchange(buf, {});
 }
 
-iobuf encode_plain(const chunked_vector<int64_value>& vals) {
-    iobuf buf;
-    for (const auto& v : vals) {
-        int64_t i = ss::cpu_to_le(v.val);
-        // NOLINTNEXTLINE(*reinterpret-cast*)
-        buf.append(reinterpret_cast<const uint8_t*>(&i), sizeof(int64_t));
-    }
-    return buf;
+size_t plain_encoder<boolean_value>::size_bytes() const {
+    return buf.size_bytes();
 }
 
-iobuf encode_plain(const chunked_vector<float32_value>& vals) {
-    iobuf buf;
-    for (const auto& v : vals) {
-        // NOLINTNEXTLINE(*reinterpret-cast*)
-        buf.append(reinterpret_cast<const uint8_t*>(&v.val), sizeof(float));
+template<typename value_type>
+void numeric_plain_encoder<value_type>::add_value(value_type v) {
+    if constexpr (std::is_integral_v<decltype(v.val)>) {
+        v.val = ss::cpu_to_le(v.val);
     }
-    return buf;
+    // NOLINTNEXTLINE(*reinterpret-cast*)
+    buf.append(reinterpret_cast<const uint8_t*>(&v.val), sizeof(v.val));
 }
 
-iobuf encode_plain(const chunked_vector<float64_value>& vals) {
-    iobuf buf;
-    for (const auto& v : vals) {
-        // NOLINTNEXTLINE(*reinterpret-cast*)
-        buf.append(reinterpret_cast<const uint8_t*>(&v.val), sizeof(double));
-    }
-    return buf;
+template<typename value_type>
+iobuf numeric_plain_encoder<value_type>::get_encoded_buf() {
+    return std::exchange(buf, {});
 }
 
-iobuf encode_plain(chunked_vector<byte_array_value> vals) {
-    iobuf buf;
-    for (auto& v : vals) {
-        int32_t i = ss::cpu_to_le(static_cast<int32_t>(v.val.size_bytes()));
-        // NOLINTNEXTLINE(*reinterpret-cast*)
-        buf.append(reinterpret_cast<const uint8_t*>(&i), sizeof(int32_t));
-        buf.append(std::move(v.val));
-    }
-    return buf;
+template<typename value_type>
+size_t numeric_plain_encoder<value_type>::size_bytes() const {
+    return buf.size_bytes();
 }
 
-iobuf encode_plain(chunked_vector<fixed_byte_array_value> vals) {
-    iobuf buf;
-    for (auto& v : vals) {
-        buf.append(std::move(v.val));
-    }
-    return buf;
+template class numeric_plain_encoder<int32_value>;
+template class numeric_plain_encoder<int64_value>;
+template class numeric_plain_encoder<float32_value>;
+template class numeric_plain_encoder<float64_value>;
+
+void plain_encoder<byte_array_value>::add_value(byte_array_value&& v) {
+    int32_t i = ss::cpu_to_le(static_cast<int32_t>(v.val.size_bytes()));
+    // NOLINTNEXTLINE(*reinterpret-cast*)
+    buf.append(reinterpret_cast<const uint8_t*>(&i), sizeof(int32_t));
+    buf.append(std::move(v.val));
+}
+
+iobuf plain_encoder<byte_array_value>::get_encoded_buf() {
+    return std::exchange(buf, {});
+}
+
+size_t plain_encoder<byte_array_value>::size_bytes() const {
+    return buf.size_bytes();
+}
+
+void plain_encoder<fixed_byte_array_value>::add_value(
+  fixed_byte_array_value&& v) {
+    buf.append(std::move(v.val));
+}
+
+iobuf plain_encoder<fixed_byte_array_value>::get_encoded_buf() {
+    return std::exchange(buf, {});
+}
+
+size_t plain_encoder<fixed_byte_array_value>::size_bytes() const {
+    return buf.size_bytes();
 }
 
 namespace {
@@ -156,11 +157,31 @@ iobuf encode_levels(
     return encode_levels_impl(max_value, levels);
 }
 
-iobuf encode_for_stats(boolean_value v) { return encode_plain({v}); }
-iobuf encode_for_stats(int32_value v) { return encode_plain({v}); }
-iobuf encode_for_stats(int64_value v) { return encode_plain({v}); }
-iobuf encode_for_stats(float32_value v) { return encode_plain({v}); }
-iobuf encode_for_stats(float64_value v) { return encode_plain({v}); }
+iobuf encode_for_stats(boolean_value v) {
+    plain_encoder<boolean_value> e{};
+    e.add_value(v);
+    return e.get_encoded_buf();
+}
+iobuf encode_for_stats(int32_value v) {
+    plain_encoder<int32_value> e{};
+    e.add_value(v);
+    return e.get_encoded_buf();
+}
+iobuf encode_for_stats(int64_value v) {
+    plain_encoder<int64_value> e{};
+    e.add_value(v);
+    return e.get_encoded_buf();
+}
+iobuf encode_for_stats(float32_value v) {
+    plain_encoder<float32_value> e{};
+    e.add_value(v);
+    return e.get_encoded_buf();
+}
+iobuf encode_for_stats(float64_value v) {
+    plain_encoder<float64_value> e{};
+    e.add_value(v);
+    return e.get_encoded_buf();
+}
 iobuf encode_for_stats(const byte_array_value& v) { return v.val.copy(); }
 iobuf encode_for_stats(const fixed_byte_array_value& v) { return v.val.copy(); }
 } // namespace serde::parquet

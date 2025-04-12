@@ -384,7 +384,7 @@ latest_subject_schema_resolver::resolve_buf_type(std::optional<iobuf> b) const {
         latest_cached_schema_ = std::nullopt;
     }
     auto latest_schema_fut
-      = co_await ss::coroutine::as_future<ppsr::subject_schema>(
+      = co_await ss::coroutine::as_future<ppsr::stored_schema>(
         sr_->get_subject_schema(subject_, /*subject_version=*/std::nullopt));
     if (latest_schema_fut.failed()) {
         latest_schema_fut.ignore_ready_future();

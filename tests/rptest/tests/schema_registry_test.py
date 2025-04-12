@@ -442,8 +442,10 @@ import_schemas = {
         }],
         "schema":
         schema_d_proto_def,
+        #schema d will be invalid during startup in the test it is used.
+        #that's why the 'sanitized' form is not the actual sanitized form but the input form.
         "sanitized":
-        schema_d_proto_sanitized_def,
+        schema_d_proto_def,
     },
     "schema_e": {
         "subject": "schema_e",
@@ -2625,6 +2627,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             (8, "schema_g_v1"),
             (10, "schema_g_v3"),
         ]
+        #These are schemas that having missing dependencies at startup
         invalid_entries = [
             (4, "schema_d"),
             (9, "schema_g_v2"),
@@ -2652,13 +2655,9 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             else:
                 assert_request_code(result_raw, 422, endpoint)
 
-        #These schemas are valid. We should be able to retrieve them.
-        for id, _ in valid_entries:
+        #All schemas should be retrievable by id.
+        for id, _ in valid_entries + invalid_entries:
             test_schemas_ids_id(id, expected_successful=True)
-
-        #These schemas are invalid. Tryint to retrieve them should return an error.
-        for id, _ in invalid_entries:
-            test_schemas_ids_id(id, expected_successful=False)
 
         #Test /schemas/ids/{id}/versions
         def test_schemas_ids_id_versions(id, expected_successful):
@@ -2671,10 +2670,9 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             else:
                 assert_request_code(result_raw, 422, endpoint)
 
-        for id, _ in valid_entries:
+        #Versions should be retrievable for all ids.
+        for id, _ in valid_entries + invalid_entries:
             test_schemas_ids_id_versions(id, expected_successful=True)
-        for id, _ in invalid_entries:
-            test_schemas_ids_id_versions(id, expected_successful=False)
 
         #Test /schemas/ids/{id}/subjects
         def test_schemas_ids_id_subjects(id, expected_successful):
@@ -2687,10 +2685,9 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             else:
                 assert_request_code(result_raw, 422, endpoint)
 
-        for id, _ in valid_entries:
+        #Subjects should be retrievable for all ids.
+        for id, _ in valid_entries + invalid_entries:
             test_schemas_ids_id_subjects(id, expected_successful=True)
-        for id, _ in invalid_entries:
-            test_schemas_ids_id_subjects(id, expected_successful=False)
 
         #Test /subjects
         result_raw = self._request("GET",
@@ -2708,7 +2705,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             f"Expected {expected_subjects} but got {subjects}, "\
             "for request 'GET subjects'"
 
-        def test_subjects_subject(entry, expected_successful):
+        def test_subjects_subject(entry, expected_code):
             lookup_schema = import_schemas[entry]
             subject = lookup_schema["subject"]
             schema_def = lookup_schema["schema"]
@@ -2725,23 +2722,101 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
                                                          references
                                                      }))
             endpoint = f"POST subjects/{subject}",
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
+            assert_request_code(result_raw, expected_code, endpoint)
+            if expected_code == requests.codes.ok:
                 result = result_raw.json()
                 assert result["version"] == version, \
                         f"Expected version {version} but got {result['version']}, "\
                         f"for request 'POST subjects/{subject}'"
-            else:
-                assert_request_code(result_raw, 422, endpoint)
 
         #Test /subjects/{subject}
         for _, s in valid_entries:
-            test_subjects_subject(s, expected_successful=True)
+            test_subjects_subject(s, expected_code=requests.codes.ok)
 
         #These schemas should fail, as the *input* schema has an unsatisfied dependency
         for _, s in invalid_entries:
-            test_subjects_subject(s, expected_successful=False)
+            test_subjects_subject(s, expected_code=422)
 
+        #Test /subjects/{subject}/versions/{version}
+        def test_subjects_subject_versions_version(entry, expected_successful):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            version = lookup_schema["version"]
+            expected_schema = lookup_schema["sanitized"].strip()
+            #references = lookup_schema["references"] if "references" in lookup_schema else []
+            result_raw = self._get_subjects_subject_versions_version(
+                subject=subject, version=version)
+            endpoint = f"GET subjects/{subject}/versions/{version}"
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+
+                result = result_raw.json()["schema"].strip()
+                assert result == expected_schema, \
+                        f"Expected:\n{expected_schema}\nGot:\n{result}\nfor request "\
+                        f"'GET subjects/{subject}/versions/{version}'"
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        #All schemas should be retrievable through subject/version.
+        for _, s in valid_entries + invalid_entries:
+            test_subjects_subject_versions_version(s, expected_successful=True)
+
+        #Test /subjects/{subject}/versions/{version}/schema
+        def test_subjects_subject_versions_version_schema(
+                entry, expected_successful):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            version = lookup_schema["version"]
+            schema_def = lookup_schema["sanitized"].strip()
+            result_raw = self._request(
+                "GET",
+                f"subjects/{subject}/versions/{version}/schema",
+                headers=HTTP_GET_HEADERS)
+
+            endpoint = f"GET subjects/{subject}/versions/{version}/schema"
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+
+                result = result_raw.content.decode().strip()
+                assert result == schema_def, \
+                        f"Expected:\n{schema_def}\nGot:\n{result}\n"\
+                        f"for request 'GET subjects/{subject}/versions/{version}/schema'"
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        #All schemas should be retrievable through subject/version.
+        for _, s in valid_entries + invalid_entries:
+            test_subjects_subject_versions_version_schema(
+                s, expected_successful=True)
+
+        #Test /subjects/{subject}/versions/{version}/referencedby
+        def test_referenced_by(entry, expected_result):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            version = lookup_schema["version"]
+            result_raw = self._get_subjects_subject_versions_version_referenced_by(
+                subject, version)
+
+            endpoint = f"GET subjects/{subject}/versions/{version}/referencedby"
+            assert_request_code(result_raw, requests.codes.ok, endpoint)
+            result = result_raw.json()
+            assert result == expected_result, \
+                f"Expected {expected_result} but got {result}, " \
+                f"for request 'GET subjects/{subject}/versions/{version}/referencedby'"
+
+        test_referenced_by("schema_a", [3])
+        test_referenced_by("schema_b", [2])
+        test_referenced_by("schema_c", [])
+        test_referenced_by("schema_d", [])
+        test_referenced_by("schema_f_v1", [8])
+        test_referenced_by("schema_f_v3", [10])
+        test_referenced_by("schema_f_v5", [])
+        test_referenced_by("schema_g_v1", [])
+        test_referenced_by("schema_g_v2", [])
+        test_referenced_by("schema_g_v3", [])
+        test_referenced_by("schema_g_v4", [])
+
+        #This is the last of the endpoint to be checked, as it will change the state
         #Test /subjects/{subject}/versions
         def test_subjects_subject_versions(entry,
                                            expected_successful,
@@ -2780,89 +2855,6 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
                                            expected_id=id,
                                            expected_successful=False)
 
-        #Test /subjects/{subject}/versions/{version}
-        def test_subjects_subject_versions_version(entry, expected_successful):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            version = lookup_schema["version"]
-            expected_schema = lookup_schema["sanitized"].strip()
-            #references = lookup_schema["references"] if "references" in lookup_schema else []
-            result_raw = self._get_subjects_subject_versions_version(
-                subject=subject, version=version)
-            endpoint = f"GET subjects/{subject}/versions/{version}"
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-
-                result = result_raw.json()["schema"].strip()
-                assert result == expected_schema, \
-                        f"Expected:\n{expected_schema}\nGot:\n{result}\nfor request "\
-                        f"'GET subjects/{subject}/versions/{version}'"
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        for _, s in valid_entries:
-            test_subjects_subject_versions_version(s, expected_successful=True)
-        for _, s in invalid_entries:
-            test_subjects_subject_versions_version(s,
-                                                   expected_successful=False)
-
-        #Test /subjects/{subject}/versions/{version}/schema
-        def test_subjects_subject_versions_version_schema(
-                entry, expected_successful):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            version = lookup_schema["version"]
-            schema_def = lookup_schema["sanitized"].strip()
-            result_raw = self._request(
-                "GET",
-                f"subjects/{subject}/versions/{version}/schema",
-                headers=HTTP_GET_HEADERS)
-
-            endpoint = f"GET subjects/{subject}/versions/{version}/schema"
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-
-                result = result_raw.content.decode().strip()
-                assert result == schema_def, \
-                        f"Expected:\n{schema_def}\nGot:\n{result}\n"\
-                        f"for request 'GET subjects/{subject}/versions/{version}/schema'"
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        for _, s in valid_entries:
-            test_subjects_subject_versions_version_schema(
-                s, expected_successful=True)
-        for _, s in invalid_entries:
-            test_subjects_subject_versions_version_schema(
-                s, expected_successful=False)
-
-        #Test /subjects/{subject}/versions/{version}/referencedby
-        def test_referenced_by(entry, expected_result):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            version = lookup_schema["version"]
-            result_raw = self._get_subjects_subject_versions_version_referenced_by(
-                subject, version)
-
-            endpoint = f"GET subjects/{subject}/versions/{version}/referencedby"
-            assert_request_code(result_raw, requests.codes.ok, endpoint)
-            result = result_raw.json()
-            assert result == expected_result, \
-                f"Expected {expected_result} but got {result}, " \
-                f"for request 'GET subjects/{subject}/versions/{version}/referencedby'"
-
-        test_referenced_by("schema_a", [3])
-        test_referenced_by("schema_b", [2])
-        test_referenced_by("schema_c", [])
-        test_referenced_by("schema_d", [])
-        test_referenced_by("schema_f_v1", [8])
-        test_referenced_by("schema_f_v3", [10])
-        test_referenced_by("schema_f_v5", [])
-        test_referenced_by("schema_g_v1", [])
-        test_referenced_by("schema_g_v2", [])
-        test_referenced_by("schema_g_v3", [])
-        test_referenced_by("schema_g_v4", [])
-
         #Insert missing dependency, schema_e, and retry the failed schema_d requests
         result_raw = self._post_subjects_subject_versions(
             subject="schema_e",
@@ -2873,16 +2865,23 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         assert_request_code(result_raw, requests.codes.ok,
                             "POST subjects/schema_e/versions")
 
-        #Validate that schema_d is recognized as a referee
+        #Validate that schema_d is now accepted as a referee
         test_referenced_by("schema_e", [4])
 
         test_schemas_ids_id(4, expected_successful=True)
         test_schemas_ids_id_versions(4, expected_successful=True)
         test_schemas_ids_id_subjects(4, expected_successful=True)
-        test_subjects_subject("schema_d", expected_successful=True)
+        #Lookup still fails cause schema_d is stored not in it's canonical form
+        test_subjects_subject("schema_d", expected_code=404)
+        #Validate that schema_d can now be posted anew.
+        #Note that a new version will be created, as the old one was invalid at
+        #startup and it was not in canonical form. Thus it cannot be found and a
+        #new version is created.
         test_subjects_subject_versions("schema_d",
-                                       expected_id=4,
+                                       expected_id=16,
                                        expected_successful=True)
+        #After pushing, schema_d is not stored by its canonical form
+        import_schemas["schema_d"]["sanitized"] = schema_d_proto_sanitized_def
         test_subjects_subject_versions_version("schema_d",
                                                expected_successful=True)
         test_subjects_subject_versions_version_schema("schema_d",
@@ -2895,7 +2894,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
 
         #Fix problematic schemas by adding missing dependency for g_v2 and deleting g_v4.
         test_subjects_subject_versions("schema_f_v2",
-                                       expected_id=16,
+                                       expected_id=17,
                                        expected_successful=True)
 
         result_raw = self._delete_subject_version("schema_g", version=4)
@@ -2903,12 +2902,12 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
                             "DELETE subjects/schema_g/versions/4")
 
         test_subjects_subject_versions("schema_g_v5",
-                                       expected_id=17,
+                                       expected_id=18,
                                        expected_successful=True)
 
         #Fix problematic dependency chain by adding base schema.
         test_subjects_subject_versions("schema_h",
-                                       expected_id=18,
+                                       expected_id=19,
                                        expected_successful=True)
         test_schemas_ids_id(12, expected_successful=True)
         test_schemas_ids_id(13, expected_successful=True)
@@ -2951,15 +2950,11 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
     @cluster(num_nodes=3)
     def test_unsanitized_import(self):
         """
-        Verify that all endpoints sanitize the retrieved schema
+        Verify sanitization during startup
         """
         #Test setup: Simulate import of a schema by writting directly into the _schemas topic.
         #This schema is neither sanitized nor normalized
         self._push_to_schemas_topic([imported_schema])
-
-        self.redpanda.set_cluster_config(
-            {'schema_registry_protobuf_renderer_v2': True},
-            expect_restart=True)
 
         schema_def = imported_schema["schema"]
         #Normalization:off - /subjects/{subject}
@@ -2980,6 +2975,7 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             "for request 'POST subjects/imported'"
 
         #Normalization:on - /subjects/{subject}
+        #This should fail to find it, as the schema was not normalized when stored.
         result_raw = self._post_subjects_subject(subject="imported",
                                                  data=json.dumps({
                                                      "schema":
@@ -2988,14 +2984,9 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
                                                      "PROTOBUF"
                                                  }),
                                                  normalize=True)
-        assert result_raw.status_code == requests.codes.ok, \
-            f"Expected {requests.codes.ok} but got {result_raw.status_code}, "\
+        assert result_raw.status_code == 404, \
+            f"Expected 404 but got {result_raw.status_code}, "\
             f"for request 'POST subjects/imported?normalize=true'"
-        result = result_raw.json()["schema"].strip()
-        expected_result = imported_schema["normalized"].strip()
-        assert result == expected_result, \
-            f"Expected:\n{expected_result}\nGot:\n{result}\n"\
-            "for request 'POST subjects/imported?normalize=true'"
 
         #Normalization:off - /subjects/{subject}/versions
         result_raw = self._post_subjects_subject_versions(subject="imported",
@@ -3014,6 +3005,8 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             "for request 'POST subjects/imported/versions'"
 
         #Normalization:on - /subjects/{subject}/versions
+        #This should fail to find it and create a new one, as the schema was
+        #not normalized when stored.
         result_raw = self._post_subjects_subject_versions(subject="imported",
                                                           data=json.dumps({
                                                               "schema":
@@ -3026,8 +3019,8 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             f"Expected {requests.codes.ok} but got {result_raw.status_code}, "\
             "for request 'POST subjects/imported/versions?normalize=true'"
         result_id = result_raw.json()["id"]
-        assert result_id == 1, \
-            f"Expected id 1 but got {result_id}, "\
+        assert result_id == 2, \
+            f"Expected id 2 but got {result_id}, "\
             "for request 'POST subjects/imported/versions?normalize=true'"
 
     @cluster(num_nodes=4)
@@ -3375,8 +3368,9 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
     @cluster(num_nodes=3)
     def test_always_normalize_option(self):
 
-        # Post a schema with normalization set to off
+        # Post a schema with and without normalization
         result_raw = self._post_subjects_subject_versions(
+            normalize=False,
             subject="test_subject",
             data=json.dumps({
                 "schema": imported_schema_proto_def,
@@ -3384,10 +3378,26 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             }))
         assert result_raw.status_code == requests.codes.ok, \
             f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup"
+        result_id = result_raw.json()["id"]
+        assert result_id == 1, \
+            f"Expected id 1 but got {result_id} during test setup"
 
-        def test_schemas_ids_id(expected_schema):
+        result_raw = self._post_subjects_subject_versions(
+            normalize=True,
+            subject="test_subject",
+            data=json.dumps({
+                "schema": imported_schema_proto_def,
+                "schemaType": "PROTOBUF"
+            }))
+        assert result_raw.status_code == requests.codes.ok, \
+            f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup"
+        result_id = result_raw.json()["id"]
+        assert result_id == 2, \
+            f"Expected id 2 but got {result_id} during test setup"
+
+        def test_schemas_ids_id(id, expected_schema):
             result_raw = self._request("GET",
-                                       f"schemas/ids/1",
+                                       f"schemas/ids/{id}",
                                        headers=HTTP_GET_HEADERS)
             result = result_raw.json()["schema"].strip()
             assert result_raw.status_code == requests.codes.ok, \
@@ -3420,21 +3430,26 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         sanitized = imported_schema_sanitized_proto_def.strip()
         normalized = imported_schema_normalized_proto_def.strip()
 
-        test_schemas_ids_id(sanitized)
+        test_schemas_ids_id(1, sanitized)
+        test_schemas_ids_id(2, normalized)
         test_subjects_subject(sanitized, expected_version=1)
-        test_subjects_subject(sanitized, expected_version=1, norm=True)
-        test_subjects_subject(normalized, expected_version=None)
-        test_subjects_subject(normalized, expected_version=1, norm=True)
+        test_subjects_subject(sanitized, expected_version=2, norm=True)
+        test_subjects_subject(normalized, expected_version=2)
+        test_subjects_subject(normalized, expected_version=2, norm=True)
 
         #Update always_normalize and re-run all tests
         self.redpanda.set_cluster_config(
             {'schema_registry_always_normalize': True})
 
-        test_schemas_ids_id(imported_schema_normalized_proto_def.strip())
-        test_subjects_subject(sanitized, expected_version=1)
-        test_subjects_subject(sanitized, expected_version=1, norm=True)
-        test_subjects_subject(normalized, expected_version=1)
-        test_subjects_subject(normalized, expected_version=1, norm=True)
+        #Verify that always_normalize doesn't affect lookup by id
+        test_schemas_ids_id(1, sanitized)
+        test_schemas_ids_id(2, normalized)
+        #Verify that always_normalize always treats normalization set to on
+        test_subjects_subject(sanitized, expected_version=2)
+        test_subjects_subject(sanitized, expected_version=2, norm=True)
+        #Sanity check on normalized input
+        test_subjects_subject(normalized, expected_version=2)
+        test_subjects_subject(normalized, expected_version=2, norm=True)
 
     @cluster(num_nodes=3)
     def test_soft_deleted_references(self):

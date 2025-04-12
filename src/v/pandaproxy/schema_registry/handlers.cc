@@ -426,7 +426,7 @@ post_subject(server::request_t rq, server::reply_t rp) {
     // Force 40401 if no subject
     co_await rq.service().schema_store().get_versions(sub, inc_del);
 
-    canonical_schema schema;
+    subject_schema schema;
     try {
         auto unparsed = co_await ppj::rjson_parse(
           std::move(rq.req), post_subject_versions_request_handler<>{sub});
@@ -442,7 +442,7 @@ post_subject(server::request_t rq, server::reply_t rp) {
     }
 
     auto sub_schema = co_await rq.service().schema_store().has_schema(
-      std::move(schema), inc_del, norm);
+      std::move(schema), inc_del);
 
     rp.rep->write_body(
       "json",
@@ -482,7 +482,7 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
         unparsed.id = invalid_schema_id;
     }
 
-    subject_schema schema{
+    stored_schema schema{
       co_await rq.service().schema_store().make_canonical_schema(
         std::move(unparsed.def), norm),
       unparsed.version.value_or(invalid_schema_version),
@@ -490,7 +490,7 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
       is_deleted::no};
 
     auto ids = co_await rq.service().schema_store().get_schema_version(
-      schema.share(), norm);
+      schema.share());
 
     schema_id schema_id{ids.id.value_or(invalid_schema_id)};
     if (!ids.version.has_value()) {
@@ -679,7 +679,7 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
         version = parse_numerical_schema_version(ver).value();
     }
 
-    canonical_schema schema;
+    subject_schema schema;
     try {
         schema = co_await rq.service().schema_store().make_canonical_schema(
           std::move(unparsed.def));

@@ -700,7 +700,7 @@ class RedpandaInstaller:
 
         tgz = "redpanda.tar.gz"
         cmds = [
-            f"curl -vfsSL {self._version_package_url(version)} --retry 3 --retry-connrefused --retry-delay 2 --create-dir -o {version_root}/{tgz}",
+            f"curl -vfsSL {self._version_package_url(version)} --retry 3 --retry-all-errors --retry-delay 2 --create-dir -o {version_root}/{tgz}",
             f"gunzip -c {version_root}/{tgz} | tar -xf - -C {version_root}",
             f"rm {version_root}/{tgz}"
         ]
@@ -713,8 +713,8 @@ class RedpandaInstaller:
                 self._redpanda.logger.error(
                     f"Exception while downloading to {version_root} on {node.account.hostname}, cleaning up: {str(ssh_exc)}"
                 )
-                # Debug log to avoid printing too much to the console.
-                self._redpanda.logger.debug(
+                # Let's see the details
+                self._redpanda.logger.error(
                     f"Captured output for {str(ssh_exc)} on {node.account.hostname}: {captured_output}"
                 )
                 # Be permissive so we can clean everything.

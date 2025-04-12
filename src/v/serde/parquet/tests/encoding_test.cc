@@ -38,41 +38,60 @@ iobuf buf(const char* bytes) {
     b.append(bytes, N);
     return b;
 }
+
+template<typename ET, typename VT>
+ET& add_values(ET& encoder, chunked_vector<VT> values) {
+    for (auto& v : values) {
+        encoder.add_value(std::move(v));
+    }
+    return encoder;
+}
 } // namespace
 
 // NOLINTBEGIN(*magic-number*)
 TEST(PlainEncoding, BooleanBitPacking) {
-    auto encoded = encode_plain(chunked_vector<boolean_value>{});
+    plain_encoder<boolean_value> encoder{};
+    auto encoded = encoder.get_encoded_buf();
     EXPECT_EQ(encoded, buf_from());
-    encoded = encode_plain(chunked_vector<boolean_value>{{true}});
+    encoded = add_values(encoder, chunked_vector<boolean_value>{{true}})
+                .get_encoded_buf();
     EXPECT_EQ(encoded, buf_from(0b00000001));
-    encoded = encode_plain(chunked_vector<boolean_value>{{true}, {true}});
+    encoded = add_values(encoder, chunked_vector<boolean_value>{{true}, {true}})
+                .get_encoded_buf();
     EXPECT_EQ(encoded, buf_from(0b00000011));
-    encoded = encode_plain(
-      chunked_vector<boolean_value>{{true}, {false}, {true}});
+    encoded = add_values(
+                encoder, chunked_vector<boolean_value>{{true}, {false}, {true}})
+                .get_encoded_buf();
     EXPECT_EQ(encoded, buf_from(0b00000101));
-    encoded = encode_plain(chunked_vector<boolean_value>{
-      {true},
-      {false},
-      {true},
-      {true},
-      {true},
-      {false},
-      {false},
-      {false},
-      {true},
-      {false},
-      {true}});
+    encoded = add_values(
+                encoder,
+                chunked_vector<boolean_value>{
+                  {true},
+                  {false},
+                  {true},
+                  {true},
+                  {true},
+                  {false},
+                  {false},
+                  {false},
+                  {true},
+                  {false},
+                  {true}})
+                .get_encoded_buf();
     EXPECT_EQ(encoded, buf_from(0b00011101, 0b00000101));
 }
 
 TEST(PlainEncoding, Int32) {
-    auto encoded = encode_plain(chunked_vector<int32_value>{
-      {42},
-      {0},
-      {65},
-      {std::numeric_limits<int32_t>::max()},
-      {std::numeric_limits<int32_t>::min()}});
+    plain_encoder<int32_value> encoder{};
+    auto encoded = add_values(
+                     encoder,
+                     chunked_vector<int32_value>{
+                       {42},
+                       {0},
+                       {65},
+                       {std::numeric_limits<int32_t>::max()},
+                       {std::numeric_limits<int32_t>::min()}})
+                     .get_encoded_buf();
     EXPECT_EQ(
       encoded,
       buf<5 * 4>("\x2A\x00\x00\x00"
@@ -83,14 +102,18 @@ TEST(PlainEncoding, Int32) {
 }
 
 TEST(PlainEncoding, Int64) {
-    auto encoded = encode_plain(chunked_vector<int64_value>{
-      {42},
-      {0},
-      {65},
-      {std::numeric_limits<int32_t>::min()},
-      {std::numeric_limits<int32_t>::max()},
-      {std::numeric_limits<int64_t>::min()},
-      {std::numeric_limits<int64_t>::max()}});
+    plain_encoder<int64_value> encoder{};
+    auto encoded = add_values(
+                     encoder,
+                     chunked_vector<int64_value>{
+                       {42},
+                       {0},
+                       {65},
+                       {std::numeric_limits<int32_t>::min()},
+                       {std::numeric_limits<int32_t>::max()},
+                       {std::numeric_limits<int64_t>::min()},
+                       {std::numeric_limits<int64_t>::max()}})
+                     .get_encoded_buf();
     EXPECT_EQ(
       encoded,
       buf<8 * 7>("\x2A\x00\x00\x00\x00\x00\x00\x00"
@@ -103,14 +126,18 @@ TEST(PlainEncoding, Int64) {
 }
 
 TEST(PlainEncoding, Float32) {
-    auto encoded = encode_plain(chunked_vector<float32_value>{
-      {std::numeric_limits<float>::min()},
-      {std::numeric_limits<float>::max()},
-      {std::numeric_limits<float>::quiet_NaN()},
-      {std::numeric_limits<float>::signaling_NaN()},
-      {+0.0},
-      {-0.0},
-    });
+    plain_encoder<float32_value> encoder{};
+    auto encoded = add_values(
+                     encoder,
+                     chunked_vector<float32_value>{
+                       {std::numeric_limits<float>::min()},
+                       {std::numeric_limits<float>::max()},
+                       {std::numeric_limits<float>::quiet_NaN()},
+                       {std::numeric_limits<float>::signaling_NaN()},
+                       {+0.0},
+                       {-0.0},
+                     })
+                     .get_encoded_buf();
     EXPECT_EQ(
       encoded,
       buf<4 * 6>("\x00\x00\x80\x00"
@@ -122,14 +149,18 @@ TEST(PlainEncoding, Float32) {
 }
 
 TEST(PlainEncoding, Float64) {
-    auto encoded = encode_plain(chunked_vector<float64_value>{
-      {std::numeric_limits<double>::min()},
-      {std::numeric_limits<double>::max()},
-      {std::numeric_limits<double>::quiet_NaN()},
-      {std::numeric_limits<double>::signaling_NaN()},
-      {+0.0},
-      {-0.0},
-    });
+    plain_encoder<float64_value> encoder{};
+    auto encoded = add_values(
+                     encoder,
+                     chunked_vector<float64_value>{
+                       {std::numeric_limits<double>::min()},
+                       {std::numeric_limits<double>::max()},
+                       {std::numeric_limits<double>::quiet_NaN()},
+                       {std::numeric_limits<double>::signaling_NaN()},
+                       {+0.0},
+                       {-0.0},
+                     })
+                     .get_encoded_buf();
     EXPECT_EQ(
       encoded,
       buf<8 * 6>("\x00\x00\x00\x00\x00\x00\x10\x00"
@@ -154,8 +185,12 @@ chunked_vector<T> buffers(std::initializer_list<iobuf> buffers) {
 } // namespace
 
 TEST(PlainEncoding, VarBytes) {
-    auto encoded = encode_plain(
-      buffers<byte_array_value>({buf<3>("\x00\x01\x02"), buf<2>("\xFF\xF8")}));
+    plain_encoder<byte_array_value> encoder;
+    auto encoded = add_values(
+                     encoder,
+                     buffers<byte_array_value>(
+                       {buf<3>("\x00\x01\x02"), buf<2>("\xFF\xF8")}))
+                     .get_encoded_buf();
     EXPECT_EQ(
       encoded,
       buf<13>("\x03\x00\x00\x00\x00\x01\x02"
@@ -163,12 +198,16 @@ TEST(PlainEncoding, VarBytes) {
 }
 
 TEST(PlainEncoding, FixedBytes) {
-    auto encoded = encode_plain(buffers<fixed_byte_array_value>({
-      buf<1>("\x00"),
-      buf<1>("\x05"),
-      buf<1>("\xFF"),
-      buf<1>("\xEE"),
-    }));
+    plain_encoder<fixed_byte_array_value> encoder;
+    auto encoded = add_values(
+                     encoder,
+                     buffers<fixed_byte_array_value>({
+                       buf<1>("\x00"),
+                       buf<1>("\x05"),
+                       buf<1>("\xFF"),
+                       buf<1>("\xEE"),
+                     }))
+                     .get_encoded_buf();
     EXPECT_EQ(encoded, buf<4>("\x00\x05\xFF\xEE"));
 }
 

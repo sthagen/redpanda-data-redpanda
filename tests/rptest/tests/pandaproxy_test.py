@@ -2168,43 +2168,6 @@ class BasicAuthUpgradeTest(PandaProxyEndpoints):
         result = result_raw.json()
         assert result[0] == self.topic
 
-    @cluster(num_nodes=3)
-    @parametrize(base_release=(22, 2), next_release=(22, 3))
-    @parametrize(base_release=(22, 3), next_release=(23, 1))
-    def test_upgrade_and_enable_basic_auth(self, base_release: tuple[int, int],
-                                           next_release: tuple[int, int]):
-        old_version, old_version_str = self.installer.install(
-            self.redpanda.nodes, base_release)
-        security = SecurityConfig()
-        security.enable_sasl = True
-        security.endpoint_authn_method = 'sasl'
-        self.redpanda.set_security_settings(security)
-
-        pandaproxy_config = PandaproxyConfig()
-        if base_release == (22, 2):
-            # v22.2.x or earlier do not support Basic Auth
-            # so there is no kafka client cache
-            pandaproxy_config.cache_keep_alive_ms = None
-            pandaproxy_config.cache_max_size = None
-
-        self.redpanda.set_pandaproxy_settings(pandaproxy_config)
-        self.redpanda.start()
-        self._create_initial_topics()
-        self.check_usage()
-
-        # Upgrade to cluster with basic auth support
-        # and test with basic auth enabled
-        self.installer.install(self.redpanda.nodes, next_release)
-        pandaproxy_config.authn_method = 'http_basic'
-        pandaproxy_config.cache_keep_alive_ms = 300000
-        pandaproxy_config.cache_max_size = 10
-        self.redpanda.set_pandaproxy_settings(pandaproxy_config)
-        self.redpanda.rolling_restart_nodes(self.redpanda.nodes)
-        # self.redpanda.rolling_restart_nodes(self.redpanda.nodes)
-        unique_versions = wait_for_num_versions(self.redpanda, 1)
-        assert old_version_str not in unique_versions
-        self.check_usage()
-
 
 class PandaProxyConsumerGroupTest(PandaProxyEndpoints):
     topics = [

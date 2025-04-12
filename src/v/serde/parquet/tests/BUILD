@@ -1,7 +1,7 @@
 load("@bazel_skylib//rules:run_binary.bzl", "run_binary")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
 load("//bazel:build.bzl", "redpanda_cc_binary")
-load("//bazel:test.bzl", "redpanda_cc_gtest")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest")
 
 redpanda_cc_gtest(
     name = "value_test",
@@ -188,5 +188,22 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "column_writer_rpbench",
+    srcs = [
+        "column_writer_bench.cc",
+    ],
+    deps = [
+        "//src/v/bytes:random",
+        "//src/v/container:fragmented_vector",
+        "//src/v/random:generators",
+        "//src/v/serde/parquet:column_writer",
+        "//src/v/serde/parquet:schema",
+        "//src/v/serde/parquet:value",
+        "//src/v/test_utils:random_bytes",
+        "@seastar//:benchmark",
     ],
 )

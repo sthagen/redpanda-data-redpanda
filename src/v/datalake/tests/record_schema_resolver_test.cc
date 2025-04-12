@@ -83,30 +83,30 @@ public:
 
     void SetUp() override {
         auto avro_schema_id = sr
-                                ->create_schema(unparsed_schema{
+                                ->create_schema(subject_schema{
                                   subject{"foo-value"},
-                                  unparsed_schema_definition{
+                                  schema_definition{
                                     avro_record_schema, schema_type::avro}})
                                 .get();
         ASSERT_EQ(1, avro_schema_id());
         auto pb_schema_id = sr
-                              ->create_schema(unparsed_schema{
+                              ->create_schema(subject_schema{
                                 subject{"foo-value"},
-                                unparsed_schema_definition{
+                                schema_definition{
                                   pb_record_schema, schema_type::protobuf}})
                               .get();
         ASSERT_EQ(2, pb_schema_id());
         avro_schema_id = sr
-                           ->create_schema(unparsed_schema{
+                           ->create_schema(subject_schema{
                              subject{"latest-avro"},
-                             unparsed_schema_definition{
+                             schema_definition{
                                avro_record_schema, schema_type::avro}})
                            .get();
         ASSERT_EQ(1, avro_schema_id());
         pb_schema_id = sr
-                         ->create_schema(unparsed_schema{
+                         ->create_schema(subject_schema{
                            subject{"latest-proto"},
-                           unparsed_schema_definition{
+                           schema_definition{
                              pb_record_schema, schema_type::protobuf}})
                          .get();
         ASSERT_EQ(2, pb_schema_id());
@@ -379,7 +379,7 @@ struct counting_store : public pandaproxy::schema_registry::schema_getter {
       : registry(registry)
       , counts(counts) {}
 
-    ss::future<pandaproxy::schema_registry::subject_schema> get_subject_schema(
+    ss::future<pandaproxy::schema_registry::stored_schema> get_subject_schema(
       pandaproxy::schema_registry::subject sub,
       std::optional<pandaproxy::schema_registry::schema_version> version,
       pandaproxy::schema_registry::include_deleted inc_dec) final {
@@ -387,15 +387,14 @@ struct counting_store : public pandaproxy::schema_registry::schema_getter {
         co_return co_await getter->get_subject_schema(sub, version, inc_dec);
     }
 
-    ss::future<pandaproxy::schema_registry::canonical_schema_definition>
+    ss::future<pandaproxy::schema_registry::schema_definition>
     get_schema_definition(pandaproxy::schema_registry::schema_id id) final {
         counts[id] += 1;
         auto* getter = co_await registry.getter();
         co_return co_await getter->get_schema_definition(id);
     }
 
-    ss::future<
-      std::optional<pandaproxy::schema_registry::canonical_schema_definition>>
+    ss::future<std::optional<pandaproxy::schema_registry::schema_definition>>
     maybe_get_schema_definition(
       pandaproxy::schema_registry::schema_id id) final {
         counts[id] += 1;
@@ -419,13 +418,13 @@ public:
     synced_getter() const override {
         co_return &_store;
     }
-    ss::future<pandaproxy::schema_registry::canonical_schema_definition>
+    ss::future<pandaproxy::schema_registry::schema_definition>
     get_schema_definition(
       pandaproxy::schema_registry::schema_id id) const override {
         return _store.get_schema_definition(id);
     }
 
-    ss::future<pandaproxy::schema_registry::subject_schema> get_subject_schema(
+    ss::future<pandaproxy::schema_registry::stored_schema> get_subject_schema(
       pandaproxy::schema_registry::subject sub,
       std::optional<pandaproxy::schema_registry::schema_version> version)
       const override {
@@ -433,11 +432,11 @@ public:
     }
 
     ss::future<pandaproxy::schema_registry::schema_id> create_schema(
-      pandaproxy::schema_registry::unparsed_schema unparsed) override {
+      pandaproxy::schema_registry::subject_schema unparsed) override {
         return _registry.create_schema(std::move(unparsed));
     }
 
-    const std::vector<pandaproxy::schema_registry::subject_schema>& get_all() {
+    const std::vector<pandaproxy::schema_registry::stored_schema>& get_all() {
         return _registry.get_all();
     }
 
@@ -462,16 +461,16 @@ std::unique_ptr<counting_registry> make_counting_sr() {
     auto sr = std::make_unique<counting_registry>();
 
     auto avro_schema_id = sr
-                            ->create_schema(unparsed_schema{
+                            ->create_schema(subject_schema{
                               subject{"foo-value"},
-                              unparsed_schema_definition{
+                              schema_definition{
                                 avro_record_schema, schema_type::avro}})
                             .get();
     vassert(1 == avro_schema_id(), "failed to registry avro schema");
     auto pb_schema_id = sr
-                          ->create_schema(unparsed_schema{
+                          ->create_schema(subject_schema{
                             subject{"foo-value"},
-                            unparsed_schema_definition{
+                            schema_definition{
                               pb_record_schema, schema_type::protobuf}})
                           .get();
     vassert(2 == pb_schema_id(), "failed to register protobuf schema");
@@ -486,9 +485,9 @@ std::unique_ptr<counting_registry> make_counting_sr() {
     };
     for (auto i = 3; i < 10; i++) {
         auto pb_schema_id = sr
-                              ->create_schema(unparsed_schema{
+                              ->create_schema(subject_schema{
                                 subject{"foo-value"},
-                                unparsed_schema_definition{
+                                schema_definition{
                                   get_simple_schema(i), schema_type::protobuf}})
                               .get();
         vassert(i == pb_schema_id(), "failed to register protobuf schema");

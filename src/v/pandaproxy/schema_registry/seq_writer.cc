@@ -114,6 +114,7 @@ ss::future<> seq_writer::read_sync() {
 
     auto max_offset = offsets.data.topics[0].partitions[0].offset;
     co_await wait_for(max_offset - model::offset{1});
+    co_await _store.process_marked_schemas();
 }
 
 ss::future<> seq_writer::check_mutable(const std::optional<subject>& sub) {
@@ -179,6 +180,7 @@ ss::future<bool> seq_writer::produce_and_apply(
     if (success) {
         vlog(plog.debug, "seq_writer: Successful write at {}", res.base_offset);
         co_await consume_to_store(_store, *this)(std::move(batch));
+        co_await _store.process_marked_schemas();
     } else {
         vlog(
           plog.debug,
@@ -213,7 +215,7 @@ void seq_writer::advance_offset_inner(model::offset offset) {
 }
 
 ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
-  subject_schema schema, model::offset write_at) {
+  stored_schema schema, model::offset write_at) {
     co_await check_mutable(schema.schema.sub());
 
     // Check if store already contains this data: if
@@ -248,7 +250,7 @@ ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
           .node{_node_id},
           .sub{sub},
           .version{projected.version}};
-        auto value = canonical_schema_value{
+        auto value = schema_value{
           .schema{std::move(canonical)},
           .version{projected.version},
           .id{projected.id},
@@ -266,7 +268,7 @@ ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
     }
 }
 
-ss::future<schema_id> seq_writer::write_subject_version(subject_schema schema) {
+ss::future<schema_id> seq_writer::write_subject_version(stored_schema schema) {
     co_return co_await sequenced_write(
       [&schema](model::offset write_at, seq_writer& seq) {
           return seq.do_write_subject_version(schema.share(), write_at);
@@ -435,14 +437,13 @@ ss::future<std::optional<bool>> seq_writer::do_delete_subject_version(
     }
 
     schema_id s_id = co_await _store.get_id(sub, version);
-    unparsed_schema_definition schema
-      = co_await _store.get_unparsed_schema_definition(s_id);
+    schema_definition schema = co_await _store.get_schema_definition(s_id);
 
     auto key = schema_key{
       .seq{write_at}, .node{_node_id}, .sub{sub}, .version{version}};
     vlog(plog.debug, "seq_writer::delete_subject_version {}", key);
-    unparsed_schema_value value{
-      .schema{unparsed_schema{sub, std::move(schema)}},
+    schema_value value{
+      .schema{subject_schema{sub, std::move(schema)}},
       .version{version},
       .id{s_id},
       .deleted{is_deleted::yes}};

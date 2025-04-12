@@ -273,6 +273,7 @@ redpanda_cc_bench(
     env = {
         "IDENTITY_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/identity)",
     },
+    exec_in_shm = False,
     memory = "512MiB",
     deps = [
         ":logger",

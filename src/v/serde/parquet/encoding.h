@@ -21,20 +21,68 @@ namespace serde::parquet {
 //
 // See:
 // https://parquet.apache.org/docs/file-format/data-pages/encodings/#plain-plain--0
+template<typename value_type>
+class plain_encoder;
 
-iobuf encode_plain(const chunked_vector<boolean_value>& vals);
+template<>
+class plain_encoder<boolean_value> {
+public:
+    void add_value(boolean_value v);
+    iobuf get_encoded_buf();
+    size_t size_bytes() const;
 
-iobuf encode_plain(const chunked_vector<int32_value>& vals);
+private:
+    iobuf buf;
+    uint8_t bits{0};
+    uint8_t shift{0};
+};
 
-iobuf encode_plain(const chunked_vector<int64_value>& vals);
+template<typename value_type>
+class numeric_plain_encoder {
+public:
+    void add_value(value_type);
+    iobuf get_encoded_buf();
+    size_t size_bytes() const;
 
-iobuf encode_plain(const chunked_vector<float32_value>& vals);
+private:
+    iobuf buf;
+};
 
-iobuf encode_plain(const chunked_vector<float64_value>& vals);
+template<>
+class plain_encoder<int32_value> : public numeric_plain_encoder<int32_value> {};
 
-iobuf encode_plain(chunked_vector<byte_array_value> vals);
+template<>
+class plain_encoder<int64_value> : public numeric_plain_encoder<int64_value> {};
 
-iobuf encode_plain(chunked_vector<fixed_byte_array_value> vals);
+template<>
+class plain_encoder<float32_value>
+  : public numeric_plain_encoder<float32_value> {};
+
+template<>
+class plain_encoder<float64_value>
+  : public numeric_plain_encoder<float64_value> {};
+
+template<>
+class plain_encoder<byte_array_value> {
+public:
+    void add_value(byte_array_value&&);
+    iobuf get_encoded_buf();
+    size_t size_bytes() const;
+
+private:
+    iobuf buf;
+};
+
+template<>
+class plain_encoder<fixed_byte_array_value> {
+public:
+    void add_value(fixed_byte_array_value&&);
+    iobuf get_encoded_buf();
+    size_t size_bytes() const;
+
+private:
+    iobuf buf;
+};
 
 // Levels (definition and repetition) are encoded using Parquet's hybrid
 // run-length encoding/bitpacking schema. Bit packing requires the maximum

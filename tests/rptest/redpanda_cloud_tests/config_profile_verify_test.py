@@ -116,7 +116,7 @@ class ConfigProfileVerifyTest(RedpandaCloudTest):
 
         # Convert space separated output into a Python list
         # Example: ["Standard_D2d_v5", "Standard_D2d_v5", "Standard_D2d_v5"]
-        nodes = output.split()
+        nodes = json.loads(output)
 
         # Ensure we have nodes to validate
         if not nodes:
