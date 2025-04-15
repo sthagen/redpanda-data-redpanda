@@ -10,6 +10,7 @@ go_library(
 
 go_binary(
     name = "transform-error",
+    out = "transform-error.wasm",
     embed = [":transform-error_lib"],
     goarch = "wasm",
     goos = "wasip1",

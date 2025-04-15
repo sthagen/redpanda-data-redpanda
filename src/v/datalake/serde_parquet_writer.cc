@@ -2,8 +2,8 @@
 
 #include "base/vlog.h"
 #include "datalake/logger.h"
-#include "datalake/schema_parquet.h"
-#include "datalake/values_parquet.h"
+#include "iceberg/conversion/schema_parquet.h"
+#include "iceberg/conversion/values_parquet.h"
 #include "version/version.h"
 
 namespace datalake {

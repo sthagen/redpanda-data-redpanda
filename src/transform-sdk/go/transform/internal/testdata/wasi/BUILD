@@ -10,6 +10,7 @@ go_library(
 
 go_binary(
     name = "wasi",
+    out = "wasi.wasm",
     embed = [":wasi_lib"],
     goarch = "wasm",
     goos = "wasip1",

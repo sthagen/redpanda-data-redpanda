@@ -1,5 +1,7 @@
 #include "test_utils/runfiles.h"
 
+#include <cstdlib>
+
 #ifdef BAZEL_TEST
 #include "tools/cpp/runfiles/runfiles.h"
 #endif

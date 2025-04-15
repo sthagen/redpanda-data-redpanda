@@ -227,3 +227,15 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "rate_limited_function",
+    hdrs = [
+        "rate_limited_function.h",
+    ],
+    include_prefix = "ssx",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@seastar",
+    ],
+)

@@ -19,13 +19,13 @@
 using namespace std::chrono_literals;
 
 TEST_F(WasmTestFixture, MemoryIsLimited) {
-    load_wasm("dynamic");
+    load_wasm("dynamic.wasm");
     EXPECT_NO_THROW(execute_command("allocate", 5_KiB));
     EXPECT_THROW(execute_command("allocate", MAX_MEMORY), wasm::wasm_exception);
 }
 
 TEST_F(WasmTestFixture, CpuIsLimited) {
-    load_wasm("dynamic");
+    load_wasm("dynamic.wasm");
     // In reality, we don't want this to be over a few milliseconds, but in an
     // effort to prevent test flakiness on hosts with lots of concurrent tests
     // on shared vCPUs, we make this much higher.

@@ -21,7 +21,7 @@
 using namespace std::chrono_literals;
 
 TEST_F(WasmTestFixture, IdentityFunction) {
-    load_wasm("identity");
+    load_wasm("identity.wasm");
     auto batch = make_tiny_batch();
     auto transformed = transform(batch);
     ASSERT_EQ(transformed.copy_records(), batch.copy_records());
@@ -30,7 +30,7 @@ TEST_F(WasmTestFixture, IdentityFunction) {
 using ::testing::ElementsAre;
 
 TEST_F(WasmTestFixture, LogsAreEmitted) {
-    load_wasm("dynamic");
+    load_wasm("dynamic.wasm");
     ss::sstring msg = "foobar";
     auto value = execute_command("print", msg);
     auto bytes = iobuf_to_bytes(value);
@@ -46,7 +46,7 @@ TEST_F(WasmTestFixture, WorksWithCpuProfiler) {
       = ss::engine().get_cpu_profiler_period();
     ss::engine().set_cpu_profiler_enabled(true);
     ss::engine().set_cpu_profiler_period(100us);
-    load_wasm("dynamic");
+    load_wasm("dynamic.wasm");
     EXPECT_THROW(execute_command("loop", 0), wasm::wasm_exception);
     ss::engine().set_cpu_profiler_enabled(original_enabled);
     ss::engine().set_cpu_profiler_period(original_period);

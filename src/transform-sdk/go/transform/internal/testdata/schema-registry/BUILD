@@ -14,6 +14,7 @@ go_library(
 
 go_binary(
     name = "schema-registry",
+    out = "schema-registry.wasm",
     embed = [":schema-registry_lib"],
     goarch = "wasm",
     goos = "wasip1",

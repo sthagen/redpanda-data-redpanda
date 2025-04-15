@@ -10,6 +10,7 @@ go_library(
 
 go_binary(
     name = "identity",
+    out = "identity.wasm",
     embed = [":identity_lib"],
     goarch = "wasm",
     goos = "wasip1",

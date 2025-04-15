@@ -9,11 +9,11 @@
  */
 #pragma once
 
-#include "datalake/conversion_outcome.h"
+#include "iceberg/conversion/conversion_outcome.h"
 
 #include <avro/ValidSchema.hh>
 
-namespace datalake {
+namespace iceberg {
 
 /**
  * Deserialize an Avro serialized message into an iceberg value.
@@ -21,4 +21,4 @@ namespace datalake {
 ss::future<value_outcome>
 deserialize_avro(iobuf buffer, avro::ValidSchema schema);
 
-} // namespace datalake
+} // namespace iceberg

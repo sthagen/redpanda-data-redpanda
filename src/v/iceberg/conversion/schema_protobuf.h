@@ -10,16 +10,13 @@
 #pragma once
 
 #include "google/protobuf/descriptor.h"
+#include "iceberg/conversion/conversion_outcome.h"
+#include "iceberg/datatypes.h"
 
-#include <deque>
+namespace iceberg {
 
-namespace datalake {
+// convert a protobuf message schema to iceberg schema
+conversion_outcome<iceberg::struct_type>
+type_to_iceberg(const google::protobuf::Descriptor& pool);
 
-using proto_descriptors_stack = std::deque<const google::protobuf::Descriptor*>;
-inline constexpr int max_recursion_depth = 100;
-
-bool is_recursive_type(
-  const google::protobuf::Descriptor& msg,
-  const proto_descriptors_stack& stack);
-
-} // namespace datalake
+} // namespace iceberg

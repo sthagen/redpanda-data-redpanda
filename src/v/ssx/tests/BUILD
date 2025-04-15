@@ -228,3 +228,17 @@ redpanda_cc_bench(
         "@seastar//:benchmark",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "rate_limited_function_test",
+    timeout = "short",
+    srcs = [
+        "rate_limited_function_test.cc",
+    ],
+    deps = [
+        "//src/v/ssx:rate_limited_function",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

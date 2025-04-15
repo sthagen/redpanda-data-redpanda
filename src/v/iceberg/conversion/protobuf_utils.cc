@@ -8,9 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "datalake/protobuf_utils.h"
+#include "iceberg/conversion/protobuf_utils.h"
 
-namespace datalake {
+namespace iceberg {
 
 bool is_recursive_type(
   const google::protobuf::Descriptor& msg,
@@ -21,4 +21,4 @@ bool is_recursive_type(
       });
 }
 
-} // namespace datalake
+} // namespace iceberg

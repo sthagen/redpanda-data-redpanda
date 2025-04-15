@@ -10,6 +10,7 @@ go_library(
 
 go_binary(
     name = "dynamic",
+    out = "dynamic.wasm",
     embed = [":dynamic_lib"],
     goarch = "wasm",
     goos = "wasip1",

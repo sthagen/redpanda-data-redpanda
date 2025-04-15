@@ -14,11 +14,15 @@
 #include "crypto/ossl_context_service.h"
 #include "random/generators.h"
 #include "ssx/thread_worker.h"
+#include "test_utils/runfiles.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/testing/perf_tests.hh>
+
+#include <exception>
+#include <filesystem>
 
 static constexpr size_t inner_iters = 1000;
 
@@ -43,20 +47,17 @@ public:
         auto fips_mode = crypto::is_fips_mode::no;
 #endif
         _thread_worker->start({.name = "worker"}).get();
-        if (auto module_override = ::getenv("__FIPS_MODULE_PATH");
-            module_override != nullptr) {
-            vassert(
-              std::filesystem::exists(module_override),
-              "Module not found: {}",
-              module_override);
-            auto mod = std::filesystem::path{module_override}.parent_path();
-            ::setenv("MODULE_DIR", mod.c_str(), 1);
+        auto module_dir = test_utils::get_runfile_path("src/v/crypto/tests");
+        if (!module_dir.has_value()) {
+            char* var = std::getenv("MODULE_DIR");
+            vassert(var != nullptr, "MODULE_DIR is not set");
+            module_dir = var;
         }
         _svc
           .start(
             std::ref(*_thread_worker),
             get_config_file_path(),
-            ::getenv("MODULE_DIR"),
+            module_dir.value(),
             fips_mode)
           .get();
         _svc.invoke_on_all(&crypto::ossl_context_service::start).get();
@@ -74,12 +75,14 @@ private:
     ss::sharded<crypto::ossl_context_service> _svc;
 
     static std::string get_config_file_path() {
-        auto conf_file = ::getenv("OPENSSL_CONF");
-        if (conf_file) {
-            return conf_file;
-        } else {
-            return "";
+        auto conf_file = test_utils::get_runfile_path(
+          "src/v/crypto/tests/openssl_conf.cnf");
+        if (!conf_file.has_value()) {
+            char* var = std::getenv("OPENSSL_CONF");
+            vassert(var != nullptr, "OPENSSL_CONF is not set");
+            conf_file = var;
         }
+        return conf_file.value();
     }
 };
 
@@ -95,7 +98,6 @@ struct openssl_perf_test {
             });
         }
     }
-
     ~openssl_perf_test() = default;
 };
 

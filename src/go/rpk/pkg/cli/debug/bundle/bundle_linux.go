@@ -147,6 +147,7 @@ func executeBundle(ctx context.Context, bp bundleParams) error {
 		saveKernelSymbols(ps),
 		saveLogs(ctx, ps, bp.logsSince, bp.logsUntil, bp.logsLimitBytes),
 		saveLspci(ctx, ps),
+		saveLsblk(ctx, ps),
 		saveMdstat(ps),
 		saveMountedFilesystems(ps),
 		saveNTPDrift(ps),
@@ -156,6 +157,7 @@ func executeBundle(ctx context.Context, bp bundleParams) error {
 		saveStartupLog(ps, bp.y),
 		saveSlabInfo(ps),
 		saveSocketData(ctx, ps),
+		saveSoftwareInterrupts(ps),
 		saveSysctl(ctx, ps),
 		saveSyslog(ps),
 		saveTopOutput(ctx, ps),
@@ -563,6 +565,17 @@ func saveInterrupts(ps *stepParams) step {
 	}
 }
 
+// Saves the contents of '/proc/softirqs/'.
+func saveSoftwareInterrupts(ps *stepParams) step {
+	return func() error {
+		bs, err := afero.ReadFile(ps.fs, "/proc/softirqs")
+		if err != nil {
+			return err
+		}
+		return writeFileToZip(ps, "proc/softirqs", bs)
+	}
+}
+
 // Saves the contents of '/proc/mounts'.
 func saveMountedFilesystems(ps *stepParams) step {
 	return func() error {
@@ -812,6 +825,18 @@ func saveLspci(ctx context.Context, ps *stepParams) step {
 			ps,
 			filepath.Join(linuxUtilsRoot, "lspci.txt"),
 			"lspci",
+		)
+	}
+}
+
+// Saves the output of `lsblk --all`.
+func saveLsblk(ctx context.Context, ps *stepParams) step {
+	return func() error {
+		return writeCommandOutputToZip(
+			ctx,
+			ps,
+			filepath.Join(linuxUtilsRoot, "lsblk.txt"),
+			"lsblk", "--all",
 		)
 	}
 }

@@ -18,3 +18,9 @@ config_setting(
         "compilation_mode": "opt",
     },
 )
+
+filegroup(
+    name = "bench_wrapper",
+    srcs = ["bench_wrapper.py"],
+    visibility = ["//visibility:public"],
+)

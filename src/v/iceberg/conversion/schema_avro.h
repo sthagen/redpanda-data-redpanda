@@ -9,12 +9,12 @@
  */
 #pragma once
 
-#include "datalake/conversion_outcome.h"
+#include "iceberg/conversion/conversion_outcome.h"
 #include "iceberg/datatypes.h"
 
 #include <avro/Node.hh>
 
-namespace datalake {
+namespace iceberg {
 
 /**
  * Converts given AVRO schema to iceberg struct type. If a top level avro type
@@ -39,4 +39,4 @@ namespace datalake {
  *    same iceberg type, conversion will be done when parsing avro value
  */
 conversion_outcome<iceberg::struct_type> type_to_iceberg(const avro::NodePtr&);
-} // namespace datalake
+} // namespace iceberg

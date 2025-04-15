@@ -39,7 +39,7 @@ public:
     void SetUp() override;
     void TearDown() override;
 
-    void load_wasm(std::string file);
+    void load_wasm(std::string_view file);
     model::record_batch make_tiny_batch();
     model::record_batch make_tiny_batch(iobuf record_value);
     model::record_batch transform(const model::record_batch&);

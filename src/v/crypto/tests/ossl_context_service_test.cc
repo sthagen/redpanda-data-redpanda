@@ -68,11 +68,16 @@ public:
               << "Skipping FIPS test because module is not present";
         }
 #endif
-
+        auto module_dir = test_utils::get_runfile_path("src/v/crypto/tests");
+        if (!module_dir.has_value()) {
+            char* var = std::getenv("MODULE_DIR");
+            vassert(var != nullptr, "MODULE_DIR is not set");
+            module_dir = var;
+        }
         ASSERT_NO_THROW_CORO(co_await svc.start(
           std::ref(*thread_worker()),
           get_config_file_path(),
-          ::getenv("MODULE_DIR"),
+          ss::sstring{module_dir.value()},
           param.fips_mode));
 
         ASSERT_NO_THROW_CORO(

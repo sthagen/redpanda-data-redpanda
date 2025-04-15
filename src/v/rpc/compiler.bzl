@@ -27,7 +27,7 @@ def redpanda_cc_rpc_library(name, src, out = None, deps = [], include_prefix = N
         name = name + "_genrule",
         srcs = [src],
         outs = [out],
-        cmd = "$(PYTHON3) $(execpath //src/v/rpc:compiler) --service_file $< --output_file $@",
+        cmd = "$(execpath //src/v/rpc:compiler) --service_file $< --output_file $@",
         tools = ["//src/v/rpc:compiler"],
         toolchains = ["@rules_python//python:current_py_toolchain"],
     )

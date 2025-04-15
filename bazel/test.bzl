@@ -6,7 +6,7 @@ changes. For example, redpanda_cc_gtest will automatically configure Seastar for
 running tests, like setting a reasonable number of cores and amount of memory.
 """
 
-load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load(":internal.bzl", "redpanda_copts")
 
 def _has_flags(args, *flags):
@@ -354,8 +354,7 @@ def redpanda_cc_bench(
         data = [],
         tags = [],
         target_compatible_with = [],
-        redirect_stderr = False,
-        exec_in_shm = False):
+        redirect_stderr = False):
     """
     Create a seastar benchmark target
 
@@ -368,18 +367,14 @@ def redpanda_cc_bench(
       env: any custom environment variables for the binary
       cpu: the number of cores the benchmark needs
       memory: the amount of RAM needed for the benchmark
-      runs: number of runs
-      duration: duration of a single run in seconds
+      runs: number of runs or None for default (applies to run but not test)
+      duration: duration of a single run in seconds or None for default (applies to run but not test)
       data: any data files available to the benchmark as runfiles
       tags: custom tags for the test
       timeout: the timeout for smoke testing the benchmark
       target_compatible_with: constraints for the test target
       redirect_stderr: if True, redirects stdout (seastar logging, mostly) to a file
                        so that it does not overwhelm the result output
-      exec_in_shm: if True, the benchmark will execute in a subdir in /dev/shm which leads
-                   to very fast IO, but the inability to resolve paths relative to the bazel
-                   workspace root, so False is useful for benchmarks that need to access their
-                   runfiles
     """
 
     # We require this naming convention as we do things like extract
@@ -409,16 +404,9 @@ def redpanda_cc_bench(
         "resources:memory:{}".format(_parse_bytes(memory) / (1 << 20)),
     ]
 
-    binary_args = []
-    if runs != None:
-        binary_args.append("--runs={}".format(runs))
-    if duration != None:
-        binary_args.append("--duration={}".format(duration))
-
     tags = tags + ["bench"]
 
     binary_name = name + "_binary"
-
     native.cc_binary(
         name = binary_name,
         srcs = srcs,
@@ -435,45 +423,40 @@ def redpanda_cc_bench(
     )
 
     args = ["$(rootpath :{})".format(binary_name)] + args
-
     env = env | {
-        "MB_EXEC_IN_SHM": "1" if exec_in_shm else "0",
+        "MB_EXEC_IN_SHM": "1",
         "MB_REDIRECT_STDERR_DEFAULT": "1" if redirect_stderr else "0",
     }
 
+    binary_args = []
+    if runs != None:
+        binary_args.append("--runs={}".format(runs))
+    if duration != None:
+        binary_args.append("--duration={}".format(duration))
+
     # to run a benchmark in the right way, we need to wrap it in bench-wrapper.sh,
     # which can cd to the right location and make other adjustments
-    native.sh_binary(
+    py_binary(
         name = name,
-        srcs = ["//tools:bench_wrapper"],
-        args = args,
-        data = data + [
-            ":" + binary_name,
-        ],
+        srcs = ["//bazel:bench_wrapper"],
+        main = "bench_wrapper.py",
+        args = args + binary_args,
+        data = data + [":" + binary_name],
         env = env,
         testonly = True,
     )
 
     # we write a wrapper to test the benchmark, which tries to
     # run it as quickly as possible in order to smoke test it
-    write_file(
-        name = name + "_test_script",
-        out = name + "_test_wrapper.sh",
-        content = [
-            "#!/bin/bash",
-            "exec $@ --iterations=1 --runs=1 --duration=0 --no-stdout --overprovisioned",
-        ],
-    )
     test_data, test_env = _test_options()
-    native.sh_test(
+    py_test(
         name = name + "_test",
         timeout = timeout,
+        main = "bench_wrapper.py",
         tags = resource_tags + tags,
-        srcs = [name + "_test_script"],
+        srcs = ["//bazel:bench_wrapper"],
         env = env | test_env,
-        args = args,
-        data = [
-            ":" + binary_name,
-        ] + data + test_data,
+        args = args + ["--iterations=1 --runs=1 --duration=0 --no-stdout --overprovisioned"],
+        data = [":" + binary_name] + data + test_data,
         target_compatible_with = target_compatible_with,
     )

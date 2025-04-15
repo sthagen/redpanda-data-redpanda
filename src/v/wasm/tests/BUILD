@@ -29,6 +29,7 @@ redpanda_test_cc_library(
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:random_bytes",
+        "//src/v/test_utils:runfiles",
         "//src/v/wasm:api",
         "//src/v/wasm:transform_probe",
         "//src/v/wasm:wasmtime",
@@ -77,6 +78,19 @@ redpanda_cc_gtest(
     ],
 )
 
+filegroup(
+    name = "wasm_test_assets",
+    srcs = [
+        "//src/transform-sdk/go/transform/internal/testdata/dynamic",
+        "//src/transform-sdk/go/transform/internal/testdata/identity",
+        "//src/transform-sdk/go/transform/internal/testdata/schema-registry",
+        "//src/transform-sdk/go/transform/internal/testdata/setup-panic",
+        "//src/transform-sdk/go/transform/internal/testdata/transform-error",
+        "//src/transform-sdk/go/transform/internal/testdata/transform-panic",
+        "//src/transform-sdk/go/transform/internal/testdata/wasi",
+    ],
+)
+
 redpanda_cc_gtest(
     name = "wasi_test",
     timeout = "moderate",
@@ -84,12 +98,7 @@ redpanda_cc_gtest(
         "wasi_test.cc",
     ],
     cpu = 1,
-    data = [
-        "//src/transform-sdk/go/transform/internal/testdata/wasi",
-    ],
-    env = {
-        "WASI_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/wasi)",
-    },
+    data = [":wasm_test_assets"],
     memory = "128MiB",
     deps = [
         ":wasm_fixture",
@@ -113,14 +122,7 @@ redpanda_cc_gtest(
         "wasm_transform_test.cc",
     ],
     cpu = 1,
-    data = [
-        "//src/transform-sdk/go/transform/internal/testdata/dynamic",
-        "//src/transform-sdk/go/transform/internal/testdata/identity",
-    ],
-    env = {
-        "IDENTITY_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/identity)",
-        "DYNAMIC_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/dynamic)",
-    },
+    data = [":wasm_test_assets"],
     memory = "128MiB",
     deps = [
         ":wasm_fixture",
@@ -139,12 +141,7 @@ redpanda_cc_gtest(
         "wasm_sr_test.cc",
     ],
     cpu = 1,
-    data = [
-        "//src/transform-sdk/go/transform/internal/testdata/schema-registry",
-    ],
-    env = {
-        "SCHEMA-REGISTRY_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/schema-registry)",
-    },
+    data = [":wasm_test_assets"],
     memory = "128MiB",
     deps = [
         ":wasm_fixture",
@@ -169,18 +166,7 @@ redpanda_cc_gtest(
         "wasm_lifecycle_test.cc",
     ],
     cpu = 1,
-    data = [
-        "//src/transform-sdk/go/transform/internal/testdata/identity",
-        "//src/transform-sdk/go/transform/internal/testdata/setup-panic",
-        "//src/transform-sdk/go/transform/internal/testdata/transform-error",
-        "//src/transform-sdk/go/transform/internal/testdata/transform-panic",
-    ],
-    env = {
-        "IDENTITY_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/identity)",
-        "SETUP-PANIC_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/setup-panic)",
-        "TRANSFORM-PANIC_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/transform-panic)",
-        "TRANSFORM-ERROR_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/transform-error)",
-    },
+    data = [":wasm_test_assets"],
     memory = "128MiB",
     deps = [
         ":wasm_fixture",
@@ -200,12 +186,7 @@ redpanda_cc_gtest(
         "wasm_resources_test.cc",
     ],
     cpu = 1,
-    data = [
-        "//src/transform-sdk/go/transform/internal/testdata/dynamic",
-    ],
-    env = {
-        "DYNAMIC_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/dynamic)",
-    },
+    data = [":wasm_test_assets"],
     memory = "128MiB",
     deps = [
         ":wasm_fixture",
@@ -267,13 +248,7 @@ redpanda_cc_bench(
         "wasm_transform_bench.cc",
     ],
     cpu = 1,
-    data = [
-        "//src/transform-sdk/go/transform/internal/testdata/identity",
-    ],
-    env = {
-        "IDENTITY_WASM_BINARY": "$(rootpath //src/transform-sdk/go/transform/internal/testdata/identity)",
-    },
-    exec_in_shm = False,
+    data = [":wasm_test_assets"],
     memory = "512MiB",
     deps = [
         ":logger",
@@ -282,6 +257,7 @@ redpanda_cc_bench(
         "//src/v/model/tests:random",
         "//src/v/schema:registry",
         "//src/v/test_utils:random",
+        "//src/v/test_utils:runfiles",
         "//src/v/wasm:api",
         "//src/v/wasm:logger",
         "//src/v/wasm:transform_probe",

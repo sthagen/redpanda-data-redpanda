@@ -17,7 +17,7 @@
 #include <gtest/gtest.h>
 
 TEST_F(WasmTestFixture, CanRestartEngine) {
-    load_wasm("identity");
+    load_wasm("identity.wasm");
     engine()->stop().get();
     // It still works after being restarted
     engine()->start().get();
@@ -27,16 +27,16 @@ TEST_F(WasmTestFixture, CanRestartEngine) {
 }
 
 TEST_F(WasmTestFixture, HandlesSetupPanic) {
-    EXPECT_THROW(load_wasm("setup-panic"), wasm::wasm_exception);
+    EXPECT_THROW(load_wasm("setup-panic.wasm"), wasm::wasm_exception);
 }
 
 TEST_F(WasmTestFixture, HandlesTransformPanic) {
-    load_wasm("transform-panic");
+    load_wasm("transform-panic.wasm");
     EXPECT_THROW(transform(make_tiny_batch()), wasm::wasm_exception);
 }
 
 TEST_F(WasmTestFixture, HandlesTransformErrors) {
-    load_wasm("transform-error");
+    load_wasm("transform-error.wasm");
     EXPECT_THROW(transform(make_tiny_batch()), wasm::wasm_exception);
     engine()->stop().get();
     engine()->start().get();

@@ -164,7 +164,7 @@ func (l *licenseRequest) prompt() error {
 		return fmt.Errorf("unable to get the firt name: %v", err)
 	}
 	l.name = name
-	lastname, err := out.Prompt("Last name:")
+	lastname, err := out.Prompt("Last Name:")
 	if err != nil {
 		return fmt.Errorf("unable to get the last name: %v", err)
 	}

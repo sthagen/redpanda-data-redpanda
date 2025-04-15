@@ -7,9 +7,9 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "datalake/values_parquet.h"
+#include "iceberg/conversion/values_parquet.h"
 
-namespace datalake {
+namespace iceberg {
 namespace {
 struct primitive_value_converting_visitor {
     parquet_conversion_outcome operator()(iceberg::boolean_value v) {
@@ -146,4 +146,4 @@ ss::future<parquet_conversion_outcome> to_parquet_value(iceberg::value value) {
     return std::visit(value_converting_visitor{}, std::move(value));
 }
 
-} // namespace datalake
+} // namespace iceberg

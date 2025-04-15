@@ -618,6 +618,10 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
             'iceberg_rest_catalog_crl',
             'iceberg_rest_catalog_crl_file',
         ])
+        # Cloud storage and iceberg depend on properly configured cloud IO.
+        # Skip them to avoid breaking the test.
+        exclude_settings.add('cloud_storage_enabled')
+        exclude_settings.add('iceberg_enabled')
 
         # List of settings that must be odd
         odd_settings = [
@@ -691,10 +695,6 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 # Don't lock ourselves out of the admin API!
                 continue
 
-            if name == 'cloud_storage_enabled':
-                # Enabling cloud storage requires setting other properties too
-                continue
-
             if name == 'storage_strict_data_init':
                 # Enabling this property requires a file be manually added
                 # to RP's data dir for it to start
@@ -705,25 +705,11 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 # cloud storage read/write properties.
                 continue
 
-            if name == 'record_key_subject_name_strategy' or name == 'record_value_subject_name_strategy':
-                valid_value = random.choice(
-                    [e for e in p['enum_values'] if e != initial_value])
-
-            if name == 'cloud_storage_recovery_topic_validation_mode':
-                valid_value = random.choice(
-                    [e for e in p['enum_values'] if e != initial_value])
-
-            if name == "tls_min_version":
-                valid_value = random.choice(
-                    [e for e in p['enum_values'] if e != initial_value])
-
-            if name == "iceberg_catalog_type":
-                valid_value = random.choice(
-                    [e for e in p['enum_values'] if e != initial_value])
-
-            if name == "iceberg_invalid_record_action":
-                valid_value = random.choice(
-                    [e for e in p['enum_values'] if e != initial_value])
+            if 'enum_values' in p:
+                valid_choices = p['enum_values']
+                if p['nullable']:
+                    valid_choices.append(None)
+                valid_value = random.choice(valid_choices)
 
             if name == "enable_consumer_group_metrics":
                 valid_value = random.choice([[], ["group"], ["partition"]])

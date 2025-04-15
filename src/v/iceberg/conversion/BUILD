@@ -1,0 +1,147 @@
+load("//bazel:build.bzl", "redpanda_cc_library")
+
+redpanda_cc_library(
+    name = "conversion_outcome",
+    srcs = [
+    ],
+    hdrs = [
+        "conversion_outcome.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/iceberg:values",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "protobuf_utils",
+    srcs = [
+        "protobuf_utils.cc",
+    ],
+    hdrs = [
+        "protobuf_utils.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = [":__subpackages__"],
+    deps = [
+        "@protobuf",
+    ],
+)
+
+redpanda_cc_library(
+    name = "schema_avro",
+    srcs = [
+        "schema_avro.cc",
+    ],
+    hdrs = [
+        "schema_avro.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        "//src/v/iceberg:datatypes",
+        "@avro",
+        "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "schema_parquet",
+    srcs = [
+        "schema_parquet.cc",
+    ],
+    hdrs = [
+        "schema_parquet.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/iceberg:datatypes",
+        "//src/v/serde/parquet:schema",
+    ],
+)
+
+redpanda_cc_library(
+    name = "schema_protobuf",
+    srcs = [
+        "schema_protobuf.cc",
+    ],
+    hdrs = [
+        "schema_protobuf.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        ":protobuf_utils",
+        "//src/v/iceberg:datatypes",
+        "@fmt",
+        "@protobuf",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "values_avro",
+    srcs = ["values_avro.cc"],
+    hdrs = ["values_avro.h"],
+    implementation_deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/iceberg:avro_decimal",
+        "//src/v/serde/avro",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        "@avro",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "values_parquet",
+    srcs = [
+        "values_parquet.cc",
+    ],
+    hdrs = [
+        "values_parquet.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        "//src/v/iceberg:values",
+        "//src/v/serde/parquet:value",
+    ],
+)
+
+redpanda_cc_library(
+    name = "values_protobuf",
+    srcs = [
+        "values_protobuf.cc",
+    ],
+    hdrs = [
+        "values_protobuf.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        ":protobuf_utils",
+        "//src/v/bytes:iobuf",
+        "//src/v/container:fragmented_vector",
+        "//src/v/iceberg:values",
+        "//src/v/serde/protobuf",
+        "//src/v/ssx:future_util",
+        "@abseil-cpp//absl/time",
+        "@fmt",
+        "@protobuf",
+        "@seastar",
+    ],
+)

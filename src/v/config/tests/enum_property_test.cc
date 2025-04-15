@@ -52,17 +52,35 @@ SEASTAR_THREAD_TEST_CASE(enum_property_validation) {
 
     for (const auto& v : invalid_values) {
         verr = cfg.enum_str.validate(YAML::Load(v));
-        BOOST_CHECK(verr.has_value());
-        BOOST_REQUIRE(
-          verr.value().error_message() == "Must be one of foo,bar,baz");
+        BOOST_REQUIRE(verr.has_value());
+        BOOST_REQUIRE_EQUAL(
+          verr.value().error_message(), "Must be one of foo,bar,baz");
 
         verr = cfg.opt_enum_str.validate(YAML::Load(v));
-        BOOST_CHECK(verr.has_value());
+        BOOST_REQUIRE(verr.has_value());
+        BOOST_REQUIRE_EQUAL(
+          verr.value().error_message(), "Must be one of foo,bar,baz or null");
     }
 
     // Optional variant should also always consider null to be valid.
     verr = cfg.opt_enum_str.validate(YAML::Load("~"));
     BOOST_CHECK(!verr.has_value());
+}
+
+SEASTAR_THREAD_TEST_CASE(enum_property_values) {
+    auto cfg = test_config();
+
+    auto values = cfg.enum_str.enum_values();
+    BOOST_CHECK_EQUAL(values.size(), 3);
+    BOOST_CHECK_EQUAL(values[0], "foo");
+    BOOST_CHECK_EQUAL(values[1], "bar");
+    BOOST_CHECK_EQUAL(values[2], "baz");
+
+    auto opt_values = cfg.opt_enum_str.enum_values();
+    BOOST_CHECK_EQUAL(opt_values.size(), 3);
+    BOOST_CHECK_EQUAL(opt_values[0], "foo");
+    BOOST_CHECK_EQUAL(opt_values[1], "bar");
+    BOOST_CHECK_EQUAL(opt_values[2], "baz");
 }
 
 } // namespace

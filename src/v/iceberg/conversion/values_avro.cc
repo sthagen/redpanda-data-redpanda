@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "datalake/values_avro.h"
+#include "iceberg/conversion/values_avro.h"
 
 #include "bytes/iobuf_parser.h"
 #include "iceberg/avro_decimal.h"
@@ -16,7 +16,7 @@
 
 #include <seastar/util/log.hh>
 
-namespace datalake {
+namespace iceberg {
 
 namespace {
 
@@ -269,4 +269,4 @@ deserialize_avro(iobuf buffer, avro::ValidSchema schema) {
     }
 }
 
-} // namespace datalake
+} // namespace iceberg

@@ -7,14 +7,14 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "datalake/schema_avro.h"
+#include "iceberg/conversion/schema_avro.h"
 
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
 #include <avro/Schema.hh>
 
-namespace datalake {
+namespace iceberg {
 
 namespace {
 static constexpr size_t max_schema_depth = 100;
@@ -74,11 +74,11 @@ bool is_recursive_type(const state& state, const avro::NodePtr& node) {
 conversion_outcome<std::optional<iceberg::field_type>>
 inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
     if (is_recursive_type(state, node)) {
-        return schema_conversion_exception(
+        return conversion_exception(
           fmt::format("Unsupported recursive type: {}", *node));
     }
     if (state.type_hierarchy.size() >= max_schema_depth) {
-        return schema_conversion_exception(
+        return conversion_exception(
           fmt::format("Max nesting depth of {} reached", max_schema_depth));
     }
 
@@ -140,7 +140,7 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
         return iceberg::long_type{};
     case avro::AVRO_ARRAY: {
         if (node->leaves() != 1) {
-            return schema_conversion_exception(fmt::format(
+            return conversion_exception(fmt::format(
               "Invalid number of leaves {} in AVRO_ARRAY, expected to have "
               "only 1 leaf",
               node->leaves()));
@@ -151,7 +151,7 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
             return field_res.error();
         }
         if (!field_res.value().has_value()) {
-            return schema_conversion_exception(
+            return conversion_exception(
               fmt::format("Unsupported type of AVRO_NULL as an array element"));
         }
         return iceberg::list_type::create(
@@ -161,14 +161,14 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
     }
     case avro::AVRO_MAP: {
         if (node->leaves() != 2) {
-            return schema_conversion_exception(fmt::format(
+            return conversion_exception(fmt::format(
               "Invalid number of leaves {} in AVRO_MAP, expected to have "
               "exactly 2 leaves",
               node->leaves()));
         }
 
         if (node->leafAt(0)->type() != avro::AVRO_STRING) {
-            return schema_conversion_exception(fmt::format(
+            return conversion_exception(fmt::format(
               "AVRO_MAP is expected to be a string. Current key type: {}",
               node->leafAt(0)->type()));
         }
@@ -177,7 +177,7 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
             return value_t_result.error();
         }
         if (!value_t_result.value().has_value()) {
-            return schema_conversion_exception(
+            return conversion_exception(
               fmt::format("Unsupported type of AVRO_NULL as a map value"));
         }
 
@@ -251,7 +251,7 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
          */
         return field_type_from_avro(::avro::resolveSymbol(node), state);
     case avro::AVRO_UNKNOWN:
-        return schema_conversion_exception(
+        return conversion_exception(
           "Conversion of unknown avro type is not supported");
     }
 }
@@ -261,7 +261,7 @@ field_type_from_avro(const avro::NodePtr& node, state& state) {
     try {
         return inner_field_type_from_avro(node, state);
     } catch (...) {
-        return schema_conversion_exception(fmt::format(
+        return conversion_exception(fmt::format(
           "exception thrown while converting AVRO {} schema of type {} to "
           "iceberg - {}",
           *node,
@@ -285,7 +285,7 @@ type_to_iceberg(const avro::NodePtr& node) {
         }
         auto field = std::move(result.value());
         if (!field.has_value()) {
-            return schema_conversion_exception(
+            return conversion_exception(
               "AVRO_NULL is not supported top level type");
         }
 
@@ -301,4 +301,4 @@ type_to_iceberg(const avro::NodePtr& node) {
     return struct_from_avro_record(node, s);
 }
 
-} // namespace datalake
+} // namespace iceberg

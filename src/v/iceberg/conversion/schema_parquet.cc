@@ -11,7 +11,7 @@
 #include "iceberg/datatypes.h"
 #include "serde/parquet/schema.h"
 
-namespace datalake {
+namespace iceberg {
 namespace {
 
 auto map_repetition_type(iceberg::field_required required) {
@@ -224,4 +224,4 @@ schema_to_parquet(const iceberg::struct_type& schema) {
     root.path.emplace_back("root");
     return root;
 }
-} // namespace datalake
+} // namespace iceberg

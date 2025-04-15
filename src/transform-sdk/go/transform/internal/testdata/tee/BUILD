@@ -10,6 +10,7 @@ go_library(
 
 go_binary(
     name = "tee",
+    out = "tee.wasm",
     embed = [":tee_lib"],
     goarch = "wasm",
     goos = "wasip1",

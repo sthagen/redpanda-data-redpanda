@@ -8,10 +8,10 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "datalake/schema_protobuf.h"
-#include "datalake/tests/proto_definitions.h"
-#include "datalake/values_protobuf.h"
 #include "gtest/gtest.h"
+#include "iceberg/conversion/schema_protobuf.h"
+#include "iceberg/conversion/tests/proto_definitions.h"
+#include "iceberg/conversion/values_protobuf.h"
 #include "iceberg/datatypes.h"
 #include "test_utils/test.h"
 
@@ -49,7 +49,7 @@ MATCHER_P3(IsField, id, name, type, "") {
 TEST(SchemaProtobuf, TestSimpleSchemaConversion) {
     auto descriptor = Person::GetDescriptor();
 
-    auto result = datalake::type_to_iceberg(*descriptor);
+    auto result = iceberg::type_to_iceberg(*descriptor);
     ASSERT_FALSE(result.has_error());
     auto& top_level = result.value();
     // string name = 1;
@@ -111,7 +111,7 @@ TEST(SchemaProtobuf, TestSimpleSchemaConversion) {
 TEST(SchemaProtobuf, TestComplexSchema) {
     auto d = Metadata::GetDescriptor();
 
-    auto result = datalake::type_to_iceberg(*d);
+    auto result = iceberg::type_to_iceberg(*d);
     ASSERT_FALSE(result.has_exception());
 
     auto& top_level = result.value();
@@ -166,7 +166,7 @@ TEST(SchemaProtobuf, TestComplexSchema) {
 
 TEST_CORO(SchemaProtobuf, TestMessageWithOneOfField) {
     auto d = StructWithOneOf::GetDescriptor();
-    auto result = datalake::type_to_iceberg(*d);
+    auto result = iceberg::type_to_iceberg(*d);
     ASSERT_FALSE_CORO(result.has_error());
     auto field = std::move(result.value());
     EXPECT_THAT(
@@ -180,7 +180,7 @@ TEST_CORO(SchemaProtobuf, TestMessageWithOneOfField) {
 
 TEST_CORO(SchemaProtobuf, TestMessageWithTimestamp) {
     auto d = StructWithTimestamp::GetDescriptor();
-    auto result = datalake::type_to_iceberg(*d);
+    auto result = iceberg::type_to_iceberg(*d);
     ASSERT_FALSE_CORO(result.has_error());
     auto field = std::move(result.value());
     EXPECT_THAT(
@@ -190,7 +190,7 @@ TEST_CORO(SchemaProtobuf, TestMessageWithTimestamp) {
 TEST_CORO(SchemaProtobuf, TestProtoTestMessages) {
     auto d = protobuf_test_messages::editions::TestAllTypesEdition2023::
       GetDescriptor();
-    auto result = datalake::type_to_iceberg(*d);
+    auto result = iceberg::type_to_iceberg(*d);
     ASSERT_FALSE_CORO(result.has_error());
 }
 
@@ -198,7 +198,7 @@ TEST(SchemaProtobuf, TestInvalidSchema) {
     for (auto desc :
          {RecursiveMessage::GetDescriptor(),
           RecursiveMessageNested::GetDescriptor()}) {
-        auto result = datalake::type_to_iceberg(*desc);
+        auto result = iceberg::type_to_iceberg(*desc);
         ASSERT_TRUE(result.has_error());
     }
 }
@@ -242,13 +242,13 @@ auto IcebergKeyValue(KeyMatcherT k_matcher, ValueMatcherT v_matcher) {
     return FieldsAre(k_matcher, v_matcher);
 }
 template<typename Message>
-ss::future<datalake::optional_value_outcome>
+ss::future<iceberg::optional_value_outcome>
 serialize_and_convert(const Message& msg) {
     auto buffer = iobuf::from(msg.SerializeAsString());
     auto parsed = co_await serde::pb::parse(
       std::move(buffer), *msg.GetDescriptor());
 
-    co_return co_await datalake::proto_parsed_message_to_value(
+    co_return co_await iceberg::proto_parsed_message_to_value(
       std::move(parsed), *msg.GetDescriptor());
 }
 

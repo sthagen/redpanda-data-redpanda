@@ -9,11 +9,11 @@
  */
 #pragma once
 
-#include "datalake/conversion_outcome.h"
+#include "iceberg/conversion/conversion_outcome.h"
 
 #include <serde/parquet/value.h>
 
-namespace datalake {
+namespace iceberg {
 using parquet_conversion_outcome
   = checked<serde::parquet::value, value_conversion_exception>;
 
@@ -24,4 +24,4 @@ using parquet_conversion_outcome
  */
 ss::future<parquet_conversion_outcome> to_parquet_value(iceberg::value);
 
-} // namespace datalake
+} // namespace iceberg

@@ -10,11 +10,11 @@
 #pragma once
 
 #ifdef BAZEL_TEST
-#include "src/v/datalake/tests/testdata/complex.pb.h"
-#include "src/v/datalake/tests/testdata/iceberg_ready_test_messages_edition2023.pb.h"
-#include "src/v/datalake/tests/testdata/not_supported.pb.h"
-#include "src/v/datalake/tests/testdata/person.pb.h"
-#include "src/v/datalake/tests/testdata/proto2.pb.h"
+#include "src/v/iceberg/conversion/tests/testdata/complex.pb.h"
+#include "src/v/iceberg/conversion/tests/testdata/iceberg_ready_test_messages_edition2023.pb.h"
+#include "src/v/iceberg/conversion/tests/testdata/not_supported.pb.h"
+#include "src/v/iceberg/conversion/tests/testdata/person.pb.h"
+#include "src/v/iceberg/conversion/tests/testdata/proto2.pb.h"
 #else
 #include "testdata/complex.pb.h"
 #include "testdata/iceberg_ready_test_messages_edition2023.pb.h"

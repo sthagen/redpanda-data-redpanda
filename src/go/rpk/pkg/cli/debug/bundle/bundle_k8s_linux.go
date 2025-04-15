@@ -76,12 +76,14 @@ func executeK8SBundle(ctx context.Context, bp bundleParams) error {
 		saveInterrupts(ps),
 		saveKafkaMetadata(ctx, ps, bp.cl),
 		saveKernelSymbols(ps),
+		saveLsblk(ctx, ps),
 		saveMdstat(ps),
 		saveMountedFilesystems(ps),
 		saveNTPDrift(ps),
 		saveResourceUsageData(ps, bp.y),
 		saveStartupLog(ps, bp.y),
 		saveSlabInfo(ps),
+		saveSoftwareInterrupts(ps),
 		saveUname(ctx, ps),
 	}
 

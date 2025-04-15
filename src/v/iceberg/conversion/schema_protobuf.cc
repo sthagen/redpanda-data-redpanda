@@ -8,10 +8,10 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "datalake/schema_protobuf.h"
+#include "iceberg/conversion/schema_protobuf.h"
 
-#include "datalake/conversion_outcome.h"
-#include "datalake/protobuf_utils.h"
+#include "iceberg/conversion/conversion_outcome.h"
+#include "iceberg/conversion/protobuf_utils.h"
 #include "iceberg/datatypes.h"
 
 #include <seastar/core/sstring.hh>
@@ -22,7 +22,7 @@
 
 #include <ranges>
 
-namespace datalake {
+namespace iceberg {
 namespace {
 namespace pb = google::protobuf;
 
@@ -45,7 +45,7 @@ field_outcome success(const pb::FieldDescriptor& fd, iceberg::field_type ft) {
 struct_outcome struct_from_protobuf(
   const pb::Descriptor& msg, proto_descriptors_stack& stack) {
     if (is_recursive_type(msg, stack)) {
-        return schema_conversion_exception(fmt::format(
+        return conversion_exception(fmt::format(
           "Protocol buffer field not supported - recursive type detected, type "
           "hierarchy: {}, current type: {}",
           fmt::join(
@@ -54,7 +54,7 @@ struct_outcome struct_from_protobuf(
           msg.DebugString()));
     }
     if (stack.size() > max_recursion_depth) {
-        return schema_conversion_exception(fmt::format(
+        return conversion_exception(fmt::format(
           "Protocol buffer field {} not supported - max nested depth of {} "
           "reached",
           msg.DebugString(),
@@ -143,7 +143,7 @@ field_outcome from_protobuf(
     case pb::FieldDescriptor::TYPE_STRING:
         return success(fd, iceberg::string_type{});
     case pb::FieldDescriptor::TYPE_GROUP:
-        return schema_conversion_exception(fmt::format(
+        return conversion_exception(fmt::format(
           "Protocol buffer field {} type {} not supported",
           fd.DebugString(),
           fd.type_name()));
@@ -183,4 +183,4 @@ type_to_iceberg(const pb::Descriptor& descriptor) {
     return struct_from_protobuf(descriptor, stack);
 }
 
-} // namespace datalake
+} // namespace iceberg

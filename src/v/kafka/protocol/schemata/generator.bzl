@@ -82,7 +82,7 @@ def generate_kafka_messages(name = "generate_kafka_messages"):
                     source,
                     header,
                 ],
-                cmd = "$(PYTHON3) $(execpath //src/v/kafka/protocol/schemata:generator) $< $(OUTS)",
+                cmd = "$(execpath //src/v/kafka/protocol/schemata:generator) $< $(OUTS)",
                 tools = [
                     "//src/v/kafka/protocol/schemata:generator",
                 ],

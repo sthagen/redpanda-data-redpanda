@@ -7,12 +7,12 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "datalake/values_protobuf.h"
+#include "iceberg/conversion/values_protobuf.h"
 
 #include "bytes/iobuf.h"
 #include "container/fragmented_vector.h"
-#include "datalake/conversion_outcome.h"
-#include "datalake/protobuf_utils.h"
+#include "iceberg/conversion/conversion_outcome.h"
+#include "iceberg/conversion/protobuf_utils.h"
 #include "iceberg/values.h"
 #include "ssx/future-util.h"
 
@@ -23,7 +23,7 @@
 #include <absl/time/time.h>
 #include <fmt/core.h>
 
-namespace datalake {
+namespace iceberg {
 namespace pb = google::protobuf;
 namespace parsed = serde::pb::parsed;
 namespace {
@@ -398,4 +398,4 @@ deserialize_protobuf(iobuf buffer, const pb::Descriptor& type_descriptor) {
     }
 }
 
-} // namespace datalake
+} // namespace iceberg

@@ -23,6 +23,7 @@
 #include "schema/tests/fake_registry.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/random_bytes.h"
+#include "test_utils/runfiles.h"
 #include "wasm/engine.h"
 #include "wasm/tests/wasm_fixture.h"
 #include "wasm/tests/wasm_logger.h"
@@ -112,15 +113,14 @@ void WasmTestFixture::TearDown() {
     _probe = nullptr;
 }
 
-void WasmTestFixture::load_wasm(std::string file) {
-    std::string path = fmt::format("{}.wasm", file);
-    if (!ss::file_exists(path).get()) {
-        auto bazel_env_var = fmt::format(
-          "{}_WASM_BINARY", absl::AsciiStrToUpper(file));
-        const char* path_envvar = std::getenv(bazel_env_var.c_str());
-        vassert(path_envvar != nullptr, "expected {} to exist", bazel_env_var);
-        path = path_envvar;
-    }
+void WasmTestFixture::load_wasm(std::string_view filename) {
+    std::filesystem::path file(filename);
+    auto path = test_utils::get_runfile_path(
+                  std::string(
+                    std::filesystem::path(
+                      "src/transform-sdk/go/transform/internal/testdata")
+                    / file.stem() / file.filename()))
+                  .value_or(std::string(filename));
     auto wasm_file = ss::util::read_entire_file(path).get();
     auto buf = model::wasm_binary_iobuf(std::make_unique<iobuf>());
     for (auto& chunk : wasm_file) {

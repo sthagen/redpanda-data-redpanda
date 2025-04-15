@@ -45,18 +45,11 @@ v_cc_library(
     record_schema_resolver.cc
     record_translator.cc
     schema_registry.cc
-    schema_avro.cc
-    schema_protobuf.cc
     partitioning_writer.cc
-    protobuf_utils.cc
-    values_avro.cc
-    values_protobuf.cc
     base_types.cc
     cloud_data_io.cc
     table_creator.cc
     translation_task.cc
-    schema_parquet.cc
-    values_parquet.cc
     local_parquet_file_writer.cc
     serde_parquet_writer.cc
     partition_key_path.cc
@@ -71,9 +64,11 @@ v_cc_library(
     Seastar::seastar
     protobuf::libprotobuf
     v::iceberg
+    v::iceberg_conversion
     v::serde_protobuf
     v::serde_avro
     v::serde_parquet
+    v::iceberg_conversion
 )
 
 add_subdirectory(tests)

@@ -903,8 +903,15 @@ public:
 
     std::vector<ss::sstring> enum_values() const final override {
         std::vector<ss::sstring> r;
+        r.reserve(_values.size());
         for (const auto& v : _values) {
-            r.push_back(ssx::sformat("{}", v));
+            if constexpr (reflection::is_std_optional<T>) {
+                if (v.has_value()) {
+                    r.push_back(ssx::sformat("{}", v.value()));
+                }
+            } else {
+                r.push_back(ssx::sformat("{}", v));
+            }
         }
 
         return r;
@@ -912,18 +919,16 @@ public:
 
 private:
     ss::sstring help_text() const {
-        // String-ize the available values
-        std::vector<std::string> str_values;
-        str_values.reserve(_values.size());
-        std::transform(
-          _values.begin(),
-          _values.end(),
-          std::back_inserter(str_values),
-          [](const T& v) { return fmt::format("{}", v); });
+        constexpr std::string_view or_null_str = [] {
+            if constexpr (reflection::is_std_optional<T>) {
+                return " or null";
+            } else {
+                return "";
+            }
+        }();
 
         return fmt::format(
-          "Must be one of {}",
-          fmt::join(str_values.begin(), str_values.end(), ","));
+          "Must be one of {}{}", fmt::join(enum_values(), ","), or_null_str);
     }
 
     std::vector<T> _values;

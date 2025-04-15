@@ -9,11 +9,11 @@
  */
 #pragma once
 
-#include "datalake/conversion_outcome.h"
 #include "google/protobuf/descriptor.h"
+#include "iceberg/conversion/conversion_outcome.h"
 #include "serde/protobuf/parser.h"
 
-namespace datalake {
+namespace iceberg {
 
 /**
  * Deserializes a protobuf message using serde::pb::parser and converts it to
@@ -28,4 +28,4 @@ ss::future<optional_value_outcome> proto_parsed_message_to_value(
   std::unique_ptr<serde::pb::parsed::message> message,
   const google::protobuf::Descriptor& descriptor);
 
-} // namespace datalake
+} // namespace iceberg

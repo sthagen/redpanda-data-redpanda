@@ -12,9 +12,8 @@ def _expand_with_stamp_vars(ctx):
         outputs = [ctx.outputs.out],
         inputs = [ctx.file.defaults_file, ctx.file.template, ctx.info_file],
         tools = [ctx.executable._tool, toolchain.py3_runtime.interpreter],
-        executable = toolchain.py3_runtime.interpreter,
+        executable = ctx.executable._tool.path,
         arguments = [
-            ctx.executable._tool.path,
             "--template",
             ctx.file.template.path,
             "--variables",

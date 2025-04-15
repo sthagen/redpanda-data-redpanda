@@ -1,5 +1,6 @@
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@bazel_skylib//rules:write_file.bzl", "write_file")
+load("@rules_python//python:defs.bzl", "py_binary")
 load("//bazel:build.bzl", "redpanda_cc_library")
 load(":expand_with_stamp_vars.bzl", "expand_with_stamp_vars")
 

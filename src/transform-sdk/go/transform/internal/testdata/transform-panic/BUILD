@@ -10,6 +10,7 @@ go_library(
 
 go_binary(
     name = "transform-panic",
+    out = "transform-panic.wasm",
     embed = [":transform-panic_lib"],
     goarch = "wasm",
     goos = "wasip1",

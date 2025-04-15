@@ -28,35 +28,6 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "conversion_outcome",
-    srcs = [
-    ],
-    hdrs = [
-        "conversion_outcome.h",
-    ],
-    include_prefix = "datalake",
-    deps = [
-        "//src/v/iceberg:values",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_library(
-    name = "protobuf_utils",
-    srcs = [
-        "protobuf_utils.cc",
-    ],
-    hdrs = [
-        "protobuf_utils.h",
-    ],
-    include_prefix = "datalake",
-    visibility = [":__subpackages__"],
-    deps = [
-        "@protobuf",
-    ],
-)
-
-redpanda_cc_library(
     name = "schema_identifier",
     hdrs = [
         "schema_identifier.h",
@@ -67,26 +38,6 @@ redpanda_cc_library(
         "//src/v/pandaproxy",
         "//src/v/serde",
         "@boost//:container_hash",
-    ],
-)
-
-redpanda_cc_library(
-    name = "schema_protobuf",
-    srcs = [
-        "schema_protobuf.cc",
-    ],
-    hdrs = [
-        "schema_protobuf.h",
-    ],
-    include_prefix = "datalake",
-    visibility = [":__subpackages__"],
-    deps = [
-        ":conversion_outcome",
-        ":protobuf_utils",
-        "//src/v/iceberg:datatypes",
-        "@fmt",
-        "@protobuf",
-        "@seastar",
     ],
 )
 
@@ -277,31 +228,6 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "values_protobuf",
-    srcs = [
-        "values_protobuf.cc",
-    ],
-    hdrs = [
-        "values_protobuf.h",
-    ],
-    include_prefix = "datalake",
-    visibility = [":__subpackages__"],
-    deps = [
-        ":conversion_outcome",
-        ":protobuf_utils",
-        "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
-        "//src/v/iceberg:values",
-        "//src/v/serde/protobuf",
-        "//src/v/ssx:future_util",
-        "@abseil-cpp//absl/time",
-        "@fmt",
-        "@protobuf",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_library(
     name = "base_types",
     srcs = [
         "base_types.cc",
@@ -371,13 +297,13 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":catalog_schema_manager",
-        ":conversion_outcome",
         ":logger",
         ":record_schema_resolver",
         ":record_translator",
         ":table_creator",
         ":table_id_provider",
         "//src/v/base",
+        "//src/v/iceberg/conversion:conversion_outcome",
         "//src/v/storage:parser_utils",
         "//src/v/utils:lazy_abort_source",
         "//src/v/utils:prefix_logger",
@@ -406,11 +332,11 @@ redpanda_cc_library(
         "record_schema_resolver.h",
     ],
     implementation_deps = [
-        ":conversion_outcome",
         ":logger",
-        ":schema_avro",
-        ":schema_protobuf",
         ":schema_registry",
+        "//src/v/iceberg/conversion:conversion_outcome",
+        "//src/v/iceberg/conversion:schema_avro",
+        "//src/v/iceberg/conversion:schema_protobuf",
         "//src/v/metrics",
         "//src/v/pandaproxy",
         "//src/v/schema:registry",
@@ -438,15 +364,15 @@ redpanda_cc_library(
         "record_translator.h",
     ],
     implementation_deps = [
-        ":conversion_outcome",
         ":logger",
         ":schema_registry",
         ":table_definition",
-        ":values_avro",
-        ":values_protobuf",
         "//src/v/iceberg:avro_utils",
         "//src/v/iceberg:compatibility_utils",
         "//src/v/iceberg:values",
+        "//src/v/iceberg/conversion:conversion_outcome",
+        "//src/v/iceberg/conversion:values_avro",
+        "//src/v/iceberg/conversion:values_protobuf",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@avro",
         "@protobuf",
@@ -460,77 +386,6 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/iceberg:datatypes",
         "//src/v/model",
-    ],
-)
-
-redpanda_cc_library(
-    name = "schema_avro",
-    srcs = [
-        "schema_avro.cc",
-    ],
-    hdrs = [
-        "schema_avro.h",
-    ],
-    include_prefix = "datalake",
-    visibility = [":__subpackages__"],
-    deps = [
-        ":conversion_outcome",
-        "//src/v/iceberg:datatypes",
-        "@avro",
-        "@fmt",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_library(
-    name = "values_avro",
-    srcs = ["values_avro.cc"],
-    hdrs = ["values_avro.h"],
-    implementation_deps = [
-        "//src/v/bytes:iobuf",
-        "//src/v/bytes:iobuf_parser",
-        "//src/v/iceberg:avro_decimal",
-        "//src/v/serde/avro",
-    ],
-    include_prefix = "datalake",
-    visibility = [":__subpackages__"],
-    deps = [
-        ":conversion_outcome",
-        "@avro",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_library(
-    name = "schema_parquet",
-    srcs = [
-        "schema_parquet.cc",
-    ],
-    hdrs = [
-        "schema_parquet.h",
-    ],
-    include_prefix = "datalake",
-    visibility = [":__subpackages__"],
-    deps = [
-        "//src/v/iceberg:datatypes",
-        "//src/v/serde/parquet:schema",
-    ],
-)
-
-redpanda_cc_library(
-    name = "values_parquet",
-    srcs = [
-        "values_parquet.cc",
-    ],
-    hdrs = [
-        "values_parquet.h",
-    ],
-    include_prefix = "datalake",
-    visibility = [":__subpackages__"],
-    deps = [
-        ":conversion_outcome",
-        "//src/v/iceberg:values",
-        "//src/v/serde/parquet:value",
     ],
 )
 
@@ -564,9 +419,9 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":logger",
-        ":schema_parquet",
-        ":values_parquet",
         "//src/v/iceberg:values",
+        "//src/v/iceberg/conversion:schema_parquet",
+        "//src/v/iceberg/conversion:values_parquet",
         "//src/v/version",
     ],
     include_prefix = "datalake",

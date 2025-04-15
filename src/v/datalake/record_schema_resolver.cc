@@ -12,10 +12,10 @@
 #include "base/vlog.h"
 #include "config/configuration.h"
 #include "datalake/logger.h"
-#include "datalake/schema_avro.h"
 #include "datalake/schema_identifier.h"
-#include "datalake/schema_protobuf.h"
 #include "datalake/schema_registry.h"
+#include "iceberg/conversion/schema_avro.h"
+#include "iceberg/conversion/schema_protobuf.h"
 #include "iceberg/datatypes.h"
 #include "metrics/prometheus_sanitize.h"
 #include "pandaproxy/schema_registry/protobuf.h"
@@ -44,7 +44,7 @@ checked<resolved_type, type_resolver::errc> translate_avro_schema(
   shared_schema_t schema) {
     const auto& avro_schema = avro_def();
     try {
-        auto result = datalake::type_to_iceberg(avro_schema.root());
+        auto result = iceberg::type_to_iceberg(avro_schema.root());
         if (result.has_error()) {
             vlog(
               datalake_log.error,
@@ -80,7 +80,7 @@ checked<resolved_type, type_resolver::errc> translate_protobuf_schema(
     }
     const auto* d = &d_res.value().get();
     try {
-        auto type = type_to_iceberg(*d).value();
+        auto type = iceberg::type_to_iceberg(*d).value();
         return resolved_type{
           .schema = resolved_schema(*d, std::move(schema)),
           .id

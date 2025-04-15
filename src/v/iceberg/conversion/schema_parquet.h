@@ -9,14 +9,14 @@
  */
 #pragma once
 
-#include "datalake/conversion_outcome.h"
-#include "google/protobuf/descriptor.h"
 #include "iceberg/datatypes.h"
+#include "serde/parquet/schema.h"
 
-namespace datalake {
-
-// convert a protobuf message schema to iceberg schema
-conversion_outcome<iceberg::struct_type>
-type_to_iceberg(const google::protobuf::Descriptor& pool);
-
-} // namespace datalake
+namespace iceberg {
+/**
+ * Translates an Iceberg schema to a parquet schema that is required to write
+ * parquet files. This function do not do any validation of the schema as it
+ * assumes that the schema was validated before.
+ */
+serde::parquet::schema_element schema_to_parquet(const iceberg::struct_type&);
+} // namespace iceberg

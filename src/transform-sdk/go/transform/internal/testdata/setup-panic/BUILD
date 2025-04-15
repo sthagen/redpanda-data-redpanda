@@ -9,6 +9,7 @@ go_library(
 
 go_binary(
     name = "setup-panic",
+    out = "setup-panic.wasm",
     embed = [":setup-panic_lib"],
     goarch = "wasm",
     goos = "wasip1",

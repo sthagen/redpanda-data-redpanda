@@ -9,9 +9,9 @@
  */
 
 #include "bytes/iobuf_parser.h"
-#include "datalake/schema_parquet.h"
-#include "datalake/values_parquet.h"
 #include "gtest/gtest.h"
+#include "iceberg/conversion/schema_parquet.h"
+#include "iceberg/conversion/values_parquet.h"
 #include "iceberg/tests/value_generator.h"
 #include "test_utils/randoms.h"
 using namespace testing;
@@ -395,7 +395,7 @@ iceberg::struct_type map_types() {
 
 TEST(DatalakeParquetSchema, EmptySchemaConversionTest) {
     iceberg::struct_type schema;
-    auto parquet_schema = datalake::schema_to_parquet(schema);
+    auto parquet_schema = iceberg::schema_to_parquet(schema);
     ASSERT_EQ(parquet_schema.name(), "root");
     ASSERT_TRUE(parquet_schema.children.empty());
     ASSERT_EQ(
@@ -411,7 +411,7 @@ TEST(DatalakeParquetSchema, PrimitiveTypes) {
             f->required = iceberg::field_required::no;
         }
     }
-    auto parquet_schema = datalake::schema_to_parquet(schema);
+    auto parquet_schema = iceberg::schema_to_parquet(schema);
     ASSERT_EQ(parquet_schema.name(), "root");
     ASSERT_EQ(parquet_schema.children.size(), 14);
     ASSERT_TRUE(primitive_schema_matches(parquet_schema, schema));
@@ -419,7 +419,7 @@ TEST(DatalakeParquetSchema, PrimitiveTypes) {
 
 TEST(DatalakeParquetSchema, Lists) {
     auto schema = list_types();
-    auto parquet_schema = datalake::schema_to_parquet(schema);
+    auto parquet_schema = iceberg::schema_to_parquet(schema);
     ASSERT_EQ(parquet_schema.name(), "root");
     ASSERT_EQ(parquet_schema.children.size(), 4);
 
@@ -462,7 +462,7 @@ TEST(DatalakeParquetSchema, Lists) {
 TEST(DatalakeParquetSchema, Maps) {
     for (int i = 0; i < 2000; ++i) {
         auto schema = map_types();
-        auto parquet_schema = datalake::schema_to_parquet(schema);
+        auto parquet_schema = iceberg::schema_to_parquet(schema);
         ASSERT_EQ(parquet_schema.name(), "root");
         ASSERT_EQ(parquet_schema.children.size(), 15);
         for (int i = 0; i < 15; i++) {
@@ -528,7 +528,7 @@ TEST(DatalakeParquetSchema, NestedStruct) {
       iceberg::field_required::yes,
       iceberg::make_copy(primitive_types())));
 
-    auto parquet_schema = datalake::schema_to_parquet(schema);
+    auto parquet_schema = iceberg::schema_to_parquet(schema);
     ASSERT_EQ(parquet_schema.name(), "root");
     ASSERT_EQ(parquet_schema.children.size(), 1);
     ASSERT_EQ(parquet_schema.children[0].name(), "nested_struct");
@@ -841,7 +841,7 @@ auto prepare_test_data(iceberg::field_type schema) {
     auto test_value = iceberg::tests::make_value(
       iceberg::tests::value_spec{}, iceberg::make_copy(schema_field));
     return std::make_tuple(
-      datalake::to_parquet_value(iceberg::make_copy(test_value)).get(),
+      iceberg::to_parquet_value(iceberg::make_copy(test_value)).get(),
       std::move(test_value));
 }
 

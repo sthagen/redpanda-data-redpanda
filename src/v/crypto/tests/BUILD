@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:copy_file.bzl", "copy_file")
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
@@ -90,39 +91,44 @@ expand_template(
     name = "openssl_conf",
     out = "openssl_conf.cnf",
     substitutions = {
-        "@REDPANDA_DEPS_INSTALL_DIR@": "src/v/crypto/tests",
+        "@REDPANDA_DEPS_INSTALL_DIR@/etc/ssl": "src/v/crypto/tests",
     },
     template = "test_openssl_conf.cnf.in",
 )
 
-genrule(
+copy_file(
     name = "fipsmodule_cnf",
-    srcs = ["@openssl-fips//:fipsmodule_cnf"],
-    outs = ["etc/ssl/fipsmodule.cnf"],
-    cmd = "cp -L $(SRCS) $@",
+    src = "@openssl-fips//:fipsmodule_cnf",
+    out = "fipsmodule.cnf",
+    allow_symlink = True,
 )
 
-common_data_deps = [
-    ":fipsmodule_cnf",
-    "@openssl-fips//:fipsmodule_so",
-    ":openssl_conf",
-]
+copy_file(
+    name = "fipsmodule_so",
+    src = "@openssl-fips//:fipsmodule_so",
+    out = "fips.so",
+    allow_symlink = True,
+)
 
-common_env = {
-    "OPENSSL_CONF": "$(rootpath :openssl_conf)",
-    "__FIPS_MODULE_PATH": "$(rootpath @openssl-fips//:fipsmodule_so)",
-}
+filegroup(
+    name = "fips_test_assets",
+    srcs = [
+        ":fipsmodule_cnf",
+        ":fipsmodule_so",
+        ":openssl_conf",
+    ],
+)
 
 redpanda_cc_bench(
     name = "crypto_bench_rpbench",
     srcs = ["crypto_bench.cc"],
-    data = common_data_deps,
-    env = common_env,
+    data = [":fips_test_assets"],
     deps = [
         "//src/v/base",
         "//src/v/crypto",
         "//src/v/random:generators",
         "//src/v/ssx:thread_worker",
+        "//src/v/test_utils:runfiles",
         "@openssl-fips",
         "@seastar",
         "@seastar//:benchmark",
@@ -132,14 +138,14 @@ redpanda_cc_bench(
 redpanda_cc_bench(
     name = "crypto_bench_fips_rpbench",
     srcs = ["crypto_bench.cc"],
-    data = common_data_deps,
+    data = [":fips_test_assets"],
     defines = ["PERF_FIPS_MODE"],
-    env = common_env,
     deps = [
         "//src/v/base",
         "//src/v/crypto",
         "//src/v/random:generators",
         "//src/v/ssx:thread_worker",
+        "//src/v/test_utils:runfiles",
         "@openssl",
         "@seastar",
         "@seastar//:benchmark",
@@ -155,6 +161,7 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/ssx:thread_worker",
         "//src/v/test_utils:gtest",
+        "//src/v/test_utils:runfiles",
         "@googletest//:gtest",
     ],
 )
@@ -166,9 +173,9 @@ redpanda_cc_gtest(
         "ossl_context_service_test.cc",
     ],
     cpu = 2,
-    data = common_data_deps,
+    data = [":fips_test_assets"],
     defines = ["FIPS_MODULE_REQUIRED"],
-    env = common_env | {"RP_FIXTURE_ENV": ""},
+    env = {"RP_FIXTURE_ENV": ""},
     deps = [
         ":crypto_test_utils",
         ":ossl_context_service_test_base",
@@ -190,9 +197,9 @@ redpanda_cc_gtest(
         "ossl_context_service_failure_tests.cc",
     ],
     cpu = 2,
-    data = common_data_deps,
+    data = [":fips_test_assets"],
     defines = ["FIPS_MODULE_REQUIRED"],
-    env = common_env | {"RP_FIXTURE_ENV": ""},
+    env = {"RP_FIXTURE_ENV": ""},
     deps = [
         ":crypto_test_utils",
         ":ossl_context_service_test_base",

@@ -77,9 +77,7 @@ use_repo(non_module_dependencies, "hdrhistogram")
 use_repo(non_module_dependencies, "hwloc")
 use_repo(non_module_dependencies, "jsoncons")
 use_repo(non_module_dependencies, "krb5")
-
-# workaround for CORE-9546
-# use_repo(non_module_dependencies, "libpciaccess")
+use_repo(non_module_dependencies, "libpciaccess")
 use_repo(non_module_dependencies, "libprotobuf_mutator")
 use_repo(non_module_dependencies, "libxml2")
 use_repo(non_module_dependencies, "lksctp")

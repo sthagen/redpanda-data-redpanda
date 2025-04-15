@@ -13,6 +13,7 @@
 
 #include "base/seastarx.h"
 #include "ssx/thread_worker.h"
+#include "test_utils/runfiles.h"
 #include "test_utils/test.h"
 
 #include <seastar/util/log.hh>
@@ -23,12 +24,12 @@
 #include <memory>
 
 inline std::string get_config_file_path() {
-    auto conf_file = ::getenv("OPENSSL_CONF");
-    if (conf_file) {
-        return conf_file;
-    } else {
-        return "";
+    char* var = std::getenv("OPENSSL_CONF");
+    if (var != nullptr) {
+        return var;
     }
+    return test_utils::get_runfile_path("src/v/crypto/tests/openssl_conf.cnf")
+      .value_or("");
 }
 
 class ossl_context_base_test_framework : public seastar_test {
@@ -43,17 +44,6 @@ public:
         // Grab a copy of the global context.  This will be set on all shards at
         // clean up just in case a test fails and does not perform this action
         _global_context = OSSL_LIB_CTX_get0_global_default();
-
-        // Maybe override the module directory
-        // We need this to play nice with bazel, which isn't very friendly about
-        // providing us with directories.
-        if (auto module_override = ::getenv("__FIPS_MODULE_PATH");
-            module_override != nullptr) {
-            ASSERT_TRUE_CORO(std::filesystem::exists(module_override))
-              << fmt::format("Module not found: {}", module_override);
-            auto mod = std::filesystem::path{module_override}.parent_path();
-            ::setenv("MODULE_DIR", mod.c_str(), 1);
-        }
     }
 
     ss::future<> TearDownAsync() override {
@@ -71,12 +61,18 @@ protected:
     }
 
     ss::future<bool> fips_module_present() {
-        auto mod_dir = ss::sstring{::getenv("MODULE_DIR")};
-        auto dir_type = co_await ss::file_type(mod_dir);
+        auto module_dir = test_utils::get_runfile_path("src/v/crypto/tests");
+        if (char* override = ::getenv("MODULE_DIR"); override != nullptr) {
+            module_dir = override;
+        }
+        if (!module_dir.has_value()) {
+            co_return false;
+        }
+        auto dir_type = co_await ss::file_type(module_dir.value());
         if (!dir_type || *dir_type != ss::directory_entry_type::directory) {
             co_return false;
         } else {
-            auto fips_file = mod_dir + "/fips.so";
+            auto fips_file = module_dir.value() + "/fips.so";
             co_return co_await ss::file_exists(fips_file);
         }
     }

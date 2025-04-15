@@ -115,6 +115,7 @@ rp_test(
     v::seastar_testing_main
     v::wasm 
     v::model_test_utils
+    v::runfiles
   BUILD_DEPENDENCIES
     wasm_testdata_identity
   INPUT_FILES

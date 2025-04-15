@@ -201,7 +201,7 @@
   "moduleExtensions": {
     "//bazel:extensions.bzl%non_module_dependencies": {
       "general": {
-        "bzlTransitiveDigest": "ZGaKqwECNyUDduSXFKqG/ehB6Bql/WaXimCv69fuksU=",
+        "bzlTransitiveDigest": "SIRWQ+radZuG0xin6bW2+kQwnBPkC1XE+o1F046iwIA=",
         "usagesDigest": "8eEn6X1e7HKkx2OPWUwQBOEnT9TIkMhEcXbu/wRjGno=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
@@ -306,7 +306,7 @@
               "build_file": "@@//bazel/thirdparty:libpciaccess.BUILD",
               "sha256": "d0d0d53c2085d21ab37ae5989e55a3de13d4d80dc2c0a8d5c77154ea70f4783c",
               "strip_prefix": "libpciaccess-2ec2576cabefef1eaa5dd9307c97de2e887fc347",
-              "url": "https://gitlab.freedesktop.org/xorg/lib/libpciaccess/-/archive/2ec2576cabefef1eaa5dd9307c97de2e887fc347/libpciaccess-2ec2576cabefef1eaa5dd9307c97de2e887fc347.tar.gz"
+              "url": "https://vectorized-public.s3.amazonaws.com/dependencies/libpciaccess-2ec2576cabefef1eaa5dd9307c97de2e887fc347.tar.gz"
             }
           },
           "libprotobuf_mutator": {
@@ -5777,7 +5777,7 @@
           "@@rules_rust~~rust_host_tools~rust_host_tools//bin/rustc": "241027b94ad67beb36d0356f7cc05180daaa9966b2958cfba1d4de089d2e521c",
           "@@//bazel/thirdparty/Cargo.lock": "931fa1bc55d0e5d2e5b6d96da399569a4c2254a4bb1d99c98f71bb4b98eead73",
           "@@//bazel/thirdparty/Cargo.toml": "cb23768a6e7edc8f97215921e956f5be06521ad93cc0ecf64a932e3a8caada54",
-          "@@//MODULE.bazel": "2b57c34de42ea6176f2cdac8a68353691eb68608f5e43249308be323b7896a44",
+          "@@//MODULE.bazel": "95197662702f84ae3836bf17657faf8ae3c473f988968e0a470d5cbe541dd7fd",
           "@@//bazel/thirdparty/wasmtime.BUILD": "4b55deaf51f5b8be25fc3592f9bcf3d732f99632cd793c685436ddca9a177534",
           "@@rules_rust~~rust_host_tools~rust_host_tools//bin/cargo": "35099f3b7b9497b3ae95aa00886ac6839343488e5cdb958e69c16c9b58c3afb2"
         },

@@ -8,10 +8,10 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "bytes/iobuf_parser.h"
-#include "datalake/schema_avro.h"
-#include "datalake/values_avro.h"
 #include "gtest/gtest.h"
 #include "iceberg/avro_decimal.h"
+#include "iceberg/conversion/schema_avro.h"
+#include "iceberg/conversion/values_avro.h"
 #include "iceberg/datatypes.h"
 #include "serde/avro/tests/data_generator.h"
 
@@ -99,7 +99,7 @@ TEST(AvroSchema, TestNonRecordSchema) {
 
     for (auto& [name, schema, type] : tl_type_expectations) {
         auto root = load_json_schema(schema);
-        auto iceberg_struct_res = datalake::type_to_iceberg(root);
+        auto iceberg_struct_res = iceberg::type_to_iceberg(root);
 
         ASSERT_TRUE(iceberg_struct_res.has_value());
 
@@ -255,7 +255,7 @@ AssertionResult field_matches(
 
 TEST(AvroSchema, TestRecordType) {
     auto root = load_json_schema(big_record);
-    auto iceberg_struct_res = datalake::type_to_iceberg(root);
+    auto iceberg_struct_res = iceberg::type_to_iceberg(root);
 
     ASSERT_TRUE(iceberg_struct_res.has_value());
     auto struct_t = std::move(iceberg_struct_res.value());
@@ -360,7 +360,7 @@ constexpr auto tree_node = R"J(
 
 TEST(AvroSchema, TestRecursiveType) {
     auto root = load_json_schema(tree_node);
-    auto iceberg_struct_res = datalake::type_to_iceberg(root);
+    auto iceberg_struct_res = iceberg::type_to_iceberg(root);
 
     ASSERT_TRUE(iceberg_struct_res.has_error());
 }
@@ -447,7 +447,7 @@ constexpr auto logical_types = R"J(
 
 TEST(AvroSchema, TestLogicalTypes) {
     auto root = load_json_schema(logical_types);
-    auto iceberg_struct_res = datalake::type_to_iceberg(root);
+    auto iceberg_struct_res = iceberg::type_to_iceberg(root);
 
     ASSERT_FALSE(iceberg_struct_res.has_error());
     auto struct_t = std::move(iceberg_struct_res.value());
@@ -496,18 +496,18 @@ iobuf serialize_with_avro(
  * Helper function to prepare test data for avro serialization and
  * deserialization. This function takes avro schema as input, generates random
  * Avro GenericDatum serializes it using avro library and finally deserialize it
- * with datalake::deserialize_avro function. It returns a tuple containing
+ * with iceberg::deserialize_avro function. It returns a tuple containing
  * value, iceberg schema and test data in form of generic datum.
  */
 std::tuple<
-  datalake::value_outcome,
-  datalake::conversion_outcome<iceberg::field_type>,
+  iceberg::value_outcome,
+  iceberg::conversion_outcome<iceberg::field_type>,
   avro::GenericDatum>
 prepare_avro_test(std::string_view schema) {
     // Load schema
     auto valid_schema = avro::compileJsonSchemaFromString(std::string(schema));
     // Convert to iceberg schema
-    auto iceberg_struct_res = datalake::type_to_iceberg(valid_schema.root());
+    auto iceberg_struct_res = iceberg::type_to_iceberg(valid_schema.root());
     // Generate random generic datum
     avro_generator gen({});
     avro::GenericDatum datum = gen.generate_datum(valid_schema.root());
@@ -515,7 +515,7 @@ prepare_avro_test(std::string_view schema) {
     // Serialize using avro library
     auto buffer = serialize_with_avro(datum, valid_schema);
 
-    auto values = datalake::deserialize_avro(buffer.copy(), valid_schema).get();
+    auto values = iceberg::deserialize_avro(buffer.copy(), valid_schema).get();
     if (iceberg_struct_res.has_error()) {
         return {
           std::move(values),

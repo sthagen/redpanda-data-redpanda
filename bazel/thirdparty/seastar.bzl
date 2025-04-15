@@ -23,7 +23,7 @@ def seastar_cc_swagger_library(name, src, definitions = [], visibility = None):
         name = name + "_genrule",
         srcs = [src] + definitions,
         outs = [hh_out, cc_out],
-        cmd = "$(PYTHON3) $(location @seastar//:seastar-json2code) --create-cc -f " + src_abs + " -o " + hh_out_abs,
+        cmd = "$(location @seastar//:seastar-json2code) --create-cc -f " + src_abs + " -o " + hh_out_abs,
         tools = ["@seastar//:seastar-json2code"],
         toolchains = ["@rules_python//python:current_py_toolchain"],
     )

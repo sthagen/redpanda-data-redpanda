@@ -10,14 +10,14 @@
 #include "datalake/record_translator.h"
 
 #include "base/vlog.h"
-#include "datalake/conversion_outcome.h"
 #include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
 #include "datalake/table_definition.h"
-#include "datalake/values_avro.h"
-#include "datalake/values_protobuf.h"
 #include "iceberg/avro_utils.h"
 #include "iceberg/compatibility_utils.h"
+#include "iceberg/conversion/conversion_outcome.h"
+#include "iceberg/conversion/values_avro.h"
+#include "iceberg/conversion/values_protobuf.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/values.h"
 #include "model/fundamental.h"
@@ -35,14 +35,16 @@ struct value_translating_visitor {
     iobuf parsable_buf;
     const iceberg::field_type& type;
 
-    ss::future<optional_value_outcome>
+    ss::future<iceberg::optional_value_outcome>
     operator()(const google::protobuf::Descriptor& d) {
-        return deserialize_protobuf(std::move(parsable_buf), d);
+        return iceberg::deserialize_protobuf(std::move(parsable_buf), d);
     }
-    ss::future<optional_value_outcome> operator()(const avro::ValidSchema& s) {
-        auto value = co_await deserialize_avro(std::move(parsable_buf), s);
+    ss::future<iceberg::optional_value_outcome>
+    operator()(const avro::ValidSchema& s) {
+        auto value = co_await iceberg::deserialize_avro(
+          std::move(parsable_buf), s);
         if (value.has_error()) {
-            co_return optional_value_outcome(value.error());
+            co_return iceberg::optional_value_outcome(value.error());
         }
         co_return std::move(value.value());
     }

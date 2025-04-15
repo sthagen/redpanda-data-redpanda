@@ -17,17 +17,31 @@ class ossl_context_test_no_env_framework
   : public ossl_context_base_test_framework {
 public:
     ss::future<> SetUpAsync() override {
-        orig_conf_file = std::string{::getenv("OPENSSL_CONF")};
+        if (char* conf = ::getenv("OPENSSL_CONF"); conf != nullptr) {
+            orig_conf_file = conf;
+        }
         std::cout << "orig_conf_file: " << orig_conf_file << std::endl;
-        ::unsetenv("OPENSSL_CONF");
+        ::setenv("OPENSSL_CONF", "", 1);
         co_await ossl_context_base_test_framework::SetUpAsync();
     }
 
     ss::future<> TearDownAsync() override {
         co_await ossl_context_base_test_framework::TearDownAsync();
-        ::setenv("OPENSSL_CONF", orig_conf_file.c_str(), 1);
-        std::cout << "OPENSSL_CONF: " << ::getenv("OPENSSL_CONF") << std::endl;
-        ASSERT_EQ_CORO(::getenv("OPENSSL_CONF"), orig_conf_file);
+        if (orig_conf_file.empty()) {
+            ::unsetenv("OPENSSL_CONF");
+        } else {
+            ::setenv("OPENSSL_CONF", orig_conf_file.c_str(), 1);
+        }
+    }
+
+    ss::sstring module_dir() const {
+        auto module_dir = test_utils::get_runfile_path("src/v/crypto/tests");
+        if (!module_dir.has_value()) {
+            char* var = std::getenv("MODULE_DIR");
+            vassert(var != nullptr, "MODULE_DIR is not set");
+            module_dir = var;
+        }
+        return ss::sstring{module_dir.value()};
     }
 
 protected:
@@ -46,7 +60,7 @@ TEST_F_CORO(ossl_context_test_no_env_framework, fips_mode) {
     co_await svc.start(
       std::ref(*thread_worker()),
       get_config_file_path(),
-      ::getenv("MODULE_DIR"),
+      module_dir(),
       crypto::is_fips_mode::yes);
 
     EXPECT_THROW(
@@ -61,7 +75,7 @@ TEST_F_CORO(ossl_context_test_no_env_framework, non_fips_mode) {
     co_await svc.start(
       std::ref(*thread_worker()),
       get_config_file_path(),
-      ::getenv("MODULE_DIR"),
+      module_dir(),
       crypto::is_fips_mode::no);
 
     EXPECT_NO_THROW(

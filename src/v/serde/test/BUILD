@@ -70,7 +70,7 @@ py_binary(
 genrule(
     name = "generated_structs_genrule",
     outs = ["generated_structs.h"],
-    cmd = "$(PYTHON3) $(execpath :struct_gen) $@",
+    cmd = "$(execpath :struct_gen) $@",
     toolchains = ["@rules_python//python:current_py_toolchain"],
     tools = [":struct_gen"],
 )

@@ -15,6 +15,7 @@
 #include "model/transform.h"
 #include "schema/registry.h"
 #include "test_utils/randoms.h"
+#include "test_utils/runfiles.h"
 #include "wasm/engine.h"
 #include "wasm/logger.h"
 #include "wasm/tests/wasm_logger.h"
@@ -30,7 +31,6 @@
 
 #include <absl/strings/ascii.h>
 
-#include <chrono>
 #include <cstdlib>
 #include <memory>
 #include <unistd.h>
@@ -40,14 +40,14 @@ using namespace std::chrono_literals;
 template<size_t BatchSize, size_t RecordSize>
 class WasmBenchTest {
 public:
-    WasmBenchTest() { load("identity").get(); }
+    WasmBenchTest() { load("identity.wasm").get(); }
     WasmBenchTest(const WasmBenchTest&) = delete;
     WasmBenchTest(WasmBenchTest&&) = delete;
     WasmBenchTest& operator=(const WasmBenchTest&) = delete;
     WasmBenchTest& operator=(WasmBenchTest&&) = delete;
     ~WasmBenchTest() { cleanup().get(); }
 
-    ss::future<> load(std::string_view file) {
+    ss::future<> load(std::filesystem::path file) {
         if (_engine) {
             co_await _engine->stop();
         }
@@ -77,13 +77,14 @@ public:
         };
         auto wasm_binary = model::wasm_binary_iobuf(std::make_unique<iobuf>());
         {
-            auto path = fmt::format("{}.wasm", file);
-            if (!(co_await ss::file_exists(path))) {
-                auto bazel_env_var = fmt::format(
-                  "{}_WASM_BINARY", absl::AsciiStrToUpper(file));
-                path = std::getenv(bazel_env_var.c_str());
-                vassert(!path.empty(), "expected {} to exist", bazel_env_var);
-            }
+            auto path
+              = test_utils::get_runfile_path(
+                  std::string(
+                    std::filesystem::path(
+                      "src/transform-sdk/go/transform/internal/testdata")
+                    / file.stem() / file.filename()))
+                  .value_or(std::string(file));
+            fmt::print(std::cerr, "Loading wasm file: {}\n", path);
             auto data = co_await ss::util::read_entire_file_contiguous(path);
             wasm_binary()->append(data.data(), data.size());
         }
