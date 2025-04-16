@@ -424,7 +424,10 @@ private:
           .request(full_path)
           .with_method(ss::httpd::operation_type::GET)
           .then_reply_with(
-            not_found_response, ss::http::reply::status_type::not_found);
+            not_found_response,
+            std::vector<std::pair<ss::sstring, ss::sstring>>{
+              {"Content-Type", "application/xml"}},
+            ss::http::reply::status_type::not_found);
     }
 
     void parse_manifests(

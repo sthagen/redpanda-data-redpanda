@@ -23,6 +23,7 @@
 
 #include <exception>
 #include <filesystem>
+#include <memory>
 
 static constexpr size_t inner_iters = 1000;
 
@@ -63,12 +64,10 @@ public:
         _svc.invoke_on_all(&crypto::ossl_context_service::start).get();
     }
 
-    ss::future<> stop() {
-        co_await _svc.stop();
-        co_await _thread_worker->stop();
-    }
-
-    ~openssl_perf() = default;
+    ~openssl_perf() {
+        _svc.stop().get();
+        _thread_worker->stop().get();
+    };
 
 private:
     std::unique_ptr<ssx::singleton_thread_worker> _thread_worker{nullptr};
@@ -86,19 +85,8 @@ private:
     }
 };
 
-static std::unique_ptr<openssl_perf> global_perf{nullptr};
-
 struct openssl_perf_test {
-    openssl_perf_test() {
-        if (!global_perf) {
-            global_perf = std::make_unique<openssl_perf>();
-            ss::engine().at_exit([]() -> ss::future<> {
-                co_await global_perf->stop();
-                global_perf.reset();
-            });
-        }
-    }
-    ~openssl_perf_test() = default;
+    std::unique_ptr<openssl_perf> perf = std::make_unique<openssl_perf>();
 };
 
 PERF_TEST_F(openssl_perf_test, md5_1k) {

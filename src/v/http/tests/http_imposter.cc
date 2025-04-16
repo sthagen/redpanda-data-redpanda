@@ -11,9 +11,8 @@
 #include "http/tests/http_imposter.h"
 
 #include "base/vlog.h"
+#include "http/tests/utils.h"
 #include "utils/uuid.h"
-
-#include <seastar/http/function_handlers.hh>
 
 #include <utility>
 
@@ -94,8 +93,9 @@ void http_imposter_fixture::listen() {
 
 void http_imposter_fixture::set_routes(ss::httpd::routes& r) {
     using namespace ss::httpd;
-    _handler = std::make_unique<function_handler>(
-      [this](const_req req, ss::http::reply& repl) -> ss::sstring {
+    _handler = std::make_unique<http::test_utils::flexible_function_handler>(
+      [this](const_req req, ss::http::reply& repl, ss::sstring& content_type)
+        -> ss::sstring {
           if (_masking_active) {
               if (
                 ss::lowres_clock::now() - _masking_active->started
@@ -153,6 +153,7 @@ void http_imposter_fixture::set_routes(ss::httpd::routes& r) {
           } else if (
             req._method == "POST" && req.query_parameters.contains("delete")) {
               // Delete objects
+              content_type = "xml";
               return R"xml(<DeleteResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"></DeleteResult>)xml";
           } else {
               auto lookup_r = ri;
@@ -162,12 +163,14 @@ void http_imposter_fixture::set_routes(ss::httpd::routes& r) {
               repl.set_status(response.status);
               for (const auto& [k, v] : response.headers) {
                   repl.add_header(k, v);
+                  if (k == "Content-Type" && v == "application/xml") {
+                      content_type = "xml";
+                  }
               }
 
               return response.body;
           }
-      },
-      "txt");
+      });
     r.add_default_handler(_handler.get());
 }
 

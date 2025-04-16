@@ -15,6 +15,7 @@
 #include "bytes/iobuf_parser.h"
 #include "cloud_storage_clients/client.h"
 #include "cloud_storage_clients/client_probe.h"
+#include "http/tests/utils.h"
 #include "test_utils/async.h"
 #include "test_utils/test_macros.h"
 
@@ -501,11 +502,11 @@ void s3_imposter_fixture::set_routes(
     using reply = ss::http::reply;
     _content_handler = ss::make_shared<content_handler>(
       expectations, *this, std::move(headers_to_store));
-    _handler = std::make_unique<function_handler>(
-      [this](const_req req, reply& repl) {
+    _handler = std::make_unique<http::test_utils::flexible_function_handler>(
+      [this](const_req req, reply& repl, [[maybe_unused]] ss::sstring& type) {
           return _content_handler->handle(req, repl);
       },
-      "txt");
+      "xml");
     r.add_default_handler(_handler.get());
 }
 

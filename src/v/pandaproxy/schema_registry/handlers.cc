@@ -147,7 +147,7 @@ std::invoke_result_t<F> get_or_load(server::request_t& rq, F f) {
     }
 
     // Load latest writes and retry
-    vlog(plog.debug, "get_or_load: refreshing schema store on missing item");
+    vlog(srlog.debug, "get_or_load: refreshing schema store on missing item");
     co_await rq.service().writer().read_sync();
     co_return co_await f();
 }
@@ -415,7 +415,7 @@ post_subject(server::request_t rq, server::reply_t rp) {
     auto norm{parse::query_param<std::optional<normalize>>(*rq.req, "normalize")
                 .value_or(normalize::no)};
     vlog(
-      plog.debug,
+      srlog.debug,
       "post_subject subject='{}', normalize='{}', deleted='{}'",
       sub,
       norm,
@@ -461,7 +461,7 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
     auto norm{parse::query_param<std::optional<normalize>>(*rq.req, "normalize")
                 .value_or(normalize::no)};
     vlog(
-      plog.debug,
+      srlog.debug,
       "post_subject_versions subject='{}', normalize='{}'",
       sub,
       norm);
@@ -663,7 +663,7 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
     co_await rq.service().writer().read_sync();
 
     vlog(
-      plog.info,
+      srlog.info,
       "compatibility_subject_version: subject: {}, version: {}",
       unparsed.def.sub(),
       ver);

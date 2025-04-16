@@ -15,6 +15,7 @@
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/s3_client.h"
 #include "hashing/secure.h"
+#include "http/tests/utils.h"
 #include "net/dns.h"
 #include "net/types.h"
 #include "test_utils/fixture.h"
@@ -31,6 +32,7 @@
 #include <seastar/http/function_handlers.hh>
 #include <seastar/http/handlers.hh>
 #include <seastar/http/httpd.hh>
+#include <seastar/http/request.hh>
 #include <seastar/http/routes.hh>
 #include <seastar/net/api.hh>
 #include <seastar/net/socket_defs.hh>
@@ -125,6 +127,8 @@ static constexpr auto no_such_config_payload = R"xml(
 void set_routes(ss::httpd::routes& r) {
     using namespace ss::httpd;
     using reply = ss::http::reply;
+    using flexible_function_handler
+      = http::test_utils::flexible_function_handler;
     auto empty_put_response = new function_handler(
       [](const_req req) {
           BOOST_REQUIRE(!req.get_header("x-amz-content-sha256").empty());
@@ -132,24 +136,30 @@ void set_routes(ss::httpd::routes& r) {
           return "";
       },
       "txt");
-    auto erroneous_put_response = new function_handler(
-      []([[maybe_unused]] const_req req, reply& reply) {
+    auto erroneous_put_response = new flexible_function_handler(
+      [](
+        [[maybe_unused]] const_req req,
+        reply& reply,
+        [[maybe_unused]] ss::sstring& type) {
           reply.set_status(reply::status_type::internal_server_error);
           return error_payload;
       },
-      "txt");
+      "xml");
     auto get_response = new function_handler(
       [](const_req req) {
           BOOST_REQUIRE(!req.get_header("x-amz-content-sha256").empty());
           return ss::sstring(expected_payload, expected_payload_size);
       },
       "txt");
-    auto erroneous_get_response = new function_handler(
-      []([[maybe_unused]] const_req req, reply& reply) {
+    auto erroneous_get_response = new flexible_function_handler(
+      [](
+        [[maybe_unused]] const_req req,
+        reply& reply,
+        [[maybe_unused]] ss::sstring& type) {
           reply.set_status(reply::status_type::internal_server_error);
           return error_payload;
       },
-      "txt");
+      "xml");
     auto empty_delete_response = new function_handler(
       [](const_req req, reply& reply) {
           BOOST_REQUIRE(!req.get_header("x-amz-content-sha256").empty());
@@ -157,14 +167,17 @@ void set_routes(ss::httpd::routes& r) {
           return "";
       },
       "txt");
-    auto erroneous_delete_response = new function_handler(
-      []([[maybe_unused]] const_req req, reply& reply) {
+    auto erroneous_delete_response = new flexible_function_handler(
+      [](
+        [[maybe_unused]] const_req req,
+        reply& reply,
+        [[maybe_unused]] ss::sstring& type) {
           reply.set_status(reply::status_type::internal_server_error);
           return error_payload;
       },
-      "txt");
-    auto list_objects_response = new function_handler(
-      [](const_req req, reply& reply) {
+      "xml");
+    auto list_objects_response = new flexible_function_handler(
+      [](const_req req, reply& reply, [[maybe_unused]] ss::sstring& type) {
           BOOST_REQUIRE(!req.get_header("x-amz-content-sha256").empty());
           BOOST_REQUIRE_EQUAL(req.get_query_param("list-type"), "2");
           auto prefix = req.get_query_param("prefix");
@@ -180,27 +193,33 @@ void set_routes(ss::httpd::routes& r) {
                 req.get_query_param("continuation-token"), "ctok");
               return list_objects_payload;
           }
-          return "";
+          return "<root>none</root>";
       },
-      "txt");
+      "xml");
     auto unexpected_error_response = new function_handler(
       []([[maybe_unused]] const_req req, reply& reply) {
           reply.set_status(reply::status_type::internal_server_error);
           return "unexpected!";
       },
       "txt");
-    auto key_not_found_response = new function_handler(
-      []([[maybe_unused]] const_req req, reply& reply) {
+    auto key_not_found_response = new flexible_function_handler(
+      [](
+        [[maybe_unused]] const_req req,
+        reply& reply,
+        [[maybe_unused]] ss::sstring& type) {
           reply.set_status(reply::status_type::not_found);
           return no_such_key_payload;
       },
-      "txt");
-    auto bucket_not_found_response = new function_handler(
-      []([[maybe_unused]] const_req req, reply& reply) {
+      "xml");
+    auto bucket_not_found_response = new flexible_function_handler(
+      [](
+        [[maybe_unused]] const_req req,
+        reply& reply,
+        [[maybe_unused]] ss::sstring& type) {
           reply.set_status(reply::status_type::not_found);
           return no_such_bucket_payload;
       },
-      "txt");
+      "xml");
     auto delete_objects_response = new function_handler(
       [](const_req req, reply& reply) -> std::string {
           if (!req.query_parameters.contains("delete")) {
@@ -282,12 +301,15 @@ void set_routes(ss::httpd::routes& r) {
           return "";
       },
       "txt");
-    auto no_such_config = new function_handler(
-      []([[maybe_unused]] const_req req, reply& reply) {
+    auto no_such_config = new flexible_function_handler(
+      [](
+        [[maybe_unused]] const_req req,
+        reply& reply,
+        [[maybe_unused]] ss::sstring& type) {
           reply.set_status(reply::status_type::not_found);
           return no_such_config_payload;
       },
-      "txt");
+      "xml");
     r.add(operation_type::PUT, url("/test"), empty_put_response);
     r.add(operation_type::PUT, url("/test-error"), erroneous_put_response);
     r.add(operation_type::GET, url("/test"), get_response);

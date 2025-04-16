@@ -50,7 +50,6 @@ constexpr boost::beast::string_view delete_snapshot_name
 constexpr boost::beast::string_view is_hns_enabled_name = "x-ms-is-hns-enabled";
 constexpr boost::beast::string_view delete_snapshot_value = "include";
 constexpr boost::beast::string_view error_code_name = "x-ms-error-code";
-constexpr boost::beast::string_view content_type_name = "Content-Type";
 constexpr boost::beast::string_view expiry_option_name = "x-ms-expiry-option";
 constexpr boost::beast::string_view expiry_option_value = "RelativeToNow";
 constexpr boost::beast::string_view expiry_time_name = "x-ms-expiry-time";
@@ -73,23 +72,6 @@ bool is_error_retryable(
 } // namespace
 
 namespace cloud_storage_clients {
-
-enum class response_content_type : int8_t { unknown, xml, json };
-
-static response_content_type
-get_response_content_type(const http::client::response_header& headers) {
-    if (auto iter = headers.find(content_type_name); iter != headers.end()) {
-        if (iter->value().find("json") != std::string_view::npos) {
-            return response_content_type::json;
-        }
-
-        if (iter->value().find("xml") != std::string_view::npos) {
-            return response_content_type::xml;
-        }
-    }
-
-    return response_content_type::unknown;
-}
 
 static abs_rest_error_response
 parse_xml_rest_error_response(boost::beast::http::status result, iobuf buf) {
@@ -628,7 +610,7 @@ ss::future<http::client::response_stream_ref> abs_client::do_get_object(
               response_stream->get_headers());
         }
 
-        const auto content_type = get_response_content_type(
+        const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
         auto buf = co_await util::drain_response_stream(
           std::move(response_stream));
@@ -686,7 +668,7 @@ ss::future<> abs_client::do_put_object(
     if (const auto is_no_content_and_accepted = accept_no_content
                                                 && status == no_content;
         status != created && !is_no_content_and_accepted) {
-        const auto content_type = get_response_content_type(
+        const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
         auto buf = co_await util::drain_response_stream(
           std::move(response_stream));
@@ -803,7 +785,7 @@ ss::future<> abs_client::do_delete_object(
 
     const auto status = response_stream->get_headers().result();
     if (status != boost::beast::http::status::accepted) {
-        const auto content_type = get_response_content_type(
+        const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
         auto buf = co_await util::drain_response_stream(
           std::move(response_stream));
@@ -884,7 +866,7 @@ ss::future<abs_client::list_bucket_result> abs_client::do_list_objects(
     const auto status = response_stream->get_headers().result();
 
     if (status != boost::beast::http::status::ok) {
-        const auto content_type = get_response_content_type(
+        const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
         iobuf buf = co_await util::drain_response_stream(response_stream);
         throw parse_rest_error_response(content_type, status, std::move(buf));
@@ -1047,7 +1029,7 @@ ss::future<> abs_client::do_delete_file(
     if (
       status != boost::beast::http::status::accepted
       && status != boost::beast::http::status::ok) {
-        const auto content_type = get_response_content_type(
+        const auto content_type = util::get_response_content_type(
           response_stream->get_headers());
         auto buf = co_await util::drain_response_stream(
           std::move(response_stream));

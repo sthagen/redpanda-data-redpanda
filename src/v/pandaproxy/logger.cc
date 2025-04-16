@@ -11,4 +11,5 @@
 
 namespace pandaproxy {
 ss::logger plog{"pandaproxy"};
+ss::logger srlog{"schemaregistry"};
 } // namespace pandaproxy

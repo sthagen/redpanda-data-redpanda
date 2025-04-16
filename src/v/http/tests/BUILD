@@ -5,10 +5,12 @@ redpanda_test_cc_library(
     srcs = [
         "http_imposter.cc",
         "registered_urls.cc",
+        "utils.cc",
     ],
     hdrs = [
         "http_imposter.h",
         "registered_urls.h",
+        "utils.h",
     ],
     include_prefix = "http/tests",
     visibility = ["//visibility:public"],

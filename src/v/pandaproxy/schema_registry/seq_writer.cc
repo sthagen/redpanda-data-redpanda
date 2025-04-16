@@ -61,7 +61,7 @@ struct batch_builder : public storage::record_batch_builder {
 
     void operator()(const seq_marker& s) {
         vlog(
-          plog.debug,
+          srlog.debug,
           "Delete {} tombstoning sub={} at {}",
           to_string_view(s.key_type),
           sub,
@@ -130,12 +130,12 @@ ss::future<> seq_writer::wait_for(model::offset offset) {
     return container().invoke_on(
       reader_shard, _smp_opts, [offset](seq_writer& seq) {
           if (auto waiters = seq._wait_for_sem.waiters(); waiters != 0) {
-              vlog(plog.trace, "wait_for waiting for {} waiters", waiters);
+              vlog(srlog.trace, "wait_for waiting for {} waiters", waiters);
           }
           return ss::with_semaphore(seq._wait_for_sem, 1, [&seq, offset]() {
               if (offset > seq._loaded_offset) {
                   vlog(
-                    plog.debug,
+                    srlog.debug,
                     "wait_for dirty!  Reading {}..{}",
                     seq._loaded_offset,
                     offset);
@@ -148,7 +148,7 @@ ss::future<> seq_writer::wait_for(model::offset offset) {
                     .consume(
                       consume_to_store{seq._store, seq}, model::no_timeout);
               } else {
-                  vlog(plog.trace, "wait_for clean (offset  {})", offset);
+                  vlog(srlog.trace, "wait_for clean (offset  {})", offset);
                   return ss::make_ready_future<>();
               }
           });
@@ -178,12 +178,13 @@ ss::future<bool> seq_writer::produce_and_apply(
 
     auto success = write_at.value_or(res.base_offset) == res.base_offset;
     if (success) {
-        vlog(plog.debug, "seq_writer: Successful write at {}", res.base_offset);
+        vlog(
+          srlog.debug, "seq_writer: Successful write at {}", res.base_offset);
         co_await consume_to_store(_store, *this)(std::move(batch));
         co_await _store.process_marked_schemas();
     } else {
         vlog(
-          plog.debug,
+          srlog.debug,
           "seq_writer: Failed write at {} (wrote at {})",
           write_at,
           res.base_offset);
@@ -200,14 +201,14 @@ ss::future<> seq_writer::advance_offset(model::offset offset) {
 void seq_writer::advance_offset_inner(model::offset offset) {
     if (_loaded_offset < offset) {
         vlog(
-          plog.debug,
+          srlog.debug,
           "seq_writer::advance_offset {}->{}",
           _loaded_offset,
           offset);
         _loaded_offset = offset;
     } else {
         vlog(
-          plog.debug,
+          srlog.debug,
           "seq_writer::advance_offset ignoring {} (have {})",
           offset,
           _loaded_offset);
@@ -224,18 +225,20 @@ ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
       = co_await _store.project_ids(schema.share())
           .handle_exception([](std::exception_ptr e) {
               vlog(
-                plog.debug, "write_subject_version: project_ids failed: {}", e);
+                srlog.debug,
+                "write_subject_version: project_ids failed: {}",
+                e);
               return ss::make_exception_future<sharded_store::insert_result>(e);
           });
 
     if (!projected.inserted) {
-        vlog(plog.debug, "write_subject_version: no-op");
+        vlog(srlog.debug, "write_subject_version: no-op");
         co_return projected.id;
     } else {
         auto canonical = std::move(schema.schema);
         auto sub = canonical.sub();
         vlog(
-          plog.debug,
+          srlog.debug,
           "seq_writer::write_subject_version project offset={} "
           "subject={} "
           "schema={} "
@@ -280,7 +283,7 @@ ss::future<std::optional<bool>> seq_writer::do_write_config(
   compatibility_level compat,
   model::offset write_at) {
     vlog(
-      plog.debug,
+      srlog.debug,
       "write_config sub={} compat={} offset={}",
       sub,
       to_string_view(compat),
@@ -326,7 +329,7 @@ ss::future<bool> seq_writer::write_config(
 }
 
 ss::future<std::optional<bool>> seq_writer::do_delete_config(subject sub) {
-    vlog(plog.debug, "delete config sub={}", sub);
+    vlog(srlog.debug, "delete config sub={}", sub);
 
     co_await check_mutable(sub);
 
@@ -358,7 +361,7 @@ ss::future<bool> seq_writer::delete_config(subject sub) {
 ss::future<std::optional<bool>> seq_writer::do_write_mode(
   std::optional<subject> sub, mode m, force f, model::offset write_at) {
     vlog(
-      plog.debug,
+      srlog.debug,
       "write_mode sub={} mode={} force={} offset={}",
       sub,
       to_string_view(m),
@@ -404,7 +407,7 @@ seq_writer::write_mode(std::optional<subject> sub, mode mode, force f) {
 
 ss::future<std::optional<bool>>
 seq_writer::do_delete_mode(subject sub, model::offset write_at) {
-    vlog(plog.debug, "delete mode sub={} offset={}", sub, write_at);
+    vlog(srlog.debug, "delete mode sub={} offset={}", sub, write_at);
 
     // Report an error if the mode isn't registered
     co_await _store.get_mode(sub, default_to_global::no);
@@ -441,7 +444,7 @@ ss::future<std::optional<bool>> seq_writer::do_delete_subject_version(
 
     auto key = schema_key{
       .seq{write_at}, .node{_node_id}, .sub{sub}, .version{version}};
-    vlog(plog.debug, "seq_writer::delete_subject_version {}", key);
+    vlog(srlog.debug, "seq_writer::delete_subject_version {}", key);
     schema_value value{
       .schema{subject_schema{sub, std::move(schema)}},
       .version{version},
@@ -528,7 +531,7 @@ seq_writer::do_delete_subject_impermanent(subject sub, model::offset write_at) {
 
 ss::future<std::vector<schema_version>>
 seq_writer::delete_subject_impermanent(subject sub) {
-    vlog(plog.debug, "delete_subject_impermanent sub={}", sub);
+    vlog(srlog.debug, "delete_subject_impermanent sub={}", sub);
     return sequenced_write(
       [sub{std::move(sub)}](model::offset write_at, seq_writer& seq) {
           return seq.do_delete_subject_impermanent(sub, write_at);
@@ -555,7 +558,7 @@ seq_writer::delete_subject_permanent_inner(
 
     /// Check for whether our victim is already soft-deleted happens
     /// within these store functions (will throw a 404-equivalent if so)
-    vlog(plog.debug, "delete_subject_permanent sub={}", sub);
+    vlog(srlog.debug, "delete_subject_permanent sub={}", sub);
 
     co_await check_mutable(sub);
 

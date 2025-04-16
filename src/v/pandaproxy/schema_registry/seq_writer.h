@@ -115,7 +115,7 @@ private:
         auto remote = [base_backoff, f](seq_writer& seq) {
             if (auto waiters = seq._write_sem.waiters(); waiters != 0) {
                 vlog(
-                  plog.trace,
+                  srlog.trace,
                   "sequenced_write waiting for {} waiters",
                   waiters);
             }
@@ -124,7 +124,7 @@ private:
                   if (auto waiters = seq._wait_for_sem.waiters();
                       waiters != 0) {
                       vlog(
-                        plog.debug,
+                        srlog.debug,
                         "sequenced_write acquired write_sem with {} "
                         "wait_for_sem waiters",
                         waiters);

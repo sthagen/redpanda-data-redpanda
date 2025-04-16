@@ -93,6 +93,8 @@ from_config(std::optional<config::s3_url_style> us) {
     return std::nullopt;
 }
 
+enum class response_content_type : int8_t { unknown, xml, json };
+
 } // namespace cloud_storage_clients
 
 namespace std {

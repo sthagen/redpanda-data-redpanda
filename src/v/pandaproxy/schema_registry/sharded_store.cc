@@ -175,10 +175,11 @@ sharded_store::get_schema_version(stored_schema schema) {
         } else {
             // Use the supplied id
             s_id = schema.id;
-            vlog(plog.debug, "project_ids: using supplied ID {}", s_id.value());
+            vlog(
+              srlog.debug, "project_ids: using supplied ID {}", s_id.value());
         }
     } else if (s_id) {
-        vlog(plog.debug, "project_ids: existing ID {}", s_id.value());
+        vlog(srlog.debug, "project_ids: existing ID {}", s_id.value());
     }
 
     // Determine if the subject already has a version that references this
@@ -231,7 +232,7 @@ sharded_store::project_ids(stored_schema schema) {
     if (s_id == invalid_schema_id) {
         // New schema, project an ID for it.
         s_id = co_await project_schema_id();
-        vlog(plog.debug, "project_ids: projected new ID {}", s_id);
+        vlog(srlog.debug, "project_ids: projected new ID {}", s_id);
     }
 
     auto sub_shard{shard_for(sub)};
@@ -340,7 +341,7 @@ sharded_store::has_schema(subject_schema schema, include_deleted inc_del) {
               // Stored schemas might be invalid if imported improperly
               e.code() == error_code::schema_invalid) {
                 vlog(
-                  plog.warn,
+                  srlog.warn,
                   "Failed to parse stored schema, subject '{}', version {}. "
                   "Error: {}",
                   schema.sub(),
@@ -747,7 +748,7 @@ ss::future<> sharded_store::maybe_update_max_schema_id(schema_id id) {
         auto old = _next_schema_id;
         _next_schema_id = std::max(_next_schema_id, id + 1);
         vlog(
-          plog.debug,
+          srlog.debug,
           "maybe_update_max_schema_id: {}->{}",
           old,
           _next_schema_id);

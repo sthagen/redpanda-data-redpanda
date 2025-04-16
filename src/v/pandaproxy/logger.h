@@ -17,4 +17,5 @@
 
 namespace pandaproxy {
 extern ss::logger plog;
+extern ss::logger srlog;
 } // namespace pandaproxy

@@ -79,12 +79,14 @@ struct handler_adaptor : ss::httpd::handler_base {
       server::function_handler&& handler,
       ss::httpd::path_description& path_desc,
       const ss::sstring& metrics_group_name,
-      json::serialization_format exceptional_mime_type)
+      json::serialization_format exceptional_mime_type,
+      ss::logger& log)
       : _pending_requests(pending_requests)
       , _ctx(ctx)
       , _handler(std::move(handler))
       , _probe(path_desc, metrics_group_name)
-      , _exceptional_mime_type(exceptional_mime_type) {}
+      , _exceptional_mime_type(exceptional_mime_type)
+      , _log(log) {}
 
     ss::future<std::unique_ptr<ss::http::reply>> handle(
       const ss::sstring&,
@@ -114,6 +116,15 @@ struct handler_adaptor : ss::httpd::handler_base {
             co_return std::move(rp.rep);
         }
         auto sem_units = co_await ss::get_units(_ctx.mem_sem, req_size);
+
+        auto prefix = ssx::sformat(
+          "[{}:{}]",
+          rq.req->get_client_address().addr(),
+          rq.req->get_client_address().port());
+        auto req_line = ssx::sformat(
+          "{} {} HTTP/{}", rq.req->_method, rq.req->_url, rq.req->_version);
+        vlog(_log.trace, "{} handling {}", prefix, req_line);
+
         if (_ctx.as.abort_requested()) {
             set_reply_unavailable(*rp.rep);
             rp.mime_type = _exceptional_mime_type;
@@ -127,14 +138,23 @@ struct handler_adaptor : ss::httpd::handler_base {
         } catch (...) {
             auto ex = std::current_exception();
             vlog(
-              plog.warn,
+              _log.warn,
               "Request: {} {} failed: {}",
               method,
               url,
               std::current_exception());
-            rp = server::reply_t{exception_reply(ex), _exceptional_mime_type};
+            rp = server::reply_t{
+              exception_reply(_log, ex), _exceptional_mime_type};
         }
         set_and_measure_response(rp);
+        vlog(
+          _log.trace,
+          "{} responding to {}: status={} resp_size={}",
+          prefix,
+          req_line,
+          static_cast<std::underlying_type_t<ss::http::reply::status_type>>(
+            rp.rep->_status),
+          rp.rep->_content.size());
         co_return std::move(rp.rep);
     }
 
@@ -143,6 +163,7 @@ struct handler_adaptor : ss::httpd::handler_base {
     server::function_handler _handler;
     probe _probe;
     json::serialization_format _exceptional_mime_type;
+    ss::logger& _log;
 };
 
 server::server(
@@ -152,7 +173,8 @@ server::server(
   const ss::sstring& header,
   const ss::sstring& definitions,
   context_t& ctx,
-  json::serialization_format exceptional_mime_type)
+  json::serialization_format exceptional_mime_type,
+  ss::logger& log)
   : _server(server_name)
   , _public_metrics_group_name(public_metrics_group_name)
   , _pending_reqs()
@@ -160,7 +182,8 @@ server::server(
   , _has_routes(false)
   , _ctx(ctx)
   , _exceptional_mime_type(exceptional_mime_type)
-  , _probe{} {
+  , _probe{}
+  , _log(log) {
     _api20.set_api_doc(_server._routes);
     _api20.register_api_file(_server._routes, header);
     _api20.add_definitions_file(_server._routes, definitions);
@@ -179,7 +202,8 @@ void server::route(server::route_t r) {
       std::move(r.handler),
       r.path_desc,
       _public_metrics_group_name,
-      _exceptional_mime_type);
+      _exceptional_mime_type,
+      _log);
     r.path_desc.set(_server._routes, handler);
 }
 
@@ -204,7 +228,7 @@ ss::future<> server::start(
   const std::vector<config::endpoint_tls_config>& endpoints_tls,
   const std::vector<model::broker_endpoint>& advertised) {
     _server._routes.register_exeption_handler(
-      exception_replier{ss::sstring{name(_exceptional_mime_type)}});
+      exception_replier{ss::sstring{name(_exceptional_mime_type)}, _log});
 
     _probe = std::make_unique<server_probe>(_ctx, _public_metrics_group_name);
 
@@ -238,11 +262,11 @@ ss::future<> server::start(
               it->config,
               _public_metrics_group_name,
               it->name,
-              [](
+              [&log = _log](
                 const std::unordered_set<ss::sstring>& updated,
                 const std::exception_ptr& eptr) {
                   rpc::log_certificate_reload_event(
-                    plog, "API TLS", updated, eptr);
+                    log, "API TLS", updated, eptr);
               });
         }
         co_await _server.listen(addr, cred);

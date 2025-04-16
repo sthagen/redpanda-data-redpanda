@@ -40,6 +40,7 @@ log_config = LoggingConfig('info',
                            logger_levels={
                                'security': 'trace',
                                'pandaproxy': 'trace',
+                               'schemaregistry': 'trace',
                                'kafka/client': 'trace',
                                'kafka': 'debug',
                                'http': 'trace',

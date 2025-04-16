@@ -60,6 +60,24 @@ void registered_urls::add_mapping::add_mapping_when::then_reply_with(
       .headers = std::move(headers), .status = status};
 }
 
+void registered_urls::add_mapping::add_mapping_when::then_reply_with(
+  ss::sstring content,
+  std::vector<std::pair<ss::sstring, ss::sstring>> headers,
+  ss::http::reply::status_type status) {
+    if (!r.contains(url)) {
+        r[url] = method_reply_map{};
+    }
+
+    if (!r[url].contains(method)) {
+        r[url][method] = content_reply_map{};
+    }
+
+    r[url][method][request_content] = response{
+      .body = std::move(content),
+      .headers = std::move(headers),
+      .status = status};
+}
+
 registered_urls::add_mapping::add_mapping_when&
 registered_urls::add_mapping::add_mapping_when::with_method(
   ss::httpd::operation_type m) {

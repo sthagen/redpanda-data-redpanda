@@ -96,6 +96,11 @@ struct registered_urls {
               ss::sstring content, ss::http::reply::status_type status);
 
             void then_reply_with(
+              ss::sstring content,
+              std::vector<std::pair<ss::sstring, ss::sstring>> headers,
+              ss::http::reply::status_type status);
+
+            void then_reply_with(
               std::vector<std::pair<ss::sstring, ss::sstring>> headers,
               ss::http::reply::status_type status);
 

@@ -1,6 +1,6 @@
 v_cc_library(
   NAME http_test_utils
-  SRCS registered_urls.cc http_imposter.cc
+  SRCS registered_urls.cc http_imposter.cc utils.cc
   DEPS Seastar::seastar_testing v::http)
 
 rp_test(

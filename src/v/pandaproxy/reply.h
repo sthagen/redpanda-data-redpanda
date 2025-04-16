@@ -95,7 +95,8 @@ inline std::unique_ptr<ss::http::reply> unprocessable_entity(ss::sstring msg) {
       std::move(msg));
 }
 
-inline std::unique_ptr<ss::http::reply> exception_reply(std::exception_ptr e) {
+inline std::unique_ptr<ss::http::reply>
+exception_reply(ss::logger& log, std::exception_ptr e) {
     try {
         std::rethrow_exception(e);
     } catch (const ss::gate_closed_exception& e) {
@@ -117,7 +118,7 @@ inline std::unique_ptr<ss::http::reply> exception_reply(std::exception_ptr e) {
         auto ise = reply_error_code::internal_server_error;
         auto eb = errored_body(ise, make_error_condition(ise).message());
         vlog(
-          plog.error,
+          log.error,
           "exception_reply: {}, exception: {}",
           eb->_content,
           std::current_exception());
@@ -127,8 +128,9 @@ inline std::unique_ptr<ss::http::reply> exception_reply(std::exception_ptr e) {
 
 struct exception_replier {
     ss::sstring mime_type;
+    ss::logger& log;
     std::unique_ptr<ss::http::reply> operator()(const std::exception_ptr& e) {
-        auto res = exception_reply(e);
+        auto res = exception_reply(log, e);
         res->set_mime_type(mime_type);
         return res;
     }

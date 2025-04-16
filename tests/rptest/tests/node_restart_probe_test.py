@@ -18,6 +18,7 @@ from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST
 from rptest.tests.redpanda_test import RedpandaTest
+from rptest.utils.mode_checks import skip_debug_mode
 
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.utils.util import wait_until
@@ -79,10 +80,16 @@ class NodeRestartProbeTestBase(RedpandaTest):
             toggle(False)
 
     def produce_to_all_partitions(self, acks):
-        for topic in self.topics:
+        """
+        produce data unevenly, so that partitions of different topics catch up
+        at different times
+        """
+        for topic_no, topic in enumerate(self.topics):
             self.redpanda.logger.debug(f"producing to {topic.name}")
-            produce_bytes = (self.PRODUCE_BYTES +
-                             self.PRODUCE_BYTES_JITTER * random.uniform(-1, 1))
+            # produce into topics with shorter data first to increase
+            # discrepancy between partition catch-up times
+            produce_bytes = self.PRODUCE_BYTES + self.PRODUCE_BYTES_JITTER * (
+                topic_no * 3 / len(self.topics) - 1)
             produce_messages = max(produce_bytes / self.MSG_SIZE, 1)
             num_messages = int(topic.partition_count * produce_messages)
             self.kafka_tools.produce(topic.name, num_messages, self.MSG_SIZE,
@@ -376,14 +383,14 @@ def unittest_wait_gradually_increases():
 
 
 class NodePostRestartProbeTest(NodeRestartProbeTestBase):
-    PRODUCE_BYTES = 1 * 1024 * 1024
-    PRODUCE_BYTES_JITTER = 1 * 1024 * 1024
+    PRODUCE_BYTES = 5 * 1024 * 1024
+    PRODUCE_BYTES_JITTER = 3 * 1024 * 1024
 
     def __init__(self, test_context):
         super(NodePostRestartProbeTest, self).__init__(
             test_context=test_context,
             num_brokers=3,
-            extra_rp_conf={'health_monitor_max_metadata_age': 100})
+            extra_rp_conf={'health_monitor_max_metadata_age': 30})
 
     def create_topics(self):
         self.topics = [
@@ -399,6 +406,7 @@ class NodePostRestartProbeTest(NodeRestartProbeTestBase):
         self.redpanda.logger.info(f"{load_reclamed_pc=}")
         return load_reclamed_pc
 
+    @skip_debug_mode
     @cluster(num_nodes=3, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def post_restart_probe_test(self):
         unittest_wait_gradually_increases()

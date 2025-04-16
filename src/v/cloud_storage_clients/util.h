@@ -57,4 +57,7 @@ std::vector<object_key> all_paths_to_file(const object_key& path);
 // TODO: This should be replaced after we will represent URIs as structs
 void url_encode_target(http::client::request_header& header);
 
+response_content_type
+get_response_content_type(const http::client::response_header& headers);
+
 } // namespace cloud_storage_clients::util

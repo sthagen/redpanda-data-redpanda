@@ -274,4 +274,21 @@ void url_encode_target(http::client::request_header& header) {
     }
 }
 
+response_content_type
+get_response_content_type(const http::client::response_header& headers) {
+    static constexpr boost::beast::string_view content_type_name
+      = "Content-Type";
+    if (auto iter = headers.find(content_type_name); iter != headers.end()) {
+        if (iter->value().find("json") != std::string_view::npos) {
+            return response_content_type::json;
+        }
+
+        if (iter->value().find("xml") != std::string_view::npos) {
+            return response_content_type::xml;
+        }
+    }
+
+    return response_content_type::unknown;
+}
+
 } // namespace cloud_storage_clients::util

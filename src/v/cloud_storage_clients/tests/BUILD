@@ -43,6 +43,7 @@ redpanda_cc_btest(
         "//src/v/bytes:iostream",
         "//src/v/cloud_storage_clients",
         "//src/v/hashing:secure",
+        "//src/v/http/tests:utils",
         "//src/v/net",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:base64",

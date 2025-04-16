@@ -1377,7 +1377,7 @@ struct consume_to_store {
 
         auto key_type = from_string_view<topic_key_type>(key_type_str);
         if (!key_type.has_value()) {
-            vlog(plog.error, "Ignoring keytype: {}", key_type_str);
+            vlog(srlog.error, "Ignoring keytype: {}", key_type_str);
             co_await _sequencer.advance_offset(offset);
             co_return;
         }
@@ -1456,7 +1456,7 @@ struct consume_to_store {
         // compatibility, which can't collide.
         if (val && key.seq.has_value() && offset != key.seq) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "Ignoring out of order {} (at offset {})",
               key,
               offset);
@@ -1465,7 +1465,7 @@ struct consume_to_store {
 
         try {
             vlog(
-              plog.debug,
+              srlog.debug,
               "Applying: {} tombstone={} (at offset {})",
               key,
               !val.has_value(),
@@ -1483,7 +1483,7 @@ struct consume_to_store {
                       e.code() == error_code::subject_not_found
                       || e.code() == error_code::subject_version_not_found) {
                         vlog(
-                          plog.debug,
+                          srlog.debug,
                           "Ignoring tombstone at offset={}, subject or version "
                           "already removed ({})",
                           offset,
@@ -1505,7 +1505,7 @@ struct consume_to_store {
                   val->deleted);
             }
         } catch (const exception& e) {
-            vlog(plog.debug, "Error replaying: {}: {}", key, e.what());
+            vlog(srlog.debug, "Error replaying: {}: {}", key, e.what());
         }
     }
 
@@ -1517,7 +1517,7 @@ struct consume_to_store {
         // compatibility, which can't collide.
         if (val && key.seq.has_value() && offset != key.seq) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "Ignoring out of order {} (at offset {})",
               key,
               offset);
@@ -1530,7 +1530,7 @@ struct consume_to_store {
               fmt::format("Unexpected magic: {}", key));
         }
         try {
-            vlog(plog.debug, "Applying: {}", key);
+            vlog(srlog.debug, "Applying: {}", key);
             if (key.sub.has_value()) {
                 if (!val.has_value()) {
                     co_await _store.clear_compatibility(
@@ -1554,11 +1554,11 @@ struct consume_to_store {
                 co_await _store.set_compatibility(val->compat);
             } else {
                 vlog(
-                  plog.warn,
+                  srlog.warn,
                   "Tried to apply config with neither subject nor value");
             }
         } catch (const exception& e) {
-            vlog(plog.debug, "Error replaying: {}: {}", key, e);
+            vlog(srlog.debug, "Error replaying: {}: {}", key, e);
         }
     }
 
@@ -1570,7 +1570,7 @@ struct consume_to_store {
         // compatibility, which can't collide.
         if (val && key.seq.has_value() && offset != key.seq) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "Ignoring out of order {} (at offset {})",
               key,
               offset);
@@ -1583,7 +1583,7 @@ struct consume_to_store {
               fmt::format("Unexpected magic: {}", key));
         }
         try {
-            vlog(plog.debug, "Applying: {}", key);
+            vlog(srlog.debug, "Applying: {}", key);
             if (key.sub.has_value()) {
                 if (!val.has_value()) {
                     co_await _store.clear_mode(
@@ -1609,11 +1609,11 @@ struct consume_to_store {
                 co_await _store.set_mode(val->mode, force::yes);
             } else {
                 vlog(
-                  plog.warn,
+                  srlog.warn,
                   "Tried to apply mode with neither subject nor value");
             }
         } catch (const exception& e) {
-            vlog(plog.debug, "Error replaying: {}: {}", key, e);
+            vlog(srlog.debug, "Error replaying: {}: {}", key, e);
         }
     }
 
@@ -1629,7 +1629,7 @@ struct consume_to_store {
         // compatibility, which can't collide.
         if (val && key.seq.has_value() && offset != key.seq) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "Ignoring out of order {} (at offset {})",
               key,
               offset);
@@ -1642,7 +1642,8 @@ struct consume_to_store {
             // actual removal of subjects/versions happens on hard delete, i.e.
             // the tombstone for the schema/version itself, not the tombstone
             // for the soft deletion.
-            vlog(plog.debug, "Ignoring delete_subject tombstone at {}", offset);
+            vlog(
+              srlog.debug, "Ignoring delete_subject tombstone at {}", offset);
             co_return;
         }
 
@@ -1652,7 +1653,7 @@ struct consume_to_store {
               fmt::format("Unexpected magic: {}", key));
         }
         try {
-            vlog(plog.debug, "Applying: {}", key);
+            vlog(srlog.debug, "Applying: {}", key);
             co_await _store.delete_subject(
               seq_marker{
                 .seq = key.seq,
@@ -1662,7 +1663,7 @@ struct consume_to_store {
               key.sub,
               permanent_delete::no);
         } catch (const exception& e) {
-            vlog(plog.debug, "Error replaying: {}: {}", key, e);
+            vlog(srlog.debug, "Error replaying: {}: {}", key, e);
         }
     }
 

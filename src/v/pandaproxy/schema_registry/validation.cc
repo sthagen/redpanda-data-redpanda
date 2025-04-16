@@ -196,7 +196,7 @@ public:
 
         if (parser.bytes_left() < 5) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "validating: topic: {}, field: {}, not enough bytes: {}",
               topic(),
               to_string_view(field),
@@ -207,7 +207,7 @@ public:
         auto magic = parser.consume_type<int8_t>();
         if (magic != 0) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "validating: topic: {}, field: {}, invalid magic: {}",
               topic(),
               to_string_view(field),
@@ -222,7 +222,7 @@ public:
         if (_api->_schema_id_cache.local().has(
               topic, field, sns, id, std::nullopt)) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "validating: topic: {}, field: {}, cache hit",
               topic(),
               to_string_view(field));
@@ -236,7 +236,7 @@ public:
             schema.emplace(co_await _api->_store->get_schema_definition(id));
         } catch (const exception& ex) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "validating: topic: {}, field: {}, schema not found: {}",
               topic(),
               to_string_view(field),
@@ -249,7 +249,7 @@ public:
             auto offsets = get_proto_offsets(parser);
             if (offsets.empty()) {
                 vlog(
-                  plog.debug,
+                  srlog.debug,
                   "validating: topic: {}, field: {}, invalid protobuf offsets",
                   topic(),
                   to_string_view(field));
@@ -259,7 +259,7 @@ public:
             if (_api->_schema_id_cache.local().has(
                   topic, field, sns, id, offsets)) {
                 vlog(
-                  plog.debug,
+                  srlog.debug,
                   "validating: topic: {}, field: {}, cache hit",
                   topic(),
                   to_string_view(field));
@@ -274,7 +274,7 @@ public:
           *_api->_store, sns, *std::move(schema), proto_offsets);
         if (!record_name) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "validating: topic: {}, field: {}, unable to extract record_name",
               topic(),
               to_string_view(field));
@@ -287,7 +287,7 @@ public:
           sub, id, include_deleted::yes);
         if (!has_id) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "validating: sub: {}, id: {}, has_id: {}",
               sub,
               id,
@@ -377,7 +377,7 @@ public:
 
         if (!valid) {
             vlog(
-              plog.debug,
+              srlog.debug,
               "validating: _topic: {}, _record_key_schema_id_validation: {}, "
               "_record_key_subject_name_strategy: {}, "
               "_record_value_schema_id_validation: {}, "
@@ -438,7 +438,7 @@ std::optional<schema_id_validator> maybe_make_schema_id_validator(
     if (should_validate_schema_id(props, mode)) {
         if (!api) {
             vlog(
-              plog.error,
+              srlog.error,
               "{} requires schema_registry to be enabled in redpanda.yaml",
               config::shard_local_cfg().enable_schema_id_validation.name());
         }
@@ -452,7 +452,7 @@ ss::future<kafka::error_code> schema_id_validator::operator()(
     using futurator = ss::futurize<kafka::error_code>;
     return (*_impl)(batch)
       .handle_exception([](std::exception_ptr e) {
-          vlog(plog.warn, "Invalid record due to exception: {}", e);
+          vlog(srlog.warn, "Invalid record due to exception: {}", e);
           return futurator::convert(kafka::error_code::invalid_record);
       })
       .then([probe](futurator::value_type res) {
