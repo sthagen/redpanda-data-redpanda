@@ -19,6 +19,7 @@ go_library(
         "@com_connectrpc_connect//:connect",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
+        "@org_golang_google_genproto_googleapis_rpc//errdetails",
     ],
 )
 

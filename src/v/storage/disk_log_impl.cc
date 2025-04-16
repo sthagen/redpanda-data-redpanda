@@ -982,6 +982,15 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
         co_await ss::remove_file(compact_index.string());
     }
 
+    // Evict segment readers and prevent new ones from being added to the cache.
+    std::vector<ss::future<readers_cache::range_lock_holder>> holder_futs;
+    holder_futs.reserve(segments.size());
+    for (auto& segment : segments) {
+        holder_futs.push_back(_readers_cache->evict_segment_readers(segment));
+    }
+    auto holders = co_await ss::when_all_succeed(
+      holder_futs.begin(), holder_futs.end());
+
     // lock the range. only metadata (e.g. open/rename/delete) i/o occurs with
     // these locks held so it is a relatively short duration. all of the data
     // copying and compaction i/o occurred above with no locks held. 5 retries
@@ -1033,6 +1042,7 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
     // compaction to two segments, and we check that assumption here and use
     // simplified clean-up routine.
     locks.clear();
+    holders.clear();
     staging_to_clean.clear();
     vassert(segments.size() == 2, "Cannot compact more than two segments");
     auto it = std::find(_segs.begin(), _segs.end(), segment_to_remove);

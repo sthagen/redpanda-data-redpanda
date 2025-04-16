@@ -10,6 +10,9 @@
 package secret
 
 import (
+	"fmt"
+	"strings"
+
 	dataplanev1 "buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go/redpanda/api/dataplane/v1"
 	"connectrpc.com/connect"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
@@ -53,10 +56,25 @@ func newListCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			response, err := cl.Secrets.ListSecrets(cmd.Context(), connect.NewRequest(request))
 			out.MaybeDie(err, "unable to list secrets: %v", err)
 
-			tw := out.NewTable("name")
+			tw := out.NewTable("NAME", "SCOPES")
 			defer tw.Flush()
 			for _, secret := range response.Msg.Secrets {
-				tw.Line(secret.Id)
+				var secretScopes []string
+				for _, scope := range secret.Scopes {
+					name, ok := mapScopeToName()[scope]
+					if !ok {
+						fmt.Printf("invalid scope: %s,", scope.String())
+						name = "invalid"
+					}
+					secretScopes = append(secretScopes, name)
+				}
+				tw.PrintStructFields(struct {
+					Name   string
+					Scopes string
+				}{
+					Name:   secret.Id,
+					Scopes: strings.Join(secretScopes, ", "),
+				})
 			}
 		},
 	}

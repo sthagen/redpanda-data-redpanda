@@ -10,6 +10,7 @@
 package secret
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -20,15 +21,20 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/publicapi"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 )
 
 func newUpdateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var secretName, secretValue string
+	var scopes []string
 
 	cmd := &cobra.Command{
 		Use:   "update",
 		Short: "Update an existing secret",
-		Long:  "Update an existing secret for your Redpanda Cloud cluster",
+		Long: `Update an existing secret for your Redpanda Cloud cluster.
+
+Scopes define the areas where the secret can be used. Updating a secret will 
+overwrite its scopes. Available scope options are: redpanda_connect, redpanda_cluster`,
 		Run: func(cmd *cobra.Command, _ []string) {
 			err := validateSecretName(secretName)
 			out.MaybeDie(err, "invalid secret name: %v", err)
@@ -51,21 +57,62 @@ func newUpdateCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 			cl, err := publicapi.NewDataPlaneClientSet(url, p.CurrentAuth().AuthToken)
 			out.MaybeDie(err, "unable to initialize cloud client: %v", err)
 
+			var scopeRequest []dataplanev1.Scope
+			for _, scope := range scopes {
+				vs, ok := mapNameToScope()[scope]
+				if !ok {
+					out.Die("invalid scope: %s, available options are: %s", scope, strings.Join(getScopeNames(), ", "))
+				}
+				scopeRequest = append(scopeRequest, vs)
+			}
+
 			request := &dataplanev1.UpdateSecretRequest{
 				Id:         strings.ToUpper(secretName),
 				SecretData: []byte(secretValue),
-				Scopes:     []dataplanev1.Scope{dataplanev1.Scope_SCOPE_REDPANDA_CONNECT},
+				Scopes:     scopeRequest,
 			}
+
 			response, err := cl.Secrets.UpdateSecret(cmd.Context(), connect.NewRequest(request))
-			out.MaybeDie(err, "unable to update secret: %v", err)
+			if err != nil {
+				var connectErr *connect.Error
+				if errors.As(err, &connectErr) {
+					if connectErr.Code() == connect.CodeAlreadyExists {
+						out.Die("secret %s already exists", secretName)
+					}
+					if connectErr.Code() == connect.CodeNotFound {
+						out.Die("secret %s not found", secretName)
+					}
+					if connectErr.Code() == connect.CodeInvalidArgument {
+						for _, detail := range connectErr.Details() {
+							c, _ := detail.Value()
+							switch d := c.(type) {
+							case *errdetails.BadRequest:
+								for _, violation := range d.FieldViolations {
+									out.Die(fmt.Sprintf("invalid field:%s, error=%s\n",
+										violation.Field, violation.Description))
+								}
+							default:
+								// do nothing
+							}
+						}
+					}
+				}
+				out.MaybeDie(err, "unable to create secret: %v", err)
+			}
 			fmt.Printf("Secret %s updated successfully \n", response.Msg.Secret.Id)
 		},
 	}
 
 	cmd.Flags().StringVar(&secretName, "name", "", "Name of the secret, must be uppercase and can only contain letters, digits, and underscores")
 	cmd.Flags().StringVar(&secretValue, "value", "", "New secret value of the secret")
+	cmd.Flags().StringSliceVar(&scopes, "scopes", nil, "Scope of the secret (e.g. redpanda_connect)")
 	cmd.MarkFlagRequired("name")
 	cmd.MarkFlagRequired("value")
+	cmd.MarkFlagRequired("scopes")
+
+	cmd.RegisterFlagCompletionFunc("scopes", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {
+		return getScopeNames(), cobra.ShellCompDirectiveNoSpace
+	})
 
 	return cmd
 }
