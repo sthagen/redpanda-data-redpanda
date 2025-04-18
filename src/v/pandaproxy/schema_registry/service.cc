@@ -42,6 +42,7 @@
 #include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/http/api_docs.hh>
 #include <seastar/http/exception.hh>
+#include <seastar/util/log.hh>
 #include <seastar/util/noncopyable_function.hh>
 
 #include <boost/algorithm/string/predicate.hpp>
@@ -636,7 +637,8 @@ service::service(
       "/schema_registry_definitions",
       _ctx,
       json::serialization_format::schema_registry_v1_json,
-      srlog)
+      srlog,
+      srreqs)
   , _store(store)
   , _writer(sequencer)
   , _controller(controller)

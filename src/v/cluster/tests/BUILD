@@ -58,6 +58,7 @@ redpanda_test_cc_library(
         "utils.h",
     ],
     include_prefix = "cluster/tests",
+    visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
         "//src/v/config",
@@ -90,6 +91,7 @@ redpanda_test_cc_library(
         "utils.h",
     ],
     include_prefix = "cluster/tests",
+    visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
         "//src/v/test_utils:seastar_boost",

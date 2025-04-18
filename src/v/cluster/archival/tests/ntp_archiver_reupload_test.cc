@@ -158,8 +158,7 @@ struct reupload_fixture : public archiver_fixture {
     }
 
     // Need to call this when releasing an appender.
-    void add_segment_bytes(
-      ss::lw_shared_ptr<storage::segment> s, ssize_t size_bytes) {
+    void add_segment_bytes(ss::lw_shared_ptr<storage::segment> s, ssize_t) {
         static_cast<storage::disk_log_impl*>(disk_log_impl().get())
           ->add_closed_segment_bytes(s->file_size());
         if (!s->has_clean_compact_timestamp()) {

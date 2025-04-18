@@ -10,7 +10,6 @@
 
 #include "cluster/archival/tests/service_fixture.h"
 
-#include "archival/ntp_archiver_service.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
@@ -19,6 +18,7 @@
 #include "cloud_storage/remote_segment.h"
 #include "cloud_storage_clients/configuration.h"
 #include "cluster/archival/archival_metadata_stm.h"
+#include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/archival/types.h"
 #include "cluster/members_table.h"
 #include "config/configuration.h"
@@ -272,7 +272,7 @@ void archiver_fixture::initialize_shard(
   storage::api& api,
   const std::vector<segment_desc>& segm,
   std::optional<storage::ntp_config::default_overrides> overrides,
-  bool fit_segments) {
+  bool) {
     absl::flat_hash_map<model::ntp, size_t> all_ntp;
     for (const auto& d : segm) {
         storage::ntp_config ntpc(d.ntp, data_dir.string());

@@ -34,6 +34,7 @@ redpanda_test_cc_library(
         "util.h",
     ],
     include_prefix = "cloud_storage/tests",
+    visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",

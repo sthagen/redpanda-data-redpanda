@@ -8,6 +8,7 @@ int_flag(
     name = "build_jobs",
     build_setting_default = 8,
     make_variable = "BUILD_JOBS",
+    visibility = ["@openssl-fips//:__pkg__"],
 )
 
 string_flag(

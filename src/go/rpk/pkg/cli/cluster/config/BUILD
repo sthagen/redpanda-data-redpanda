@@ -19,11 +19,20 @@ go_library(
         "//src/go/rpk/pkg/adminapi",
         "//src/go/rpk/pkg/config",
         "//src/go/rpk/pkg/out",
+        "//src/go/rpk/pkg/publicapi",
+        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1:controlplane",
+        "@com_connectrpc_connect//:connect",
         "@com_github_kballard_go_shellquote//:go-shellquote",
         "@com_github_redpanda_data_common_go_rpadmin//:rpadmin",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",
         "@in_gopkg_yaml_v3//:yaml_v3",
+        "@org_golang_google_genproto_googleapis_rpc//errdetails",
+        "@org_golang_google_protobuf//proto",
+        "@org_golang_google_protobuf//types/known/anypb",
+        "@org_golang_google_protobuf//types/known/fieldmaskpb",
+        "@org_golang_google_protobuf//types/known/structpb",
+        "@org_uber_go_zap//:zap",
     ],
 )
 
@@ -33,6 +42,7 @@ go_test(
     srcs = [
         "edit_test.go",
         "import_test.go",
+        "set_test.go",
     ],
     embed = [":config"],
     deps = [

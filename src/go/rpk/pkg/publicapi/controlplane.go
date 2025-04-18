@@ -31,6 +31,7 @@ type CloudClientSet struct {
 	Organization  iamv1connect.OrganizationServiceClient
 	ResourceGroup controlplanev1connect.ResourceGroupServiceClient
 	Serverless    controlplanev1connect.ServerlessClusterServiceClient
+	Operations    controlplanev1connect.OperationServiceClient
 }
 
 // NewCloudClientSet creates a Public API client set with the service
@@ -54,6 +55,7 @@ func NewCloudClientSet(host, authToken string, opts ...connect.ClientOption) *Cl
 		Organization:  iamv1connect.NewOrganizationServiceClient(httpCl, host, opts...),
 		ResourceGroup: controlplanev1connect.NewResourceGroupServiceClient(httpCl, host, opts...),
 		Serverless:    controlplanev1connect.NewServerlessClusterServiceClient(httpCl, host, opts...),
+		Operations:    controlplanev1connect.NewOperationServiceClient(httpCl, host, opts...),
 	}
 }
 

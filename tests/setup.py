@@ -9,7 +9,7 @@ setup(
     author_email='hi@redpanda.com',
     description='redpanda internal testing',
     packages=find_packages(),
-    setup_requires=['setuptools', 'grpcio-tools==1.53'],
+    setup_requires=['setuptools'],
     package_data={'': ['*.md']},
     include_package_data=True,
     install_requires=[

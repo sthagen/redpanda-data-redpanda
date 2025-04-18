@@ -16,6 +16,7 @@ go_library(
         "//src/go/rpk/pkg/net",
         "//src/go/rpk/pkg/os",
         "//src/go/rpk/pkg/out",
+        "@build_buf_gen_go_redpandadata_cloud_protocolbuffers_go//redpanda/api/controlplane/v1:controlplane",
         "@com_github_mattn_go_isatty//:go-isatty",
         "@com_github_spf13_afero//:afero",
         "@com_github_spf13_cobra//:cobra",

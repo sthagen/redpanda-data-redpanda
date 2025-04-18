@@ -535,7 +535,7 @@ TEST(TestTransformApplication, BinaryTruncateTransform) {
 }
 
 TEST(TestTransformApplication, TextTruncateTransform) {
-    const std::vector<const std::string> available_symbols{
+    const std::vector<std::string> available_symbols{
       "\x01", "\t", "\n", "\r", " ", "A", "a", "@", "香", "😊", "⋀", "Ы"};
 
     for (int runs = 0; runs < 10; ++runs) {

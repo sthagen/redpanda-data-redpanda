@@ -827,6 +827,7 @@ redpanda_cc_bench(
         "//src/v/redpanda/tests:fixture",
         "//src/v/test_utils:fixture",
         "//src/v/test_utils:scoped_config",
+        "@seastar",
         "@seastar//:benchmark",
     ],
 )

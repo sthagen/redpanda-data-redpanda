@@ -18,6 +18,9 @@ configure_make(
         "@openssl//:release_mode": ["--release"],
         "//conditions:default": [],
     }),
+    env = {
+        "OPENSSL_BUILD_JOBS": "$(BUILD_JOBS)",
+    },
     lib_source = ":srcs",
     out_shared_libs = [
         "ossl-modules/fips.so",
@@ -26,6 +29,7 @@ configure_make(
         "",
         "install_fips",
     ],
+    toolchains = ["@openssl//:build_jobs"],
     visibility = [
         "//visibility:public",
     ],

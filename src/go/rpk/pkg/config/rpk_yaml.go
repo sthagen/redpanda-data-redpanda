@@ -17,6 +17,7 @@ import (
 	"reflect"
 	"time"
 
+	controlplanev1 "buf.build/gen/go/redpandadata/cloud/protocolbuffers/go/redpanda/api/controlplane/v1"
 	rpkos "github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
 	"github.com/spf13/afero"
 	"go.uber.org/zap"
@@ -447,6 +448,10 @@ func (c *RpkCloudCluster) HasAuth(a RpkCloudAuth) bool {
 
 func (c *RpkCloudCluster) IsServerless() bool {
 	return c != nil && c.ClusterType == ServerlessClusterType
+}
+
+func (c *RpkCloudCluster) IsBYOC() bool {
+	return c != nil && c.ClusterType == controlplanev1.Cluster_TYPE_BYOC.String()
 }
 
 func (c *RpkCloudCluster) CheckClusterURL() (string, error) {

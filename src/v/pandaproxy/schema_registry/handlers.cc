@@ -9,9 +9,11 @@
 
 #include "handlers.h"
 
+#include "bytes/iobuf_parser.h"
 #include "container/json.h"
 #include "pandaproxy/json/rjson_util.h"
 #include "pandaproxy/json/types.h"
+#include "pandaproxy/logger.h"
 #include "pandaproxy/parsing/httpd.h"
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/errors.h"
@@ -73,18 +75,39 @@ parse_schema_version(const ss::sstring& ver) {
              : parse_numerical_schema_version(ver).value();
 }
 
+template<ppj::impl::RjsonParseHandler Handler>
+typename ss::future<typename Handler::rjson_parse_result>
+rjson_parse(ss::http::request& req, Handler handler) {
+    co_return co_await ppj::rjson_parse(req, std::move(handler), srreqs);
+}
+
+void log_response(const ss::http::request& req, const iobuf& resp) {
+    if (srreqs.is_enabled(ss::log_level::trace)) {
+        iobuf_const_parser parser{resp};
+        vlog(
+          srreqs.trace,
+          "[{}:{}] sending response {} {}: {:?}",
+          req.get_client_address().addr(),
+          req.get_client_address().port(),
+          req._method,
+          req._url,
+          parser.read_string(
+            std::min(parser.bytes_left(), max_log_line_bytes)));
+    }
+}
+
 ss::future<server::reply_t>
 get_config(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
-    rq.req.reset();
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
     auto res = co_await rq.service().schema_store().get_compatibility();
 
-    rp.rep->write_body(
-      "json", ppj::rjson_serialize(get_config_req_rep{.compat = res}));
+    auto resp = ppj::rjson_serialize_iobuf(get_config_req_rep{.compat = res});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -92,12 +115,13 @@ ss::future<server::reply_t>
 put_config(server::request_t rq, server::reply_t rp) {
     parse_content_type_header(rq);
     parse_accept_header(rq, rp);
-    auto config = co_await ppj::rjson_parse(
-      std::move(rq.req), put_config_handler<>{});
+    auto config = co_await rjson_parse(*rq.req, put_config_handler<>{});
 
     co_await rq.service().writer().write_config(std::nullopt, config.compat);
 
-    rp.rep->write_body("json", ppj::rjson_serialize(config));
+    auto resp = ppj::rjson_serialize_iobuf(config);
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -108,7 +132,6 @@ get_config_subject(server::request_t rq, server::reply_t rp) {
     auto fallback = parse::query_param<std::optional<default_to_global>>(
                       *rq.req, "defaultToGlobal")
                       .value_or(default_to_global::no);
-    rq.req.reset();
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
@@ -116,8 +139,9 @@ get_config_subject(server::request_t rq, server::reply_t rp) {
     auto res = co_await rq.service().schema_store().get_compatibility(
       sub, fallback);
 
-    rp.rep->write_body(
-      "json", ppj::rjson_serialize(get_config_req_rep{.compat = res}));
+    auto resp = ppj::rjson_serialize_iobuf(get_config_req_rep{.compat = res});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -157,14 +181,15 @@ put_config_subject(server::request_t rq, server::reply_t rp) {
     parse_content_type_header(rq);
     parse_accept_header(rq, rp);
     auto sub = parse::request_param<subject>(*rq.req, "subject");
-    auto config = co_await ppj::rjson_parse(
-      std::move(rq.req), put_config_handler<>{});
+    auto config = co_await rjson_parse(*rq.req, put_config_handler<>{});
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
     co_await rq.service().writer().write_config(sub, config.compat);
 
-    rp.rep->write_body("json", ppj::rjson_serialize(config));
+    auto resp = ppj::rjson_serialize_iobuf(std::move(config));
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -172,8 +197,6 @@ ss::future<server::reply_t>
 delete_config_subject(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto sub = parse::request_param<subject>(*rq.req, "subject");
-
-    rq.req.reset();
 
     // ensure we see latest writes
     co_await rq.service().writer().read_sync();
@@ -193,21 +216,23 @@ delete_config_subject(server::request_t rq, server::reply_t rp) {
 
     co_await rq.service().writer().delete_config(sub);
 
-    rp.rep->write_body(
-      "json", ppj::rjson_serialize(get_config_req_rep{.compat = lvl}));
+    auto resp = ppj::rjson_serialize_iobuf(get_config_req_rep{.compat = lvl});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
 ss::future<server::reply_t> get_mode(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
-    rq.req.reset();
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
     auto res = co_await rq.service().schema_store().get_mode();
 
-    rp.rep->write_body("json", ppj::rjson_serialize(mode_req_rep{.mode = res}));
+    auto resp = ppj::rjson_serialize_iobuf(mode_req_rep{.mode = res});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -216,11 +241,13 @@ ss::future<server::reply_t> put_mode(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto frc = parse::query_param<std::optional<force>>(*rq.req, "force")
                  .value_or(force::no);
-    auto res = co_await ppj::rjson_parse(std::move(rq.req), mode_handler<>{});
+    auto res = co_await rjson_parse(*rq.req, mode_handler<>{});
 
     co_await rq.service().writer().write_mode(std::nullopt, res.mode, frc);
 
-    rp.rep->write_body("json", ppj::rjson_serialize(res));
+    auto resp = ppj::rjson_serialize_iobuf(res);
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -231,14 +258,15 @@ get_mode_subject(server::request_t rq, server::reply_t rp) {
     auto fallback = parse::query_param<std::optional<default_to_global>>(
                       *rq.req, "defaultToGlobal")
                       .value_or(default_to_global::no);
-    rq.req.reset();
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
     auto res = co_await rq.service().schema_store().get_mode(sub, fallback);
 
-    rp.rep->write_body("json", ppj::rjson_serialize(mode_req_rep{.mode = res}));
+    auto resp = ppj::rjson_serialize_iobuf(mode_req_rep{.mode = res});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -249,13 +277,15 @@ put_mode_subject(server::request_t rq, server::reply_t rp) {
     auto frc = parse::query_param<std::optional<force>>(*rq.req, "force")
                  .value_or(force::no);
     auto sub = parse::request_param<subject>(*rq.req, "subject");
-    auto res = co_await ppj::rjson_parse(std::move(rq.req), mode_handler<>{});
+    auto res = co_await rjson_parse(*rq.req, mode_handler<>{});
 
     // Ensure we see latest writes
     co_await rq.service().writer().read_sync();
     co_await rq.service().writer().write_mode(sub, res.mode, frc);
 
-    rp.rep->write_body("json", ppj::rjson_serialize(res));
+    auto resp = ppj::rjson_serialize_iobuf(res);
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -263,8 +293,6 @@ ss::future<server::reply_t>
 delete_mode_subject(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto sub = parse::request_param<subject>(*rq.req, "subject");
-
-    rq.req.reset();
 
     // ensure we see latest writes
     co_await rq.service().writer().read_sync();
@@ -283,18 +311,20 @@ delete_mode_subject(server::request_t rq, server::reply_t rp) {
 
     co_await rq.service().writer().delete_mode(sub);
 
-    rp.rep->write_body("json", ppj::rjson_serialize(mode_req_rep{.mode = m}));
+    auto resp = ppj::rjson_serialize_iobuf(mode_req_rep{.mode = m});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
 ss::future<server::reply_t>
 get_schemas_types(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
-    rq.req.reset();
 
-    static const std::vector<std::string_view> schemas_types{
-      "JSON", "PROTOBUF", "AVRO"};
-    rp.rep->write_body("json", ppj::rjson_serialize(schemas_types));
+    static const iobuf schemas_types{ppj::rjson_serialize_iobuf(
+      std::vector<std::string_view>{"JSON", "PROTOBUF", "AVRO"})};
+    log_response(*rq.req, schemas_types);
+    rp.rep->write_body("json", ppj::as_body_writer(schemas_types.copy()));
     return ss::make_ready_future<server::reply_t>(std::move(rp));
 }
 
@@ -302,7 +332,6 @@ ss::future<server::reply_t>
 get_schemas_ids_id(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto id = parse::request_param<schema_id>(*rq.req, "id");
-    rq.req.reset();
 
     // With deferred schema validation, there might be a schema that
     // had invalid references. These might have already been posted, so
@@ -313,10 +342,10 @@ get_schemas_ids_id(server::request_t rq, server::reply_t rp) {
         return rq.service().schema_store().get_schema_definition(id);
     });
 
-    rp.rep->write_body(
-      "json",
-      ppj::rjson_serialize(
-        get_schemas_ids_id_response{.definition{std::move(def)}}));
+    auto resp = ppj::rjson_serialize_iobuf(
+      get_schemas_ids_id_response{.definition{std::move(def)}});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -324,7 +353,6 @@ ss::future<server::reply_t>
 get_schemas_ids_id_versions(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto id = parse::request_param<schema_id>(*rq.req, "id");
-    rq.req.reset();
 
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
@@ -335,10 +363,10 @@ get_schemas_ids_id_versions(server::request_t rq, server::reply_t rp) {
     auto svs = co_await rq.service().schema_store().get_schema_subject_versions(
       id);
 
-    rp.rep->write_body(
-      "json",
-      ppj::rjson_serialize(get_schemas_ids_id_versions_response{
-        .subject_versions{std::move(svs)}}));
+    auto resp = ppj::rjson_serialize_iobuf(
+      get_schemas_ids_id_versions_response{.subject_versions{std::move(svs)}});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -349,7 +377,6 @@ ss::future<ctx_server<service>::reply_t> get_schemas_ids_id_subjects(
     auto incl_del{
       parse::query_param<std::optional<include_deleted>>(*rq.req, "deleted")
         .value_or(include_deleted::no)};
-    rq.req.reset();
 
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
@@ -357,11 +384,10 @@ ss::future<ctx_server<service>::reply_t> get_schemas_ids_id_subjects(
     // Force early 40403 if the schema id isn't found
     co_await rq.service().schema_store().get_schema_definition(id);
 
-    rp.rep->write_body(
-      "json",
-      ppj::rjson_serialize(
-        co_await rq.service().schema_store().get_schema_subjects(
-          id, incl_del)));
+    auto resp = ppj::rjson_serialize_iobuf(
+      co_await rq.service().schema_store().get_schema_subjects(id, incl_del));
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -373,15 +399,15 @@ get_subjects(server::request_t rq, server::reply_t rp) {
         .value_or(include_deleted::no)};
     auto subject_prefix{
       parse::query_param<std::optional<ss::sstring>>(*rq.req, "subjectPrefix")};
-    rq.req.reset();
 
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    rp.rep->write_body(
-      "json",
-      json::rjson_serialize(co_await rq.service().schema_store().get_subjects(
-        inc_del, subject_prefix)));
+    auto resp = ppj::rjson_serialize_iobuf(
+      co_await rq.service().schema_store().get_subjects(
+        inc_del, subject_prefix));
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -392,15 +418,15 @@ get_subject_versions(server::request_t rq, server::reply_t rp) {
     auto inc_del{
       parse::query_param<std::optional<include_deleted>>(*rq.req, "deleted")
         .value_or(include_deleted::no)};
-    rq.req.reset();
 
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    auto versions = co_await rq.service().schema_store().get_versions(
-      sub, inc_del);
+    auto versions = ppj::rjson_serialize_iobuf(
+      co_await rq.service().schema_store().get_versions(sub, inc_del));
 
-    rp.rep->write_body("json", ppj::rjson_serialize(versions));
+    log_response(*rq.req, versions);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(versions)));
     co_return rp;
 }
 
@@ -428,8 +454,8 @@ post_subject(server::request_t rq, server::reply_t rp) {
 
     subject_schema schema;
     try {
-        auto unparsed = co_await ppj::rjson_parse(
-          std::move(rq.req), post_subject_versions_request_handler<>{sub});
+        auto unparsed = co_await rjson_parse(
+          *rq.req, post_subject_versions_request_handler<>{sub});
         schema = co_await rq.service().schema_store().make_canonical_schema(
           std::move(unparsed.def), norm);
     } catch (const exception& e) {
@@ -444,12 +470,13 @@ post_subject(server::request_t rq, server::reply_t rp) {
     auto sub_schema = co_await rq.service().schema_store().has_schema(
       std::move(schema), inc_del);
 
-    rp.rep->write_body(
-      "json",
-      ppj::rjson_serialize(post_subject_versions_version_response{
+    auto resp = ppj::rjson_serialize_iobuf(
+      post_subject_versions_version_response{
         .schema{std::move(sub_schema.schema)},
         .id{sub_schema.id},
-        .version{sub_schema.version}}));
+        .version{sub_schema.version}});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -468,8 +495,8 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
 
     co_await rq.service().writer().read_sync();
 
-    auto unparsed = co_await ppj::rjson_parse(
-      std::move(rq.req), post_subject_versions_request_handler<>{sub});
+    auto unparsed = co_await rjson_parse(
+      *rq.req, post_subject_versions_request_handler<>{sub});
 
     // If presented with a non-positive integer for version, set it to
     // invalid_schema_version so that the version number can be projected
@@ -502,9 +529,10 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
           std::move(schema));
     }
 
-    rp.rep->write_body(
-      "json",
-      ppj::rjson_serialize(post_subject_versions_response{.id{schema_id}}));
+    auto resp = ppj::rjson_serialize_iobuf(
+      post_subject_versions_response{.id{schema_id}});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -516,7 +544,6 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version(
     auto inc_del{
       parse::query_param<std::optional<include_deleted>>(*rq.req, "deleted")
         .value_or(include_deleted::no)};
-    rq.req.reset();
 
     co_await rq.service().writer().read_sync();
 
@@ -527,12 +554,13 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version(
           sub, version, inc_del);
     });
 
-    rp.rep->write_body(
-      "json",
-      ppj::rjson_serialize(post_subject_versions_version_response{
+    auto resp = ppj::rjson_serialize_iobuf(
+      post_subject_versions_version_response{
         .schema = std::move(get_res.schema),
         .id = get_res.id,
-        .version = get_res.version}));
+        .version = get_res.version});
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -544,7 +572,6 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version_schema(
     auto inc_del{
       parse::query_param<std::optional<include_deleted>>(*rq.req, "deleted")
         .value_or(include_deleted::no)};
-    rq.req.reset();
 
     co_await rq.service().writer().read_sync();
 
@@ -553,8 +580,9 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version_schema(
     auto get_res = co_await rq.service().schema_store().get_subject_schema(
       sub, version, inc_del);
 
-    rp.rep->write_body(
-      "json", ppj::as_body_writer(std::move(get_res.schema).def().raw()()));
+    auto resp = std::move(get_res.schema).def().raw();
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)()));
     co_return rp;
 }
 
@@ -564,16 +592,16 @@ get_subject_versions_version_referenced_by(
     parse_accept_header(rq, rp);
     auto sub = parse::request_param<subject>(*rq.req, "subject");
     auto ver = parse::request_param<ss::sstring>(*rq.req, "version");
-    rq.req.reset();
 
     co_await rq.service().writer().read_sync();
 
     auto version = parse_schema_version(ver).value();
 
-    auto references = co_await rq.service().schema_store().referenced_by(
-      sub, version);
+    auto references = ppj::rjson_serialize_iobuf(
+      co_await rq.service().schema_store().referenced_by(sub, version));
 
-    rp.rep->write_body("json", ppj::rjson_serialize(std::move(references)));
+    log_response(*rq.req, references);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(references)));
     co_return rp;
 }
 
@@ -584,7 +612,6 @@ delete_subject(server::request_t rq, server::reply_t rp) {
     auto permanent{
       parse::query_param<std::optional<permanent_delete>>(*rq.req, "permanent")
         .value_or(permanent_delete::no)};
-    rq.req.reset();
 
     // Must see latest data to do a valid check of whether the
     // subject is already soft-deleted
@@ -596,7 +623,9 @@ delete_subject(server::request_t rq, server::reply_t rp) {
               sub, std::nullopt)
           : co_await rq.service().writer().delete_subject_impermanent(sub);
 
-    rp.rep->write_body("json", ppj::rjson_serialize(versions));
+    auto resp = ppj::rjson_serialize_iobuf(std::move(versions));
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -608,7 +637,6 @@ delete_subject_version(server::request_t rq, server::reply_t rp) {
     auto permanent{
       parse::query_param<std::optional<permanent_delete>>(*rq.req, "permanent")
         .value_or(permanent_delete::no)};
-    rq.req.reset();
 
     // Must see latest data to know whether what we're deleting is the last
     // version
@@ -643,7 +671,9 @@ delete_subject_version(server::request_t rq, server::reply_t rp) {
         co_await rq.service().writer().delete_subject_version(sub, version);
     }
 
-    rp.rep->write_body("json", ppj::rjson_serialize(version));
+    auto resp = ppj::rjson_serialize_iobuf(version);
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;
 }
 
@@ -656,8 +686,8 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
     auto is_verbose{
       parse::query_param<std::optional<verbose>>(*rq.req, "verbose")
         .value_or(verbose::no)};
-    auto unparsed = co_await ppj::rjson_parse(
-      std::move(rq.req), post_subject_versions_request_handler<>{sub});
+    auto unparsed = co_await rjson_parse(
+      *rq.req, post_subject_versions_request_handler<>{sub});
 
     // Must read, in case we have the subject in cache with an outdated config
     co_await rq.service().writer().read_sync();
@@ -691,13 +721,13 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
               errors, [ec](error_code e) { return ec == e; });
         };
         if (is_verbose && reportable(e.code())) {
-            rp.rep->write_body(
-              "json",
-              json::rjson_serialize(post_compatibility_res{
-                .is_compat = false,
-                .messages = {e.message()},
-                .is_verbose = is_verbose,
-              }));
+            auto resp = ppj::rjson_serialize_iobuf(post_compatibility_res{
+              .is_compat = false,
+              .messages = {e.message()},
+              .is_verbose = is_verbose,
+            });
+            log_response(*rq.req, resp);
+            rp.rep->write_body("json", json::as_body_writer(std::move(resp)));
             co_return rp;
         }
         throw;
@@ -709,13 +739,13 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
             version, schema.share(), is_verbose);
       });
 
-    rp.rep->write_body(
-      "json",
-      json::rjson_serialize(post_compatibility_res{
-        .is_compat = get_res.is_compat,
-        .messages = std::move(get_res.messages),
-        .is_verbose = is_verbose,
-      }));
+    auto resp = ppj::rjson_serialize_iobuf(post_compatibility_res{
+      .is_compat = get_res.is_compat,
+      .messages = std::move(get_res.messages),
+      .is_verbose = is_verbose,
+    });
+    log_response(*rq.req, resp);
+    rp.rep->write_body("json", json::as_body_writer(std::move(resp)));
     co_return rp;
 }
 

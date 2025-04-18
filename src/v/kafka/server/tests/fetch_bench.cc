@@ -21,6 +21,7 @@
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
+#include <seastar/coroutine/as_future.hh>
 #include <seastar/testing/perf_tests.hh>
 
 struct fetch_bench_config {
@@ -66,10 +67,17 @@ using fetch_request_config = std::vector<fetch_topic>;
 template<fetch_bench_config cfg>
 struct fetch_bench_fixture : redpanda_thread_fixture {
     ss::future<size_t> fetch_from(fetch_request_config req_config) {
-        std::optional<size_t> total_batches_per_fetch = std::nullopt;
         auto conn_context = make_connection_context();
         co_await conn_context->start();
+        auto fut = co_await ss::coroutine::as_future<size_t>(
+          do_fetch_from(req_config, conn_context));
+        co_await conn_context->stop();
+        co_return fut.get();
+    }
 
+    ss::future<size_t>
+    do_fetch_from(fetch_request_config req_config, conn_ptr conn_context) {
+        std::optional<size_t> total_batches_per_fetch = std::nullopt;
         auto make_rctx = [&] {
             size_t total_batches = 0;
 
@@ -104,7 +112,7 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
             frq_data.max_wait_ms = 500ms;
             frq_data.min_bytes = total_batches
                                  * (cfg.batch_size + cfg.batch_overhead);
-            frq_data.max_bytes = 52428800;
+            frq_data.max_bytes = 50_MiB;
             frq_data.isolation_level = model::isolation_level::read_uncommitted;
             frq_data.session_id = kafka::invalid_fetch_session_id;
             frq_data.session_epoch = kafka::final_fetch_session_epoch;
@@ -126,8 +134,9 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
               make_rctx(), ss::default_smp_service_group()));
         }
 
-        // Do a single fetch outside of the measured region first to ensure the
-        // fetched batches are in the batch cache in the subsequent fetches.
+        // Do a single fetch outside of the measured region first to ensure
+        // the fetched batches are in the batch cache in the subsequent
+        // fetches.
         co_await kafka::testing::do_fetch(*octxs[cfg.num_fetches]);
 
         // Drain task queue before running the measured region in order to
@@ -257,7 +266,8 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
         co_return t;
     }
 
-    // Creates a topic with two partitions. One on shard 0 the other on shard 1.
+    // Creates a topic with two partitions. One on shard 0 the other on
+    // shard 1.
     ss::future<model::topic> initialize_multi_partition_topic() {
         vassert(ss::smp::count >= 2, "requires at least 2 shards");
 

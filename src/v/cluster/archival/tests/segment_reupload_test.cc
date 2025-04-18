@@ -8,11 +8,11 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "archival/archival_policy.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/types.h"
 #include "cluster/archival/adjacent_segment_merger.h"
+#include "cluster/archival/archival_policy.h"
 #include "cluster/archival/segment_reupload.h"
 #include "cluster/archival/tests/service_fixture.h"
 #include "model/fundamental.h"

@@ -26,6 +26,8 @@ CRASH_LOOP_LOG = [
 SIGNAL_CRASH_LOG = [
     "Aborting on",
     "Segmentation fault on",
+    "Segmentation fault: resolved ip:",
+    "Segmentation fault: sicode:",
     "Illegal instruction on",
 ]
 
