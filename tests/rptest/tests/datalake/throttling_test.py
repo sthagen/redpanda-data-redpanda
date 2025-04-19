@@ -17,6 +17,7 @@ from random import randint
 
 from confluent_kafka import avro
 from confluent_kafka.avro import AvroProducer
+from rptest.services.kgo_verifier_services import KgoVerifierProducer
 from rptest.services.redpanda import PandaproxyConfig, SchemaRegistryConfig, SISettings, MetricsEndpoint
 from rptest.services.redpanda import CloudStorageType, SISettings
 from rptest.tests.redpanda_test import RedpandaTest
@@ -73,7 +74,15 @@ class DatalakeThrottlingTest(RedpandaTest):
         return total
 
     def producer_throttled(self, dl: DatalakeServices):
-        dl.produce_to_topic(self.topic_name, 128, 10240)
+        KgoVerifierProducer.oneshot(
+            self.test_ctx,
+            self.redpanda,
+            self.topic_name,
+            msg_size=1024,
+            msg_count=3 * 10240,
+            client_name="iceberg_producer",
+        )
+
         throttle = self._total_throttle()
         throttled_requests = self._throttled_requests()
         return throttle > 0 and throttled_requests > 0

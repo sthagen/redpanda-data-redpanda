@@ -78,7 +78,7 @@ public:
             if (usage > _opts.page_buffer_size) {
                 co_await col.writer.next_page();
             }
-            stats.buffered_size += col.writer.current_page_memory_usage();
+            stats.buffered_size += col.writer.memory_usage();
         }
         stats.flushed_size = _flushed_bytes;
         co_return stats;

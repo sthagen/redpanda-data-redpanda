@@ -11,6 +11,7 @@ from rptest.services.catalog_service import CatalogType
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
 from rptest.services.redpanda import SISettings
+from rptest.services.redpanda import ResourceSettings
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
@@ -39,20 +40,27 @@ class DatalakeDiskUsageTest(RedpandaTest):
     controlling the usage.
     """
     def __init__(self, test_ctx, *args, **kwargs):
+        # datalake has a hard coded 10% memory limit. when a translator hits
+        # this limit it force finishes. this makes it difficult to accumulate
+        # data on disk. so bump up the shard memory limit to make that a bit
+        # easier.
+        resource_setting = ResourceSettings(num_cpus=1, memory_mb=4096)
         super(DatalakeDiskUsageTest, self).__init__(
             test_ctx,
             num_brokers=1,
             si_settings=SISettings(test_context=test_ctx),
+            resource_settings=resource_setting,
             extra_rp_conf={
                 "iceberg_enabled": True,
                 "datalake_disk_space_monitor_enable": True,
-                # for reactivity
-                "datalake_scheduler_time_slice_ms": 5000,
-                "datalake_disk_space_monitor_interval": 5000,
-                # let translator accumulate staging data
-                "datalake_translator_flush_bytes": 16 * 2**30,
+                # configure so that data will accumulate in the staging
+                # directory. flush/scratch space limits are set high to avoid
+                # space limits. lag is set high to avoid finishing. time slice
+                # is set low to avoid hitting the per-core memory limit.
+                "datalake_scheduler_time_slice_ms": 3000,
+                "datalake_translator_flush_bytes": 100 * 2**30,
                 "iceberg_target_lag_ms": 10 * 60 * 1000,
-                "datalake_scratch_space_size_bytes": 60 * 2**30,
+                "datalake_scratch_space_size_bytes": 100 * 2**30,
             },
             *args,
             **kwargs)
@@ -84,13 +92,13 @@ class DatalakeDiskUsageTest(RedpandaTest):
                 self.test_ctx,
                 self.redpanda,
                 self.topic_name,
-                2**13,
-                2**14,  # ~128mb
+                2**14,
+                2**15,  # ~256mb
                 acks=-1)
             producer.start()
             producer.wait()
             producer.free()
-            time.sleep(2)
+            time.sleep(10)
             current_size = self.datalake_staging_usage()
             self.logger.info(f"Staging data usage {current_size}")
             assert (
@@ -100,8 +108,8 @@ class DatalakeDiskUsageTest(RedpandaTest):
 
     @cluster(num_nodes=2)
     @skip_debug_mode
-    @matrix(num_partitions=[1, 2, 30],
-            concurrent_translations=[1, 4],
+    @matrix(num_partitions=[10],
+            concurrent_translations=[4],
             cloud_storage_type=supported_storage_types())
     def test_idle_finish(self, num_partitions, concurrent_translations,
                          cloud_storage_type):

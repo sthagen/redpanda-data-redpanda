@@ -6,6 +6,8 @@
 #include "iceberg/conversion/values_parquet.h"
 #include "version/version.h"
 
+#include <seastar/util/defer.hh>
+
 namespace datalake {
 
 ss::future<writer_error> serde_parquet_writer::add_data_struct(
@@ -20,6 +22,10 @@ ss::future<writer_error> serde_parquet_writer::add_data_struct(
       std::move(conversion_result.value()));
     try {
         auto stats = co_await _writer.write_row(std::move(group));
+        auto stats_updater = ss::defer([this, stats] {
+            _buffered_bytes = stats.buffered_size;
+            _flushed_bytes = stats.flushed_size;
+        });
         auto new_buffered_bytes = stats.buffered_size;
         if (new_buffered_bytes > _buffered_bytes) {
             auto reservation_result = co_await _mem_tracker.reserve_bytes(
@@ -35,8 +41,6 @@ ss::future<writer_error> serde_parquet_writer::add_data_struct(
             co_await _mem_tracker.free_bytes(
               _buffered_bytes - new_buffered_bytes, as);
         }
-        _buffered_bytes = new_buffered_bytes;
-        _flushed_bytes = stats.flushed_size;
     } catch (...) {
         vlog(
           datalake_log.warn,

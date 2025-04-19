@@ -45,6 +45,17 @@ inline auto put_config(
       ppj::serialization_format::schema_registry_v1_json);
 }
 
+inline auto lookup_schema(
+  http::client& client, const pps::subject& sub, const ss::sstring& payload) {
+    return http_request(
+      client,
+      fmt::format("/subjects/{}", sub()),
+      make_body(payload),
+      boost::beast::http::verb::post,
+      ppj::serialization_format::schema_registry_v1_json,
+      ppj::serialization_format::schema_registry_v1_json);
+}
+
 inline auto post_schema(
   http::client& client, const pps::subject& sub, const ss::sstring& payload) {
     return http_request(

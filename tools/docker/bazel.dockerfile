@@ -9,6 +9,7 @@ RUN dnf install -y wget || { apt-get update && apt install -y wget; }
 # convenience for CI that runs sysctl to bump max-aio-nr for testing
 # ubuntu already has this installed by default
 RUN dnf install -y procps-ng || true
+RUN dnf install -y python3 || { apt-get update && apt install -y python3 python3-venv; }
 RUN wget -O /usr/local/bin/bazel \
         https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-${TARGETARCH} && \
         chmod +x /usr/local/bin/bazel

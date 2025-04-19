@@ -462,7 +462,7 @@ public:
         if (_discard_translated_state) {
             return std::move(reader).release()->finally().then([] {
                 return ss::make_exception_future(
-                  "state changed, reset translation");
+                  std::runtime_error("state changed, reset translation"));
             });
         }
         return _in_progress_translation->translate_once(
@@ -531,7 +531,10 @@ public:
                   }
                   auto result = result_f.get();
                   if (result.has_error()) {
-                      return ss::make_exception_future(result.error());
+                      return ss::make_exception_future(
+                        std::runtime_error(fmt::format(
+                          "Error flushing in-progress translation: {}",
+                          result.error())));
                   }
                   return ss::now();
               })

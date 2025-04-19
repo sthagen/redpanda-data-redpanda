@@ -318,7 +318,8 @@ ss::future<> datalake_manager::check_and_manage_disk_space() {
           index_type usage;
           for (const auto& it : mgr._scheduler.all_translators()) {
               auto status = it.second.status();
-              auto size = status.disk_bytes_flushed.value_or(0);
+              auto size = status.disk_bytes_flushed.value_or(0)
+                          + status.memory_bytes_reserved.value_or(0);
               usage.emplace(
                 size, std::make_tuple(ss::this_shard_id(), it.first));
           }

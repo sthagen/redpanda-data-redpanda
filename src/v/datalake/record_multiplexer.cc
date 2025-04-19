@@ -25,29 +25,6 @@
 
 #include <seastar/core/loop.hh>
 
-namespace {
-
-// Recoverable errors are the class of errors that donot leave the underlying
-// writers in a bad shape. Upon recoverable errors the translator may choose to
-// flush and continue as if nothing happened, so we preserve the state to
-// facilitate that.
-bool is_recoverable_error(datalake::writer_error err) {
-    switch (err) {
-    case datalake::writer_error::ok:
-    case datalake::writer_error::oom_error:
-    case datalake::writer_error::time_limit_exceeded:
-        return true;
-    case datalake::writer_error::parquet_conversion_error:
-    case datalake::writer_error::file_io_error:
-    case datalake::writer_error::no_data:
-    case datalake::writer_error::flush_error:
-    case datalake::writer_error::shutting_down:
-    case datalake::writer_error::unknown_error:
-        return false;
-    }
-}
-}; // namespace
-
 namespace datalake {
 
 namespace {
@@ -298,8 +275,10 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
           std::move(record_data_res.value()), estimated_size, as);
 
         if (add_data_result != writer_error::ok) {
-            vlog(
-              _log.warn,
+            vlogl(
+              _log,
+              is_recoverable_error(add_data_result) ? ss::log_level::debug
+                                                    : ss::log_level::warn,
               "Error adding data to writer for record {}: {}",
               offset,
               add_data_result);

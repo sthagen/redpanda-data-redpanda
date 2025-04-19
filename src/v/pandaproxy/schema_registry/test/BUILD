@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_cc_gtest", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_btest", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_test_cc_library(
     name = "avro_payloads",
@@ -372,5 +372,23 @@ redpanda_cc_gtest(
         "@fmt",
         "@googletest//:gtest",
         "@seastar",
+    ],
+)
+
+redpanda_cc_bench(
+    name = "api_rpbench",
+    timeout = "moderate",
+    srcs = [
+        "api_bench.cc",
+    ],
+    deps = [
+        ":client_utils",
+        "//src/v/base",
+        "//src/v/http",
+        "//src/v/json",
+        "//src/v/pandaproxy",
+        "//src/v/pandaproxy/test:fixture",
+        "@abseil-cpp//absl/strings",
+        "@seastar//:benchmark",
     ],
 )

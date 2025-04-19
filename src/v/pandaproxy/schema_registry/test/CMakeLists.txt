@@ -68,3 +68,16 @@ rp_test(
   ARGS "-- -c 1"
   LABELS pandaproxy
 )
+
+rp_test(
+  BENCHMARK_TEST
+  BINARY_NAME pandaproxy_schema_registry_api_bench
+  SOURCES api_bench.cc
+  LIBRARIES
+    Seastar::seastar_perf_testing
+    v::application
+    v::seastar_testing_main
+    v_pandaproxy_schema_registry
+  ARGS "-c 1 --duration=1 --runs=1 --memory=4G"
+  LABELS pandaproxy
+)

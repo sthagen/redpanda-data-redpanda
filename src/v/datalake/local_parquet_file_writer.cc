@@ -75,8 +75,10 @@ ss::future<writer_error> local_parquet_file_writer::add_data_struct(
     auto write_result = co_await _writer->add_data_struct(
       std::move(data), sz, as);
     if (write_result != writer_error::ok) {
-        vlog(
-          datalake_log.warn,
+        vlogl(
+          datalake_log,
+          is_recoverable_error(write_result) ? ss::log_level::debug
+                                             : ss::log_level::warn,
           "Error writing data to file {} - {}",
           _output_file_path,
           write_result);
@@ -101,7 +103,7 @@ ss::future<writer_error> local_parquet_file_writer::flush() {
     if (!_initialized) {
         co_return writer_error::flush_error;
     }
-    if (_error != writer_error::ok) {
+    if (_error != writer_error::ok && !is_recoverable_error(_error)) {
         co_return _error;
     }
     auto result = co_await ss::coroutine::as_future(_writer->flush());
@@ -130,10 +132,10 @@ local_parquet_file_writer::finish() {
           _output_file_path);
         writer_ec = writer_error::file_io_error;
     }
-    if (_error == writer_error::ok && writer_ec != writer_error::ok) {
+    if (is_recoverable_error(_error) && !is_recoverable_error(writer_ec)) {
         _error = writer_ec;
     }
-    if (_error != writer_error::ok) {
+    if (!is_recoverable_error(_error)) {
         auto exists = co_await ss::file_exists(_output_file_path().string());
         if (exists) {
             co_await ss::remove_file(_output_file_path().string());

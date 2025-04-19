@@ -27,7 +27,7 @@ SIGNAL_CRASH_LOG = [
     "Aborting on",
     "Segmentation fault on",
     "Segmentation fault: resolved ip:",
-    "Segmentation fault: sicode:",
+    "Segmentation fault: si_code:",
     "Illegal instruction on",
 ]
 

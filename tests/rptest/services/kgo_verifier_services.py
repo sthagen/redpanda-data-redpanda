@@ -577,7 +577,8 @@ class KgoVerifierProducer(KgoVerifierService):
                  tolerate_data_loss=False,
                  tolerate_failed_produce=False,
                  tombstone_probability=0.0,
-                 validate_latest_values=False):
+                 validate_latest_values=False,
+                 client_name=None):
         super(KgoVerifierProducer,
               self).__init__(context, redpanda, topic, msg_size, custom_node,
                              debug_logs, trace_logs, username, password,
@@ -598,6 +599,7 @@ class KgoVerifierProducer(KgoVerifierService):
         self._tolerate_failed_produce = tolerate_failed_produce
         self._tombstone_probability = tombstone_probability
         self._validate_latest_values = validate_latest_values
+        self._client_name = client_name
 
     @property
     def produce_status(self):
@@ -665,11 +667,14 @@ class KgoVerifierProducer(KgoVerifierService):
     def is_complete(self):
         return self._status.acked >= self._msg_count
 
+    def client_name(self):
+        return self._client_name if self._client_name else self.who_am_i()
+
     def start_node(self, node, clean=False):
         if clean:
             self.clean_node(node)
 
-        cmd = f"{TESTS_DIR}/kgo-verifier --brokers {self._redpanda.brokers()} --topic {self._topic} --msg_size {self._msg_size} --produce_msgs {self._msg_count} --rand_read_msgs 0 --seq_read=0 --client-name {self.who_am_i()}"
+        cmd = f"{TESTS_DIR}/kgo-verifier --brokers {self._redpanda.brokers()} --topic {self._topic} --msg_size {self._msg_size} --produce_msgs {self._msg_count} --rand_read_msgs 0 --seq_read=0 --client-name {self.client_name()}"
 
         if self._username is not None:
             cmd = cmd + f' --username {self._username}'

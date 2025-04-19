@@ -37,7 +37,8 @@ ss::future<> partitioning_writer::flush() {
             if (err == writer_error::ok) {
                 return ss::make_ready_future();
             }
-            return ss::make_exception_future<>(err);
+            return ss::make_exception_future<>(std::runtime_error(
+              fmt::format("Error flushing parquet file writer: {}", err)));
         });
     });
 }
@@ -73,7 +74,12 @@ ss::future<writer_error> partitioning_writer::add_data(
     auto write_res = co_await writer->add_data_struct(
       std::move(val), approx_size, as);
     if (write_res != writer_error::ok) {
-        vlog(datalake_log.error, "Failed to add data: {}", write_res);
+        vlogl(
+          datalake_log,
+          is_recoverable_error(write_res) ? ss::log_level::debug
+                                          : ss::log_level::error,
+          "Failed to add data: {}",
+          write_res);
         co_return write_res;
     }
     co_return write_res;

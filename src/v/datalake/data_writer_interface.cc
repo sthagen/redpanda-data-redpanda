@@ -53,4 +53,20 @@ writer_error map_to_writer_error(reservation_error reservation_err) {
     }
 }
 
+bool is_recoverable_error(datalake::writer_error err) {
+    switch (err) {
+    case datalake::writer_error::ok:
+    case datalake::writer_error::oom_error:
+    case datalake::writer_error::time_limit_exceeded:
+        return true;
+    case datalake::writer_error::parquet_conversion_error:
+    case datalake::writer_error::file_io_error:
+    case datalake::writer_error::no_data:
+    case datalake::writer_error::flush_error:
+    case datalake::writer_error::shutting_down:
+    case datalake::writer_error::unknown_error:
+        return false;
+    }
+}
+
 } // namespace datalake

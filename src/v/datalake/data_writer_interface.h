@@ -33,6 +33,12 @@ enum class writer_error {
 };
 std::ostream& operator<<(std::ostream&, const writer_error&);
 
+// Recoverable errors are the class of errors that donot leave the underlying
+// writers in a bad shape. Upon recoverable errors the translator may choose to
+// flush and continue as if nothing happened, so we preserve the state to
+// facilitate that.
+bool is_recoverable_error(datalake::writer_error);
+
 struct data_writer_error_category : std::error_category {
     const char* name() const noexcept final { return "Data Writer Error"; }
 
