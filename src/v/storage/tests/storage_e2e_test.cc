@@ -5781,3 +5781,27 @@ FIXTURE_TEST(
       std::move(remove_ntp_fut))
       .get();
 }
+
+FIXTURE_TEST(disk_usage_with_log_throwing_exception, storage_test_fixture) {
+    storage::log_manager mgr = make_log_manager();
+    info("Configuration: {}", mgr.config());
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp_a = model::ntp("kafka", "a", 0);
+    auto log_a
+      = mgr.manage(storage::ntp_config(ntp_a, mgr.config().base_dir)).get();
+    auto ntp_b = model::ntp("kafka", "b", 0);
+    auto log_b
+      = mgr.manage(storage::ntp_config(ntp_b, mgr.config().base_dir)).get();
+
+    // Closing the housekeeping gate will cause log->disk_usage() to throw an
+    // exception.
+    auto* disk_log = static_cast<storage::disk_log_impl*>(log_b.get());
+    disk_log->gate().close().get();
+
+    // Check that the disk usage is still collected, even if one of the logs
+    // throws an exception for some reason.
+    BOOST_REQUIRE_NO_THROW(mgr.disk_usage().get());
+
+    // Reassign the gate so there is no double close().
+    disk_log->gate() = ss::gate{};
+};

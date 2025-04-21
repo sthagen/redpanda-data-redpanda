@@ -3841,13 +3841,49 @@ ss::future<usage_report> disk_log_impl::disk_usage(gc_config cfg) {
      * compute the amount of current disk usage as well as the amount available
      * for being reclaimed.
      */
-    auto [usage, reclaim] = co_await disk_usage_and_reclaimable_space(cfg);
+    usage use;
+    reclaim_size_limits reclaim;
+
+    auto usage_and_reclaim_fut = co_await ss::coroutine::as_future(
+      disk_usage_and_reclaimable_space(cfg));
+
+    if (usage_and_reclaim_fut.failed()) {
+        // The disk usage/reclaimable space could not be computed for some
+        // reason. Return the used size, but with 0 bytes indicated as
+        // reclaimable.
+        auto e = usage_and_reclaim_fut.get_exception();
+        ss::semaphore limit(std::max<size_t>(
+          1,
+          config::shard_local_cfg()
+            .space_management_max_segment_concurrency()));
+
+        use = co_await ss::map_reduce(
+          _segs,
+          [&limit](const segment_set::type& seg) {
+              return ss::with_semaphore(
+                limit, 1, [&seg] { return seg->persistent_size(); });
+          },
+          usage{},
+          [](usage acc, usage u) { return acc + u; });
+
+        vlog(
+          gclog.warn,
+          "Unable to collect disk usage for ntp {}: {}, reporting usage of {} "
+          "with no reclaimable bytes",
+          config().ntp(),
+          e,
+          use.total());
+    } else {
+        auto usage_and_reclaim = usage_and_reclaim_fut.get();
+        use = usage_and_reclaim.first;
+        reclaim = usage_and_reclaim.second;
+    }
 
     /*
      * compute target capacities such as minimum required capacity as well as
      * capacities needed to meet goals such as local retention.
      */
-    auto target = co_await disk_usage_target(cfg, usage);
+    auto target = co_await disk_usage_target(cfg, use);
 
     /*
      * the intention here is to establish a needed <= wanted relationship which
@@ -3856,7 +3892,7 @@ ss::future<usage_report> disk_log_impl::disk_usage(gc_config cfg) {
     target.min_capacity_wanted = std::max(
       target.min_capacity_wanted, target.min_capacity);
 
-    co_return usage_report(usage, reclaim, target);
+    co_return usage_report(use, reclaim, target);
 }
 
 fragmented_vector<ss::lw_shared_ptr<segment>>
