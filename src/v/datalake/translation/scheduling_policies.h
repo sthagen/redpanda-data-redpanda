@@ -151,6 +151,13 @@ private:
 
         translator_id id;
         status status;
+        translator::stop_reason reason;
+
+        finish_choice_info(
+          translator_id id, enum status status, translator::stop_reason reason)
+          : id(std::move(id))
+          , status(status)
+          , reason(reason) {}
     };
 
     /*

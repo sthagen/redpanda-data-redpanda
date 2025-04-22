@@ -615,7 +615,8 @@ class DeleteRecordsTest(RedpandaTest, PartitionMovementMixin):
     @parametrize(cloud_storage_enabled=False)
     def test_delete_records_with_transactions(self, cloud_storage_enabled):
         """
-        Tests that the log_eviction_stm is respecting the max_collectible_offset
+        Tests that the log_eviction_stm is respecting the
+        max_removable_local_log_offset
         """
         self._start(cloud_storage_enabled)
 

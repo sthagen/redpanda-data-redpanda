@@ -1309,7 +1309,7 @@ archival_metadata_stm::take_local_snapshot(ssx::semaphore_units apply_units) {
       0, snapshot_offset, std::move(snap_data));
 }
 
-model::offset archival_metadata_stm::max_collectible_offset() {
+model::offset archival_metadata_stm::max_removable_local_log_offset() {
     // From Redpanda 22.3 up, the ntp_config's impression of whether
     // archival is enabled is authoritative.
     bool collect_all = !_raft->log_config().is_archival_enabled();

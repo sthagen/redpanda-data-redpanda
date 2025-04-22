@@ -106,7 +106,7 @@ ss::future<> group_tx_tracker_stm::do_apply(const model::record_batch& b) {
           features::feature::group_tx_fence_dedicated_batch_type))) {
         // This is only relevant for upgrades from 24.1.x to 24.2.x where a
         // mixed mode cluster has this feature disabled until the upgrade is
-        // done. Holding off stm updates ensures that max_collectible offset
+        // done. Holding off stm updates ensures that max_removable offset
         // does not progress for the duration of the upgrade, which is ok since
         // group compaction was not considering any control batches in 24.1.x,
         // so nothing was being compacted.
@@ -116,7 +116,7 @@ ss::future<> group_tx_tracker_stm::do_apply(const model::record_batch& b) {
     co_await parse(b.copy());
 }
 
-model::offset group_tx_tracker_stm::max_collectible_offset() {
+model::offset group_tx_tracker_stm::max_removable_local_log_offset() {
     auto result = last_applied_offset();
     for (const auto& [_, group_state] : _all_txs) {
         if (!group_state.begin_offsets.empty()) {
@@ -352,13 +352,13 @@ bool group_tx_tracker_stm::producer_tx_state::expired_deprecated_fence_tx()
     // transaction.
     // After this buggy compaction, these uncleaned tx_fence batches are
     // accounted as open transactions when computing
-    // max_collectible_offset thus blocking further compaction after
+    // max_removable_local_log_offset thus blocking further compaction after
     // upgrade to 24.2.x.
     if (fence_type != model::record_batch_type::tx_fence) {
         return false;
     }
     // note: this is a heuristic to ignore any transactions that have long been
-    // expired and we do not want them to block max collectible offset.
+    // expired and we do not want them to block max removable offset.
     // clamp the timeout, incase timeout is unset
     auto max_timeout
       = std::chrono::duration_cast<model::timeout_clock::duration>(

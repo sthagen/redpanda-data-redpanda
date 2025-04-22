@@ -651,6 +651,10 @@ private:
         cluster::partition_probe& probe() override {
             throw std::runtime_error("unimplemented");
         }
+        size_t
+        estimate_size_between(kafka::offset, kafka::offset) const override {
+            throw std::runtime_error("unimplemented");
+        }
 
     private:
         model::offset latest_offset() {

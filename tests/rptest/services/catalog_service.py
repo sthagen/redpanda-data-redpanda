@@ -65,6 +65,11 @@ class CatalogService(abc.ABC, Service):
         ...
 
     @property
+    @abc.abstractmethod
+    def iceberg_rest_port(self) -> int:
+        ...
+
+    @property
     def vendor_api_url(self) -> str:
         """
         Some services (e.g. Nessie) may expose a vendor-specific API endpoint

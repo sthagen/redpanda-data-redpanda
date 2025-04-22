@@ -106,7 +106,7 @@ public:
                     model::timestamp(
                       model::timestamp::now().value() - ret_duration.count()),
                     std::nullopt,
-                    log->stm_manager()->max_collectible_offset(),
+                    log->stm_manager()->max_removable_local_log_offset(),
                     std::nullopt,
                     ss::default_priority_class(),
                     dummy_as,

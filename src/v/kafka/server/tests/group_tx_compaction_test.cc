@@ -352,7 +352,7 @@ ss::future<> run_workload(
               ->housekeeping(storage::housekeeping_config{
                 model::timestamp::max(),
                 std::nullopt,
-                log->stm_manager()->max_collectible_offset(),
+                log->stm_manager()->max_removable_local_log_offset(),
                 std::nullopt,
                 ss::default_priority_class(),
                 dummy_as,
@@ -435,20 +435,20 @@ TEST_P_CORO(group_basic_workload_fixture, test_group_tx_stm_tracking) {
     co_await wait_until_stm_apply();
     // no transactions in flight
     ASSERT_EQ_CORO(
-      stm->max_collectible_offset(), log->offsets().committed_offset);
-    auto before = stm->max_collectible_offset();
+      stm->max_removable_local_log_offset(), log->offsets().committed_offset);
+    auto before = stm->max_removable_local_log_offset();
     // begin transaction.
     co_await execute_op(1);
-    ASSERT_EQ_CORO(stm->max_collectible_offset(), before);
+    ASSERT_EQ_CORO(stm->max_removable_local_log_offset(), before);
     // tx offset commit
     co_await execute_op(2);
-    ASSERT_EQ_CORO(stm->max_collectible_offset(), before);
+    ASSERT_EQ_CORO(stm->max_removable_local_log_offset(), before);
     // end transaction
     co_await execute_op(3);
-    // ensure max collectible offset moved.
-    ASSERT_GT_CORO(stm->max_collectible_offset(), before);
+    // ensure max removable offset moved.
+    ASSERT_GT_CORO(stm->max_removable_local_log_offset(), before);
     ASSERT_EQ_CORO(
-      stm->max_collectible_offset(), log->offsets().committed_offset);
+      stm->max_removable_local_log_offset(), log->offsets().committed_offset);
 }
 
 INSTANTIATE_TEST_SUITE_P(

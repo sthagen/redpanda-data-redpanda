@@ -254,7 +254,8 @@ replicated_partition::aborted_transactions_remote(
  * Based on the lower offset of an incoming request, decide whether it should
  * be sent to cloud storage (return true), or local raft storage (return false)
  */
-bool replicated_partition::may_read_from_cloud(kafka::offset start_offset) {
+bool replicated_partition::may_read_from_cloud(
+  kafka::offset start_offset) const {
     return _partition->is_remote_fetch_enabled()
            && _partition->cloud_data_available()
            && (start_offset < model::offset_cast(_translator->from_log_offset(_partition->raft_start_offset())));
@@ -663,6 +664,58 @@ result<partition_info> replicated_partition::get_partition_info() const {
     });
 
     return {std::move(ret)};
+}
+
+size_t replicated_partition::estimate_size_between(
+  kafka::offset begin, kafka::offset end) const {
+    if (begin > end) {
+        return 0;
+    }
+    if (
+      _partition->is_read_replica_mode_enabled()
+      && _partition->cloud_data_available()) {
+        auto& m = _partition->archival_meta_stm()->manifest();
+        return m.estimate_size_between(begin, end);
+    }
+    auto ot = _partition->log()->get_offset_translator_state();
+    auto local_log_start = _partition->raft_start_offset();
+    auto local_kafka_start = model::offset_cast(
+      ot->from_log_offset(local_log_start));
+    auto local_kafka_end = kafka::prev_offset(
+      model::offset_cast(ot->from_log_offset(_partition->high_watermark())));
+
+    size_t cloud_sz = 0;
+    if (may_read_from_cloud(begin)) {
+        // There is some data that falls below the local log and should be
+        // served from the cloud.
+
+        // Clamp the target end point to just below the local log so we don't
+        // double account for data that is both in the local log and in cloud.
+        auto cloud_clamped_kafka_end = std::min(
+          end, kafka::prev_offset(local_kafka_start));
+        auto& m = _partition->archival_meta_stm()->manifest();
+        cloud_sz = m.estimate_size_between(begin, cloud_clamped_kafka_end);
+    }
+    size_t local_sz = 0;
+    if (end >= local_kafka_start) {
+        // There is some data that will be served from the local log.
+
+        // Clamp the target offsets with what is actually available in the log.
+        auto local_clamped_kafka_begin = std::max(begin, local_kafka_start);
+        auto local_clamped_kafka_end = std::min(end, local_kafka_end);
+        auto local_clamped_begin = ot->to_log_offset(
+          kafka::offset_cast(local_clamped_kafka_begin));
+        auto local_clamped_end = model::prev_offset(ot->to_log_offset(
+          kafka::offset_cast(kafka::next_offset(local_clamped_kafka_end))));
+
+        auto log = _partition->log();
+        auto local_sz_from_begin = log->size_bytes_after_offset(
+          model::prev_offset(local_clamped_begin));
+        auto local_sz_after_end = log->size_bytes_after_offset(
+          local_clamped_end);
+        local_sz = local_sz_from_begin - local_sz_after_end;
+    }
+    return cloud_sz + local_sz;
 }
 
 } // namespace kafka

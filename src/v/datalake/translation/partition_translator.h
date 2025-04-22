@@ -90,7 +90,7 @@ public:
 
     void start_translation(scheduling::clock::duration time_slice) final;
 
-    void stop_translation() final;
+    void stop_translation(stop_reason) final;
 
     void reconcile_properties() noexcept final;
 

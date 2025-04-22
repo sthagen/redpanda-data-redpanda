@@ -170,17 +170,34 @@ ss::future<std::error_code> translation_stm::reset_highest_translated_offset(
     co_return error;
 }
 
-model::offset translation_stm::max_collectible_offset() {
+model::offset translation_stm::max_removable_local_log_offset() {
     if (!_raft->log_config().iceberg_enabled()) {
         return model::offset::max();
     }
-    // if offset is not initialized, do not attempt translation.
+    // If offset is not initialized (we've never translated anything), avoid
+    // removing data. This means that when we haven't yet translated anything,
+    // local data is pinned until we start translating. Since the first
+    // translation starts at the beginning of the local log, this helps ensure:
+    // - on a new partition, we translate from 0 without reading from cloud
+    // - on a recovery topic partition, we don't backfill historical data
     if (_highest_translated_offset == kafka::offset{}) {
-        return model::offset{};
+        return model::offset::min();
     }
+    // If we have translated data before, no need to pin local data because
+    // translators don't need to read local data.
+    return model::offset::max();
+}
 
-    return highest_log_offset_below_next(
-      _raft->log(), _highest_translated_offset);
+std::optional<kafka::offset>
+translation_stm::lowest_pinned_data_offset() const {
+    if (!_raft->log_config().iceberg_enabled()) {
+        return std::nullopt;
+    }
+    // If we haven't translated anything yet, aggressively pin data.
+    if (_highest_translated_offset == kafka::offset{}) {
+        return kafka::offset{0};
+    }
+    return kafka::next_offset(_highest_translated_offset);
 }
 
 ss::future<raft::local_snapshot_applied> translation_stm::apply_local_snapshot(

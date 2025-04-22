@@ -1843,14 +1843,14 @@ FIXTURE_TEST(adjacent_segment_compaction, storage_test_fixture) {
     // Check if it honors max_compactible offset by resetting it to the base
     // offset of first segment. Nothing should be compacted.
     const auto first_segment_offsets = log->segments().front()->offsets();
-    c_cfg.compact.max_collectible_offset
+    c_cfg.compact.max_removable_local_log_offset
       = first_segment_offsets.get_base_offset();
     log->housekeeping(c_cfg).get();
     BOOST_REQUIRE_EQUAL(log->segment_count(), 3);
 
-    // Now compact without restricting collectible offset. The segment count
+    // Now compact without restricting removable offset. The segment count
     // will be reduced again.
-    c_cfg.compact.max_collectible_offset = model::offset::max();
+    c_cfg.compact.max_removable_local_log_offset = model::offset::max();
     log->housekeeping(c_cfg).get();
     BOOST_REQUIRE_EQUAL(log->segment_count(), 2);
 
@@ -4054,7 +4054,7 @@ FIXTURE_TEST(test_skipping_compaction_below_start_offset, log_builder_fixture) {
     BOOST_REQUIRE_EQUAL(log.segment_count(), 2);
 
     // Grab the new start offset from the notification and
-    // update the collectible offset and start offsets.
+    // update the removable offset and start offsets.
     auto evict_at_offset = eviction_future.get();
     BOOST_REQUIRE_EQUAL(*new_start_offset, model::next_offset(evict_at_offset));
     BOOST_REQUIRE(b.update_start_offset(*new_start_offset).get());

@@ -2501,6 +2501,52 @@ partition_manifest::timequery(model::timestamp t) const {
     return *_segments.at_index(target_ix);
 }
 
+size_t partition_manifest::estimate_size_between(
+  kafka::offset begin, kafka::offset end) const {
+    if (begin > end) {
+        return 0;
+    }
+    auto stm_start_offset = get_start_kafka_offset();
+    auto stm_next_offset = get_next_kafka_offset();
+    if (!stm_start_offset.has_value() || !stm_next_offset.has_value()) {
+        // The manifest is empty, implying the cloud log is empty.
+        return 0;
+    }
+    size_t spillover_sz = 0;
+    if (begin < *stm_start_offset) {
+        // 'begin' falls below the STM manifest, meaning the range includes
+        // part of the spillover region: aggregate them.
+        for (const auto& m : _spillover_manifests) {
+            if (
+              m.base_kafka_offset() <= end && m.last_kafka_offset() >= begin) {
+                spillover_sz += m.size_bytes;
+            }
+        }
+    }
+    if (end < *stm_start_offset) {
+        // 'end' falls below the STM manifest, mening the entire range was in
+        // the spillover region and we can just return what we have.
+        return spillover_sz;
+    }
+    // At this point we know there is overlap between the input range and the
+    // the STM manifest.
+
+    size_t stm_sz = 0;
+    auto stm_end_offset = kafka::prev_offset(*stm_next_offset);
+    if (begin <= *stm_start_offset && end >= stm_end_offset) {
+        // The range covers the entire STM manifest -- no need to iterate.
+        stm_sz = stm_region_size_bytes();
+    } else {
+        for (const auto& s : _segments) {
+            if (
+              s.base_kafka_offset() <= end && s.last_kafka_offset() >= begin) {
+                stm_sz += s.size_bytes;
+            }
+        }
+    }
+    return stm_sz + spillover_sz;
+}
+
 // this class is a serde-enabled version of partition_manifest. it's needed
 // because segment_meta_cstore is not copyable, and moving it would empty out
 // partition_manifest

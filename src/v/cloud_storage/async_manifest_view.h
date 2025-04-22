@@ -158,7 +158,8 @@ public:
     ss::future<result<archive_start_offset_advance, error_outcome>>
     compute_retention(
       std::optional<size_t> size_limit,
-      std::optional<std::chrono::milliseconds> time_limit) noexcept;
+      std::optional<std::chrono::milliseconds> time_limit,
+      std::optional<kafka::offset> pinned_offset = std::nullopt) noexcept;
 
     const remote_path_provider& path_provider() const {
         return _remote_path_provider;
@@ -171,8 +172,10 @@ private:
     ss::future<result<archive_start_offset_advance, error_outcome>>
     size_based_retention(size_t size_limit) noexcept;
 
+    // Returns a point that corresponds to the beginning of the highest
+    // manifest less than or containing the given offset.
     ss::future<result<archive_start_offset_advance, error_outcome>>
-    offset_based_retention() noexcept;
+      find_highest_le(kafka::offset) noexcept;
 
     // Perform a term upper bound search within the spillover manifest list.
     // Returns the index of the first spillover manifest that contains a segment

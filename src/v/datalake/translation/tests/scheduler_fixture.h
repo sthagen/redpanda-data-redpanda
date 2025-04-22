@@ -38,7 +38,7 @@ public:
     ss::future<> close() noexcept override;
     translation_status status() const override;
     void start_translation(clock::duration translate_for) override;
-    void stop_translation() override;
+    void stop_translation(stop_reason) override;
     void reconcile_properties() noexcept override {}
     std::chrono::milliseconds current_lag_ms() const override {
         return std::chrono::milliseconds{0};
@@ -125,14 +125,20 @@ public:
     ss::future<>
     init(scheduling_notifications&, reservations_tracker&) override;
     void start_translation(clock::duration deadline) override;
-    void stop_translation() override;
+    void stop_translation(stop_reason) override;
+};
+
+class noop_disk_manager : public disk_manager {
+public:
+    // the default noop disk manager implements an infinite disk
+    ss::future<size_t> reserve() override { co_return 1_MiB; }
 };
 
 class scheduler_fixture : public seastar_test {
 public:
     virtual ss::lw_shared_ptr<scheduler> make_scheduler() {
         return ss::make_lw_shared<scheduler>(
-          total_memory, block_size, make_scheduling_policy());
+          total_memory, block_size, make_scheduling_policy(), _disk_manager);
     }
 
     virtual std::unique_ptr<scheduling_policy> make_scheduling_policy() {
@@ -200,6 +206,8 @@ protected:
 
     int _partition_counter{0};
     ss::lw_shared_ptr<scheduler> _scheduler;
+
+    noop_disk_manager _disk_manager;
 };
 
 } // namespace datalake::translation::scheduling

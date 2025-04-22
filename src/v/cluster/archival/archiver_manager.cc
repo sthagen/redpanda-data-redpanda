@@ -409,8 +409,8 @@ public:
             // is true for the `ssx::spawn_with_gate` call. The danger of not
             // running the archiver is that the broker may run out of disk
             // space. Because the data is not uploaded to the cloud storage the
-            // max_collectible_offset can't be propagated forward. Because of
-            // that the local data can't be evicted.
+            // max_removable_local_log_offset can't be propagated forward.
+            // Because of that the local data can't be evicted.
             vlog(
               fsm._ctxlog.error,
               "ALERT! ntp_archiver failed to start {}",

@@ -4108,23 +4108,23 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       true)
   , datalake_disk_space_monitor_interval(
-      *this,
-      "datalake_disk_space_monitor_interval",
-      "The amount of time between invocations of the datalake disk space usage "
-      "monitor which examines disk usage and dispatches requests to "
-      "translators to reduce their usage if it is above the configured "
-      "threshold.",
-      {.needs_restart = needs_restart::no,
-       .example = "3600000",
-       .visibility = visibility::tunable},
-      30s,
-      {.min = 2s})
+      *this, "datalake_disk_space_monitor_interval")
   , datalake_scratch_space_size_bytes(
       *this,
       "datalake_scratch_space_size_bytes",
       "Size, in bytes, of the amount of scratch space datalake should use.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       5_GiB)
+  , datalake_scratch_space_soft_limit_size_percent(
+      *this,
+      "datalake_scratch_space_soft_limit_size_percent",
+      "Size of the scratch space datalake soft limit expressed as a percentage "
+      "of the datalake_scratch_space_size_bytes configuration value.",
+      {.needs_restart = needs_restart::no,
+       .example = "80.0",
+       .visibility = visibility::user},
+      80.0,
+      {.min = 0.0, .max = 100.0})
   , datalake_disk_usage_overage_coeff(
       *this,
       "datalake_disk_usage_overage_coeff",
@@ -4135,6 +4135,17 @@ configuration::configuration()
        .example = "1.8",
        .visibility = visibility::tunable},
       2.0)
+  , datalake_scheduler_disk_reservation_block_size(
+      *this,
+      "datalake_scheduler_disk_reservation_block_size",
+      "The size, in bytes, of the block of disk reservation that the datalake "
+      "manager will assign to each datalake scheduler when it runs out of "
+      "local reservation.",
+      {.needs_restart = needs_restart::no,
+       .example = "10000000",
+       .visibility = visibility::tunable},
+      50_MiB,
+      {.min = 1_MiB})
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",

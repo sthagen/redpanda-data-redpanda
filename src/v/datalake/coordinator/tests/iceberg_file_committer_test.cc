@@ -204,7 +204,8 @@ TEST_F(FileCommitterTest, TestMissingTable) {
     ASSERT_EQ(0, load_res.value().snapshots->size());
 
     // Now try again with some data.
-    state.topic_to_state[topic] = make_topic_state({{{0, 100}}});
+    state.topic_to_state[topic] = make_topic_state(
+      {{{0, 100}}}, /*added_at=*/model::offset{1000}, /*with_files=*/true);
     res = committer.commit_topic_files_to_catalog(topic, state).get();
     ASSERT_FALSE(res.has_error());
     ASSERT_EQ(1, res.value().size());
@@ -218,6 +219,27 @@ TEST_F(FileCommitterTest, TestMissingTable) {
     ASSERT_EQ(1, table.schemas[0].schema_struct.fields.size());
     ASSERT_EQ(1, table.partition_specs.size());
     ASSERT_EQ(1, table.partition_specs[0].fields.size());
+    ASSERT_TRUE(table.snapshots.has_value());
+    ASSERT_EQ(1, table.snapshots->size());
+
+    // Now drop the table and try to commit. This should fail, but at least
+    // shouldn't crash.
+    catalog.drop_table(table_ident, /*purge=*/true).get();
+    state.topic_to_state[topic] = make_topic_state(
+      {{{101, 200}}}, /*added_at=*/model::offset{1001}, /*with_files=*/true);
+    res = committer.commit_topic_files_to_catalog(topic, state).get();
+    ASSERT_TRUE(res.has_error());
+    ASSERT_EQ(res.error(), file_committer::errc::failed);
+
+    // And the same for the DLQ.
+    state.topic_to_state[topic] = make_topic_state(
+      {{{201, 300}}},
+      /*added_at=*/model::offset{1002},
+      /*with_files=*/true,
+      /*dlq=*/true);
+    res = committer.commit_topic_files_to_catalog(topic, state).get();
+    ASSERT_TRUE(res.has_error());
+    ASSERT_EQ(res.error(), file_committer::errc::failed);
 }
 
 TEST_F(FileCommitterTest, TestMissingTopic) {

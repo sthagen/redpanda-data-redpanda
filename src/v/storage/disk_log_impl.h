@@ -308,8 +308,8 @@ private:
     std::optional<std::pair<segment_set::iterator, segment_set::iterator>>
     find_adjacent_compaction_range(const compaction_config& cfg);
 
-    // Requests compaction of adjacent segments per the max_collectible_offset
-    // in the compaction_config.
+    // Requests compaction of adjacent segments per the
+    // max_removable_local_log_offset in the compaction_config.
     //
     // Returns std::nullopt if an adjacent pair could not be found for adjacent
     // compaction, or a compaction_result. This result should also have its

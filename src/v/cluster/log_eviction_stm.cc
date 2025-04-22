@@ -71,7 +71,7 @@ ss::future<> log_eviction_stm::handle_log_eviction_events() {
                 co_await _has_pending_truncation.wait();
             } else {
                 // Previous iter didn't get everything (e.g. because max
-                // collectible offset prevented use from truncating). Be sure
+                // removable offset prevented use from truncating). Be sure
                 // to try again soon even if no other notifications come in.
                 co_await _has_pending_truncation.wait(retry_backoff_time);
             }
@@ -172,10 +172,10 @@ log_eviction_stm::do_write_raft_snapshot(model::offset truncation_point) {
     co_await _raft->refresh_commit_index();
     co_await _raft->log()->stm_manager()->ensure_snapshot_exists(
       truncation_point);
-    const auto max_collectible_offset
-      = _raft->log()->stm_manager()->max_collectible_offset();
-    if (truncation_point > max_collectible_offset) {
-        truncation_point = max_collectible_offset;
+    const auto max_removable_local_log_offset
+      = _raft->log()->stm_manager()->max_removable_local_log_offset();
+    if (truncation_point > max_removable_local_log_offset) {
+        truncation_point = max_removable_local_log_offset;
         if (truncation_point <= _raft->last_snapshot_index()) {
             /// Cannot truncate, have already reached maximum allowable
             co_return;
@@ -183,7 +183,7 @@ log_eviction_stm::do_write_raft_snapshot(model::offset truncation_point) {
         vlog(
           _log.trace,
           "Can only evict up to offset: {}, asked to evict to: {} ",
-          max_collectible_offset,
+          max_removable_local_log_offset,
           truncation_point);
     }
     if (truncation_point <= _raft->last_snapshot_index()) {

@@ -29,6 +29,7 @@ enum class writer_error {
     oom_error,
     time_limit_exceeded,
     shutting_down,
+    out_of_disk,
     unknown_error,
 };
 std::ostream& operator<<(std::ostream&, const writer_error&);
@@ -59,10 +60,60 @@ enum reservation_error {
     shutting_down = 1,
     out_of_memory = 2,
     time_quota_exceeded = 3,
-    unknown = 4,
+    out_of_disk = 4,
+    unknown = 5,
 };
 
 writer_error map_to_writer_error(reservation_error);
+
+/**
+ * Interface to track disk used by parquet writers.
+ *
+ * disk space tracking considers the combined total of buffered and already
+ * flushed data. this is because in the current implementation when a translator
+ * uploads and removes data from disk it also flushes all of its bufferred data.
+ * if those two actions are decoupled, then this accounting could be updated to
+ * provide more flexibility in controlling resource usage.
+ */
+class writer_disk_tracker {
+public:
+    writer_disk_tracker() = default;
+    writer_disk_tracker(const writer_disk_tracker&) = delete;
+    writer_disk_tracker(writer_disk_tracker&&) = default;
+    writer_disk_tracker& operator=(const writer_disk_tracker&) = delete;
+    writer_disk_tracker& operator=(writer_disk_tracker&&) = delete;
+
+    virtual ~writer_disk_tracker() = default;
+
+    /**
+     * Reserves passed input bytes.
+     */
+    virtual ss::future<reservation_error>
+    reserve_bytes(size_t bytes, ss::abort_source&) noexcept = 0;
+
+    /**
+     * Frees up passed input bytes.
+     *
+     * The amount of data on disk isn't being reduced here, but disk accounting
+     * is the total of buffered and flushed, and the buffered component may
+     * shrink (e.g. due to compression).
+     */
+    virtual ss::future<> free_bytes(size_t bytes, ss::abort_source&) = 0;
+
+    /**
+     * Releases all the reservations. After this caller, the reserved bytes
+     * tracked is 0. May not be called concurrently with other methods.
+     */
+    virtual void release() = 0;
+
+    /**
+     * Release unused reservation units. Invoke this if units are not expected
+     * be used in the near term. See reservation_tracker::reserve_disk for
+     * additional information.
+     */
+    virtual void release_unused() = 0;
+};
+
 /**
  * Interface to track memory used by the parquet writers. The reservations are
  * held until the tracker object is alive or release is explicitly called.
@@ -93,6 +144,16 @@ public:
      * tracked is 0. May not be called concurrently with other methods.
      */
     virtual void release() = 0;
+
+    /*
+     * Return a reference to the disk resource tracker.
+     *
+     * TODO: instead of plumbing additional resource trackers around in
+     * parallel to the writer_mem_tracker, the writer_mem_tracker should be
+     * renamed to resource_tracker and expose the writer_mem_tracker like we are
+     * doing here for the disk resource.
+     */
+    virtual writer_disk_tracker& disk() = 0;
 };
 
 /**

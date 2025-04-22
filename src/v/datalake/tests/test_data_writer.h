@@ -31,6 +31,24 @@ public:
         return ss::make_ready_future<>();
     }
     void release() override {}
+    writer_disk_tracker& disk() override { return _disk; }
+
+private:
+    class noop_disk_tracker : public writer_disk_tracker {
+    public:
+        ss::future<reservation_error>
+        reserve_bytes(size_t, ss::abort_source&) noexcept override {
+            return ss::make_ready_future<reservation_error>(
+              reservation_error::ok);
+        }
+        ss::future<> free_bytes(size_t, ss::abort_source&) override {
+            return ss::make_ready_future<>();
+        }
+        void release() override {}
+        void release_unused() override {}
+    };
+
+    noop_disk_tracker _disk;
 };
 
 class test_data_writer : public parquet_file_writer {

@@ -1429,16 +1429,16 @@ partition::do_unsafe_reset_remote_partition_manifest_from_cloud(bool force) {
           "No matching manifest for {} rev {}", ntp(), initial_rev));
     }
 
-    const auto max_collectible
-      = _raft->log()->stm_manager()->max_collectible_offset();
-    if (new_manifest.get_last_offset() < max_collectible) {
+    const auto max_removable
+      = _raft->log()->stm_manager()->max_removable_local_log_offset();
+    if (new_manifest.get_last_offset() < max_removable) {
         auto msg = ssx::sformat(
           "Applying the cloud manifest would cause data loss since the last "
-          "offset in the downloaded manifest is below the max_collectible "
+          "offset in the downloaded manifest is below the max_removable "
           "offset "
           "{} < {}",
           new_manifest.get_last_offset(),
-          max_collectible);
+          max_removable);
 
         if (!force) {
             throw std::runtime_error(msg);
@@ -1579,8 +1579,8 @@ partition::archival_meta_stm() const {
     return _archival_meta_stm;
 }
 
-model::offset partition::max_collectible_offset() {
-    return _raft->log()->stm_manager()->max_collectible_offset();
+model::offset partition::max_removable_local_log_offset() {
+    return _raft->log()->stm_manager()->max_removable_local_log_offset();
 }
 
 std::optional<model::offset> partition::kafka_start_offset_override() const {

@@ -30,6 +30,8 @@ std::ostream& operator<<(std::ostream& os, const writer_error& ev) {
         return os << "Time limit exceeded";
     case writer_error::shutting_down:
         return os << "Shutting down";
+    case writer_error::out_of_disk:
+        return os << "Disk exhausted";
     case writer_error::unknown_error:
         return os << "Unknown error";
     }
@@ -48,6 +50,8 @@ writer_error map_to_writer_error(reservation_error reservation_err) {
         return writer_error::oom_error;
     case time_quota_exceeded:
         return writer_error::time_limit_exceeded;
+    case out_of_disk:
+        return writer_error::out_of_disk;
     case unknown:
         return writer_error::unknown_error;
     }
@@ -58,6 +62,7 @@ bool is_recoverable_error(datalake::writer_error err) {
     case datalake::writer_error::ok:
     case datalake::writer_error::oom_error:
     case datalake::writer_error::time_limit_exceeded:
+    case datalake::writer_error::out_of_disk:
         return true;
     case datalake::writer_error::parquet_conversion_error:
     case datalake::writer_error::file_io_error:

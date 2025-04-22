@@ -54,7 +54,10 @@ public:
 
     ss::lw_shared_ptr<scheduler> make_scheduler() override {
         return ss::make_lw_shared<scheduler>(
-          total_memory(), memory_block_size(), make_scheduling_policy());
+          total_memory(),
+          memory_block_size(),
+          make_scheduling_policy(),
+          _disk_manager);
     }
 
     std::unique_ptr<scheduling_policy> make_scheduling_policy() override {

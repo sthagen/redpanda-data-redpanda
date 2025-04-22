@@ -47,11 +47,11 @@ struct translator_stm_fixture : stm_raft_fixture<stm> {
         }
     }
 
-    ss::future<std::vector<model::offset>> max_collectible_offsets() {
+    ss::future<std::vector<model::offset>> max_removable_local_log_offsets() {
         std::vector<model::offset> result;
         result.reserve(node_stms.size());
         co_await for_each_stm([&result](stm_ptr stm) {
-            result.push_back(stm->max_collectible_offset());
+            result.push_back(stm->max_removable_local_log_offset());
         });
         co_return result;
     }
@@ -89,13 +89,13 @@ struct translator_stm_fixture : stm_raft_fixture<stm> {
           update, ts, stm->raft()->term(), 5s, as);
     }
 
-    ss::future<> check_max_collectible_offset(model::offset expected) {
+    ss::future<> check_max_removable_local_log_offset(model::offset expected) {
         RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [this, expected]() {
-            return max_collectible_offsets().then(
+            return max_removable_local_log_offsets().then(
               [this, expected](std::vector<model::offset> result) {
                   vlog(
                     logger().info,
-                    "max collectible offsets: {}, expected: {}",
+                    "max removable offsets: {}, expected: {}",
                     result,
                     expected);
                   auto equal = std::all_of(
@@ -140,9 +140,9 @@ TEST_F_CORO(translator_stm_fixture, state_machine_ops) {
     co_await wait_for_leader(5s);
     scoped_config config;
     config.get("iceberg_enabled").set_value(true);
-    // since iceberg is not enabled, ensure max_collectible offset
+    // since iceberg is not enabled, ensure max_removable offset
     // is max()
-    co_await check_max_collectible_offset(model::offset::max());
+    co_await check_max_removable_local_log_offset(model::offset::max());
     co_await check_highest_translated_offset(std::nullopt);
     co_await check_highest_translated_timestamp(std::nullopt);
 
@@ -156,28 +156,21 @@ TEST_F_CORO(translator_stm_fixture, state_machine_ops) {
             .then([](std::error_code ec) { return !bool(ec); });
       });
 
-    // iceberg is still disabled, max_collectible offset shouldn't change.
-    co_await check_max_collectible_offset(model::offset::max());
+    // iceberg is still disabled, max_removable offset shouldn't change.
+    co_await check_max_removable_local_log_offset(model::offset::max());
     co_await check_highest_translated_offset(std::nullopt);
     co_await check_highest_translated_timestamp(std::nullopt);
 
     // enable iceberg.
     co_await enable_iceberg();
 
-    model::offset max_collectible_offset{};
-    {
-        auto log = std::get<0>(node_stms.begin()->second)->raft()->log();
-        max_collectible_offset
-          = datalake::translation::highest_log_offset_below_next(
-            log, new_translated_offset);
-    }
-    co_await check_max_collectible_offset(max_collectible_offset);
+    co_await check_max_removable_local_log_offset(model::offset::max());
     co_await check_highest_translated_offset(new_translated_offset);
     co_await check_highest_translated_timestamp(new_catchup_timestamp);
 
     co_await disable_iceberg();
 
-    co_await check_max_collectible_offset(model::offset::max());
+    co_await check_max_removable_local_log_offset(model::offset::max());
     co_await check_highest_translated_offset(std::nullopt);
     co_await check_highest_translated_timestamp(std::nullopt);
 
@@ -189,7 +182,7 @@ TEST_F_CORO(translator_stm_fixture, state_machine_ops) {
     co_await restart_nodes();
 
     co_await enable_iceberg();
-    co_await check_max_collectible_offset(max_collectible_offset);
+    co_await check_max_removable_local_log_offset(model::offset::max());
     co_await check_highest_translated_offset(new_translated_offset);
     co_await check_highest_translated_timestamp(new_catchup_timestamp);
 }

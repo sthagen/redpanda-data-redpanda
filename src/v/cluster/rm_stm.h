@@ -166,11 +166,11 @@ public:
      *
      * Callers should be wary to either ensure that the stm is synced before
      * calling, or ensure that the producer_id doesn't need to reflect batches
-     * later than the max_collectible_offset.
+     * later than the max_removable_local_log_offset.
      */
     model::producer_id highest_producer_id() const;
 
-    model::offset max_collectible_offset() override {
+    model::offset max_removable_local_log_offset() override {
         const auto lso = last_stable_offset();
         if (lso < model::offset{0}) {
             return model::offset{};

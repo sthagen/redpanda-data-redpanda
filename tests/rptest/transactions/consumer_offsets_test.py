@@ -71,8 +71,9 @@ class VerifyConsumerOffsetsThruUpgrades(RedpandaTest):
                 for replica in state["replicas"]:
                     for stm in replica["raft_state"]["stms"]:
                         if stm["name"] == "group_tx_tracker_stm.snapshot":
-                            collectible.append(stm["last_applied_offset"] ==
-                                               stm["max_collectible_offset"])
+                            collectible.append(
+                                stm["last_applied_offset"] ==
+                                stm["max_removable_local_log_offset"])
                 return len(collectible) == 3 and all(collectible)
             except Exception as e:
                 self.redpanda.logger.debug(

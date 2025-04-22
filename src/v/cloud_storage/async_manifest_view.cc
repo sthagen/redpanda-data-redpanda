@@ -946,7 +946,8 @@ ss::future<
   result<async_manifest_view::archive_start_offset_advance, error_outcome>>
 async_manifest_view::compute_retention(
   std::optional<size_t> size_limit,
-  std::optional<std::chrono::milliseconds> time_limit) noexcept {
+  std::optional<std::chrono::milliseconds> time_limit,
+  std::optional<kafka::offset> pinned_offset) noexcept {
     archive_start_offset_advance time_result;
     archive_start_offset_advance size_result;
     if (time_limit.has_value()) {
@@ -995,7 +996,8 @@ async_manifest_view::compute_retention(
           "Start kafka offset override {} exceeds computed retention {}",
           _stm_manifest.get_start_kafka_offset_override(),
           result.offset);
-        auto r = co_await offset_based_retention();
+        auto r = co_await find_highest_le(
+          _stm_manifest.get_start_kafka_offset_override());
         if (r.has_error()) {
             co_return r;
         }
@@ -1005,15 +1007,32 @@ async_manifest_view::compute_retention(
           "Found offset {} to advance start offset to",
           result.offset);
     }
+    if (pinned_offset && result.offset - result.delta > *pinned_offset) {
+        vlog(
+          _ctxlog.debug,
+          "Computed retention Kafka offset {} is above the pinned offset {}",
+          result.offset - result.delta,
+          *pinned_offset);
+        auto r = co_await find_highest_le(*pinned_offset);
+        if (r.has_error()) {
+            co_return r;
+        }
+        result = r.value();
+        vlog(
+          _ctxlog.debug,
+          "Found Kafka offset {} to pin the start offset to {}",
+          result.offset - result.delta,
+          *pinned_offset);
+    }
     co_return result;
 }
 
 ss::future<
   result<async_manifest_view::archive_start_offset_advance, error_outcome>>
-async_manifest_view::offset_based_retention() noexcept {
+async_manifest_view::find_highest_le(kafka::offset o) noexcept {
     archive_start_offset_advance result;
     try {
-        auto boundary = _stm_manifest.get_start_kafka_offset_override();
+        auto boundary = o;
         auto res = co_await get_cursor(
           boundary, std::nullopt, cursor_base_t::archive_clean_offset);
         if (res.has_failure()) {

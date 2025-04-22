@@ -397,7 +397,8 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
 
         // Until we better implement bailing out of compaction, the best thing
         // we can do for observability is add a watchdog here.
-        ssx::watchdog wd5m(5min, [ntp = current_log.handle->config().ntp()] {
+        auto ntp = current_log.handle->config().ntp();
+        ssx::watchdog wd5m(5min, [ntp] {
             vlog(
               gclog.warn, "{}: Housekeeping process exceeding 5 minutes", ntp);
         });
@@ -405,10 +406,44 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         // NOTE: housekeeping holds _compaction_housekeeping_gate, that prevents
         // the removal of the parent object. this makes awaiting housekeeping
         // safe against removal of segments from _logs_list
+        auto& log = current_log.handle;
+        auto pinned_kafka_offset
+          = current_log.handle->stm_manager()->lowest_pinned_data_offset();
+        std::optional<model::offset> max_unpinned_offset;
+        if (pinned_kafka_offset) {
+            auto local_log_start = log->offsets().start_offset;
+            auto kafka_local_start = model::offset_cast(
+              log->from_log_offset(local_log_start));
+            if (*pinned_kafka_offset >= kafka_local_start) {
+                // Translate the pinned Kafka offset.
+                max_unpinned_offset = model::prev_offset(
+                  log->to_log_offset(kafka::offset_cast(*pinned_kafka_offset)));
+            } else {
+                // The pin falls below the log start, in which case the entire
+                // local log is pinned.
+                max_unpinned_offset = model::prev_offset(
+                  log->offsets().start_offset);
+            }
+        }
+        model::offset max_compactible_offset
+          = current_log.handle->stm_manager()->max_removable_local_log_offset();
+        if (
+          max_unpinned_offset
+          && *max_unpinned_offset < max_compactible_offset) {
+            vlog(
+              gclog.debug,
+              "{}: Compaction is pinned by offset: pinned Kafka offset: {}, "
+              "log offsets max unpinned {} < max removable {}",
+              ntp,
+              *pinned_kafka_offset,
+              *max_unpinned_offset,
+              max_compactible_offset);
+            max_compactible_offset = *max_unpinned_offset;
+        }
         co_await current_log.handle->housekeeping(housekeeping_config(
           collection_threshold,
           _config.retention_bytes(),
-          current_log.handle->stm_manager()->max_collectible_offset(),
+          max_compactible_offset,
           current_log.handle->config().tombstone_retention_ms(),
           _config.compaction_priority,
           _abort_source,

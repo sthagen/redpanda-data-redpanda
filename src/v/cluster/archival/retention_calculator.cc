@@ -77,7 +77,8 @@ private:
 
 std::optional<retention_calculator> retention_calculator::factory(
   const cloud_storage::partition_manifest& manifest,
-  const storage::ntp_config& ntp_config) {
+  const storage::ntp_config& ntp_config,
+  std::optional<kafka::offset> pinned_offset) {
     if (!ntp_config.is_collectable()) {
         vlog(
           archival_log.trace, "{} Partition not collectible", ntp_config.ntp());
@@ -90,11 +91,12 @@ std::optional<retention_calculator> retention_calculator::factory(
     vlog(
       archival_log.debug,
       "{} Creating retention calculator, ntp_config: {}, archive start offset: "
-      "{}, start offset: {}",
+      "{}, start offset: {}, pinned kafka offset: {}",
       ntp_config.ntp(),
       ntp_config,
       arch_so,
-      last_so);
+      last_so,
+      pinned_offset);
 
     if (arch_so != model::offset{} && arch_so != last_so) {
         // Retention should be applied to the archive area of the log first
@@ -175,19 +177,33 @@ std::optional<retention_calculator> retention_calculator::factory(
         return std::nullopt;
     }
 
-    return retention_calculator{manifest, std::move(strats)};
+    return retention_calculator{manifest, std::move(strats), pinned_offset};
 }
 
 retention_calculator::retention_calculator(
   const cloud_storage::partition_manifest& manifest,
-  std::vector<std::unique_ptr<retention_strategy>> strategies)
+  std::vector<std::unique_ptr<retention_strategy>> strategies,
+  std::optional<kafka::offset> pinned_offset)
   : _manifest(manifest)
-  , _strategies(std::move(strategies)) {}
+  , _strategies(std::move(strategies))
+  , _pinned_offset(pinned_offset) {}
 
 std::optional<model::offset> retention_calculator::next_start_offset() {
     auto it = _manifest.first_addressable_segment();
     for (; it != _manifest.end(); ++it) {
         const auto& entry = *it;
+        if (_pinned_offset && entry.last_kafka_offset() >= *_pinned_offset) {
+            // The pin is blocking us from removing this segment and beyond.
+            vlog(
+              archival_log.debug,
+              "{} retention is blocked on segment [{}, {}] by pin at Kafka "
+              "offset {}",
+              _manifest.get_ntp(),
+              entry.base_kafka_offset(),
+              entry.last_kafka_offset(),
+              *_pinned_offset);
+            break;
+        }
         const auto all_done = std::all_of(
           _strategies.begin(), _strategies.end(), [&](auto& strat) {
               return strat->done(entry);
@@ -195,6 +211,9 @@ std::optional<model::offset> retention_calculator::next_start_offset() {
         if (all_done) {
             break;
         }
+    }
+    if (it == _manifest.first_addressable_segment()) {
+        return std::nullopt;
     }
 
     // We made it to the end of our strategies and our policies are still not

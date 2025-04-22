@@ -106,6 +106,10 @@ class IcebergRESTCatalog(CatalogService):
         assert self._catalog_url, "URL not available because service is not started"
         return self._catalog_url
 
+    @property
+    def iceberg_rest_port(self) -> int:
+        return 8181
+
     def set_filesystem_wrapper_mode(self, mode: bool):
         self.filesystem_wrapper_mode = mode
         self.compute_warehouse_path()
@@ -231,7 +235,7 @@ class IcebergRESTCatalog(CatalogService):
             f"Starting Iceberg REST catalog service on {node.name} with command {cmd}"
         )
         node.account.ssh(cmd, allow_fail=False)
-        self._catalog_url = f"http://{node.account.hostname}:8181"
+        self._catalog_url = f"http://{node.account.hostname}:{self.iceberg_rest_port}"
         self.wait(timeout_sec=30)
 
     def wait_node(self, node, timeout_sec=None):

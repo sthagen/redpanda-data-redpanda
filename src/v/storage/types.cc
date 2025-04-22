@@ -21,12 +21,27 @@
 
 namespace storage {
 
-model::offset stm_manager::max_collectible_offset() {
+model::offset stm_manager::max_removable_local_log_offset() {
     model::offset result = model::offset::max();
     for (const auto& stm : _stms) {
-        auto mco = stm->max_collectible_offset();
+        auto mco = stm->max_removable_local_log_offset();
         result = std::min(result, mco);
-        vlog(stlog.trace, "max_collectible_offset[{}] = {}", stm->name(), mco);
+        vlog(
+          stlog.trace,
+          "max_removable_local_log_offset[{}] = {}",
+          stm->name(),
+          mco);
+    }
+    return result;
+}
+
+std::optional<kafka::offset> stm_manager::lowest_pinned_data_offset() const {
+    std::optional<kafka::offset> result;
+    for (const auto& stm : _stms) {
+        auto pinned = stm->lowest_pinned_data_offset();
+        if (pinned) {
+            result = std::min(*pinned, result.value_or(kafka::offset::max()));
+        }
     }
     return result;
 }
@@ -206,10 +221,10 @@ std::ostream& operator<<(std::ostream& os, const gc_config& cfg) {
 std::ostream& operator<<(std::ostream& o, const compaction_config& c) {
     fmt::print(
       o,
-      "{{max_collectible_offset:{}, "
+      "{{max_removable_local_log_offset:{}, "
       "should_sanitize:{}, "
       "tombstone_retention_ms:{}}}",
-      c.max_collectible_offset,
+      c.max_removable_local_log_offset,
       c.sanitizer_config,
       c.tombstone_retention_ms);
     return o;

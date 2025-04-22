@@ -168,9 +168,19 @@ partition_translator::fetch_translation_offsets(retry_chain_node& rcn) {
     // least until 'wait_for_data' returns and we re-enter the loop.
     _data_source->update_commit_lag(last_committed_offset);
 
-    // LTO stands for last translated offset
-    const auto checkpointed_lto = result.last_added_offset.value_or(
-      kafka::prev_offset(_data_source->min_offset_for_translation()));
+    auto next_start_offset = result.last_added_offset
+                               ? kafka::next_offset(*result.last_added_offset)
+                               : _data_source->min_offset_for_translation();
+
+    // Replicate an initialized last translated offset to unblock the max
+    // removable offset while pinning this Kafka offset from
+    // application-facing retention or compaction.
+    //
+    // NOTE: kafka::prev_offset(0) is kafka::offset::min() (uninitialized).
+    // in this case we want -1 to differentiate from uninitialized.
+    auto checkpointed_lto = next_start_offset == kafka::offset{0}
+                              ? kafka::offset{-1}
+                              : kafka::prev_offset(next_start_offset);
     /**
      * We do not replicate the timestamp of the highest translated offset
      * here as this information is not present in coordinator. This is fine
@@ -299,6 +309,9 @@ partition_translator::run_one_translation_iteration(
         vlog(
           _logger.debug,
           "Translation attempt exceeded scheduler time limit quota");
+    } catch (const translator_out_of_disk_error&) {
+        // Finishing will free up scratch space on disk
+        result = finish_immediately::yes;
     } catch (...) {
         // unknown exception or shutdown exception.
         unexpected_ex = std::current_exception();
@@ -349,7 +362,7 @@ ss::future<bool> partition_translator::finish_inflight_translation(
     if (expected_begin != translation_result.start_offset) {
         // This is possible if there is a gap in offsets range, eg from
         // compaction. Normally that shouldn't be the case, as translation
-        // enforces max_collectible_offset which prevents compaction or
+        // enforces max_removable_local_log_offset which prevents compaction or
         // other forms of retention from kicking in before translation
         // actually happens. However there could be a sequence of enabling /
         // disabling iceberg configuration on the topic that can temporarily
@@ -571,15 +584,21 @@ void partition_translator::start_translation(
     _ready_to_translate.broadcast();
 }
 
-void partition_translator::stop_translation() {
+void partition_translator::stop_translation(translator::stop_reason reason) {
     if (_gate.is_closed() || !_inflight_translation_state) {
         return;
     }
 
-    // Currently only preempted on exceeding memory budget, if the policy
-    // changes to preempt on other errors, should be updated accordingly.
-    _inflight_translation_state->as.request_abort_ex(
-      translator_out_of_memory_error{});
+    switch (reason) {
+    case stop_reason::oom:
+        _inflight_translation_state->as.request_abort_ex(
+          translator_out_of_memory_error{});
+        break;
+    case stop_reason::out_of_disk:
+        _inflight_translation_state->as.request_abort_ex(
+          translator_out_of_disk_error{});
+        break;
+    }
 }
 
 void partition_translator::set_finish_translation() {

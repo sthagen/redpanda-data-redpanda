@@ -9,8 +9,6 @@
  */
 
 #include "cloud_io/tests/s3_imposter.h"
-#include "cloud_storage/remote.h"
-#include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/tests/manual_fixture.h"
 #include "cloud_storage/tests/produce_utils.h"
 #include "cloud_storage/tests/read_replica_e2e_fixture.h"
@@ -18,7 +16,7 @@
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/cloud_metadata/tests/manual_mixin.h"
 #include "cluster/health_monitor_frontend.h"
-#include "config/configuration.h"
+#include "kafka/data/replicated_partition.h"
 #include "kafka/server/tests/list_offsets_utils.h"
 #include "kafka/server/tests/produce_consume_utils.h"
 #include "model/fundamental.h"
@@ -106,6 +104,87 @@ TEST_F(ManualFixture, TestSpilloverRetentionCompactedTopic) {
       0);
 }
 
+TEST_F(ManualFixture, TestSizeEstimationWithCloud) {
+    test_local_cfg.get("log_compaction_interval_ms")
+      .set_value(std::chrono::duration_cast<std::chrono::milliseconds>(1s));
+    test_local_cfg.get("cloud_storage_disable_upload_loop_for_tests")
+      .set_value(true);
+    test_local_cfg.get("cloud_storage_spillover_manifest_max_segments")
+      .set_value(std::make_optional<size_t>(5));
+    test_local_cfg.get("cloud_storage_spillover_manifest_size")
+      .set_value(std::optional<size_t>{});
+    const model::topic topic_name("tapioca");
+    model::ntp ntp(model::kafka_namespace, topic_name, 0);
+
+    cluster::topic_properties props;
+    props.shadow_indexing = model::shadow_indexing_mode::full;
+    props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::deletion;
+    add_topic({model::kafka_namespace, topic_name}, 1, props).get();
+    wait_for_leader(ntp).get();
+
+    const auto records_per_seg = 5;
+    const auto num_segs = 100;
+    auto partition = app.partition_manager.local().get(ntp);
+    auto& archiver = partition->archiver().value().get();
+    tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
+    auto total_records = gen.num_segments(num_segs)
+                           .batches_per_segment(records_per_seg)
+                           .additional_local_segments(10)
+                           .produce()
+                           .get();
+    ASSERT_GE(total_records, 550);
+    ASSERT_TRUE(archiver.sync_for_tests().get());
+    archiver.apply_spillover().get();
+
+    // Aggressively GC, relying on max removable to preserve local segments
+    // not yet in tiered storage.
+    auto log = partition->log();
+    auto& manifest = partition->archival_meta_stm()->manifest();
+    log->set_cloud_gc_offset(model::next_offset(manifest.get_last_offset()));
+    RPTEST_REQUIRE_EVENTUALLY(5s, [&] {
+        vlog(e2e_test_log.info, "Log has {} segments", log->segment_count());
+        return log->segment_count() == 11;
+    });
+
+    kafka::replicated_partition kafka_partition(partition);
+    auto lso_res = kafka_partition.last_stable_offset();
+    ASSERT_FALSE(lso_res.has_error());
+    auto last_offset = kafka::prev_offset(model::offset_cast(lso_res.value()));
+    auto local_start = model::offset_cast(kafka_partition.local_start_offset());
+
+    auto total_estimated_sz = kafka_partition.estimate_size_between(
+      kafka::offset(0), last_offset);
+    auto cloud_estimated_sz = kafka_partition.estimate_size_between(
+      kafka::offset(0), kafka::prev_offset(local_start));
+    auto local_estimated_sz = kafka_partition.estimate_size_between(
+      local_start, last_offset);
+
+    vlog(
+      e2e_test_log.info,
+      "Local log start: {}, last offset: {}",
+      local_start,
+      last_offset);
+    EXPECT_EQ(local_estimated_sz, partition->size_bytes());
+    EXPECT_EQ(cloud_estimated_sz, partition->cloud_log_size());
+    EXPECT_EQ(total_estimated_sz, local_estimated_sz + cloud_estimated_sz);
+
+    for (int64_t i = 0; i < 13; i++) {
+        kafka::offset cut(i * total_records / 13);
+        auto left_estimated_sz = kafka_partition.estimate_size_between(
+          kafka::offset(0), kafka::prev_offset(cut));
+        auto right_estimated_sz = kafka_partition.estimate_size_between(
+          cut, last_offset);
+        EXPECT_LE(left_estimated_sz, total_estimated_sz);
+        EXPECT_LE(right_estimated_sz, total_estimated_sz);
+
+        // NOTE: error of 4000 chosen emperically.
+        // TODO: we expect some error given the estimate is based on the
+        // segment index, but it seems a little high, figure out why that is.
+        EXPECT_NEAR(
+          total_estimated_sz, left_estimated_sz + right_estimated_sz, 4000);
+    }
+}
+
 class EndToEndFixture
   : public s3_imposter_fixture
   , public manual_metadata_upload_mixin
@@ -153,12 +232,12 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloud) {
     ASSERT_EQ(2, log->segments().size());
     ASSERT_EQ(1, archiver.manifest().size());
 
-    // Compact the local log to GC to the collectible offset.
+    // Compact the local log to GC to the removable offset.
     ss::abort_source as;
     storage::housekeeping_config housekeeping_conf(
       model::timestamp::min(),
       1,
-      log->stm_manager()->max_collectible_offset(),
+      log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
       ss::default_priority_class(),
       as);
@@ -582,7 +661,7 @@ TEST_P(CloudStorageEndToEndManualTest, TestTimequeryAfterArchivalGC) {
     storage::housekeeping_config housekeeping_conf(
       model::timestamp::min(),
       1, // max_bytes_in_log
-      log->stm_manager()->max_collectible_offset(),
+      log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
       ss::default_priority_class(),
       as);
@@ -879,7 +958,7 @@ TEST_P(EndToEndFixture, TestCloudStorageTimequery) {
     storage::housekeeping_config housekeeping_conf(
       model::timestamp::max(),
       0,
-      log->stm_manager()->max_collectible_offset(),
+      log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
       ss::default_priority_class(),
       as);

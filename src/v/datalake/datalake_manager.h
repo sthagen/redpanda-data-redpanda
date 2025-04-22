@@ -46,6 +46,8 @@ class registry;
 
 namespace datalake {
 
+class core_0_disk_manager;
+
 /*
  * Per shard instance responsible for launching and synchronizing all datalake
  * related tasks like file format translation, frontend etc.
@@ -138,6 +140,27 @@ private:
      */
     ss::future<> check_and_manage_disk_space();
 
+    /*
+     * Returns the disk soft limit, which is the threshold above which disk
+     * utilization will trigger asynchronous requests to translators to finish
+     * their translations and release on disk resources.
+     */
+    size_t disk_space_soft_limit();
+
+    /*
+     * Returns true if the disk space soft limit were breached.
+     */
+    bool disk_space_soft_limit_exceeded();
+
+    friend class core_0_disk_manager;
+    ss::future<size_t> reserve_disk(ss::shard_id);
+
+    /*
+     * A helper that can be called when disk limit configuration values change
+     * which will recompute the active configuration.
+     */
+    void update_disk_limits();
+
 private:
     model::node_id _self;
     ss::sharded<raft::group_manager>* _group_mgr;
@@ -167,10 +190,39 @@ private:
     config::binding<model::iceberg_invalid_record_action>
       _iceberg_invalid_record_action;
     std::filesystem::path _writer_scratch_space;
+    std::unique_ptr<core_0_disk_manager> _disk_manager;
     translation::scheduling::scheduler _scheduler;
     ssx::work_queue _queue;
-    ssx::semaphore _disk_space_monitor_sem{0, "datalake::disk_space_monitor"};
-    config::binding<std::chrono::milliseconds> _disk_usage_interval;
+    ss::condition_variable _disk_space_monitor_cv;
+    /*
+     * _disk_bytes_reservable_total
+     *
+     * - this is the total amount of disk space that can be reserved. it is
+     * a fixed value set when configuration changes. it's basically the upper
+     * limit on the total size of the scratch space used on the system. it
+     * is only accessed by core 0.
+     *
+     * _core0_disk_bytes_reservable
+     *
+     * - this is a semaphore that represents a subset of the reservable
+     * total which is currently available for reserving. when the system
+     * starts this semaphore has units equal to the reservable total. as
+     * translators on other cores reserve disk space, they subtract off
+     * units from this semaphore, making those units unreservable. the
+     * semaphore is only used on core 0.
+     *
+     * schedulers consume units from the semaphore by contacting the datalake
+     * manager on core 0. currently cores do not return units willingly.
+     * instead, when the data lake manager is low on reservable space, it (1)
+     * requests translators to free space by finishing and then (2) steals
+     * unreserved units from each core to be handed back out on demand.
+     */
+    size_t _disk_bytes_reservable_total{0};
+    size_t _disk_bytes_reservable_soft_limit{0};
+    ssx::semaphore _core0_disk_bytes_reservable;
+    config::binding<bool> _disk_space_manager_enable;
+    config::binding<size_t> _scratch_space_size_bytes;
+    config::binding<double> _scratch_space_soft_limit_size_percent;
 };
 
 } // namespace datalake

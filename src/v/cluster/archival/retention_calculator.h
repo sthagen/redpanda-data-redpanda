@@ -35,7 +35,9 @@ public:
 class retention_calculator {
 public:
     static std::optional<retention_calculator> factory(
-      const cloud_storage::partition_manifest&, const storage::ntp_config&);
+      const cloud_storage::partition_manifest&,
+      const storage::ntp_config&,
+      std::optional<kafka::offset> pinned_offset = std::nullopt);
 
     std::optional<model::offset> next_start_offset();
 
@@ -44,10 +46,12 @@ public:
 private:
     retention_calculator(
       const cloud_storage::partition_manifest&,
-      std::vector<std::unique_ptr<retention_strategy>>);
+      std::vector<std::unique_ptr<retention_strategy>>,
+      std::optional<kafka::offset> pinned_offset);
 
     const cloud_storage::partition_manifest& _manifest;
     std::vector<std::unique_ptr<retention_strategy>> _strategies;
+    std::optional<kafka::offset> _pinned_offset;
 };
 
 } // namespace archival

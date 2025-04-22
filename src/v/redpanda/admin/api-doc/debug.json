@@ -1137,9 +1137,9 @@
                     "type": "long",
                     "description": "Last applied offset"
                 },
-                "max_collectible_offset": {
+                "max_removable_local_log_offset": {
                     "type": "long",
-                    "description": "Max collectible offset"
+                    "description": "Max removable offset"
                 }
             }
         },

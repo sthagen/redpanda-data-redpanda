@@ -9,8 +9,6 @@
  */
 
 #include "cluster/archival/retention_calculator.h"
-#include "cluster/archival/tests/service_fixture.h"
-#include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/archival.h"
 #include "test_utils/tmp_dir.h"
 
@@ -28,20 +26,12 @@ struct size_based_retention_test_spec {
     tristate<size_t> retention_bytes;
     tristate<std::chrono::milliseconds> retention_duration;
     tristate<kafka::offset> desired_start_offset;
+    std::optional<kafka::offset> pinned_offset;
     std::optional<model::offset> next_start_offset;
 };
 
 const auto delta_10_min = model::timestamp{
   model::timestamp::now().value() - std::chrono::milliseconds{10min}.count()};
-
-namespace {
-segment_spec make_segment_spec_with_uninitialized_start_offset() {
-    auto ret = segment_spec(0, 9, 1024);
-    ret.start_offset = model::offset{};
-    return ret;
-}
-
-} // namespace
 
 const std::vector<size_based_retention_test_spec> retention_tests{
   // retention disabled
@@ -187,6 +177,49 @@ const std::vector<size_based_retention_test_spec> retention_tests{
     .desired_start_offset = tristate<kafka::offset>{},
     .next_start_offset = model::offset{30}},
 
+  // Mixed retention but with a pin at the start of the log.
+  size_based_retention_test_spec{
+    .remote_segments
+    = {{0, 9, 1024, delta_10_min}, {10, 19, 1024, delta_10_min}, {20, 29, 1024}, {30, 39, 1024}},
+    .retention_bytes = tristate<size_t>{1024 * 2 - 42},
+    .retention_duration = tristate<std::chrono::milliseconds>{5min},
+    .desired_start_offset = tristate<kafka::offset>{},
+    .pinned_offset = kafka::offset{0},
+    .next_start_offset = std::nullopt},
+
+  // Mixed retention but with an offset pin that is actually a no-op (normal
+  // retention polciy results in the same offset).
+  size_based_retention_test_spec{
+    .remote_segments
+    = {{0, 9, 1024, delta_10_min}, {10, 19, 1024, delta_10_min}, {20, 29, 1024}, {30, 39, 1024}},
+    .retention_bytes = tristate<size_t>{1024 * 2 - 42},
+    .retention_duration = tristate<std::chrono::milliseconds>{5min},
+    .desired_start_offset = tristate<kafka::offset>{},
+    .pinned_offset = kafka::offset{30},
+    .next_start_offset = model::offset{30}},
+
+  // Mixed retention with an offset pin that pins exactly at the start of the
+  // previous segment.
+  size_based_retention_test_spec{
+    .remote_segments
+    = {{0, 9, 1024, delta_10_min}, {10, 19, 1024, delta_10_min}, {20, 29, 1024}, {30, 39, 1024}},
+    .retention_bytes = tristate<size_t>{1024 * 2 - 42},
+    .retention_duration = tristate<std::chrono::milliseconds>{5min},
+    .desired_start_offset = tristate<kafka::offset>{},
+    .pinned_offset = kafka::offset{20},
+    .next_start_offset = model::offset{20}},
+
+  // Mixed retention with an offset pin that pins exactly at the end of the
+  // previous segment, pinning the entire previous segment.
+  size_based_retention_test_spec{
+    .remote_segments
+    = {{0, 9, 1024, delta_10_min}, {10, 19, 1024, delta_10_min}, {20, 29, 1024}, {30, 39, 1024}},
+    .retention_bytes = tristate<size_t>{1024 * 2 - 42},
+    .retention_duration = tristate<std::chrono::milliseconds>{5min},
+    .desired_start_offset = tristate<kafka::offset>{},
+    .pinned_offset = kafka::offset{29},
+    .next_start_offset = model::offset{20}},
+
   // mixed retention with offset-based retention, no-op
   size_based_retention_test_spec{
     .remote_segments
@@ -205,15 +238,6 @@ const std::vector<size_based_retention_test_spec> retention_tests{
     .retention_duration = tristate<std::chrono::milliseconds>{5min},
     .desired_start_offset = tristate<kafka::offset>{kafka::offset(42)},
     .next_start_offset = model::offset{40}},
-
-  // Remote segment with uninitalized start offset and all sorts of retention
-  // enabled.
-  size_based_retention_test_spec{
-    .remote_segments = {make_segment_spec_with_uninitialized_start_offset()},
-    .retention_bytes = tristate<size_t>{1024},
-    .retention_duration = tristate<std::chrono::milliseconds>{100ms},
-    .desired_start_offset = tristate<kafka::offset>{},
-    .next_start_offset = std::nullopt},
 };
 
 SEASTAR_THREAD_TEST_CASE(test_retention_strategies) {
@@ -224,16 +248,17 @@ SEASTAR_THREAD_TEST_CASE(test_retention_strategies) {
         // clang-format off
         const auto& [remote_segments, retention_bytes,
                      retention_duration, desired_start_offset,
-                     next_start_offset] = test;
+                     pinned_offset, next_start_offset] = test;
         // clang-format on
 
         vlog(
           test_log.info,
           "Running test case: segments={}, retention_bytes={}, "
-          "retention_duration={}, next_start_offset={}",
+          "retention_duration={}, pinned_offset={}, next_start_offset={}",
           remote_segments,
           retention_bytes,
           retention_duration,
+          pinned_offset,
           next_start_offset);
 
         ntp_config config{{"test_ns", "test_topic", 0}, {data_path}};
@@ -248,7 +273,8 @@ SEASTAR_THREAD_TEST_CASE(test_retention_strategies) {
               m.advance_start_kafka_offset(desired_start_offset.value()));
         }
 
-        auto retention_calculator = retention_calculator::factory(m, config);
+        auto retention_calculator = retention_calculator::factory(
+          m, config, pinned_offset);
         if (next_start_offset.has_value()) {
             BOOST_REQUIRE(retention_calculator.has_value());
             auto next_so = retention_calculator->next_start_offset();

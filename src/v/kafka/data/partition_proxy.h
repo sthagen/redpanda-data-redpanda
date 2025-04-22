@@ -89,6 +89,8 @@ public:
           = 0;
 
         virtual result<partition_info> get_partition_info() const = 0;
+        virtual size_t estimate_size_between(kafka::offset, kafka::offset) const
+          = 0;
         virtual cluster::partition_probe& probe() = 0;
         virtual ~impl() noexcept = default;
     };
@@ -163,6 +165,10 @@ public:
 
     result<partition_info> get_partition_info() const {
         return _impl->get_partition_info();
+    }
+
+    size_t estimate_size_between(kafka::offset begin, kafka::offset end) const {
+        return _impl->estimate_size_between(begin, end);
     }
 
     ss::future<result<model::offset>>

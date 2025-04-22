@@ -45,12 +45,51 @@ public:
       : std::runtime_error("translator_time_quota_exceeded") {}
 };
 
+class translator_out_of_disk_error final : public std::runtime_error {
+public:
+    explicit translator_out_of_disk_error()
+      : std::runtime_error("translator_out_of_disk") {}
+};
+
+class noop_disk_tracker : public writer_disk_tracker {
+    ss::future<reservation_error>
+    reserve_bytes(size_t, ss::abort_source&) noexcept override;
+    ss::future<> free_bytes(size_t, ss::abort_source&) override;
+    void release() override;
+    void release_unused() override;
+};
+
 class noop_mem_tracker : public writer_mem_tracker {
 public:
     ss::future<reservation_error>
     reserve_bytes(size_t, ss::abort_source&) noexcept override;
     ss::future<> free_bytes(size_t, ss::abort_source&) override;
     void release() override;
+    writer_disk_tracker& disk() override;
+
+private:
+    noop_disk_tracker _disk;
+};
+
+/**
+ * Tracks disk usage across all writers in a single translator.
+ */
+class translator_disk_tracker : public writer_disk_tracker {
+public:
+    explicit translator_disk_tracker(
+      scheduling::reservations_tracker& scheduling_reservations)
+      : _reservations_tracker(scheduling_reservations) {}
+
+    ss::future<reservation_error>
+    reserve_bytes(size_t, ss::abort_source&) noexcept override;
+    ss::future<> free_bytes(size_t, ss::abort_source&) override;
+    void release() override;
+    void release_unused() override;
+
+private:
+    size_t _current_usage{0};
+    scheduling::reservations_tracker& _reservations_tracker;
+    ssx::semaphore_units _reservations;
 };
 
 /**
@@ -60,12 +99,14 @@ class translator_mem_tracker : public writer_mem_tracker {
 public:
     explicit translator_mem_tracker(
       scheduling::reservations_tracker& scheduling_reservations)
-      : _reservations_tracker(scheduling_reservations) {}
+      : _reservations_tracker(scheduling_reservations)
+      , _disk(scheduling_reservations) {}
 
     ss::future<reservation_error>
     reserve_bytes(size_t, ss::abort_source&) noexcept override;
     ss::future<> free_bytes(size_t, ss::abort_source&) override;
     void release() override;
+    writer_disk_tracker& disk() override;
 
     size_t current_usage() const;
     size_t total_reserved() const;
@@ -74,6 +115,7 @@ private:
     size_t _current_usage{0};
     scheduling::reservations_tracker& _reservations_tracker;
     ssx::semaphore_units _reservations;
+    translator_disk_tracker _disk;
 };
 
 class coordinator_api {
@@ -183,6 +225,7 @@ enum translation_errc {
     oom_error,
     time_limit_exceeded,
     shutting_down,
+    out_of_disk,
 };
 
 std::ostream& operator<<(std::ostream&, translation_errc);

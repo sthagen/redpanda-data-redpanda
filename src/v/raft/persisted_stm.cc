@@ -367,7 +367,7 @@ ss::future<> persisted_stm_base<BaseT, T>::ensure_local_snapshot_exists(
 }
 
 template<typename BaseT, supported_stm_snapshot T>
-model::offset persisted_stm_base<BaseT, T>::max_collectible_offset() {
+model::offset persisted_stm_base<BaseT, T>::max_removable_local_log_offset() {
     return model::offset::max();
 }
 

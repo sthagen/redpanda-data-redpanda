@@ -217,7 +217,7 @@ public:
     bool has_appender() const;
     compacted_index_writer& compaction_index();
     const compacted_index_writer& compaction_index() const;
-    // We currently use `max_collectible_offset` to control both
+    // We currently use `max_removable_local_log_offset` to control both
     // deletion/eviction, and compaction.
     bool has_compactible_offsets(const compaction_config& cfg) const;
 
@@ -439,7 +439,7 @@ inline bool
 segment::has_compactible_offsets(const compaction_config& cfg) const {
     // since we don't support partially-compacted segments, a segment must
     // end before the max compactible offset to be eligible for compaction.
-    return _tracker.get_stable_offset() <= cfg.max_collectible_offset;
+    return _tracker.get_stable_offset() <= cfg.max_removable_local_log_offset;
 }
 
 inline void segment::mark_as_compacted_segment() {

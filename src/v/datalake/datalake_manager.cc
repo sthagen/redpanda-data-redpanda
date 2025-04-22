@@ -84,6 +84,64 @@ make_record_translator(const model::iceberg_mode& mode) {
 }
 } // namespace
 
+/*
+ * high-level design of space management
+ *
+ * Core 0 manages the total space reservation on the system. It is modeled as a
+ * semaphore that records the unreserved space (aka free space), and is
+ * initialized to the total allowable scratch space size. Each scheduler
+ * also has a disk reservation which is initialized to 0.
+ *
+ * When a translator writes data to disk is attempts to acquire disk reservation
+ * from its core-local scheduler. When the core-local scheduler does not have
+ * any reservation available then it tries to acquire a block of reservation
+ * from the core 0 manager.
+ *
+ * If core 0 has sufficient units to hand out to a scheduler, then the request
+ * is granted immediately. Otherwise, no units are granted and the scheduler
+ * will go into a polling loop until units become available.
+ *
+ * When core 0 unused space dips below the soft limit (e.g. 80% of the total)
+ * then it initiates a process to bring utilization down below the soft limit
+ * and free up space.
+ *
+ * It is a two step process. First, core 0 requests all cores to release their
+ * unused disk reservation to core 0. If this brings down the usage below soft
+ * limit then the process completes. Otherwise, core 0 requests that translators
+ * with large reservations finish immedinately and release their units. The
+ * process continues until usage falls below the soft limit.
+ */
+class core_0_disk_manager : public translation::scheduling::disk_manager {
+public:
+    static constexpr ss::shard_id manager_shard = 0;
+
+    /*
+     * ideally we could initialize with container() in the datalake manager
+     * constructor. however, seastar doesn't set the underlying container()
+     * pointer until after service instance is constructed. so we need to patch
+     * the proxy pointer, and a convenient place is datalake_manager::start.
+     */
+    void set_manager_reference(ss::sharded<datalake_manager>& manager) {
+        vassert(_manager == nullptr, "manager reference set twice");
+        _manager = &manager;
+    }
+
+    ss::future<size_t> reserve() override {
+        if (_manager) {
+            const auto from = ss::this_shard_id();
+            return _manager->invoke_on(
+              manager_shard, [from](datalake_manager& manager) {
+                  return manager.reserve_disk(from);
+              });
+        }
+        vlog(datalake_log.debug, "Dropping disk reservation request");
+        return ss::make_ready_future<size_t>(0);
+    }
+
+private:
+    ss::sharded<datalake_manager>* _manager{nullptr};
+};
+
 datalake_manager::datalake_manager(
   model::node_id self,
   ss::sharded<raft::group_manager>* group_mgr,
@@ -125,6 +183,7 @@ datalake_manager::datalake_manager(
   , _iceberg_invalid_record_action(
       config::shard_local_cfg().iceberg_invalid_record_action.bind())
   , _writer_scratch_space(config::node().datalake_staging_path())
+  , _disk_manager(std::make_unique<core_0_disk_manager>())
   , _scheduler(
       memory_limit,
       config::shard_local_cfg().datalake_scheduler_block_size_bytes(),
@@ -132,7 +191,8 @@ datalake_manager::datalake_manager(
         config::shard_local_cfg()
           .datalake_scheduler_max_concurrent_translations.bind(),
         std::chrono::duration_cast<translation::scheduling::clock::duration>(
-          config::shard_local_cfg().datalake_scheduler_time_slice_ms())))
+          config::shard_local_cfg().datalake_scheduler_time_slice_ms())),
+      *_disk_manager)
   , _queue(
       sg,
       [](const std::exception_ptr& ex) {
@@ -141,8 +201,14 @@ datalake_manager::datalake_manager(
             "unexpected error in managing translator: {}",
             ex);
       })
-  , _disk_usage_interval(
-      config::shard_local_cfg().datalake_disk_space_monitor_interval.bind()) {}
+  , _core0_disk_bytes_reservable{0, "datalake::core0_disk_bytes_reservable"}
+  , _disk_space_manager_enable(
+      config::shard_local_cfg().datalake_disk_space_monitor_enable.bind())
+  , _scratch_space_size_bytes(
+      config::shard_local_cfg().datalake_scratch_space_size_bytes.bind())
+  , _scratch_space_soft_limit_size_percent(
+      config::shard_local_cfg()
+        .datalake_scratch_space_soft_limit_size_percent.bind()) {}
 datalake_manager::~datalake_manager() = default;
 
 size_t datalake_manager::total_translation_backlog() const {
@@ -163,6 +229,7 @@ datalake_manager::get_or_create_probe(const model::ntp& ntp) {
 }
 
 ss::future<> datalake_manager::start() {
+    _disk_manager->set_manager_reference(container());
     _catalog = co_await _catalog_factory->create_catalog();
     _schema_mgr = std::make_unique<catalog_schema_manager>(*_catalog);
     // partition managed notification, this is particularly
@@ -264,33 +331,27 @@ ss::future<> datalake_manager::start() {
     /*
      * Start the global disk space usage monitor loop
      */
-    const ss::shard_id disk_space_monitor_core = 0;
-    if (ss::this_shard_id() == disk_space_monitor_core) {
+    if (ss::this_shard_id() == core_0_disk_manager::manager_shard) {
+        // setup config bindings to trigger reconfiguration
+        _disk_space_manager_enable.watch([this] { update_disk_limits(); });
+        _scratch_space_size_bytes.watch([this] { update_disk_limits(); });
+        _scratch_space_soft_limit_size_percent.watch(
+          [this] { update_disk_limits(); });
+
+        // initialize
+        update_disk_limits();
+
         ssx::spawn_with_gate(_gate, [this] { return disk_space_monitor(); });
     }
-
-    _disk_usage_interval.watch([this] { _disk_space_monitor_sem.signal(); });
 }
 
 ss::future<> datalake_manager::disk_space_monitor() {
     while (!_gate.is_closed()) {
-        const auto interval = _disk_usage_interval();
-        try {
-            co_await _disk_space_monitor_sem.wait(
-              interval, std::max(_disk_space_monitor_sem.current(), size_t(1)));
-        } catch (const ss::semaphore_timed_out& ex) {
-            std::ignore = ex;
-            // drop through to perform work
-        }
-
-        if (_disk_usage_interval() != interval) {
-            // configuration change
-            continue;
-        }
-
-        if (!config::shard_local_cfg().datalake_disk_space_monitor_enable()) {
-            continue;
-        }
+        co_await _disk_space_monitor_cv.wait([this] {
+            return config::shard_local_cfg()
+                     .datalake_disk_space_monitor_enable()
+                   && disk_space_soft_limit_exceeded();
+        });
 
         try {
             co_await check_and_manage_disk_space();
@@ -300,6 +361,12 @@ ss::future<> datalake_manager::disk_space_monitor() {
               "Recoverable error checking datalake disk space: {}",
               std::current_exception());
         }
+
+        /*
+         * even when we the system is driven to high disk space utilization
+         * frequently, we don't want to go too hard with the reclaim loop.
+         */
+        co_await ss::sleep_abortable(1s, _as->local());
     }
 }
 
@@ -307,6 +374,34 @@ ss::future<> datalake_manager::check_and_manage_disk_space() {
     using translator_id = translation::scheduling::translator_id;
     using translator_info = std::pair<ss::shard_id, translator_id>;
     using index_type = absl::btree_multimap<size_t, translator_info>;
+
+    /*
+     * it may be the case that there is plenty of free space, but each scheduler
+     * is holding on to unused units. so the first step is to go harvest excess
+     * units and then take additional action if we are really out of space.
+     */
+    auto excess_units = co_await container().map_reduce0(
+      [](datalake_manager& mgr) {
+          return mgr._scheduler.release_unused_disk_units();
+      },
+      size_t{0},
+      [](size_t acc, size_t units) { return acc + units; });
+
+    // if schedulers miss their disk units, they'll come say hi
+    if (excess_units > 0) {
+        _core0_disk_bytes_reservable.signal(excess_units);
+    }
+
+    vlog(
+      datalake_log.debug,
+      "Collected {} unused disk reservation units, remaining {}",
+      human::bytes(excess_units),
+      human::bytes(_core0_disk_bytes_reservable.current()));
+
+    // low disk problem solved?
+    if (!disk_space_soft_limit_exceeded()) {
+        co_return;
+    }
 
     /*
      * Collect disk usage from all translators managed by the scheduler, and
@@ -331,19 +426,20 @@ ss::future<> datalake_manager::check_and_manage_disk_space() {
           return acc;
       });
 
-    const size_t target_size
-      = config::shard_local_cfg().datalake_scratch_space_size_bytes();
-
     const auto total_bytes = std::reduce(
       usage.begin(),
       usage.end(),
       size_t(0),
       [](const auto acc, const auto& elem) { return acc + elem.first; });
 
-    // the amount of disk usage over the target
-    const auto real_target_excess = total_bytes < target_size
-                                      ? 0
-                                      : total_bytes - target_size;
+    // check again after scheduling point
+    if (!disk_space_soft_limit_exceeded()) {
+        co_return;
+    }
+
+    // amount to free to get back to the soft limit
+    const auto soft_limit_excess = disk_space_soft_limit()
+                                   - _core0_disk_bytes_reservable.current();
 
     /*
      * do nothing if we are over the limit, but only by a "small" amount, which
@@ -352,13 +448,14 @@ ss::future<> datalake_manager::check_and_manage_disk_space() {
      * to avoid thrashing (see resource_mgm/storage.cc).
      */
     const size_t min_size_threshold = 64_MiB;
-    if (real_target_excess <= min_size_threshold) {
+    if (soft_limit_excess <= min_size_threshold) {
         vlog(
           datalake_log.trace,
-          "Disk monitor total {} target {} excess",
+          "Disk monitor total {} available {} soft limit {} excess {}",
           human::bytes(total_bytes),
-          human::bytes(target_size),
-          human::bytes(real_target_excess));
+          human::bytes(_core0_disk_bytes_reservable.current()),
+          human::bytes(disk_space_soft_limit()),
+          human::bytes(soft_limit_excess));
         co_return;
     }
 
@@ -366,7 +463,7 @@ ss::future<> datalake_manager::check_and_manage_disk_space() {
       = config::shard_local_cfg().datalake_disk_usage_overage_coeff();
 
     const auto adjusted_target_excess = static_cast<size_t>(
-      real_target_excess * coeff);
+      soft_limit_excess * coeff);
 
     /*
      * Generate a schedule of translators that should be finished immediately so
@@ -378,27 +475,31 @@ ss::future<> datalake_manager::check_and_manage_disk_space() {
     size_t schedule_total_bytes = 0;
     absl::flat_hash_map<
       ss::shard_id,
-      chunked_vector<std::pair<translator_id, size_t>>>
+      chunked_vector<translation::scheduling::scheduler::finish_request>>
       schedule;
     for (auto& it : std::ranges::reverse_view(usage)) {
         if (schedule_total_bytes >= adjusted_target_excess) {
             break;
         }
-        schedule[it.second.first].push_back(
-          std::make_pair(it.second.second, it.first));
+        // it.first is the data usage by the translator. if the scheduling
+        // policy can make use of it, then it coudl be passed in here to avoid
+        // recalulation of the same value.
+        schedule[it.second.first].emplace_back(
+          it.second.second,
+          translation::scheduling::translator::stop_reason::out_of_disk);
         schedule_total_bytes += it.first;
         num_translators++;
     }
 
     vlog(
-      datalake_log.info,
-      "Requesting {} translators to reclaim {}. Current total {} target {}/{} "
-      "excess {}",
+      datalake_log.debug,
+      "Requesting {} translators to reclaim {}. Current total {} soft limit {} "
+      "excess {} adjusted {}",
       num_translators,
       human::bytes(schedule_total_bytes),
       human::bytes(total_bytes),
-      human::bytes(target_size),
-      human::bytes(real_target_excess),
+      human::bytes(disk_space_soft_limit()),
+      human::bytes(soft_limit_excess),
       human::bytes(adjusted_target_excess));
 
     /*
@@ -413,6 +514,48 @@ ss::future<> datalake_manager::check_and_manage_disk_space() {
                 mgr._scheduler.request_immediate_finish(std::move(translators));
             });
       });
+}
+
+size_t datalake_manager::disk_space_soft_limit() {
+    return _disk_bytes_reservable_soft_limit;
+}
+
+bool datalake_manager::disk_space_soft_limit_exceeded() {
+    // we use the available_units semaphore interface which is adjusted to
+    // reflect any deficits (cores owe us units), and might be negative.
+    const auto used = static_cast<ssize_t>(_disk_bytes_reservable_total)
+                      - _core0_disk_bytes_reservable.available_units();
+    return used > static_cast<ssize_t>(disk_space_soft_limit());
+}
+
+ss::future<size_t> datalake_manager::reserve_disk(ss::shard_id shard) {
+    /*
+     * figure out how many units we'll return to the caller. if after consuming
+     * these units we've exceeded the configured soft limit then kick the disk
+     * space monitor which will attempt to bring usage back down below the soft
+     * limit.
+     */
+    const auto units = std::min(
+      _core0_disk_bytes_reservable.current(),
+      config::shard_local_cfg()
+        .datalake_scheduler_disk_reservation_block_size());
+    if (units > 0) {
+        _core0_disk_bytes_reservable.consume(units);
+    }
+
+    if (disk_space_soft_limit_exceeded()) {
+        _disk_space_monitor_cv.signal();
+    }
+
+    vlog(
+      datalake_log.debug,
+      "Allocated {} disk reservation for shard {} from global pool. Total "
+      "available {}",
+      human::bytes(units),
+      shard,
+      human::bytes(_core0_disk_bytes_reservable.current()));
+
+    co_return units;
 }
 
 ss::future<>
@@ -467,7 +610,7 @@ datalake_manager::prepare_staging_directory(std::filesystem::path path) {
 
 ss::future<> datalake_manager::shutdown() {
     vlog(datalake_log.debug, "Stopping datalake manager...");
-    _disk_space_monitor_sem.broken();
+    _disk_space_monitor_cv.broken();
     auto f = _gate.close();
     co_await _queue.shutdown();
     if (_backlog_controller) {
@@ -646,6 +789,65 @@ size_t datalake_manager::partitions_with_translation_blocked() const {
     // TODO: Return blocked if partition wasn't translated for a long time f.e.
     // moret
     return 0;
+}
+
+void datalake_manager::update_disk_limits() {
+    // the requests
+    auto new_total_size = _scratch_space_size_bytes();
+    if (!_disk_space_manager_enable()) {
+        // when we disable the manager we want to effectively stop enforcing
+        // limits. so make the total allowable size massive, but not so big that
+        // we need to worry about any kind of integer overflow.
+        new_total_size = 50_TiB;
+    }
+
+    const auto new_soft_percent = _scratch_space_soft_limit_size_percent();
+
+    // current settings
+    const auto prev_total = _disk_bytes_reservable_total;
+    const auto prev_soft_limit = _disk_bytes_reservable_soft_limit;
+    const auto prev_available = _core0_disk_bytes_reservable.available_units();
+
+    _disk_bytes_reservable_soft_limit = static_cast<size_t>(
+      static_cast<double>(new_total_size) * (new_soft_percent / 100.0));
+
+    if (new_total_size > _disk_bytes_reservable_total) {
+        auto units = new_total_size - _disk_bytes_reservable_total;
+        _disk_bytes_reservable_total = new_total_size;
+        _core0_disk_bytes_reservable.signal(units);
+
+    } else if (new_total_size < _disk_bytes_reservable_total) {
+        auto units = _disk_bytes_reservable_total - new_total_size;
+        _disk_bytes_reservable_total = new_total_size;
+        _core0_disk_bytes_reservable.consume(units);
+    }
+
+    /*
+     * let the monitor see if anything needs to be done based on the changes
+     */
+    _disk_space_monitor_cv.signal();
+
+    /*
+     * when shrinking the size of the scratch space the semaphore tracking
+     * available units on core 0 may become negative because all the units are
+     * currently handed out to other cores.
+     */
+    auto format_reservable = [](auto v) {
+        if (v >= 0) {
+            return fmt::format("{}", human::bytes(v));
+        }
+        return fmt::format("{} ({})", human::bytes(0), v);
+    };
+
+    vlog(
+      datalake_log.info,
+      "Setting scratch space total {} soft {} available {} prev ({}, {}, {})",
+      human::bytes(_disk_bytes_reservable_total),
+      human::bytes(_disk_bytes_reservable_soft_limit),
+      format_reservable(_core0_disk_bytes_reservable.available_units()),
+      human::bytes(prev_total),
+      human::bytes(prev_soft_limit),
+      format_reservable(prev_available));
 }
 
 } // namespace datalake

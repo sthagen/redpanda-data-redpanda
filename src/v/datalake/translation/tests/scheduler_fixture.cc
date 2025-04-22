@@ -239,7 +239,7 @@ translation_status mock_translator::status() const {
     return status;
 }
 
-void mock_translator::stop_translation() {
+void mock_translator::stop_translation(translator::stop_reason) {
     auto holder = _gate.hold();
     vassert(_started, "Translator should be started first");
     if (!_translation_state) {
@@ -271,11 +271,11 @@ void exceptional_translator::start_translation(clock::duration translate_for) {
     return mock_translator::start_translation(translate_for);
 }
 
-void exceptional_translator::stop_translation() {
+void exceptional_translator::stop_translation(translator::stop_reason reason) {
     if (tests::random_bool()) {
         throw ss::gate_closed_exception();
     }
-    return mock_translator::stop_translation();
+    return mock_translator::stop_translation(reason);
 }
 
 std::unique_ptr<translator>

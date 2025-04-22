@@ -7,6 +7,7 @@
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
 import time
+import threading
 from rptest.services.catalog_service import CatalogType
 from rptest.services.cluster import cluster
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
@@ -44,7 +45,8 @@ class DatalakeDiskUsageTest(RedpandaTest):
         # this limit it force finishes. this makes it difficult to accumulate
         # data on disk. so bump up the shard memory limit to make that a bit
         # easier.
-        resource_setting = ResourceSettings(num_cpus=1, memory_mb=4096)
+        resource_setting = ResourceSettings(num_cpus=2, memory_mb=8192)
+        self.target_lag_sec = 5 * 60
         super(DatalakeDiskUsageTest, self).__init__(
             test_ctx,
             num_brokers=1,
@@ -59,7 +61,7 @@ class DatalakeDiskUsageTest(RedpandaTest):
                 # is set low to avoid hitting the per-core memory limit.
                 "datalake_scheduler_time_slice_ms": 3000,
                 "datalake_translator_flush_bytes": 100 * 2**30,
-                "iceberg_target_lag_ms": 10 * 60 * 1000,
+                "iceberg_target_lag_ms": self.target_lag_sec * 1000,
                 "datalake_scratch_space_size_bytes": 100 * 2**30,
             },
             *args,
@@ -98,7 +100,7 @@ class DatalakeDiskUsageTest(RedpandaTest):
             producer.start()
             producer.wait()
             producer.free()
-            time.sleep(10)
+            time.sleep(5)
             current_size = self.datalake_staging_usage()
             self.logger.info(f"Staging data usage {current_size}")
             assert (
@@ -106,9 +108,13 @@ class DatalakeDiskUsageTest(RedpandaTest):
                 start_time) < timeout_sec, f"{current_size} < {target_size}"
         return current_size
 
+    def translation_lag(self):
+        metric_name = "vectorized_cluster_partition_iceberg_offsets_pending_translation"
+        return self.redpanda.metric_sum(metric_name, expect_metric=True)
+
     @cluster(num_nodes=2)
     @skip_debug_mode
-    @matrix(num_partitions=[10],
+    @matrix(num_partitions=[10, 40],
             concurrent_translations=[4],
             cloud_storage_type=supported_storage_types())
     def test_idle_finish(self, num_partitions, concurrent_translations,
@@ -145,3 +151,57 @@ class DatalakeDiskUsageTest(RedpandaTest):
         wait_until(lambda: self.datalake_staging_usage() <= new_target_size,
                    timeout_sec=60,
                    backoff_sec=2)
+
+        # start a thread that tracks the max observed usage
+        self.max_usage_observed = 0
+        self.stopped = threading.Event()
+
+        def usage_monitor():
+            while not self.stopped.is_set():
+                usage = self.datalake_staging_usage()
+                lag = self.translation_lag()
+                self.max_usage_observed = max(self.max_usage_observed, usage)
+                self.logger.info(
+                    f"Max usage observed {self.max_usage_observed} lag {lag} current usage {usage}"
+                )
+                time.sleep(1)
+
+        usage_monitor_thread = threading.Thread(target=usage_monitor,
+                                                daemon=True)
+        usage_monitor_thread.start()
+
+        try:
+            # now let's go ham with the producing
+            lag_start = self.translation_lag()
+            producer = RpkProducer(
+                self.test_ctx,
+                self.redpanda,
+                self.topic_name,
+                2**14,  # 16kb message size
+                2**18,  # 4gb total data written
+                acks=-1)
+            producer.start()
+
+            # make sure stuff looks like it is happening!
+            wait_until(lambda: self.translation_lag() > lag_start,
+                       timeout_sec=60,
+                       backoff_sec=5)
+
+            producer.wait()
+            producer.free()
+
+            # after we finish producing, wait for translation to finish. since
+            # we had to set the lag time high to increase data that lands on
+            # disk, we also need to wait a long time for lag to go to zero.
+            # currently it doens't look like we can dynamically change that.
+            wait_until(lambda: self.translation_lag() == 0,
+                       timeout_sec=self.target_lag_sec * 2,
+                       backoff_sec=10,
+                       err_msg=f"lag={self.translation_lag()}")
+
+            self.logger.info("Finished waiting on translation to complete")
+
+            assert self.max_usage_observed > 0 and self.max_usage_observed <= new_target_size, f"{self.max_usage_observed} > {new_target_size}"
+        finally:
+            self.stopped.set()
+            usage_monitor_thread.join()

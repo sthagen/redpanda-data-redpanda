@@ -52,6 +52,8 @@ translation_task::errc map_error_code(writer_error errc) {
         return translation_task::errc::time_limit_exceeded;
     case writer_error::shutting_down:
         return translation_task::errc::shutting_down;
+    case writer_error::out_of_disk:
+        return translation_task::errc::out_of_disk;
     case writer_error::unknown_error:
         return translation_task::errc::file_io_error;
     }
@@ -401,6 +403,8 @@ std::ostream& operator<<(std::ostream& o, translation_task::errc ec) {
         return o << "time limit exceeded";
     case translation_task::errc::shutting_down:
         return o << "shutting down";
+    case translation_task::errc::out_of_disk:
+        return o << "disk exhausted";
     }
 }
 } // namespace datalake

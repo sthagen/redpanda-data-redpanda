@@ -1241,7 +1241,7 @@ enum class reconfiguration_policy {
      * With target initial retention partition move policy controller backend
      * will calculate the learner start offset based on the configured learner
      * initial retention configuration (either a global cluster property or
-     * topic override ) and partition max collectible offset. Max collectible
+     * topic override ) and partition max removable offset. Max removable
      * offset is advanced after all the previous offsets were successfully
      * uploaded to the cloud.
      */
@@ -2804,10 +2804,11 @@ struct partition_stm_state
 
     ss::sstring name;
     model::offset last_applied_offset;
-    model::offset max_collectible_offset;
+    model::offset max_removable_local_log_offset;
 
     auto serde_fields() {
-        return std::tie(name, last_applied_offset, max_collectible_offset);
+        return std::tie(
+          name, last_applied_offset, max_removable_local_log_offset);
     }
 };
 

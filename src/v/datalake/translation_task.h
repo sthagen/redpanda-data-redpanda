@@ -48,6 +48,7 @@ public:
         oom_error,
         time_limit_exceeded,
         shutting_down,
+        out_of_disk,
     };
 
     using custom_partitioning_enabled

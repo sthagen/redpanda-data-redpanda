@@ -463,7 +463,7 @@ ss::future<> disk_log_impl::adjacent_merge_compact(
               config().ntp(),
               s.reader().filename(),
               s.offsets().get_stable_offset(),
-              cfg.max_collectible_offset);
+              cfg.max_removable_local_log_offset);
             return true;
         } else {
             vlog(
@@ -473,7 +473,7 @@ ss::future<> disk_log_impl::adjacent_merge_compact(
               config().ntp(),
               s.reader().filename(),
               s.offsets().get_stable_offset(),
-              cfg.max_collectible_offset);
+              cfg.max_removable_local_log_offset);
             return false;
         }
     };
@@ -3524,13 +3524,13 @@ disk_log_impl::disk_usage_and_reclaimable_space(gc_config input_cfg) {
      *
      * Because this effort is split between the log, raft, and eviction_stm we
      * end up having to duplicate some of the logic here, such as handling the
-     * max collectible offset from stm. A future refactoring may consider moving
+     * max removable offset from stm. A future refactoring may consider moving
      * more of the retention controls into a higher level location.
      */
-    const auto max_collectible = stm_manager()->max_collectible_offset();
+    const auto max_removable = stm_manager()->max_removable_local_log_offset();
     const auto retention_offset = [&]() -> std::optional<model::offset> {
         if (max_offset.has_value()) {
-            return std::min(max_offset.value(), max_collectible);
+            return std::min(max_offset.value(), max_removable);
         }
         return std::nullopt;
     }();
@@ -3551,7 +3551,7 @@ disk_log_impl::disk_usage_and_reclaimable_space(gc_config input_cfg) {
             retention_segments.push_back(seg);
         } else if (
           is_cloud_retention_active()
-          && seg->offsets().get_dirty_offset() <= max_collectible) {
+          && seg->offsets().get_dirty_offset() <= max_removable) {
             available_segments.push_back(seg);
         } else {
             remaining_segments.push_back(seg);
@@ -3568,7 +3568,7 @@ disk_log_impl::disk_usage_and_reclaimable_space(gc_config input_cfg) {
         if (
           !config().is_read_replica_mode_enabled()
           && is_cloud_retention_active() && seg != _segs.back()
-          && seg->offsets().get_dirty_offset() <= max_collectible
+          && seg->offsets().get_dirty_offset() <= max_removable
           && local_retention_offset.has_value()
           && seg->offsets().get_dirty_offset()
                <= local_retention_offset.value()) {
@@ -3911,16 +3911,16 @@ disk_log_impl::cloud_gc_eligible_segments() {
 
     /*
      * how much are we allowed to collect? sub-systems (e.g. transactions)
-     * may signal restrictions through the max collectible offset. for cloud
-     * topics max collectible will include a reflection of how much data has
+     * may signal restrictions through the max removable offset. for cloud
+     * topics max removable will include a reflection of how much data has
      * been uploaded into the cloud.
      */
-    const auto max_collectible = stm_manager()->max_collectible_offset();
+    const auto max_removable = stm_manager()->max_removable_local_log_offset();
 
     // collect eligible segments
     fragmented_vector<segment_set::type> segments;
     for (auto remaining = _segs.size() - keep_segs; auto& seg : _segs) {
-        if (seg->offsets().get_committed_offset() <= max_collectible) {
+        if (seg->offsets().get_committed_offset() <= max_removable) {
             segments.push_back(seg);
         }
         if (--remaining <= 0) {
@@ -3967,7 +3967,7 @@ disk_log_impl::get_reclaimable_offsets(gc_config cfg) {
 
     /*
      * there is currently a bug with read replicas that makes the max
-     * collectible offset unreliable. the read replica topics still have a
+     * removable offset unreliable. the read replica topics still have a
      * retention setting, but we are going to exempt them from forced reclaim
      * until this bug is fixed to avoid any complications.
      *
@@ -4011,7 +4011,7 @@ disk_log_impl::get_reclaimable_offsets(gc_config cfg) {
      * for a cloud-backed topic the max collecible offset is the threshold below
      * which data has been uploaded and can safely be removed from local disk.
      */
-    const auto max_collectible = stm_manager()->max_collectible_offset();
+    const auto max_removable = stm_manager()->max_removable_local_log_offset();
 
     /*
      * lightweight segment set copy for safe iteration
@@ -4033,13 +4033,13 @@ disk_log_impl::get_reclaimable_offsets(gc_config cfg) {
     vlog(
       stlog.debug,
       "Categorizing {} {} segments for {} with local retention {} low "
-      "space {} max collectible {}",
+      "space {} max removable {}",
       segments.size(),
       (hinted ? "hinted" : "non-hinted"),
       config().ntp(),
       local_retention_offset,
       low_space_offset,
-      max_collectible);
+      max_removable);
 
     /*
      * categorize each segment.
@@ -4060,13 +4060,13 @@ disk_log_impl::get_reclaimable_offsets(gc_config cfg) {
              * a potential:
              *
              *   1. rolling the active segment will bound progress towards
-             *   making its current full size reclaimable as max collectible
+             *   making its current full size reclaimable as max removable
              *   increases to cover the entire segment.
              *
-             *   2. finally, we don't report it if max collectible hasn't even
+             *   2. finally, we don't report it if max removable hasn't even
              *   made it to the active segment yet.
              */
-            if (seg->offsets().get_base_offset() <= max_collectible) {
+            if (seg->offsets().get_base_offset() <= max_removable) {
                 res.force_roll = seg_size;
                 vlog(
                   stlog.trace,
@@ -4086,13 +4086,13 @@ disk_log_impl::get_reclaimable_offsets(gc_config cfg) {
          * if the current segment is not fully collectible, then subsequent
          * segments will not be either, and don't require consideration.
          */
-        if (point.offset > max_collectible) {
+        if (point.offset > max_removable) {
             vlog(
               stlog.trace,
-              "Stopping collection at offset {}:{} above max collectible {}",
+              "Stopping collection at offset {}:{} above max removable {}",
               point.offset,
               human::bytes(point.size),
-              max_collectible);
+              max_removable);
             break;
         }
 

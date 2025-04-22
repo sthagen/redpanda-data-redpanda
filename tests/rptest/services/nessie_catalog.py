@@ -71,6 +71,10 @@ class NessieCatalog(CatalogService):
         return self._catalog_url
 
     @property
+    def iceberg_rest_port(self) -> int:
+        return self.NESSIE_PORT
+
+    @property
     def vendor_api_url(self) -> str:
         assert self._vendor_api_url, "URL not available because service is not started"
         return self._vendor_api_url

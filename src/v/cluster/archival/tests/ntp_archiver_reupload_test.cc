@@ -239,7 +239,7 @@ struct reupload_fixture : public archiver_fixture {
     }
 
     ss::lw_shared_ptr<storage::segment> run_disk_log_housekeeping(
-      model::offset max_collectible = model::offset::max()) {
+      model::offset max_removable = model::offset::max()) {
         auto& seg_set = disk_log_impl()->segments();
         scoped_config cfg;
         // Make sure that the compaction always runs
@@ -251,7 +251,7 @@ struct reupload_fixture : public archiver_fixture {
           ->housekeeping(storage::housekeeping_config{
             model::timestamp::max(),
             std::nullopt,
-            max_collectible,
+            max_removable,
             std::nullopt,
             ss::default_priority_class(),
             abort_source})
@@ -554,7 +554,7 @@ FIXTURE_TEST(test_upload_both_compacted_and_non_compacted, reupload_fixture) {
     // compacted and one non-compacted segments are uploaded.
     //
     // NOTE: we can only compact up to what's been uploaded, since that
-    // determines the max collectible offset.
+    // determines the max removable offset.
     reset_http_call_state();
     auto seg = run_disk_log_housekeeping(
       manifest.first_addressable_segment()->committed_offset);

@@ -29,7 +29,8 @@ public:
     ss::future<> stop() override;
 
     ss::future<> do_apply(const model::record_batch&) override;
-    model::offset max_collectible_offset() override;
+    model::offset max_removable_local_log_offset() override;
+    std::optional<kafka::offset> lowest_pinned_data_offset() const override;
     ss::future<raft::local_snapshot_applied>
     apply_local_snapshot(raft::stm_snapshot_header, iobuf&& bytes) override;
 
@@ -103,6 +104,9 @@ private:
 
     void update_highest_translated_offset(kafka::offset new_offset);
 
+    // The offset one below the starting point of the next translation.
+    // When this is kafka::offset::min() (the default), this indicates that it
+    // is not initialized.
     kafka::offset _highest_translated_offset{};
 
     // approximate system time at which _highest_translated_offset became

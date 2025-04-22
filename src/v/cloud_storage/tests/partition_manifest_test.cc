@@ -2381,6 +2381,166 @@ SEASTAR_THREAD_TEST_CASE(test_archive_offsets_serialization) {
     BOOST_REQUIRE_EQUAL(restored.get_archive_clean_offset(), model::offset(50));
 }
 
+namespace {
+segment_meta make_segment(
+  std::pair<int64_t, int64_t> kafka_bounds, size_t size, int64_t delta = 10) {
+    auto model_start = kafka_bounds.first + delta;
+    auto model_last = kafka_bounds.second + delta;
+    return {
+      .is_compacted = false,
+      .size_bytes = size,
+      .base_offset = model::offset(model_start),
+      .committed_offset = model::offset(model_last),
+      .base_timestamp = model::timestamp{1689985196373},
+      .max_timestamp = model::timestamp{1689985643129},
+      .delta_offset = model::offset_delta(delta),
+      .ntp_revision = model::initial_revision_id(1234),
+      .archiver_term = model::term_id(16),
+      .segment_term = model::term_id(1),
+      .delta_offset_end = model::offset_delta(delta),
+      .sname_format = segment_name_format::v3,
+      .metadata_size_hint = 0};
+}
+} // namespace
+
+SEASTAR_THREAD_TEST_CASE(test_estimate_size) {
+    partition_manifest m;
+    m.add(make_segment({10, 99}, 1234));
+    m.add(make_segment({100, 199}, 1000));
+    BOOST_CHECK_EQUAL(kafka::offset{200}, m.get_next_kafka_offset());
+
+    // Check values before the start.
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{0}, kafka::offset{0}));
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{0}, kafka::offset{9}));
+
+    // Overlapping with just the first segment.
+    BOOST_CHECK_EQUAL(
+      1234, m.estimate_size_between(kafka::offset{0}, kafka::offset{10}));
+    BOOST_CHECK_EQUAL(
+      1234, m.estimate_size_between(kafka::offset{10}, kafka::offset{99}));
+    BOOST_CHECK_EQUAL(
+      1234, m.estimate_size_between(kafka::offset{99}, kafka::offset{99}));
+
+    // Overlapping with both segments.
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{99}, kafka::offset{100}));
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{0}, kafka::offset{100}));
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{0}, kafka::offset{200}));
+
+    // Overlapping with just the second segment.
+    BOOST_CHECK_EQUAL(
+      1000, m.estimate_size_between(kafka::offset{100}, kafka::offset{100}));
+    BOOST_CHECK_EQUAL(
+      1000, m.estimate_size_between(kafka::offset{100}, kafka::offset{199}));
+    BOOST_CHECK_EQUAL(
+      1000, m.estimate_size_between(kafka::offset{199}, kafka::offset{199}));
+    BOOST_CHECK_EQUAL(
+      1000, m.estimate_size_between(kafka::offset{100}, kafka::offset{200}));
+
+    // Check values past the end.
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{200}, kafka::offset{200}));
+}
+
+SEASTAR_THREAD_TEST_CASE(test_estimate_size_spillover) {
+    partition_manifest m;
+    m.add(make_segment({10, 99}, 1234));
+    m.add(make_segment({100, 199}, 1000));
+    m.add(make_segment({200, 299}, 2000));
+    m.add(make_segment({300, 399}, 500));
+    m.set_archive_start_offset(model::offset{20}, model::offset_delta{10});
+    m.spillover(make_segment({10, 199}, 2234));
+    m.spillover(make_segment({200, 299}, 2000));
+
+    BOOST_CHECK_EQUAL(kafka::offset{10}, m.full_log_start_kafka_offset());
+    BOOST_CHECK_EQUAL(kafka::offset{400}, m.get_next_kafka_offset());
+    BOOST_CHECK_EQUAL(500, m.stm_region_size_bytes());
+    BOOST_CHECK_EQUAL(4234, m.archive_size_bytes());
+
+    // At this point, the archival layout looks like this:
+    //   size bytes    [2234B  ][2000B   ][500B ]
+    //   kafka offsets [10, 199][200, 299][300, 399]
+    //   region        [archive          ][stm     ]
+
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{0}, kafka::offset{0}));
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{0}, kafka::offset{9}));
+
+    // Overlapping with just the first segment.
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{0}, kafka::offset{10}));
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{10}, kafka::offset{99}));
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{99}, kafka::offset{99}));
+
+    // Overlapping with both segments.
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{99}, kafka::offset{100}));
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{0}, kafka::offset{100}));
+
+    // Overlapping with just the second segment.
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{100}, kafka::offset{100}));
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{100}, kafka::offset{199}));
+    BOOST_CHECK_EQUAL(
+      2234, m.estimate_size_between(kafka::offset{199}, kafka::offset{199}));
+
+    // Overlap with the second spillover manifest too.
+    BOOST_CHECK_EQUAL(
+      4234, m.estimate_size_between(kafka::offset{0}, kafka::offset{200}));
+    BOOST_CHECK_EQUAL(
+      4234, m.estimate_size_between(kafka::offset{100}, kafka::offset{200}));
+
+    // Overlap with just the second spillover manifest.
+    BOOST_CHECK_EQUAL(
+      2000, m.estimate_size_between(kafka::offset{299}, kafka::offset{299}));
+
+    // Overlap the spillover manifest and STM manifest.
+    BOOST_CHECK_EQUAL(
+      2500, m.estimate_size_between(kafka::offset{299}, kafka::offset{300}));
+
+    // Now just the STM manifest.
+    BOOST_CHECK_EQUAL(
+      500, m.estimate_size_between(kafka::offset{300}, kafka::offset{300}));
+
+    // And now the whole cloud log.
+    BOOST_CHECK_EQUAL(
+      4734, m.estimate_size_between(kafka::offset{0}, kafka::offset{300}));
+}
+
+SEASTAR_THREAD_TEST_CASE(test_estimate_size_empty) {
+    partition_manifest m;
+    BOOST_CHECK(!m.get_next_kafka_offset().has_value());
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{0}, kafka::offset{0}));
+
+    m.add(make_segment({10, 99}, 1234));
+    BOOST_CHECK_EQUAL(kafka::offset{100}, m.get_next_kafka_offset());
+
+    // Sanity check that we get non-zero for a valid range...
+    BOOST_CHECK_EQUAL(
+      1234, m.estimate_size_between(kafka::offset{90}, kafka::offset{90}));
+    // ...but zero when the range is empty.
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{90}, kafka::offset{89}));
+
+    // Now truncate such that the whole manifest is empty.
+    m.truncate(model::next_offset(m.last_segment()->committed_offset));
+    BOOST_CHECK(!m.get_next_kafka_offset().has_value());
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{0}, kafka::offset{0}));
+    BOOST_CHECK_EQUAL(
+      0, m.estimate_size_between(kafka::offset{100}, kafka::offset{100}));
+}
+
 SEASTAR_THREAD_TEST_CASE(test_partition_manifest_outofbound_trigger) {
     BOOST_TEST_INFO(
       fmt::format("random_seed: [{}]", random_generators::internal::gen));

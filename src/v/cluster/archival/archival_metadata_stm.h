@@ -277,7 +277,7 @@ public:
 
     model::offset get_last_clean_at() const { return _last_clean_at; };
 
-    model::offset max_collectible_offset() override;
+    model::offset max_removable_local_log_offset() override;
 
     ss::future<iobuf> take_snapshot(model::offset) final { co_return iobuf{}; }
 

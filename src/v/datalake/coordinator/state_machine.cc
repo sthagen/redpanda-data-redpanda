@@ -140,7 +140,7 @@ ss::future<> coordinator_stm::do_apply(const model::record_batch& b) {
     rearm_snapshot_timer();
 }
 
-model::offset coordinator_stm::max_collectible_offset() { return {}; }
+model::offset coordinator_stm::max_removable_local_log_offset() { return {}; }
 
 ss::future<raft::local_snapshot_applied> coordinator_stm::apply_local_snapshot(
   raft::stm_snapshot_header, iobuf&& snapshot_buf) {

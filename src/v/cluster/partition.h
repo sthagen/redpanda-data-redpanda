@@ -178,7 +178,7 @@ public:
      * learners as claimed by the state machines implemented on top of this
      * partition.
      */
-    model::offset max_collectible_offset();
+    model::offset max_removable_local_log_offset();
 
     ss::future<std::error_code> update_replica_set(
       std::vector<raft::broker_revision> brokers,
@@ -350,7 +350,7 @@ public:
     // from an iobuf containing the JSON representation of the manifest.
     //
     // Warning: in order to call this safely, one must stop the archiver
-    // manually whilst ensuring that the max collectible offset reported
+    // manually whilst ensuring that the max removable offset reported
     // by the archival metadata STM remains stable. Prefer its sibling
     // which resets from the cloud state.
     //

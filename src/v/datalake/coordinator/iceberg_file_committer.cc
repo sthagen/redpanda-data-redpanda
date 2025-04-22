@@ -461,34 +461,23 @@ iceberg_file_committer::commit_topic_files_to_catalog(
         auto main_table_id = table_id_provider::table_id(topic);
         auto main_table_res = co_await catalog_.load_table(main_table_id);
         if (main_table_res.has_error()) {
-            switch (main_table_res.error()) {
-            case iceberg::catalog::errc::not_found:
-                vlog(
-                  datalake_log.debug,
-                  "Main table {} not found for committing from topic {}",
-                  main_table_id,
-                  topic);
-                break;
-            default:
-                co_return log_and_convert_catalog_errc(
-                  main_table_res.error(),
-                  fmt::format(
-                    "Error loading table {} for committing from topic {}",
-                    main_table_id,
-                    topic));
-            }
-        } else {
-            auto main_table_commit_builder_res = table_commit_builder::create(
-              cluster,
-              std::move(main_table_id),
-              std::move(main_table_res.value()),
-              !disable_snapshot_tags_());
-            if (main_table_commit_builder_res.has_error()) {
-                co_return main_table_commit_builder_res.error();
-            }
-            main_table_commit_builder = std::move(
-              main_table_commit_builder_res.value());
+            co_return log_and_convert_catalog_errc(
+              main_table_res.error(),
+              fmt::format(
+                "Error loading table {} for committing from topic {}",
+                main_table_id,
+                topic));
         }
+        auto main_table_commit_builder_res = table_commit_builder::create(
+          cluster,
+          std::move(main_table_id),
+          std::move(main_table_res.value()),
+          !disable_snapshot_tags_());
+        if (main_table_commit_builder_res.has_error()) {
+            co_return main_table_commit_builder_res.error();
+        }
+        main_table_commit_builder = std::move(
+          main_table_commit_builder_res.value());
     }
 
     // DLQ table (optional):
@@ -497,39 +486,23 @@ iceberg_file_committer::commit_topic_files_to_catalog(
         auto dlq_table_id = table_id_provider::dlq_table_id(topic);
         auto dlq_table_res = co_await catalog_.load_table(dlq_table_id);
         if (dlq_table_res.has_error()) {
-            switch (dlq_table_res.error()) {
-            case iceberg::catalog::errc::not_found:
-                vlog(
-                  datalake_log.debug,
-                  "DLQ table {} not found for committing from topic {}",
-                  dlq_table_id,
-                  topic);
-                // We ignore the DLQ table not found error and continue under
-                // the assumption that there are will be no DLQ files to commit.
-                // If such a file is found we'll return an error. Ideally we
-                // would load the table conditionally but for now we can't
-                // suspend/co_await here.
-                break;
-            default:
-                co_return log_and_convert_catalog_errc(
-                  dlq_table_res.error(),
-                  fmt::format(
-                    "Error loading table {} for committing from topic {}",
-                    dlq_table_id,
-                    topic));
-            }
-        } else {
-            auto dlq_table_commit_builder_res = table_commit_builder::create(
-              cluster,
-              std::move(dlq_table_id),
-              std::move(dlq_table_res.value()),
-              !disable_snapshot_tags_());
-            if (dlq_table_commit_builder_res.has_error()) {
-                co_return dlq_table_commit_builder_res.error();
-            }
-            dlq_table_commit_builder = std::move(
-              dlq_table_commit_builder_res.value());
+            co_return log_and_convert_catalog_errc(
+              dlq_table_res.error(),
+              fmt::format(
+                "Error loading table {} for committing from topic {}",
+                dlq_table_id,
+                topic));
         }
+        auto dlq_table_commit_builder_res = table_commit_builder::create(
+          cluster,
+          std::move(dlq_table_id),
+          std::move(dlq_table_res.value()),
+          !disable_snapshot_tags_());
+        if (dlq_table_commit_builder_res.has_error()) {
+            co_return dlq_table_commit_builder_res.error();
+        }
+        dlq_table_commit_builder = std::move(
+          dlq_table_commit_builder_res.value());
     }
 
     chunked_hash_map<model::partition_id, kafka::offset> pending_commits;
