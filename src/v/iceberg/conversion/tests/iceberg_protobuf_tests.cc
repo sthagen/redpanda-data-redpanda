@@ -667,3 +667,40 @@ TEST_CORO(values_protobuf, TestProto2FieldPresence) {
         Eq(std::nullopt),
         Eq(std::nullopt)));
 }
+
+TEST_CORO(values_protobuf, TestProto2Issue) {
+    proto2::Foo msg;
+    msg.set_a(123);
+    msg.set_b(456);
+    msg.set_c("bar");
+    msg.set_d(789);
+    msg.set_e(123.456);
+    msg.set_f(123);
+    msg.set_g("foo");
+    msg.set_h("baz");
+    msg.set_i("qux");
+    msg.set_j("thud");
+    msg.set_k("zing");
+
+    auto result = co_await serialize_and_convert(msg);
+    ASSERT_TRUE_CORO(result.has_value());
+    auto r_opt = std::move(result.value());
+    ASSERT_TRUE_CORO(r_opt.has_value());
+    auto struct_v = std::get<std::unique_ptr<iceberg::struct_value>>(
+      std::move(r_opt.value()));
+
+    EXPECT_THAT(
+      struct_v->fields,
+      ElementsAre(
+        OptionalIcebergPrimitive<string_value>("123"),
+        OptionalIcebergPrimitive<string_value>("456"),
+        OptionalIcebergPrimitive<string_value>("bar"),
+        OptionalIcebergPrimitive<long_value>(789),
+        OptionalIcebergPrimitive<double_value>(123.456),
+        OptionalIcebergPrimitive<long_value>(123),
+        OptionalIcebergPrimitive<string_value>("foo"),
+        OptionalIcebergPrimitive<string_value>("baz"),
+        OptionalIcebergPrimitive<string_value>("qux"),
+        OptionalIcebergPrimitive<string_value>("thud"),
+        OptionalIcebergPrimitive<string_value>("zing")));
+}

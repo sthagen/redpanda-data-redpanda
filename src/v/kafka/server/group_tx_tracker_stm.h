@@ -125,6 +125,11 @@ public:
 
     const all_txs_t& inflight_transactions() const { return _all_txs; }
 
+    raft::stm_initial_recovery_policy
+    get_initial_recovery_policy() const final {
+        return raft::stm_initial_recovery_policy::read_everything;
+    }
+
 private:
     static constexpr int8_t supported_local_snapshot_version = 1;
     struct snapshot

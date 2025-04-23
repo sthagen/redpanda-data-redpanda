@@ -5493,6 +5493,22 @@ class RedpandaService(RedpandaServiceBase):
         else:
             return None
 
+    def estimate_total_disk_bytes_read(self):
+        try:
+            samples = self.metrics_sample(
+                "vectorized_io_queue_total_read_bytes_total",
+                nodes=self.started_nodes())
+        except Exception as e:
+            self.logger.warn(
+                f"Cannot check metrics, did a test finish with all nodes down? ({e})"
+            )
+            return None
+
+        if samples is not None and samples.samples:
+            return sum(s.value for s in samples.samples)
+        else:
+            return None
+
     def wait_node_add_rebalance_finished(self,
                                          new_nodes,
                                          admin=None,

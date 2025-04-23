@@ -227,6 +227,11 @@ public:
 
     ss::future<tx::errc> abort_all_txes();
 
+    raft::stm_initial_recovery_policy
+    get_initial_recovery_policy() const final {
+        return raft::stm_initial_recovery_policy::read_everything;
+    }
+
 protected:
     ss::future<> apply_raft_snapshot(const iobuf&) final;
 

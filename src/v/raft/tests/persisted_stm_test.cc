@@ -66,6 +66,7 @@ struct kv_state
             } else {
                 remove(op.key);
             }
+            valid_op_cnt++;
             return true;
         }
     }
@@ -103,6 +104,7 @@ struct kv_state
             } else {
                 kv_map.erase(it);
             }
+            valid_op_cnt++;
             return true;
         }
 
@@ -111,14 +113,16 @@ struct kv_state
 
     state_t kv_map;
 
-    friend bool operator==(const kv_state&, const kv_state&) = default;
+    friend bool operator==(const kv_state& lhs, const kv_state& rhs) {
+        return lhs.kv_map == rhs.kv_map;
+    }
     friend std::ostream& operator<<(std::ostream& o, const kv_state& st) {
         for (auto& [k, v] : st.kv_map) {
             fmt::print(o, "{}={}, ", k, v);
         }
         return o;
     }
-
+    size_t valid_op_cnt{0};
     auto serde_fields() { return std::tie(kv_map); }
 };
 
@@ -283,6 +287,11 @@ public:
 
     void set_throw_on_apply(bool should_throw) {
         throw_on_apply = should_throw;
+    }
+
+    raft::stm_initial_recovery_policy
+    get_initial_recovery_policy() const override {
+        return raft::stm_initial_recovery_policy::read_everything;
     }
 
     bool throw_on_apply = false;
@@ -518,6 +527,11 @@ public:
         co_await validate_applied_offsets(applied_offset_before);
         co_return stm_snapshot::create(
           0, last_applied_offset(), serde::to_iobuf(_last_stm_applied));
+    }
+
+    raft::stm_initial_recovery_policy
+    get_initial_recovery_policy() const final {
+        return raft::stm_initial_recovery_policy::read_everything;
     }
 
 private:
@@ -988,4 +1002,124 @@ TEST_F_CORO(persisted_stm_test_fixture, test_application_on_lagging_replica) {
     auto added_stm = builder.create_stm<other_persisted_kv>(n);
     co_await n.start(std::move(builder));
     co_await wait_for_apply();
+}
+
+class start_from_end_stm : public persisted_kv {
+public:
+    static constexpr std::string_view name = "start_from_end_stm";
+    explicit start_from_end_stm(raft_node_instance& rn)
+      : persisted_kv(rn, false, "start_from_end_stm_kv_stm_snapshot") {}
+
+    ss::future<> apply_raft_snapshot(const iobuf& buffer) override {
+        if (buffer.empty()) {
+            co_return;
+        }
+        state = serde::from_iobuf<kv_state>(buffer.copy());
+        co_return;
+    };
+    stm_initial_recovery_policy get_initial_recovery_policy() const override {
+        return stm_initial_recovery_policy::skip_to_end;
+    }
+    // This STM only counts the number of apply function calls
+    ss::future<> do_apply(const model::record_batch& batch) override {
+        if (batch.header().type != model::record_batch_type::raft_data) {
+            co_return;
+        }
+        apply_count++;
+    }
+};
+
+/**
+ * This test initializes raft group with only one stm applies some data and
+ * takes local snapshot.
+ *
+ * After that all the replicas are stopped and two more state machines are added
+ * to the raft group.
+ *
+ * The two state machines uses different initialization policies. Finally the
+ * test verifies if the state machines were applied with expected batches.
+ */
+TEST_F(persisted_stm_test_fixture, test_persisted_stm_recovery_policy) {
+    initialize_state_machines().get();
+    kv_state expected;
+    auto ops = random_operations(2000);
+    for (auto batch : ops) {
+        apply_operations(expected, std::move(batch)).get();
+    }
+    wait_for_apply().get();
+    for (const auto& [_, stm] : node_stms) {
+        ASSERT_EQ(stm->state, expected);
+    }
+
+    take_local_snapshot_on_every_node().get();
+    auto ops_to_snapshot = expected.valid_op_cnt;
+    auto ops_phase_two = random_operations(2000);
+    for (auto batch : ops) {
+        apply_operations(expected, std::move(batch)).get();
+    }
+    absl::flat_hash_map<model::node_id, ss::sstring> data_directories;
+    for (auto& [id, node] : nodes()) {
+        data_directories[id] = node->raft()->log()->config().base_directory();
+    }
+
+    std::vector<ss::shared_ptr<other_persisted_kv>> full_read_stms;
+    std::vector<ss::shared_ptr<start_from_end_stm>> short_read_stms;
+    auto restart_with_new_state_machines = [&] {
+        full_read_stms.clear();
+        short_read_stms.clear();
+        for (auto& [id, data_dir] : data_directories) {
+            stop_node(id).get();
+            add_node(id, model::revision_id(0), data_dir);
+        }
+
+        /**
+         * Now add the state machines and restart the replicas.
+         */
+        for (auto& [id, node] : nodes()) {
+            node->initialise(all_vnodes()).get();
+            raft::state_machine_manager_builder builder;
+            auto stm = builder.create_stm<persisted_kv>(*node);
+            full_read_stms.push_back(
+              builder.create_stm<other_persisted_kv>(*node));
+            short_read_stms.push_back(
+              builder.create_stm<start_from_end_stm>(*node));
+
+            node->start(std::move(builder)).get();
+            node_stms.insert_or_assign(node->get_vnode(), std::move(stm));
+        }
+    };
+
+    restart_with_new_state_machines();
+    wait_for_apply().get();
+    // the base stm state must not change
+    for (auto& [_, stm] : node_stms) {
+        ASSERT_EQ(stm->state, expected);
+    }
+
+    for (auto& stm : full_read_stms) {
+        ASSERT_EQ(stm->apply_count, expected.valid_op_cnt);
+    }
+
+    for (auto& stm : short_read_stms) {
+        ASSERT_EQ(stm->apply_count, expected.valid_op_cnt - ops_to_snapshot);
+    }
+    /**
+     * Verify that initial recovery policy is respected after local snapshot
+     * removal
+     */
+
+    // remove the state machines local snapshots
+    for (auto& stm : node_stms) {
+        stm.second->remove_local_state().get();
+    }
+    // restart state machines
+    restart_with_new_state_machines();
+    wait_for_apply().get();
+    for (auto& stm : full_read_stms) {
+        ASSERT_EQ(stm->apply_count, expected.valid_op_cnt);
+    }
+
+    for (auto& stm : short_read_stms) {
+        ASSERT_EQ(stm->apply_count, expected.valid_op_cnt - ops_to_snapshot);
+    }
 }

@@ -108,6 +108,11 @@ public:
 
     ss::future<iobuf> take_snapshot(model::offset) final { co_return iobuf{}; }
 
+    raft::stm_initial_recovery_policy
+    get_initial_recovery_policy() const final {
+        return raft::stm_initial_recovery_policy::read_everything;
+    }
+
 protected:
     ss::future<raft::local_snapshot_applied>
     apply_local_snapshot(raft::stm_snapshot_header, iobuf&&) override;

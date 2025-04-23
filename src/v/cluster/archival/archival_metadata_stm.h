@@ -289,6 +289,11 @@ public:
         return _remote_path_provider;
     }
 
+    raft::stm_initial_recovery_policy
+    get_initial_recovery_policy() const final {
+        return raft::stm_initial_recovery_policy::read_everything;
+    }
+
 private:
     ss::future<bool>
     do_sync(model::timeout_clock::duration timeout, ss::abort_source* as);

@@ -162,7 +162,11 @@ state_machine_manager::state_machine_manager(
   consensus* raft, std::vector<named_stm> stms, ss::scheduling_group apply_sg)
   : _raft(raft)
   , _log(ctx_log(_raft->group(), _raft->ntp()))
-  , _apply_sg(apply_sg) {
+  , _apply_sg(apply_sg)
+  , _initial_recovery_snapshot_mgr(
+      std::filesystem::path(_raft->log_config().work_directory()),
+      "stm_manager.snapshot",
+      ss::default_priority_class()) {
     for (auto& n_stm : stms) {
         _supports_snapshot_at_offset
           = _supports_snapshot_at_offset
@@ -219,6 +223,8 @@ ss::future<> state_machine_manager::start() {
       _log.debug,
       "started state machine manager with initial next offset: {}",
       _next);
+    // it safe to update next here as the apply loop didn't start yet.
+    co_await apply_initial_recovery_policy();
     ssx::spawn_with_gate(_gate, [this] {
         return ss::do_until(
           [this] { return _as.abort_requested(); }, [this] { return apply(); });
@@ -237,6 +243,113 @@ ss::future<> state_machine_manager::stop() {
     co_await ss::coroutine::parallel_for_each(
       _machines, [](auto p) { return p.second->stm->stop(); });
     co_await std::move(gate_f);
+}
+
+ss::future<> state_machine_manager::apply_initial_recovery_policy() {
+    auto snapshot = co_await read_initial_recovery_snapshot();
+    if (!snapshot) {
+        /**
+         * If snapshot is not available create one, it will be populated during
+         * initial recovery
+         */
+        vlog(_log.debug, "no initial recovery snapshot found");
+        snapshot.emplace(initial_recovery_snapshot{});
+    }
+    vlog(_log.debug, "Starting with initial recovery snapshot: {}", *snapshot);
+    for (auto& [name, entry] : _machines) {
+        auto it = snapshot->initial_recovery_next_offsets.find(name);
+        if (it != snapshot->initial_recovery_next_offsets.end()) {
+            const auto init_recovery_offset = it->second;
+            vlog(
+              _log.debug,
+              "skipping initial recovery for {} state machine as it was "
+              "recovered from snapshot",
+              name);
+            if (
+              entry->stm->next() > model::offset{0}
+              && entry->stm->next() < init_recovery_offset) {
+                vlog(
+                  _log.error,
+                  "State machine '{}' has next offset set to {} which is "
+                  "less than the snapshot offset {}. Skipping initial "
+                  "recovery.",
+                  name,
+                  entry->stm->next(),
+                  init_recovery_offset);
+                continue;
+            }
+            entry->stm->set_next(
+              std::max(init_recovery_offset, entry->stm->next()));
+            continue;
+        }
+        // Stm needs initial recovery
+        const auto policy = entry->stm->get_initial_recovery_policy();
+        vlog(
+          _log.info,
+          "Applying '{}' initial recovery policy for '{}' state machine",
+          policy,
+          name);
+        switch (policy) {
+        case stm_initial_recovery_policy::read_everything:
+            snapshot->initial_recovery_next_offsets.emplace(
+              name, model::offset{0});
+            continue;
+        case stm_initial_recovery_policy::skip_to_end:
+            /**
+             * special case of a state machine that already existed in the
+             * previous version but the initial policy logic wasn't there yet
+             */
+            if (entry->stm->next() > model::offset{0}) {
+                vlog(
+                  _log.info,
+                  "State machine '{}' already has next offset set to {}",
+                  name,
+                  entry->stm->next());
+                snapshot->initial_recovery_next_offsets.emplace(
+                  name, model::offset{0});
+                continue;
+            }
+            /**
+             * Here we apply the skip to end policy.
+             *
+             * The policy leverages the fact that the _next offset is already
+             * established as all local snapshots from the other state machines
+             * were already applied.
+             *
+             * We must not use the log end offset here as the end offset may
+             * change with the truncation as it haven't yet been committed in
+             * Raft sense.
+             *
+             * The `_next` is safe as it is based on the last applied offset of
+             * the other state machines i.e. the `_next` offset is already
+             * committed.
+             *
+             * This policy comes with the trade off. The newly added state
+             * machines will not actually rewind to the physical end of the log.
+             * But will read a small part of it.
+             */
+            vlog(
+              _log.info,
+              "Setting next offset: {} for: '{}' state machine as a part of "
+              "initial recovery policy.",
+              _next,
+              name);
+            entry->stm->set_next(_next);
+            /**
+             * Initial recovery finished, marked as done in the snapshot.
+             */
+            snapshot->initial_recovery_next_offsets.emplace(
+              name, entry->stm->next());
+        }
+    }
+
+    // clean up offsets from state machines that are not longer present in the
+    // manager but are still in the initial recovery snapshot.
+    absl::erase_if(
+      snapshot->initial_recovery_next_offsets,
+      [this](const auto& pair) { return !_machines.contains(pair.first); });
+
+    co_await write_initial_recovery_snapshot(std::move(*snapshot));
 }
 
 std::vector<state_machine_manager::entry_ptr>
@@ -663,6 +776,92 @@ ss::future<> state_machine_manager::remove_local_state() {
     co_await ss::coroutine::parallel_for_each(_machines, [](auto entry_pair) {
         return entry_pair.second->stm->remove_local_state();
     });
+    co_await _initial_recovery_snapshot_mgr.remove_snapshot();
 }
 
+ss::future<std::optional<state_machine_manager::initial_recovery_snapshot>>
+state_machine_manager::read_initial_recovery_snapshot() {
+    auto reader = co_await _initial_recovery_snapshot_mgr.open_snapshot();
+    if (!reader) {
+        co_return std::nullopt;
+    }
+
+    auto md_buffer_f = co_await ss::coroutine::as_future(
+      reader->read_metadata());
+
+    if (md_buffer_f.failed()) {
+        auto e = md_buffer_f.get_exception();
+        vlog(
+          _log.error,
+          "failed to read initial recovery snapshot metadata: {}",
+          e);
+        co_await reader->close();
+        std::rethrow_exception(e);
+    }
+
+    auto snap_sz_f = co_await ss::coroutine::as_future(
+      reader->get_snapshot_size());
+    if (snap_sz_f.failed()) {
+        auto e = snap_sz_f.get_exception();
+        vlog(
+          _log.error, "failed to read initial recovery snapshot size: {}", e);
+        co_await reader->close();
+        std::rethrow_exception(e);
+    }
+    auto snapshot_content_f = co_await ss::coroutine::as_future(
+      read_iobuf_exactly(reader->input(), snap_sz_f.get()));
+
+    if (snapshot_content_f.failed()) {
+        auto e = snapshot_content_f.get_exception();
+        vlog(_log.error, "failed to read recovery snapshot: {}", e);
+        co_await reader->close();
+        std::rethrow_exception(e);
+    }
+    co_await reader->close();
+
+    co_await _initial_recovery_snapshot_mgr.remove_partial_snapshots();
+    co_return serde::from_iobuf<initial_recovery_snapshot>(
+      std::move(snapshot_content_f.get()));
+}
+
+ss::future<> state_machine_manager::write_initial_recovery_snapshot(
+  initial_recovery_snapshot snap) {
+    vlog(_log.trace, "writing initial recovery snapshot: {}", snap);
+    auto writer = co_await _initial_recovery_snapshot_mgr.start_snapshot();
+
+    auto md_f = co_await ss::coroutine::as_future(
+      writer.write_metadata(iobuf{}));
+    if (md_f.failed()) {
+        auto e = md_f.get_exception();
+        vlog(
+          _log.error,
+          "failed to write initial recovery snapshot metadata: {}",
+          e);
+        co_await writer.close();
+        std::rethrow_exception(e);
+    }
+
+    auto data_f = co_await ss::coroutine::as_future(
+      write_iobuf_to_output_stream(
+        serde::to_iobuf(std::move(snap)), writer.output()));
+    if (data_f.failed()) {
+        auto e = data_f.get_exception();
+        vlog(
+          _log.error, "failed to write initial recovery snapshot data: {}", e);
+        co_await writer.close();
+        std::rethrow_exception(e);
+    }
+
+    co_await writer.close();
+    co_await _initial_recovery_snapshot_mgr.finish_snapshot(writer);
+}
+
+std::ostream& operator<<(
+  std::ostream& o, const state_machine_manager::initial_recovery_snapshot& s) {
+    fmt::print(
+      o,
+      "{{ initial_recovery_next_offsets: {} }}",
+      s.initial_recovery_next_offsets);
+    return o;
+}
 } // namespace raft

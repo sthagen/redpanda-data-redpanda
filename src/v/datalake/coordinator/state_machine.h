@@ -48,6 +48,11 @@ public:
 
     const topics_state& state() const { return state_; }
 
+    raft::stm_initial_recovery_policy
+    get_initial_recovery_policy() const final {
+        return raft::stm_initial_recovery_policy::read_everything;
+    }
+
 protected:
     ss::future<> stop() override;
 
