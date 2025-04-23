@@ -437,13 +437,21 @@ ss::future<pb::FileDescriptorProto> build_file_with_refs(
         if (dp.FindFileByName(ref.name)) {
             continue;
         }
-        auto dep = co_await store.get_subject_schema(
-          ref.sub, ref.version, include_deleted::yes);
-        co_await build_file_with_refs(
-          dp,
-          store,
-          subject_schema{subject{ref.name}, std::move(dep.schema).def()},
-          normalize::no);
+        try {
+            auto dep = co_await store.get_subject_schema(
+              ref.sub, ref.version, include_deleted::yes);
+            co_await build_file_with_refs(
+              dp,
+              store,
+              subject_schema{subject{ref.name}, std::move(dep.schema).def()},
+              normalize::no);
+        } catch (const exception& e) {
+            if (failed_subject_schema_lookup(e.code())) {
+                throw as_exception(
+                  no_reference_found_for(schema, ref.sub, ref.version));
+            }
+            throw;
+        }
     }
 
     parser p;
@@ -467,8 +475,17 @@ ss::future<pb::FileDescriptorProto> import_schema(
         co_return co_await build_file_with_refs(
           dp, store, schema.share(), norm);
     } catch (const exception& e) {
+        // Rethrow if the schema is missing references
+        if (e.code() == error_code::schema_missing_reference) {
+            throw;
+        }
+        // Otherwise log the error details and throw an appropriate error for
+        // the response
         vlog(
-          srlog.warn, "Failed to decode schema {}: {}", schema.sub(), e.what());
+          srlog.warn,
+          "Failed to decode schema {}: {:?}",
+          schema.sub(),
+          e.what());
         throw as_exception(invalid_schema(schema));
     }
 }

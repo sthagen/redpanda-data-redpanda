@@ -1,0 +1,21 @@
+load("@rules_go//go:def.bzl", "go_library")
+
+go_library(
+    name = "mcp",
+    srcs = ["mcp.go"],
+    importpath = "github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cloud/mcp",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/go/rpk/pkg/config",
+        "//src/go/rpk/pkg/oauth",
+        "//src/go/rpk/pkg/oauth/providers/auth0",
+        "//src/go/rpk/pkg/out",
+        "//src/go/rpk/pkg/publicapi",
+        "@com_github_mark3labs_mcp_go//mcp",
+        "@com_github_mark3labs_mcp_go//server",
+        "@com_github_redpanda_data_common_go_proto//gen/go/redpanda/api/controlplane/v1/controlplanev1mcp",
+        "@com_github_spf13_afero//:afero",
+        "@com_github_spf13_cobra//:cobra",
+        "@com_github_tidwall_sjson//:sjson",
+    ],
+)

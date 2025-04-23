@@ -27,11 +27,23 @@ import (
 // CloudClientSet holds the respective service clients to interact with
 // the control plane endpoints of the Public API.
 type CloudClientSet struct {
-	Cluster       controlplanev1connect.ClusterServiceClient
-	Organization  iamv1connect.OrganizationServiceClient
-	ResourceGroup controlplanev1connect.ResourceGroupServiceClient
-	Serverless    controlplanev1connect.ServerlessClusterServiceClient
-	Operations    controlplanev1connect.OperationServiceClient
+	Region           controlplanev1connect.RegionServiceClient
+	Cluster          controlplanev1connect.ClusterServiceClient
+	Network          controlplanev1connect.NetworkServiceClient
+	Organization     iamv1connect.OrganizationServiceClient
+	ResourceGroup    controlplanev1connect.ResourceGroupServiceClient
+	Serverless       controlplanev1connect.ServerlessClusterServiceClient
+	Operations       controlplanev1connect.OperationServiceClient
+	ServerlessRegion controlplanev1connect.ServerlessRegionServiceClient
+
+	m         sync.RWMutex
+	authToken string
+}
+
+func (cpCl *CloudClientSet) Token() string {
+	cpCl.m.RLock()
+	defer cpCl.m.RUnlock()
+	return cpCl.authToken
 }
 
 // NewCloudClientSet creates a Public API client set with the service
@@ -40,9 +52,11 @@ func NewCloudClientSet(host, authToken string, opts ...connect.ClientOption) *Cl
 	if host == "" {
 		host = ControlPlaneProdURL
 	}
+	ccs := &CloudClientSet{}
+	ccs.authToken = authToken
 	opts = append([]connect.ClientOption{
 		connect.WithInterceptors(
-			newAuthInterceptor(authToken),              // Add the Bearer token.
+			newReloadingAuthInterceptor(ccs.Token),     // Add the Bearer token.
 			newLoggerInterceptor(),                     // Add logs to every request.
 			newAgentInterceptor(defaultRpkUserAgent()), // Add the User-Agent.
 		),
@@ -50,13 +64,21 @@ func NewCloudClientSet(host, authToken string, opts ...connect.ClientOption) *Cl
 
 	httpCl := &http.Client{Timeout: 30 * time.Second}
 
-	return &CloudClientSet{
-		Cluster:       controlplanev1connect.NewClusterServiceClient(httpCl, host, opts...),
-		Organization:  iamv1connect.NewOrganizationServiceClient(httpCl, host, opts...),
-		ResourceGroup: controlplanev1connect.NewResourceGroupServiceClient(httpCl, host, opts...),
-		Serverless:    controlplanev1connect.NewServerlessClusterServiceClient(httpCl, host, opts...),
-		Operations:    controlplanev1connect.NewOperationServiceClient(httpCl, host, opts...),
-	}
+	ccs.Cluster = controlplanev1connect.NewClusterServiceClient(httpCl, host, opts...)
+	ccs.Region = controlplanev1connect.NewRegionServiceClient(httpCl, host, opts...)
+	ccs.Network = controlplanev1connect.NewNetworkServiceClient(httpCl, host, opts...)
+	ccs.Organization = iamv1connect.NewOrganizationServiceClient(httpCl, host, opts...)
+	ccs.ResourceGroup = controlplanev1connect.NewResourceGroupServiceClient(httpCl, host, opts...)
+	ccs.Serverless = controlplanev1connect.NewServerlessClusterServiceClient(httpCl, host, opts...)
+	ccs.Operations = controlplanev1connect.NewOperationServiceClient(httpCl, host, opts...)
+	ccs.ServerlessRegion = controlplanev1connect.NewServerlessRegionServiceClient(httpCl, host, opts...)
+	return ccs
+}
+
+func (cpCl *CloudClientSet) UpdateAuthToken(authToken string) {
+	cpCl.m.Lock()
+	defer cpCl.m.Unlock()
+	cpCl.authToken = authToken
 }
 
 // ResourceGroupForID gets the resource group for a given ID and handles the

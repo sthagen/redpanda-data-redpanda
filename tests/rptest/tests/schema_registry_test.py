@@ -666,6 +666,22 @@ soft_deleted_schemas = {
         "type": "AVRO",
     }
 }
+
+not_dependent_schemas = {
+    "proto": {
+        "schema": schema_proto_def,
+        "type": "PROTOBUF",
+    },
+    "json": {
+        "schema": json_number_schema_def,
+        "type": "JSON",
+    },
+    "avro": {
+        "schema": schema_avro_def,
+        "type": "AVRO",
+    },
+}
+
 dependent_schemas = {
     "proto": {
         "subject":
@@ -3450,6 +3466,50 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         #Sanity check on normalized input
         test_subjects_subject(normalized, expected_version=2)
         test_subjects_subject(normalized, expected_version=2, norm=True)
+
+    @cluster(num_nodes=3)
+    @matrix(stype=["json", "proto"])
+    def test_missing_references(self, stype):
+        """
+        Missing references should return an error message with details of the missing reference
+        """
+
+        self._set_config(data=json.dumps({"compatibility": "NONE"}))
+
+        base_schema = not_dependent_schemas[stype]
+        schema = dependent_schemas[stype]
+        subject = schema["subject"]
+        ref_subject = schema["references"][0]["subject"]
+        ref_version = schema["references"][0]["version"]
+
+        result_raw = self._post_subjects_subject_versions(
+            subject=subject,
+            data=json.dumps({
+                "schema": base_schema["schema"],
+                "schemaType": base_schema["type"],
+            }))
+        assert result_raw.status_code == requests.codes.ok, \
+                f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup. "\
+                f"Request content: {result_raw.content}. Processing {stype}."
+
+        for endpoint in [
+                self._post_subjects_subject_versions,
+                self._post_subjects_subject
+        ]:
+            result_raw = endpoint(subject=subject,
+                                  data=json.dumps({
+                                      "schema":
+                                      schema["schema"],
+                                      "schemaType":
+                                      schema["type"],
+                                      "references":
+                                      schema["references"],
+                                  }))
+            assert result_raw.status_code == requests.codes.unprocessable_entity, \
+                    f"Expected {requests.codes.unprocessable_entity} but got {result_raw.status_code}. "\
+                    f"Request content: {result_raw.content}. Processing {type}."
+            assert f"No schema reference found for subject \"{ref_subject}\" and version {ref_version}" in result_raw.json()["message"], \
+                f"Expected result to contain missing references, but got {result_raw.json()}."
 
     @cluster(num_nodes=3)
     def test_soft_deleted_references(self):

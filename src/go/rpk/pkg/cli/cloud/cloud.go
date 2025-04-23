@@ -13,6 +13,7 @@ import (
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cloud/auth"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cloud/byoc"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cloud/cluster"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cloud/mcp"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/cloud/resourcegroup"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/spf13/afero"
@@ -26,6 +27,7 @@ func NewCommand(fs afero.Fs, p *config.Params, execFn func(string, []string) err
 	}
 
 	cmd.AddCommand(
+		mcp.NewCommand(fs, p),
 		auth.NewCommand(fs, p),
 		byoc.NewCommand(fs, p, execFn),
 		cluster.NewCommand(fs, p),

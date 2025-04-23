@@ -560,11 +560,19 @@ ss::future<collected_schema> collect_schema(
   ss::sstring name,
   subject_schema schema) {
     for (const auto& ref : schema.def().refs()) {
-        if (!collected.contains(ref.name)) {
-            auto ss = co_await store.get_subject_schema(
-              ref.sub, ref.version, include_deleted::yes);
-            collected = co_await collect_schema(
-              store, std::move(collected), ref.name, std::move(ss.schema));
+        if (name != ref.name && !collected.contains(ref.name)) {
+            try {
+                auto ss = co_await store.get_subject_schema(
+                  ref.sub, ref.version, include_deleted::yes);
+                collected = co_await collect_schema(
+                  store, std::move(collected), ref.name, std::move(ss.schema));
+            } catch (const exception& e) {
+                if (failed_subject_schema_lookup(e.code())) {
+                    throw as_exception(
+                      no_reference_found_for(schema, ref.sub, ref.version));
+                }
+                throw;
+            }
         }
     }
     collected.insert(std::move(name), std::move(schema).def());
@@ -634,6 +642,22 @@ sanitize_avro_schema_definition(schema_definition def) {
       schema_definition::raw_string{std::move(buf).as_iobuf()},
       schema_type::avro,
       def.refs()};
+}
+
+ss::future<subject_schema> make_canonical_avro_schema(
+  schema_getter&, subject_schema unparsed_schema, normalize norm) {
+    auto [sub, unparsed] = std::move(unparsed_schema).destructure();
+    auto [def, type, refs] = std::move(unparsed).destructure();
+    if (norm) {
+        std::sort(refs.begin(), refs.end());
+        refs.erase(std::unique(refs.begin(), refs.end()), refs.end());
+    }
+    schema_definition schema{std::move(def), type, std::move(refs)};
+    // TODO: Check references
+    // co_await collect_schema(store, {}, sub, {sub, schema.share()});
+    co_return subject_schema{
+      std::move(sub),
+      sanitize_avro_schema_definition(std::move(schema)).value()};
 }
 
 compatibility_result check_compatible(

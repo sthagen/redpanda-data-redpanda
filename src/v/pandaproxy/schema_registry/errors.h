@@ -201,4 +201,9 @@ inline error_info versions_exhausted(const subject& sub) {
       fmt::format("Versions exhausted for subject {}", sub())};
 }
 
+inline bool failed_subject_schema_lookup(std::error_code ec) {
+    return ec == error_code::subject_not_found
+           || ec == error_code::subject_version_not_found;
+}
+
 } // namespace pandaproxy::schema_registry

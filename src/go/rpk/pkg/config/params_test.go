@@ -92,6 +92,7 @@ rpk:
 `,
 			mutate: func(c *RedpandaYaml) {
 				c.Rpk.KafkaAPI.Brokers = []string{"127.0.1.1:9647"}
+				c.Rpk.SR.Addresses = []string{"200.4.2.1:8081"}
 			},
 			exp: `rpk:
     kafka_api:
@@ -105,7 +106,7 @@ rpk:
             - 122.65.33.12:4444
     schema_registry:
         addresses:
-            - 127.0.0.1:8081
+            - 200.4.2.1:8081
 `,
 		},
 		{
@@ -353,6 +354,9 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					AdminAPI: RpkAdminAPI{
 						Addresses: []string{"bar:9644"},
 					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{"baz:8082"},
+					},
 				},
 			},
 			expCfg: &RedpandaYaml{
@@ -371,12 +375,14 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					AdminAPI: RpkAdminAPI{
 						Addresses: []string{"bar:9644"},
 					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{"baz:8082"},
+					},
 				},
 			},
 		},
-
 		{
-			name: "kafka broker and admin api from redpanda",
+			name: "kafka broker, admin api and SR from redpanda.yaml",
 			inCfg: &RedpandaYaml{
 				Redpanda: RedpandaNodeConfig{
 					KafkaAPI: []NamedAuthNSocketAddress{
@@ -384,6 +390,11 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					},
 					AdminAPI: []NamedSocketAddress{
 						{Address: "0.0.2.3", Port: 4444},
+					},
+				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "9.12.10.1", Port: 5522},
 					},
 				},
 			},
@@ -396,6 +407,11 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 						{Address: "0.0.2.3", Port: 4444},
 					},
 				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "9.12.10.1", Port: 5522},
+					},
+				},
 				Rpk: RpkNodeConfig{
 					KafkaAPI: RpkKafkaAPI{
 						Brokers: []string{"250.12.12.12:9095"},
@@ -403,10 +419,12 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					AdminAPI: RpkAdminAPI{
 						Addresses: []string{"0.0.2.3:4444"},
 					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{"9.12.10.1:5522"},
+					},
 				},
 			},
 		},
-
 		{
 			name: "admin api sorted, no TLS used because we have non-TLS servers",
 			inCfg: &RedpandaYaml{
@@ -435,6 +453,20 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					},
 					AdminAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
 				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "10.1.0.1", Port: 2222, Name: "tls"}, // same as above, numbers in addr/port slightly changed
+						{Address: "127.1.0.1", Port: 2222, Name: "tls"},
+						{Address: "localhost", Port: 2222, Name: "tls"},
+						{Address: "122.61.33.12", Port: 2222, Name: "tls"},
+						{Address: "10.1.2.1", Port: 8888},
+						{Address: "127.1.2.1", Port: 8888},
+						{Address: "localhost", Port: 8888},
+						{Address: "122.61.32.12", Port: 8888},
+						{Address: "0.0.0.0", Port: 8888},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
+				},
 			},
 			expCfg: &RedpandaYaml{
 				Redpanda: RedpandaNodeConfig{
@@ -462,6 +494,20 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					},
 					AdminAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
 				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "10.1.0.1", Port: 2222, Name: "tls"},
+						{Address: "127.1.0.1", Port: 2222, Name: "tls"},
+						{Address: "localhost", Port: 2222, Name: "tls"},
+						{Address: "122.61.33.12", Port: 2222, Name: "tls"},
+						{Address: "10.1.2.1", Port: 8888},
+						{Address: "127.1.2.1", Port: 8888},
+						{Address: "localhost", Port: 8888},
+						{Address: "122.61.32.12", Port: 8888},
+						{Address: "0.0.0.0", Port: 8888},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
+				},
 				Rpk: RpkNodeConfig{
 					KafkaAPI: RpkKafkaAPI{
 						Brokers: []string{
@@ -480,12 +526,20 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 							"122.65.32.12:7777", // public
 						},
 					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{
+							"localhost:8888",
+							"127.1.2.1:8888",
+							"127.0.0.1:8888",
+							"10.1.2.1:8888",
+							"122.61.32.12:8888",
+						},
+					},
 				},
 			},
 		},
-
 		{
-			name: "broker and admin api sorted with TLS and MTLS",
+			name: "broker, admin api, and SR sorted with TLS and MTLS",
 			inCfg: &RedpandaYaml{
 				Redpanda: RedpandaNodeConfig{
 					KafkaAPI: []NamedAuthNSocketAddress{
@@ -515,6 +569,22 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					AdminAPITLS: []ServerTLS{
 						{Name: "mtls", Enabled: true, RequireClientAuth: true},
 						{Name: "tls", Enabled: true},
+					},
+				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "10.1.0.1", Port: 3333, Name: "mtls"},
+						{Address: "127.1.0.1", Port: 3333, Name: "mtls"},
+						{Address: "localhost", Port: 3333, Name: "mtls"},
+						{Address: "122.61.33.12", Port: 3333, Name: "mtls"},
+						{Address: "10.1.0.1", Port: 8888, Name: "tls"},
+						{Address: "127.1.0.1", Port: 8888, Name: "tls"},
+						{Address: "localhost", Port: 8888, Name: "tls"},
+						{Address: "122.61.33.12", Port: 8888, Name: "tls"},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{
+						{Name: "tls", Enabled: true},
+						{Name: "mtls", Enabled: true, RequireClientAuth: true},
 					},
 				},
 			},
@@ -549,6 +619,22 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 						{Name: "tls", Enabled: true},
 					},
 				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "10.1.0.1", Port: 3333, Name: "mtls"},
+						{Address: "127.1.0.1", Port: 3333, Name: "mtls"},
+						{Address: "localhost", Port: 3333, Name: "mtls"},
+						{Address: "122.61.33.12", Port: 3333, Name: "mtls"},
+						{Address: "10.1.0.1", Port: 8888, Name: "tls"},
+						{Address: "127.1.0.1", Port: 8888, Name: "tls"},
+						{Address: "localhost", Port: 8888, Name: "tls"},
+						{Address: "122.61.33.12", Port: 8888, Name: "tls"},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{
+						{Name: "tls", Enabled: true},
+						{Name: "mtls", Enabled: true, RequireClientAuth: true},
+					},
+				},
 				Rpk: RpkNodeConfig{
 					KafkaAPI: RpkKafkaAPI{
 						Brokers: []string{
@@ -566,12 +652,19 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 							"122.61.33.9:4444",
 						},
 					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{
+							"localhost:8888",
+							"127.1.0.1:8888",
+							"10.1.0.1:8888",
+							"122.61.33.12:8888",
+						},
+					},
 				},
 			},
 		},
-
 		{
-			name: "broker and admin api sorted with TLS",
+			name: "broker, admin api, and SR sorted with TLS",
 			inCfg: &RedpandaYaml{
 				Redpanda: RedpandaNodeConfig{
 					KafkaAPI: []NamedAuthNSocketAddress{
@@ -588,6 +681,15 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 						{Address: "122.65.33.12", Port: 4444, Name: "tls"},
 					},
 					AdminAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
+				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "10.1.0.1", Port: 7777, Name: "tls"},
+						{Address: "127.1.0.1", Port: 7777, Name: "tls"},
+						{Address: "localhost", Port: 7777, Name: "tls"},
+						{Address: "122.61.33.12", Port: 7777, Name: "tls"},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
 				},
 			},
 			expCfg: &RedpandaYaml{
@@ -607,6 +709,15 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					},
 					AdminAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
 				},
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "10.1.0.1", Port: 7777, Name: "tls"},
+						{Address: "127.1.0.1", Port: 7777, Name: "tls"},
+						{Address: "localhost", Port: 7777, Name: "tls"},
+						{Address: "122.61.33.12", Port: 7777, Name: "tls"},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
+				},
 				Rpk: RpkNodeConfig{
 					KafkaAPI: RpkKafkaAPI{
 						Brokers: []string{
@@ -624,12 +735,19 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 							"122.65.33.12:4444",
 						},
 					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{
+							"localhost:7777",
+							"127.1.0.1:7777",
+							"10.1.0.1:7777",
+							"122.61.33.12:7777",
+						},
+					},
 				},
 			},
 		},
-
 		{
-			name: "assume the admin API when only Kafka API is available",
+			name: "assume the admin API and SR when only Kafka API is available",
 			inCfg: &RedpandaYaml{
 				Redpanda: RedpandaNodeConfig{
 					KafkaAPI: []NamedAuthNSocketAddress{
@@ -656,12 +774,55 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 							"127.1.0.1:9644",
 						},
 					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{
+							"127.1.0.1:8081",
+						},
+					},
 				},
 			},
 		},
-
 		{
-			name: "assume the Kafka API API when only admin API is available from rpk with TLS",
+			name: "assume the admin API and Kafka API when only schema registry is available",
+			inCfg: &RedpandaYaml{
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "localhost", Port: 8888},
+						{Address: "127.0.0.1", Port: 8888},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
+				},
+			},
+			expCfg: &RedpandaYaml{
+				SchemaRegistry: &SchemaRegistry{
+					SchemaRegistryAPI: []NamedAuthNSocketAddress{
+						{Address: "localhost", Port: 8888},
+						{Address: "127.0.0.1", Port: 8888},
+					},
+					SchemaRegistryAPITLS: []ServerTLS{{Name: "tls", Enabled: true}},
+				},
+				Rpk: RpkNodeConfig{
+					KafkaAPI: RpkKafkaAPI{
+						Brokers: []string{
+							"localhost:9092", // we only use the first one to infer.
+						},
+					},
+					AdminAPI: RpkAdminAPI{
+						Addresses: []string{
+							"localhost:9644",
+						},
+					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{
+							"localhost:8888",
+							"127.0.0.1:8888",
+						},
+					},
+				},
+			},
+		},
+		{
+			name: "assume the Kafka API API and SR when only admin API is available from rpk with TLS",
 			inCfg: &RedpandaYaml{
 				Rpk: RpkNodeConfig{
 					AdminAPI: RpkAdminAPI{
@@ -678,6 +839,10 @@ func TestAddUnsetRedpandaDefaults(t *testing.T) {
 					},
 					AdminAPI: RpkAdminAPI{
 						Addresses: []string{"127.1.0.1:5555"},
+						TLS:       new(TLS),
+					},
+					SR: RpkSchemaRegistryAPI{
+						Addresses: []string{"127.1.0.1:8081"},
 						TLS:       new(TLS),
 					},
 				},

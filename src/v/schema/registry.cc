@@ -126,23 +126,18 @@ registry::get_valid_schema(ppsr::schema_id schema_id) const {
             co_return std::nullopt;
         }
     }
-    auto& schema_def = *schema_def_opt;
-    auto schema_type = schema_def.type();
-    switch (schema_type) {
+    switch (schema_def_opt->type()) {
     case ppsr::schema_type::json: {
         co_return co_await ppsr::make_json_schema_definition(
-          *reader,
-          {ppsr::subject("r"), {std::move(schema_def).raw(), schema_type}});
+          *reader, {ppsr::subject("r"), std::move(*schema_def_opt)});
     }
     case ppsr::schema_type::avro: {
         co_return co_await ppsr::make_avro_schema_definition(
-          *reader,
-          {ppsr::subject("r"), {std::move(schema_def).raw(), schema_type}});
+          *reader, {ppsr::subject("r"), std::move(*schema_def_opt)});
     }
     case ppsr::schema_type::protobuf: {
         co_return co_await ppsr::make_protobuf_schema_definition(
-          *reader,
-          {ppsr::subject("r"), {std::move(schema_def).raw(), schema_type}});
+          *reader, {ppsr::subject("r"), std::move(*schema_def_opt)});
     }
     }
 }

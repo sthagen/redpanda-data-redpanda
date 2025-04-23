@@ -360,7 +360,7 @@ const std::array test_reference_cases = {
   test_references_data{
     {{{referenced.share(), {}},
       {referencer_wrong_sub.share(),
-       {pps::error_code::schema_empty,
+       {pps::error_code::schema_missing_reference,
         R"(Invalid schema {subject=referencer,version=0,id=-1,schemaType=JSON,references=[{name='example.com/referenced.json', subject='wrong_sub', version=1}],metadata=null,ruleSet=null,schema={
   "description": "A schema that references the base schema",
   "type": "object",

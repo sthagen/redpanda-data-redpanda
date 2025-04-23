@@ -222,7 +222,7 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
         // reconfigurations. Therefore waiting until there is no on-going
         // updates will let us know if the previous partition movements have
         // finished.
-        RPTEST_REQUIRE_EVENTUALLY_CORO(30s, [&topic_table] {
+        co_await tests::cooperative_spin_wait_with_timeout(30s, [&topic_table] {
             return !topic_table.has_updates_in_progress();
         });
 
@@ -260,8 +260,7 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
 
     // Creates a topic with a single partition that is on shard 0.
     ss::future<model::topic> initialize_single_partition_topic() {
-        auto t = co_await create_topic(
-          {model::broker_shard{model::node_id{0}, 0}});
+        auto t = co_await create_topic({model::broker_shard{this_node(), 0}});
         co_await produce_to_topic(t, 1, 1);
         co_return t;
     }
@@ -272,12 +271,14 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
         vassert(ss::smp::count >= 2, "requires at least 2 shards");
 
         auto t = co_await create_topic({
-          model::broker_shard{model::node_id{0}, 0},
-          model::broker_shard{model::node_id{0}, 1},
+          model::broker_shard{this_node(), 0},
+          model::broker_shard{this_node(), 1},
         });
         co_await produce_to_topic(t, 2, 1);
         co_return t;
     }
+
+    auto this_node() { return config::node().node_id().value(); }
 
     scoped_config test_local_cfg;
 };

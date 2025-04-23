@@ -33,6 +33,15 @@ func newAuthInterceptor(token string) connect.UnaryInterceptorFunc {
 	}
 }
 
+func newReloadingAuthInterceptor(f func() string) connect.UnaryInterceptorFunc {
+	return func(next connect.UnaryFunc) connect.UnaryFunc {
+		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
+			req.Header().Set("Authorization", fmt.Sprintf("Bearer %s", f()))
+			return next(ctx, req)
+		}
+	}
+}
+
 func newLoggerInterceptor() connect.UnaryInterceptorFunc {
 	return func(next connect.UnaryFunc) connect.UnaryFunc {
 		return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {

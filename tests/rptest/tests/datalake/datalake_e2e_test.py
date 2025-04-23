@@ -513,6 +513,112 @@ class DatalakeE2ETests(RedpandaTest):
                 assert spark_describe_out == spark_expected_out, str(
                     spark_describe_out)
 
+    @cluster(num_nodes=3)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            query_engine=[QueryEngineType.SPARK],
+            catalog_type=[CatalogType.REST_JDBC])
+    def test_protobuf_references(self, cloud_storage_type, query_engine,
+                                 catalog_type):
+        proto_addr = """
+syntax = "proto3";
+
+message Address {
+  string street = 1;
+  string city = 2;
+  string state = 3;
+  string zip = 4;
+}
+"""
+        # NOTE: Person references Address.
+        proto_person = """
+syntax = "proto3";
+import "address.proto";
+
+message Person {
+  string name = 1;
+  Address address = 2;
+}"""
+        protobuf_file_descriptor = """
+name: "example.proto"
+message_type {
+  name: "Address"
+  field { name: "street" number: 1 label: LABEL_OPTIONAL type: TYPE_STRING }
+  field { name: "city" number: 2 label: LABEL_OPTIONAL type: TYPE_STRING }
+  field { name: "state" number: 3 label: LABEL_OPTIONAL type: TYPE_STRING }
+  field { name: "zip" number: 4 label: LABEL_OPTIONAL type: TYPE_STRING }
+}
+message_type {
+  name: "Person"
+  field { name: "name" number: 1 label: LABEL_OPTIONAL type: TYPE_STRING }
+  field { name: "address" number: 2 label: LABEL_OPTIONAL type: TYPE_MESSAGE type_name: ".Address" }
+}
+"""
+        # Using the protobuf text format, parse the raw descriptor and create a
+        # dynamic message from it.
+        file_desc_pb = protobuf.descriptor_pb2.FileDescriptorProto()
+        pb_text_format.Merge(protobuf_file_descriptor, file_desc_pb)
+        pool = protobuf.descriptor_pool.DescriptorPool()
+        pool.Add(file_desc_pb)
+        factory = protobuf.message_factory.MessageFactory(pool)
+        person_desc = pool.FindMessageTypeByName("Person")
+        Person = factory.GetPrototype(person_desc)
+        count = 100
+
+        def produce_protos():
+            producer = Producer({'bootstrap.servers': self.redpanda.brokers()})
+            for i in range(count):
+                record = json.dumps({
+                    "name": f"Bob{i} Protopants",
+                    "address": {
+                        "street": f"{i} Main St.",
+                        "city": "Protoville" if i % 2 == 0 else "Buftown",
+                        "state": "District 13" if i % 3 == 0 else "Hooli",
+                        "zip": "8675309" if i % 4 == 0 else "12345"
+                    }
+                })
+                person_proto = Person()
+                pb_json_format.Parse(record, person_proto)
+                producer.produce(topic=self.topic_name,
+                                 value=person_proto.SerializeToString())
+            producer.flush()
+
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              include_query_engines=[query_engine],
+                              catalog_type=catalog_type) as dl:
+            rpk = RpkTool(self.redpanda)
+
+            subj_person = "subject_for_person"
+            subj_addr = "subject_for_addr"
+            rpk.create_schema_from_str(subj_addr, proto_addr, "proto")  # ID 1
+            rpk.create_schema_from_str(
+                subj_person,
+                proto_person,
+                "proto",
+                references=f"address.proto:{subj_addr}:1")  # ID 2
+            dl.create_iceberg_enabled_topic(
+                self.topic_name,
+                iceberg_mode=
+                f"value_schema_latest:subject={subj_person},protobuf_name=Person"
+            )
+            produce_protos()
+            dl.wait_for_translation(self.topic_name, msg_count=count)
+
+            table_name = f"redpanda.{self.topic_name}"
+            spark = dl.spark()
+            spark_expected_out = [
+                ('redpanda', 'struct<partition:int,offset:bigint,timestamp:timestamp_ntz,headers:array<struct<key:binary,value:binary>>,key:binary>', None),
+                ('name', 'string', None),
+                ('address', 'struct<street:string,city:string,state:string,zip:string>', None),
+                ('', '', ''),
+                ('# Partitioning', '', ''),
+                ('Part 0', 'hours(redpanda.timestamp)', '')
+            ] # yapf: disable
+            spark_describe_out = spark.run_query_fetch_all(
+                f"describe {table_name}")
+            assert spark_describe_out == spark_expected_out, str(
+                spark_describe_out)
+
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())

@@ -23,6 +23,9 @@ make_avro_schema_definition(schema_getter& store, subject_schema schema);
 result<schema_definition>
 sanitize_avro_schema_definition(schema_definition def);
 
+ss::future<subject_schema> make_canonical_avro_schema(
+  schema_getter& store, subject_schema schema, normalize norm = normalize::no);
+
 compatibility_result check_compatible(
   const avro_schema_definition& reader,
   const avro_schema_definition& writer,

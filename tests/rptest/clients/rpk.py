@@ -1717,11 +1717,12 @@ class RpkTool:
     def create_schema_from_str(self,
                                subject: str,
                                schema: str,
-                               schema_suffix="avro"):
+                               schema_suffix="avro",
+                               references=None):
         with tempfile.NamedTemporaryFile(suffix=f".{schema_suffix}") as tf:
             tf.write(bytes(schema, 'UTF-8'))
             tf.flush()
-            return self.create_schema(subject, tf.name)
+            return self.create_schema(subject, tf.name, references)
 
     def get_schema(self,
                    subject=None,

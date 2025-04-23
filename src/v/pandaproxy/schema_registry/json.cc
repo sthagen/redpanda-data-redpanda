@@ -233,9 +233,7 @@ ss::future<> check_references(sharded_store& store, subject_schema schema) {
     for (const auto& ref : schema.def().refs()) {
         co_await store.get_id(ref.sub, ref.version)
           .handle_exception_type([&](const exception& e) -> schema_id {
-              if (
-                e.code() == error_code::subject_not_found
-                || e.code() == error_code::schema_id_not_found) {
+              if (failed_subject_schema_lookup(e.code())) {
                   throw as_exception(
                     no_reference_found_for(schema, ref.sub, ref.version));
               }

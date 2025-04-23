@@ -1612,24 +1612,88 @@ func (c *Config) addUnsetRedpandaDefaults(actual bool) {
 		src.Redpanda.AdminAPITLS,
 		&dst.Rpk.AdminAPI.Addresses,
 	)
-
-	if len(dst.Rpk.KafkaAPI.Brokers) == 0 && len(dst.Rpk.AdminAPI.Addresses) > 0 {
-		_, host, _, err := rpknet.SplitSchemeHostPort(dst.Rpk.AdminAPI.Addresses[0])
-		if err == nil {
-			host = net.JoinHostPort(host, strconv.Itoa(DefaultKafkaPort))
-			dst.Rpk.KafkaAPI.Brokers = []string{host}
-			dst.Rpk.KafkaAPI.TLS = dst.Rpk.AdminAPI.TLS
-		}
+	if src.SchemaRegistry != nil {
+		defaultFromRedpanda(
+			namedAuthnToNamed(src.SchemaRegistry.SchemaRegistryAPI),
+			src.SchemaRegistry.SchemaRegistryAPITLS,
+			&dst.Rpk.SR.Addresses,
+		)
 	}
 
-	if len(dst.Rpk.AdminAPI.Addresses) == 0 && len(dst.Rpk.KafkaAPI.Brokers) > 0 {
-		_, host, _, err := rpknet.SplitSchemeHostPort(dst.Rpk.KafkaAPI.Brokers[0])
-		if err == nil {
-			host = net.JoinHostPort(host, strconv.Itoa(DefaultAdminPort))
-			dst.Rpk.AdminAPI.Addresses = []string{host}
-			dst.Rpk.AdminAPI.TLS = dst.Rpk.KafkaAPI.TLS
+	// If only one listener is set, infer the others using its address, TLS
+	// config, and default ports. This isn't perfect, but it's a reasonable
+	// fallback.
+
+	// This list defines a set of sources we can use to infer the others.
+	// Each entry includes the source address list, its TLS config, and a list
+	// of "setters" — where each setter is a target to populate if it's empty.
+	type setter struct {
+		dstAddress *[]string
+		dstTLS     **TLS
+		defPort    int
+	}
+	srcs := []struct {
+		srcAddrs []string
+		srcTLS   *TLS
+		setters  []setter
+	}{
+		{
+			srcAddrs: dst.Rpk.KafkaAPI.Brokers,
+			srcTLS:   dst.Rpk.KafkaAPI.TLS,
+			setters: []setter{
+				{&dst.Rpk.AdminAPI.Addresses, &dst.Rpk.AdminAPI.TLS, DefaultAdminPort},
+				{&dst.Rpk.SR.Addresses, &dst.Rpk.SR.TLS, DefaultSchemaRegPort},
+			},
+		},
+		{
+			srcAddrs: dst.Rpk.AdminAPI.Addresses,
+			srcTLS:   dst.Rpk.AdminAPI.TLS,
+			setters: []setter{
+				{&dst.Rpk.KafkaAPI.Brokers, &dst.Rpk.KafkaAPI.TLS, DefaultKafkaPort},
+				{&dst.Rpk.SR.Addresses, &dst.Rpk.SR.TLS, DefaultSchemaRegPort},
+			},
+		},
+		{
+			srcAddrs: dst.Rpk.SR.Addresses,
+			srcTLS:   dst.Rpk.SR.TLS,
+			setters: []setter{
+				{&dst.Rpk.KafkaAPI.Brokers, &dst.Rpk.KafkaAPI.TLS, DefaultKafkaPort},
+				{&dst.Rpk.AdminAPI.Addresses, &dst.Rpk.AdminAPI.TLS, DefaultAdminPort},
+			},
+		},
+	}
+
+	// Loop through the sources in priority order:
+	//   Kafka > Admin > Schema Registry.
+	// Use the first one that has addresses configured to infer the others.
+	for _, src := range srcs {
+		if len(src.srcAddrs) == 0 {
+			continue
+		}
+		for _, setter := range src.setters {
+			if len(*setter.dstAddress) == 0 {
+				// Only update the target if it hasn't been set already.
+				inferAddress(src.srcAddrs, setter.defPort, src.srcTLS, setter.dstAddress, setter.dstTLS)
+			}
 		}
 	}
+}
+
+// inferAddress uses the first address in 'from' to infer a target listener
+// address. It joins the host with the given port, and assigns the result to
+// the target addresses and TLS config pointers.
+func inferAddress(from []string, defaultPort int, tlsCfg *TLS, target *[]string, targetTLS **TLS) {
+	if len(from) == 0 {
+		return
+	}
+	_, host, _, err := rpknet.SplitSchemeHostPort(from[0])
+	if err != nil {
+		return
+	}
+	addr := net.JoinHostPort(host, strconv.Itoa(defaultPort))
+
+	*target = []string{addr}
+	*targetTLS = tlsCfg
 }
 
 func (c *Config) fixSchemePorts() error {

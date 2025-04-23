@@ -353,7 +353,6 @@ def redpanda_cc_bench(
         duration = None,
         data = [],
         tags = [],
-        target_compatible_with = [],
         redirect_stderr = False):
     """
     Create a seastar benchmark target
@@ -372,7 +371,6 @@ def redpanda_cc_bench(
       data: any data files available to the benchmark as runfiles
       tags: custom tags for the test
       timeout: the timeout for smoke testing the benchmark
-      target_compatible_with: constraints for the test target
       redirect_stderr: if True, redirects stdout (seastar logging, mostly) to a file
                        so that it does not overwhelm the result output
     """
@@ -458,5 +456,4 @@ def redpanda_cc_bench(
         env = env | test_env,
         args = args + ["--iterations=1 --runs=1 --duration=0 --no-stdout --overprovisioned"],
         data = [":" + binary_name] + data + test_data,
-        target_compatible_with = target_compatible_with,
     )

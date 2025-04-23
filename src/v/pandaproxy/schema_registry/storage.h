@@ -22,6 +22,7 @@
 #include "pandaproxy/json/rjson_util.h"
 #include "pandaproxy/logger.h"
 #include "pandaproxy/schema_registry/error.h"
+#include "pandaproxy/schema_registry/errors.h"
 #include "pandaproxy/schema_registry/exceptions.h"
 #include "pandaproxy/schema_registry/seq_writer.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
@@ -1479,9 +1480,7 @@ struct consume_to_store {
                     // tombstone all the records referring to a particular
                     // version, we will see more than one get applied, and
                     // after the first one, the rest will not find it.
-                    if (
-                      e.code() == error_code::subject_not_found
-                      || e.code() == error_code::subject_version_not_found) {
+                    if (failed_subject_schema_lookup(e.code())) {
                         vlog(
                           srlog.debug,
                           "Ignoring tombstone at offset={}, subject or version "

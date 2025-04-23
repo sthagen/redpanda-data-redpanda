@@ -208,6 +208,71 @@ TEST_F(RecordSchemaResolverTest, TestProtobufSchemaHappyPathNested) {
     EXPECT_EQ(resolved_buf.type->type, expected_type);
 }
 
+TEST_F(RecordSchemaResolverTest, TestProtobufSchemaReferences) {
+    constexpr std::string_view pb_simple_schema = R"(
+syntax = "proto2";
+message SimpleMessage {
+  optional string label = 1;
+  optional int32 number = 2;
+  optional int64 big_number = 3;
+}
+)";
+    constexpr std::string_view pb_references_schema = R"(
+syntax = "proto2";
+import "simple.proto";
+
+message NestedMessage {
+  optional string label = 1;
+  optional SimpleMessage simple = 2;
+}
+)";
+    auto pb_schema_id = sr
+                          ->create_schema(subject_schema{
+                            subject{"simple_schema"},
+                            schema_definition{
+                              pb_simple_schema, schema_type::protobuf}})
+                          .get();
+    ASSERT_EQ(5, pb_schema_id());
+    pb_schema_id = sr->create_schema(subject_schema{
+                                       subject{"references_schema"},
+                                       schema_definition{
+                                         pb_references_schema,
+                                         schema_type::protobuf,
+                                         {schema_reference{
+                                           .name = "simple.proto",
+                                           .sub = subject{"simple_schema"},
+                                           .version = schema_version{0}}}}})
+                     .get();
+    ASSERT_EQ(6, pb_schema_id());
+    std::vector<int32_t> pb_offsets{};
+    iobuf buf;
+    buf.append("\0\0\0\0\6", 5);
+    buf.append(encode_pb_offsets(pb_offsets));
+    buf.append(generate_dummy_body());
+
+    auto resolver = record_schema_resolver(*sr);
+    auto res = resolver.resolve_buf_type(buf.copy()).get();
+    ASSERT_FALSE(res.has_error());
+    auto& resolved_buf = res.value();
+    ASSERT_TRUE(resolved_buf.type.has_value());
+    const auto expected_type = field_type{[] {
+        auto expected_struct = struct_type{};
+        expected_struct.fields.emplace_back(
+          nested_field::create(1, "label", field_required::no, string_type{}));
+        auto simple_struct = struct_type{};
+        simple_struct.fields.emplace_back(
+          nested_field::create(1, "label", field_required::no, string_type{}));
+        simple_struct.fields.emplace_back(
+          nested_field::create(2, "number", field_required::no, int_type{}));
+        simple_struct.fields.emplace_back(nested_field::create(
+          3, "big_number", field_required::no, long_type{}));
+        expected_struct.fields.emplace_back(nested_field::create(
+          2, "simple", field_required::no, std::move(simple_struct)));
+        return expected_struct;
+    }()};
+    EXPECT_EQ(resolved_buf.type->type, expected_type);
+}
+
 TEST_F(RecordSchemaResolverTest, TestProtobufSchemaHappyPathNoOffsets) {
     // Kakfa magic byte + schema ID + _empty_ pb offsets.
     iobuf buf;

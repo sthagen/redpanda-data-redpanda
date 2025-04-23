@@ -716,7 +716,9 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
     } catch (exception& e) {
         constexpr auto reportable = [](std::error_code ec) {
             constexpr std::array errors{
-              error_code::schema_invalid, error_code::schema_empty};
+              error_code::schema_invalid,
+              error_code::schema_empty,
+              error_code::schema_missing_reference};
             return absl::c_any_of(
               errors, [ec](error_code e) { return ec == e; });
         };

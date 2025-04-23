@@ -13,6 +13,7 @@ go_library(
         "//src/go/rpk/pkg/cli/cloud/auth",
         "//src/go/rpk/pkg/cli/cloud/byoc",
         "//src/go/rpk/pkg/cli/cloud/cluster",
+        "//src/go/rpk/pkg/cli/cloud/mcp",
         "//src/go/rpk/pkg/cli/cloud/resourcegroup",
         "//src/go/rpk/pkg/cli/container/common",
         "//src/go/rpk/pkg/cli/profile",

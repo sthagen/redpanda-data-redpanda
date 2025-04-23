@@ -135,7 +135,9 @@ SEASTAR_THREAD_TEST_CASE(test_protobuf_imported_failure) {
       pps::make_protobuf_schema_definition(store.store, schema1.share()).get(),
       pps::exception,
       [](const pps::exception& ex) {
-          return ex.code() == pps::error_code::schema_invalid;
+          return ex.code() == pps::error_code::schema_missing_reference
+                 && std::string_view(ex.message())
+                      .contains("No schema reference found for subject");
       });
 }
 
