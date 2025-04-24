@@ -15,6 +15,7 @@ from enum import Enum
 class QueryEngineType(str, Enum):
     SPARK = 'spark'
     TRINO = 'trino'
+    DATABRICKS_SQL = 'databricks_sql'
 
 
 class QueryEngineBase(ABC):
@@ -26,10 +27,18 @@ class QueryEngineBase(ABC):
 
     @abstractmethod
     def make_client(self):
+        """
+        A PEP 249 compliant client connection object.
+        See https://peps.python.org/pep-0249/#connection-objects
+        """
         raise NotImplementedError
 
     @contextmanager
     def run_query(self, query):
+        """
+        A PEP 249 compliant cursor object.
+        See https://peps.python.org/pep-0249/#cursor-objects
+        """
         client = self.make_client()
         assert client
         self.logger.debug(f"running query: {query}")

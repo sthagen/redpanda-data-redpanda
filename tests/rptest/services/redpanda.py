@@ -476,6 +476,7 @@ class SISettings:
     These settings are altered in RedpandaTest if running on AWS.
     """
     GLOBAL_CLOUD_STORAGE_CRED_SOURCE_KEY = "cloud_store_cred_source"
+    GLOBAL_S3_BUCKET = "s3_bucket"
     GLOBAL_S3_ACCESS_KEY = "s3_access_key"
     GLOBAL_S3_SECRET_KEY = "s3_secret_key"
     GLOBAL_S3_REGION_KEY = "s3_region"
@@ -697,6 +698,8 @@ class SISettings:
             return
         cloud_storage_credentials_source = test_context.globals.get(
             self.GLOBAL_CLOUD_STORAGE_CRED_SOURCE_KEY, 'config_file')
+        cloud_storage_bucket = test_context.globals.get(
+            self.GLOBAL_S3_BUCKET, None)
         cloud_storage_access_key = test_context.globals.get(
             self.GLOBAL_S3_ACCESS_KEY, None)
         cloud_storage_secret_key = test_context.globals.get(
@@ -739,6 +742,12 @@ class SISettings:
             self.cloud_storage_region = cloud_storage_region
             self.cloud_storage_api_endpoint_port = 443
             self.addressing_style = S3AddressingStyle.VIRTUAL
+
+            if cloud_storage_bucket:
+                logger.info(
+                    f"Using bucket name from globals: {cloud_storage_bucket}")
+                self.bypass_bucket_creation = True
+                self._cloud_storage_bucket = cloud_storage_bucket
         else:
             logger.info('No AWS credentials supplied, assuming minio defaults')
 

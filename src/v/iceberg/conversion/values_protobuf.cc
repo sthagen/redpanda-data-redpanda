@@ -260,12 +260,12 @@ ss::future<optional_value_outcome> single_field_to_value(
           field_descriptor,
           &pb::FieldDescriptor::default_value_float);
     case pb::FieldDescriptor::TYPE_UINT32:
+    case pb::FieldDescriptor::TYPE_FIXED32:
         // casting uint32 to long value to prevent overflow
         co_return convert<uint32_t, iceberg::long_value>(
           std::move(field),
           field_descriptor,
           &pb::FieldDescriptor::default_value_uint32);
-    case pb::FieldDescriptor::TYPE_FIXED32:
     case pb::FieldDescriptor::TYPE_SFIXED64:
     case pb::FieldDescriptor::TYPE_INT64:
     case pb::FieldDescriptor::TYPE_SINT64:

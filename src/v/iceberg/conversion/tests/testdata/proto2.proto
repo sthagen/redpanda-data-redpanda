@@ -23,16 +23,17 @@ message MessageWithOptionalFields {
     }
 }
 
-message Foo {
-    optional uint64 a = 1;
-    optional uint64 b = 2;
-    optional string c = 3;
-    optional uint32 d = 4;
-    optional double e = 5;
-    optional uint32 f = 6;
-    optional string g = 7;
-    optional string h = 8;
-    optional string i = 9;
-    optional string j = 10;
-    optional string k = 11;
+message NumericScalars {
+    optional double a = 1;
+    optional float b = 2;
+    optional int32 c = 3;
+    optional int64 d = 4;
+    optional uint32 e = 5;
+    optional uint64 f = 6;
+    optional sint32 g = 7;
+    optional sint64 h = 8;
+    optional fixed32 i = 9;
+    optional fixed64 j = 10;
+    optional sfixed32 k = 11;
+    optional sfixed64 l = 12;
 }

@@ -668,19 +668,20 @@ TEST_CORO(values_protobuf, TestProto2FieldPresence) {
         Eq(std::nullopt)));
 }
 
-TEST_CORO(values_protobuf, TestProto2Issue) {
-    proto2::Foo msg;
-    msg.set_a(123);
-    msg.set_b(456);
-    msg.set_c("bar");
-    msg.set_d(789);
-    msg.set_e(123.456);
-    msg.set_f(123);
-    msg.set_g("foo");
-    msg.set_h("baz");
-    msg.set_i("qux");
-    msg.set_j("thud");
-    msg.set_k("zing");
+TEST_CORO(values_protobuf, TestProtoNumbers) {
+    proto2::NumericScalars msg;
+    msg.set_a(3.14);
+    msg.set_b(53.4f);
+    msg.set_c(5234);
+    msg.set_d(12342542);
+    msg.set_e(52345235);
+    msg.set_f(45353453435);
+    msg.set_g(-234234);
+    msg.set_h(-2342352435);
+    msg.set_i(23453245);
+    msg.set_j(4234234);
+    msg.set_k(-234234);
+    msg.set_l(-234234342);
 
     auto result = co_await serialize_and_convert(msg);
     ASSERT_TRUE_CORO(result.has_value());
@@ -692,15 +693,16 @@ TEST_CORO(values_protobuf, TestProto2Issue) {
     EXPECT_THAT(
       struct_v->fields,
       ElementsAre(
-        OptionalIcebergPrimitive<string_value>("123"),
-        OptionalIcebergPrimitive<string_value>("456"),
-        OptionalIcebergPrimitive<string_value>("bar"),
-        OptionalIcebergPrimitive<long_value>(789),
-        OptionalIcebergPrimitive<double_value>(123.456),
-        OptionalIcebergPrimitive<long_value>(123),
-        OptionalIcebergPrimitive<string_value>("foo"),
-        OptionalIcebergPrimitive<string_value>("baz"),
-        OptionalIcebergPrimitive<string_value>("qux"),
-        OptionalIcebergPrimitive<string_value>("thud"),
-        OptionalIcebergPrimitive<string_value>("zing")));
+        OptionalIcebergPrimitive<double_value>(3.14),
+        OptionalIcebergPrimitive<float_value>(53.4f),
+        OptionalIcebergPrimitive<int_value>(5234),
+        OptionalIcebergPrimitive<long_value>(12342542),
+        OptionalIcebergPrimitive<long_value>(52345235),
+        OptionalIcebergPrimitive<string_value>("45353453435"),
+        OptionalIcebergPrimitive<int_value>(-234234),
+        OptionalIcebergPrimitive<long_value>(-2342352435),
+        OptionalIcebergPrimitive<long_value>(23453245),
+        OptionalIcebergPrimitive<string_value>("4234234"),
+        OptionalIcebergPrimitive<int_value>(-234234),
+        OptionalIcebergPrimitive<long_value>(-234234342)));
 }

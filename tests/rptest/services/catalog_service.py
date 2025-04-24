@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from typing import Dict, Optional
 from ducktape.services.service import Service
 from rptest.context import cloud_storage
 
@@ -21,6 +22,7 @@ class CatalogType(str, Enum):
     REST_HADOOP = 'rest_hadoop'
     POLARIS = 'polaris'
     NESSIE = 'nessie'
+    DATABRICKS_UNITY = 'databricks_unity'
 
 
 def catalog_type_to_config_string(catalog_type: CatalogType) -> str:
@@ -130,4 +132,14 @@ class CatalogService(abc.ABC, Service):
             raise ValueError(
                 f"Unsupported credential type: {type(self.credentials)}")
 
+        # Subclasses may need to configure the client further.
+        self._configure_client(conf)
+
         return load_catalog(catalog_name, **conf)
+
+    def _configure_client(self, conf: Dict[str, Optional[str]]):
+        """
+        Delegate to subclasses more advanced client configuration like
+        authentication. Mutate conf in place.
+        """
+        pass

@@ -8,11 +8,13 @@
 # by the Apache License, Version 2.0
 
 import operator
-from typing import Any, Tuple, Optional
-from ducktape.services.service import Service
+from typing import Any, Optional
 from ducktape.utils.util import wait_until
 from rptest.clients.rpk import RpkTool, TopicSpec
+from rptest.context import databricks as databricks_ctx
 from rptest.services.apache_iceberg_catalog import IcebergRESTCatalog
+from rptest.services.databricks_workspace import DatabricksWorkspace
+from rptest.services.datalake.catalog.databricks_unity import DatabricksUnity
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
 from rptest.services.redpanda import RedpandaService
 from rptest.services.spark_service import SparkService
@@ -22,7 +24,6 @@ from rptest.services.redpanda_connect import RedpandaConnectService
 from rptest.tests.datalake.query_engine_factory import get_query_engine_by_type
 from rptest.services.catalog_service import CatalogType, CatalogService
 from rptest.services.nessie_catalog import NessieCatalog
-from rptest.tests.datalake.catalog_service_factory import make_catalog_service_for_type
 
 
 class DatalakeServices():
@@ -42,19 +43,15 @@ class DatalakeServices():
         # Tests may rely on setting frequent translations.
         self.redpanda.set_environment(
             {"__REDPANDA_TEST_DISABLE_BOUNDED_PROPERTY_CHECKS": "ON"})
-        si_settings = self.redpanda.si_settings
-        assert si_settings
+        assert self.redpanda.si_settings
 
         self.warehouse_name = warehouse_name
-        self.catalog_service = make_catalog_service_for_type(
-            catalog_type=catalog_type,
-            test_ctx=test_ctx,
-            cloud_storage_bucket=si_settings.cloud_storage_bucket,
-            warehouse_name=warehouse_name)
         self.included_query_engines = include_query_engines
-        # To be populated later once we have the URI of the catalog
-        # available
-        self.query_engines: list[Service] = []
+
+        self.query_engines = []
+
+        self._catalog_type = catalog_type
+        self._cloud_storage_bucket = self.redpanda.si_settings.cloud_storage_bucket
 
     def setUp(self):
         assert len(self.redpanda.started_nodes()) == 0, \
@@ -63,6 +60,7 @@ class DatalakeServices():
         # create bucket first, or the catalog won't start
         self.redpanda.start_si()
 
+        self._create_catalog_service()
         self.catalog_service.start()
 
         # Better defaults for testing. We don't want to wait too long
@@ -91,6 +89,36 @@ class DatalakeServices():
                 "iceberg_disable_snapshot_tagging":
                 "true"
             })
+
+        if self.catalog_service.catalog_type() == CatalogType.DATABRICKS_UNITY:
+            self.redpanda.add_extra_rp_conf({
+                "iceberg_rest_catalog_warehouse":
+                self.warehouse_name,
+                "iceberg_disable_snapshot_tagging":
+                "true",
+            })
+
+            creds = databricks_ctx.DatabricksContext.from_context(
+                self.test_ctx).credentials
+            if isinstance(creds, databricks_ctx.PatCredentials):
+                self.redpanda.add_extra_rp_conf({
+                    "iceberg_rest_catalog_authentication_mode":
+                    "bearer",
+                    "iceberg_rest_catalog_token":
+                    creds.token,
+                })
+            elif isinstance(creds, databricks_ctx.OauthCredentials):
+                self.redpanda.add_extra_rp_conf({
+                    "iceberg_rest_catalog_authentication_mode":
+                    "oauth2",
+                    "iceberg_rest_catalog_client_id":
+                    creds.client_id,
+                    "iceberg_rest_catalog_client_secret":
+                    creds.client_secret,
+                })
+            else:
+                raise ValueError(f"Unsupported credentials type {type(creds)}")
+
         self.redpanda.start(start_si=False)
 
         for engine in self.included_query_engines:
@@ -101,7 +129,8 @@ class DatalakeServices():
                           iceberg_catalog_uri=catalog_uri,
                           default_warehouse_dir=self.catalog_service.
                           cloud_storage_warehouse,
-                          catalog_type=self.catalog_service.catalog_type())
+                          catalog_type=self.catalog_service.catalog_type(),
+                          catalog_name=self.warehouse_name)
             svc.start()
             self.query_engines.append(svc)
 
@@ -302,3 +331,40 @@ class DatalakeServices():
                                     msg_size=msg_size,
                                     msg_count=msg_count,
                                     rate_limit_bps=rate_limit_bps)
+
+    def _create_catalog_service(self):
+        if self._catalog_type == CatalogType.DATABRICKS_UNITY:
+            # TODO: Do not allow callers to customize the warehouse name.
+            assert self.warehouse_name == CatalogService.DEFAULT_WAREHOUSE_NAME, \
+                "Unexpected customization of warehouse name in databricks unity test. We need to create one with a random name."
+
+            dbx_workspace = DatabricksWorkspace(self.test_ctx)
+            dbx_catalog_info = dbx_workspace.create_catalog(
+                self._cloud_storage_bucket)
+
+            # Override.
+            self.warehouse_name = dbx_catalog_info.name
+
+            self.catalog_service = DatabricksUnity(
+                self.test_ctx,
+                cloud_storage_bucket=self._cloud_storage_bucket,
+                catalog=dbx_catalog_info)
+        elif self._catalog_type == CatalogType.REST_JDBC:
+            self.catalog_service = IcebergRESTCatalog(
+                self.test_ctx,
+                cloud_storage_bucket=self._cloud_storage_bucket,
+                warehouse_name=self.warehouse_name)
+        elif self._catalog_type == CatalogType.REST_HADOOP:
+            self.catalog_service = IcebergRESTCatalog(
+                self.test_ctx,
+                cloud_storage_bucket=self._cloud_storage_bucket,
+                warehouse_name=self.warehouse_name,
+                filesystem_wrapper_mode=True)
+        elif self._catalog_type == CatalogType.NESSIE:
+            self.catalog_service = NessieCatalog(
+                self.test_ctx,
+                cloud_storage_bucket=self._cloud_storage_bucket,
+                warehouse_name=self.warehouse_name)
+        else:
+            raise NotImplementedError(
+                f"No catalog of type {self._catalog_type}")
