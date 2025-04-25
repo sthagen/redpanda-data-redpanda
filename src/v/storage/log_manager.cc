@@ -318,6 +318,13 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
                 return true;
             }
 
+            vlog(
+              gclog.trace,
+              "{}: dirty ratio ({}) < min.cleanable.dirty.ratio ({}), skipping "
+              "compaction.",
+              l->config().ntp(),
+              dirty_ratio,
+              min_cleanable_dirty_ratio);
             return false;
         };
 

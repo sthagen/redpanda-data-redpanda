@@ -23,6 +23,7 @@ import requests
 from ducktape.utils.util import wait_until
 
 from rptest.utils.bookend_collection import BookendCollection
+from rptest.utils.mode_checks import in_fips_environment
 
 # Match any version that may result from a redpanda binary, which may not be a
 # released version.
@@ -139,7 +140,7 @@ class RedpandaInstaller:
     # cluster, and that directories therein are only ever created (never
     # deleted) during the lifetime of the RedpandaInstaller.
     INSTALLER_ROOT = "/opt/redpanda_installs"
-    TGZ_URL_TEMPLATE = "https://vectorized-public.s3.us-west-2.amazonaws.com/releases/redpanda/{version}/redpanda-{version}-{arch}.tar.gz"
+    TGZ_URL_TEMPLATE = "https://vectorized-public.{s3}.us-west-2.amazonaws.com/releases/redpanda/{version}/redpanda-{version}-{arch}.tar.gz"
 
     # File path to be used for locking to prevent multiple local test processes
     # from operating on the same volume mounts.
@@ -666,8 +667,15 @@ class RedpandaInstaller:
             node.account.ssh_output(relink_cmd)
 
     def _version_package_url(self, version: tuple):
+        # if we're running in FIPS mode, we could hit TLS
+        # handshake errors talking to one of the hosts for
+        # vectorized-public.s3.us-west-2.amazonaws.com ; use
+        # vectorized-public.s3-fips.us-west-2.amazonaws.com
+        # instead.
         return self.TGZ_URL_TEMPLATE.format(
-            arch=self.arch, version=f"{version[0]}.{version[1]}.{version[2]}")
+            s3='s3' if not in_fips_environment() else 's3-fips',
+            arch=self.arch,
+            version=f"{version[0]}.{version[1]}.{version[2]}")
 
     @property
     def arch(self):

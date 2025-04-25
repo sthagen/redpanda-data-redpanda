@@ -1105,6 +1105,10 @@ ss::future<result<ss::stop_iteration>> controller_backend::reconcile_ntp_step(
             // Configuration will be replicate to the new replica
             initial_replicas = {};
         }
+        auto tt_revision_on_create = _topics.local().last_applied_revision();
+        auto topic_md = _topics.local().get_topic_metadata_ref(
+          model::topic_namespace_view(ntp));
+        vassert(topic_md, "topic metadata disappeared for {}", ntp);
         auto ec = co_await create_partition(
           ntp,
           group_id,
@@ -1113,15 +1117,16 @@ ss::future<result<ss::stop_iteration>> controller_backend::reconcile_ntp_step(
           replicas_view.revisions(),
           force_reconfiguration{
             replicas_view.update
-            && replicas_view.update->is_force_reconfiguration()});
+            && replicas_view.update->is_force_reconfiguration()},
+          topic_md->get());
         if (ec) {
             co_return ec;
         }
 
         // The partition that we just created uses topic properties queried from
-        // topic_table at last_applied_revision(). Thus all properties updates
-        // with revisions <= last_applied_revision() are already reconciled.
-        rs.mark_properties_reconciled(_topics.local().last_applied_revision());
+        // topic_table at tt_revision_on_create. Thus all properties updates
+        // with revisions <= tt_revision_on_create are already reconciled.
+        rs.mark_properties_reconciled(tt_revision_on_create);
 
         co_return ss::stop_iteration::no;
     }
@@ -1133,6 +1138,7 @@ ss::future<result<ss::stop_iteration>> controller_backend::reconcile_ntp_step(
           *rs.properties_changed_at,
           partition_operation_type::update_properties);
 
+        auto tt_prop_revision = _topics.local().last_applied_revision();
         auto cfg = _topics.local().get_topic_cfg(
           model::topic_namespace_view{ntp});
         vassert(cfg, "[{}] expected topic cfg to be present", ntp);
@@ -1144,7 +1150,7 @@ ss::future<result<ss::stop_iteration>> controller_backend::reconcile_ntp_step(
         co_await partition->update_configuration(
           std::move(cfg).value().properties);
 
-        rs.mark_properties_reconciled(_topics.local().last_applied_revision());
+        rs.mark_properties_reconciled(tt_prop_revision);
         co_return ss::stop_iteration::no;
     }
 
@@ -1288,7 +1294,8 @@ ss::future<std::error_code> controller_backend::create_partition(
   model::revision_id log_revision,
   replicas_t initial_replicas,
   const replicas_revision_map& replica_revision_map,
-  force_reconfiguration is_force_reconfigured) {
+  force_reconfiguration is_force_reconfigured,
+  const topic_metadata& topic_md) {
     vlog(
       clusterlog.debug,
       "[{}] creating partition, log revision: {}, initial_replicas: {}",
@@ -1296,28 +1303,23 @@ ss::future<std::error_code> controller_backend::create_partition(
       log_revision,
       initial_replicas);
 
+    // References `topic_md` and `replica_revision_map` are only valid until the
+    // first scheduling point. Copy required data from them early even though we
+    // may not need them eventually.
+    topic_configuration cfg = topic_md.get_configuration();
+    model::revision_id topic_rev = topic_md.get_revision();
+    // Remote revision is used for cloud storage paths. If the topic was
+    // recovered, this is the value from the original manifest, and if topic
+    // is read replica, the value from remote topic manifest is used.
+    model::initial_revision_id remote_rev
+      = topic_md.get_remote_revision().value_or(
+        model::initial_revision_id{topic_rev});
+    std::vector<raft::vnode> initial_nodes = create_vnode_set(
+      initial_replicas, replica_revision_map, log_revision);
+
     auto ec = co_await _shard_placement.prepare_create(ntp, log_revision);
     if (ec) {
         co_return ec;
-    }
-
-    topic_configuration cfg;
-    model::revision_id topic_rev;
-    model::initial_revision_id remote_rev;
-    {
-        auto topic_md = _topics.local().get_topic_metadata_ref(
-          model::topic_namespace_view(ntp));
-        if (!topic_md) {
-            // topic was already removed, do nothing
-            co_return errc::success;
-        }
-        cfg = topic_md->get().get_configuration();
-        topic_rev = topic_md->get().get_revision();
-        // Remote revision is used for cloud storage paths. If the topic was
-        // recovered, this is the value from the original manifest, and if topic
-        // is read replica, the value from remote topic manifest is used.
-        remote_rev = topic_md->get().get_remote_revision().value_or(
-          model::initial_revision_id{topic_rev});
     }
 
     // handle partially created topic
@@ -1325,9 +1327,6 @@ ss::future<std::error_code> controller_backend::create_partition(
 
     // no partition exists, create one
     if (likely(!partition)) {
-        std::vector<raft::vnode> initial_nodes = create_vnode_set(
-          initial_replicas, replica_revision_map, log_revision);
-
         std::optional<cloud_storage_clients::bucket_name> read_replica_bucket;
         if (cfg.is_read_replica()) {
             read_replica_bucket = cloud_storage_clients::bucket_name(
@@ -1389,8 +1388,7 @@ ss::future<std::error_code> controller_backend::create_partition(
               std::move(xst_state),
               rtp,
               read_replica_bucket,
-              cfg.properties.remote_label,
-              cfg.properties.remote_topic_namespace_override);
+              &cfg);
 
             _xst_states.erase(ntp);
 

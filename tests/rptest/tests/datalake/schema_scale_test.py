@@ -62,7 +62,7 @@ class SchemaScaleTester:
         self.total = 0
 
     def _make_schema(self, use_partition_spec: bool = False):
-        sg = SchemaGenerator(ProducerType.AVRO, max_depth=15, max_fields=150)
+        sg = SchemaGenerator(ProducerType.AVRO, max_depth=15, max_fields=1000)
         schema, template = sg.generate_schema_fields()
         self.schema = schema
         self.schema_fields = sg.fields
@@ -158,7 +158,7 @@ class SchemaScaleTester:
         r = rpk.create_schema_from_str(f"{self.topic_name}_schema", schema_str)
 
         for _ in range(3):
-            self.produce(dl, self.topic_name, 5000)
+            self.produce(dl, self.topic_name, 500)
 
         self.log_table_schema(dl, query_engine)
         self.check_no_dlq_table(dl)

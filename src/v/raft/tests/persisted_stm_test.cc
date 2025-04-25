@@ -834,8 +834,18 @@ TEST_F_CORO(persisted_stm_test_fixture, test_snapshot_in_background_apply) {
     for (const auto& [_, stm] : node_stms) {
         ASSERT_EQ_CORO(stm->state, expected);
     }
-    // force background apply on one of the state machines
-    auto throwing_stm = node_stms.begin()->second;
+
+    // force background apply on one of the non-leader state machines
+    ss::shared_ptr<persisted_kv> throwing_stm;
+    for (auto& [id, stm] : node_stms) {
+        auto raft = stm->raft_node.raft();
+        if (!raft->is_leader()) {
+            raft->block_new_leadership();
+            throwing_stm = stm;
+            break;
+        }
+    }
+    vassert(throwing_stm, "all nodes are leaders");
     throwing_stm->set_throw_on_apply(true);
 
     auto ops_phase_three = random_operations(20);
