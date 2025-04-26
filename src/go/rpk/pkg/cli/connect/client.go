@@ -17,6 +17,7 @@ import (
 	"os"
 	"runtime"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/fips"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/httpapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/plugin"
 )
@@ -92,7 +93,11 @@ func newRepoClient() (*connectRepoClient, error) {
 
 func (c *connectRepoClient) Manifest(ctx context.Context) (*connectManifest, error) {
 	var manifest connectManifest
-	err := c.cl.Get(ctx, fmt.Sprintf("%v/connect/manifest.json", getPluginURL()), nil, &manifest)
+	path := fmt.Sprintf("%v/connect/manifest.json", getPluginURL())
+	if fips.IsEnabled() {
+		path = fmt.Sprintf("%v/connect-fips/manifest.json", getPluginURL())
+	}
+	err := c.cl.Get(ctx, path, nil, &manifest)
 	if err != nil {
 		return nil, fmt.Errorf("unable to retrieve Redpanda Connect manifest: %v", err)
 	}

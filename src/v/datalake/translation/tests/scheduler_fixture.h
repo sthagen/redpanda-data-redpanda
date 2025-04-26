@@ -43,6 +43,12 @@ public:
     std::chrono::milliseconds current_lag_ms() const override {
         return std::chrono::milliseconds{0};
     }
+    void set_finish_translation() final {
+        _finish_translation_requested = true;
+    }
+    bool get_finish_translation() final {
+        return _finish_translation_requested;
+    }
 
 private:
     // Mock of a single parquet file writer.
@@ -91,6 +97,7 @@ private:
     ss::timer<clock> _translation_timer;
     ss::condition_variable _wait_for_scheduler_cb;
     clock::time_point _next_checkpoint;
+    bool _finish_translation_requested{false};
 };
 
 // A translator that overshoots deadline and requires explict force flushing

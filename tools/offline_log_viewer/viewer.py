@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
+from collections.abc import Iterable
 import os
 import sys
 from os.path import join
+from typing import Any
 
 from controller import ControllerLog, ControllerSnapshot
 from consumer_groups import GroupsLog
-from consumer_offsets import OffsetsLog
+from consumer_offsets import ConsumerGroupsSummaryGenerator, OffsetsLog
+
 from crash_report import decode_crash_report
 from topic_manifest import decode_topic_manifest, decode_topic_manifest_to_legacy_v1_json
 from tx_coordinator import TxLog
@@ -14,10 +17,19 @@ import itertools
 from storage import Store
 from kvstore import KvStore
 from kafka import KafkaLog
+from collections import namedtuple
 import logging
 import json
 
 logger = logging.getLogger('viewer')
+
+Configuration = namedtuple("Configuration", [
+    "path",
+    "type",
+    "topic",
+    "binary_dump",
+    "partition",
+])
 
 
 class SerializableGenerator(list):
@@ -34,157 +46,213 @@ class SerializableGenerator(list):
         return itertools.chain(self._head, *self[:1])
 
 
-def print_kv_store(store):
-    # Map of partition ID to list of kvstore items
-    result = {}
+class OfflineLogViewer():
+    def __init__(self, config: Configuration):
+        self._config = config
+        self.validate_path()
 
-    for ntp in store.ntps:
-        if ntp.nspace == "redpanda" and ntp.topic == "kvstore":
-            logger.info(f"inspecting {ntp}")
-            kv = KvStore(ntp)
-            kv.decode()
-            items = kv.items()
+    def output_json(self, data):
+        json.dump(data, sys.stdout, indent=2)
+        sys.stdout.flush()
 
-            result[ntp.partition] = items
+    def build_store(self):
+        return Store(self._config.path)
 
-    # Send JSON output to stdout in case caller wants to parse it, other
-    # CLI output goes to stderr via logger
-    print(json.dumps(result, indent=2))
+    def stream_json(self, data: Any, wrap_with_gen: bool = True) -> None:
+        iter_json = json.JSONEncoder(indent=2).iterencode(
+            SerializableGenerator(data) if wrap_with_gen else data)
+        for j in iter_json:
+            sys.stdout.write(j)
+        sys.stdout.flush()
 
+    def print_kv_store(self):
+        # Map of partition ID to list of kvstore items
+        result = {}
+        store = self.build_store()
+        for ntp in store.ntps:
+            if ntp.nspace == "redpanda" and ntp.topic == "kvstore":
+                logger.info(f"inspecting {ntp}")
+                kv = KvStore(ntp)
+                kv.decode()
+                items = kv.items()
 
-def print_controller(store, bin_dump: bool):
-    for ntp in store.ntps:
-        if ntp.nspace == "redpanda" and ntp.topic == "controller":
-            ctrl = ControllerLog(ntp, bin_dump)
-            iter_json = json.JSONEncoder(indent=2).iterencode(
-                SerializableGenerator(ctrl))
-            for j in iter_json:
-                print(j, end='')
+                result[ntp.partition] = items
+        # Send JSON output to stdout in case caller wants to parse it, other
+        # CLI output goes to stderr via logger
+        self.output_json(result)
 
+    def print_controller(self):
+        store = self.build_store()
+        for ntp in store.ntps:
+            if ntp.nspace == "redpanda" and ntp.topic == "controller":
+                ctrl = ControllerLog(ntp, self._config.binary_dump)
+                self.stream_json(ctrl)
 
-def print_controller_snapshot(store, bin_dump: bool):
-    for ntp in store.ntps:
-        if ntp.nspace == "redpanda" and ntp.topic == "controller":
+    def print_controller_snapshot(self):
+        store = self.build_store()
+        for ntp in store.ntps:
+            if ntp.nspace == "redpanda" and ntp.topic == "controller":
+                snap = ControllerSnapshot(ntp,
+                                          bin_dump=self._config.binary_dump)
+                self.stream_json(snap.to_dict().items())
 
-            snap = ControllerSnapshot(ntp, bin_dump=bin_dump)
-            iter_json = json.JSONEncoder(indent=2).iterencode(
-                SerializableGenerator(snap.to_dict().items()))
-            for j in iter_json:
-                print(j, end='')
+    def print_topic_manifest(self, legacy_json=False):
+        res = decode_topic_manifest_to_legacy_v1_json(
+            self._config.path) if legacy_json else decode_topic_manifest(
+                self._config.path)
+        self.output_json(res)
 
+    def print_kafka(self, headers_only: bool = False):
+        store = self.build_store()
+        for ntp in store.ntps:
+            if ntp.nspace in ["kafka", "kafka_internal"]:
+                if self._config.topic and ntp.topic != self._config.topic:
+                    continue
+                if self._should_skip_partition(ntp.partition):
+                    continue
+                logger.info(f'topic: {ntp.topic}, partition: {ntp.partition}')
+                log = KafkaLog(ntp, headers_only=headers_only)
+                self.stream_json(log)
 
-def print_topic_manifest(serde_file_path, legacy_json: bool):
-    if not os.path.exists(serde_file_path):
-        logger.error(f"File doesn't exist {serde_file_path}")
-        sys.exit(1)
+    def print_groups(self):
+        store = self.build_store()
+        for ntp in store.ntps:
+            if ntp.nspace == "kafka_internal" and ntp.topic == "group":
+                l = GroupsLog(ntp)
+                l.decode()
+                self.output_json(l.records)
 
-    res = decode_topic_manifest_to_legacy_v1_json(
-        serde_file_path) if legacy_json else decode_topic_manifest(
-            serde_file_path)
-    print(json.dumps(res, indent=2))
+    def print_consumer_offsets(self, decode_all_batches: bool):
+        store = self.build_store()
+        logs = {}
+        for ntp in store.ntps:
+            if ntp.nspace == "kafka" and ntp.topic == "__consumer_offsets":
+                if self._should_skip_partition(ntp.partition):
+                    continue
+                logs[str(ntp)] = SerializableGenerator(
+                    OffsetsLog(ntp, decode_all_batches))
+        self.stream_json(logs, wrap_with_gen=False)
 
+    def print_consumer_offsets_summary(self):
+        store = self.build_store()
+        summaries = {}
+        for ntp in store.ntps:
+            if ntp.nspace == "kafka" and ntp.topic == "__consumer_offsets":
+                if self._should_skip_partition(ntp.partition):
+                    continue
+                summaries[str(ntp)] = ConsumerGroupsSummaryGenerator(
+                    ntp).build_summary()
+        self.output_json(summaries)
 
-def print_kafka(store, topic, headers_only):
-    for ntp in store.ntps:
-        if ntp.nspace in ["kafka", "kafka_internal"]:
-            if topic and ntp.topic != topic:
-                continue
+    def print_tx_coordinator(self):
+        store = self.build_store()
+        for ntp in store.ntps:
+            if ntp.nspace == "kafka_internal" and ntp.topic == "tx":
+                l = TxLog(ntp)
+                for result in l.decode():
+                    self.output_json(result)
 
-            logger.info(f'topic: {ntp.topic}, partition: {ntp.partition}')
-            log = KafkaLog(ntp, headers_only=headers_only)
-            json_iter = json.JSONEncoder(indent=2).iterencode(
-                SerializableGenerator(log))
-            for record in json_iter:
-                print(record, end='')
-
-
-def print_groups(store):
-    for ntp in store.ntps:
-        if ntp.nspace == "kafka_internal" and ntp.topic == "group":
-            l = GroupsLog(ntp)
-            l.decode()
-            logger.info(json.dumps(l.records, indent=2))
-    logger.info("")
-
-
-def print_consumer_offsets(store):
-    logs = dict()
-    for ntp in store.ntps:
-        if ntp.nspace == "kafka" and ntp.topic == "__consumer_offsets":
-            logs[str(ntp)] = SerializableGenerator(OffsetsLog(ntp))
-    json_records = json.JSONEncoder(indent=2).iterencode(logs)
-    for record in json_records:
-        print(record, end='')
-
-
-def print_tx_coordinator(store):
-    for ntp in store.ntps:
-        if ntp.nspace == "kafka_internal" and ntp.topic == "tx":
-            l = TxLog(ntp)
-            for result in l.decode():
-                logger.info(json.dumps(result, indent=2))
-    logger.info("")
-
-
-def print_crash_report(path: str) -> None:
-    """
-    Parses either a specific crash report or the all crashes in the crash_reports directory
-    """
-    if not os.path.exists(path):
-        logger.error(f'Crash file {path} does not exist')
-        sys.exit(1)
-
-    if os.path.isdir(path):
-        crash_reports_dir = os.path.join(path, "crash_reports")
-        if not os.path.isdir(crash_reports_dir):
-            logger.error(f'Could not find crash_reports directory in {path}')
-            sys.exit(1)
-        crash_files = [
-            f for f in os.listdir(crash_reports_dir) if f.endswith(".crash")
-        ]
-        if not crash_files:
-            logger.error(f'No crash reports found in {crash_reports_dir}')
-            sys.exit(1)
-        res = {}
-        for f in crash_files:
-            try:
-                res[f] = decode_crash_report(join(crash_reports_dir, f))
-            except:
-                # Ignore errors when parsing files - there may be empty ones that fail to be decoded
-                pass
-    else:
-        res = decode_crash_report(path)
-    print(json.dumps(res, indent=2))
-
-
-def validate_path(options):
-    path = options.path
-    if not os.path.exists(path):
-        logger.error(f"Path doesn't exist {path}")
-        sys.exit(1)
-    if options.force:
-        return
-    controller = join(path, "redpanda", "controller")
-    if not os.path.exists(controller):
-        logger.error(
-            f"Each redpanda data dir should have controller piece but {controller} isn't found"
-        )
-        sys.exit(1)
-
-
-def validate_topic(path, topic):
-    if topic:
-        topic = join(path, "kafka", topic)
-        if not os.path.exists(topic):
-            logger.error(f"Topic {topic} doesn't exist")
+    def print_crash_report(self) -> None:
+        """
+        Parses either a specific crash report or the all crashes in the crash_reports directory
+        """
+        if not os.path.exists(self._config.path):
+            logger.error(f'Crash file {self._config.path} does not exist')
             sys.exit(1)
 
+        if os.path.isdir(self._config.path):
+            crash_reports_dir = os.path.join(self._config.path,
+                                             "crash_reports")
+            if not os.path.isdir(crash_reports_dir):
+                logger.error(
+                    f'Could not find crash_reports directory in {self._config.path}'
+                )
+                sys.exit(1)
+            crash_files = [
+                f for f in os.listdir(crash_reports_dir)
+                if f.endswith(".crash")
+            ]
+            if not crash_files:
+                logger.error(f'No crash reports found in {crash_reports_dir}')
+                sys.exit(1)
+            res = {}
+            for f in crash_files:
+                try:
+                    res[f] = decode_crash_report(join(crash_reports_dir, f))
+                except:
+                    # Ignore errors when parsing files - there may be empty ones that fail to be decoded
+                    pass
+        else:
+            res = decode_crash_report(self._config.path)
+        self.output_json(res)
 
-def validate_tx_coordinator(path):
-    tx = join(path, "kafka_internal", "tx")
-    if not os.path.exists(tx):
-        logger.error(f"tx coordinator dir {tx} doesn't exist")
-        sys.exit(1)
+    def validate_path(self):
+        path = self._config.path
+        if not os.path.exists(path):
+            logger.error(f"Path doesn't exist {path}")
+            sys.exit(1)
+
+    def validate_topic(self):
+        if self._config.topic:
+            topic = join(self._config.path, "kafka", self._config.topic)
+            if not os.path.exists(topic):
+                logger.error(f"Topic {topic} doesn't exist")
+                sys.exit(1)
+
+    def validate_tx_coordinator(self):
+        tx = join(self._config.path, "kafka_internal", "tx")
+        if not os.path.exists(tx):
+            logger.error(f"tx coordinator dir {tx} doesn't exist")
+            sys.exit(1)
+
+    def run_viewer(self):
+        if self._config.type == "topic_manifest":
+            self.print_topic_manifest(legacy_json=False)
+        elif self._config.type == "topic_manifest_legacy":
+            self.print_topic_manifest(legacy_json=True)
+        elif self._config.type == "crash_report":
+            self.print_crash_report()
+        elif self._config.type == "kvstore":
+            self.print_kv_store()
+        elif self._config.type == "controller":
+            self.print_controller()
+        elif self._config.type == "controller_snapshot":
+            self.print_controller_snapshot()
+        elif self._config.type == "kafka":
+            self.validate_topic()
+            self.print_kafka(headers_only=True)
+        elif self._config.type == "kafka_records":
+            self.validate_topic()
+            self.print_kafka(headers_only=False)
+        elif self._config.type == "legacy-group":
+            self.print_groups()
+        elif self._config.type == "consumer_offsets":
+            self.print_consumer_offsets(decode_all_batches=False)
+        elif self._config.type == "consumer_offsets_all":
+            self.print_consumer_offsets(decode_all_batches=True)
+        elif self._config.type == "consumer_offsets_summary":
+            self.print_consumer_offsets_summary()
+        elif self._config.type == "tx_coordinator":
+            self.validate_tx_coordinator()
+            self.print_tx_coordinator()
+        else:
+            logger.error(f"Unknown type: {self._config.type}")
+            sys.exit(1)
+
+    def _should_skip_partition(self, partition_id):
+        if self._config.partition is None:
+            return False
+        return self._config.partition != partition_id
+
+
+def build_config(options):
+    return Configuration(
+        path=options.path,
+        type=options.type,
+        topic=options.topic,
+        binary_dump=options.dump,
+        partition=options.partition,
+    )
 
 
 def main():
@@ -199,11 +267,19 @@ def main():
         parser.add_argument('--type',
                             type=str,
                             choices=[
-                                'controller', 'kvstore', 'kafka',
-                                'consumer_offsets', 'legacy-group',
-                                'kafka_records', 'tx_coordinator',
-                                'topic_manifest', 'topic_manifest_legacy',
-                                'controller_snapshot', 'crash_report'
+                                'controller',
+                                'kvstore',
+                                'kafka',
+                                'consumer_offsets',
+                                'legacy-group',
+                                'kafka_records',
+                                'tx_coordinator',
+                                'topic_manifest',
+                                'topic_manifest_legacy',
+                                'controller_snapshot',
+                                'crash_report',
+                                "consumer_offsets_all",
+                                "consumer_offsets_summary",
                             ],
                             required=True,
                             help='operation to execute')
@@ -217,53 +293,24 @@ def main():
             '--dump',
             action='store_true',
             help='output binary dumps of keys and values being parsed')
-        parser.add_argument('--force',
-                            action='store_true',
-                            help='Skip data directory validation')
+        parser.add_argument('--force', action='store_true', help='Deprecated')
+        parser.add_argument('--partition',
+                            type=int,
+                            required=False,
+                            default=None,
+                            help="if set, will parse only this partition")
         return parser
 
     parser = generate_options()
     options, _ = parser.parse_known_args()
-
-    if options.type in ["topic_manifest", "topic_manifest_legacy"]:
-        print_topic_manifest(
-            options.path, legacy_json=options.type == "topic_manifest_legacy")
-        sys.exit(0)
-    elif options.type in ["crash_report"]:
-        print_crash_report(options.path)
-        sys.exit(0)
-
     if options.verbose:
         logging.basicConfig(level="DEBUG")
     else:
         logging.basicConfig(level="INFO")
+
     logger.info(f"starting metadata viewer with options: {options}")
-
-    validate_path(options)
-
-    store = Store(options.path)
-    if options.type == "kvstore":
-        print_kv_store(store)
-    elif options.type == "controller":
-        print_controller(store, options.dump)
-    elif options.type == "controller_snapshot":
-        print_controller_snapshot(store, options.dump)
-    elif options.type == "kafka":
-        validate_topic(options.path, options.topic)
-        print_kafka(store, options.topic, headers_only=True)
-    elif options.type == "kafka_records":
-        validate_topic(options.path, options.topic)
-        print_kafka(store, options.topic, headers_only=False)
-    elif options.type == "legacy-group":
-        print_groups(store)
-    elif options.type == "consumer_offsets":
-        print_consumer_offsets(store)
-    elif options.type == "tx_coordinator":
-        validate_tx_coordinator(options.path)
-        print_tx_coordinator(store)
-    else:
-        logger.error(f"Unknown type: {options.type}")
-        sys.exit(1)
+    viewer = OfflineLogViewer(build_config(options))
+    viewer.run_viewer()
 
 
 if __name__ == '__main__':

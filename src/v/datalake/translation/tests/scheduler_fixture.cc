@@ -15,6 +15,8 @@
 #include "ssx/future-util.h"
 #include "test_utils/randoms.h"
 
+#include <seastar/util/defer.hh>
+
 using namespace std::chrono_literals;
 
 namespace datalake::translation::scheduling {
@@ -163,6 +165,8 @@ ss::future<> mock_translator::translation_loop() {
         {
             co_await _wait_for_scheduler_cb.wait(
               [this] { return _translation_state.has_value(); });
+            auto clear_finish_request = ss::defer(
+              [this] { _finish_translation_requested = false; });
             auto holder = _translation_state->gate.hold();
             auto deadline = _translation_state->translate_for;
             auto start_time = clock::now();

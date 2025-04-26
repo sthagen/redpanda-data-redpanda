@@ -161,12 +161,14 @@ copy_data_segment_reducer::filter(model::record_batch batch) {
     int32_t records_seen = 0;
     co_await batch.for_each_record_async(
       [this, &batch, &offset_deltas, &records_seen](const model::record& r) {
-          records_seen++;
+          ++records_seen;
           return maybe_keep_offset(
             batch, r, batch.record_count() == records_seen, offset_deltas);
       });
 
-    if (batch.last_offset() == _segment_last_offset && offset_deltas.empty()) {
+    if (
+      _compaction_placeholder_enabled
+      && batch.last_offset() == _segment_last_offset && offset_deltas.empty()) {
         // last batch in the segment has been compacted away.
         // This is most likely caused by aborted data batches getting compacted
         // away during self compaction of the segment if they are the last batch
@@ -174,7 +176,7 @@ copy_data_segment_reducer::filter(model::record_batch batch) {
         // contiguousness of the offset space.
         auto placeholder = make_placeholder_batch(batch.header());
         vlog(
-          stlog.debug,
+          gclog.debug,
           "installing a placeholder {} for compacted batch: {}",
           placeholder,
           batch);
@@ -438,7 +440,7 @@ ss::future<ss::stop_iteration> tx_reducer::operator()(model::record_batch&& b) {
           can_discard_tx_data_batch(b)
           || can_discard_consumer_offsets_batch(b)) {
             vlog(
-              stlog.trace, "discarded batch during compaction: {}", b.header());
+              gclog.trace, "discarded batch during compaction: {}", b.header());
             _stats.batches_discarded++;
             co_return ss::stop_iteration::no;
         }

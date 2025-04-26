@@ -25,6 +25,7 @@
 #include "kafka/protocol/schemata/delete_topics_request.h"
 #include "kafka/protocol/schemata/describe_acls_request.h"
 #include "kafka/protocol/schemata/describe_client_quotas_request.h"
+#include "kafka/protocol/schemata/describe_cluster_request.h"
 #include "kafka/protocol/schemata/describe_configs_request.h"
 #include "kafka/protocol/schemata/describe_groups_request.h"
 #include "kafka/protocol/schemata/describe_log_dirs_request.h"
@@ -105,6 +106,7 @@ using request_types = make_request_types<
   describe_transactions_api,
   list_transactions_api,
   alter_client_quotas_api,
-  describe_client_quotas_api>;
+  describe_client_quotas_api,
+  describe_cluster_api>;
 
 } // namespace kafka

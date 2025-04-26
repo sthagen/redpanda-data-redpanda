@@ -25,10 +25,11 @@ CRASH_LOOP_LOG = [
 
 SIGNAL_CRASH_LOG = [
     "Aborting on",
+    "Aborting:",
     "Segmentation fault on",
-    "Segmentation fault: resolved ip:",
-    "Segmentation fault: si_code:",
+    "Segmentation fault:",
     "Illegal instruction on",
+    "Illegal instruction:",
 ]
 
 ASSERT_CRASH_LOG = ["assert - "]

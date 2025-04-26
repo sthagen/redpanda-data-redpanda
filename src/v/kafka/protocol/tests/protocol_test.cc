@@ -22,6 +22,7 @@
 #include "kafka/protocol/delete_topics.h"
 #include "kafka/protocol/describe_acls.h"
 #include "kafka/protocol/describe_client_quotas.h"
+#include "kafka/protocol/describe_cluster.h"
 #include "kafka/protocol/describe_configs.h"
 #include "kafka/protocol/describe_groups.h"
 #include "kafka/protocol/describe_log_dirs.h"

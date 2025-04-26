@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -e
-git -C /opt clone -b v1.32.0 --single-branch https://github.com/Shopify/sarama.git
+git -C /opt clone -b v1.45.1 --single-branch https://github.com/IBM/sarama.git
 cd /opt/sarama/examples/interceptors
 go mod tidy
 go build

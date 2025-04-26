@@ -68,6 +68,18 @@ class KafkaCliTools:
     VERSIONS = ("3.9.0", "3.8.0", "3.7.0", "3.0.0", "2.7.0", "2.5.0", "2.4.1",
                 "2.3.1")
 
+    @classmethod
+    def _version_tuple(cls, v: str) -> tuple[int, ...]:
+        return tuple(map(int, v.split('.')))
+
+    @classmethod
+    def min_version(cls) -> str:
+        return min(cls.VERSIONS, key=cls._version_tuple)
+
+    @classmethod
+    def max_version(cls) -> str:
+        return max(cls.VERSIONS, key=cls._version_tuple)
+
     def __init__(self,
                  redpanda: RedpandaServiceForClients,
                  version: str | None = None,
@@ -127,14 +139,23 @@ sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthL
             self._command_config = None
 
     @classmethod
-    def instances(cls):
+    def instances(cls,
+                  min_version: Optional[str] = None,
+                  max_version: Optional[str] = None):
+        min_version = min_version or cls.min_version()
+        max_version = max_version or cls.max_version()
+
         def make_factory(version: str):
             def factory(redpanda: RedpandaServiceForClients):
                 return cls(redpanda, version)
 
             return factory
 
-        return list(map(make_factory, cls.VERSIONS))
+        return [
+            make_factory(v) for v in cls.VERSIONS
+            if cls._version_tuple(min_version) <= cls._version_tuple(v) <=
+            cls._version_tuple(max_version)
+        ]
 
     def create_topic(self, spec: TopicSpec):
         self._redpanda.logger.debug("Creating topic: %s", spec.name)

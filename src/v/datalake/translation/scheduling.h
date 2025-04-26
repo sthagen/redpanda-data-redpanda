@@ -231,7 +231,7 @@ public:
      * matter what stat it is in (e.g. running, waiting, idle). The translator
      * is free to clear the request after taking action.
      */
-    virtual void set_finish_translation() {}
+    virtual void set_finish_translation() = 0;
 
     /**
      * Return true if the translator is still in the progress of satisfying the

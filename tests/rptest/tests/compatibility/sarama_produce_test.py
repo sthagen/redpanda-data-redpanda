@@ -7,12 +7,14 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from rptest.services.cluster import cluster
-from ducktape.errors import DucktapeError
 from time import sleep
 
-from rptest.tests.redpanda_test import RedpandaTest
+from ducktape.errors import DucktapeError
+from ducktape.mark import matrix
+
 from rptest.clients.rpk import RpkTool
+from rptest.services.cluster import cluster
+from rptest.tests.redpanda_test import RedpandaTest
 
 import subprocess
 
@@ -38,7 +40,8 @@ class SaramaProduceTest(RedpandaTest):
                                                 extra_rp_conf=extra_rp_conf)
 
     @cluster(num_nodes=3, log_allow_list=TX_ERROR_LOGS)
-    def test_produce(self):
+    @matrix(version=["2.1.0", "2.6.0"])
+    def test_produce(self, version):
         verifier_bin = "/opt/redpanda-tests/go/sarama/produce_test/produce_test"
 
         self.redpanda.logger.info("creating topics")
@@ -50,8 +53,10 @@ class SaramaProduceTest(RedpandaTest):
         retries = 5
         for i in range(0, retries):
             try:
-                cmd = "{verifier_bin} --brokers {brokers}".format(
-                    verifier_bin=verifier_bin, brokers=self.redpanda.brokers())
+                cmd = "{verifier_bin} --brokers {brokers} --version {version}".format(
+                    verifier_bin=verifier_bin,
+                    brokers=self.redpanda.brokers(),
+                    version=version)
                 subprocess.check_output(["/bin/sh", "-c", cmd],
                                         stderr=subprocess.STDOUT)
                 self.redpanda.logger.info("sarama produce test passed")

@@ -9,9 +9,12 @@
  * by the Apache License, Version 2.0
  */
 
+#include "crash_tracker/logger.h"
 #include "crash_tracker/recorder.h"
 
 #include <seastar/core/smp.hh>
+#include <seastar/util/backtrace.hh>
+#include <seastar/util/log.hh>
 #include <seastar/util/print_safe.hh>
 
 namespace crash_tracker {
@@ -69,15 +72,34 @@ void install_oneshot_signal_handler() {
     }).get();
 }
 
-void sigsegv_action() {
+static void maybe_print_backtrace(std::string_view signal_msg) noexcept {
+    if (ctlog.is_enabled(ss::log_level::debug)) {
+        ss::print_safe(signal_msg.data(), signal_msg.size());
+        ss::print_safe(":\n");
+        ss::backtrace(
+          [](const ss::frame& f) {
+              ss::print_safe("0x");
+              ss::print_zero_padded_hex_safe(f.addr);
+              ss::print_safe(" in ");
+              ss::print_safe(f.so->name.c_str());
+              ss::print_safe("\n");
+          },
+          true);
+    }
+}
+
+static void sigsegv_action() noexcept {
+    maybe_print_backtrace("Segmentation fault");
     constexpr auto signo = crash_tracker::recorder::recorded_signo::sigsegv;
     crash_tracker::get_recorder().record_crash_sighandler(signo);
 }
 void sigabrt_action() {
+    maybe_print_backtrace("Aborting");
     constexpr auto signo = crash_tracker::recorder::recorded_signo::sigabrt;
     crash_tracker::get_recorder().record_crash_sighandler(signo);
 }
 void sigill_action() {
+    maybe_print_backtrace("Illegal instruction");
     constexpr auto signo = crash_tracker::recorder::recorded_signo::sigill;
     crash_tracker::get_recorder().record_crash_sighandler(signo);
 }

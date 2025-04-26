@@ -29,6 +29,8 @@ builds:
       - -X github.com/redpanda-data/redpanda/src/go/rpk/pkg/cli/container/common.tag={{.Tag}}
     env:
       - 'CGO_ENABLED={{ if index .Env "CGO_ENABLED" }}{{ .Env.CGO_ENABLED }}{{ else }}0{{ end }}'
+    tags:
+      - fips
     goos:
       - linux
     goarch:

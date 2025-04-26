@@ -363,7 +363,6 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         ":log_manager_probe",
-        ":logger",
         "//src/v/syschecks",
     ],
     include_prefix = "storage",
@@ -374,6 +373,7 @@ redpanda_cc_library(
         ":compaction",
         ":index_state",
         ":key_offset_map",
+        ":logger",
         ":parser_utils",
         ":record_batch_builder",
         ":record_batch_utils",

@@ -2,4 +2,4 @@ module produce_test
 
 go 1.19
 
-require github.com/Shopify/sarama v1.37.2
+require github.com/IBM/sarama v1.45.1

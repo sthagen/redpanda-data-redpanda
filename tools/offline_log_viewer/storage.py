@@ -40,7 +40,21 @@ Header = collections.namedtuple(
                'producer_epoch', 'base_seq', 'record_count'))
 
 SEGMENT_NAME_PATTERN = re.compile(
-    "(?P<base_offset>\d+)-(?P<term>\d+)-v(?P<version>\d)\.log")
+    r"(?P<base_offset>\d+)-(?P<term>\d+)-v(?P<version>\d)\.log")
+
+
+def human_bytes(bytes: int):
+    """Convert bytes to human readable MiB."""
+    if bytes < 1024:
+        return f"{bytes} B"
+    elif bytes < 1024**2:
+        return f"{bytes / 1024:.2f} KiB"
+    elif bytes < 1024**3:
+        return f"{bytes / 1024**2:.2f} MiB"
+    elif bytes < 1024**4:
+        return f"{bytes / 1024**3:.2f} GiB"
+    else:
+        return f"{bytes / 1024**4:.2f} TiB"
 
 
 class CorruptBatchError(Exception):
@@ -139,6 +153,19 @@ class BatchType(Enum):
     version_fence = 23
     tx_tm_hosted_trasactions = 24
     prefix_truncate = 25
+    plugin_update = 26
+    tx_registry = 27
+    cluster_recovery_cmd = 28
+    compaction_placeholder = 29
+    role_management_cmd = 30
+    client_quota = 31
+    data_migration_cmd = 32
+    group_fence_tx = 33
+    partition_properties_update = 34
+    datalake_coordinator = 35
+    dl_placeholder = 36
+    dl_stm_command = 37
+    datalake_translation_state = 38
     unknown = -1
 
     @classmethod
@@ -185,6 +212,7 @@ class Batch:
         header = self.header._asdict()
         attrs = header['attrs']
         header["type_name"] = self.type.name
+        header["term"] = self.term
         header['expanded_attrs'] = {
             'compression':
             Batch.CompressionType(attrs & Batch.compression_mask).name,
@@ -210,6 +238,9 @@ class Batch:
             # it appears that we may have hit a truncation point if all of the
             # fields in the header are zeros
             if all(map(lambda v: v == 0, header)):
+                logger.info(
+                    f"Truncation point detected at {f.tell()} (all zeros in header)"
+                )
                 return
             records_size = header.batch_size - HEADER_SIZE
             data = f.read(records_size)
@@ -234,21 +265,24 @@ class Batch:
 
 
 class BatchIterator:
-    def __init__(self, path):
+    def __init__(self, path, term):
         self.path = path
+        self.term = term
         self.file = open(path, "rb")
         self.idx = 0
 
     def __next__(self):
         b = Batch.from_stream(self.file, self.idx)
+
         if b is None:
             fsize = os.stat(self.path).st_size
             if fsize != self.file.tell():
-                logger.warn(
-                    f"Incomplete read of {self.path}: {self.file.tell()}/{fsize}"
+                logger.warning(
+                    f"Incomplete read of {self.path}: {human_bytes(self.file.tell())}/{human_bytes(fsize)}"
                 )
             raise StopIteration()
         self.idx += 1
+        b.term = self.term
         return b
 
     def __del__(self):
@@ -258,9 +292,17 @@ class BatchIterator:
 class Segment:
     def __init__(self, path):
         self.path = path
+        self.term = self._parse_term()
+
+    def _parse_term(self):
+        m = SEGMENT_NAME_PATTERN.match(os.path.basename(self.path))
+        if m is None:
+            raise RuntimeError(f"Invalid segment path: {self.path}")
+
+        return int(m['term'])
 
     def __iter__(self):
-        return BatchIterator(self.path)
+        return BatchIterator(self.path, self.term)
 
 
 class Ntp:

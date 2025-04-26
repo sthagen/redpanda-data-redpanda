@@ -31,14 +31,12 @@ class KafkaCliClientCompatTest(RedpandaTest):
 
     @cluster(num_nodes=3)
     def test_describe_broker_configs(self):
-        # this uses the latest kafka client. older clients still need some work.
-        # it seems as though at the protocol layer things work fine, but the
-        # interface to cli clients are different. so some work generalizing the
-        # client interface is needed.
-        client_factory = KafkaCliTools.instances()[0]
-        client = client_factory(self.redpanda)
-        res = client.describe_broker_config()
-        assert res.count("All configs for broker") == len(self.redpanda.nodes)
+        # kafka-configs.sh --describe --entity-type brokers --all is not supported prior to 2.6.0
+        for client_factory in KafkaCliTools.instances(min_version="2.6.0"):
+            client = client_factory(self.redpanda)
+            res = client.describe_broker_config()
+            assert res.count("All configs for broker") == len(
+                self.redpanda.nodes)
 
     @cluster(num_nodes=1)
     def test_create_role_acl(self):

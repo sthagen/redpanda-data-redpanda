@@ -384,19 +384,18 @@ ss::future<> fair_scheduling_policy::on_resource_exhaustion(
                  > b.status().memory_bytes_reserved;
       });
 
-    auto num_running = executor.running.size();
     // pick the earliest scheduled translator and force a flush.
+    auto& executable = *executor.running.begin();
     vlog(
       datalake_log.debug,
       "[{}] stopping translator due to memory exhaustion",
-      *executor.running.begin());
-    executor.stop_translation(
-      *executor.running.begin(), translator::stop_reason::oom);
-
-    while (mem_tracker.memory_exhausted() && !executor.as.abort_requested()
-           && executor.running.size() == num_running) {
-        co_await ss::sleep_abortable(polling_interval, executor.as);
-    }
+      executable);
+    co_await finish_translator(
+      executor,
+      finish_choice_info(
+        executable.translator_ptr()->id(),
+        finish_choice_info::status::running,
+        translator::stop_reason::oom));
 }
 
 enum fair_scheduling_policy::finish_choice_info::status

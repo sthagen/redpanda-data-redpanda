@@ -431,6 +431,18 @@ disk_log_impl::request_eviction_until_offset(model::offset max_offset) {
     return _start_offset;
 }
 
+ss::future<compaction_result> disk_log_impl::segment_self_compact(
+  compaction_config cfg, ss::lw_shared_ptr<segment> seg) {
+    co_return co_await storage::internal::self_compact_segment(
+      seg,
+      _stm_manager,
+      cfg,
+      *_probe,
+      *_readers_cache,
+      _manager.resources(),
+      _feature_table);
+}
+
 ss::future<> disk_log_impl::adjacent_merge_compact(
   compaction_config cfg, std::optional<model::offset> new_start_offset) {
     vlog(
@@ -495,14 +507,7 @@ ss::future<> disk_log_impl::adjacent_merge_compact(
         }
 
         auto segment = *seg_it;
-        auto result = co_await storage::internal::self_compact_segment(
-          segment,
-          _stm_manager,
-          cfg,
-          *_probe,
-          *_readers_cache,
-          _manager.resources(),
-          _feature_table);
+        auto result = co_await segment_self_compact(cfg, segment);
 
         if (segment->is_closed()) {
             // We can race here with a truncation operation that removes the
@@ -610,14 +615,7 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
             cfg.asrc->check();
         }
 
-        auto result = co_await storage::internal::self_compact_segment(
-          seg,
-          _stm_manager,
-          cfg,
-          *_probe,
-          *_readers_cache,
-          _manager.resources(),
-          _feature_table);
+        auto result = co_await segment_self_compact(cfg, seg);
 
         if (result.did_compact() == false) {
             continue;
@@ -958,14 +956,9 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
         replacement->mark_as_finished_windowed_compaction();
     }
     _probe->add_initial_segment(*replacement.get());
-    auto ret = co_await storage::internal::self_compact_segment(
-      replacement,
-      _stm_manager,
-      cfg,
-      *_probe,
-      *_readers_cache,
-      _manager.resources(),
-      _feature_table);
+
+    auto ret = co_await segment_self_compact(cfg, replacement);
+
     _probe->delete_segment(*replacement.get());
     vlog(gclog.debug, "Final compacted segment {}", replacement);
 

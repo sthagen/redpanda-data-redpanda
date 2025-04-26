@@ -42,7 +42,7 @@ ss::future<ss::stop_iteration> put_entry(
     co_return ss::stop_iteration::yes;
 }
 
-ss::future<bool> should_keep(
+ss::future<bool> is_latest_record_for_key(
   const key_offset_map& map,
   const model::record_batch& b,
   const model::record& r) {
@@ -184,56 +184,48 @@ ss::future<index_state> deduplicate_segment(
     }
     auto rdr = internal::create_segment_full_reader(
       seg, cfg, probe, std::move(read_holder));
+
+    auto segment_last_offset = seg->offsets().get_committed_offset();
     auto compaction_placeholder_enabled = feature_table.local().is_active(
       features::feature::compaction_placeholder_batch);
-
     const bool past_tombstone_delete_horizon
       = internal::is_past_tombstone_delete_horizon(seg, cfg);
     bool may_have_tombstone_records = false;
+
+    auto is_latest_record = [&map](
+                              const model::record_batch& b,
+                              const model::record& r) -> ss::future<bool> {
+        return is_latest_record_for_key(map, b, r);
+    };
+
+    auto record_filter = [f = std::move(is_latest_record),
+                          &feature_table,
+                          segment_last_offset,
+                          past_tombstone_delete_horizon,
+                          &may_have_tombstone_records,
+                          &probe](
+                           const model::record_batch& b,
+                           const model::record& r,
+                           bool is_last_record_in_batch) {
+        return internal::should_keep(
+          b,
+          r,
+          is_last_record_in_batch,
+          f,
+          probe,
+          feature_table,
+          segment_last_offset,
+          past_tombstone_delete_horizon,
+          may_have_tombstone_records);
+    };
+
     auto copy_reducer = internal::copy_data_segment_reducer(
-      [&map,
-       &may_have_tombstone_records,
-       &probe,
-       segment_last_offset = seg->offsets().get_committed_offset(),
-       past_tombstone_delete_horizon,
-       compaction_placeholder_enabled](
-        const model::record_batch& b,
-        const model::record& r,
-        bool is_last_record_in_batch) {
-          auto is_last_batch = b.last_offset() == segment_last_offset;
-          // once compaction placeholder feature is enabled, we are not
-          // worried about empty batches as the reducer then installs a
-          // placeholder batch if all the records are compacted away.
-          if (
-            !compaction_placeholder_enabled
-            && (is_last_batch && is_last_record_in_batch)) {
-              vlog(
-                gclog.trace,
-                "retaining last record: {} of segment from batch: {}",
-                r,
-                b.header());
-              return ss::make_ready_future<bool>(true);
-          }
-
-          // Deal with tombstone record removal
-          if (r.is_tombstone() && past_tombstone_delete_horizon) {
-              probe.add_removed_tombstone();
-              return ss::make_ready_future<bool>(false);
-          }
-
-          return should_keep(map, b, r).then(
-            [&may_have_tombstone_records,
-             is_tombstone = r.is_tombstone()](bool keep) {
-                if (is_tombstone && keep) {
-                    may_have_tombstone_records = true;
-                }
-                return keep;
-            });
-      },
+      std::move(record_filter),
       &appender,
       seg->path().is_internal_topic(),
       should_offset_delta_times,
-      seg->offsets().get_committed_offset(),
+      segment_last_offset,
+      compaction_placeholder_enabled,
       &cmp_idx_writer,
       inject_reader_failure,
       cfg.asrc);

@@ -836,6 +836,9 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/cluster:features",
+        "//src/v/features",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
         "//src/v/random:generators",

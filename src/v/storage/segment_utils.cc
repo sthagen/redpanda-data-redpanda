@@ -354,9 +354,6 @@ ss::future<storage::index_state> do_copy_segment_data(
     auto old_broker_timestamp = seg->index().broker_timestamp();
     auto old_clean_compact_timestamp = seg->index().clean_compact_timestamp();
 
-    const bool past_tombstone_delete_horizon
-      = internal::is_past_tombstone_delete_horizon(seg, cfg);
-
     // find out which offsets will survive compaction
     auto idx_path = seg->reader().path().to_compacted_index();
     auto compacted_reader = make_file_backed_compacted_reader(
@@ -388,40 +385,51 @@ ss::future<storage::index_state> do_copy_segment_data(
       "copying compacted segment data from {} to {}",
       seg->reader().filename(),
       tmpname);
+
+    auto segment_last_offset = seg->offsets().get_committed_offset();
+    auto compaction_placeholder_enabled = feature_table.local().is_active(
+      features::feature::compaction_placeholder_batch);
+    const bool past_tombstone_delete_horizon
+      = internal::is_past_tombstone_delete_horizon(seg, cfg);
     bool may_have_tombstone_records = false;
-    auto should_keep =
-      [compacted_list = std::move(compacted_offsets),
-       past_tombstone_delete_horizon,
-       &may_have_tombstone_records,
-       &pb](const model::record_batch& b, const model::record& r, bool) {
-          // Deal with tombstone record removal
-          if (r.is_tombstone() && past_tombstone_delete_horizon) {
-              pb.add_removed_tombstone();
-              return ss::make_ready_future<bool>(false);
-          }
 
-          const auto o = b.base_offset()
-                         + model::offset_delta(r.offset_delta());
-          const auto keep = compacted_list.contains(o);
+    auto offset_in_compacted_list =
+      [compacted_offsets = std::move(compacted_offsets)](
+        const model::record_batch& b,
+        const model::record& r) -> ss::future<bool> {
+        const auto o = b.base_offset() + model::offset_delta(r.offset_delta());
+        const auto keep = compacted_offsets.contains(o);
+        return ss::make_ready_future<bool>(keep);
+    };
 
-          if (r.is_tombstone() && keep) {
-              may_have_tombstone_records = true;
-          }
+    auto record_filter = [f = std::move(offset_in_compacted_list),
+                          &feature_table,
+                          segment_last_offset,
+                          past_tombstone_delete_horizon,
+                          &may_have_tombstone_records,
+                          &pb](
+                           const model::record_batch& b,
+                           const model::record& r,
+                           bool is_last_record_in_batch) {
+        return internal::should_keep(
+          b,
+          r,
+          is_last_record_in_batch,
+          f,
+          pb,
+          feature_table,
+          segment_last_offset,
+          past_tombstone_delete_horizon,
+          may_have_tombstone_records);
+    };
 
-          return ss::make_ready_future<bool>(keep);
-      };
-
-    model::offset segment_last_offset{};
-    if (likely(feature_table.local().is_active(
-          features::feature::compaction_placeholder_batch))) {
-        segment_last_offset = seg->offsets().get_committed_offset();
-    }
     auto copy_reducer = copy_data_segment_reducer(
-      std::move(should_keep),
+      std::move(record_filter),
       appender.get(),
       seg->path().is_internal_topic(),
       apply_offset,
       segment_last_offset,
+      compaction_placeholder_enabled,
       /*cidx=*/nullptr,
       /*inject_failure=*/false,
       cfg.asrc);

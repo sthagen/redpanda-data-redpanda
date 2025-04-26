@@ -16,6 +16,7 @@
 #include "storage/compacted_index_reader.h"
 #include "storage/compacted_index_writer.h"
 #include "storage/compacted_offset_list.h"
+#include "storage/logger.h"
 #include "storage/probe.h"
 #include "storage/readers_cache.h"
 #include "storage/segment.h"
@@ -25,6 +26,7 @@
 #include <seastar/core/circular_buffer.hh>
 #include <seastar/core/rwlock.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/util/noncopyable_function.hh>
 
 #include <roaring/roaring.hh>
 
@@ -298,6 +300,53 @@ auto with_segment_reader_handle(segment_reader_handle handle, Func func) {
                 [] { return ss::make_ready_future<>(); });
           });
       });
+}
+
+template<typename Func>
+ss::future<bool> should_keep(
+  const model::record_batch& b,
+  const model::record& r,
+  bool is_last_record_in_batch,
+  Func&& is_latest_key,
+  probe& pb,
+  ss::sharded<features::feature_table>& feature_table,
+  model::offset segment_last_offset,
+  bool past_tombstone_delete_horizon,
+  bool& may_have_tombstone_records) {
+    auto compaction_placeholder_enabled = feature_table.local().is_active(
+      features::feature::compaction_placeholder_batch);
+    auto is_last_batch = b.last_offset() == segment_last_offset;
+    // once compaction placeholder feature is enabled, we are not
+    // worried about empty batches as the reducer then installs a
+    // placeholder batch if all the records are compacted away.
+    if (
+      !compaction_placeholder_enabled
+      && (is_last_batch && is_last_record_in_batch)) {
+        vlog(
+          gclog.trace,
+          "retaining last record: {} of segment from batch: {}",
+          r,
+          b.header());
+        if (r.is_tombstone()) {
+            may_have_tombstone_records = true;
+        }
+
+        co_return true;
+    }
+
+    // Deal with tombstone record removal
+    if (r.is_tombstone() && past_tombstone_delete_horizon) {
+        pb.add_removed_tombstone();
+        co_return false;
+    }
+
+    auto keep = co_await is_latest_key(b, r);
+
+    if (r.is_tombstone() && keep) {
+        may_have_tombstone_records = true;
+    }
+
+    co_return keep;
 }
 
 } // namespace storage::internal

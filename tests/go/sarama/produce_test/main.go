@@ -8,16 +8,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/Shopify/sarama"
+	"github.com/IBM/sarama"
 )
 
 var (
 	brokers = flag.String("brokers", "127.0.0.1:9092", "Th Redpanda brokers to connect to, as a comma separated list")
 	count   = flag.Int64("count", 100, "Optional count to run")
+	version = flag.String("version", "2.1.0", "Kafka version to use, e.g. 2.1.0")
 )
 
 func main() {
 	flag.Parse()
+
+	version, err := sarama.ParseKafkaVersion(*version)
+	if err != nil {
+		fmt.Printf("Error creating producer, %v", err)
+		os.Exit(1)
+	}
 
 	brokerList := strings.Split(*brokers, ",")
 	fmt.Printf("Redpanda brokers: %s\n", strings.Join(brokerList, ", "))
@@ -26,7 +33,7 @@ func main() {
 		"topic1",
 	}
 
-	producer, err := newProducer(brokerList)
+	producer, err := newProducer(brokerList, version)
 	if err != nil {
 		fmt.Printf("Error creating producer, %v", err)
 		os.Exit(1)
@@ -39,7 +46,7 @@ func main() {
 	}
 }
 
-func newProducer(brokers []string) (sarama.SyncProducer, error) {
+func newProducer(brokers []string, version sarama.KafkaVersion) (sarama.SyncProducer, error) {
 	config := sarama.NewConfig()
 
 	config.Metadata.Full = false
@@ -50,7 +57,7 @@ func newProducer(brokers []string) (sarama.SyncProducer, error) {
 	config.Producer.Retry.Max = 10                   //hard
 	config.Producer.Return.Successes = true
 	config.Net.MaxOpenRequests = 1
-	config.Version = sarama.V2_1_0_0
+	config.Version = version
 
 	producer, err := sarama.NewSyncProducer(brokers, config)
 

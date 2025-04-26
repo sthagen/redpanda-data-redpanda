@@ -228,6 +228,10 @@ public:
 
     storage_resources& resources();
 
+    // Self compacts a segment.
+    ss::future<compaction_result>
+    segment_self_compact(compaction_config, ss::lw_shared_ptr<segment> seg);
+
     // Performs self-compaction on the earliest segment possible, and then
     // attempts to perform compaction on adjacent segments.
     ss::future<> adjacent_merge_compact(
