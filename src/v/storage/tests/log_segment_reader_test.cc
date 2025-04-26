@@ -318,3 +318,17 @@ SEASTAR_THREAD_TEST_CASE(iobuf_is_zero_test) {
     zero.append(zeros.data(), zeros.size());
     BOOST_REQUIRE_EQUAL(storage::internal::is_zero(zero), true);
 }
+
+SEASTAR_THREAD_TEST_CASE(test_ghosts_gap) {
+    long twice_i32max = static_cast<long>(std::numeric_limits<int32_t>::max())
+                        * 2;
+    auto ghost_batches = log_reader::make_ghost_batches(
+      model::offset{0}, model::offset{twice_i32max}, model::term_id{0});
+    BOOST_REQUIRE_EQUAL(3, ghost_batches.size());
+    size_t num_records = 0;
+    for (const auto& b : ghost_batches) {
+        BOOST_REQUIRE_GT(b.record_count(), 0);
+        num_records += b.record_count();
+    }
+    BOOST_REQUIRE_EQUAL(twice_i32max + 1, num_records);
+}

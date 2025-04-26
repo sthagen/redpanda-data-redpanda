@@ -135,6 +135,10 @@ public:
     using data_t = model::record_batch_reader::data_t;
     using foreign_data_t = model::record_batch_reader::foreign_data_t;
     using storage_t = model::record_batch_reader::storage_t;
+    static std::vector<model::record_batch> make_ghost_batches(
+      model::offset start_offset,
+      model::offset end_offset,
+      model::term_id term);
 
     log_reader(
       std::unique_ptr<lock_manager::lease>,

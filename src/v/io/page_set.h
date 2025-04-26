@@ -76,8 +76,10 @@ public:
 
     /**
      * Remove the page pointed to be \p it.
+     *
+     * Returns an iterator to the next page in the set.
      */
-    void erase(const_iterator it);
+    const_iterator erase(const_iterator it);
 
     /**
      * Return an iterator to the first page in the set.
@@ -88,6 +90,11 @@ public:
      * Return an iterator to the end of the page set.
      */
     [[nodiscard]] const_iterator end() const;
+
+    /**
+     * Returns the number of pages in the set.
+     */
+    [[nodiscard]] size_t size() const;
 
 private:
     map_type pages_;

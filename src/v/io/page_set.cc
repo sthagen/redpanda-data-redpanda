@@ -24,8 +24,8 @@ page_set::const_iterator page_set::find(uint64_t offset) const {
     return const_iterator(pages_.find(offset));
 }
 
-void page_set::erase(page_set::const_iterator it) {
-    pages_.erase(it.base_reference());
+page_set::const_iterator page_set::erase(page_set::const_iterator it) {
+    return const_iterator{pages_.erase(it.base_reference())};
 }
 
 page_set::const_iterator page_set::begin() const {
@@ -44,5 +44,7 @@ page_set::insert(seastar::lw_shared_ptr<page> page) {
       {.start = offset, .length = size}, std::move(page));
     return {const_iterator(res.first), res.second};
 }
+
+size_t page_set::size() const { return pages_.size(); }
 
 } // namespace experimental::io

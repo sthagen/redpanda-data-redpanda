@@ -74,4 +74,9 @@ void page::signal_waiters() {
       [](page::waiter* waiter) { waiter->ready.set_value(); });
 }
 
+bool page::may_evict() const {
+    return !test_flag(flags::faulting) && !test_flag(flags::dirty)
+           && use_count() == 1;
+}
+
 } // namespace experimental::io

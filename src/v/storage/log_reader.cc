@@ -57,28 +57,6 @@ model::record_batch make_ghost_batch(
     return batch;
 }
 
-/**
- * makes multiple ghost batches required to fill the gap in a way that max batch
- * size (max of int32_t) is not exceeded
- */
-std::vector<model::record_batch> make_ghost_batches(
-  model::offset start_offset, model::offset end_offset, model::term_id term) {
-    std::vector<model::record_batch> batches;
-    while (start_offset <= end_offset) {
-        static constexpr model::offset max_batch_size{
-          std::numeric_limits<int32_t>::max()};
-        // limit max batch size
-        const model::offset delta = std::min<model::offset>(
-          max_batch_size, end_offset - start_offset);
-
-        batches.push_back(
-          make_ghost_batch(start_offset, delta + start_offset, term));
-        start_offset = next_offset(batches.back().last_offset());
-    }
-
-    return batches;
-}
-
 } // anonymous namespace
 
 template<>
@@ -97,6 +75,28 @@ struct fmt::formatter<storage::log_reader> : fmt::formatter<std::string_view> {
 
 namespace storage {
 using records_t = ss::circular_buffer<model::record_batch>;
+
+/**
+ * makes multiple ghost batches required to fill the gap in a way that max batch
+ * size (max of int32_t) is not exceeded
+ */
+std::vector<model::record_batch> log_reader::make_ghost_batches(
+  model::offset start_offset, model::offset end_offset, model::term_id term) {
+    std::vector<model::record_batch> batches;
+    while (start_offset <= end_offset) {
+        static constexpr model::offset max_batch_size{
+          std::numeric_limits<int32_t>::max() - 1};
+        // limit max batch size
+        const model::offset delta = std::min<model::offset>(
+          max_batch_size, end_offset - start_offset);
+
+        batches.push_back(
+          make_ghost_batch(start_offset, delta + start_offset, term));
+        start_offset = next_offset(batches.back().last_offset());
+    }
+
+    return batches;
+}
 
 batch_consumer::consume_result skipping_consumer::accept_batch_start(
   const model::record_batch_header& header) const {

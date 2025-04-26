@@ -24,6 +24,29 @@ namespace experimental::io {
 
 /**
  * A page represents a contiguous region of data in a file.
+ *
+ * Concurrency
+ * -----------
+ *
+ * Pages are subject to synchronous eviction, via the page cache, by the Seastar
+ * memory reclaimer, and thus have specific rules related to concurrency.
+ *
+ * Pages in the page cache (and subject to Seastar reclaim) are contained on an
+ * intrusive list using the page::cache_hook intrusive list hook. The Seastar
+ * reclaimer accesses pages through this list. When a page is chosen for
+ * eviction its may_evict method is called. If the page is allowed to be
+ * evicted, then the page cache is permitted to clear the page's data buffer and
+ * remove the page from the cache's intrusive list, but the page structure
+ * itself otherwise left unmodified.
+ *
+ * The interactions of the reclaimer (free, intrusive_list::erase, may_evict)
+ * should all be allocation-free, problematic interleavings that corrupt data
+ * structures are unexpected. However, there are additional page access rules.
+ *
+ * After obtaining a shared_ptr reference to a page it should be tested for
+ * with page.data().empty() to determine if the page had been evicted. If it has
+ * not been evicted, then as long as the held reference remains alive the page
+ * is not subject to eviction.
  */
 class page : public seastar::enable_lw_shared_from_this<page> {
 public:
@@ -103,21 +126,28 @@ public:
     void clear();
 
     /*
-     * Used by the cache to test if this page may be evicted. If true, the cache
-     * is permitted to release the backing memory for this page and remove the
-     * page from the cache.
+     * Used by the page cache to test if this page may be evicted. If true, the
+     * cache is permitted to release the backing memory for this page. Note that
+     * this will be invoked by Seastar's synchronous relaimer. See the comment
+     * on the page class for additional details.
      *
-     * use_count(): we maintain the invariant that a page in the cache is always
-     * referenced by an index structure. therefore, if its use_count is 1 then
-     * there are no other active references to the page, and the backing memory
-     * can be released. this property is useful because it bounds the set of
-     * locations where a page must be tested to those where new page references
-     * are obtained from an index.
+     * A page is non-evictable when:
+     *
+     * Faulting: when a page is faulting we cannot evict it because inflight I/O
+     * may be writing to the page's data buffer and expect it to be present.
+     *
+     * Dirty: when a page is dirty we cannot evict it because we would lose
+     * updates that have not yet been made persistent.
+     *
+     * References: the container that owns pages (most likely page_set) stores
+     * shared_ptr<page> objects which have an base line use count of 1. When the
+     * use count is 1 the page is considered evictable--it is alive, but not
+     * being actively used. However, when new references to the page
+     * are created (e.g. a reader) then the use count is > 1 and the page is not
+     * subject to eviction. See Scylla's LSA weak pointer for additional
+     * inspiration.
      */
-    [[nodiscard]] bool may_evict() const {
-        return !test_flag(flags::faulting) && !test_flag(flags::dirty)
-               && use_count() == 1;
-    }
+    [[nodiscard]] bool may_evict() const;
 
     /**
      * Page cache entry intrusive list hook.

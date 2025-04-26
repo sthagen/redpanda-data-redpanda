@@ -41,6 +41,23 @@ TEST(IntervalMap, InsertIntoEmptyMap) {
     }
 }
 
+TEST(IntervalMap, Size) {
+    imap map;
+    EXPECT_EQ(map.size(), 0);
+
+    EXPECT_TRUE(map.insert({0, 10}, 0).second);
+    EXPECT_EQ(map.size(), 1);
+
+    EXPECT_TRUE(map.insert({10, 10}, 0).second);
+    EXPECT_EQ(map.size(), 2);
+
+    map.erase(map.begin());
+    EXPECT_EQ(map.size(), 1);
+
+    map.erase(map.begin());
+    EXPECT_EQ(map.size(), 0);
+}
+
 TEST(IntervalMap, InsertOverlapRejected) {
     imap map;
     EXPECT_TRUE(map.insert({0, 10}, 0).second);
@@ -216,8 +233,9 @@ TEST(IntervalMap, Erase) {
         imap map;
         auto res = map.insert({0, 10}, 0);
         EXPECT_FALSE(map.empty());
-        map.erase(res.first);
+        auto next = map.erase(res.first);
         EXPECT_TRUE(map.empty());
+        EXPECT_EQ(next, map.end());
     }
 
     // erase 2 becomes empty
@@ -225,13 +243,36 @@ TEST(IntervalMap, Erase) {
         imap map;
         EXPECT_TRUE(map.insert({0, 10}, 0).second);
         EXPECT_TRUE(map.insert({10, 10}, 0).second);
-        const auto it0 = map.find(0);
+        EXPECT_FALSE(map.empty());
+
         const auto it1 = map.find(10);
+        auto next = map.erase(it1);
         EXPECT_FALSE(map.empty());
-        map.erase(it1);
-        EXPECT_FALSE(map.empty());
-        map.erase(it0);
+        EXPECT_EQ(next, map.end());
+
+        const auto it0 = map.find(0);
+        next = map.erase(it0);
         EXPECT_TRUE(map.empty());
+        EXPECT_EQ(next, map.end());
+    }
+
+    // erase returns non-end next
+    {
+        imap map;
+        EXPECT_TRUE(map.insert({0, 10}, 0).second);
+        EXPECT_TRUE(map.insert({10, 10}, 0).second);
+        EXPECT_FALSE(map.empty());
+
+        const auto it0 = map.find(0);
+        auto next = map.erase(it0);
+        EXPECT_FALSE(map.empty());
+        EXPECT_EQ(next, map.begin());
+        EXPECT_NE(next, map.end());
+
+        const auto it1 = map.find(10);
+        next = map.erase(it1);
+        EXPECT_TRUE(map.empty());
+        EXPECT_EQ(next, map.end());
     }
 }
 
