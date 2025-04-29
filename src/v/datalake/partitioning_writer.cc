@@ -74,10 +74,12 @@ ss::future<writer_error> partitioning_writer::add_data(
     auto write_res = co_await writer->add_data_struct(
       std::move(val), approx_size, as);
     if (write_res != writer_error::ok) {
+        auto is_shutdown_error = write_res == writer_error::shutting_down;
         vlogl(
           datalake_log,
-          is_recoverable_error(write_res) ? ss::log_level::debug
-                                          : ss::log_level::error,
+          is_recoverable_error(write_res) || is_shutdown_error
+            ? ss::log_level::debug
+            : ss::log_level::error,
           "Failed to add data: {}",
           write_res);
         co_return write_res;
@@ -110,8 +112,11 @@ partitioning_writer::finish() && {
     for (auto& [pk, writer] : writers_) {
         auto file_res = co_await writer->finish();
         if (file_res.has_error()) {
-            vlog(
-              datalake_log.error,
+            auto is_shutdown_error = file_res.error()
+                                     == writer_error::shutting_down;
+            vlogl(
+              datalake_log,
+              is_shutdown_error ? ss::log_level::debug : ss::log_level::error,
               "Failed to finish writer: {}",
               file_res.error());
             if (first_error == writer_error::ok) {
