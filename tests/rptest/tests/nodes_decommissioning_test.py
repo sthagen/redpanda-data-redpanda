@@ -665,6 +665,10 @@ class NodesDecommissioningTest(PreallocNodesTest):
     @parametrize(shutdown_decommissioned=True)
     @parametrize(shutdown_decommissioned=False)
     def test_decommissioning_rebalancing_node(self, shutdown_decommissioned):
+        # lower space management loop interval to make partition balancing
+        # start faster after node restart.
+        self.redpanda.add_extra_rp_conf(
+            {"retention_local_trim_interval": 5_000})
 
         # start 4 nodes
         self.redpanda.start(nodes=self.redpanda.nodes[0:4])
@@ -697,7 +701,7 @@ class NodesDecommissioningTest(PreallocNodesTest):
         to_decommission_id = self.redpanda.node_id(to_decommission)
         first_node = self.redpanda.nodes[0]
         wait_until(lambda: self._partitions_moving(node=first_node),
-                   timeout_sec=15,
+                   timeout_sec=30,
                    backoff_sec=1)
 
         # request decommission of newly added broker

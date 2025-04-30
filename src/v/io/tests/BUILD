@@ -128,3 +128,17 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "page_cache_test",
+    timeout = "short",
+    srcs = ["page_cache_test.cc"],
+    deps = [
+        ":testing",
+        "//src/v/base",
+        "//src/v/io",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

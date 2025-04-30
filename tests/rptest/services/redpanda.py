@@ -5522,7 +5522,7 @@ class RedpandaService(RedpandaServiceBase):
                                          new_nodes,
                                          admin=None,
                                          min_partitions=5,
-                                         progress_timeout=30,
+                                         progress_timeout=60,
                                          timeout=300,
                                          backoff=2):
         """Waits until the rebalance triggered by adding new nodes is finished."""

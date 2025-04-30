@@ -247,10 +247,22 @@ void partition_balancer_backend::on_topic_table_update() {
 void partition_balancer_backend::on_health_monitor_update(
   const node_health_report& report,
   std::optional<ss::lw_shared_ptr<const node_health_report>> old_report) {
+    auto has_log_data_size = [](const node_health_report& r) {
+        return r.local_state.log_data_size.has_value();
+    };
+
     if (!old_report) {
         vlog(
           clusterlog.debug,
           "health report for node {} appeared, scheduling tick",
+          report.id);
+
+        maybe_rearm_timer(/*now=*/true);
+    } else if (
+      !has_log_data_size(*old_report.value()) && has_log_data_size(report)) {
+        vlog(
+          clusterlog.debug,
+          "log data size for node {} appeared, scheduling tick",
           report.id);
 
         maybe_rearm_timer(/*now=*/true);
@@ -391,6 +403,8 @@ ss::future<> partition_balancer_backend::do_tick() {
         .min_partition_size_threshold = get_min_partition_size_threshold(),
         .node_responsiveness_timeout = node_responsiveness_timeout,
         .topic_aware = _topic_aware(),
+        .space_management_enabled
+        = config::shard_local_cfg().space_management_enable,
       },
       _state,
       _partition_allocator);
