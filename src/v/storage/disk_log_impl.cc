@@ -1534,7 +1534,7 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
     // Persist the state of our indexes in their new names.
     seg->index().swap_index_state(std::move(new_idx));
     seg->force_set_commit_offset_from_index();
-    seg->release_batch_cache_index();
+    co_await seg->reset_batch_cache_index();
 
     const ssize_t removed_bytes = ssize_t(size_before) - ssize_t(size_after);
 

@@ -221,7 +221,10 @@ public:
     // deletion/eviction, and compaction.
     bool has_compactible_offsets(const compaction_config& cfg) const;
 
-    void release_batch_cache_index() { _cache.reset(); }
+    // Calls `_cache->reset()`, iff the optional `_cache` has a value. This
+    // leaves the object in a re-usable state. If there is no contained object
+    // (i.e `_cache == std::nullopt`), this function is a no-op.
+    ss::future<> reset_batch_cache_index();
     /** Cache methods */
     std::optional<std::reference_wrapper<batch_cache_index>> cache();
     std::optional<std::reference_wrapper<const batch_cache_index>>
@@ -468,6 +471,11 @@ inline bool segment::finished_windowed_compaction() const {
 }
 inline bool segment::has_clean_compact_timestamp() const {
     return index().has_clean_compact_timestamp();
+}
+inline ss::future<> segment::reset_batch_cache_index() {
+    if (_cache.has_value()) {
+        co_await _cache->reset();
+    }
 }
 inline std::optional<std::reference_wrapper<batch_cache_index>>
 segment::cache() {

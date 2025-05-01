@@ -24,7 +24,6 @@ If this PR is a backport, link to the original with `Backport of PR`, e.g.
 - [ ] v25.1.x
 - [ ] v24.3.x
 - [ ] v24.2.x
-- [ ] v24.1.x
 
 ## Release Notes
 

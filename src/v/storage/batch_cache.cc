@@ -472,8 +472,7 @@ void batch_cache_index::mark_clean(model::offset up_to_inclusive) {
 
     _dirty_tracker.mark_clean(up_to_inclusive);
 }
-ss::future<> batch_cache_index::clear_async() {
-    lock_guard lk(*this);
+ss::future<> batch_cache_index::clear_async_unlocked() {
     vassert(
       _dirty_tracker.clean(),
       "Destroying batch_cache_index ({}) tracking dirty batches.",
@@ -483,6 +482,11 @@ ss::future<> batch_cache_index::clear_async() {
           _cache->evict(std::move(value.second.range()));
       });
     _index.clear();
+}
+
+ss::future<> batch_cache_index::clear_async() {
+    lock_guard lk(*this);
+    co_await clear_async_unlocked();
 }
 
 void batch_cache::background_reclaimer::start() {
