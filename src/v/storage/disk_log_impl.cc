@@ -788,6 +788,24 @@ disk_log_impl::find_adjacent_compaction_range(const compaction_config& cfg) {
     // sliding window over segments. currently restricted to two segments
     auto range = std::make_pair(_segs.begin(), std::next(_segs.begin(), 2));
 
+    // Ensure that the adjacent segments do not span an offset space greater
+    // than the maximum value that can be represented by a uint32_t. This must
+    // be enforced due to use of roaring::bitmap in the compacted_offset_list,
+    // which is used to deduplicate records during self compaction and sliding
+    // window compaction. Overflows in this area could lead to incorrect
+    // compaction.
+    auto valid_offset_range = [](
+                                ss::lw_shared_ptr<segment>& first,
+                                ss::lw_shared_ptr<segment>& last) -> bool {
+        auto base_offset_first_seg = first->offsets().get_base_offset();
+        auto dirty_offset_last_seg = last->offsets().get_dirty_offset();
+        int64_t offset_delta = dirty_offset_last_seg()
+                               - base_offset_first_seg();
+        static constexpr int64_t u32_max = static_cast<int64_t>(
+          std::numeric_limits<uint32_t>::max());
+        return offset_delta <= u32_max;
+    };
+
     while (true) {
         // the simple compaction process in use right now builds a concatenation
         // of segments so we avoid processing a group that is too large.
@@ -814,7 +832,8 @@ disk_log_impl::find_adjacent_compaction_range(const compaction_config& cfg) {
         // found a good range if all the tests pass
         if (
           same_term
-          && total_size < _manager.config().max_compacted_segment_size()) {
+          && total_size < _manager.config().max_compacted_segment_size()
+          && valid_offset_range(*range.first, *std::prev(range.second))) {
             break;
         }
 
@@ -2835,23 +2854,20 @@ ss::future<std::optional<timequery_result>>
 disk_log_impl::timequery(timequery_config cfg) {
     vassert(!_closed, "timequery on closed log - {}", *this);
     if (_segs.empty()) {
-        return ss::make_ready_future<std::optional<timequery_result>>();
+        co_return std::nullopt;
     }
-    return make_reader(cfg).then([cfg](model::record_batch_reader reader) {
-        return model::consume_reader_to_memory(
-                 std::move(reader), model::no_timeout)
-          .then([cfg](model::record_batch_reader::storage_t st) {
-              using ret_t = std::optional<timequery_result>;
-              auto& batches = std::get<model::record_batch_reader::data_t>(st);
-              if (
-                !batches.empty()
-                && batches.front().header().max_timestamp >= cfg.time) {
-                  return ret_t(batch_timequery(
-                    batches.front(), cfg.min_offset, cfg.time, cfg.max_offset));
-              }
-              return ret_t();
-          });
-    });
+
+    auto reader = co_await make_reader(cfg);
+    auto batches = co_await model::consume_reader_to_memory(
+      std::move(reader), model::no_timeout);
+
+    if (
+      !batches.empty() && batches.front().header().max_timestamp >= cfg.time) {
+        co_return co_await batch_timequery(
+          std::move(batches.front()), cfg.min_offset, cfg.time, cfg.max_offset);
+    }
+
+    co_return std::nullopt;
 }
 
 ss::future<> disk_log_impl::remove_segment_permanently(

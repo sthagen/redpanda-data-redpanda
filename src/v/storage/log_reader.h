@@ -297,8 +297,8 @@ private:
  * \param t The timestamp to search for
  * \param max_offset The maximum offset to consider
  */
-timequery_result batch_timequery(
-  const model::record_batch& b,
+ss::future<timequery_result> batch_timequery(
+  model::record_batch b,
   model::offset min_offset,
   model::timestamp t,
   model::offset max_offset);

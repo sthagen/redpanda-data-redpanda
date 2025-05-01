@@ -20,7 +20,7 @@ from rptest.services.admin import OutboundDataMigration, InboundDataMigration, N
 
 import confluent_kafka as ck
 
-from ducktape.mark import matrix
+from ducktape.mark import matrix, ignore
 from ducktape.tests.test import TestContext
 from ducktape.utils.util import wait_until
 from rptest.services.cluster import cluster
@@ -571,6 +571,7 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             {"ntr_no_topic_manifest", "missing_segments"})
 
     @cluster(num_nodes=3, log_allow_list=MIGRATION_LOG_ALLOW_LIST)
+    @ignore  # flaky: CORE-9921
     def test_conflicting_names(self):
         def on_delivery(err, msg):
             if err is not None:

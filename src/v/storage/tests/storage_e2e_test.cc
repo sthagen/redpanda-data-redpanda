@@ -57,7 +57,9 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <iterator>
+#include <limits>
 #include <numeric>
 #include <optional>
 #include <vector>
@@ -1989,6 +1991,72 @@ FIXTURE_TEST(max_adjacent_segment_compaction, storage_test_fixture) {
     log->housekeeping(c_cfg).get();
     BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 3);
 }
+
+FIXTURE_TEST(
+  adjacent_segment_compaction_range_u32_bounds, storage_test_fixture) {
+    storage::log_manager mgr = make_log_manager();
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp = model::ntp("kafka", "tapioca", 0);
+    auto log
+      = mgr.manage(storage::ntp_config(ntp, mgr.config().base_dir)).get();
+    auto* disk_log = static_cast<storage::disk_log_impl*>(log.get());
+
+    append_single_record_batch(log, 1, model::term_id(0));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    append_single_record_batch(log, 1, model::term_id(0));
+    disk_log->force_roll(ss::default_priority_class()).get();
+    log->flush().get();
+    BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 3);
+
+    auto& segs = disk_log->segments();
+
+    // Need to mark the segments as self compacted so that they are eligible for
+    // adjacent segment compaction.
+    for (auto& seg : segs) {
+        if (!seg->has_appender()) {
+            seg->mark_as_finished_self_compaction();
+        }
+    }
+
+    // Last non-active segment
+    auto& back = segs[1];
+
+    int64_t u32_max = static_cast<int64_t>(
+      std::numeric_limits<uint32_t>::max());
+
+    // const_cast is ridiculous
+    auto& back_offset_tracker = const_cast<storage::segment::offset_tracker&>(
+      back->offsets());
+
+    // Set the last non-active segment's dirty offset to one past the uint32_t
+    // max- this should make the segment non-eligible for adjacent compaction
+    // with the first segment with a base offset of 0.
+    int64_t one_past_u32_max = u32_max + 1;
+    back_offset_tracker.set_offset(
+      storage::segment::offset_tracker::dirty_offset_t{one_past_u32_max});
+
+    ss::abort_source as;
+    storage::compaction_config cfg(
+      model::offset::max(), std::nullopt, ss::default_priority_class(), as);
+    auto range = disk_log->find_adjacent_compaction_range(cfg);
+    BOOST_REQUIRE(!range.has_value());
+
+    // Set the last non-active segment's dirty offset to the uint32_t
+    // max- this should make the segment eligible for adjacent compaction
+    // with the first segment, since the offset range no longer exceeds the
+    // uint32_t max.
+    back_offset_tracker.set_offset(
+      storage::segment::offset_tracker::dirty_offset_t{u32_max});
+    range = disk_log->find_adjacent_compaction_range(cfg);
+    BOOST_REQUIRE(range.has_value());
+
+    auto range_segments = std::vector<ss::lw_shared_ptr<storage::segment>>(
+      range->first, range->second);
+
+    // Compare filenames for equality
+    BOOST_REQUIRE_EQUAL(range_segments[0]->filename(), segs[0]->filename());
+    BOOST_REQUIRE_EQUAL(range_segments[1]->filename(), segs[1]->filename());
+};
 
 FIXTURE_TEST(many_segment_locking, storage_test_fixture) {
     auto cfg = default_log_config(test_dir);
