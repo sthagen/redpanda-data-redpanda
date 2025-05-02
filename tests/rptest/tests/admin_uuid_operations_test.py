@@ -21,7 +21,7 @@ from rptest.services.cluster import cluster
 from rptest.util import expect_exception
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.errors import TimeoutError
-from ducktape.mark import parametrize
+from ducktape.mark import parametrize, matrix
 
 from rptest.services.utils import LogSearchLocal
 from rptest.util import wait_until_result, wait_until
@@ -185,10 +185,23 @@ class AdminUUIDOperationsTest(RedpandaTest):
                 backoff_s=1))
 
     @cluster(num_nodes=3)
-    @parametrize(mode=TestMode.CFG_OVERRIDE)
-    @parametrize(mode=TestMode.NO_OVERRIDE)
-    @parametrize(mode=TestMode.CLI_OVERRIDE)
-    def test_force_uuid_override(self, mode):
+    @matrix(
+        mode=[
+            TestMode.CFG_OVERRIDE,
+            TestMode.NO_OVERRIDE,
+            TestMode.CLI_OVERRIDE,
+        ],
+        force=[
+            True,
+            False,
+        ],
+    )
+    def test_uuid_override(self, mode, force):
+        if mode == TestMode.NO_OVERRIDE and force is True:
+            self.logger.debug(
+                "Force flag doesn't apply if we're not overriding anything")
+            return
+
         # create a topic so that the cluster is not completely empty
         RpkTool(self.redpanda).create_topic("foo", 10, 3)
 
@@ -238,7 +251,8 @@ class AdminUUIDOperationsTest(RedpandaTest):
                 dict(node_id_overrides=[
                     dict(current_uuid=current_uuid,
                          new_uuid=old_uuid,
-                         new_id=initial_to_stop_id)
+                         new_id=initial_to_stop_id,
+                         ignore_existing_node_id=force)
                 ], ),
                 drop_disk=False,
             )
@@ -250,7 +264,7 @@ class AdminUUIDOperationsTest(RedpandaTest):
                 to_stop,
                 extra_cli=[
                     "--node-id-overrides",
-                    f"{current_uuid}:{old_uuid}:{initial_to_stop_id}",
+                    f"{current_uuid}:{old_uuid}:{initial_to_stop_id}{'/ignore_existing_node_id' if force else ''}",
                 ],
                 drop_disk=False,
             )
@@ -312,9 +326,17 @@ class AdminUUIDOperationsTest(RedpandaTest):
                    retry_on_exc=True)
 
     @cluster(num_nodes=3)
-    @parametrize(mode=TestMode.CFG_OVERRIDE)
-    @parametrize(mode=TestMode.CLI_OVERRIDE)
-    def test_force_uuid_override_multinode(self, mode):
+    @matrix(
+        mode=[
+            TestMode.CFG_OVERRIDE,
+            TestMode.CLI_OVERRIDE,
+        ],
+        force=[
+            True,
+            False,
+        ],
+    )
+    def test_uuid_override_multinode(self, mode, force):
         # create a topic so that the cluster is not completely empty
         RpkTool(self.redpanda).create_topic("foo", 10, 3)
 
@@ -361,7 +383,8 @@ class AdminUUIDOperationsTest(RedpandaTest):
                 override_cfg_params=dict(node_id_overrides=[
                     dict(current_uuid=current_uuids[n],
                          new_uuid=old_uuids[initial_to_stop_ids[n]],
-                         new_id=initial_to_stop_ids[n])
+                         new_id=initial_to_stop_ids[n],
+                         ignore_existing_node_id=force)
                     for n in range(0, len(to_stop))
                 ]),
                 auto_assign_node_id=True,
@@ -372,7 +395,7 @@ class AdminUUIDOperationsTest(RedpandaTest):
                 extra_cli=[
                     "--node-id-overrides",
                 ] + [
-                    f"{current_uuids[n]}:{old_uuids[initial_to_stop_ids[n]]}:{initial_to_stop_ids[n]}"
+                    f"{current_uuids[n]}:{old_uuids[initial_to_stop_ids[n]]}:{initial_to_stop_ids[n]}{'/ignore_existing_node_id' if force else '' }"
                     for n in range(0, len(to_stop))
                 ],
                 auto_assign_node_id=True,
@@ -386,3 +409,146 @@ class AdminUUIDOperationsTest(RedpandaTest):
 
         assert controller_leader is not None, "Didn't elect a controller leader"
         assert controller_leader not in to_stop, f"Unexpected controller leader {controller_leader.account.hostname}"
+
+    @cluster(num_nodes=3)
+    @matrix(
+        mode=[
+            TestMode.CFG_OVERRIDE,
+            TestMode.CLI_OVERRIDE,
+        ],
+        force=[
+            True,
+            False,
+        ],
+    )
+    def test_force_uuid_override(self, mode, force):
+        """
+        Test that we can force a UUID override in situations where the cluster
+        is healthy and the target node already has a node ID assigned
+        """
+        # create a topic so that the cluster is not completely empty
+        RpkTool(self.redpanda).create_topic("foo", 10, 3)
+
+        to_stop = self.redpanda.nodes[0]
+        initial_to_stop_id = self.redpanda.node_id(to_stop)
+
+        self._restart_node(to_stop, drop_disk=True)
+
+        # wait for the node to join with new ID
+        uuids = wait_until_result(
+            lambda: self._uuids_updated(),
+            timeout_sec=30,
+            backoff_sec=2,
+            err_msg="Node was unable to join the cluster")
+
+        old_uuid = None
+        for n in uuids:
+            id = n['node_id']
+            if id == initial_to_stop_id:
+                old_uuid = n['uuid']
+
+        assert old_uuid is not None, "Old uuid unexpectedly None"
+
+        current_uuid = self.admin.get_broker_uuid(to_stop)['node_uuid']
+
+        THE_OVERRIDE = f"{current_uuid} -> ID: '{initial_to_stop_id}' ; UUID: '{old_uuid}'"
+        if mode == TestMode.CFG_OVERRIDE:
+            self.logger.debug(
+                f"Override with known-good uuid/id via node config: {THE_OVERRIDE}"
+            )
+            self._restart_node(
+                to_stop,
+                dict(node_id_overrides=[
+                    dict(current_uuid=current_uuid,
+                         new_uuid=old_uuid,
+                         new_id=initial_to_stop_id,
+                         ignore_existing_node_id=force)
+                ], ),
+                drop_disk=False,
+            )
+        elif mode == TestMode.CLI_OVERRIDE:
+            self.logger.debug(
+                f"Override with known-good uuid/id via command line options: {THE_OVERRIDE}"
+            )
+            self._restart_node(
+                to_stop,
+                extra_cli=[
+                    "--node-id-overrides",
+                    f"{current_uuid}:{old_uuid}:{initial_to_stop_id}{'/ignore_existing_node_id' if force else ''}",
+                ],
+                drop_disk=False,
+            )
+
+        def wait_for_override():
+            wait_until(lambda: self.admin.get_broker_uuid(to_stop)['node_id']
+                       == initial_to_stop_id,
+                       timeout_sec=30,
+                       backoff_sec=2,
+                       err_msg=f"{to_stop.name} did not take the ID override")
+
+            wait_until(
+                lambda: self.admin.get_broker_uuid(to_stop)['node_uuid'
+                                                            ] == old_uuid,
+                timeout_sec=30,
+                backoff_sec=2,
+                err_msg=f"{to_stop.name} did not take the UUID override")
+
+        def override_log():
+            OVERRIDE_LOG = "-P '(Overriding) ((UUID)|(node ID))'"
+
+            return [
+                s.strip()
+                for s in self.log_searcher._capture_log(to_stop, OVERRIDE_LOG)
+            ]
+
+        override_logs = override_log()
+
+        if force:
+            wait_for_override()
+            assert len(override_logs) == 2, \
+                f"Expected to find both override logs, got {json.dumps(override_logs, indent=1)}"
+        else:
+            with expect_exception(TimeoutError, lambda _: True):
+                wait_for_override()
+            assert len(override_logs) == 1, \
+                f"Expected to find only UUID log, got {json.dumps(override_logs, indent=1)}"
+
+        self.logger.debug(
+            f"Restart w/ the same config and confirm that current UUID mismatch prevents changes from taking effect"
+        )
+        if mode == TestMode.CFG_OVERRIDE:
+            self._restart_node(
+                to_stop,
+                dict(node_id_overrides=[
+                    dict(current_uuid=current_uuid,
+                         new_uuid=old_uuid,
+                         new_id=initial_to_stop_id,
+                         ignore_existing_node_id=force)
+                ], ),
+                drop_disk=False,
+            )
+        elif mode == TestMode.CLI_OVERRIDE:
+            self._restart_node(
+                to_stop,
+                extra_cli=[
+                    "--node-id-overrides",
+                    f"{current_uuid}:{old_uuid}:{initial_to_stop_id}{'/ignore_existing_node_id' if force else ''}",
+                ],
+                drop_disk=False,
+            )
+
+        with expect_exception(TimeoutError, lambda e: True):
+
+            def check_logs():
+                diff = set(override_log()) - set(override_logs)
+                self.logger.debug(
+                    f"New override logs: {json.dumps(list(diff), indent=1)}")
+                return diff
+
+            wait_until(
+                lambda: len(check_logs()) > 0,
+                timeout_sec=30,
+                backoff_sec=2,
+                err_msg=
+                f"Unexpected second override: {json.dumps(list(set(override_log()) - set(override_logs)), indent=1)}"
+            )

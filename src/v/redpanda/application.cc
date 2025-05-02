@@ -454,7 +454,7 @@ int application::run(int ac, char** av) {
       "node-id-overrides",
       po::value<std::vector<config::node_id_override>>()->multitoken(),
       "Override node UUID and ID iff current UUID matches "
-      "- usage: <current UUID>:<new UUID>:<new ID>");
+      "- usage: <current UUID>:<new UUID>:<new ID>[/ignore_existing_node_id]?");
 
     // Validate command line args using options registered by the app and
     // seastar. Keep the resulting variables in a temporary map so they don't
@@ -2726,15 +2726,19 @@ void application::wire_up_and_start(::stop_signal& app_signal, bool test_mode) {
     cluster::cluster_discovery cd(
       node_uuid, storage.local(), app_signal.abort_source());
 
-    bool ever_ran_controller = storage.local()
-                                 .kvs()
-                                 .get(
-                                   storage::kvstore::key_space::controller,
-                                   cluster::controller::invariants_key())
-                                 .has_value();
+    auto invariants_buf = storage.local().kvs().get(
+      storage::kvstore::key_space::controller,
+      cluster::controller::invariants_key());
+
+    bool ever_ran_controller = invariants_buf.has_value();
+
+    bool has_id = config::node().node_id().has_value() && ever_ran_controller;
+
+    bool force_override = _node_overrides.node_id().has_value()
+                          && _node_overrides.ignore_existing_node_id();
 
     model::node_id node_id;
-    if (config::node().node_id().has_value() && ever_ran_controller) {
+    if (has_id && !force_override) {
         vlog(
           _log.info,
           "Running with already-established node ID {}",
@@ -2743,15 +2747,31 @@ void application::wire_up_and_start(::stop_signal& app_signal, bool test_mode) {
     } else if (auto id = _node_overrides.node_id(); id.has_value()) {
         vlog(
           _log.warn,
-          "Overriding node ID: {} -> {}",
+          "Overriding node ID: {} -> {} [ignore_existing_node_id? {}]",
           config::node().node_id(),
-          id);
+          id,
+          has_id && force_override);
         node_id = id.value();
         // null out the config'ed ID indiscriminately; it will be set outside
         // the conditional
         ss::smp::invoke_on_all([] {
             config::node().node_id.set_value(std::nullopt);
         }).get();
+        if (invariants_buf.has_value()) {
+            auto invariants
+              = reflection::from_iobuf<cluster::configuration_invariants>(
+                std::move(invariants_buf.value()));
+            invariants.node_id = node_id;
+            storage.local()
+              .kvs()
+              .put(
+                storage::kvstore::key_space::controller,
+                cluster::controller::invariants_key(),
+                reflection::to_iobuf(
+                  cluster::configuration_invariants{invariants}))
+              .get();
+            vlog(_log.debug, "Force-updated local node_id to {}", node_id);
+        }
     } else {
         auto registration_result = cd.register_with_cluster().get();
         node_id = registration_result.assigned_node_id;

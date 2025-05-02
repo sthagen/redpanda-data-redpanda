@@ -838,6 +838,7 @@ redpanda_cc_gtest(
         "//src/v/base",
         "//src/v/cluster",
         "//src/v/cluster:features",
+        "//src/v/container:fragmented_vector",
         "//src/v/features",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",

@@ -133,6 +133,10 @@ redpanda_cc_library(
         "tx_range_manifest.h",
         "types.h",
     ],
+    implementation_deps = [
+        "//src/v/json",
+        "@rapidjson",
+    ],
     include_prefix = "cloud_storage",
     visibility = ["//visibility:public"],
     deps = [
@@ -159,7 +163,6 @@ redpanda_cc_library(
         "//src/v/container:fragmented_vector",
         "//src/v/container:intrusive",
         "//src/v/hashing:xx",
-        "//src/v/json",
         "//src/v/metrics",
         "//src/v/model",
         "//src/v/net",
@@ -208,7 +211,6 @@ redpanda_cc_library(
         "@boost//:range",
         "@boost//:uuid",
         "@fmt",
-        "@rapidjson",
         "@re2",
         "@seastar",
         "@zlib",

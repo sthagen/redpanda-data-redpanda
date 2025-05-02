@@ -349,8 +349,9 @@ ss::future<storage::index_state> do_copy_segment_data(
   storage_resources& resources,
   offset_delta_time apply_offset,
   ss::sharded<features::feature_table>& feature_table) {
-    // preserve broker_timestamp and clean_compact_timestamp from the segment's
-    // index
+    // preserve base_offset, broker_timestamp, and clean_compact_timestamp from
+    // the segment's index
+    auto old_base_offset = seg->index().base_offset();
     auto old_broker_timestamp = seg->index().broker_timestamp();
     auto old_clean_compact_timestamp = seg->index().clean_compact_timestamp();
 
@@ -428,6 +429,7 @@ ss::future<storage::index_state> do_copy_segment_data(
       appender.get(),
       seg->path().is_internal_topic(),
       apply_offset,
+      old_base_offset,
       segment_last_offset,
       compaction_placeholder_enabled,
       /*cidx=*/nullptr,

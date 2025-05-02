@@ -19,6 +19,10 @@
 namespace config {
 
 std::ostream& operator<<(std::ostream& os, const config::node_id_override& v) {
+    if (v.ignore_existing_node_id) {
+        return os << ssx::sformat(
+                 "{}:{}:{}/ignore_existing_node_id", v.key, v.uuid, v.id);
+    }
     return os << ssx::sformat("{}:{}:{}", v.key, v.uuid, v.id);
 }
 
@@ -26,20 +30,25 @@ std::istream& operator>>(std::istream& is, config::node_id_override& v) {
     std::string s;
     is >> s;
 
-    static const re2::RE2 pattern{R"(^([^:]+):([^:]+):([^:]+)$)"};
+    static const re2::RE2 pattern{
+      R"(^([^:]+):([^:]+):([^:^/]+)(/ignore_existing_node_id)?$)"};
     vassert(pattern.ok(), "Regex compilation failed");
 
-    std::string curr, uuid, id;
+    std::string curr, uuid, id, ignore_existing_node_id;
 
-    if (!re2::RE2::FullMatch(s, pattern, &curr, &uuid, &id)) {
+    if (!re2::RE2::FullMatch(
+          s, pattern, &curr, &uuid, &id, &ignore_existing_node_id)) {
         throw std::runtime_error(fmt::format(
-          R"(Formatting error: '{}', must be of form '<uuid>:<uuid>:<id>')",
+          R"(Formatting error: '{}', must be of form '<uuid>:<uuid>:<id>[/ignore_existing_node_id]?')",
           s));
     }
 
     v.key = boost::lexical_cast<model::node_uuid>(curr);
     v.uuid = boost::lexical_cast<model::node_uuid>(uuid);
     v.id = boost::lexical_cast<model::node_id>(id);
+    if (!ignore_existing_node_id.empty()) {
+        v.ignore_existing_node_id = true;
+    }
 
     return is;
 }
@@ -57,6 +66,7 @@ void node_override_store::maybe_set_overrides(
             }
             _uuid_override.emplace(o.uuid);
             _id_override.emplace(o.id);
+            _ignore_existing_node_id = o.ignore_existing_node_id;
         }
     }
 }
@@ -71,6 +81,11 @@ const std::optional<model::node_id>&
 node_override_store::node_id() const noexcept {
     vassert(ss::this_shard_id() == 0, "Only get overrides on shard 0");
     return _id_override;
+}
+
+bool node_override_store::ignore_existing_node_id() const noexcept {
+    vassert(ss::this_shard_id() == 0, "Only get overrides on shard 0");
+    return _ignore_existing_node_id;
 }
 
 } // namespace config

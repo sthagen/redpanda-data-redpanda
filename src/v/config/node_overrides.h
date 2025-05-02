@@ -34,13 +34,25 @@ struct node_id_override {
     node_id_override(
       model::node_uuid key,
       model::node_uuid uuid_value,
-      model::node_id id_value)
+      model::node_id id_value,
+      bool ignore_existing_node_id = false)
       : key(key)
       , uuid(uuid_value)
-      , id(id_value) {}
+      , id(id_value)
+      , ignore_existing_node_id(ignore_existing_node_id) {}
     model::node_uuid key{};
     model::node_uuid uuid{};
     model::node_id id{};
+    /**
+     * ignore_existing_node_id - Flag controlling whether the override should be
+     * forced onto the node, possibly overwriting a node ID already store in its
+     * local kvstore.
+     *
+     * - if unset: Ignore the override if the node already has an ID persisted
+     *             to the configuration invariants in its local kvstore.
+     * - if set:   Apply the override irrespective of local kvstore contents.
+     */
+    bool ignore_existing_node_id{false};
 
 private:
     friend std::ostream&
@@ -75,10 +87,12 @@ struct node_override_store {
 
     const std::optional<model::node_uuid>& node_uuid() const noexcept;
     const std::optional<model::node_id>& node_id() const noexcept;
+    bool ignore_existing_node_id() const noexcept;
 
 private:
     std::optional<model::node_uuid> _uuid_override;
     std::optional<model::node_id> _id_override;
+    bool _ignore_existing_node_id{false};
 };
 
 } // namespace config
@@ -93,6 +107,8 @@ struct convert<config::node_id_override> {
         node["current_uuid"] = ssx::sformat("{}", rhs.key);
         node["new_uuid"] = ssx::sformat("{}", rhs.uuid);
         node["new_id"] = ssx::sformat("{}", rhs.id);
+        node["ignore_existing_node_id"] = ssx::sformat(
+          "{}", rhs.ignore_existing_node_id);
 
         return node;
     }
@@ -104,6 +120,11 @@ struct convert<config::node_id_override> {
         rhs.key = node["current_uuid"].as<model::node_uuid>();
         rhs.uuid = node["new_uuid"].as<model::node_uuid>();
         rhs.id = node["new_id"].as<model::node_id>();
+        if (const auto& f = node["ignore_existing_node_id"]; f) {
+            rhs.ignore_existing_node_id = f.as<bool>();
+        } else {
+            rhs.ignore_existing_node_id = false;
+        }
         return true;
     }
 };

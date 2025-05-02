@@ -18,6 +18,8 @@
 #include "cloud_storage/remote_partition.h"
 #include "cloud_storage/tests/cloud_storage_fixture.h"
 #include "cloud_storage/tests/common_def.h"
+#include "cloud_storage/topic_manifest.h"
+#include "json/ostreamwrapper.h"
 #include "model/record_batch_types.h"
 #include "utils/lazy_abort_source.h"
 
@@ -226,5 +228,22 @@ scan_remote_partition_incrementally_with_closest_lso(
   model::offset max,
   size_t maybe_max_segments,
   size_t maybe_max_readers);
+
+namespace testing {
+
+/// Serialize manifest object in json format. only fields up to
+/// first_version are serialized
+///
+/// This is testing only code that is used for testing backwards compatibility
+/// with older versions of redpanda which used json format for topic manifest.
+///
+/// Generally you shouldn't make any changes to this function except
+/// refactoring.
+///
+/// \param out output stream that should be used to output the json
+/// \param m manifest object to serialize
+void topic_manifest_serialize_v1_json(
+  std::ostream& out, const topic_manifest& m);
+} // namespace testing
 
 } // namespace cloud_storage

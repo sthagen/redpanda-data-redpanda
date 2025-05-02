@@ -14,15 +14,11 @@
 #include "bytes/streambuf.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/remote_path_provider.h"
-#include "cloud_storage/topic_path_utils.h"
 #include "cloud_storage/types.h"
-#include "hashing/xx.h"
 #include "json/encodings.h"
 #include "json/istreamwrapper.h"
-#include "json/ostreamwrapper.h"
 #include "json/reader.h"
 #include "json/types.h"
-#include "json/writer.h"
 #include "model/compression.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -65,6 +61,8 @@ struct topic_manifest_state
 
 namespace cloud_storage {
 
+/// JSON parsing handler for topic manifest written by legacy
+/// versions of Redpanda. For backwards compatibility.
 struct topic_manifest_handler
   : public json::BaseReaderHandler<json::UTF8<>, topic_manifest_handler> {
     using key_string = ss::basic_sstring<char, uint32_t, 31>;
@@ -389,6 +387,9 @@ topic_manifest::update(manifest_format format, ss::input_stream<char> is) {
 
     switch (format) {
     case manifest_format::json: {
+        /// Backwards compatibility with legacy topic manifest
+        /// written by older versions of Redpanda.
+
         iobuf_istreambuf ibuf(result);
         std::istream stream(&ibuf);
 
@@ -439,93 +440,6 @@ ss::future<iobuf> topic_manifest::serialize_buf() const {
       .cfg = _topic_config.value(), .initial_revision = _rev}));
 }
 
-void topic_manifest::serialize_v1_json(std::ostream& out) const {
-    json::OStreamWrapper wrapper(out);
-    json::Writer<json::OStreamWrapper> w(wrapper);
-    w.StartObject();
-    w.Key("version");
-    w.Int(static_cast<int>(topic_manifest::first_version()));
-    w.Key("namespace");
-    w.String(_topic_config->tp_ns.ns());
-    w.Key("topic");
-    w.String(_topic_config->tp_ns.tp());
-    w.Key("partition_count");
-    w.Int(_topic_config->partition_count);
-    w.Key("replication_factor");
-    w.Int(_topic_config->replication_factor);
-    w.Key("revision_id");
-    w.Int(_rev());
-
-    // optional values are encoded in the following manner:
-    // - key set to null - optional is nullopt
-    // - key is not null - optional has value
-    w.Key("compression");
-    if (_topic_config->properties.compression.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *_topic_config->properties.compression));
-    } else {
-        w.Null();
-    }
-    w.Key("cleanup_policy_bitflags");
-    if (_topic_config->properties.cleanup_policy_bitflags.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *_topic_config->properties.cleanup_policy_bitflags));
-    } else {
-        w.Null();
-    }
-    w.Key("compaction_strategy");
-    if (_topic_config->properties.compaction_strategy.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *_topic_config->properties.compaction_strategy));
-    } else {
-        w.Null();
-    }
-    w.Key("timestamp_type");
-    if (_topic_config->properties.timestamp_type.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *_topic_config->properties.timestamp_type));
-    } else {
-        w.Null();
-    }
-    w.Key("segment_size");
-    if (_topic_config->properties.segment_size.has_value()) {
-        w.Uint64(*_topic_config->properties.segment_size);
-    } else {
-        w.Null();
-    }
-    // NOTE: manifest_object_name is intentionaly ommitted
-
-    // tristate values are encoded in the following manner:
-    // - key not present - tristate is disabled
-    // - key set to null - tristate is enabled but not set
-    // - key is not null - tristate is enabled and set
-    if (!_topic_config->properties.retention_bytes.is_disabled()) {
-        w.Key("retention_bytes");
-        if (_topic_config->properties.retention_bytes.has_optional_value()) {
-            w.Uint64(_topic_config->properties.retention_bytes.value());
-        } else {
-            w.Null();
-        }
-    }
-    if (!_topic_config->properties.retention_duration.is_disabled()) {
-        w.Key("retention_duration");
-        if (_topic_config->properties.retention_duration.has_optional_value()) {
-            w.Int64(
-              _topic_config->properties.retention_duration.value().count());
-        } else {
-            w.Null();
-        }
-    }
-
-    // do not serialize fields that are not deserializable by previous versions
-    // of redpanda
-    if (_topic_config->properties.mpx_virtual_cluster_id) {
-        w.Key("virtual_cluster_id");
-        w.String(fmt::format(
-          "{}", _topic_config->properties.mpx_virtual_cluster_id.value()));
-    }
-    w.EndObject();
-}
 ss::sstring topic_manifest::display_name() const {
     // The path is <prefix>/meta/<ns>/<topic>/topic_manifest.json
     vassert(_topic_config, "Topic config is not set");

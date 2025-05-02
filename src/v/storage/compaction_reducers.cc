@@ -318,7 +318,7 @@ ss::future<ss::stop_iteration> copy_data_segment_reducer::filter_and_append(
     // caller who has more context
     if (_idx.maybe_index(
           _acc,
-          32_KiB,
+          segment_index::default_data_buffer_step,
           start_pos,
           batch.base_offset(),
           batch.last_offset(),

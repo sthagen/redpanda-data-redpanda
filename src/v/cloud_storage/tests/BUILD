@@ -44,6 +44,7 @@ redpanda_test_cc_library(
         "//src/v/cloud_storage",
         "//src/v/cluster",
         "//src/v/cluster/cloud_metadata/tests:manual_mixin",
+        "//src/v/json",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
         "//src/v/model/tests:random",
@@ -57,6 +58,7 @@ redpanda_test_cc_library(
         "//src/v/utils:stream_provider",
         "@boost//:numeric_conversion",
         "@boost//:test",
+        "@rapidjson",
         "@seastar",
     ],
 )
@@ -530,6 +532,7 @@ redpanda_cc_gtest(
     cpu = 1,
     tags = ["exclusive"],
     deps = [
+        ":common",
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
         "//src/v/cloud_io/tests:s3_imposter",

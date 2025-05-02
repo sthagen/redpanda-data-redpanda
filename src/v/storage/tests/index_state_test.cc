@@ -19,9 +19,9 @@
 
 static storage::index_state make_random_index_state(
   storage::offset_delta_time apply_offset = storage::offset_delta_time::yes) {
-    auto st = storage::index_state::make_empty_index(apply_offset);
+    auto base_offset = model::offset(random_generators::get_int<int64_t>());
+    auto st = storage::index_state::make_empty_index(base_offset, apply_offset);
     st.bitflags = random_generators::get_int<uint32_t>();
-    st.base_offset = model::offset(random_generators::get_int<int64_t>());
     st.max_offset = model::offset(random_generators::get_int<int64_t>());
     st.base_timestamp = model::timestamp(random_generators::get_int<int64_t>());
     st.max_timestamp = model::timestamp(random_generators::get_int<int64_t>());
@@ -265,10 +265,10 @@ BOOST_AUTO_TEST_CASE(binary_compatibility_test) {
     // format. In order to do this the index_state has to be refactored and the
     // columnar part has to be extracted. But the serialized form shouldn't
     // change.
+    auto base_offset = model::offset(6321451485771820344);
     auto expected_state = storage::index_state::make_empty_index(
-      storage::offset_delta_time::yes);
+      base_offset, storage::offset_delta_time::yes);
     // NOLINTBEGIN(cppcoreguidelines-avoid-magic-numbers)
-    expected_state.base_offset = model::offset(6321451485771820344);
     expected_state.base_timestamp = model::timestamp(5331697842032508203);
     expected_state.max_offset = model::offset(6925876299231340900);
     expected_state.max_timestamp = model::timestamp(659192121601013627);
@@ -355,4 +355,25 @@ BOOST_AUTO_TEST_CASE(binary_compatibility_test) {
     auto actual_bytes = bytes_to_iobuf(serde_serialized);
     BOOST_REQUIRE_EQUAL(expected_bytes.size_bytes(), actual_bytes.size_bytes());
     BOOST_REQUIRE(expected_bytes == actual_bytes);
+}
+
+BOOST_AUTO_TEST_CASE(index_overflow) {
+    storage::index_state state;
+
+    // Previous versions of Redpanda can have an index with offsets spanning
+    // greater than uint32 offset space. In these cases, the index is not
+    // reliable and querying the index should just return the first entry.
+    const model::timestamp dummy_ts;
+    const storage::offset_delta_time should_offset{false};
+    storage::offset_time_index time_idx{dummy_ts, should_offset};
+    constexpr long uint32_max = std::numeric_limits<uint32_t>::max();
+    state.add_entry(0, time_idx, 1);
+    state.add_entry(100, time_idx, 2);
+    state.add_entry(static_cast<uint32_t>(uint32_max + 1), time_idx, 3);
+    state.add_entry(static_cast<uint32_t>(uint32_max + 10), time_idx, 4);
+    state.max_offset = model::offset{uint32_max + 10};
+    auto res = state.find_nearest(model::offset(100));
+    BOOST_REQUIRE(res.has_value());
+    BOOST_CHECK_EQUAL(res->offset, model::offset{0});
+    BOOST_CHECK_EQUAL(res->filepos, 1);
 }

@@ -215,7 +215,7 @@ redpanda_cc_btest(
 
 redpanda_cc_btest(
     name = "async_data_uploader_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "async_data_uploader_test.cc",
     ],

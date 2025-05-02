@@ -263,24 +263,34 @@ SEASTAR_THREAD_TEST_CASE(full_config_update_all_fields_correct) {
 }
 
 SEASTAR_THREAD_TEST_CASE(topic_manifest_min_serialization) {
-    auto min_cfg = cfg;
-    min_cfg.properties.retention_bytes = tristate<size_t>(
+    constexpr auto json_manifest = R"json({
+    "version": 1,
+    "namespace": "cfg-test-namespace",
+    "topic": "cfg-test-topic",
+    "partition_count": 32,
+    "replication_factor": 3,
+    "revision_id": 0,
+    "compression": null,
+    "cleanup_policy_bitflags": null,
+    "compaction_strategy": null,
+    "timestamp_type": null,
+    "segment_size": 0,
+    "retention_bytes": 0,
+    "retention_duration": -9223372036854775808
+})json";
+
+    auto expected_cfg = cfg;
+    expected_cfg.properties.retention_bytes = tristate<size_t>(
       std::numeric_limits<size_t>::min());
-    min_cfg.properties.retention_duration = tristate<std::chrono::milliseconds>(
-      std::chrono::milliseconds::min());
-    min_cfg.properties.segment_size = std::make_optional(
+    expected_cfg.properties.retention_duration
+      = tristate<std::chrono::milliseconds>(std::chrono::milliseconds::min());
+    expected_cfg.properties.segment_size = std::make_optional(
       std::numeric_limits<size_t>::min());
 
-    topic_manifest m(min_cfg, model::initial_revision_id{0});
-    iobuf buf;
-    iobuf_ostreambuf obuf(buf);
-    std::ostream os(&obuf);
-    m.serialize_v1_json(os);
-
-    auto rstr = make_iobuf_input_stream(std::move(buf));
     topic_manifest restored;
-    restored.update(manifest_format::json, std::move(rstr)).get();
-    BOOST_CHECK_EQUAL(m.get_revision(), restored.get_revision());
+    restored.update(manifest_format::json, make_manifest_stream(json_manifest))
+      .get();
+    BOOST_CHECK_EQUAL(model::initial_revision_id(0), restored.get_revision());
     auto restored_cfg = restored.get_topic_config().value();
     // as a safety net, negative values for retention_duration are converted to
     // disabled tristate (infinite retention)
@@ -288,28 +298,41 @@ SEASTAR_THREAD_TEST_CASE(topic_manifest_min_serialization) {
 
     BOOST_CHECK_EQUAL(
       restored_cfg.properties.retention_bytes,
-      min_cfg.properties.retention_bytes);
+      expected_cfg.properties.retention_bytes);
     BOOST_CHECK_EQUAL(
-      restored_cfg.properties.segment_size, min_cfg.properties.segment_size);
+      restored_cfg.properties.segment_size,
+      expected_cfg.properties.segment_size);
 }
 
 SEASTAR_THREAD_TEST_CASE(topic_manifest_max_serialization) {
-    auto max_cfg = cfg;
-    max_cfg.properties.retention_bytes = tristate<size_t>(
-      std::numeric_limits<size_t>::max());
-    max_cfg.properties.retention_duration = tristate<std::chrono::milliseconds>(
-      std::chrono::milliseconds::max());
-    max_cfg.properties.segment_size = std::make_optional(
-      std::numeric_limits<size_t>::max());
-    topic_manifest m(max_cfg, model::initial_revision_id{0});
-    iobuf buf;
-    iobuf_ostreambuf obuf(buf);
-    std::ostream os(&obuf);
-    m.serialize_v1_json(os);
+    constexpr auto json_manifest = R"json({
+  "version": 1,
+  "namespace": "cfg-test-namespace",
+  "topic": "cfg-test-topic",
+  "partition_count": 32,
+  "replication_factor": 3,
+  "revision_id": 0,
+  "compression": null,
+  "cleanup_policy_bitflags": null,
+  "compaction_strategy": null,
+  "timestamp_type": null,
+  "segment_size": 18446744073709551615,
+  "retention_bytes": 18446744073709551615,
+  "retention_duration": 9223372036854775807
+})json";
 
-    auto rstr = make_iobuf_input_stream(std::move(buf));
+    auto expected_cfg = cfg;
+    expected_cfg.properties.retention_bytes = tristate<size_t>(
+      std::numeric_limits<size_t>::max());
+    expected_cfg.properties.retention_duration
+      = tristate<std::chrono::milliseconds>(std::chrono::milliseconds::max());
+    expected_cfg.properties.segment_size = std::make_optional(
+      std::numeric_limits<size_t>::max());
+    topic_manifest m(expected_cfg, model::initial_revision_id{0});
+
     topic_manifest restored;
-    restored.update(manifest_format::json, std::move(rstr)).get();
+    restored.update(manifest_format::json, make_manifest_stream(json_manifest))
+      .get();
     BOOST_REQUIRE(m == restored);
 }
 

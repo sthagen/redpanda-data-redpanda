@@ -187,7 +187,7 @@ TEST(TransformedDataTest, MakeBatch) {
       transformed_batch.header().size_bytes, transformed_batch.size_bytes());
     auto expected_records = batch.copy_records();
     auto actual_records = transformed_batch.copy_records();
-    for (auto i = 0; i < expected_records.size(); ++i) {
+    for (size_t i = 0; i < expected_records.size(); ++i) {
         EXPECT_EQ(actual_records[i].key(), expected_records[i].key());
         EXPECT_EQ(actual_records[i].value(), expected_records[i].value());
         EXPECT_EQ(actual_records[i].headers(), expected_records[i].headers());

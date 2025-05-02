@@ -721,7 +721,19 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
     }
 
     if (needs_chunked_sliding_window_compact) {
-        co_return co_await chunked_sliding_window_compact(cfg, segs, map);
+        bool did_compact = false;
+        try {
+            did_compact = co_await chunked_sliding_window_compact(
+              cfg, segs, map);
+        } catch (...) {
+            vlog(
+              gclog.debug,
+              "[{}] failed to perform chunked sliding window compaction. "
+              "Stopping compaction: {}",
+              config().ntp(),
+              std::current_exception());
+        }
+        co_return did_compact;
     }
 
     vlog(
@@ -755,6 +767,14 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
     for (auto& seg : segs) {
         if (cfg.asrc) {
             cfg.asrc->check();
+        }
+
+        if (seg->is_closed()) {
+            // We may have raced with a prefix truncation while waiting for the
+            // _segment_rewrite_lock, meaning some segments in the window may
+            // have been closed. It is safe to `continue` and rewrite the other,
+            // non-closed segments in the window.
+            continue;
         }
 
         // A segment is considered "clean" if it has been fully indexed (all
@@ -1326,6 +1346,13 @@ ss::future<bool> disk_log_impl::chunked_sliding_window_compact(
     // happens multiple times in the below while() loop
     auto segment_modify_lock = co_await _segment_rewrite_lock.get_units();
 
+    if (seg->is_closed()) {
+        // We may have raced with a prefix truncation while waiting for
+        // the _segment_rewrite_lock. Do not proceed with chunked compaction on
+        // `seg`.
+        co_return false;
+    }
+
     // The key offset map will be repeatedly built from "chunks" of the
     // unindexed segment and used to rewrite the segments in the sliding window
     // until the entirety of the unindexed segment has been indexed
@@ -1344,6 +1371,14 @@ ss::future<bool> disk_log_impl::chunked_sliding_window_compact(
         for (auto& s : segs) {
             if (compact_cfg.asrc) {
                 compact_cfg.asrc->check();
+            }
+
+            if (s->is_closed()) {
+                // We may have raced with a prefix truncation while waiting for
+                // the _segment_rewrite_lock, meaning some segments in the
+                // window may have been closed. It is safe to `continue` and
+                // rewrite the other, non-closed segments in the window.
+                continue;
             }
 
             // Neither of these flags are true until chunked compaction is

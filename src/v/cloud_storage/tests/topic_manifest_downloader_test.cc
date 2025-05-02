@@ -125,7 +125,8 @@ public:
         iobuf buf;
         iobuf_ostreambuf obuf(buf);
         std::ostream os(&obuf);
-        tm.serialize_v1_json(os);
+        cloud_storage::testing::topic_manifest_serialize_v1_json(os, tm);
+
         auto hashed_path = prefixed_topic_manifest_json_path(
           tm.get_topic_config()->tp_ns);
         upload_request json_req{

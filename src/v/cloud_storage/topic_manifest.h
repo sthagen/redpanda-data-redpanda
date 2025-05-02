@@ -19,8 +19,15 @@
 
 namespace cloud_storage {
 
+namespace testing {
+void topic_manifest_serialize_v1_json(std::ostream&, const topic_manifest& m);
+}
+
 struct topic_manifest_handler;
 class topic_manifest final : public base_manifest {
+    friend void testing::topic_manifest_serialize_v1_json(
+      std::ostream&, const topic_manifest& m);
+
 public:
     using version_t = named_type<int32_t, struct topic_manifest_version_tag>;
 
@@ -53,12 +60,6 @@ public:
 
     /// Manifest object name in S3
     remote_manifest_path get_manifest_path(const remote_path_provider&) const;
-
-    /// Serialize manifest object in json format. only fields up to
-    /// first_version are serialized
-    ///
-    /// \param out output stream that should be used to output the json
-    void serialize_v1_json(std::ostream& out) const;
 
     manifest_type get_manifest_type() const override {
         return manifest_type::topic;

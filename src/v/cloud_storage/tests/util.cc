@@ -1005,4 +1005,98 @@ void reupload_compacted_segments(
     m.advance_insync_offset(m.get_last_offset());
 }
 
+namespace testing {
+
+void topic_manifest_serialize_v1_json(
+  std::ostream& out, const topic_manifest& m) {
+    json::OStreamWrapper wrapper(out);
+    json::Writer<json::OStreamWrapper> w(wrapper);
+    w.StartObject();
+    w.Key("version");
+    w.Int(static_cast<int>(topic_manifest::first_version()));
+    w.Key("namespace");
+    w.String(m._topic_config->tp_ns.ns());
+    w.Key("topic");
+    w.String(m._topic_config->tp_ns.tp());
+    w.Key("partition_count");
+    w.Int(m._topic_config->partition_count);
+    w.Key("replication_factor");
+    w.Int(m._topic_config->replication_factor);
+    w.Key("revision_id");
+    w.Int(m._rev());
+
+    // optional values are encoded in the following manner:
+    // - key set to null - optional is nullopt
+    // - key is not null - optional has value
+    w.Key("compression");
+    if (m._topic_config->properties.compression.has_value()) {
+        w.String(boost::lexical_cast<std::string>(
+          *m._topic_config->properties.compression));
+    } else {
+        w.Null();
+    }
+    w.Key("cleanup_policy_bitflags");
+    if (m._topic_config->properties.cleanup_policy_bitflags.has_value()) {
+        w.String(boost::lexical_cast<std::string>(
+          *m._topic_config->properties.cleanup_policy_bitflags));
+    } else {
+        w.Null();
+    }
+    w.Key("compaction_strategy");
+    if (m._topic_config->properties.compaction_strategy.has_value()) {
+        w.String(boost::lexical_cast<std::string>(
+          *m._topic_config->properties.compaction_strategy));
+    } else {
+        w.Null();
+    }
+    w.Key("timestamp_type");
+    if (m._topic_config->properties.timestamp_type.has_value()) {
+        w.String(boost::lexical_cast<std::string>(
+          *m._topic_config->properties.timestamp_type));
+    } else {
+        w.Null();
+    }
+    w.Key("segment_size");
+    if (m._topic_config->properties.segment_size.has_value()) {
+        w.Uint64(*m._topic_config->properties.segment_size);
+    } else {
+        w.Null();
+    }
+    // NOTE: manifest_object_name is intentionaly ommitted
+
+    // tristate values are encoded in the following manner:
+    // - key not present - tristate is disabled
+    // - key set to null - tristate is enabled but not set
+    // - key is not null - tristate is enabled and set
+    if (!m._topic_config->properties.retention_bytes.is_disabled()) {
+        w.Key("retention_bytes");
+        if (m._topic_config->properties.retention_bytes.has_optional_value()) {
+            w.Uint64(m._topic_config->properties.retention_bytes.value());
+        } else {
+            w.Null();
+        }
+    }
+    if (!m._topic_config->properties.retention_duration.is_disabled()) {
+        w.Key("retention_duration");
+        if (m._topic_config->properties.retention_duration
+              .has_optional_value()) {
+            w.Int64(
+              m._topic_config->properties.retention_duration.value().count());
+        } else {
+            w.Null();
+        }
+    }
+
+    // do not serialize fields that are not deserializable by previous versions
+    // of redpanda
+    if (m._topic_config->properties.mpx_virtual_cluster_id) {
+        w.Key("virtual_cluster_id");
+        w.String(fmt::format(
+          "{}", m._topic_config->properties.mpx_virtual_cluster_id.value()));
+    }
+    w.EndObject();
+}
+
+} // namespace testing
+
 } // namespace cloud_storage

@@ -57,6 +57,38 @@ SEASTAR_THREAD_TEST_CASE(test_overrides_decode) {
         BOOST_CHECK_EQUAL(u.key, node_uuid);
         BOOST_CHECK_EQUAL(u.uuid, other_uuid);
         BOOST_CHECK_EQUAL(u.id, node_id);
+        // 'ignore_existing_node_id' defaults to false
+        BOOST_CHECK(!u.ignore_existing_node_id);
+    }
+}
+
+SEASTAR_THREAD_TEST_CASE(test_overrides_decode_ignore_existing_node_id) {
+    static model::node_uuid node_uuid{uuid_t::create()};
+    static model::node_uuid other_uuid{uuid_t::create()};
+    auto node_id = model::node_id{0};
+    static auto some_override = ssx::sformat(
+      "node_id_overrides:\n"
+      "  - current_uuid: {}\n"
+      "    new_uuid: {}\n"
+      "    new_id: {}\n"
+      "    ignore_existing_node_id: true\n"
+      "  - current_uuid: {}\n"
+      "    new_uuid: {}\n"
+      "    new_id: {}\n"
+      "    ignore_existing_node_id: true\n",
+      node_uuid,
+      other_uuid,
+      node_id,
+      node_uuid,
+      other_uuid,
+      node_id);
+    auto some_override_cfg = read_from_yaml(some_override);
+    BOOST_CHECK_EQUAL(some_override_cfg.size(), 2);
+    for (const auto& u : some_override_cfg) {
+        BOOST_CHECK_EQUAL(u.key, node_uuid);
+        BOOST_CHECK_EQUAL(u.uuid, other_uuid);
+        BOOST_CHECK_EQUAL(u.id, node_id);
+        BOOST_CHECK(u.ignore_existing_node_id);
     }
 }
 
@@ -81,6 +113,22 @@ SEASTAR_THREAD_TEST_CASE(test_overrides_decode_errors) {
         model::node_uuid{uuid_t::create()},
         model::node_uuid{uuid_t::create()} /* does not parse to node ID */)),
       YAML::TypedBadConversion<model::node_id::type>);
+
+    static constexpr std::string_view entry_fmt_ignore_existing_node_id
+      = "node_id_overrides:\n"
+        "  - current_uuid: {}\n"
+        "    new_uuid: {}\n"
+        "    new_id: {}\n"
+        "    ignore_existing_node_id: {}\n";
+
+    BOOST_CHECK_THROW(
+      read_from_yaml(fmt::format(
+        entry_fmt_ignore_existing_node_id,
+        model::node_uuid{uuid_t::create()},
+        model::node_uuid{uuid_t::create()},
+        model::node_id{0},
+        "eslaf" /* that's not a bool */)),
+      YAML::TypedBadConversion<bool>);
 
     BOOST_CHECK_THROW(
       read_from_yaml(fmt::format(
@@ -113,13 +161,30 @@ SEASTAR_THREAD_TEST_CASE(test_overrides_lexical_cast) {
         ovr = boost::lexical_cast<config::node_id_override>(s);
     };
 
-    BOOST_REQUIRE_NO_THROW(std::invoke(convert, option));
-    BOOST_CHECK_EQUAL(ovr.key, uuid_a);
-    BOOST_CHECK_EQUAL(ovr.uuid, uuid_b);
-    BOOST_CHECK_EQUAL(ovr.id, id);
-    std::stringstream ss;
-    ss << ovr;
-    BOOST_CHECK_EQUAL(ss.str(), option);
+    {
+        BOOST_REQUIRE_NO_THROW(std::invoke(convert, option));
+        BOOST_CHECK_EQUAL(ovr.key, uuid_a);
+        BOOST_CHECK_EQUAL(ovr.uuid, uuid_b);
+        BOOST_CHECK_EQUAL(ovr.id, id);
+        BOOST_CHECK(!ovr.ignore_existing_node_id);
+        std::stringstream ss;
+        ss << ovr;
+        BOOST_CHECK_EQUAL(ss.str(), option);
+    }
+
+    option = ssx::sformat(
+      "{}:{}:{}/ignore_existing_node_id", uuid_a, uuid_b, id);
+
+    {
+        BOOST_REQUIRE_NO_THROW(std::invoke(convert, option));
+        BOOST_CHECK_EQUAL(ovr.key, uuid_a);
+        BOOST_CHECK_EQUAL(ovr.uuid, uuid_b);
+        BOOST_CHECK_EQUAL(ovr.id, id);
+        BOOST_CHECK(ovr.ignore_existing_node_id);
+        std::stringstream ss;
+        ss << ovr;
+        BOOST_CHECK_EQUAL(ss.str(), option);
+    }
 
     option = ssx::sformat("{}", uuid_a);
     BOOST_CHECK_THROW(std::invoke(convert, option), std::runtime_error);
@@ -133,6 +198,11 @@ SEASTAR_THREAD_TEST_CASE(test_overrides_lexical_cast) {
     BOOST_CHECK_THROW(std::invoke(convert, option), boost::bad_lexical_cast);
     option = ssx::sformat("{}:{}:{}", uuid_a, uuid_b, "not-an-id");
     BOOST_CHECK_THROW(std::invoke(convert, option), boost::bad_lexical_cast);
+
+    // 'ignore_existing_node_id' component is not lexically cast, so errors
+    // appear as formatting runtime_errors (rather than bad_lexical_cast).
+    option = ssx::sformat("{}:{}:{}/plzforceplz", uuid_a, uuid_b, id);
+    BOOST_CHECK_THROW(std::invoke(convert, option), std::runtime_error);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_overrides_store) {
