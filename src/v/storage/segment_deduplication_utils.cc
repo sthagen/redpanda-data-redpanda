@@ -220,6 +220,7 @@ ss::future<index_state> deduplicate_segment(
     };
 
     auto copy_reducer = internal::copy_data_segment_reducer(
+      seg->path().get_ntp(),
       std::move(record_filter),
       &appender,
       seg->path().is_internal_topic(),
@@ -279,7 +280,8 @@ ss::future<bool> index_chunk_of_segment_for_map(
     auto start_offset_inclusive = model::next_offset(last_indexed_offset);
     auto rdr = internal::create_segment_full_reader(
       seg, compact_cfg, pb, std::move(read_holder), start_offset_inclusive);
-    internal::map_building_reducer reducer(&map, start_offset_inclusive);
+    internal::map_building_reducer reducer(
+      seg->path().get_ntp(), &map, start_offset_inclusive);
 
     bool fully_indexed_segment = co_await std::move(rdr).consume(
       reducer, model::no_timeout);

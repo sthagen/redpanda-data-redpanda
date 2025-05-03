@@ -25,3 +25,15 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "test_utils_test",
+    timeout = "short",
+    srcs = [
+        "test_utils_test.cc",
+    ],
+    deps = [
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

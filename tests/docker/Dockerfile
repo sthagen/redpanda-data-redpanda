@@ -12,10 +12,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-FROM public.ecr.aws/docker/library/ubuntu:jammy-20240911.1 AS base
+FROM public.ecr.aws/docker/library/ubuntu:jammy-20240911.1 AS os_base
 
 ENV TZ="UTC" \
     DEBIAN_FRONTEND=noninteractive
+
+FROM os_base AS m2_seed
+ARG USE_MAVEN_SEED=1
+# Used to seed the maven cache for the java base image, see script for details
+COPY --chmod=0755 tests/docker/ducktape-deps/seed-maven-cache /
+RUN /seed-maven-cache && rm -rf /seed-maven-cache /var/lib/apt/lists/*
+
+FROM os_base AS base
 
 RUN mkdir -p /opt/redpanda-tests
 COPY --chown=0:0 tests/protobuf /opt/redpanda-tests/protobuf
@@ -35,7 +43,13 @@ RUN /tool-pkgs && \
 
 #################################
 
-FROM base AS kafka-streams-examples
+FROM base AS maven_base
+# maven_base is used for all maven-using java stages below
+COPY --from=m2_seed /root/.m2 /root/.m2
+
+#################################
+
+FROM maven_base AS kafka-streams-examples
 
 # Install kafka streams examples.  This is a very slow step (tens of minutes), doing
 # many maven dependency downloads without any parallelism.  To avoid re-running it
@@ -46,7 +60,7 @@ RUN /kafka-streams-examples && \
 
 #################################
 
-FROM base AS omb
+FROM maven_base AS omb
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/omb /
 RUN /omb && \
@@ -54,7 +68,7 @@ RUN /omb && \
 
 #################################
 
-FROM base AS java-verifiers
+FROM maven_base AS java-verifiers
 
 COPY --chown=0:0 tests/java/e2e-verifiers /opt/redpanda-tests/java/e2e-verifiers
 COPY --chown=0:0 tests/java/verifiers /opt/redpanda-tests/java/verifiers
@@ -65,7 +79,7 @@ RUN /java-verifiers && \
 
 #################################
 
-FROM base AS kafka-tools
+FROM maven_base AS kafka-tools
 
 ENV KAFKA_MIRROR="https://s3-us-west-2.amazonaws.com/kafka-packages"
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kafka-tools /
@@ -261,10 +275,28 @@ RUN /trino && rm /trino
 
 #################################
 
-FROM base AS spark
+FROM maven_base AS spark
 COPY --chown=0:0 tests/java/spark-iceberg-dependencies /opt/redpanda-tests/java/spark-iceberg-dependencies
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/spark /
 RUN /spark && rm /spark
+
+#################################
+# m2-collector creates the final .m2 cache from all images
+# that execute directly out of the cache, so we avoid duplicating
+# the full cache contents N times in the final image
+FROM base AS m2-collector
+COPY --from=kafka-streams-examples /root/.m2 /root/.m2
+COPY --from=java-verifiers /root/.m2 /root/.m2
+COPY --from=omb /root/.m2 /root/.m2
+
+###################################
+# m2-all collects additional m2 caches from images that do not
+# execute directly out of the cache, so they can be included
+# in the seed tarball
+FROM m2-collector AS m2-all
+COPY --from=kafka-tools /root/.m2 /root/.m2
+COPY --from=spark /root/.m2 /root/.m2
+
 
 #################################
 
@@ -333,13 +365,10 @@ RUN echo 'PermitUserEnvironment yes' >> /etc/ssh/sshd_config && \
 
 # copy from other images
 COPY --from=kafka-streams-examples /opt/kafka-streams-examples /opt/kafka-streams-examples
-COPY --from=kafka-streams-examples /root/.m2 /root/.m2
 COPY --from=omb /opt/openmessaging-benchmark /opt/openmessaging-benchmark
-COPY --from=omb /root/.m2 /root/.m2
 COPY --from=java-verifiers /opt/redpanda-tests/java /opt/redpanda-tests/java
 COPY --from=java-verifiers /opt/verifiers /opt/verifiers
 COPY --from=java-verifiers /opt/kafka-serde /opt/kafka-serde
-COPY --from=java-verifiers /root/.m2 /root/.m2
 COPY --from=kafka-tools /opt /opt
 COPY --from=kcat /usr/local/bin/kcat /usr/local/bin/
 COPY --from=sarama-examples /opt/sarama /opt/sarama
@@ -363,6 +392,7 @@ COPY --from=flink /opt/flink/ /opt/flink/
 COPY --from=iceberg-rest /opt/iceberg-rest-catalog /opt/iceberg-rest-catalog
 COPY --from=trino /opt/trino /opt/trino
 COPY --from=spark /opt/spark /opt/spark
+COPY --from=m2-collector /root/.m2 /root/.m2
 
 RUN ldconfig
 

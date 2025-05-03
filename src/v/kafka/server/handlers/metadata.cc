@@ -24,6 +24,7 @@
 #include "kafka/server/handlers/details/security.h"
 #include "kafka/server/handlers/topics/topic_utils.h"
 #include "kafka/server/response.h"
+#include "model/errc.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/timeout_clock.h"
@@ -304,41 +305,55 @@ get_topic_metadata(
     std::vector<ss::future<metadata_response::topic>> new_topics;
 
     for (auto& topic : *request.data.topics) {
+        const auto move_topic_name = [&topic]() {
+            return std::move(topic.name).value_or(model::topic{});
+        };
+
         /**
          * Authorize source topic in case if we deal with materialized one
          */
-        if (!ctx.authorized(security::acl_operation::describe, topic.name)) {
+        if (!ctx.authorized(
+              security::acl_operation::describe,
+              topic.name.value_or(model::topic{}))) {
             // not authorized, return authorization error
             res.push_back(make_error_topic_response(
-              std::move(topic.name), error_code::topic_authorization_failed));
+              move_topic_name(), error_code::topic_authorization_failed));
             continue;
         }
-        if (auto md = ctx.metadata_cache().get_topic_metadata(
-              model::topic_namespace_view(model::kafka_namespace, topic.name));
-            md) {
-            auto src_topic_response = make_topic_response(
-              ctx, request, *md, is_node_isolated);
-            src_topic_response.name = std::move(topic.name);
-            res.push_back(std::move(src_topic_response));
-            continue;
+        if (topic.name.has_value()) {
+            if (auto md = ctx.metadata_cache().get_topic_metadata(
+                  model::topic_namespace_view(
+                    model::kafka_namespace, *topic.name));
+                md) {
+                auto src_topic_response = make_topic_response(
+                  ctx, request, *md, is_node_isolated);
+                src_topic_response.name = move_topic_name();
+                res.push_back(std::move(src_topic_response));
+                continue;
+            }
         }
 
         if (
           !config::shard_local_cfg().auto_create_topics_enabled
           || !request.data.allow_auto_topic_creation) {
+            bool valid = topic.name.has_value()
+                         && validate_kafka_topic_name(*topic.name)
+                              == model::errc::success;
             res.push_back(make_error_topic_response(
-              std::move(topic.name), error_code::unknown_topic_or_partition));
+              move_topic_name(),
+              valid ? error_code::unknown_topic_or_partition
+                    : error_code::invalid_topic_exception));
             continue;
         }
         /**
          * check if authorized to create
          */
-        if (!ctx.authorized(security::acl_operation::create, topic.name)) {
+        if (!ctx.authorized(security::acl_operation::create, *topic.name)) {
             res.push_back(make_error_topic_response(
-              std::move(topic.name), error_code::topic_authorization_failed));
+              move_topic_name(), error_code::topic_authorization_failed));
             continue;
         }
-        topics_to_be_created.emplace_back(std::move(topic.name));
+        topics_to_be_created.emplace_back(move_topic_name());
     }
 
     if (!ctx.audit()) {
@@ -538,6 +553,41 @@ ss::future<typename T::api::response_type> handle_metadata(
     T::log_request(ctx.header(), request);
 
     if constexpr (std::same_as<T, metadata_handler>) {
+        auto version = ctx.header().version;
+        if (
+          !request.list_all_topics && version > api_version{9}
+          && version < api_version{12}) {
+            auto err = kafka::error_code::none;
+            for (auto& topic : *request.data.topics) {
+                // Check request validity
+                if (!topic.name.has_value()) {
+                    err = kafka::error_code::invalid_request;
+                    vlog(
+                      klog.info,
+                      "Topic name can not be null for version {}",
+                      version);
+                    break;
+                } else if (topic.topic_id != uuid{}) {
+                    err = kafka::error_code::invalid_request;
+                    vlog(
+                      klog.info,
+                      "Topic IDs are not supported in requests for version {}",
+                      version);
+                    break;
+                }
+            }
+            if (err != kafka::error_code::none) {
+                // Don't include any other information in the response
+                metadata_response reply;
+                for (auto& topic : *request.data.topics) {
+                    reply.data.topics.push_back(metadata_response::topic{
+                      .error_code = err,
+                      .name = std::move(topic.name).value_or(model::topic{}),
+                      .topic_id = topic.topic_id});
+                }
+                co_return reply;
+            }
+        }
         reply.data.topics = co_await get_topic_metadata(
           ctx, request, isolated_or_decommissioned);
     }

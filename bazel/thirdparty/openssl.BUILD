@@ -43,9 +43,19 @@ filegroup(
 configure_make(
     name = "openssl",
     # These don't get make variables expanded, so use the injected environment variable.
-    args = ["-j$OPENSSL_BUILD_JOBS"],
+    args = [
+        "-j$OPENSSL_BUILD_JOBS",
+        # This will cause OpenSSL to ignore the prefix flag and install at the specified DESTDIR
+        "DESTDIR=$BUILD_TMPDIR/openssl",
+    ],
     configure_command = "Configure",
     configure_options = [
+        # OpenSSL will look for system certs in a path relative to the OPENSSLDIR macro
+        # This macro is defined as <prefix>/<openssldir>
+        # Most linux environments install system certs in /etc/ssl/certs, so we set
+        # the OPENSSLDIR macro to /etc/ssl
+        "--prefix=/",
+        "--openssldir=/etc/ssl",
         "--libdir=lib",
         "no-tests",
     ] + select({
@@ -61,7 +71,7 @@ configure_make(
         "openssl",
     ],
     out_data_dirs = [
-        "ssl",
+        "etc/ssl",
     ],
     out_shared_libs = [
         "libssl.so.3",

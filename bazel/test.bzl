@@ -265,6 +265,7 @@ def redpanda_cc_btest(
         env = env,
         target_compatible_with = target_compatible_with,
         data = data,
+        local_defines = ["IS_BTEST"],
         tags = tags,
     )
 

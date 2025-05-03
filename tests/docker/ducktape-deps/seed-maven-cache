@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# This script is used to download the maven cache seed for the ducktape docker image.
+# Further documentation at ../docker/README.md.
+
+seed_file="m2-cache-2025-04-25-59e96a8aeb.tgz"
+
+seed_url="https://vectorized-public.s3.us-west-2.amazonaws.com/dependencies/$seed_file"
+# Use this URL instead for local testing:
+# seed_url="https://perf-team-public.s3.us-west-2.amazonaws.com/deps-staging/$seed_file"
+
+if [[ ${USE_MAVEN_SEED:=unset} != 1 ]]; then
+  echo "Skipping maven cache seeding (USE_MAVEN_SEED=$USE_MAVEN_SEED)"
+  # touch it since later COPY expect it to at least exist
+  mkdir -p /root/.m2
+  exit 0
+fi
+
+# install axel & ssl deps for fast downloads
+apt-get update && apt-get install openssl ca-certificates axel -y
+echo "Downloading the maven cache seed from: $seed_url"
+axel -n 10 -o /tmp/m2.tgz "$seed_url"
+tar xzf /tmp/m2.tgz -C /root
+rm -f /tmp/m2.tgz
+
+

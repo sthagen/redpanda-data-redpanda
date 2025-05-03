@@ -640,6 +640,7 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/redpanda/tests:fixture",
         "//src/v/security",
+        "//src/v/test_utils:random_bytes",
         "//src/v/test_utils:seastar_boost",
         "@abseil-cpp//absl/algorithm:container",
         "@boost//:test",

@@ -3753,12 +3753,7 @@ class RedpandaService(RedpandaServiceBase):
         are actually redpanda crashes.
         """
 
-        allow_list = []
-        if log_allow_list:
-            for a in log_allow_list:
-                if should_compile(a):
-                    a = re.compile(a)
-                allow_list.append(a)
+        allow_list = prepare_allow_list(log_allow_list)
 
         def is_allowed_log_line(line: str) -> bool:
             for a in allow_list:
