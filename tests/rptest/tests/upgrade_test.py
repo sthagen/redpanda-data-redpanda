@@ -14,6 +14,7 @@ from packaging.version import Version
 
 from ducktape.mark import parametrize, matrix
 from ducktape.utils.util import wait_until
+from ducktape.errors import TimeoutError
 from rptest.clients.default import DefaultClient
 from rptest.services.admin import Admin
 from rptest.clients.rpk import RpkTool
@@ -223,6 +224,11 @@ class UpgradeBackToBackTest(PreallocNodesTest):
 
         wrote_at_least = 0
 
+        def restart_consumers():
+            for consumer in self._consumers:
+                consumer.stop()
+                consumer.start(clean=False)
+
         for current_version in self.upgrade_through_versions(self.versions):
             if not started:
                 # First version, start up the workload
@@ -247,7 +253,26 @@ class UpgradeBackToBackTest(PreallocNodesTest):
 
             # Wait for consumers to finish work and check invariants.
             for consumer in self._consumers:
-                consumer.wait()
+                max_retries = 5
+                while max_retries > 0:
+                    max_retries -= 1
+                    try:
+                        consumer.wait()
+                        break
+                    except Exception as e:
+                        # consumer status endpoint timeout, in v22 we need to tolerate the offset for leader epoch handler error
+                        if current_version[0] <= 22:
+                            self.logger.info(
+                                f"restarting consumer, Redpanda running {current_version} version"
+                            )
+                            try:
+                                consumer.stop()
+                            except Exception:
+                                self.logger.info(
+                                    f"failed to stop consumer {consumer}")
+                            consumer.start(clean=False)
+                        else:
+                            raise e
 
             # Check consumer invariants after each upgrade.
             assert self._seq_consumer.consumer_status.validator.valid_reads >= wrote_at_least
@@ -255,9 +280,7 @@ class UpgradeBackToBackTest(PreallocNodesTest):
             assert self._cg_consumer.consumer_status.validator.valid_reads >= wrote_at_least
 
             # Restart the consumers for the next upgrade.
-            for consumer in self._consumers:
-                consumer.stop()
-                consumer.start(clean=False)
+            restart_consumers()
 
         # Validate that the data structures written by a mixture of historical
         # versions remain readable by our current debug tools
