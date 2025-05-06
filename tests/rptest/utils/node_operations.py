@@ -210,6 +210,8 @@ class NodeDecommissionWaiter():
             try:
                 decommission_status = self.admin.get_decommission_status(
                     self.node_id, self._not_decommissioned_node())
+                partition_balancer_status = self.admin.get_partition_balancer_status(
+                    self._not_decommissioned_node())
             except requests.exceptions.HTTPError as e:
                 self.logger.info(
                     f"unable to get decommission status, HTTP error",
@@ -223,7 +225,7 @@ class NodeDecommissionWaiter():
                 continue
 
             self.logger.debug(
-                f"Node {self.node_id} decommission status: {decommission_status}"
+                f"Node {self.node_id} decommission status: {decommission_status}, partition balancer status: {partition_balancer_status}"
             )
 
             replicas_left = decommission_status['replicas_left']

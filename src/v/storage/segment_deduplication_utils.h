@@ -72,4 +72,12 @@ ss::future<bool> index_chunk_of_segment_for_map(
   probe& pb,
   model::offset& last_indexed_offset);
 
+// Returns true iff the segment's .compacted_index file contains ANY key present
+// in the key_offset_map that is not the latest offset for that key. Otherwise,
+// there would be no point to rewriting the segment and its index files.
+ss::future<bool> segment_needs_rewrite_with_offset_map(
+  const compaction_config& cfg,
+  ss::lw_shared_ptr<segment> seg,
+  const key_offset_map& map);
+
 } // namespace storage

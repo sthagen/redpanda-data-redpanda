@@ -783,6 +783,26 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
         const bool is_clean_compacted = seg->offsets().get_base_offset()
                                         >= idx_start_offset;
 
+        const bool segment_needs_rewrite
+          = internal::may_have_removable_tombstones(seg, cfg)
+            || co_await segment_needs_rewrite_with_offset_map(cfg, seg, map);
+        if (!segment_needs_rewrite) {
+            vlog(
+              gclog.trace,
+              "[{}] segment does not require rewrite with provided offset map: "
+              "{}",
+              config().ntp(),
+              seg->filename());
+            bool marked_as_cleanly_compacted
+              = co_await internal::mark_segment_as_finished_window_compaction(
+                seg, is_clean_compacted, *_probe);
+            if (marked_as_cleanly_compacted) {
+                subtract_dirty_segment_bytes(seg->size_bytes());
+            }
+
+            continue;
+        }
+
         co_await rewrite_segment_with_offset_map(
           cfg, seg, map, is_finished_window_compaction, is_clean_compacted);
     }
@@ -1378,6 +1398,20 @@ ss::future<bool> disk_log_impl::chunked_sliding_window_compact(
                 // the _segment_rewrite_lock, meaning some segments in the
                 // window may have been closed. It is safe to `continue` and
                 // rewrite the other, non-closed segments in the window.
+                continue;
+            }
+
+            const bool segment_needs_rewrite
+              = internal::may_have_removable_tombstones(s, compact_cfg)
+                || co_await segment_needs_rewrite_with_offset_map(
+                  compact_cfg, s, map);
+            if (!segment_needs_rewrite) {
+                vlog(
+                  gclog.trace,
+                  "[{}] segment does not require rewrite with provided offset "
+                  "map: {}",
+                  config().ntp(),
+                  seg->filename());
                 continue;
             }
 

@@ -860,7 +860,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_btest(
     name = "compaction_fuzz_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "compaction_fuzz_test.cc",
     ],

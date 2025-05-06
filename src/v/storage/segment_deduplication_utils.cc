@@ -9,6 +9,8 @@
 
 #include "storage/segment_deduplication_utils.h"
 
+#include "model/fundamental.h"
+#include "model/timeout_clock.h"
 #include "model/timestamp.h"
 #include "storage/compacted_index_writer.h"
 #include "storage/compaction_reducers.h"
@@ -22,9 +24,13 @@
 #include "storage/segment_utils.h"
 #include "storage/types.h"
 
+#include <seastar/core/loop.hh>
+#include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/coroutine/as_future.hh>
 
 #include <exception>
+#include <optional>
 
 namespace storage {
 
@@ -302,6 +308,52 @@ ss::future<bool> index_chunk_of_segment_for_map(
     }
 
     co_return fully_indexed_segment;
+}
+
+ss::future<bool> segment_needs_rewrite_with_offset_map(
+  const compaction_config& cfg,
+  ss::lw_shared_ptr<segment> seg,
+  const key_offset_map& map) {
+    auto compaction_idx_path = seg->path().to_compacted_index();
+    // If the file doesn't exist for whatever reason, return true.
+    // This could, for example, race with a truncation which removes the
+    // .compaction_index.
+    if (!co_await ss::file_exists(compaction_idx_path.string())) {
+        co_return true;
+    }
+    auto compaction_idx_file = co_await internal::make_reader_handle(
+      compaction_idx_path, cfg.sanitizer_config);
+    auto rdr = make_file_backed_compacted_reader(
+      compaction_idx_path, compaction_idx_file, cfg.iopc, 64_KiB, cfg.asrc);
+
+    auto fut = co_await ss::coroutine::as_future(rdr.verify_integrity());
+    if (fut.failed()) {
+        // If we were unable to read the .compaction_index file, proceed with
+        // compaction.
+        fut.ignore_ready_future();
+        co_await rdr.close();
+        co_return true;
+    }
+
+    bool segment_needs_rewrite = false;
+    // The segment in question needs rewriting _only_ iff it contains at least
+    // one key found in the key_offset_map which is not the latest offset for
+    // that key.
+    co_await rdr.for_each_async(
+      [&map, &segment_needs_rewrite](
+        const compacted_index::entry& e) -> ss::future<ss::stop_iteration> {
+          model::offset o = e.offset + model::offset_delta(e.delta);
+          return map.get(e.key).then([o, &segment_needs_rewrite](
+                                       std::optional<model::offset> map_entry) {
+              if (map_entry.has_value() && map_entry.value() > o) {
+                  segment_needs_rewrite = true;
+                  return ss::stop_iteration::yes;
+              }
+              return ss::stop_iteration::no;
+          });
+      },
+      model::no_timeout);
+    co_return segment_needs_rewrite;
 }
 
 } // namespace storage

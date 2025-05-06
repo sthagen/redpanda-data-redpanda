@@ -632,21 +632,16 @@ TEST_P(CompactionFixtureBatchSizeParamTest, TestRecompactWithNewData) {
     disk_log.sliding_window_compact(new_cfg).get();
 
     // Most segments have already compacted their segments away entirely,
-    // except their last record. Such segments shouldn't be compacted. Three
+    // except their last record. Such segments shouldn't be compacted. Two
     // segments should be compacted:
-    // - the new segment is compacted twice (self + windowed)
+    // - the new segment is self compacted
     // - the segment that previously had the latest keys should be compacted
     auto segments_compacted_3 = disk_log.get_probe().get_segments_compacted();
     auto compaction_ratio_3 = disk_log.compaction_ratio().get();
-    ASSERT_EQ(segments_compacted + 3, segments_compacted_3);
+    ASSERT_EQ(segments_compacted + 2, segments_compacted_3);
 
     // Check for a reasonable compaction ratio.
     ASSERT_LT(compaction_ratio_3, 0.65);
-
-    // Compared to our first compaction ratio that windowed compacted many
-    // segments in a row, one self-compaction + windowed compaction will have a
-    // worse compaction ratio.
-    ASSERT_LT(compaction_ratio, compaction_ratio_3);
 }
 INSTANTIATE_TEST_SUITE_P(
   RecordsPerBatch,
@@ -1543,4 +1538,88 @@ TEST_F(CompactionFixtureTest, TestSegmentIndexReconstructed) {
     ASSERT_EQ(
       pre_sliding_window_index_relative_offsets,
       post_sliding_window_index_relative_offsets);
+}
+
+TEST_F(CompactionFixtureTest, TestSlidingWindowNoUnecessaryRewrites) {
+    constexpr auto cardinality = 100;
+    constexpr auto num_segments = 2;
+    constexpr auto batches_per_segment = 1;
+    constexpr auto records_per_batch = 10;
+    generate_data(
+      num_segments, cardinality, batches_per_segment, records_per_batch)
+      .get();
+
+    ss::abort_source never_abort;
+    auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
+    auto& segments = disk_log.segments();
+
+    storage::compaction_config cfg(
+      model::offset::max(),
+      std::nullopt,
+      ss::default_priority_class(),
+      never_abort);
+
+    for (auto& seg : segments) {
+        if (!seg->has_appender()) {
+            disk_log.segment_self_compact(cfg, seg).get();
+        }
+    }
+
+    // Check that the segment .log file and the .compaction_index file are not
+    // re-written if they don't need to be during a round of sliding window
+    // compaction. The same check cannot be applied to the .base_index file, as
+    // segments may be marked cleanly compacted and the file would be reflushed
+    // to disk to reflect the updated state.
+    using time_point = std::chrono::system_clock::time_point;
+    std::vector<std::vector<time_point>>
+      segments_file_mtimes_pre_sliding_window;
+    for (auto& seg : segments) {
+        if (seg->has_appender()) {
+            continue;
+        }
+        std::vector<time_point> segment_file_mtimes{
+          ss::file_stat(seg->path().string()).get().time_modified,
+          ss::file_stat(seg->path().to_compacted_index().string())
+            .get()
+            .time_modified,
+        };
+        segments_file_mtimes_pre_sliding_window.push_back(segment_file_mtimes);
+    }
+
+    disk_log.sliding_window_compact(cfg).get();
+
+    std::vector<std::vector<time_point>>
+      segments_file_mtimes_post_sliding_window;
+    for (auto& seg : segments) {
+        if (seg->has_appender()) {
+            continue;
+        }
+        std::vector<time_point> segment_file_mtimes{
+          ss::file_stat(seg->path().string()).get().time_modified,
+          ss::file_stat(seg->path().to_compacted_index().string())
+            .get()
+            .time_modified,
+        };
+        segments_file_mtimes_post_sliding_window.push_back(segment_file_mtimes);
+    }
+
+    ASSERT_EQ(
+      segments_file_mtimes_pre_sliding_window,
+      segments_file_mtimes_post_sliding_window);
+
+    // We should see 2 compacted segments (from self-compaction)
+    auto segments_compacted = log->get_probe().get_segments_compacted();
+    ASSERT_EQ(segments_compacted, 2);
+
+    // Generate more data (of the same profile), and expect to see the original
+    // 2 segments now window compacted, and the additional 2 segments
+    // self-compacted.
+    generate_data(
+      num_segments, cardinality, batches_per_segment, records_per_batch)
+      .get();
+
+    disk_log.sliding_window_compact(cfg).get();
+
+    segments_compacted = log->get_probe().get_segments_compacted();
+    ASSERT_EQ(segments_compacted, 6);
 }

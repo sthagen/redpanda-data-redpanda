@@ -519,3 +519,39 @@ TEST(DeduplicateSegmentsTest, TestBadReader) {
         .get(),
       std::runtime_error);
 }
+
+TEST(DeduplicateSegmentsTest, SegmentNeedsRewriteNoCompactedIndex) {
+    storage::disk_log_builder b;
+    build_segments(
+      b,
+      /*num_segs=*/1,
+      /*records_per_seg=*/10,
+      /*start_offset=*/0,
+      /*mark_compacted=*/false);
+    auto cleanup = ss::defer([&] { b.stop().get(); });
+    auto& disk_log = b.get_disk_log_impl();
+
+    auto& segs = disk_log.segments();
+    auto& seg = segs[0];
+    compaction_config cfg(
+      model::offset{0},
+      std::nullopt,
+      ss::default_priority_class(),
+      never_abort);
+    simple_key_offset_map map(50);
+
+    // When the .compaction_index file doesn't exist, the segment should assume
+    // it needs rewriting.
+    ASSERT_FALSE(
+      ss::file_exists(seg->path().to_compacted_index().string()).get());
+
+    bool needs_rewrite
+      = segment_needs_rewrite_with_offset_map(cfg, seg, map).get();
+
+    // Make sure we didn't create a new .compaction_index file by just
+    // attempting to read it.
+    ASSERT_FALSE(
+      ss::file_exists(seg->path().to_compacted_index().string()).get());
+
+    ASSERT_EQ(needs_rewrite, true);
+}
