@@ -373,7 +373,8 @@ static cluster::topic_configuration make_topic_config(
       topic_config->tp_ns.ns,
       topic_config->tp_ns.tp,
       topic_config->partition_count,
-      topic_config->replication_factor);
+      topic_config->replication_factor,
+      topic_config->tp_id);
     auto& topic_properties = topic_to_create_cfg.properties;
 
     // copy all properties

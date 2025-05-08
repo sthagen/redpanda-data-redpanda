@@ -115,6 +115,7 @@
 #include "metrics/prometheus_sanitize.h"
 #include "migrations/migrators.h"
 #include "migrations/rbac_migrator.h"
+#include "migrations/topic_id_migrator.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "net/dns.h"
@@ -2860,6 +2861,9 @@ void application::wire_up_and_start(::stop_signal& app_signal, bool test_mode) {
           std::make_unique<features::migrators::rbac_migrator>(*controller));
         _migrators.push_back(
           std::make_unique<features::migrators::shard_placement_migrator>(
+            *controller));
+        _migrators.push_back(
+          std::make_unique<features::migrators::topic_id_migrator>(
             *controller));
     }
 

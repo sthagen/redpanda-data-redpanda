@@ -104,6 +104,8 @@ std::string_view to_string_view(feature f) {
         return "cloud_storage_metadata_rw_fence";
     case feature::node_restart_risk_assessment:
         return "node_restart_risk_assessment";
+    case feature::topic_ids:
+        return "topic_ids";
 
     /*
      * testing features
@@ -147,7 +149,7 @@ constexpr cluster_version latest_version = to_cluster_version(
 // a freshly initialized node will start at. All features up to this cluster
 // version will automatically be enabled when Redpanda starts.
 constexpr cluster_version earliest_version = to_cluster_version(
-  release_version::v24_1_1);
+  release_version::v24_2_1);
 
 static_assert(
   latest_version - earliest_version == 3L,
@@ -182,6 +184,7 @@ bool is_major_version_release(cluster::cluster_version version) {
     case release_version::v24_2_1:
     case release_version::v24_3_1:
     case release_version::v25_1_1:
+    case release_version::v25_2_1:
         return true;
     }
     __builtin_unreachable();

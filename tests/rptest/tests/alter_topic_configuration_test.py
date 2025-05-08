@@ -524,8 +524,7 @@ class AlterConfigMixedNodeTest(EndToEndTest):
         alter_and_check(check_consistent_properties_across_nodes)
 
         # Install updated version of redpanda across all nodes.
-        self.redpanda._installer.install(self.redpanda.nodes,
-                                         RedpandaInstaller.HEAD)
+        self.redpanda._installer.install(self.redpanda.nodes, (24, 3))
         # Restart one node.
         restart_node_and_await_stable_leader(self.redpanda.nodes[0])
 

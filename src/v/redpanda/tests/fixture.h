@@ -45,6 +45,7 @@
 #include "net/dns.h"
 #include "pandaproxy/rest/configuration.h"
 #include "pandaproxy/schema_registry/configuration.h"
+#include "random/generators.h"
 #include "redpanda/application.h"
 #include "resource_mgmt/cpu_scheduling.h"
 #include "security/acl.h"
@@ -82,6 +83,17 @@ using empty_seed_starts_cluster
   = ss::bool_class<struct empty_seed_starts_cluster_tag>;
 
 using namespace std::chrono_literals;
+
+inline ss::sstring test_directory() {
+    char* tmpdir = std::getenv("TEST_TMPDIR");
+    if (!tmpdir) {
+        return ss::format(
+          "test.dir_{}", random_generators::gen_alphanum_string(6));
+    }
+    return {
+      std::filesystem::path(tmpdir)
+      / fmt::format("test.dir_{}", random_generators::gen_alphanum_string(6))};
+}
 
 class redpanda_thread_fixture {
 public:
@@ -192,7 +204,7 @@ public:
           8082,
           8081,
           {},
-          ssx::sformat("test.dir_{}", time(0)),
+          test_directory(),
           std::nullopt,
           true) {}
 
@@ -224,7 +236,7 @@ public:
           8082,
           8081,
           {},
-          ssx::sformat("test.dir_{}", time(0)),
+          test_directory(),
           std::nullopt,
           true,
           get_s3_config(port, url_style),
@@ -246,7 +258,7 @@ public:
           8082,
           8081,
           {},
-          ssx::sformat("test.dir_{}", time(0)),
+          test_directory(),
           std::nullopt,
           true,
           get_s3_config(port, url_style),
@@ -275,7 +287,7 @@ public:
           8082,
           8081,
           {},
-          ssx::sformat("test.dir_{}", time(0)),
+          test_directory(),
           std::nullopt,
           true,
           get_s3_config(port, url_style),

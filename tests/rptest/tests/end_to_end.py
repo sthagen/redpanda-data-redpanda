@@ -138,7 +138,7 @@ class EndToEndTest(Test):
                 for i in range(install_opts.num_to_upgrade)
             ]
             self.redpanda._installer.install(nodes_to_upgrade,
-                                             RedpandaInstaller.HEAD)
+                                             install_opts.upgraded_version)
             self.redpanda.restart_nodes(nodes_to_upgrade)
 
         self._client = DefaultClient(self.redpanda)

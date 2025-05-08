@@ -16,8 +16,21 @@
 
 #include <fmt/format.h>
 
+namespace {
+inline ss::sstring test_directory() {
+    char* tmpdir = std::getenv("TEST_TMPDIR");
+    if (!tmpdir) {
+        return ss::format(
+          "test.dir_{}", random_generators::gen_alphanum_string(6));
+    }
+    return {
+      std::filesystem::path(tmpdir)
+      / fmt::format("test.dir_{}", random_generators::gen_alphanum_string(6))};
+}
+} // namespace
+
 SEASTAR_THREAD_TEST_CASE(empty_dir) {
-    auto dir = "test.dir_" + random_generators::gen_alphanum_string(4);
+    auto dir = test_directory();
     ss::recursive_touch_directory(dir).get();
 
     int count = 0;
@@ -30,7 +43,7 @@ SEASTAR_THREAD_TEST_CASE(empty_dir) {
 }
 
 SEASTAR_THREAD_TEST_CASE(non_empty_dir) {
-    auto dir = "test.dir_" + random_generators::gen_alphanum_string(4);
+    auto dir = test_directory();
     ss::recursive_touch_directory(dir).get();
 
     // sees directories
@@ -65,7 +78,7 @@ SEASTAR_THREAD_TEST_CASE(non_empty_dir) {
 }
 
 SEASTAR_THREAD_TEST_CASE(exceptional_future) {
-    auto dir = "test.dir_" + random_generators::gen_alphanum_string(4);
+    auto dir = test_directory();
     ss::recursive_touch_directory(dir).get();
 
     // make sure we have some files in the directory
@@ -104,8 +117,7 @@ SEASTAR_THREAD_TEST_CASE(exceptional_future) {
 }
 
 SEASTAR_THREAD_TEST_CASE(test_empty_dir) {
-    auto dir = std::filesystem::path(
-      "test.dir_" + random_generators::gen_alphanum_string(4));
+    auto dir = std::filesystem::path(test_directory());
     ss::recursive_touch_directory(dir.string()).get();
     BOOST_REQUIRE(directory_walker::empty(dir).get());
     ss::recursive_touch_directory((dir / "xxx").string()).get();

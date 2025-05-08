@@ -251,7 +251,6 @@ redpanda_cc_btest(
     srcs = [
         "member_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/container:fragmented_vector",
         "//src/v/kafka/protocol",
@@ -272,7 +271,6 @@ redpanda_cc_btest(
         "consumer_groups_test.cc",
     ],
     cpu = 1,
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/client",
@@ -303,7 +301,6 @@ redpanda_cc_btest(
     srcs = [
         "group_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/config",
@@ -325,7 +322,6 @@ redpanda_cc_btest(
     srcs = [
         "read_write_roundtrip_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/kafka/protocol",
         "//src/v/random:generators",
@@ -343,7 +339,6 @@ redpanda_cc_btest(
     srcs = [
         "delete_topics_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/container:fragmented_vector",
         "//src/v/kafka/protocol",
@@ -368,7 +363,6 @@ redpanda_cc_btest(
     srcs = [
         "offset_fetch_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/kafka/protocol:offset_fetch",
         "//src/v/redpanda/tests:fixture",
@@ -386,7 +380,6 @@ redpanda_cc_btest(
     srcs = [
         "api_versions_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/kafka/server",
         "//src/v/redpanda/tests:fixture",
@@ -404,7 +397,6 @@ redpanda_cc_btest(
     srcs = [
         "usage_manager_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/base",
         "//src/v/kafka/server",
@@ -422,8 +414,8 @@ redpanda_cc_btest(
     srcs = [
         "create_topics_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
+        "//src/v/cluster",
         "//src/v/config",
         "//src/v/container:fragmented_vector",
         "//src/v/features:enterprise_feature_messages",
@@ -446,7 +438,6 @@ redpanda_cc_btest(
     srcs = [
         "find_coordinator_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/kafka/protocol:find_coordinator",
         "//src/v/redpanda/tests:fixture",
@@ -464,7 +455,6 @@ redpanda_cc_btest(
     srcs = [
         "list_offsets_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/container:fragmented_vector",
         "//src/v/kafka/protocol",
@@ -487,7 +477,6 @@ redpanda_cc_btest(
     srcs = [
         "topic_recreate_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/container:fragmented_vector",
         "//src/v/kafka/protocol",
@@ -514,7 +503,6 @@ redpanda_cc_btest(
     srcs = [
         "fetch_session_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/kafka/protocol:fetch",
         "//src/v/kafka/protocol/schemata:fetch_request",
@@ -535,7 +523,6 @@ redpanda_cc_btest(
     srcs = [
         "create_partition_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/config",
         "//src/v/features:enterprise_feature_messages",
@@ -556,7 +543,6 @@ redpanda_cc_btest(
     srcs = [
         "group_metadata_serialization_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/bytes",
         "//src/v/kafka/protocol",
@@ -580,7 +566,6 @@ redpanda_cc_btest(
     srcs = [
         "partition_reassignments_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/config",
         "//src/v/container:fragmented_vector",
@@ -606,7 +591,6 @@ redpanda_cc_btest(
     srcs = [
         "replicated_partition_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/data:partition_proxy",
@@ -626,7 +610,6 @@ redpanda_cc_btest(
     srcs = [
         "metadata_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/client",
@@ -654,7 +637,6 @@ redpanda_cc_btest(
     srcs = [
         "quota_manager_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/config",
@@ -672,7 +654,6 @@ redpanda_cc_btest(
     srcs = [
         "client_quota_translator_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/base",
         "//src/v/cluster",
@@ -692,7 +673,6 @@ redpanda_cc_btest(
         "alter_config_test.cc",
     ],
     cpu = "1",
-    tags = ["exclusive"],
     deps = [
         "//src/v/config",
         "//src/v/container:fragmented_vector",
@@ -723,7 +703,6 @@ redpanda_cc_btest(
         "produce_consume_test.cc",
     ],
     cpu = "1",
-    tags = ["exclusive"],
     deps = [
         ":kafka_test_utils",
         "//src/v/container:fragmented_vector",
@@ -811,7 +790,6 @@ redpanda_cc_bench(
     ],
     cpu = 2,
     memory = "4GiB",
-    tags = ["exclusive"],
     deps = [
         ":kafka_test_utils",
         "//src/v/base",
@@ -834,7 +812,6 @@ redpanda_cc_bench(
     duration = 1,
     memory = "4GiB",
     runs = 1,
-    tags = ["exclusive"],
     deps = [
         "//src/v/base",
         "//src/v/kafka/client",
@@ -859,7 +836,6 @@ redpanda_cc_bench(
     memory = "4GiB",
     redirect_stderr = True,
     runs = 1,
-    tags = ["exclusive"],
     deps = [
         "//src/v/container:fragmented_vector",
         "//src/v/kafka/protocol/schemata:produce_request",

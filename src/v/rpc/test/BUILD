@@ -131,7 +131,6 @@ redpanda_cc_btest(
         ":other_cert",
         ":other_cert_ca",
     ],
-    tags = ["exclusive"],
     deps = [
         ":cycling_rpc",
         ":echo_rpc",

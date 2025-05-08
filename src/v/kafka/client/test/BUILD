@@ -126,7 +126,6 @@ redpanda_cc_btest(
     srcs = [
         "consumer_group.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/base",
         "//src/v/bytes",
@@ -167,7 +166,6 @@ redpanda_cc_btest(
     srcs = [
         "fetch.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/client",
@@ -191,7 +189,6 @@ redpanda_cc_btest(
     srcs = [
         "produce.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/kafka/client",
         "//src/v/kafka/client/test:fixture",
@@ -214,7 +211,6 @@ redpanda_cc_btest(
     srcs = [
         "reconnect.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/http",
         "//src/v/kafka/client",
@@ -240,7 +236,6 @@ redpanda_cc_btest(
     srcs = [
         "retry.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/client",

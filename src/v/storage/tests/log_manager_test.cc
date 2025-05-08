@@ -46,16 +46,24 @@ void write_batches(ss::lw_shared_ptr<segment> seg) {
     seg->flush().get();
 }
 
+inline ss::sstring test_directory() {
+    char* tmpdir = std::getenv("TEST_TMPDIR");
+    if (!tmpdir) {
+        return "test.dir";
+    }
+    return {std::filesystem::path(tmpdir) / std::string("test.dir")};
+}
+
 log_config make_config() {
     return log_config{
-      "test.dir",
+      test_directory(),
       1024,
       ss::default_priority_class(),
       storage::make_sanitized_file_config()};
 }
 
 ntp_config config_from_ntp(const model::ntp& ntp) {
-    return ntp_config(ntp, "test.dir");
+    return ntp_config(ntp, test_directory());
 }
 
 constexpr size_t default_segment_readahead_size = 128 * 1024;

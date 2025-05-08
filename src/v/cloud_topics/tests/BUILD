@@ -20,7 +20,6 @@ redpanda_cc_gtest(
         "end_to_end_test.cc",
     ],
     cpu = 1,
-    tags = ["exclusive"],
     deps = [
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",

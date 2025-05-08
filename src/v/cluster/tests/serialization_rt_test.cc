@@ -558,6 +558,7 @@ cluster::topic_configuration old_random_topic_configuration() {
     tp_cfg.properties = old_random_topic_properties();
     tp_cfg.replication_factor = random_generators::get_int<int16_t>(0, 10);
     tp_cfg.partition_count = random_generators::get_int(0, 100);
+    tp_cfg.tp_id = model::create_topic_id();
     return tp_cfg;
 }
 
@@ -567,6 +568,7 @@ cluster::topic_configuration random_topic_configuration() {
     tp_cfg.properties = random_topic_properties();
     tp_cfg.replication_factor = random_generators::get_int<int16_t>(0, 10);
     tp_cfg.partition_count = random_generators::get_int(0, 100);
+    tp_cfg.tp_id = model::create_topic_id();
     return tp_cfg;
 }
 

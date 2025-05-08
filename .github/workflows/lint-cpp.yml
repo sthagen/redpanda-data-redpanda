@@ -33,6 +33,10 @@ jobs:
           wget -O $HOME/.local/bin/bazel https://github.com/bazelbuild/bazelisk/releases/latest/download/bazelisk-linux-amd64
           chmod +x $HOME/.local/bin/bazel
       - name: Run clang-format
+        env:
+          # Bazel uses this to enforce strict sandboxing - we can't do it in Github Actions,
+          # so set CI=false to disable the check we do in `//tools:bazel`
+          CI: false
         # Don't update the lockfile for this
         run: |
           bazel run --lockfile_mode=off //tools:clang_format

@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cluster/types.h"
 #include "config/configuration.h"
 #include "config/leaders_preference.h"
 #include "container/fragmented_vector.h"
@@ -17,6 +18,8 @@
 #include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/tests/topic_properties_helpers.h"
 #include "model/errc.h"
+#include "model/metadata.h"
+#include "model/namespace.h"
 
 #include <seastar/core/smp.hh>
 #include <seastar/core/sstring.hh>
@@ -650,4 +653,27 @@ FIXTURE_TEST(create_dry_run_rejects_existing, create_topic_fixture) {
              .get();
     BOOST_REQUIRE_EQUAL(
       resp.data.topics[0].error_code, kafka::error_code::topic_already_exists);
+}
+
+FIXTURE_TEST(create_topic_assigns_topic_id, create_topic_fixture) {
+    auto client = make_kafka_client().get();
+    client.connect().get();
+
+    auto topic = make_topic(ssx::sformat("topic_foo"));
+
+    // create the topic
+    auto resp = client
+                  .dispatch(
+                    make_req({topic}, /*validate_only = */ false),
+                    kafka::api_version(5))
+                  .get();
+    BOOST_REQUIRE_EQUAL(
+      resp.data.topics[0].error_code, kafka::error_code::none);
+
+    auto tpn = model::topic_namespace{
+      model::kafka_namespace, model::topic{"topic_foo"}};
+    auto md = app.controller->get_topics_state().local().get_topic_metadata(
+      tpn);
+    BOOST_REQUIRE(md.has_value());
+    BOOST_REQUIRE(md->get_configuration().tp_id.has_value());
 }

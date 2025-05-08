@@ -14,6 +14,7 @@
 #include "model/namespace.h"
 #include "reflection/adl.h"
 #include "storage/ntp_config.h"
+#include "utils/uuid.h"
 
 #include <seastar/core/sstring.hh>
 
@@ -79,6 +80,7 @@ void topic_configuration::serde_write(iobuf& out) {
     write(out, replication_factor);
     write(out, properties);
     write(out, is_migrated);
+    write(out, tp_id);
 }
 
 void topic_configuration::serde_read(iobuf_parser& in, const serde::header& h) {
@@ -93,6 +95,12 @@ void topic_configuration::serde_read(iobuf_parser& in, const serde::header& h) {
     } else {
         is_migrated = false;
     }
+    if (h._version >= 3) {
+        tp_id = read_nested<std::optional<model::topic_id>>(
+          in, h._bytes_left_limit);
+    } else {
+        tp_id = std::nullopt;
+    }
 
     if (h._version < 1) {
         // Legacy tiered storage topics do not delete data on
@@ -105,11 +113,12 @@ std::ostream& operator<<(std::ostream& o, const topic_configuration& cfg) {
     fmt::print(
       o,
       "{{ topic: {}, partition_count: {}, replication_factor: {}, is_migrated: "
-      "{}, properties: {}}}",
+      "{}, topic_id: {}, properties: {}}}",
       cfg.tp_ns,
       cfg.partition_count,
       cfg.replication_factor,
       cfg.is_migrated,
+      cfg.tp_id,
       cfg.properties);
 
     return o;

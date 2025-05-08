@@ -31,6 +31,14 @@
 
 using namespace std::chrono_literals; // NOLINT
 
+inline ss::sstring test_directory() {
+    char* tmpdir = std::getenv("TEST_TMPDIR");
+    if (!tmpdir) {
+        return "test.dir";
+    }
+    return {std::filesystem::path(tmpdir) / std::string("test.dir")};
+}
+
 struct bootstrap_fixture : raft::simple_record_fixture {
     using raft::simple_record_fixture::active_nodes;
     bootstrap_fixture()
@@ -39,12 +47,12 @@ struct bootstrap_fixture : raft::simple_record_fixture {
               return storage::kvstore_config(
                 1_MiB,
                 config::mock_binding(10ms),
-                "test.dir",
+                test_directory(),
                 storage::make_sanitized_file_config());
           },
           []() {
               return storage::log_config(
-                "test.dir",
+                test_directory(),
                 1_GiB,
                 ss::default_priority_class(),
                 storage::with_cache::no,
@@ -59,7 +67,7 @@ struct bootstrap_fixture : raft::simple_record_fixture {
         _storage.start().get();
         // ignore the get_log()
         (void)_storage.log_mgr()
-          .manage(storage::ntp_config(_ntp, "test.dir"))
+          .manage(storage::ntp_config(_ntp, test_directory()))
           .get();
     }
 

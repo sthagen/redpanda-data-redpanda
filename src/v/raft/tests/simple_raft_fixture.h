@@ -32,11 +32,22 @@
 #include <chrono>
 #include <memory>
 
+inline ss::sstring test_directory() {
+    char* tmpdir = std::getenv("TEST_TMPDIR");
+    if (!tmpdir) {
+        return ss::format(
+          "test.dir_{}", random_generators::gen_alphanum_string(6));
+    }
+    return {
+      std::filesystem::path(tmpdir)
+      / fmt::format("test.dir_{}", random_generators::gen_alphanum_string(6))};
+}
+
 using namespace std::chrono_literals; // NOLINT
 struct simple_raft_fixture {
     simple_raft_fixture()
       : _self{0}
-      , _data_dir("test_dir_" + random_generators::gen_alphanum_string(6)) {}
+      , _data_dir(test_directory()) {}
 
     void create_raft(storage::ntp_config::default_overrides overrides = {}) {
         // configure and start kvstore

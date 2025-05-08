@@ -172,10 +172,10 @@ private:
     void register_metrics();
 
     static wasmtime_error_t* allocate_stack_memory(
-      void* env, size_t size, wasmtime_stack_memory_t* memory_ret);
+      void* env, size_t size, bool zeroed, wasmtime_stack_memory_t* memory_ret);
 
-    wasmtime_error_t*
-    allocate_stack_memory(size_t size, wasmtime_stack_memory_t* memory_ret);
+    wasmtime_error_t* allocate_stack_memory(
+      size_t size, bool zeroed, wasmtime_stack_memory_t* memory_ret);
 
     // We don't have control over this API.
     // NOLINTBEGIN(bugprone-easily-swappable-parameters)
@@ -1332,11 +1332,16 @@ wasmtime_runtime::wasmtime_runtime(std::unique_ptr<schema::registry> sr)
     // whatever is difference between the two is how much host functions can
     // get, make sure to leave our own functions some room to execute.
     wasmtime_config_max_wasm_stack_set(config, max_vm_guest_stack_usage);
-    // This disables static memory, see:
+    // These settings means that Wasmtime only allocates exactly how much memory
+    // is requested by the module:
     // https://docs.wasmtime.dev/contributing-architecture.html#linear-memory
-    wasmtime_config_static_memory_maximum_size_set(config, 0_KiB);
-    wasmtime_config_dynamic_memory_guard_size_set(config, 0_KiB);
-    wasmtime_config_dynamic_memory_reserved_for_growth_set(config, 0_KiB);
+    //
+    // Our memory never moves because we don't allow for relocating memory,
+    // this tells wasmtime to allocate the full amount of memory upfront.
+    wasmtime_config_memory_may_move_set(config, false);
+    wasmtime_config_memory_reservation_set(config, 0_KiB);
+    wasmtime_config_memory_guard_size_set(config, 0_KiB);
+    wasmtime_config_memory_reservation_for_growth_set(config, 0_KiB);
     // Don't modify the unwind info as registering these symbols causes C++
     // exceptions to grab a lock in libgcc and deadlock the Redpanda
     // process.
@@ -1517,18 +1522,20 @@ size_t wasmtime_runtime::per_invocation_fuel_amount() const {
 }
 
 wasmtime_error_t* wasmtime_runtime::allocate_stack_memory(
-  void* env, size_t size, wasmtime_stack_memory_t* memory_ret) {
+  void* env, size_t size, bool zeroed, wasmtime_stack_memory_t* memory_ret) {
     auto* runtime = static_cast<wasmtime_runtime*>(env);
-    return runtime->allocate_stack_memory(size, memory_ret);
+    return runtime->allocate_stack_memory(size, zeroed, memory_ret);
 }
 
 wasmtime_error_t* wasmtime_runtime::allocate_stack_memory(
-  size_t size, wasmtime_stack_memory_t* memory_ret) {
+  size_t size, bool zeroed, wasmtime_stack_memory_t* memory_ret) {
+    std::ignore = zeroed; // We always zero the memory in the allocator.
     auto stack = _stack_allocator.local().allocate(size);
     struct vm_stack {
         stack_memory underlying;
         wasm::stack_allocator* allocator;
     };
+    // NOLINTNEXTLINE(cppcoreguidelines-owning-memory)
     memory_ret->env = new vm_stack{
       .underlying = std::move(stack),
       .allocator = &_stack_allocator.local(),
@@ -1562,12 +1569,15 @@ wasmtime_error_t* wasmtime_runtime::allocate_heap_memory(
       "we only support 32bit addressable memory");
     vassert(
       reserved_size_in_bytes == 0,
-      "this value should be set to 0 according to the config");
+      "this value should be set to 0 according to the config, got: {}",
+      reserved_size_in_bytes);
     vassert(
       guard_size_in_bytes == 0,
-      "this value should be set to 0 according to the config");
+      "this value should be set to 0 according to the config, got: {}",
+      guard_size_in_bytes);
     auto* runtime = static_cast<wasmtime_runtime*>(env);
-    return runtime->allocate_heap_memory({minimum, maximum}, memory_ret);
+    return runtime->allocate_heap_memory(
+      {.minimum = minimum, .maximum = maximum}, memory_ret);
 }
 
 wasmtime_error_t* wasmtime_runtime::allocate_heap_memory(

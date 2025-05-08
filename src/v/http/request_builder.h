@@ -78,7 +78,7 @@ public:
 
 private:
     ada::result<ada::url_aggregator> _url{
-      tl::unexpected{ada::errors::generic_error}};
+      tl::unexpected{ada::errors::type_error}};
     std::optional<ss::sstring> _target{std::nullopt};
     boost::beast::http::request_header<> _request;
     absl::flat_hash_map<ss::sstring, ss::sstring> _query_params_kv;

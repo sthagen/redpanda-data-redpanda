@@ -42,6 +42,19 @@
 
 using namespace std::chrono_literals;
 
+namespace {
+inline std::filesystem::path test_directory() {
+    char* tmpdir = std::getenv("TEST_TMPDIR");
+    if (!tmpdir) {
+        return fmt::format(
+          "test.dir_{}", random_generators::gen_alphanum_string(6));
+    }
+    return std::filesystem::path(tmpdir)
+           / fmt::format(
+             "test.dir_{}", random_generators::gen_alphanum_string(6));
+}
+} // namespace
+
 struct debug_bundle_service_fixture : public seastar_test {
     ss::future<> SetUpAsync() override {
         const char* script_path = std::getenv("RPK_SHIM");
@@ -51,7 +64,7 @@ struct debug_bundle_service_fixture : public seastar_test {
           << script_path << " does not exist";
         _rpk_shim_path = script_path;
 
-        _data_dir = "test_dir_" + random_generators::gen_alphanum_string(6);
+        _data_dir = test_directory();
         ASSERT_NO_THROW_CORO(
           co_await ss::recursive_touch_directory(_data_dir.native()))
           << "Failed to create " << _data_dir;
@@ -323,7 +336,8 @@ TEST_F_CORO(debug_bundle_service_started_fixture, test_all_parameters) {
       "debug bundle --output {}/{}.zip --verbose -Xuser={} -Xpass={} "
       "-Xsasl.mechanism={} --controller-logs-size-limit {}B "
       "--cpu-profiler-wait {}s --logs-since {} --logs-size-limit {}B "
-      "--logs-until {} --metrics-interval {}s --metrics-samples {} --partition "
+      "--logs-until {} --metrics-interval {}s --metrics-samples {} "
+      "--partition "
       "{}/{}/1,2,3 {}/{}/4,5,6 -Xtls.enabled=true "
       "-Xtls.insecure_skip_verify=false --namespace {} --label-selector "
       "{}={},{}={}\n",

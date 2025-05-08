@@ -48,7 +48,7 @@ public:
           8082 + 10,
           8081 + 10,
           std::vector<config::seed_server>{},
-          ssx::sformat("test.dir_read_replica{}", time(0)),
+          test_directory(),
           app.sched_groups,
           true,
           get_s3_config(httpd_port_number()),

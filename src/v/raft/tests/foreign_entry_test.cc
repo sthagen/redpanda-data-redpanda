@@ -40,23 +40,28 @@
 
 using namespace std::chrono_literals; // NOLINT
 
+inline ss::sstring test_directory() {
+    char* tmpdir = std::getenv("TEST_TMPDIR");
+    if (!tmpdir) {
+        return "test.dir";
+    }
+    return {std::filesystem::path(tmpdir) / std::string("test.dir")};
+}
 struct foreign_entry_fixture {
     static constexpr int active_nodes = 3;
-    ss::sstring test_dir = "test.data."
-                           + random_generators::gen_alphanum_string(10);
 
     foreign_entry_fixture()
       : _storage(
-          [this]() {
+          []() {
               return storage::kvstore_config(
                 1_MiB,
                 config::mock_binding(10ms),
-                test_dir,
+                test_directory(),
                 storage::make_sanitized_file_config());
           },
-          [this]() {
+          []() {
               return storage::log_config(
-                test_dir,
+                test_directory(),
                 1_GiB,
                 ss::default_priority_class(),
                 storage::make_sanitized_file_config());
@@ -69,7 +74,7 @@ struct foreign_entry_fixture {
           .get();
         _storage.start().get();
         (void)_storage.log_mgr()
-          .manage(storage::ntp_config(_ntp, "test.dir"))
+          .manage(storage::ntp_config(_ntp, test_directory()))
           .get();
     }
 

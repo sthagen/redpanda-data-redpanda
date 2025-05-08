@@ -571,7 +571,6 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             {"ntr_no_topic_manifest", "missing_segments"})
 
     @cluster(num_nodes=3, log_allow_list=MIGRATION_LOG_ALLOW_LIST)
-    @ignore  # flaky: CORE-9921
     def test_conflicting_names(self):
         def on_delivery(err, msg):
             if err is not None:

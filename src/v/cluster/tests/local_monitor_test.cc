@@ -34,7 +34,7 @@ using storage::disk_space_alert;
 
 local_monitor_fixture::local_monitor_fixture() {
     auto log_conf = storage::log_config{
-      "test.dir",
+      test_directory(),
       1024,
       ss::default_priority_class(),
       storage::make_sanitized_file_config()};

@@ -108,16 +108,6 @@ std::filesystem::path form_debug_bundle_storage_directory() {
       / service::debug_bundle_dir_name);
 }
 
-ss::future<> write_file(std::string_view path, iobuf buf) {
-    auto file = co_await ss::open_file_dma(
-      path, ss::open_flags::create | ss::open_flags::rw);
-    auto h = ss::defer([file]() mutable { ssx::background = file.close(); });
-    auto istrm = make_iobuf_input_stream(std::move(buf));
-    auto ostrm = co_await ss::make_file_output_stream(file);
-    co_await ss::copy(istrm, ostrm);
-    co_await ostrm.flush();
-}
-
 bool was_run_successful(ss::experimental::process::wait_status wait_status) {
     auto* exited = std::get_if<ss::experimental::process::wait_exited>(
       &wait_status);
@@ -761,7 +751,7 @@ ss::future<> service::set_metadata(job_id_t job_id) {
       job_id);
 
     try {
-        co_await write_file(process_output_file.native(), std::move(po_buf));
+        co_await write_fully(process_output_file, std::move(po_buf));
         vlog(
           lg.debug,
           "Successfully wrote process output to file to {}",

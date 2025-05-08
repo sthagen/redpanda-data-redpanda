@@ -677,6 +677,15 @@ ss::future<topic_result> topics_frontend::do_create_topic(
           assignable_config.cfg.tp_ns, errc::resource_is_being_migrated);
     }
 
+    if (!assignable_config.cfg.tp_id.has_value()) {
+        assignable_config.cfg.tp_id = model::create_topic_id();
+        vlog(
+          clusterlog.debug,
+          "Configuring topic {} with id {}",
+          assignable_config.cfg.tp_ns,
+          assignable_config.cfg.tp_id.value());
+    }
+
     auto result = validate_topic_configuration(assignable_config);
 
     if (result.ec != errc::success) {

@@ -157,7 +157,6 @@ redpanda_cc_gtest(
         "record_multiplexer_test.cc",
     ],
     cpu = 1,
-    tags = ["exclusive"],
     deps = [
         ":catalog_and_registry_fixture",
         ":record_generator",

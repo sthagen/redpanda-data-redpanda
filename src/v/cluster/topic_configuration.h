@@ -9,11 +9,13 @@
 #pragma once
 
 #include "cluster/topic_properties.h"
+#include "model/fundamental.h"
 #include "model/metadata.h"
 #include "serde/rw/envelope.h"
 #include "serde/rw/rw.h"
 #include "serde/rw/scalar.h"
 #include "storage/ntp_config.h"
+#include "utils/uuid.h"
 
 namespace cluster {
 
@@ -22,18 +24,20 @@ namespace cluster {
 struct topic_configuration
   : serde::envelope<
       topic_configuration,
-      serde::version<2>,
+      serde::version<3>,
       serde::compat_version<0>> {
     topic_configuration(
       model::ns ns,
       model::topic topic,
       int32_t partition_count,
       int16_t replication_factor,
+      std::optional<model::topic_id> topic_id = std::nullopt,
       bool is_migrated = false)
       : tp_ns(std::move(ns), std::move(topic))
       , partition_count(partition_count)
       , replication_factor(replication_factor)
-      , is_migrated(is_migrated) {}
+      , is_migrated(is_migrated)
+      , tp_id(topic_id) {}
 
     topic_configuration() = default;
 
@@ -80,6 +84,9 @@ struct topic_configuration
     int16_t replication_factor{0};
     // bypass migration restrictions
     bool is_migrated{false};
+    // topic id, a UUID (as introduced in KIP-516), only std::nullopt until the
+    // migration to using topic ids is completed
+    std::optional<model::topic_id> tp_id{std::nullopt};
 
     topic_properties properties;
 

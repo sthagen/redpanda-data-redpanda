@@ -581,7 +581,6 @@ redpanda_cc_btest(
     srcs = [
         "crash_reporter_test.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/cluster",
         "//src/v/storage/tests:kvstore_fixture",

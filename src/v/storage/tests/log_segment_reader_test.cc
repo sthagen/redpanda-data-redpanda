@@ -8,29 +8,46 @@
 // by the Apache License, Version 2.0
 
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "model/record_utils.h"
 #include "model/tests/random_batch.h"
-#include "model/timeout_clock.h"
 #include "random/generators.h"
-#include "storage/disk_log_appender.h"
-#include "storage/file_sanitizer.h"
 #include "storage/log_reader.h"
 #include "storage/parser_utils.h"
-#include "storage/record_batch_utils.h"
 #include "storage/segment.h"
 #include "storage/segment_appender.h"
-#include "storage/segment_reader.h"
 #include "storage/tests/utils/disk_log_builder.h"
+#include "test_utils/test_macros.h"
 
-#include <seastar/core/thread.hh>
-#include <seastar/testing/thread_test_case.hh>
+#include <seastar/core/circular_buffer.hh>
+
+#include <gtest/gtest.h>
 
 using namespace storage; // NOLINT
 
-#define check_batches(actual, expected)                                        \
-    BOOST_REQUIRE_EQUAL_COLLECTIONS(                                           \
-      actual.begin(), actual.end(), expected.begin(), expected.end());
+template<typename l_iter_t, typename r_iter_t>
+void check_iters(
+  l_iter_t l_iter, l_iter_t l_end, r_iter_t r_iter, r_iter_t r_end) {
+    bool l_done = false;
+    bool r_done = false;
+    while (true) {
+        l_done = l_iter == l_end;
+        r_done = r_iter == r_end;
+        if (l_done || r_done) {
+            break;
+        }
+        RPTEST_REQUIRE_EQ(*r_iter, *l_iter);
+        ++r_iter;
+        ++l_iter;
+    }
+    RPTEST_REQUIRE_EQ(l_done, r_done);
+}
+
+void check_batches(
+  const ss::circular_buffer<model::record_batch>& actual,
+  const ss::circular_buffer<model::record_batch>& expected) {
+    RPTEST_REQUIRE_EQ(actual.size(), expected.size());
+    check_iters(actual.begin(), actual.end(), expected.begin(), expected.end());
+}
 
 namespace {
 ss::circular_buffer<model::record_batch>
@@ -54,7 +71,7 @@ void write(
 }
 } // namespace
 
-SEASTAR_THREAD_TEST_CASE(test_can_read_single_batch_smaller_offset) {
+TEST(reader_test, test_can_read_single_batch_smaller_offset) {
     disk_log_builder b;
     b | start() | add_segment(1);
     auto buf = model::test::make_random_batches(model::offset(1), 1).get();
@@ -62,10 +79,10 @@ SEASTAR_THREAD_TEST_CASE(test_can_read_single_batch_smaller_offset) {
     // To-do Kostas Add support for pipe consume!
     auto res = b.consume().get();
     b | stop();
-    BOOST_REQUIRE(res.empty());
+    RPTEST_REQUIRE(res.empty());
 }
 
-SEASTAR_THREAD_TEST_CASE(test_can_read_single_batch_same_offset) {
+TEST(reader_test, test_can_read_single_batch_same_offset) {
     storage::log_reader_config reader_config(
       model::offset(1),
       model::offset(1),
@@ -84,7 +101,7 @@ SEASTAR_THREAD_TEST_CASE(test_can_read_single_batch_same_offset) {
     check_batches(res, batches);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_can_read_multiple_batches) {
+TEST(reader_test, test_can_read_multiple_batches) {
     auto batches = model::test::make_random_batches(model::offset(1)).get();
     storage::log_reader_config reader_config(
       batches.front().base_offset(),
@@ -103,7 +120,7 @@ SEASTAR_THREAD_TEST_CASE(test_can_read_multiple_batches) {
     check_batches(res, batches);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_does_not_read_past_committed_offset_one_segment) {
+TEST(reader_test, test_does_not_read_past_committed_offset_one_segment) {
     auto batches = model::test::make_random_batches(model::offset(2)).get();
     storage::log_reader_config reader_config(
       batches.back().last_offset() + model::offset(1),
@@ -119,11 +136,10 @@ SEASTAR_THREAD_TEST_CASE(test_does_not_read_past_committed_offset_one_segment) {
     write(copy(batches), b);
     auto res = b.consume(reader_config).get();
     b | stop();
-    BOOST_REQUIRE(res.empty());
+    RPTEST_REQUIRE(res.empty());
 }
 
-SEASTAR_THREAD_TEST_CASE(
-  test_does_not_read_past_committed_offset_multiple_segments) {
+TEST(reader_test, test_does_not_read_past_committed_offset_multiple_segments) {
     auto batches = model::test::make_random_batches(model::offset(1), 2).get();
     storage::log_reader_config reader_config(
       batches.back().last_offset(),
@@ -144,7 +160,7 @@ SEASTAR_THREAD_TEST_CASE(
     check_batches(res, first);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_does_not_read_past_max_bytes) {
+TEST(reader_test, test_does_not_read_past_max_bytes) {
     auto batches = model::test::make_random_batches(model::offset(1), 2).get();
     storage::log_reader_config reader_config(
       batches.front().base_offset(),
@@ -165,7 +181,7 @@ SEASTAR_THREAD_TEST_CASE(test_does_not_read_past_max_bytes) {
     check_batches(res, first);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_reads_at_least_one_batch) {
+TEST(reader_test, test_reads_at_least_one_batch) {
     auto batches = model::test::make_random_batches(model::offset(1), 2).get();
     storage::log_reader_config reader_config(
       batches.front().base_offset(),
@@ -186,7 +202,7 @@ SEASTAR_THREAD_TEST_CASE(test_reads_at_least_one_batch) {
     check_batches(res, first);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_read_batch_range) {
+TEST(reader_test, test_read_batch_range) {
     auto batches = model::test::make_random_batches(model::offset(0), 10).get();
     storage::log_reader_config reader_config(
       batches.front().base_offset(),
@@ -203,14 +219,14 @@ SEASTAR_THREAD_TEST_CASE(test_read_batch_range) {
     write(copy(batches), b);
     auto res = b.consume(reader_config).get();
     b | stop();
-    BOOST_REQUIRE_EQUAL_COLLECTIONS(
+    check_iters(
       std::next(res.begin(), 2),
       std::next(res.begin(), 7),
       std::next(batches.begin(), 2),
       std::next(batches.begin(), 7));
 }
 
-SEASTAR_THREAD_TEST_CASE(test_batch_type_filter) {
+TEST(reader_test, test_batch_type_filter) {
     auto batches = model::test::make_random_batches(model::offset(0), 5).get();
     for (auto i = 0u; i < batches.size(); i++) {
         batches[i].header().type = model::record_batch_type(i);
@@ -257,24 +273,24 @@ SEASTAR_THREAD_TEST_CASE(test_batch_type_filter) {
     };
 
     std::vector<int> types = read_types({});
-    BOOST_CHECK_EQUAL(types, std::vector<int>({0, 1, 2, 3, 4}));
+    RPTEST_EXPECT_EQ(types, std::vector<int>({0, 1, 2, 3, 4}));
 
     types = read_types(1);
-    BOOST_TEST(types == std::vector<int>({1}));
+    RPTEST_REQUIRE(types == std::vector<int>({1}));
 
     types = read_types(0);
-    BOOST_TEST(types == std::vector<int>({0}));
+    RPTEST_REQUIRE(types == std::vector<int>({0}));
 
     types = read_types(2);
-    BOOST_TEST(types == std::vector<int>({2}));
+    RPTEST_REQUIRE(types == std::vector<int>({2}));
 
     types = read_types(4);
-    BOOST_TEST(types == std::vector<int>({4}));
+    RPTEST_REQUIRE(types == std::vector<int>({4}));
 
     b | stop();
 }
 
-SEASTAR_THREAD_TEST_CASE(test_does_not_read_past_max_offset) {
+TEST(reader_test, test_does_not_read_past_max_offset) {
     auto batches = model::test::make_random_batches(model::offset(1), 3).get();
     storage::log_reader_config reader_config(
       batches.front().base_offset(),
@@ -293,7 +309,7 @@ SEASTAR_THREAD_TEST_CASE(test_does_not_read_past_max_offset) {
     check_batches(res, batches);
 }
 
-SEASTAR_THREAD_TEST_CASE(iobuf_is_zero_test) {
+TEST(reader_test, iobuf_is_zero_test) {
     const auto a = random_generators::gen_alphanum_string(1024);
     const auto b = bytes::from_string("abc");
     std::array<char, 1024> zeros{0};
@@ -303,37 +319,37 @@ SEASTAR_THREAD_TEST_CASE(iobuf_is_zero_test) {
     iobuf non_zero_1;
     non_zero_1.append(a.data(), a.size());
     non_zero_1.append(b.data(), b.size());
-    BOOST_REQUIRE_EQUAL(storage::internal::is_zero(non_zero_1), false);
+    RPTEST_REQUIRE_EQ(storage::internal::is_zero(non_zero_1), false);
 
     iobuf non_zero_2;
     non_zero_2.append(zeros.data(), zeros.size());
     non_zero_2.append(one.data(), one.size());
-    BOOST_REQUIRE_EQUAL(storage::internal::is_zero(non_zero_2), false);
+    RPTEST_REQUIRE_EQ(storage::internal::is_zero(non_zero_2), false);
     // empty iobuf is not zero
     iobuf empty;
-    BOOST_REQUIRE_EQUAL(storage::internal::is_zero(empty), false);
+    RPTEST_REQUIRE_EQ(storage::internal::is_zero(empty), false);
 
     iobuf zero;
     zero.append(zeros.data(), zeros.size());
     zero.append(zeros.data(), zeros.size());
-    BOOST_REQUIRE_EQUAL(storage::internal::is_zero(zero), true);
+    RPTEST_REQUIRE_EQ(storage::internal::is_zero(zero), true);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_ghosts_gap) {
+TEST(reader_test, test_ghosts_gap) {
     long twice_i32max = static_cast<long>(std::numeric_limits<int32_t>::max())
                         * 2;
     auto ghost_batches = log_reader::make_ghost_batches(
       model::offset{0}, model::offset{twice_i32max}, model::term_id{0});
-    BOOST_REQUIRE_EQUAL(3, ghost_batches.size());
+    RPTEST_REQUIRE_EQ(3, ghost_batches.size());
     size_t num_records = 0;
     for (const auto& b : ghost_batches) {
-        BOOST_REQUIRE_GT(b.record_count(), 0);
+        ASSERT_GT(b.record_count(), 0);
         num_records += b.record_count();
     }
-    BOOST_REQUIRE_EQUAL(twice_i32max + 1, num_records);
+    RPTEST_REQUIRE_EQ(twice_i32max + 1, num_records);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_ghost_read_with_index_overflow) {
+TEST(reader_test, test_ghost_read_with_index_overflow) {
     auto cfg = log_builder_config();
     cfg.cache = with_cache::no;
     disk_log_builder b(cfg);
@@ -372,14 +388,14 @@ SEASTAR_THREAD_TEST_CASE(test_ghost_read_with_index_overflow) {
     reader_config.fill_gaps = true;
     auto res = b.consume(reader_config).get();
     b | stop();
-    BOOST_REQUIRE(!res.empty());
+    RPTEST_REQUIRE(!res.empty());
     auto& first = res.front();
-    BOOST_CHECK_EQUAL(first.base_offset(), model::offset{100});
-    BOOST_CHECK_EQUAL(first.last_offset(), model::offset{100});
-    BOOST_CHECK_EQUAL(first.header().type, model::record_batch_type::raft_data);
+    RPTEST_EXPECT_EQ(first.base_offset(), model::offset{100});
+    RPTEST_EXPECT_EQ(first.last_offset(), model::offset{100});
+    RPTEST_EXPECT_EQ(first.header().type, model::record_batch_type::raft_data);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_read_with_index_overflow_base) {
+TEST(reader_test, test_read_with_index_overflow_base) {
     auto cfg = log_builder_config();
     cfg.cache = with_cache::no;
     disk_log_builder b(cfg);
@@ -423,9 +439,9 @@ SEASTAR_THREAD_TEST_CASE(test_read_with_index_overflow_base) {
       std::nullopt);
     auto res = b.consume(reader_config).get();
     b | stop();
-    BOOST_REQUIRE(!res.empty());
+    RPTEST_REQUIRE(!res.empty());
     auto& first = res.front();
-    BOOST_CHECK_EQUAL(first.base_offset(), model::offset{uint32_max});
-    BOOST_CHECK_EQUAL(first.last_offset(), model::offset{uint32_max});
-    BOOST_CHECK_EQUAL(first.header().type, model::record_batch_type::raft_data);
+    RPTEST_EXPECT_EQ(first.base_offset(), model::offset{uint32_max});
+    RPTEST_EXPECT_EQ(first.last_offset(), model::offset{uint32_max});
+    RPTEST_EXPECT_EQ(first.header().type, model::record_batch_type::raft_data);
 }

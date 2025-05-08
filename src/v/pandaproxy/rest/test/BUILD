@@ -6,7 +6,6 @@ redpanda_cc_btest(
     srcs = [
         "consumer_group.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/http",
         "//src/v/kafka/protocol:join_group",
@@ -28,7 +27,6 @@ redpanda_cc_btest(
     srcs = [
         "fetch.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/http",
         "//src/v/pandaproxy",
@@ -48,7 +46,6 @@ redpanda_cc_btest(
     srcs = [
         "list_topics.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/http",
         "//src/v/pandaproxy/test:fixture",
@@ -67,7 +64,6 @@ redpanda_cc_btest(
     srcs = [
         "produce.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/http",
         "//src/v/pandaproxy/test:fixture",

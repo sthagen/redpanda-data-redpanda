@@ -169,6 +169,7 @@ redpanda_cc_library(
         "//src/v/serde:tristate",
         "//src/v/storage",
         "//src/v/utils:tristate",
+        "//src/v/utils:uuid",
         "@seastar",
     ],
 )

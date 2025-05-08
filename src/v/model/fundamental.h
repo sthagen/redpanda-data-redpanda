@@ -522,6 +522,11 @@ constexpr std::string_view to_string_view(fips_mode_flag f) {
 
 std::ostream& operator<<(std::ostream& os, const fips_mode_flag& f);
 std::istream& operator>>(std::istream& is, fips_mode_flag& f);
+
+using topic_id = named_type<uuid_t, struct topic_id_type>;
+
+inline topic_id create_topic_id() { return topic_id{uuid_t::create()}; }
+
 } // namespace model
 
 namespace kafka {

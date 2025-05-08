@@ -13,12 +13,17 @@
 #include "cluster/errc.h"
 #include "cluster/types.h"
 #include "compat/model_generator.h"
+#include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/tests/randoms.h"
 #include "random/generators.h"
 #include "test_utils/random_bytes.h"
 #include "test_utils/randoms.h"
 #include "utils/tristate.h"
+#include "utils/uuid.h"
+
+#include <cstdint>
+#include <optional>
 
 namespace compat {
 
@@ -682,20 +687,27 @@ struct instance_generator<cluster::topic_configuration> {
         tc.replication_factor = random_generators::get_int<int16_t>();
         tc.is_migrated = tests::random_bool();
         tc.properties = instance_generator<cluster::topic_properties>::random();
+        tc.tp_id = model::create_topic_id();
         return tc;
     }
 
     static std::vector<cluster::topic_configuration> limits() {
         return {
-          {model::ns(""),
-           model::topic(""),
-           std::numeric_limits<int32_t>::max(),
-           std::numeric_limits<int16_t>::max(),
-           std::numeric_limits<bool>::max()},
+          {
+            model::ns(""),
+            model::topic(""),
+            std::numeric_limits<int32_t>::max(),
+            std::numeric_limits<int16_t>::max(),
+            model::topic_id(std::vector<uint8_t>(
+              uuid_t::length, std::numeric_limits<uint8_t>::max())),
+            std::numeric_limits<bool>::max(),
+          },
           {model::ns(""),
            model::topic(""),
            std::numeric_limits<int32_t>::min(),
            std::numeric_limits<int16_t>::min(),
+           model::topic_id(std::vector<uint8_t>(
+             uuid_t::length, std::numeric_limits<uint8_t>::min())),
            std::numeric_limits<bool>::min()}};
     }
 };

@@ -290,7 +290,6 @@ redpanda_cc_btest(
     srcs = [
         "get_schema_types.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         "//src/v/http",
         "//src/v/pandaproxy/test:fixture",
@@ -309,7 +308,6 @@ redpanda_cc_btest(
     srcs = [
         "post_subjects_subject_version.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         ":avro_payloads",
         ":client_utils",
@@ -328,7 +326,6 @@ redpanda_cc_btest(
     srcs = [
         "delete_subject_endpoints.cc",
     ],
-    tags = ["exclusive"],
     deps = [
         ":avro_payloads",
         ":client_utils",

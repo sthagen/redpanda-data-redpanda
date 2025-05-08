@@ -16,6 +16,8 @@
 #include "compat/cluster_json.h"
 #include "compat/json.h"
 #include "compat/model_json.h"
+#include "model/fundamental.h"
+#include "utils/uuid.h"
 
 #include <vector>
 
@@ -470,6 +472,7 @@ struct compat_check<cluster::topic_configuration> {
         json_write(partition_count);
         json_write(replication_factor);
         json_write(is_migrated);
+        json_write(tp_id);
         json_write(properties);
     }
 
@@ -479,6 +482,7 @@ struct compat_check<cluster::topic_configuration> {
         json_read(partition_count);
         json_read(replication_factor);
         json_read(is_migrated);
+        json_read(tp_id);
         json_read(properties);
         return obj;
     }
@@ -528,8 +532,9 @@ struct compat_check<cluster::topic_configuration> {
 
         obj.properties.iceberg_target_lag_ms = std::nullopt;
 
-        // ADL will always squash is_migrated to false
+        // ADL will always squash is_migrated to false, tp_id to a std::nullopt
         obj.is_migrated = false;
+        obj.tp_id = std::nullopt;
 
         if (cfg != obj) {
             throw compat_error(fmt::format(

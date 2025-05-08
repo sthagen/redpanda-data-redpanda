@@ -20,6 +20,7 @@
 #include "security/acl.h"
 #include "utils/base64.h"
 #include "utils/unresolved_address.h"
+#include "utils/uuid.h"
 
 #include <seastar/net/inet_address.hh>
 
@@ -142,6 +143,18 @@ void read_value(const json::Value& v, std::optional<T>& target) {
         read_value(v, t);
         target = std::move(t);
     }
+}
+
+inline void read_value(const json::Value& v, uuid_t& target) {
+    std::vector<uint8_t> vec;
+    read_value(v, vec);
+    target = uuid_t(vec);
+}
+
+inline void
+rjson_serialize(json::Writer<json::StringBuffer>& w, const uuid_t& value) {
+    auto vec = value.to_vector();
+    rjson_serialize(w, vec);
 }
 
 inline void

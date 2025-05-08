@@ -1,5 +1,6 @@
 cc_library(
     name = "ada",
+    srcs = [],
     hdrs = [
         "ada.h",
     ],

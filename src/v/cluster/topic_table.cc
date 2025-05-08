@@ -22,6 +22,7 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "storage/ntp_config.h"
+#include "utils/uuid.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/coroutine/maybe_yield.hh>
@@ -1172,6 +1173,15 @@ topic_table::apply(update_topic_properties_cmd cmd, model::offset o) {
       migration_state
       != data_migrations::migrated_resource_state::non_restricted) {
         co_return errc::resource_is_being_migrated;
+    }
+
+    if (cmd.value.topic_id.op == incremental_update_operation::set) {
+        vlog(
+          clusterlog.trace,
+          "Assigning topic id {} to topic {}",
+          cmd.value.topic_id.value,
+          cmd.key);
+        tp->second.get_configuration().tp_id = cmd.value.topic_id.value;
     }
 
     auto updated_properties = update_topic_properties(

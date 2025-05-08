@@ -633,7 +633,8 @@ ss::future<errc> backend::create_topic(
       local_nt.ns,
       local_nt.tp,
       maybe_cfg->partition_count,
-      maybe_cfg->replication_factor);
+      maybe_cfg->replication_factor,
+      maybe_cfg->tp_id);
     auto& topic_properties = topic_to_create_cfg.properties;
 
     // copy all properties

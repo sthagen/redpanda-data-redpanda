@@ -15,4 +15,11 @@ if [[ -z ${BAZELISK_SKIP_WRAPPER} ]]; then
   exit 0
 fi
 
+if [ "$CI" = "true" ]; then
+  install_base="$($BAZEL_REAL info install_base)"
+  if ! "$install_base/linux-sandbox" /bin/true; then
+    echo "linux-sandbox is required in CI"
+    exit 1
+  fi
+fi
 $BAZEL_REAL "$@"

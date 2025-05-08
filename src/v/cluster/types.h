@@ -650,6 +650,10 @@ struct incremental_topic_updates
     property_update<std::optional<std::chrono::milliseconds>>
       iceberg_target_lag_ms;
 
+    // Not a regular topic property. Used to assign topic UUIDs to pre-25-2
+    // topics that were created without one.
+    property_update<std::optional<model::topic_id>> topic_id;
+
     // To allow us to better control use of the deprecated shadow_indexing
     // field, use getters and setters instead.
     const auto& get_shadow_indexing() const { return shadow_indexing; }
@@ -693,7 +697,8 @@ struct incremental_topic_updates
           iceberg_invalid_record_action,
           iceberg_target_lag_ms,
           min_cleanable_dirty_ratio,
-          remote_allow_gaps);
+          remote_allow_gaps,
+          topic_id);
     }
 
     friend std::ostream&
