@@ -229,6 +229,12 @@ enum class error_code : int16_t {
     unstable_offset_commit = 88,
     // Broker declined to process request due to exceeded resource quotas.
     throttling_quota_exceeded = 89,
+    // A request illegally referred to a resource that does not exist.
+    resource_not_found = 91,
+    // A request illegally referred to the same resource twice.
+    duplicate_resource = 92,
+    // Requested credential would not meet criteria for acceptability
+    unacceptable_credential = 93,
     // The transactional_id could not be found for describe tx request.
     transactional_id_not_found = 105,
 };

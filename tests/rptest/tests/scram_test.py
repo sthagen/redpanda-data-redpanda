@@ -308,6 +308,103 @@ class ScramTest(BaseScramTest):
         users = self.list_users()
         assert username in users
 
+    @cluster(num_nodes=3)
+    @matrix(scram_algo=["SCRAM-SHA-256", "SCRAM-SHA-512"])
+    def test_scram_kafka_api_describe(self, scram_algo):
+        """
+        This test validates the KIP-554 implementation of Redpanda
+        """
+        test_username = "test-user"
+        test_password = "test-password"
+        test_algorithm = scram_algo
+
+        self.create_user(username=test_username,
+                         algorithm=test_algorithm,
+                         password=test_password)
+
+        kcli = KafkaCliTools(self.redpanda)
+        (username, algo,
+         iterations) = kcli.describe_user_scram(user=test_username)
+        assert username == test_username, f"Expected {test_username}, got {username}"
+        assert algo == test_algorithm, f"Expected {test_algorithm}, got {algo}"
+        assert iterations == 4096, f"Expected 4096, got {iterations}"
+
+    @cluster(num_nodes=3)
+    def test_scram_kafka_api_create_user(self):
+        test_username = "test-user"
+        test_password = "test-password"
+        test_algorithm = "SCRAM-SHA-256"
+        iteration_count = 8192
+
+        try:
+            RpkTool(self.redpanda,
+                    username=test_username,
+                    password=test_password,
+                    sasl_mechanism=test_algorithm).list_topics()
+            assert False, f"Expected {test_username} to not exist"
+        except RpkException:
+            pass
+
+        kcli = KafkaCliTools(self.redpanda)
+        kcli.create_alter_scram_user(user=test_username,
+                                     password=test_password,
+                                     algorithm=test_algorithm,
+                                     iteration_count=iteration_count)
+
+        users = self.list_users()
+        assert test_username in users, f'Expected {test_username} to be in {users}'
+
+        # Validate that we can use RPK to list topics with the new user
+        RpkTool(self.redpanda,
+                username=test_username,
+                password=test_password,
+                sasl_mechanism=test_algorithm).list_topics()
+
+    @cluster(num_nodes=3)
+    def test_scram_kafka_api_modify_user(self):
+        test_username = "test-user"
+        orig_password = "test-password"
+        new_password = "new-password"
+        orig_algorithm = "SCRAM-SHA-256"
+        new_algorithm = "SCRAM-SHA-512"
+
+        self.create_user(username=test_username,
+                         algorithm=orig_algorithm,
+                         password=orig_password)
+
+        kcli = KafkaCliTools(self.redpanda)
+        kcli.create_alter_scram_user(user=test_username,
+                                     password=new_password,
+                                     algorithm=new_algorithm)
+
+        # Validate that we can use RPK to list topics with the new user
+        RpkTool(self.redpanda,
+                username=test_username,
+                password=new_password,
+                sasl_mechanism=new_algorithm).list_topics()
+
+    @cluster(num_nodes=3)
+    def test_scram_kafka_api_delete_user(self):
+        test_username = "test-user"
+        test_password = "test-password"
+        test_algorithm = "SCRAM-SHA-256"
+
+        self.create_user(username=test_username,
+                         algorithm=test_algorithm,
+                         password=test_password)
+
+        kcli = KafkaCliTools(self.redpanda)
+        kcli.delete_scram_user(user=test_username, algorithm=test_algorithm)
+
+        try:
+            RpkTool(self.redpanda,
+                    username=test_username,
+                    password=test_password,
+                    sasl_mechanism=test_algorithm).list_topics()
+            assert False, f"Expected {test_username} to not exist"
+        except RpkException:
+            pass
+
 
 class SaslPlainTest(BaseScramTest):
     """

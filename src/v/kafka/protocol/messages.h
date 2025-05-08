@@ -15,6 +15,7 @@
 #include "kafka/protocol/schemata/alter_client_quotas_request.h"
 #include "kafka/protocol/schemata/alter_configs_request.h"
 #include "kafka/protocol/schemata/alter_partition_reassignments_request.h"
+#include "kafka/protocol/schemata/alter_user_scram_credentials_request.h"
 #include "kafka/protocol/schemata/api_versions_request.h"
 #include "kafka/protocol/schemata/create_acls_request.h"
 #include "kafka/protocol/schemata/create_partitions_request.h"
@@ -31,6 +32,7 @@
 #include "kafka/protocol/schemata/describe_log_dirs_request.h"
 #include "kafka/protocol/schemata/describe_producers_request.h"
 #include "kafka/protocol/schemata/describe_transactions_request.h"
+#include "kafka/protocol/schemata/describe_user_scram_credentials_request.h"
 #include "kafka/protocol/schemata/end_txn_request.h"
 #include "kafka/protocol/schemata/fetch_request.h"
 #include "kafka/protocol/schemata/find_coordinator_request.h"
@@ -107,6 +109,8 @@ using request_types = make_request_types<
   list_transactions_api,
   alter_client_quotas_api,
   describe_client_quotas_api,
-  describe_cluster_api>;
+  describe_cluster_api,
+  describe_user_scram_credentials_api,
+  alter_user_scram_credentials_api>;
 
 } // namespace kafka

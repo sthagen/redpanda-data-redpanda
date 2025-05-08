@@ -15,6 +15,7 @@
 #include "kafka/protocol/schemata/alter_client_quotas_request.h"
 #include "kafka/protocol/schemata/alter_configs_request.h"
 #include "kafka/protocol/schemata/alter_partition_reassignments_request.h"
+#include "kafka/protocol/schemata/alter_user_scram_credentials_request.h"
 #include "kafka/protocol/schemata/create_acls_request.h"
 #include "kafka/protocol/schemata/create_partitions_request.h"
 #include "kafka/protocol/schemata/create_topics_request.h"
@@ -29,6 +30,7 @@
 #include "kafka/protocol/schemata/describe_log_dirs_request.h"
 #include "kafka/protocol/schemata/describe_producers_request.h"
 #include "kafka/protocol/schemata/describe_transactions_request.h"
+#include "kafka/protocol/schemata/describe_user_scram_credentials_request.h"
 #include "kafka/protocol/schemata/end_txn_request.h"
 #include "kafka/protocol/schemata/fetch_request.h"
 #include "kafka/protocol/schemata/find_coordinator_request.h"
@@ -478,6 +480,10 @@ event_type kafka_api_to_event_type(kafka::api_key key) {
         return event_type::describe;
     case kafka::heartbeat_api::key:
         return event_type::heartbeat;
+    case kafka::describe_user_scram_credentials_api::key:
+        return event_type::describe;
+    case kafka::alter_user_scram_credentials_api::key:
+        return event_type::management;
     }
 
     // this method should only be used by handlers or the audit system while an

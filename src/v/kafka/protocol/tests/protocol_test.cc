@@ -12,6 +12,7 @@
 #include "kafka/protocol/alter_client_quotas.h"
 #include "kafka/protocol/alter_configs.h"
 #include "kafka/protocol/alter_partition_reassignments.h"
+#include "kafka/protocol/alter_user_scram_credentials.h"
 #include "kafka/protocol/api_versions.h"
 #include "kafka/protocol/create_acls.h"
 #include "kafka/protocol/create_partitions.h"
@@ -28,6 +29,7 @@
 #include "kafka/protocol/describe_log_dirs.h"
 #include "kafka/protocol/describe_producers.h"
 #include "kafka/protocol/describe_transactions.h"
+#include "kafka/protocol/describe_user_scram_credentials.h"
 #include "kafka/protocol/end_txn.h"
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/find_coordinator.h"
@@ -107,12 +109,20 @@ bytes invoke_franz_harness(
           }),
           boost::process::std_out > is);
 
-        c.wait();
+        auto read_stream = [](boost::process::ipstream& stream) -> ss::sstring {
+            std::ostringstream oss;
+            std::array<char, 4096> buffer;
+            while (stream && !stream.eof()) {
+                stream.read(buffer.data(), buffer.size());
+                oss.write(buffer.data(), stream.gcount());
+            }
+            return oss.str();
+        };
 
-        /// Capture data on stdout
-        std::stringstream ss;
-        ss << is.rdbuf();
-        stdout = ss.str();
+        std::thread out_thread([&]() { stdout = read_stream(is); });
+
+        c.wait();          // Wait for process to finish
+        out_thread.join(); // Wait for reading to complete
 
         /// If the program doesn't exit with success, issue is with test binary
         /// fail hard as author should fix to account for diff in feature set

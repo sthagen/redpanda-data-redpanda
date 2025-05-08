@@ -243,6 +243,9 @@ std::error_condition make_error_condition(std::error_code ec) {
         case kec::fenced_instance_id:
         case kec::invalid_record:
         case kec::transactional_id_not_found:
+        case kec::resource_not_found:
+        case kec::duplicate_resource:
+        case kec::unacceptable_credential:
             return rec::kafka_bad_request;
         case kec::not_enough_replicas:
         case kec::coordinator_not_available:

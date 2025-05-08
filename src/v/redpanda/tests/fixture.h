@@ -16,6 +16,7 @@
 #include "cloud_storage_clients/configuration.h"
 #include "cluster/archival/types.h"
 #include "cluster/cluster_utils.h"
+#include "cluster/config_frontend.h"
 #include "cluster/controller.h"
 #include "cluster/controller_stm.h"
 #include "cluster/errc.h"
@@ -32,6 +33,8 @@
 #include "config/types.h"
 #include "kafka/client/transport.h"
 #include "kafka/protocol/fetch.h"
+#include "kafka/protocol/sasl_authenticate.h"
+#include "kafka/protocol/sasl_handshake.h"
 #include "kafka/protocol/schemata/fetch_request.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/connection_context.h"
@@ -50,6 +53,8 @@
 #include "resource_mgmt/cpu_scheduling.h"
 #include "security/acl.h"
 #include "security/sasl_authentication.h"
+#include "security/scram_algorithm.h"
+#include "security/scram_authenticator.h"
 #include "ssx/thread_worker.h"
 #include "storage/directories.h"
 #include "storage/tests/utils/disk_log_builder.h"
@@ -897,6 +902,97 @@ public:
         auto data = random_generators::gen_alphanum_string(data_size);
         b.append(data.data(), data.size());
         return b;
+    }
+
+    void enable_sasl() {
+        cluster::config_update_request r{.upsert = {{"enable_sasl", "true"}}};
+        auto res = app.controller->get_config_frontend()
+                     .local()
+                     .patch(r, model::timeout_clock::now() + 1s)
+                     .get();
+        BOOST_REQUIRE(!res.errc);
+    }
+
+    void disable_sasl() {
+        cluster::config_update_request r{.upsert = {{"enable_sasl", "false"}}};
+        auto res = app.controller->get_config_frontend()
+                     .local()
+                     .patch(r, model::timeout_clock::now() + 1s)
+                     .get();
+        BOOST_REQUIRE(!res.errc);
+    }
+
+    security::server_first_message send_scram_client_first(
+      kafka::client::transport& client,
+      const security::client_first_message& client_first) {
+        kafka::sasl_authenticate_request client_first_req;
+        {
+            auto msg = client_first.message();
+            client_first_req.data.auth_bytes = bytes(msg.cbegin(), msg.cend());
+        }
+        auto client_first_resp = client.dispatch(client_first_req).get();
+        BOOST_REQUIRE_EQUAL(
+          client_first_resp.data.error_code, kafka::error_code::none);
+        return security::server_first_message(
+          client_first_resp.data.auth_bytes);
+    }
+
+    security::server_final_message send_scram_client_final(
+      kafka::client::transport& client,
+      const security::client_final_message& client_final) {
+        kafka::sasl_authenticate_request client_last_req;
+        {
+            auto msg = client_final.message();
+            client_last_req.data.auth_bytes = bytes(msg.cbegin(), msg.cend());
+        }
+        auto client_last_resp = client.dispatch(client_last_req).get();
+
+        BOOST_REQUIRE_EQUAL(
+          client_last_resp.data.error_code, kafka::error_code::none);
+        return security::server_final_message(
+          std::move(client_last_resp.data.auth_bytes));
+    }
+
+    template<typename Authenticator = security::scram_sha256_authenticator>
+    void do_sasl_handshake(kafka::client::transport& client) {
+        kafka::sasl_handshake_request req;
+        req.data.mechanism = Authenticator::name;
+
+        auto resp = client.dispatch(req).get();
+        BOOST_REQUIRE_EQUAL(resp.data.error_code, kafka::error_code::none);
+    }
+
+    template<typename Authenticator = security::scram_sha256_authenticator>
+    void authn_kafka_client(
+      kafka::client::transport& client,
+      const ss::sstring& username,
+      const ss::sstring& password) {
+        using ScramMech = typename Authenticator::auth::scram;
+        do_sasl_handshake<Authenticator>(client);
+        const auto nonce = random_generators::gen_alphanum_string(130);
+        const security::client_first_message client_first(username, nonce);
+        const auto server_first = send_scram_client_first(client, client_first);
+
+        BOOST_REQUIRE(
+          std::string_view(server_first.nonce()).starts_with(nonce));
+        BOOST_REQUIRE_GE(server_first.iterations(), ScramMech::min_iterations);
+        security::client_final_message client_final(
+          bytes::from_string("n,,"), server_first.nonce());
+        auto salted_password = ScramMech::hi(
+          bytes(password.cbegin(), password.cend()),
+          server_first.salt(),
+          server_first.iterations());
+        client_final.set_proof(ScramMech::client_proof(
+          salted_password, client_first, server_first, client_final));
+
+        auto server_final = send_scram_client_final(client, client_final);
+        BOOST_REQUIRE(!server_final.error());
+
+        auto server_key = ScramMech::server_key(salted_password);
+        auto server_sig = ScramMech::server_signature(
+          server_key, client_first, server_first, client_final);
+
+        BOOST_REQUIRE_EQUAL(server_final.signature(), server_sig);
     }
 
     application app;

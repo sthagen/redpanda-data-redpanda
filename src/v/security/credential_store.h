@@ -53,7 +53,10 @@ public:
     template<typename T>
     auto get(const credential_user& name) const -> const std::optional<T> {
         if (auto it = _credentials.find(name); it != _credentials.end()) {
-            return std::get<T>(it->second);
+            return ss::visit(
+              it->second,
+              [](const T& cred) { return cred; },
+              [](const auto&) { return std::nullopt; });
         }
         return std::nullopt;
     }

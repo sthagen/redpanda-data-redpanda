@@ -1786,6 +1786,18 @@ ntp_archiver::schedule_uploads(model::offset max_offset_exclusive) {
                                  ? model::offset(0)
                                  : last_offset + model::offset(1);
 
+    // If tiered storage was paused and gaps were allowed to be created
+    // then we need to start from the first offset in the log.
+    if (start_upload_offset < _parent.log()->offsets().start_offset) {
+        vlog(
+          _rtclog.warn,
+          "Start upload offset {} is less than log start offset {}. Resetting "
+          "start upload offset to log start offset.",
+          start_upload_offset,
+          _parent.log()->offsets().start_offset);
+        start_upload_offset = _parent.log()->offsets().start_offset;
+    }
+
     auto compacted_segments_upload_start = model::next_offset(
       manifest().get_last_uploaded_compacted_offset());
 

@@ -84,6 +84,10 @@ set(schemata
   alter_client_quotas_request.json
   alter_client_quotas_response.json
   describe_client_quotas_request.json
-  describe_client_quotas_response.json)
+  describe_client_quotas_response.json
+  describe_user_scram_credentials_request.json
+  describe_user_scram_credentials_response.json
+  alter_user_scram_credentials_request.json
+  alter_user_scram_credentials_response.json)
 
 set(schemata ${schemata} PARENT_SCOPE)

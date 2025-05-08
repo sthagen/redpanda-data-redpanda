@@ -14,6 +14,8 @@
 #include "model/fundamental.h"
 #include "utils/named_type.h"
 
+#include <seastar/core/sstring.hh>
+
 #include <absl/container/btree_map.h>
 #include <boost/numeric/conversion/cast.hpp>
 
@@ -248,5 +250,15 @@ enum class config_resource_operation : int8_t {
 };
 
 std::ostream& operator<<(std::ostream& os, config_resource_operation);
+
+using scram_user_name = named_type<ss::sstring, struct scram_user_name_tag>;
+
+enum class scram_mechanism : int8_t {
+    unknown = 0,
+    scram_sha_256 = 1,
+    scram_sha_512 = 2,
+};
+
+std::ostream& operator<<(std::ostream& os, scram_mechanism);
 
 } // namespace kafka

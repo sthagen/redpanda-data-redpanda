@@ -193,6 +193,12 @@ std::string_view error_code_to_str(error_code error) {
         return "unstable_offset_commit";
     case error_code::throttling_quota_exceeded:
         return "throttling_quota_exceeded";
+    case error_code::resource_not_found:
+        return "resource_not_found";
+    case error_code::duplicate_resource:
+        return "duplicate_resource";
+    case error_code::unacceptable_credential:
+        return "unacceptable_credential";
     case error_code::transactional_id_not_found:
         return "transactional_id_not_found";
     default:

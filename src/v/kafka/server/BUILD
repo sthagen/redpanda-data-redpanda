@@ -52,6 +52,7 @@ redpanda_cc_library(
         "group_tx_tracker_stm.cc",
         "handlers/alter_configs.cc",
         "handlers/alter_partition_reassignments.cc",
+        "handlers/alter_user_scram_credentials.cc",
         "handlers/api_versions.cc",
         "handlers/client_quotas.cc",
         "handlers/configs/config_response_utils.cc",
@@ -64,6 +65,8 @@ redpanda_cc_library(
         "handlers/describe_log_dirs.cc",
         "handlers/describe_producers.cc",
         "handlers/describe_transactions.cc",
+        "handlers/describe_user_scram_credentials.cc",
+        "handlers/details/security.cc",
         "handlers/fetch.cc",
         "handlers/find_coordinator.cc",
         "handlers/handler_interface.cc",
@@ -115,6 +118,7 @@ redpanda_cc_library(
         "handlers/alter_client_quotas.h",
         "handlers/alter_configs.h",
         "handlers/alter_partition_reassignments.h",
+        "handlers/alter_user_scram_credentials.h",
         "handlers/api_versions.h",
         "handlers/configs/config_response_utils.h",
         "handlers/configs/config_utils.h",
@@ -133,6 +137,7 @@ redpanda_cc_library(
         "handlers/describe_log_dirs.h",
         "handlers/describe_producers.h",
         "handlers/describe_transactions.h",
+        "handlers/describe_user_scram_credentials.h",
         "handlers/details/leader_epoch.h",
         "handlers/details/security.h",
         "handlers/end_txn.h",
@@ -216,6 +221,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol:alter_client_quotas",
         "//src/v/kafka/protocol:alter_configs",
         "//src/v/kafka/protocol:alter_partition_reassignments",
+        "//src/v/kafka/protocol:alter_user_scram_credentials",
         "//src/v/kafka/protocol:api_versions",
         "//src/v/kafka/protocol:create_acls",
         "//src/v/kafka/protocol:create_partitions",
@@ -232,6 +238,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol:describe_log_dirs",
         "//src/v/kafka/protocol:describe_producers",
         "//src/v/kafka/protocol:describe_transactions",
+        "//src/v/kafka/protocol:describe_user_scram_credentials",
         "//src/v/kafka/protocol:end_txn",
         "//src/v/kafka/protocol:fetch",
         "//src/v/kafka/protocol:find_coordinator",
@@ -410,6 +417,27 @@ redpanda_cc_library(
     deps = [
         ":datalake_throttle_manager",
         ":qdc_monitor_config",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "write_at_offset_stm",
+    srcs = [
+        "write_at_offset_stm.cc",
+    ],
+    hdrs = [
+        "write_at_offset_stm.h",
+    ],
+    include_prefix = "kafka/server",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":logger",
+        "//src/v/cluster:snapshot",
+        "//src/v/cluster:state_machine_registry",
+        "//src/v/model:batch_utils",
+        "//src/v/raft",
+        "//src/v/raft:fundamental",
         "@seastar",
     ],
 )

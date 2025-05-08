@@ -397,6 +397,7 @@ redpanda_cc_library(
         "//src/v/json",
         "//src/v/metrics",
         "//src/v/model",
+        "//src/v/model:batch_utils",
         "//src/v/raft:fundamental",
         "//src/v/random:fast_prng",
         "//src/v/random:generators",

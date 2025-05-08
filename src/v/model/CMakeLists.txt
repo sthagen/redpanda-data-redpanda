@@ -9,6 +9,7 @@ v_cc_library(
     validation.cc
     transform.cc
     record.cc
+    batch_utils.cc
   DEPS
     v::bytes
     v::utils

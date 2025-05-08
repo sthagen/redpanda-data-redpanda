@@ -12,6 +12,7 @@
 #include "base/vassert.h"
 #include "base/vlog.h"
 #include "bytes/iobuf.h"
+#include "model/batch_utils.h"
 #include "model/fundamental.h"
 #include "model/offset_interval.h"
 #include "model/record.h"
@@ -29,36 +30,6 @@
 #include <fmt/ostream.h>
 
 #include <exception>
-
-namespace {
-model::record_batch make_ghost_batch(
-  model::offset start_offset, model::offset end_offset, model::term_id term) {
-    auto delta = end_offset - start_offset;
-    auto now = model::timestamp::now();
-    model::record_batch_header header = {
-      .size_bytes = model::packed_record_batch_header_size,
-      .base_offset = start_offset,
-      .type = model::record_batch_type::ghost_batch,
-      .crc = 0, // crc computed later
-      .attrs = model::record_batch_attributes{} |= model::compression::none,
-      .last_offset_delta = static_cast<int32_t>(delta),
-      .first_timestamp = now,
-      .max_timestamp = now,
-      .producer_id = -1,
-      .producer_epoch = -1,
-      .base_sequence = -1,
-      .record_count = static_cast<int32_t>(delta() + 1),
-      .ctx = model::record_batch_header::context(term, ss::this_shard_id())};
-
-    model::record_batch batch(
-      std::move(header), model::record_batch::compressed_records{});
-
-    batch.header().crc = model::crc_record_batch(batch);
-    batch.header().header_crc = model::internal_header_only_crc(batch.header());
-    return batch;
-}
-
-} // anonymous namespace
 
 template<>
 struct fmt::formatter<storage::log_reader> : fmt::formatter<std::string_view> {
@@ -482,7 +453,7 @@ log_reader::do_load_slice(model::timeout_clock::time_point timeout) {
                 batches_filled.reserve(batches.size());
                 for (auto& b : batches) {
                     if (b.base_offset() > _expected_next) {
-                        auto gb = make_ghost_batches(
+                        auto gb = model::make_ghost_batches(
                           _expected_next.value(),
                           model::prev_offset(b.base_offset()),
                           b.term());

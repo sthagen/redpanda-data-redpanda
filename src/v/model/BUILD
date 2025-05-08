@@ -104,3 +104,20 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "batch_utils",
+    srcs = [
+        "batch_utils.cc",
+    ],
+    hdrs = [
+        "batch_utils.h",
+    ],
+    include_prefix = "model",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":model",
+        "//src/v/base",
+        "@seastar",
+    ],
+)

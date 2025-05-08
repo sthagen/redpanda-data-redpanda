@@ -783,6 +783,26 @@ redpanda_cc_gtest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "write_at_offset_stm_test",
+    timeout = "moderate",
+    srcs = [
+        "write_at_offset_stm_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/config",
+        "//src/v/kafka/server:write_at_offset_stm",
+        "//src/v/model/tests:random",
+        "//src/v/raft",
+        "//src/v/raft/tests:stm_test_fixture",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:scoped_config",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_bench(
     name = "kafka_fetch_rpbench",
     srcs = [
@@ -865,5 +885,51 @@ redpanda_cc_bench(
         "@fmt",
         "@seastar",
         "@seastar//:benchmark",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "describe_user_scram_credentials_test",
+    timeout = "short",
+    srcs = [
+        "describe_user_scram_credentials_test.cc",
+    ],
+    env = {"RP_FIXTURE_ENV": "1"},
+    tags = ["exclusive"],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:describe_user_scram_credentials",
+        "//src/v/kafka/server",
+        "//src/v/model",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "@abseil-cpp//absl/algorithm:container",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "alter_user_scram_credentials_test",
+    timeout = "short",
+    srcs = [
+        "alter_user_scram_credentials_test.cc",
+    ],
+    env = {"RP_FIXTURE_ENV": "1"},
+    tags = ["exclusive"],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:alter_user_scram_credentials",
+        "//src/v/kafka/server",
+        "//src/v/model",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "@abseil-cpp//absl/algorithm:container",
+        "@seastar",
+        "@seastar//:testing",
     ],
 )

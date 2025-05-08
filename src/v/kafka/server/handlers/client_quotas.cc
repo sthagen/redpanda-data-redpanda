@@ -294,7 +294,6 @@ bool valid_key_combination(const entity_key&, entity_value_diff::key) {
     // For now, all combinations we can parse are valid
     return true;
 }
-
 } // namespace
 
 template<>
@@ -329,6 +328,16 @@ ss::future<response_ptr> describe_client_quotas_handler::handle(
     // std::optional<key_part_predicate> ip_predicate;
 
     for (const auto& component : request.data.components) {
+        // This is a work around for the fact that we don't support user based
+        // quotas yet.  The `kafka-configs` tool will error out when attempting
+        // to describe a principal when this returns unsupported_version.  This
+        // is a problem with implementing support for KIP-554, as
+        // `kafka-configs` is a common kafka tool used to manage users.
+        // TODO: Fully implement quotas
+        if (component.entity_type == "user") {
+            continue;
+        }
+
         auto filter_or_err = make_filter(component);
 
         if (filter_or_err.has_error()) {

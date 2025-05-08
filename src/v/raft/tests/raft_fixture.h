@@ -685,6 +685,20 @@ struct stm_raft_fixture : raft_fixture {
         }
     }
 
+    // Restarts nodes and deletes their data directories
+    // This is useful for tests that need to start with a clean state
+    // f.e. for recovery testing.
+    ss::future<> restart_node_and_delete_data(model::node_id id) {
+        auto dir = node(id).raft()->log()->config().base_directory();
+        node_stms.erase(node(id).get_vnode());
+
+        co_await stop_node(id, remove_data_dir::yes);
+
+        add_node(id, model::revision_id(0), std::move(dir));
+
+        co_await start_node(node(id));
+    }
+
     ss::future<> restart_nodes() {
         co_await stop_and_recreate_nodes();
         co_await start_nodes();

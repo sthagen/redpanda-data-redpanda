@@ -355,6 +355,50 @@ sasl.login.callback.handler.class=io.strimzi.kafka.oauth.client.JaasClientOauthL
                          args,
                          desc="describe_quota_config")
 
+    def describe_user(self, user: str):
+        self._redpanda.logger.debug("Describing user %s", user)
+        args = ["--describe"]
+        args += ["--entity-type", "users"]
+        args += ["--entity-name", user]
+        return self._run("kafka-configs.sh", args, desc="describe_user")
+
+    def describe_user_scram(self, user: str) -> tuple[str, str, int]:
+        search = re.compile(
+            r"user-principal\s+'(.+?)'\s+are\s+(SCRAM-SHA-\d+)=iterations=(\d+)"
+        )
+        result = self.describe_user(user=user)
+        match = search.search(result)
+        if not match:
+            raise RuntimeError(
+                f"Unable to find SCRAM credentials for user {user}: {result}")
+        return (match.group(1), match.group(2), int(match.group(3)))
+
+    def create_alter_scram_user(self,
+                                user: str,
+                                password: str,
+                                algorithm: str,
+                                iteration_count: int | None = None):
+        self._redpanda.logger.debug(
+            f'Creating SCRAM user {user}, with password {password}, with algorithm {algorithm} and iteration count {iteration_count}'
+        )
+        config_parts = []
+        if iteration_count is not None:
+            config_parts.append(f"iterations={iteration_count}")
+        config_parts.append(f'password={password}')
+        args = ["--alter"]
+        args += ["--add-config", f"{algorithm}=[{','.join(config_parts)}]"]
+        args += ["--entity-type", "users"]
+        args += ["--entity-name", user]
+        return self._run("kafka-configs.sh", args, desc="create_scram_user")
+
+    def delete_scram_user(self, user: str, algorithm: str):
+        self._redpanda.logger.debug(f'Deleting SCRAM user {user}')
+        args = ["--alter"]
+        args += ["--delete-config", f"{algorithm}"]
+        args += ["--entity-type", "users"]
+        args += ["--entity-name", user]
+        return self._run("kafka-configs.sh", args, desc="delete_scram_user")
+
     def produce(self,
                 topic: str,
                 num_records: int,

@@ -127,4 +127,16 @@ std::ostream& operator<<(std::ostream& os, config_resource_operation t) {
     return os << "unknown type";
 }
 
+std::ostream& operator<<(std::ostream& os, scram_mechanism m) {
+    switch (m) {
+    case scram_mechanism::scram_sha_256:
+        return os << "SCRAM-SHA-256";
+    case scram_mechanism::scram_sha_512:
+        return os << "SCRAM-SHA-512";
+    case scram_mechanism::unknown:
+        return os << "unknown";
+    }
+    return os << "unsupported type";
+}
+
 } // namespace kafka

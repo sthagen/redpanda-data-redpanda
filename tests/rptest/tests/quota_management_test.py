@@ -417,10 +417,9 @@ Quota configs for client-id 'custom-producer' are producer_byte_rate=20480.0"""
         # rpk has client-side validation for the supported types,
         # so use other clients to exercise unsupported types
         self.redpanda.logger.debug(
-            "Verify the error message of user quotas (not yet supported)")
-        with expect_kafka_cli_error_msg(
-                "Entity type 'user' not yet supported"):
-            self.kafka_cli.describe_quota_config("--user-defaults")
+            "Verify that any request for user quotas will return nothing")
+        got = self.kafka_cli.describe_quota_config("--user-defaults")
+        assert got == "", f"Unexpected output: {got}"
 
         self.redpanda.logger.debug(
             "Verify that the default for client-id-prefix is not supported with alter"

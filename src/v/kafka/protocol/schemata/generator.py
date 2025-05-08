@@ -266,21 +266,31 @@ path_type_map = {
         "ReplicaId": ("model::node_id", "int32"),
         "RackId": ("model::rack_id", "string"),
         "Topics": {
-            "FetchPartitions": {
-                "PartitionIndex": ("model::partition_id", "int32"),
+            "Partitions": {
+                "Partition": ("model::partition_id", "int32"),
                 "FetchOffset": ("model::offset", "int64"),
                 "CurrentLeaderEpoch": ("kafka::leader_epoch", "int32"),
             },
         },
     },
     "FetchResponseData": {
-        "Topics": {
+        "Responses": {
             "Partitions": {
                 "PartitionIndex": ("model::partition_id", "int32"),
                 "HighWatermark": ("model::offset", "int64"),
                 "LastStableOffset": ("model::offset", "int64"),
                 "LogStartOffset": ("model::offset", "int64"),
-                "Records": ("kafka::batch_reader", "fetch_record_set"),
+                "DivergingEpoch": {
+                    "Epoch": ("kafka::leader_epoch", "int32"),
+                    "EndOffset": ("model::offset", "int64"),
+                },
+                "CurrentLeader": {
+                    "LeaderEpoch": ("kafka::leader_epoch", "int32"),
+                },
+                "SnapshotId": {
+                    "EndOffset": ("model::offset", "int64"),
+                    "Epoch": ("kafka::leader_epoch", "int32"),
+                },
                 "PreferredReadReplica": ("model::node_id", "int32"),
             },
         },
@@ -373,6 +383,34 @@ path_type_map = {
             "MatchType": ("kafka::describe_client_quotas_match_type", "int8"),
         },
     },
+    "DescribeUserScramCredentialsRequestData": {
+        "Users": {
+            "Name": ("kafka::scram_user_name", "string"),
+        },
+    },
+    "DescribeUserScramCredentialsResponseData": {
+        "Results": {
+            "User": ("kafka::scram_user_name", "string"),
+            "CredentialInfos": {
+                "Mechanism": ("kafka::scram_mechanism", "int8"),
+            },
+        },
+    },
+    "AlterUserScramCredentialsRequestData": {
+        "Deletions": {
+            "Name": ("kafka::scram_user_name", "string"),
+            "Mechanism": ("kafka::scram_mechanism", "int8"),
+        },
+        "Upsertions": {
+            "Name": ("kafka::scram_user_name", "string"),
+            "Mechanism": ("kafka::scram_mechanism", "int8"),
+        },
+    },
+    "AlterUserScramCredentialsResponseData": {
+        "Results": {
+            "User": ("kafka::scram_user_name", "string")
+        },
+    },
 }
 
 # a few kafka field types specify an entity type
@@ -409,8 +447,8 @@ basic_type_map = dict(
     uuid=("uuid", "read_uuid()"),
     iobuf=("iobuf", None, "read_fragmented_nullable_bytes()", None,
            "read_fragmented_nullable_flex_bytes()"),
-    fetch_record_set=("batch_reader", None, "read_nullable_batch_reader()",
-                      None, "read_nullable_flex_batch_reader()"),
+    records=("kafka::batch_reader", None, "read_nullable_batch_reader()", None,
+             "read_nullable_flex_batch_reader()"),
 )
 
 # Declare some fields as sensitive. Utmost care should be taken to ensure the
@@ -455,6 +493,9 @@ struct_renames = {
         ("EntityData", "AlterClientQuotasResponseEntityData"),
     ("DescribeClientQuotasResponseData", "Entries", "Entity"):
         ("EntityData", "DescribeClientQuotasResponseEntityData"),
+
+    ("FetchResponseData", "Responses", "Partitions", "DivergingEpoch"):
+        ("EpochEndOffset", "DivergingEpochEndOffset"),
 }
 
 # extra header per type name
@@ -486,7 +527,7 @@ extra_headers = {
 override_member_container = {
     'metadata_response_partition': 'large_fragment_vector',
     'metadata_response_topic': 'small_fragment_vector',
-    'fetchable_partition_response': 'small_fragment_vector',
+    'partition_data': 'small_fragment_vector',
     'offset_fetch_response_partition': 'small_fragment_vector',
     'int32_t': 'std::vector',
     'model::node_id': 'std::vector',
@@ -518,7 +559,7 @@ def make_context_field(path):
     structure. This structure will not be encoded/decoded on the wire and is
     used to add some extra context.
     """
-    if path == ("FetchResponseData", "Topics", "Partitions"):
+    if path == ("FetchResponseData", "Responses", "Partitions"):
         return ("bool", "has_to_be_included{true}")
 
 
@@ -591,7 +632,7 @@ STRUCT_TYPES = [
     "ForgottenTopic",
     "FetchPartition",
     "FetchableTopicResponse",
-    "FetchablePartitionResponse",
+    "PartitionData",
     "AbortedTransaction",
     "CreatePartitionsTopic",
     "CreatePartitionsTopicResult",
@@ -630,7 +671,16 @@ STRUCT_TYPES = [
     "OpData",
     "ComponentData",
     "ValueData",
+    "UserName",
+    "DescribeUserScramCredentialsResult",
+    "CredentialInfo",
+    "ScramCredentialDeletion",
+    "ScramCredentialUpsertion",
+    "AlterUserScramCredentialsResult",
 ]
+
+# A list of StructTypes that are allowed to be not arrays in the schema.
+ALLOWED_SINGULAR_STRUCT_TYPES = ["EpochEndOffset"]
 
 DROP_STREAM_OPERATOR = [
     "metadata_response_data",
@@ -643,13 +693,23 @@ DROP_STREAM_OPERATOR = [
 # `operator==()`, because one or more of its member variables are not
 # comparable
 WITHOUT_DEFAULT_EQUALITY_OPERATOR = {
-    'kafka::batch_reader', 'kafka::produce_request_record_data'
+    'kafka::batch_reader',
+    'kafka::produce_request_record_data',
+    "kafka::fetchable_topic_response",
 }
 
 # The following is a list of tag types which contain fields where their
 # respective types are not prefixed with []. The generator special cases these
 # as ArrayTypes
 TAGGED_WITH_FIELDS = []
+
+# The following is a list of tag types which contain fields where their
+# respective types are correctly not prefixed with [].
+# They must not be treated as ArrayTypes
+# This list is the names after struct_renames have been applied.
+SINGULAR_STRUCT_TYPES = [
+    "DivergingEpochEndOffset", "LeaderIdAndEpoch", "SnapshotId"
+]
 
 SCALAR_TYPES = list(basic_type_map.keys())
 ENTITY_TYPES = list(entity_type_map.keys())
@@ -726,8 +786,6 @@ class VersionRange:
                     return self.guard_enum.NO_GUARD, None
             elif self.max < first_flex:
                 return self.guard_enum.NO_SOURCE, None
-            elif self.max == first_flex:
-                return self.guard_enum.NO_GUARD, None
 
         return self._guard()
 
@@ -773,11 +831,13 @@ class FieldType:
             t = ScalarType(type_name)
         else:
             # Its possible for tagged types to contain fields where the type is not
-            # prefixed with [], these types are listed in the TAGGED_WITH_FIELDS map
+            # prefixed with [].
+            # Types in TAGGED_WITH_FIELDS map are treated as ArrayTypes
+            # Types in SINGULAR_STRUCT_TYPES map are not treated as ArrayTypes
             is_array = is_array or (type_name in TAGGED_WITH_FIELDS)
-            assert is_array
             path = path + (field["name"], )
             type_name = apply_struct_renames(path, type_name)
+            assert is_array or (type_name in SINGULAR_STRUCT_TYPES)
             t = StructType(type_name, field["fields"], path)
 
         if is_array:
@@ -802,7 +862,7 @@ class ScalarType(FieldType):
     def potentially_flexible_type(self):
         """Evaluates to true if the scalar type would be parsed as flex
         if the version is high enough"""
-        return self.name == "string" or self.name == "bytes" or self.name == "iobuf"
+        return self.name == "string" or self.name == "bytes" or self.name == "records" or self.name == "iobuf"
 
 
 class StructType(FieldType):
@@ -1383,7 +1443,7 @@ if ({{ cond }}) {
 {%- endif %}
 {%- endmacro %}
 
-{% macro field_decoder(field, methods, obj) %}
+{% macro field_decoder(field, methods, obj, unused = "") %}
 {%- set flex = methods|length > 1 %}
 {%- if obj %}
 {%- set fname = obj + "." + field.name %}
@@ -1410,6 +1470,9 @@ if ({{ cond }}) {
 {%- endif %}
 });
 {%- else %}
+{%- if field.type().is_struct -%}
+{{- struct_serde(field.type(), methods, "v." ~ field.name) -}}
+{%- else -%}
 {%- set decoder, named_type = field.decoder(flex) %}
 {%- if named_type == None %}
 {{ fname }} = reader.{{ decoder }};
@@ -1426,6 +1489,7 @@ if ({{ cond }}) {
 }
 {%- else %}
 {{ fname }} = {{ named_type }}(reader.{{ decoder }});
+{%- endif %}
 {%- endif %}
 {%- endif %}
 {%- endmacro %}
@@ -1452,7 +1516,7 @@ while(num_tags-- > 0) {
 }
 {%- endmacro %}
 
-{% macro tag_decoder(tag_definitions, obj = "") %}
+{% macro tag_decoder(tag_definitions, obj = "", unused = "") %}
 {%- if tag_definitions|length == 0 %}
 {%- set tf = "unknown_tags" %}
 {%- if obj != "" %}
@@ -1478,6 +1542,10 @@ if ({{ fname }}) {
 }
 {%- elif tdef.is_array %}
 if (!{{ fname }}.empty()) {
+    {{ vec }}.push_back({{ tdef.tag() }});
+}
+{%- elif tdef.type().is_struct  %}
+if ({{ fname }} != {{ tdef.type().name }}{}) {
     {{ vec }}.push_back({{ tdef.tag() }});
 }
 {%- elif tdef.default_value() != "" %}
@@ -1510,7 +1578,11 @@ for(uint32_t tag : to_encode) {
     switch(tag){
 {%- for tdef in tag_definitions %}
     case {{ tdef.tag() }}:
+{%- if tdef.type().is_struct -%}
+{{- struct_serde(tdef.type(), (field_encoder, tag_encoder), obj ~ "." ~ tdef.name, "rw") | indent | indent }}
+{%- else %}
 {{- field_encoder(tdef, (field_encoder, tag_encoder), obj, "rw") | indent | indent }}
+{%- endif %}
         break;
 {%- endfor %}
     default:
@@ -1521,13 +1593,13 @@ for(uint32_t tag : to_encode) {
 writer.write_tags(tagged_fields(std::move(tags_to_encode)));
 {%- endmacro %}
 
-{% macro tag_encoder(tag_definitions, obj = "") %}
+{% macro tag_encoder(tag_definitions, obj = "", writer = "writer") %}
 {%- if tag_definitions|length == 0 %}
 {%- set tf = "unknown_tags" %}
 {%- if obj != "" %}
 {%- set tf = obj + '.unknown_tags' %}
 {%- endif %}
-writer.write_tags(std::move({{ tf }}));
+{{ writer }}.write_tags(std::move({{ tf }}));
 {%- else %}
 {
 {{- tag_encoder_impl(tag_definitions, obj) | indent }}
@@ -1540,15 +1612,15 @@ writer.write_tags(std::move({{ tf }}));
 {% set flex_encoder = (field_encoder, tag_encoder) %}
 {% set flex_decoder = (field_decoder, tag_decoder) %}
 
-{% macro struct_serde(struct, serde_methods, obj = "") %}
+{% macro struct_serde(struct, serde_methods, obj = "", writer = "writer") %}
 {%- set flex = serde_methods|length > 1 %}
 {%- for field in struct.fields %}
 {%- call version_guard(field, flex) %}
-{{- serde_methods[0](field, serde_methods, obj) }}
+{{- serde_methods[0](field, serde_methods, obj, writer) }}
 {%- endcall %}
 {%- endfor %}
 {%- if flex %}
-{{- serde_methods[1](struct.tags, obj) }}
+{{- serde_methods[1](struct.tags, obj, writer) }}
 {%- endif %}
 {%- endmacro %}
 
@@ -1801,9 +1873,9 @@ std::ostream& operator<<(std::ostream& o, const {{ struct.name }}&) {
 # generator for some scenarios involving overloads / customizing output.
 ALLOWED_SCALAR_TYPES = list(set(SCALAR_TYPES) - set(["iobuf"]))
 ALLOWED_TYPES = \
-    ALLOWED_SCALAR_TYPES + \
-    [f"[]{t}" for t in ALLOWED_SCALAR_TYPES +
-        STRUCT_TYPES] + TAGGED_WITH_FIELDS
+    SINGULAR_STRUCT_TYPES + ALLOWED_SINGULAR_STRUCT_TYPES + \
+    ALLOWED_SCALAR_TYPES + TAGGED_WITH_FIELDS  + \
+    [f"[]{t}" for t in ALLOWED_SCALAR_TYPES + STRUCT_TYPES]
 
 # yapf: disable
 SCHEMA = {
