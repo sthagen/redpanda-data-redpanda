@@ -728,17 +728,6 @@ ss::future<> service::set_metadata(job_id_t job_id) {
 
     vlog(lg.debug, "Emplacing metadata into keystore for job {}", job_id);
 
-    co_await _kvstore->put(
-      storage::kvstore::key_space::debug_bundle,
-      bytes::from_string(debug_bundle_metadata_key),
-      std::move(buf));
-
-    auto remove_kvstore_on_err = ss::defer([this] {
-        ssx::background = _kvstore->remove(
-          storage::kvstore::key_space::debug_bundle,
-          bytes::from_string(debug_bundle_metadata_key));
-    });
-
     process_output po{
       .cout = _rpk_process->cout().copy(), .cerr = _rpk_process->cerr().copy()};
     iobuf po_buf;
@@ -756,7 +745,6 @@ ss::future<> service::set_metadata(job_id_t job_id) {
           lg.debug,
           "Successfully wrote process output to file to {}",
           process_output_file.native());
-        remove_kvstore_on_err.cancel();
     } catch (const std::exception& e) {
         vlog(
           lg.warn,
@@ -764,7 +752,13 @@ ss::future<> service::set_metadata(job_id_t job_id) {
           process_output_file,
           job_id,
           e.what());
+        co_return;
     }
+
+    co_await _kvstore->put(
+      storage::kvstore::key_space::debug_bundle,
+      bytes::from_string(debug_bundle_metadata_key),
+      std::move(buf));
 }
 
 std::optional<debug_bundle_status> service::process_status() const {
