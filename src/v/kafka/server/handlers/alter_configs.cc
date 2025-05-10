@@ -84,12 +84,12 @@ create_topic_properties_update(
     std::apply(apply_op(op_t::none), update.custom_properties.serde_fields());
 
     static_assert(
-      std::tuple_size_v<decltype(update.properties.serde_fields())> == 38,
-      "If you added a property, please decide on it's default alter config "
+      std::tuple_size_v<decltype(update.properties.serde_fields())> == 40,
+      "If you add a property, decide on its default alter config "
       "policy, and handle the update in the loop below");
     static_assert(
       std::tuple_size_v<decltype(update.custom_properties.serde_fields())> == 2,
-      "If you added a property, please decide on it's default alter config "
+      "If you add a property, decide on its default alter config "
       "policy, and handle the update in the loop below");
 
     /*
@@ -318,7 +318,7 @@ create_topic_properties_update(
                   update.properties.flush_ms,
                   cfg.value,
                   kafka::config_resource_operation::set,
-                  flush_ms_validator{},
+                  flush_ms_validator,
                   true);
                 continue;
             }
@@ -395,7 +395,7 @@ create_topic_properties_update(
                   update.properties.iceberg_target_lag_ms,
                   cfg.value,
                   kafka::config_resource_operation::set,
-                  iceberg_target_lag_ms_validator{},
+                  iceberg_target_lag_ms_validator,
                   [](const ss::sstring& v) {
                       auto parsed
                         = boost::lexical_cast<std::chrono::milliseconds::rep>(
@@ -411,6 +411,26 @@ create_topic_properties_update(
                   cfg.value,
                   kafka::config_resource_operation::set,
                   min_cleanable_dirty_ratio_validator{});
+                continue;
+            }
+
+            if (cfg.name == topic_property_min_compaction_lag_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.min_compaction_lag_ms,
+                  cfg.value,
+                  kafka::config_resource_operation::set,
+                  min_compaction_lag_ms_validator,
+                  /*clamp_to_duration_max=*/true);
+                continue;
+            }
+
+            if (cfg.name == topic_property_max_compaction_lag_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.max_compaction_lag_ms,
+                  cfg.value,
+                  kafka::config_resource_operation::set,
+                  max_compaction_lag_ms_validator,
+                  /*clamp_to_duration_max=*/true);
                 continue;
             }
 

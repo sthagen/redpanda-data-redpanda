@@ -11,7 +11,8 @@
 
 #pragma once
 #include "bytes/iobuf.h"
-#include "thirdparty/lz4/lz4frame.h"
+
+#include <lz4frame.h>
 
 namespace compression::internal {
 

@@ -1022,6 +1022,40 @@ configuration::configuration()
        .visibility = visibility::user},
       0.2,
       {.min = 0.0, .max = 1.0})
+  , min_compaction_lag_ms(
+      *this,
+      "min_compaction_lag_ms",
+      "For a compacted topic, the minimum time a message remains uncompacted "
+      "in the log. "
+      "The topic property `min.compaction.lag.ms` overrides this property.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      0ms,
+      [](const auto& v) -> std::optional<ss::sstring> {
+          // Maximum duration imposed by serde serialization.
+          if (v < 0ms || v > serde::max_serializable_ms) {
+              return fmt::format(
+                "min compaction lag should be in range: [0, {}]",
+                serde::max_serializable_ms);
+          }
+          return std::nullopt;
+      })
+  , max_compaction_lag_ms(
+      *this,
+      "max_compaction_lag_ms",
+      "For a compacted topic, the maximum time a message remains ineligible "
+      "for compaction. "
+      "The topic property `max.compaction.lag.ms` overrides this property.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      serde::max_serializable_ms,
+      [](const auto& v) -> std::optional<ss::sstring> {
+          // Maximum duration imposed by serde serialization.
+          if (v < 1ms || v > serde::max_serializable_ms) {
+              return fmt::format(
+                "max compaction lag should be in range: [1, {}]",
+                serde::max_serializable_ms);
+          }
+          return std::nullopt;
+      })
   , log_disable_housekeeping_for_tests(
       *this,
       "log_disable_housekeeping_for_tests",

@@ -24,7 +24,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/json",
         "//src/v/ssx:sformat",
-        "//src/v/thirdparty/ada",
+        "@ada",
         "@boost//:algorithm",
         "@fmt",
         "@re2",

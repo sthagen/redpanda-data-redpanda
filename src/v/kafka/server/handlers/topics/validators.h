@@ -580,6 +580,21 @@ struct vcluster_id_validator {
     }
 };
 
+struct min_max_compaction_lag_ms_validator {
+    static constexpr const char* error_message
+      = "max.compaction.lag.ms must be at least min.compaction.lag.ms";
+    static constexpr error_code ec = error_code::invalid_config;
+
+    static bool is_valid(const creatable_topic& c) {
+        const auto entries = config_map(c.configs);
+        const auto min_lag = get_config_value<int64_t>(
+          entries, topic_property_min_compaction_lag_ms);
+        const auto max_lag = get_config_value<int64_t>(
+          entries, topic_property_max_compaction_lag_ms);
+        return !(min_lag && max_lag && (min_lag > max_lag));
+    }
+};
+
 using compression_type_validator
   = configuration_value_validator<compression_type_validator_details>;
 using compaction_strategy_validator

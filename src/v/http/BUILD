@@ -66,10 +66,10 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/http:utils",
-        "//src/v/thirdparty/ada",
         "//src/v/utils:named_type",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
+        "@ada",
         "@boost//:algorithm",
         "@boost//:beast",
         "@seastar",

@@ -355,9 +355,9 @@ redpanda_cc_library(
         ":human",
         ":static_deleter_fn",
         "//src/v/base",
-        "//src/v/thirdparty/hdrhistogram",
         "@boost//:intrusive",
         "@fmt",
+        "@hdrhistogram",
         "@seastar",
     ],
 )

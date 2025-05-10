@@ -324,7 +324,7 @@ create_topic_properties_update(
                   update.properties.flush_ms,
                   cfg.value,
                   op,
-                  flush_ms_validator{});
+                  flush_ms_validator);
                 continue;
             }
             if (cfg.name == topic_property_flush_bytes) {
@@ -403,7 +403,7 @@ create_topic_properties_update(
                   update.properties.iceberg_target_lag_ms,
                   cfg.value,
                   op,
-                  iceberg_target_lag_ms_validator{});
+                  iceberg_target_lag_ms_validator);
                 continue;
             }
 
@@ -413,6 +413,24 @@ create_topic_properties_update(
                   cfg.value,
                   op,
                   min_cleanable_dirty_ratio_validator{});
+                continue;
+            }
+
+            if (cfg.name == topic_property_min_compaction_lag_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.min_compaction_lag_ms,
+                  cfg.value,
+                  op,
+                  min_compaction_lag_ms_validator);
+                continue;
+            }
+
+            if (cfg.name == topic_property_max_compaction_lag_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.max_compaction_lag_ms,
+                  cfg.value,
+                  op,
+                  max_compaction_lag_ms_validator);
                 continue;
             }
         } catch (const validation_error& e) {

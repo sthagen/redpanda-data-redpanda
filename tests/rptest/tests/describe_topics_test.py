@@ -335,6 +335,22 @@ class DescribeTopicsTest(RedpandaTest):
                 "throttle producers. set to `true` to allow the eviction of "
                 "locally-stored log segments, which may create gaps in "
                 "offsets."),
+            "min.compaction.lag.ms":
+            ConfigProperty(
+                config_type="LONG",
+                value="0",
+                doc_string=
+                "For a compacted topic, the minimum time a message remains uncompacted "
+                "in the log. The topic property `min.compaction.lag.ms` overrides "
+                "this property."),
+            "max.compaction.lag.ms":
+            ConfigProperty(
+                config_type="LONG",
+                value="9223372036854",
+                doc_string=
+                "For a compacted topic, the maximum time a message remains ineligible "
+                "for compaction. The topic property `max.compaction.lag.ms` overrides "
+                "this property."),
         }
 
         tp_spec = TopicSpec()

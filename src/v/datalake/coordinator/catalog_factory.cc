@@ -19,9 +19,10 @@
 #include "iceberg/rest_client/client_probe.h"
 #include "net/tls.h"
 #include "net/tls_certificate_probe.h"
-#include "thirdparty/ada/ada.h"
 
 #include <absl/strings/numbers.h>
+
+#include <ada.h>
 namespace datalake::coordinator {
 namespace {
 template<typename T>

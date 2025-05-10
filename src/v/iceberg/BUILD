@@ -1324,7 +1324,7 @@ redpanda_cc_library(
         "uri.h",
     ],
     implementation_deps = [
-        "//src/v/thirdparty/ada",
+        "@ada",
     ],
     include_prefix = "iceberg",
     visibility = ["//visibility:public"],

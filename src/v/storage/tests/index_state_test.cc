@@ -377,3 +377,34 @@ BOOST_AUTO_TEST_CASE(index_overflow) {
     BOOST_CHECK_EQUAL(res->offset, model::offset{0});
     BOOST_CHECK_EQUAL(res->filepos, 1);
 }
+
+BOOST_AUTO_TEST_CASE(non_data_timestamps_with_overflow) {
+    storage::index_state state;
+
+    // Need to ensure that non_data_timestamps in the segment_index is only set
+    // iff there is an entry in the index_state. Otherwise, a call to
+    // index.try_reset_relative_time_index() will trigger a vassert.
+    constexpr long uint32_max = std::numeric_limits<uint32_t>::max();
+    state.maybe_index(
+      0,
+      1,
+      0,
+      model::offset{uint32_max + 1},
+      model::offset{uint32_max + 1},
+      model::timestamp{0},
+      model::timestamp{0},
+      std::nullopt,
+      false,
+      0);
+    state.maybe_index(
+      1,
+      1,
+      1,
+      model::offset{uint32_max + 2},
+      model::offset{uint32_max + 2},
+      model::timestamp{0},
+      model::timestamp{0},
+      std::nullopt,
+      true,
+      0);
+}

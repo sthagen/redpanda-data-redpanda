@@ -334,6 +334,16 @@ metadata_cache::get_default_min_cleanable_dirty_ratio() const {
     return config::shard_local_cfg().min_cleanable_dirty_ratio();
 }
 
+std::chrono::milliseconds
+metadata_cache::get_default_min_compaction_lag_ms() const {
+    return config::shard_local_cfg().min_compaction_lag_ms();
+}
+
+std::chrono::milliseconds
+metadata_cache::get_default_max_compaction_lag_ms() const {
+    return config::shard_local_cfg().max_compaction_lag_ms();
+}
+
 topic_properties metadata_cache::get_default_properties() const {
     topic_properties tp;
     tp.compression = {get_default_compression()};
@@ -355,6 +365,8 @@ topic_properties metadata_cache::get_default_properties() const {
       get_default_delete_retention_ms()};
     tp.min_cleanable_dirty_ratio = tristate<double>{
       get_default_min_cleanable_dirty_ratio()};
+    tp.min_compaction_lag_ms = get_default_min_compaction_lag_ms();
+    tp.max_compaction_lag_ms = get_default_max_compaction_lag_ms();
 
     return tp;
 }

@@ -298,6 +298,55 @@ class AlterTopicConfiguration(RedpandaTest):
             topic
         ).min_cleanable_dirty_ratio == initial_spec.min_cleanable_dirty_ratio
 
+    @cluster(num_nodes=3)
+    def test_min_and_max_compaction_lag_ms_validation(self):
+        topic = self.topics[0].name
+        kafka_tools = KafkaCliTools(self.redpanda)
+        self.redpanda.set_cluster_config({
+            "min_compaction_lag_ms": 10000,
+            "max_compaction_lag_ms": 20000
+        })
+        initial_spec = kafka_tools.describe_topic(topic)
+
+        # Check that values outsides the valid ranges are rejected and
+        # don't change the configured value.
+        try:
+            self.client().alter_topic_configs(
+                topic, {TopicSpec.PROPERTY_MIN_COMPACTION_LAG_MS: -1})
+        except subprocess.CalledProcessError as e:
+            assert "invalid, expected to be in range" in e.output
+
+        try:
+            self.client().alter_topic_configs(
+                topic, {TopicSpec.PROPERTY_MAX_COMPACTION_LAG_MS: 0})
+        except subprocess.CalledProcessError as e:
+            assert "invalid, expected to be in range" in e.output
+
+        not_updated = kafka_tools.describe_topic(topic)
+        assert initial_spec.min_compaction_lag_ms == not_updated.min_compaction_lag_ms, "min.compaction.lag.ms should not have changed"
+        assert initial_spec.max_compaction_lag_ms == not_updated.max_compaction_lag_ms, "max.compaction.lag.ms should not have changed"
+
+        # Check that values in the accepted ranges are accepted, and
+        # that the properties can be unset and revert to the cluster default.
+        self.client().alter_topic_configs(
+            topic, {
+                TopicSpec.PROPERTY_MIN_COMPACTION_LAG_MS: 5000,
+                TopicSpec.PROPERTY_MAX_COMPACTION_LAG_MS: 25000,
+            })
+
+        updated = kafka_tools.describe_topic(topic)
+        assert updated.min_compaction_lag_ms == '5000', "min.compaction.lag.ms should have changed"
+        assert updated.max_compaction_lag_ms == '25000', "max.compaction.lag.ms should have changed"
+
+        self.client().delete_topic_config(
+            topic, TopicSpec.PROPERTY_MIN_COMPACTION_LAG_MS)
+        self.client().delete_topic_config(
+            topic, TopicSpec.PROPERTY_MAX_COMPACTION_LAG_MS)
+
+        cleared = kafka_tools.describe_topic(topic)
+        assert initial_spec.min_compaction_lag_ms == cleared.min_compaction_lag_ms, "min.compaction.lag.ms should have reverted to default"
+        assert initial_spec.max_compaction_lag_ms == cleared.max_compaction_lag_ms, "max.compaction.lag.ms should have reverted to default"
+
 
 class ShadowIndexingGlobalConfig(RedpandaTest):
     topics = (TopicSpec(partition_count=1, replication_factor=3), )

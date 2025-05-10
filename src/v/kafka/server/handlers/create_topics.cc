@@ -81,6 +81,8 @@ bool is_supported(std::string_view name) {
        topic_property_iceberg_invalid_record_action,
        topic_property_iceberg_target_lag_ms,
        topic_property_min_cleanable_dirty_ratio,
+       topic_property_min_compaction_lag_ms,
+       topic_property_max_compaction_lag_ms,
        topic_property_remote_allow_gaps});
 
     if (std::any_of(
@@ -126,7 +128,8 @@ using validators = make_validator_types<
   iceberg_invalid_record_action_validator,
   cloud_topic_config_validator,
   delete_retention_ms_validator,
-  iceberg_target_lag_ms_validator>;
+  iceberg_target_lag_ms_validator,
+  min_max_compaction_lag_ms_validator>;
 
 static void
 append_topic_configs(request_context& ctx, create_topics_response& response) {

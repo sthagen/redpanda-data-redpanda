@@ -255,8 +255,9 @@ bool index_state::maybe_index(
           time_col_reset,
           "Relative time index can not be reset, unexpected index size {} "
           "(expected 1). This can only happen if more than one non-data "
-          "timestamp was added to the index.",
-          index.size());
+          "timestamp was added to the index: {}.",
+          index.size(),
+          *this);
 
         base_timestamp = first_timestamp;
         max_timestamp = first_timestamp;
@@ -265,6 +266,7 @@ bool index_state::maybe_index(
 
     // index_state
     bool is_empty = false;
+    bool should_set_non_data_timestamp = false;
     if (empty()) {
         // Ordinarily, we do not allow configuration batches to contribute to
         // the segment's timestamp bounds (because config batches use walltime
@@ -272,7 +274,7 @@ bool index_state::maybe_index(
         // batch we set the timestamps, and then set a `non_data_timestamps`
         // flag so that the next time we see user data we will overwrite
         // the walltime timestamps with the user data timestamps.
-        non_data_timestamps = !user_data;
+        should_set_non_data_timestamp = !user_data;
 
         base_timestamp = first_timestamp;
         max_timestamp = first_timestamp;
@@ -308,7 +310,9 @@ bool index_state::maybe_index(
               batch_base_offset() - base_offset(),
               offset_time_index{last_timestamp - base_timestamp, with_offset},
               starting_position_in_file);
-
+            if (should_set_non_data_timestamp) {
+                non_data_timestamps = true;
+            }
             return true;
         } else {
             // We can't index anything beyond uint32 space. Presumably no

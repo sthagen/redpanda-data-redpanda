@@ -12,7 +12,6 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "thirdparty/ada/ada.h"
 #include "utils/named_type.h"
 
 #include <seastar/core/sstring.hh>
@@ -20,6 +19,8 @@
 #include <absl/container/flat_hash_map.h>
 #include <absl/container/flat_hash_set.h>
 #include <boost/beast/http/message.hpp>
+
+#include <ada.h>
 
 namespace http {
 

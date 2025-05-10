@@ -645,6 +645,10 @@ struct incremental_topic_updates
     property_update<std::optional<model::iceberg_invalid_record_action>>
       iceberg_invalid_record_action;
     property_update<tristate<double>> min_cleanable_dirty_ratio;
+    property_update<std::optional<std::chrono::milliseconds>>
+      min_compaction_lag_ms;
+    property_update<std::optional<std::chrono::milliseconds>>
+      max_compaction_lag_ms;
     property_update<std::optional<bool>> remote_allow_gaps;
 
     property_update<std::optional<std::chrono::milliseconds>>
@@ -698,7 +702,9 @@ struct incremental_topic_updates
           iceberg_target_lag_ms,
           min_cleanable_dirty_ratio,
           remote_allow_gaps,
-          topic_id);
+          topic_id,
+          min_compaction_lag_ms,
+          max_compaction_lag_ms);
     }
 
     friend std::ostream&

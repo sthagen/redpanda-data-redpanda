@@ -38,6 +38,7 @@
 
 #include <algorithm>
 #include <optional>
+#include <string_view>
 #include <type_traits>
 
 namespace kafka {
@@ -438,27 +439,42 @@ struct write_caching_config_validator {
     }
 };
 
-struct flush_ms_validator {
+struct duration_validator {
+    std::string_view name;
+    std::chrono::milliseconds min = std::chrono::milliseconds{0};
+    std::chrono::milliseconds max = serde::max_serializable_ms;
+
     std::optional<ss::sstring> operator()(
       const ss::sstring&,
       const std::optional<std::chrono::milliseconds>& maybe_value) {
-        if (!maybe_value) {
+        if (!maybe_value.has_value()) {
             return std::nullopt;
         }
         auto value = maybe_value.value();
-        if (value < 1ms || value > serde::max_serializable_ms) {
+        if (value < min || value > max) {
             return fmt::format(
-              "flush.ms value invalid, expected to be in range [1, {}]",
-              serde::max_serializable_ms);
+              "{} value invalid, expected to be in range [{}, {}]",
+              name,
+              min,
+              max);
         }
         return std::nullopt;
     }
 };
 
+const auto flush_ms_validator = duration_validator{
+  .name = "flush.ms", .min = 1ms};
+const auto iceberg_target_lag_ms_validator = duration_validator{
+  .name = "target.lag.ms", .min = 10s};
+const auto min_compaction_lag_ms_validator = duration_validator{
+  .name = "min.compaction.lag.ms"};
+const auto max_compaction_lag_ms_validator = duration_validator{
+  .name = "max.compaction.lag.ms", .min = 1ms};
+
 struct flush_bytes_validator {
     std::optional<ss::sstring>
     operator()(const ss::sstring&, const std::optional<size_t>& maybe_value) {
-        if (!maybe_value) {
+        if (!maybe_value.has_value()) {
             return std::nullopt;
         }
         auto value = maybe_value.value();
@@ -516,25 +532,6 @@ struct iceberg_partition_spec_validator {
               "couldn't parse iceberg partition spec `{}': {}",
               value,
               parsed.error());
-        }
-        return std::nullopt;
-    }
-};
-
-struct iceberg_target_lag_ms_validator {
-    std::optional<ss::sstring> operator()(
-      const ss::sstring& /*raw*/,
-      const std::optional<std::chrono::milliseconds>& maybe_value) {
-        if (maybe_value.has_value()) {
-            const auto& value = maybe_value.value();
-            constexpr auto min_lag = std::chrono::milliseconds(10s);
-            if (value < min_lag || value > serde::max_serializable_ms) {
-                return fmt::format(
-                  "target.lag.ms value invalid, expected to be in range "
-                  "[{},{}]",
-                  min_lag,
-                  serde::max_serializable_ms);
-            }
         }
         return std::nullopt;
     }

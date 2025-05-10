@@ -13,9 +13,10 @@
 #include "cloud_io/provider.h"
 #include "model/fundamental.h"
 #include "ssx/sformat.h"
-#include "thirdparty/ada/ada.h"
 
 #include <seastar/util/variant_utils.hh>
+
+#include <ada.h>
 
 namespace iceberg {
 

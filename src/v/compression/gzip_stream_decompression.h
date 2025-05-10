@@ -12,10 +12,11 @@
 #pragma once
 
 #include "bytes/iobuf.h"
-#include "thirdparty/zlib/zlib.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/iostream.hh>
+
+#include <zlib.h>
 
 namespace compression {
 

@@ -1034,6 +1034,32 @@ config_response_container_t make_topic_configs(
     add_topic_config_if_requested(
       config_keys,
       result,
+      topic_property_min_compaction_lag_ms,
+      metadata_cache.get_default_min_compaction_lag_ms(),
+      topic_property_min_compaction_lag_ms,
+      topic_properties.min_compaction_lag_ms,
+      include_synonyms,
+      maybe_make_documentation(
+        include_documentation,
+        config::shard_local_cfg().min_compaction_lag_ms.desc()),
+      describe_as_string<std::chrono::milliseconds>);
+
+    add_topic_config_if_requested(
+      config_keys,
+      result,
+      topic_property_max_compaction_lag_ms,
+      metadata_cache.get_default_max_compaction_lag_ms(),
+      topic_property_max_compaction_lag_ms,
+      topic_properties.max_compaction_lag_ms,
+      include_synonyms,
+      maybe_make_documentation(
+        include_documentation,
+        config::shard_local_cfg().max_compaction_lag_ms.desc()),
+      describe_as_string<std::chrono::milliseconds>);
+
+    add_topic_config_if_requested(
+      config_keys,
+      result,
       config::shard_local_cfg().cloud_storage_enable_remote_allow_gaps.name(),
       config::shard_local_cfg().cloud_storage_enable_remote_allow_gaps(),
       topic_property_remote_allow_gaps,

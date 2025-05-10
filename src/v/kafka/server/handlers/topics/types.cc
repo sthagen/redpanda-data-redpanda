@@ -290,6 +290,18 @@ to_cluster_type(const creatable_topic& t) {
     cfg.properties.min_cleanable_dirty_ratio = get_tristate_value<double>(
       config_entries, topic_property_min_cleanable_dirty_ratio);
 
+    cfg.properties.min_compaction_lag_ms
+      = get_duration_value<std::chrono::milliseconds>(
+        config_entries,
+        topic_property_min_compaction_lag_ms,
+        /*clamp_to_duration_max=*/true);
+
+    cfg.properties.max_compaction_lag_ms
+      = get_duration_value<std::chrono::milliseconds>(
+        config_entries,
+        topic_property_max_compaction_lag_ms,
+        /*clamp_to_duration_max=*/true);
+
     schema_id_validation_config_parser schema_id_validation_config_parser{
       cfg.properties};
 

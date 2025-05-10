@@ -13,10 +13,11 @@
 
 #include "base/seastarx.h"
 #include "base/units.h"
-#include "thirdparty/lz4/lz4frame.h"
-
+#define LZ4F_STATIC_LINKING_ONLY
 #include <seastar/core/aligned_buffer.hh>
 #include <seastar/core/semaphore.hh>
+
+#include <lz4frame.h>
 
 namespace compression {
 

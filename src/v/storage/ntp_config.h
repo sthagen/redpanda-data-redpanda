@@ -86,7 +86,11 @@ public:
         // properties.
         tristate<std::chrono::milliseconds> tombstone_retention_ms;
 
+        // Controls segment compaction eligiblity.
         tristate<double> min_cleanable_dirty_ratio;
+        std::optional<std::chrono::milliseconds> min_compaction_lag_ms;
+        std::optional<std::chrono::milliseconds> max_compaction_lag_ms;
+
         // Controls behavior during pause
         std::optional<bool> remote_allow_gaps;
 
@@ -388,6 +392,20 @@ public:
             }
         }
         return config::shard_local_cfg().min_cleanable_dirty_ratio();
+    }
+
+    std::chrono::milliseconds min_compaction_lag_ms() const {
+        if (_overrides && _overrides->min_compaction_lag_ms.has_value()) {
+            return _overrides->min_compaction_lag_ms.value();
+        }
+        return config::shard_local_cfg().min_compaction_lag_ms();
+    }
+
+    std::chrono::milliseconds max_compaction_lag_ms() const {
+        if (_overrides && _overrides->max_compaction_lag_ms.has_value()) {
+            return _overrides->max_compaction_lag_ms.value();
+        }
+        return config::shard_local_cfg().max_compaction_lag_ms();
     }
 
     ntp_config copy() const {

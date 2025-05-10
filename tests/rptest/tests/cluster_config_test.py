@@ -727,6 +727,11 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 valid_value = random.choice(
                     [e for e in p['enum_values'] if e != initial_value])
 
+            if name == "max_compaction_lag_ms":
+                # Doubling the default puts it out of the valid range.
+                # Do this instead.
+                valid_value = 10000
+
             updates[name] = valid_value
 
         patch_result = self.admin.patch_cluster_config(upsert=updates,

@@ -24,7 +24,7 @@ from ducktape.mark import matrix, ignore
 from ducktape.tests.test import TestContext
 from ducktape.utils.util import wait_until
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import RedpandaService, RedpandaServiceBase, SISettings
+from rptest.services.redpanda import RedpandaService, RedpandaServiceBase, SISettings, make_redpanda_service
 from rptest.services.kgo_verifier_services import KgoVerifierConsumerGroupConsumer, KgoVerifierProducer
 from rptest.services.redpanda import SISettings
 from rptest.tests.redpanda_test import RedpandaTest
@@ -532,8 +532,7 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
                 self.toggle_license(on=False)
             self.check_migrations(in_migration_id, len(inbound_topics), 2)
 
-            self.log_topics(t.source_topic_reference.topic
-                            for t in inbound_topics)
+            self.log_topics(t.topic_name.topic for t in inbound_topics)
 
             self.execute_data_migration_action_flaky(in_migration_id,
                                                      MigrationAction.prepare)
@@ -600,9 +599,9 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
         # mount and consume from them in random order
         cluster_uuid = self.admin.get_cluster_uuid(self.redpanda.nodes[0])
         for i in sorted(range(3), key=lambda element: random.random()):
-            hinted_ns_topic = make_namespaced_topic(
-                f"{ns_topic.topic}/{cluster_uuid}/{revisions[i]}")
-            in_topic = InboundTopic(hinted_ns_topic)
+            in_topic = InboundTopic(ns_topic,
+                                    cluster_uuid=cluster_uuid,
+                                    remote_revision=revisions[i])
             in_migr_id = self.admin.mount_topics([in_topic]).json()["id"]
             self.wait_partitions_appear([topic])
             self.wait_migration_disappear(in_migr_id)
@@ -652,7 +651,7 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             for i, t in enumerate(topics[:3])
         ]
         inbound_topics_spec = [
-            TopicSpec(name=(it.alias or it.source_topic_reference).topic,
+            TopicSpec(name=(it.alias or it.topic_name).topic,
                       partition_count=3) for it in inbound_topics
         ]
         reply = self.admin.mount_topics(inbound_topics).json()
@@ -971,8 +970,7 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             # two cycles max: to cancel halfway and to complete + check e2e
             while not remounted:
                 in_migration = InboundDataMigration(topics=[
-                    InboundTopic(source_topic_reference=workload_ns_topic,
-                                 alias=alias)
+                    InboundTopic(topic_name=workload_ns_topic, alias=alias)
                 ],
                                                     consumer_groups=[])
                 in_migration_id = self.create_and_wait(in_migration)
@@ -1134,3 +1132,150 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
         list_mountable_res = admin.list_mountable_topics().json()
         assert len(list_mountable_res["topics"]
                    ) == 2, "There should be 2 mountable topics"
+
+
+class DataMigrationsMultiClusterTest(RedpandaTest, DataMigrationTestMixin):
+    log_segment_size = 10 * 1024
+    msg_size = 128
+
+    def __init__(self, test_context: TestContext, *args, **kwargs):
+        kwargs['si_settings'] = SISettings(
+            test_context=test_context,
+            log_segment_size=self.log_segment_size,
+            cloud_storage_max_connections=5,
+        )
+        RedpandaTest.__init__(self, test_context=test_context, *args, **kwargs)
+        self.producer = None
+        self.extra_clusters = []
+
+    @property
+    def producer_throughput(self):
+        return 16 * 1024 if self.debug_mode else 1024 * 1024
+
+    def start_producer(self, topic, redpanda) -> None:
+        assert self.producer is None
+        self.producer = KgoVerifierProducer(
+            context=self.test_context,
+            redpanda=redpanda,
+            topic=topic,
+            msg_size=self.msg_size,
+            msg_count=100_000_000,
+            rate_limit_bps=self.producer_throughput,
+            tolerate_failed_produce=True,
+            trace_logs=True,
+        )
+
+        self.producer.start()
+        self.producer.wait_for_acks(1000, timeout_sec=60, backoff_sec=2)
+
+    def stop_producer(self) -> int:
+        "return the number of acked messages"
+        if self.producer is None:
+            return
+
+        self.producer.stop()
+        acked = self.producer.produce_status.acked
+        self.producer.free()
+        self.logger.info(f"stopped producer, {acked=}")
+        self.producer = None
+        return acked
+
+    def start_consumer(self, topic,
+                       redpanda) -> KgoVerifierConsumerGroupConsumer:
+        consumer = KgoVerifierConsumerGroupConsumer(self.test_context,
+                                                    redpanda,
+                                                    topic,
+                                                    self.msg_size,
+                                                    readers=3,
+                                                    group_name="test-group",
+                                                    trace_logs=True)
+
+        consumer.start()
+        return consumer
+
+    def consume(self, topic, redpanda, msg_count) -> None:
+        consumer = self.start_consumer(topic, redpanda)
+        self.logger.info(f"expecting to consume {msg_count} messages")
+        consumer.wait_total_reads(msg_count, timeout_sec=30, backoff_sec=1)
+        consumer.free()
+
+    def start_extra_cluster(self, num_brokers=3):
+        si_settings = SISettings(
+            self.test_context,
+            bypass_bucket_creation=True,
+            log_segment_size=self.log_segment_size,
+            cloud_storage_max_connections=5,
+        )
+        si_settings.reset_cloud_storage_bucket(
+            self.si_settings.cloud_storage_bucket)
+
+        cluster = make_redpanda_service(
+            self.test_context,
+            num_brokers=num_brokers,
+            si_settings=si_settings,
+        )
+        self.extra_clusters.append(cluster)
+
+        cluster.start()
+        return cluster
+
+    @cluster(num_nodes=10)
+    def test_basic(self):
+        """
+        Test that basic functionality like producing and consuming works when we
+        migrate topics between different clusters.
+        """
+        n_partitions = 10
+        workload_topic = TopicSpec(name="foo", partition_count=n_partitions)
+        workload_ns_topic = make_namespaced_topic(workload_topic.name)
+
+        dest_redpanda = self.start_extra_cluster()
+
+        self.client().create_topic(workload_topic)
+        self.logger.info(f"created topic {workload_topic}")
+
+        self.start_producer(workload_topic.name, self.redpanda)
+        self.migrate_between_clusters([workload_ns_topic], self.redpanda,
+                                      dest_redpanda)
+        total_acked = self.stop_producer()
+
+        def wait_for_offsets(redpanda, expected):
+            def predicate():
+                rpk = RpkTool(redpanda)
+                partitions = list(rpk.describe_topic(workload_topic.name))
+                if len(partitions) != n_partitions:
+                    return False
+                total = sum(p.high_watermark for p in partitions)
+                self.logger.info(f"offsets: {total=}, {expected=}")
+                return total == expected
+
+            wait_until(
+                predicate,
+                timeout_sec=15,
+                backoff_sec=1,
+                err_msg="timed out waiting for offsets of migrated topic")
+
+        wait_for_offsets(dest_redpanda, total_acked)
+
+        self.logger.info("producing more to the second cluster")
+        self.start_producer(workload_topic.name, dest_redpanda)
+
+        self.consume(workload_topic.name,
+                     redpanda=dest_redpanda,
+                     msg_count=total_acked +
+                     self.producer.produce_status.acked)
+
+        another_redpanda = self.start_extra_cluster()
+        self.migrate_between_clusters([workload_ns_topic], dest_redpanda,
+                                      another_redpanda)
+
+        total_acked += self.stop_producer()
+        wait_for_offsets(another_redpanda, total_acked)
+
+        self.logger.info("producing more to the third cluster")
+        self.start_producer(workload_topic.name, another_redpanda)
+        total_acked += self.stop_producer()
+
+        self.consume(workload_topic.name,
+                     redpanda=another_redpanda,
+                     msg_count=total_acked)
