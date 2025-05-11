@@ -98,9 +98,9 @@ def data_dependency():
     http_archive(
         name = "libxml2",
         build_file = "//bazel/thirdparty:libxml2.BUILD",
-        sha256 = "cdf9f952582c32a00513468585fb517270047ac0cfaed013ef08aa7b775fd6b4",
-        strip_prefix = "libxml2-3b1742b8391e966be780bdc43fdf959f7b3a118c",
-        url = "https://github.com/GNOME/libxml2/archive/3b1742b8391e966be780bdc43fdf959f7b3a118c.tar.gz",
+        sha256 = "f33a6353a80ccdb483abc3f895d4283f799b8ee9fae778da7a97b73604929138",
+        strip_prefix = "libxml2-2.13.8",
+        url = "https://vectorized-public.s3.us-west-2.amazonaws.com/dependencies/libxml2-v2.13.8.tar.gz",
     )
 
     http_archive(
