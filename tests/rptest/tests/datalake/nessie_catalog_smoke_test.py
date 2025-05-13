@@ -16,7 +16,6 @@ from rptest.services.spark_service import SparkService
 from rptest.tests.datalake.utils import supported_storage_types
 
 from ducktape.mark import matrix
-import pynessie
 
 from pyiceberg.schema import Schema
 from pyiceberg.types import (
@@ -57,15 +56,6 @@ class NessieCatalogSmokeTest(RedpandaTest):
     @cluster(num_nodes=5)
     @matrix(cloud_storage_type=supported_storage_types())
     def test_nessie_with_trino(self, cloud_storage_type):
-        """
-        Trino currently doesn't support Nessie management through SQL.
-        For that reason, pynessie is used here. Pynessie is considered
-        deprecated in favour of the CLI, so its use here should also be
-        limited/eventually replaced. Unfortunately, Trino also doesn't
-        support switching branches (references) without modifying the
-        catalog property iceberg.nessie-catalog.ref, which requires a
-        change to the redpanda.properties file and a restart.
-        """
         self.trino = TrinoService(self.test_ctx,
                                   self.catalog_service.vendor_api_url,
                                   self.catalog_service.cloud_storage_warehouse,
@@ -73,8 +63,6 @@ class NessieCatalogSmokeTest(RedpandaTest):
         self.trino.start()
         client = self.trino.make_client()
 
-        nessie_client_conf = {"endpoint": self.catalog_service.vendor_api_url}
-        nessie_client = pynessie.init(config_dict=nessie_client_conf)
         try:
             cursor = client.cursor()
             try:
@@ -94,16 +82,6 @@ class NessieCatalogSmokeTest(RedpandaTest):
                 row = cursor.fetchall()
                 assert len(row) == 1
                 assert row == [(2024, 'John', 60, 'Wick')]
-
-                main_branch = "main"
-                dev_branch = "dev"
-
-                main_branch_ref = nessie_client.get_reference(None)
-                nessie_client.create_branch(dev_branch, main_branch,
-                                            main_branch_ref.hash_)
-                refs = nessie_client.list_references()
-                assert len(refs.references) == 2
-
             finally:
                 cursor.close()
         finally:

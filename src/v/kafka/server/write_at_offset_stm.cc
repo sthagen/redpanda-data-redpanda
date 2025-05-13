@@ -318,6 +318,19 @@ write_at_offset_stm::take_local_snapshot(ssx::semaphore_units) {
     co_return raft::stm_snapshot{.header = hdr, .data = std::move(data)};
 }
 
+ss::future<result<kafka::offset>> write_at_offset_stm::get_expected_last_offset(
+  model::timeout_clock::duration sync_timeout) {
+    auto u = co_await _sync_lock.get_units();
+    auto sync_result = co_await sync(sync_timeout);
+    if (!sync_result) {
+        vlog(
+          _log.info,
+          "unable to retrieve expected last offset. State machine sync failed");
+        co_return raft::errc::not_leader;
+    }
+    co_return expected_last_offset();
+}
+
 write_at_offset_stm_factory::write_at_offset_stm_factory(
   storage::kvstore& kvstore,
   std::vector<model::record_batch_type> offset_translated_batches)

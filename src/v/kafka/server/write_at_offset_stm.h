@@ -108,6 +108,17 @@ public:
     get_initial_recovery_policy() const final {
         return raft::stm_initial_recovery_policy::skip_to_end;
     }
+    /**
+     * Returns the effective last offset as perceived by the state machine. This
+     * function calls `persisted_stm::sync()` to make sure the returned offset
+     * is up to date.
+
+     * NOTE: the resulting offset can move backward if the inflight replicate
+     * request fails
+     *
+     */
+    ss::future<result<kafka::offset>>
+    get_expected_last_offset(model::timeout_clock::duration sync_timeout);
 
 private:
     ss::future<> do_apply(const model::record_batch& b) final;

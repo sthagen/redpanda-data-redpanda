@@ -32,6 +32,19 @@ class CloudBroker():
         self._meta = pod['metadata']
         self.name = self._meta['name']
 
+        spec = pod.get('spec', {})
+        if not spec or 'nodeName' not in spec:
+            self.logger.error(
+                f"Pod spec is missing or does not contain 'nodeName'. Pod details: {pod}, Spec details: {spec}"
+            )
+            health_overview = self.get_health_overview()
+            self.logger.error(
+                f"Before processing pods, ensure that the Redpanda cluster is healthy. Health overview is: {health_overview}"
+            )
+            raise KeyError(
+                f"Missing 'nodeName' in pod['spec']. Health overview: {health_overview}"
+            )
+
         # Backward compatibility
         # Various classes will use this to hash and compare nodes
         try:
