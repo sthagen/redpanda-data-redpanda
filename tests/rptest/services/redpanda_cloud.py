@@ -10,7 +10,7 @@ import ipaddress
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Optional, Dict
 from prometheus_client.parser import text_string_to_metric_families
 
 from ducktape.utils.util import wait_until
@@ -1548,6 +1548,7 @@ class CloudCluster():
                                        endpoint='/ScaleCluster',
                                        json=payload)
 
+    # Update cluster properties using Admin API
     def set_cluster_config_overrides(self, cluster_id, config_values):
         """
         Set configuration overrides for a specific Redpanda cloud cluster using Admin API
@@ -1562,3 +1563,58 @@ class CloudCluster():
         return self.cloudv2._http_post(base_url=self.config.admin_api_url,
                                        endpoint='/SetClusterConfigOverrides',
                                        json=payload)
+
+    # Update cluster properties using Public API
+    def update_cluster_property_public(self, cluster_id: str,
+                                       properties: Dict[str, str]) -> dict:
+        """
+        Update a specific cluster property via the public API
+
+        :param cluster_id: Redpanda cluster ID
+        :param properties: A dictionary where each key is a property key and the value is the property value
+        :return: response from the API request
+        """
+        self._logger.debug(
+            f"Updating cluster {cluster_id} with properties: {properties}")
+
+        payload = {"cluster_configuration": {"custom_properties": properties}}
+
+        self._logger.debug(f"Payload to be sent: {payload}")
+
+        try:
+            update_resp = self.public_api._http_patch(
+                base_url=self.config.public_api_url,
+                endpoint=f"/v1/clusters/{cluster_id}",
+                json=payload)
+
+            self._logger.debug(f"Response from API: {update_resp}")
+
+            return update_resp
+        except Exception as e:
+            self._logger.error(
+                f"Error during request to update cluster {cluster_id}: {e}")
+            raise
+
+    def create_secret(self, secret_id, secret_data, scopes=None):
+        """
+        Create a new secret on dataplane and return the response.
+        :param secret_id: ID of the secret to create
+        :param secret_data: Data for the secret
+        :param scopes: List of scopes for the secret (default is ["SCOPE_REDPANDA_CLUSTER"])
+        :return: response from the API request
+        """
+        dataplane_url = self._get_dataplane_api_url()
+        if scopes is None:
+            scopes = ["SCOPE_REDPANDA_CLUSTER"]
+        response = self.public_api._http_post(base_url=dataplane_url,
+                                              endpoint=f"/v1/secrets",
+                                              json={
+                                                  "id": secret_id,
+                                                  "scopes": scopes,
+                                                  "secret_data": secret_data,
+                                              })
+        return response
+
+    def _get_dataplane_api_url(self):
+        cluster = self.rpcloud.get_cluster(self.current.cluster_id)
+        return cluster['dataplane_api']['url']

@@ -43,16 +43,17 @@ struct compacted_index {
       std::numeric_limits<uint16_t>::max());
 
     enum class entry_type : uint8_t {
-        none, // error detection
+        none, // error detection. Deprecated.
         key,  // most common - just keys
         /// \brief because of raft truncations, we write a truncation, for
         /// the recovery thread to compact up to key-point on the index.
+        /// Deprecated.
         truncation,
     };
     // bitflags for index
     enum class footer_flags : uint32_t {
         none = 0,
-        /// needed for truncation events in the same raft-term
+        /// needed for truncation events in the same raft-term. Deprecated.
         truncation = 1U,
         /// needed to determine if we should self compact first
         self_compaction = 1U << 1U,

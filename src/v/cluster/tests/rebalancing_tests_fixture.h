@@ -39,9 +39,9 @@ public:
 
     application* node_application(int id) { return apps[model::node_id(id)]; }
 
-    void start_cluster(int node_count) {
+    void start_cluster(size_t node_count) {
         // start nodes
-        for (auto i = 0; i < node_count; ++i) {
+        for (size_t i = 0; i < node_count; ++i) {
             auto nid = model::node_id(i);
             apps.emplace(nid, create_node_application(nid));
         }
@@ -141,7 +141,7 @@ public:
 
                   return ss::with_timeout(
                            model::timeout_clock::now() + 2s, std::move(f))
-                    .then([&pm, ntp](result<raft::replicate_result> res) {
+                    .then([&pm, ntp](result<raft::replicate_result>) {
                         auto p = pm.get(ntp);
                         return p->make_reader(storage::log_reader_config(
                           model::offset(0),

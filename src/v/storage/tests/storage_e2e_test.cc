@@ -5873,3 +5873,59 @@ FIXTURE_TEST(disk_usage_with_log_throwing_exception, storage_test_fixture) {
     // Reassign the gate so there is no double close().
     disk_log->gate() = ss::gate{};
 };
+
+FIXTURE_TEST(prefix_truncate_offset_range_size, storage_test_fixture) {
+    auto cfg = default_log_config(test_dir);
+    ss::abort_source as;
+    storage::log_manager mgr = make_log_manager(cfg);
+    info("Configuration: {}", mgr.config());
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp = model::ntp("kafka", "test-topic", 0);
+
+    storage::ntp_config::default_overrides overrides{
+      .cleanup_policy_bitflags = model::cleanup_policy_bitflags::deletion,
+    };
+    storage::ntp_config ntp_cfg(
+      ntp,
+      mgr.config().base_dir,
+      std::make_unique<storage::ntp_config::default_overrides>(overrides));
+
+    auto log = mgr.manage(std::move(ntp_cfg)).get();
+
+    size_t num_segments = 1;
+    for (size_t i = 0; i < num_segments; i++) {
+        append_random_batches(
+          log, 10, model::term_id(0), key_limited_random_batch_generator());
+        log->force_roll(ss::default_priority_class()).get();
+    }
+
+    auto dirty_offset = log->offsets().dirty_offset;
+    auto new_start_offset = model::offset{
+      random_generators::get_int(dirty_offset())};
+
+    info("Prefix truncating at offset {}", new_start_offset);
+
+    log
+      ->truncate_prefix(storage::truncate_prefix_config(
+        new_start_offset, ss::default_priority_class()))
+      .get();
+
+    auto lstat = log->offsets();
+    BOOST_REQUIRE_EQUAL(lstat.start_offset, new_start_offset);
+
+    for (int64_t o = model::next_offset(new_start_offset)(); o < dirty_offset();
+         ++o) {
+        // Expect that no errors are thrown by querying the offset range size
+        // for any offset.
+        BOOST_REQUIRE_NO_THROW(
+          log
+            ->offset_range_size(
+              model::offset{o},
+              storage::log::offset_range_size_requirements_t{
+                .target_size = 0x10000,
+                .min_size = 1,
+              },
+              ss::default_priority_class())
+            .get());
+    }
+}

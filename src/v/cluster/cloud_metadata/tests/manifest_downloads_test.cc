@@ -10,7 +10,6 @@
 
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/remote.h"
-#include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
 #include "cluster/cloud_metadata/key_utils.h"
 #include "cluster/cloud_metadata/manifest_downloads.h"
@@ -22,6 +21,8 @@
 
 #include <seastar/core/io_priority_class.hh>
 
+#include <gtest/gtest.h>
+
 namespace {
 static ss::abort_source never_abort;
 } // anonymous namespace
@@ -32,7 +33,8 @@ class cluster_metadata_fixture
   : public s3_imposter_fixture
   , public manual_metadata_upload_mixin
   , public redpanda_thread_fixture
-  , public enable_cloud_storage_fixture {
+  , public enable_cloud_storage_fixture
+  , public ::testing::Test {
 public:
     cluster_metadata_fixture()
       : redpanda_thread_fixture(
@@ -55,7 +57,7 @@ public:
 
 // Basic check for downloading the latest manifest. The manifest downloaded by
 // the uploader should be the one with the highest metadata ID.
-FIXTURE_TEST(test_download_manifest, cluster_metadata_fixture) {
+TEST_F(cluster_metadata_fixture, test_download_manifest) {
     // First try download when there's nothing in the bucket, e.g. as if it's
     // the first time we're using the bucket for this cluster.
     retry_chain_node retry_node(
@@ -63,8 +65,8 @@ FIXTURE_TEST(test_download_manifest, cluster_metadata_fixture) {
     auto m_res = download_highest_manifest_for_cluster(
                    remote, cluster_uuid, bucket, retry_node)
                    .get();
-    BOOST_REQUIRE(m_res.has_error());
-    BOOST_REQUIRE_EQUAL(m_res.error(), error_outcome::no_matching_metadata);
+    ASSERT_TRUE(m_res.has_error());
+    ASSERT_EQ(m_res.error(), error_outcome::no_matching_metadata);
 
     // Every manifest upload thereafter should lead a subsequent sync to
     // download the latest metadata, even if the manifests are left around.
@@ -86,7 +88,7 @@ FIXTURE_TEST(test_download_manifest, cluster_metadata_fixture) {
         auto m_res = download_highest_manifest_for_cluster(
                        remote, cluster_uuid, bucket, retry_node)
                        .get();
-        BOOST_REQUIRE(m_res.has_value());
+        ASSERT_TRUE(m_res.has_value());
         BOOST_CHECK_EQUAL(i, m_res.value().metadata_id());
     }
 
@@ -100,14 +102,13 @@ FIXTURE_TEST(test_download_manifest, cluster_metadata_fixture) {
     BOOST_CHECK_EQUAL(error_outcome::list_failed, m_res.error());
 }
 
-FIXTURE_TEST(
-  test_download_highest_manifest_in_bucket, cluster_metadata_fixture) {
+TEST_F(cluster_metadata_fixture, test_download_highest_manifest_in_bucket) {
     retry_chain_node retry_node(
       never_abort, ss::lowres_clock::time_point::max(), 10ms);
     auto m_res
       = download_highest_manifest_in_bucket(remote, bucket, retry_node).get();
-    BOOST_REQUIRE(m_res.has_error());
-    BOOST_REQUIRE_EQUAL(m_res.error(), error_outcome::no_matching_metadata);
+    ASSERT_TRUE(m_res.has_error());
+    ASSERT_EQ(m_res.error(), error_outcome::no_matching_metadata);
 
     cluster_metadata_manifest manifest;
     manifest.cluster_uuid = cluster_uuid;
@@ -122,7 +123,7 @@ FIXTURE_TEST(
 
     m_res
       = download_highest_manifest_in_bucket(remote, bucket, retry_node).get();
-    BOOST_REQUIRE(m_res.has_value());
+    ASSERT_TRUE(m_res.has_value());
     BOOST_CHECK_EQUAL(cluster_uuid, m_res.value().cluster_uuid);
     BOOST_CHECK_EQUAL(10, m_res.value().metadata_id());
 
@@ -140,23 +141,23 @@ FIXTURE_TEST(
       .get();
     m_res
       = download_highest_manifest_in_bucket(remote, bucket, retry_node).get();
-    BOOST_REQUIRE(m_res.has_value());
-    BOOST_REQUIRE_EQUAL(15, m_res.value().metadata_id());
-    BOOST_REQUIRE_EQUAL(new_uuid, m_res.value().cluster_uuid);
+    ASSERT_TRUE(m_res.has_value());
+    ASSERT_EQ(15, m_res.value().metadata_id());
+    ASSERT_EQ(new_uuid, m_res.value().cluster_uuid);
 
     // Sanity check that searching by the cluster UUIDs return the expected
     // manifests.
     m_res = download_highest_manifest_for_cluster(
               remote, cluster_uuid, bucket, retry_node)
               .get();
-    BOOST_REQUIRE(m_res.has_value());
-    BOOST_REQUIRE_EQUAL(10, m_res.value().metadata_id());
-    BOOST_REQUIRE_EQUAL(cluster_uuid, m_res.value().cluster_uuid);
+    ASSERT_TRUE(m_res.has_value());
+    ASSERT_EQ(10, m_res.value().metadata_id());
+    ASSERT_EQ(cluster_uuid, m_res.value().cluster_uuid);
 
     m_res = download_highest_manifest_for_cluster(
               remote, new_uuid, bucket, retry_node)
               .get();
-    BOOST_REQUIRE(m_res.has_value());
-    BOOST_REQUIRE_EQUAL(15, m_res.value().metadata_id());
-    BOOST_REQUIRE_EQUAL(new_uuid, m_res.value().cluster_uuid);
+    ASSERT_TRUE(m_res.has_value());
+    ASSERT_EQ(15, m_res.value().metadata_id());
+    ASSERT_EQ(new_uuid, m_res.value().cluster_uuid);
 }

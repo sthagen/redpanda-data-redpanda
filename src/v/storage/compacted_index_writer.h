@@ -73,7 +73,6 @@ public:
 
     virtual ss::future<> append(compacted_index::entry) = 0;
 
-    virtual ss::future<> truncate(model::offset) = 0;
     virtual ss::future<> close() = 0;
     virtual void set_flag(compacted_index::footer_flags) = 0;
     virtual void print(std::ostream&) const = 0;

@@ -10,23 +10,12 @@
 #include "cluster/errc.h"
 #include "cluster/rm_stm.h"
 #include "cluster/tests/rm_stm_test_fixture.h"
-#include "finjector/hbadger.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
 #include "model/tests/random_batch.h"
-#include "model/timestamp.h"
-#include "raft/consensus_utils.h"
-#include "raft/fundamental.h"
-#include "random/generators.h"
-#include "storage/record_batch_builder.h"
-#include "storage/tests/utils/disk_log_builder.h"
-#include "test_utils/async.h"
 #include "test_utils/fixture.h"
 
 #include <seastar/util/defer.hh>
-
-#include <system_error>
 
 FIXTURE_TEST(
   test_rm_stm_doesnt_interfere_with_out_of_session_messages,

@@ -12,7 +12,6 @@
 #include "cluster/logger.h"
 #include "cluster/rm_stm.h"
 #include "storage/tests/storage_test_fixture.h"
-#include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/async.h"
 #include "test_utils/randoms.h"
 #include "test_utils/test_macros.h"

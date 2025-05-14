@@ -103,11 +103,29 @@ redpanda_test_cc_library(
 )
 
 redpanda_test_cc_library(
+    name = "storage_test_fixture_gtest",
+    hdrs = [
+        "storage_test_fixture.h",
+    ],
+    include_prefix = "storage/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/compression",
+        "//src/v/config",
+        "//src/v/features",
+        "//src/v/model/tests:random",
+        "//src/v/storage",
+        "//src/v/test_utils:gtest",
+    ],
+)
+
+redpanda_test_cc_library(
     name = "storage_test_fixture",
     hdrs = [
         "storage_test_fixture.h",
     ],
     include_prefix = "storage/tests",
+    visibility = ["//visibility:public"],
     deps = [
         "//src/v/compression",
         "//src/v/config",

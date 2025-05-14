@@ -62,13 +62,18 @@ class DatabricksWorkspace(Service):
 
         self._location_names.add(bucket)
 
-        location: ExternalLocationInfo = self._client.external_locations.create(
-            name=bucket,
-            # TODO: Add support for gcs, azure
-            url=f"s3://{bucket}",
-            credential_name=self._databricks_context.ext_loc_credential_name,
-        )
-        self.logger.debug(f"Created external location: {location}")
+        try:
+            location: ExternalLocationInfo = self._client.external_locations.create(
+                name=bucket,
+                # TODO: Add support for gcs, azure
+                url=f"s3://{bucket}",
+                credential_name=self._databricks_context.
+                ext_loc_credential_name,
+            )
+            self.logger.debug(f"Created external location: {location}")
+        except databricks.sdk.errors.DatabricksError as e:
+            self.logger.error(f"Failed to create external location: {str(e)}")
+            raise
 
         requested_catalog_name = f"panda-catalog-{uuid.uuid1()}"
         self._catalog_names.add(requested_catalog_name)
@@ -83,12 +88,18 @@ class DatabricksWorkspace(Service):
             "We expect to only managed catalogs."
         assert catalog_info.name, "Catalog name must not be empty"
 
-        sql_connection = databricks.sql.connect(
-            server_hostname=self._databricks_context.server_hostname,
-            http_path=self._databricks_context.sql_warehouse_path,
-            catalog=catalog_info.name,
-            credentials_provider=self._databricks_context.credentials_provider,
-        )
+        try:
+            sql_connection = databricks.sql.connect(
+                server_hostname=self._databricks_context.server_hostname,
+                http_path=self._databricks_context.sql_warehouse_path,
+                catalog=catalog_info.name,
+                credentials_provider=self._databricks_context.
+                credentials_provider,
+            )
+            self.logger.debug("SQL connection established successfully.")
+        except Exception as e:
+            self.logger.error(f"Error establishing SQL connection: {e}")
+            raise
 
         # This is a unity catalog peculiarity. It allows schemas (iceberg
         # namespaces) to be created but tables inside it are not allowed

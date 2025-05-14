@@ -95,12 +95,33 @@ class RpCloudApiClient(object):
                    override_headers={},
                    **kwargs):
         token = self._get_token()
+        self._logger.debug(f"http token: '{token}'")
         headers = {
             'Authorization': f'Bearer {token}',
             'Accept': 'application/json'
         } | override_headers
         _base = base_url if base_url else self._config.api_url
         resp = requests.post(f'{_base}{endpoint}', headers=headers, **kwargs)
+        _r = self._handle_error(resp)
+        return _r if _r is None else _r.json()
+
+    def _http_patch(self,
+                    base_url: str | None = None,
+                    endpoint: str = '',
+                    override_headers: dict[str, str] = {},
+                    **kwargs):
+        """
+            Like _http_post but uses PATCH.
+            Injects Bearer token and Accept header the same way.
+        """
+        token = self._get_token()
+        headers = {
+            'Authorization': f'Bearer {token}',
+            'Accept': 'application/json'
+        } | override_headers
+
+        _base = base_url if base_url else self._config.api_url
+        resp = requests.patch(f'{_base}{endpoint}', headers=headers, **kwargs)
         _r = self._handle_error(resp)
         return _r if _r is None else _r.json()
 

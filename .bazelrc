@@ -59,6 +59,13 @@ build --@seastar//:stack_guards=True
 build --@seastar//:debug=True
 
 # =================================
+# Fastbuild
+# =================================
+# We want to have a --config=fastbuild that is effectively the same as no args
+# so specify a flag that does nothing to enable this
+build:fastbuild --build
+
+# =================================
 # Sanitizer
 # =================================
 build:sanitizer --compilation_mode=dbg

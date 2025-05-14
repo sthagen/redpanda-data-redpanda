@@ -341,13 +341,13 @@ void log_reader::maybe_log_load_slice_depth_warning(
     const auto size = segs.size();
     auto count = 0;
     constexpr auto max_segments = 10;
-    for (int i = (int)size - 1; i >= 0; --i) {
-        auto& seg = segs[i];
+    for (auto it = segs.rbegin(); it != segs.rend(); ++it) {
+        auto& seg = *it;
         vlog(
           stlog.warn,
           "load_slice recursion warning. lease range segment {}/{} "
           "empty {}: {}",
-          i,
+          std::distance(segs.begin(), it.base()) - 1,
           size,
           seg->empty(),
           seg);
@@ -535,18 +535,22 @@ void log_reader::reset(
     }
 };
 
-static inline bool is_finished_offset(segment_set& s, model::offset o) {
-    if (s.empty()) {
+static inline bool is_finished_offset(segment_set& segs, model::offset o) {
+    if (segs.empty()) {
         return true;
     }
 
-    for (int i = (int)s.size() - 1; i >= 0; --i) {
-        auto& seg = s[i];
-        if (!seg->empty()) {
-            return o > seg->offsets().get_dirty_offset();
-        }
+    auto it = std::find_if(
+      segs.rbegin(), segs.rend(), [](const segment_set::type& seg) {
+          return !seg->empty();
+      });
+
+    if (it == segs.rend()) {
+        return true;
     }
-    return true;
+
+    auto& seg = *it;
+    return o > seg->offsets().get_dirty_offset();
 }
 bool log_reader::is_done() {
     return is_end_of_stream()

@@ -78,7 +78,6 @@ public:
       bytes&&,
       model::offset,
       int32_t) final;
-    ss::future<> truncate(model::offset) final;
     ss::future<> append(compacted_index::entry) final;
     ss::future<> close() final;
     void print(std::ostream&) const final;

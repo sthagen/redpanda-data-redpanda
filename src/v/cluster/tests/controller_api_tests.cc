@@ -10,11 +10,8 @@
 #include "cluster/controller_api.h"
 #include "cluster/errc.h"
 #include "cluster/tests/cluster_test_fixture.h"
-#include "cluster/types.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/timeout_clock.h"
-#include "ssx/future-util.h"
 #include "test_utils/async.h"
 
 #include <seastar/core/loop.hh>

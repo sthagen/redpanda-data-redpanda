@@ -324,25 +324,6 @@ void spill_key_index::set_flag(compacted_index::footer_flags f) {
     _footer.flags |= f;
 }
 
-ss::future<> spill_key_index::truncate(model::offset o) {
-    return ss::try_with_gate(_gate, [this, o]() {
-        set_flag(compacted_index::footer_flags::truncation);
-        return drain_all_keys().then([this, o] {
-            static constexpr std::string_view compacted_key = "compaction";
-            return spill(
-              compacted_index::entry_type::truncation,
-              bytes_view(
-                // NOLINTNEXTLINE
-                reinterpret_cast<const uint8_t*>(compacted_key.data()),
-                compacted_key.size()),
-              // this is actually the base_offset + max_delta so everything
-              // upto and including this offset must be ignored during self
-              // compaction
-              value_type{o, 0});
-        });
-    });
-}
-
 ss::future<> spill_key_index::maybe_open() {
     if (!_appender.has_value()) {
         co_await open();

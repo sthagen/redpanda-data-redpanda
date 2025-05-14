@@ -9,21 +9,16 @@
 
 #include "cluster/tests/raft_fixture_retry_policy.h"
 #include "cluster/tm_stm.h"
-#include "kafka/protocol/types.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 #include "model/record.h"
+#include "raft/tests/raft_fixture.h"
 #include "test_utils/test.h"
-#include "tests/raft_fixture.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/defer.hh>
 
 #include <gtest/gtest.h>
-
-#include <cstdint>
-#include <system_error>
 
 namespace {
 using namespace raft;

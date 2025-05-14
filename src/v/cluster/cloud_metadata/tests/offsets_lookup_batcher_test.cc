@@ -18,6 +18,8 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timed_out_error.hh>
 
+#include <gtest/gtest.h>
+
 using cluster::cloud_metadata::offsets_lookup_batcher;
 
 namespace {
@@ -31,14 +33,16 @@ model::ntp get_ntp(int pid) {
 
 absl::btree_set<model::ntp> get_ntps(size_t num) {
     absl::btree_set<model::ntp> ret;
-    for (int i = 0; i < num; i++) {
+    for (size_t i = 0; i < num; i++) {
         ret.emplace(get_ntp(i));
     }
     return ret;
 }
 } // anonymous namespace
 
-class offsets_lookup_batcher_fixture : public cluster_test_fixture {
+class offsets_lookup_batcher_fixture
+  : public cluster_test_fixture
+  , public ::testing::Test {
 public:
     offsets_lookup_batcher_fixture()
       : cluster_test_fixture() {
@@ -64,7 +68,7 @@ public:
         for (int i = step_size; i < num_partitions; i += step_size) {
             retry_chain_node retry_node(never_abort, 30s, 1s);
             batcher->run_lookups(get_ntps(i), retry_node).get();
-            BOOST_REQUIRE_EQUAL(i, batcher->offsets_by_ntp().size());
+            ASSERT_EQ(i, batcher->offsets_by_ntp().size());
         }
     }
 
@@ -75,7 +79,7 @@ public:
 
 // Test that the lookup works when all partition leaders are local (in this
 // case, single node).
-FIXTURE_TEST(test_batch_list_offsets_local, offsets_lookup_batcher_fixture) {
+TEST_F(offsets_lookup_batcher_fixture, test_batch_list_offsets_local) {
     int num_partitions = batch_size * 5;
     cluster::topic_properties props;
     props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::deletion;
@@ -87,7 +91,7 @@ FIXTURE_TEST(test_batch_list_offsets_local, offsets_lookup_batcher_fixture) {
 }
 
 // Test that the lookup works when some partition leaders are remote.
-FIXTURE_TEST(test_batch_list_offsets_remote, offsets_lookup_batcher_fixture) {
+TEST_F(offsets_lookup_batcher_fixture, test_batch_list_offsets_remote) {
     auto app2 = create_node_application(model::node_id(1));
     wait_for_all_members(10s).get();
 
@@ -108,15 +112,14 @@ FIXTURE_TEST(test_batch_list_offsets_remote, offsets_lookup_batcher_fixture) {
 }
 
 // Test that running lookups for missing NTPs will timeout.
-FIXTURE_TEST(
-  test_batch_list_offsets_missing_ntp, offsets_lookup_batcher_fixture) {
+TEST_F(offsets_lookup_batcher_fixture, test_batch_list_offsets_missing_ntp) {
     int num_partitions = batch_size * 10;
     cluster::topic_properties props;
     props.cleanup_policy_bitflags = model::cleanup_policy_bitflags::deletion;
     rp->add_topic({model::kafka_namespace, topic}, num_partitions, props).get();
 
     retry_chain_node retry_node(never_abort, 3s, 1s);
-    BOOST_REQUIRE_THROW(
+    EXPECT_THROW(
       batcher->run_lookups(get_ntps(num_partitions * 2), retry_node).get(),
       ss::timed_out_error);
 }

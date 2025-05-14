@@ -8,14 +8,12 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "cloud_storage/tests/manual_fixture.h"
-#include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/cloud_metadata/producer_id_recovery_manager.h"
 #include "cluster/id_allocator_frontend.h"
 #include "cluster/partition.h"
 #include "cluster/tests/tx_compaction_utils.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
-#include "redpanda/tests/fixture.h"
 #include "test_utils/test.h"
 
 #include <gtest/gtest.h>

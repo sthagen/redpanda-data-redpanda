@@ -30,8 +30,8 @@ calculate_replicas_per_node(const cluster::metadata_cache& cache) {
 }
 
 void wait_for_even_replicas_distribution(
-  int min_expected,
-  int max_expected,
+  size_t min_expected,
+  size_t max_expected,
   model::node_id added_node,
   const cluster::metadata_cache& cache) {
     static ss::logger logger("test-log");

@@ -409,6 +409,15 @@ private:
 
     size_t get_log_truncation_counter() const noexcept override;
 
+    // Returns true iff the offset `o` is found within the bounds
+    // [start_offset, committed_offset] of the log, false otherwise.
+    bool log_contains_offset(model::offset o) const noexcept;
+
+    // Returns true iff the offsets `first` and `last` are both found within the
+    // bounds [start_offset, committed_offset] of the log, false otherwise.
+    bool log_contains_offset_range(
+      model::offset first, model::offset last) const noexcept;
+
 private:
     // Computes the segment size based on the latest max_segment_size
     // configuration. This takes into consideration any segment size

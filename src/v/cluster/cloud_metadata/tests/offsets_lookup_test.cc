@@ -18,6 +18,8 @@
 #include <seastar/core/smp.hh>
 #include <seastar/util/log.hh>
 
+#include <gtest/gtest.h>
+
 namespace {
 ss::logger logger("offsets_lookup_test");
 static ss::abort_source never_abort;
@@ -31,7 +33,8 @@ using cluster::cloud_metadata::offsets_lookup_request;
 class offsets_lookup_fixture
   : public s3_imposter_fixture
   , public redpanda_thread_fixture
-  , public enable_cloud_storage_fixture {
+  , public enable_cloud_storage_fixture
+  , public ::testing::Test {
 public:
     offsets_lookup_fixture()
       : redpanda_thread_fixture(
@@ -39,6 +42,8 @@ public:
           httpd_port_number()) {
         set_expectations_and_listen({});
         wait_for_controller_leadership().get();
+    }
+    void SetUp() override {
         RPTEST_REQUIRE_EVENTUALLY(5s, [this] {
             return app.storage.local().get_cluster_uuid().has_value();
         });
@@ -64,7 +69,7 @@ public:
     offsets_lookup* _offsets_server;
 };
 
-FIXTURE_TEST(test_list_offsets_basic, offsets_lookup_fixture) {
+TEST_F(offsets_lookup_fixture, test_list_offsets_basic) {
     offsets_lookup_request req;
     req.node_id = _node_id;
     auto n = random_generators::get_int(1, 10);
@@ -72,20 +77,20 @@ FIXTURE_TEST(test_list_offsets_basic, offsets_lookup_fixture) {
         req.ntps.emplace_back(ntp);
     }
     auto reply = _offsets_server->lookup(std::move(req)).get();
-    BOOST_REQUIRE_EQUAL(reply.node_id, _node_id);
-    BOOST_REQUIRE_EQUAL(n, reply.ntp_and_offset.size());
-    BOOST_REQUIRE_EQUAL(kafka::offset{0}, reply.ntp_and_offset[0].offset);
+    ASSERT_EQ(reply.node_id, _node_id);
+    ASSERT_EQ(n, reply.ntp_and_offset.size());
+    ASSERT_EQ(kafka::offset{0}, reply.ntp_and_offset[0].offset);
 }
 
-FIXTURE_TEST(test_list_offsets_empty_req, offsets_lookup_fixture) {
+TEST_F(offsets_lookup_fixture, test_list_offsets_empty_req) {
     offsets_lookup_request req;
     req.node_id = _node_id;
     auto reply = _offsets_server->lookup(std::move(req)).get();
-    BOOST_REQUIRE_EQUAL(reply.node_id, _node_id);
-    BOOST_REQUIRE_EQUAL(0, reply.ntp_and_offset.size());
+    ASSERT_EQ(reply.node_id, _node_id);
+    ASSERT_EQ(0, reply.ntp_and_offset.size());
 }
 
-FIXTURE_TEST(test_list_offsets_missing_topic, offsets_lookup_fixture) {
+TEST_F(offsets_lookup_fixture, test_list_offsets_missing_topic) {
     offsets_lookup_request req;
     req.node_id = _node_id;
     auto bad_topic_ntp = ntp;
@@ -96,11 +101,11 @@ FIXTURE_TEST(test_list_offsets_missing_topic, offsets_lookup_fixture) {
     }
 
     auto reply = _offsets_server->lookup(std::move(req)).get();
-    BOOST_REQUIRE_EQUAL(reply.node_id, _node_id);
-    BOOST_REQUIRE_EQUAL(0, reply.ntp_and_offset.size());
+    ASSERT_EQ(reply.node_id, _node_id);
+    ASSERT_EQ(0, reply.ntp_and_offset.size());
 }
 
-FIXTURE_TEST(test_list_offsets_missing_partition, offsets_lookup_fixture) {
+TEST_F(offsets_lookup_fixture, test_list_offsets_missing_partition) {
     offsets_lookup_request req;
     req.node_id = _node_id;
     auto bad_partition_ntp = ntp;
@@ -111,11 +116,11 @@ FIXTURE_TEST(test_list_offsets_missing_partition, offsets_lookup_fixture) {
     }
 
     auto reply = _offsets_server->lookup(std::move(req)).get();
-    BOOST_REQUIRE_EQUAL(reply.node_id, _node_id);
-    BOOST_REQUIRE_EQUAL(0, reply.ntp_and_offset.size());
+    ASSERT_EQ(reply.node_id, _node_id);
+    ASSERT_EQ(0, reply.ntp_and_offset.size());
 }
 
-FIXTURE_TEST(test_list_offsets_bad_node_id, offsets_lookup_fixture) {
+TEST_F(offsets_lookup_fixture, test_list_offsets_bad_node_id) {
     offsets_lookup_request req;
     auto bad_node_id = model::node_id{_node_id() + 1};
     req.node_id = bad_node_id;
@@ -125,6 +130,6 @@ FIXTURE_TEST(test_list_offsets_bad_node_id, offsets_lookup_fixture) {
     }
 
     auto reply = _offsets_server->lookup(std::move(req)).get();
-    BOOST_REQUIRE_EQUAL(reply.node_id, _node_id());
-    BOOST_REQUIRE_EQUAL(0, reply.ntp_and_offset.size());
+    ASSERT_EQ(reply.node_id, _node_id());
+    ASSERT_EQ(0, reply.ntp_and_offset.size());
 }

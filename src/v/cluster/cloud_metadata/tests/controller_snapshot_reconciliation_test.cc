@@ -14,7 +14,6 @@
 #include "cluster/controller_snapshot.h"
 #include "cluster/feature_manager.h"
 #include "cluster/security_frontend.h"
-#include "cluster/tests/topic_properties_generator.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
@@ -25,8 +24,6 @@
 #include "security/scram_credential.h"
 #include "security/types.h"
 #include "test_utils/async.h"
-#include "test_utils/scoped_config.h"
-#include "test_utils/test.h"
 
 #include <gtest/gtest.h>
 
