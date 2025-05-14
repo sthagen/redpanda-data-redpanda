@@ -304,6 +304,15 @@ bool index_state::maybe_index(
     // always saving the first batch simplifies a lot of book keeping
     if ((accumulator >= step && user_data) || is_empty) {
         auto offset_delta = batch_base_offset() - base_offset();
+        // on sparse compacted topic indexes, there could be a case where the
+        // offset range between valid keys is greater than can be represented
+        // with 4 bytes. i.e.: first valid key is at offset 0, next valid key is
+        // uint32::max + 1 instead of increasing the index memory footprint size
+        // to int64_t which meaningfully increases the size of the index memory
+        // pressure, we explicitly trade off 1 additional disk seek. This would
+        // be the case anyway because it is very likely that offset 0 and
+        // uint32_t::max+1 would be in the same page on disk ok to return that
+        // the prev (offset 0) would be the default start of the disk read
         if (offset_delta <= std::numeric_limits<uint32_t>::max()) {
             add_entry(
               // We know that a segment cannot be > 4GB

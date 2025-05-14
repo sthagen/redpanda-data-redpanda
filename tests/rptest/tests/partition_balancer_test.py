@@ -161,7 +161,7 @@ class PartitionBalancerService(EndToEndTest):
             disabled_node, expected_moving_partitions_amount),
                           timeout_sec=10)
 
-    def wait_until_status(self, predicate, timeout_sec=120):
+    def wait_until_status(self, predicate, timeout_sec=120, err_msg=""):
         # We may get a 504 if we proxy a status request to a suspended node.
         # It is okay to retry (the controller leader will get re-elected in the meantime).
         admin = Admin(self.redpanda, retry_codes=[503, 504], retries_amount=10)
@@ -187,7 +187,7 @@ class PartitionBalancerService(EndToEndTest):
             check,
             timeout_sec=timeout_sec,
             backoff_sec=2,
-            err_msg="failed to wait until status condition",
+            err_msg=err_msg,
         )
 
     def wait_until_ready(self,
@@ -206,7 +206,10 @@ class PartitionBalancerService(EndToEndTest):
                     ((node_id is None) or (node_id in status["violations"].get(
                         "unavailable_nodes", []))))
 
-        return self.wait_until_status(predicate, timeout_sec=timeout_sec)
+        return self.wait_until_status(
+            predicate,
+            timeout_sec=timeout_sec,
+            err_msg="Error waiting for partition balancer to become ready")
 
     def check_no_replicas_on_node(self, node):
         node2pc = self.node2partition_count()
@@ -1119,6 +1122,7 @@ class PartitionBalancerTest(PartitionBalancerService):
         )
         self.topic = TopicSpec(partition_count=random.randint(20, 30))
         self.client().create_topic(self.topic)
+        self.wait_until_ready()
 
         # throttle recovery to prevent partition moves from finishing
         self.logger.info("throttling recovery")

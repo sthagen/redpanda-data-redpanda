@@ -5,17 +5,16 @@ redpanda_cc_library(
     name = "application",
     srcs = [
         "application.cc",
-        "cli_parser.cc",
         "monitor_unsafe.cc",
     ],
     hdrs = [
         "application.h",
-        "cli_parser.h",
         "monitor_unsafe.h",
     ],
     include_prefix = "redpanda",
     visibility = ["//visibility:public"],
     deps = [
+        ":cli_parser",
         "//src/v/base",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage",
@@ -126,5 +125,23 @@ redpanda_cc_binary(
     deps = [
         ":application",
         "//src/v/syschecks",
+    ],
+)
+
+redpanda_cc_library(
+    name = "cli_parser",
+    srcs = [
+        "cli_parser.cc",
+    ],
+    hdrs = [
+        "cli_parser.h",
+    ],
+    include_prefix = "redpanda",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/utils:named_type",
+        "@boost//:program_options",
+        "@seastar",
     ],
 )

@@ -702,6 +702,14 @@ TEST_P(CloudStorageEndToEndManualTest, TestTimequeryAfterArchivalGC) {
       archiver->manifest().get_spillover_map().begin()->base_offset,
       first_seg.base_offset);
 
+    // Supply some phony disk stats so that the cache doesn't panic and
+    // think it has zero bytes of space. Otherwise we seem to be racing
+    // against an async notification in release mode.
+    app.shadow_index_cache.local().notify_disk_status(
+      100ULL * 1024 * 1024 * 1024,
+      50ULL * 1024 * 1024 * 1024,
+      storage::disk_space_alert::ok);
+
     // To be sure we actually query S3, force removal of any cached files.
     app.shadow_index_cache.local()
       .trim_manually(

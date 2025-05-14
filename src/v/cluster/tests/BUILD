@@ -1012,3 +1012,148 @@ redpanda_cc_gtest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "data_migration_table_test",
+    timeout = "short",
+    srcs = [
+        "data_migration_table_test.cc",
+    ],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/container:fragmented_vector",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "ephemeral_credential_test",
+    timeout = "short",
+    srcs = [
+        "ephemeral_credential_test.cc",
+    ],
+    deps = [
+        ":cluster_test_fixture",
+        "//src/v/cluster",
+        "//src/v/features",
+        "//src/v/model",
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+    ],
+)
+
+redpanda_test_cc_library(
+    name = "local_monitor_fixture",
+    hdrs = [
+        "local_monitor_fixture.h",
+    ],
+    include_prefix = "cluster/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/storage",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "local_monitor_test",
+    timeout = "short",
+    srcs = [
+        "local_monitor_test.cc",
+    ],
+    deps = [
+        ":local_monitor_fixture",
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/storage",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@fmt",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "security_frontend_test",
+    timeout = "short",
+    srcs = [
+        "security_frontend_test.cc",
+    ],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/cluster/tests:cluster_test_fixture",
+        "//src/v/container:zip",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "@abseil-cpp//absl/algorithm:container",
+        "@boost//:range",
+        "@boost//:test",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "serialization_rt_test",
+    timeout = "short",
+    srcs = [
+        "serialization_rt_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/cluster/tests:randoms",
+        "//src/v/cluster/tests:topic_properties_generator",
+        "//src/v/compat",
+        "//src/v/container:fragmented_vector",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/pandaproxy/schema_registry/test:random",
+        "//src/v/raft",
+        "//src/v/raft:fundamental",
+        "//src/v/random:generators",
+        "//src/v/reflection:adl",
+        "//src/v/security/tests:utils",
+        "//src/v/storage",
+        "//src/v/test_utils:random",
+        "//src/v/test_utils:random_bytes",
+        "//src/v/test_utils:rpc",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:tristate",
+        "//src/v/v8_engine",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "tx_topic_test",
+    timeout = "short",
+    srcs = [
+        "tx_topic_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/kafka/protocol",
+        "//src/v/model",
+        "//src/v/redpanda:application",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+    ],
+)

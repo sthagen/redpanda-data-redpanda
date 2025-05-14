@@ -7,8 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "bytes/iobuf_parser.h"
-#include "pandaproxy/json/iobuf.h"
 #include "pandaproxy/json/requests/produce.h"
 #include "pandaproxy/json/rjson_util.h"
 
@@ -22,14 +20,16 @@ namespace ppj = pp::json;
 auto make_binary_v2_handler() {
     return ppj::produce_request_handler<>(ppj::serialization_format::binary_v2);
 }
+constexpr std::string_view rec
+  = R"({"value": "dmVjdG9yaXplZA==","partition": 0})";
+
+const auto data_size = 1 << 20; // 1 MB
+const auto record_count = data_size / rec.size();
 
 auto gen(size_t data_size) {
-    const ss::sstring beg{R"({"records": [)"};
-    const ss::sstring end{R"(]})"};
-    const ss::sstring rec{R"({"value": "dmVjdG9yaXplZA==","partition": 0})"};
-    ss::sstring buf{
-      ss::sstring::initialized_later{},
-      beg.length() + end.length() + data_size * (rec.length() + 1)};
+    const std::string_view beg{R"({"records": [)"};
+    const std::string_view end{R"(]})"};
+    std::string buf{beg};
     for (size_t i = 0; i < data_size - 1; ++i) {
         buf += rec;
         buf += ",";
@@ -48,4 +48,4 @@ inline void parse_test(size_t data_size) {
     perf_tests::stop_measuring_time();
 }
 
-PERF_TEST(json_parse_test, binary) { parse_test(1 << 20); }
+PERF_TEST(json_parse_test, binary) { parse_test(record_count); }

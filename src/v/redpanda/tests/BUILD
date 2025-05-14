@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_test_cc_library")
 
 redpanda_test_cc_library(
     name = "fixture",
@@ -15,5 +15,21 @@ redpanda_test_cc_library(
         "//src/v/storage/tests:disk_log_builder",
         "//src/v/test_utils:fixture",
         "//src/v/test_utils:logs",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "cli_parser",
+    timeout = "short",
+    srcs = [
+        "cli_parser_tests.cc",
+    ],
+    deps = [
+        "//src/v/redpanda:cli_parser",
+        "@boost//:algorithm",
+        "@boost//:program_options",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
     ],
 )

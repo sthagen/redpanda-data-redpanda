@@ -8,20 +8,18 @@
 // by the Apache License, Version 2.0
 
 #include "cluster/commands.h"
+#include "cluster/data_migrated_resources.h"
 #include "cluster/data_migration_table.h"
 #include "cluster/data_migration_types.h"
-#include "commands.h"
+#include "cluster/errc.h"
+#include "cluster/topic_table.h"
 #include "config/configuration.h"
 #include "container/fragmented_vector.h"
-#include "data_migrated_resources.h"
-#include "data_migration_types.h"
-#include "errc.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "random/generators.h"
 #include "test_utils/test.h"
-#include "topic_table.h"
 
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sstring.hh>

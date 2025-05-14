@@ -389,3 +389,16 @@ redpanda_cc_bench(
         "@seastar//:benchmark",
     ],
 )
+
+redpanda_test_cc_library(
+    name = "random",
+    hdrs = [
+        "random.h",
+    ],
+    include_prefix = "pandaproxy/schema_registry/test",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/pandaproxy:subject_name_strategy",
+        "//src/v/random:generators",
+    ],
+)

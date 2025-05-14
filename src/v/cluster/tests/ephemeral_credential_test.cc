@@ -8,15 +8,9 @@
 // by the Apache License, Version 2.0
 
 #include "cluster/ephemeral_credential_frontend.h"
-#include "cluster/feature_manager.h"
 #include "cluster/tests/cluster_test_fixture.h"
-#include "cluster/types.h"
-#include "features/feature_table.h"
-#include "model/metadata.h"
 #include "security/acl.h"
 #include "security/credential_store.h"
-#include "security/scram_authenticator.h"
-#include "test_utils/async.h"
 #include "test_utils/fixture.h"
 
 #include <seastar/core/abort_source.hh>
@@ -25,8 +19,6 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
-#include <algorithm>
-#include <iterator>
 #include <system_error>
 #include <vector>
 
