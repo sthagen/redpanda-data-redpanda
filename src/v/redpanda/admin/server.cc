@@ -4719,13 +4719,13 @@ void admin_server::register_shadow_indexing_routes() {
       ss::httpd::shadow_indexing_json::get_cloud_storage_lifecycle,
       [this](auto req) { return get_cloud_storage_lifecycle(std::move(req)); });
 
-    register_route<user>(
+    register_route<superuser>(
       ss::httpd::shadow_indexing_json::delete_cloud_storage_lifecycle,
       [this](auto req) {
           return delete_cloud_storage_lifecycle(std::move(req));
       });
 
-    register_route<user>(
+    register_route<superuser>(
       ss::httpd::shadow_indexing_json::post_cloud_storage_cache_trim,
       [this](auto req) {
           return post_cloud_storage_cache_trim(std::move(req));
@@ -4753,7 +4753,7 @@ void admin_server::register_shadow_indexing_routes() {
       ss::httpd::shadow_indexing_json::unsafe_reset_metadata_from_cloud,
       std::move(unsafe_reset_metadata_from_cloud_handler));
 
-    register_route<user>(
+    register_route<superuser>(
       ss::httpd::shadow_indexing_json::reset_scrubbing_metadata,
       [this](auto req) { return reset_scrubbing_metadata(std::move(req)); });
 }

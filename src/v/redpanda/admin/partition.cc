@@ -864,7 +864,7 @@ void admin_server::register_partition_routes() {
           return get_majority_lost_partitions(std::move(req));
       });
 
-    register_route<user>(
+    register_route<superuser>(
       ss::httpd::partition_json::force_recover_from_nodes,
       [this](std::unique_ptr<ss::http::request> req) {
           return force_recover_partitions_from_nodes(std::move(req));

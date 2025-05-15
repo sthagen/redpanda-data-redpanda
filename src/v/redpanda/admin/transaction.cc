@@ -27,7 +27,7 @@ void admin_server::register_transaction_routes() {
           return get_all_transactions_handler(std::move(req));
       });
 
-    register_route<user>(
+    register_route<superuser>(
       ss::httpd::transaction_json::delete_partition,
       [this](std::unique_ptr<ss::http::request> req) {
           return delete_partition_handler(std::move(req));
@@ -39,7 +39,7 @@ void admin_server::register_transaction_routes() {
           return find_tx_coordinator_handler(std::move(req));
       });
 
-    register_route<user>(
+    register_route<superuser>(
       ss::httpd::transaction_json::unsafe_abort_group_transaction,
       [this](std::unique_ptr<ss::http::request> req) {
           return unsafe_abort_group_transaction(std::move(req));

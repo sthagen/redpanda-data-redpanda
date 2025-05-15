@@ -225,7 +225,7 @@ void admin_server::register_debug_routes() {
               [] { return ss::json::json_return_type(ss::json::json_void()); });
       });
 
-    register_route<user>(
+    register_route<superuser>(
       ss::httpd::debug_json::reset_leaders_info,
       [this](std::unique_ptr<ss::http::request>) {
           vlog(adminlog.info, "Request to reset leaders info");
