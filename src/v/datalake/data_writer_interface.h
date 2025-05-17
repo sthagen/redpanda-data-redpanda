@@ -23,6 +23,7 @@ namespace datalake {
 enum class writer_error {
     ok = 0,
     parquet_conversion_error,
+    retryable_type_resolution_error,
     file_io_error,
     no_data,
     flush_error,

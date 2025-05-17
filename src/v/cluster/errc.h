@@ -98,6 +98,7 @@ enum class errc : int16_t {
     data_migrations_disabled,
     resource_is_being_migrated,
     invalid_target_node_id,
+    topic_id_already_exists,
 };
 
 std::ostream& operator<<(std::ostream& o, errc err);
@@ -288,6 +289,8 @@ struct errc_category final : public std::error_category {
                    "undergoing data migration";
         case errc::invalid_target_node_id:
             return "Request was intended for the node with different node id";
+        case errc::topic_id_already_exists:
+            return "A topic with the given id already exists";
         }
         return "cluster::errc::unknown";
     }

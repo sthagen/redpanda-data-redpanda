@@ -56,10 +56,13 @@ translation_task::errc map_error_code(writer_error errc) {
         return translation_task::errc::out_of_disk;
     case writer_error::unknown_error:
         return translation_task::errc::file_io_error;
+    case writer_error::retryable_type_resolution_error:
+        return translation_task::errc::type_resolution_error;
     }
 }
 
 ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
+  prefix_logger& logger,
   cloud_data_io& _cloud_io,
   const partitioning_writer::partitioned_file& file,
   const remote_path& remote_path_prefix,
@@ -82,7 +85,7 @@ ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
       file.local_file, file_remote_path, upload_rcn, lazy_as);
     if (result.has_error()) {
         vlog(
-          datalake_log.warn,
+          logger.warn,
           "error uploading file {} to {} - {}",
           file.local_file,
           file_remote_path,
@@ -96,21 +99,22 @@ ss::future<checked<remote_path, translation_task::errc>> execute_single_upload(
 
 ss::future<checked<std::nullopt_t, translation_task::errc>>
 delete_local_data_files(
+  prefix_logger& logger,
   const chunked_vector<partitioning_writer::partitioned_file>& files) {
     using ret_t = checked<std::nullopt_t, translation_task::errc>;
     return ss::max_concurrent_for_each(
              files,
              16,
-             [](const partitioning_writer::partitioned_file& file) {
+             [&logger](const partitioning_writer::partitioned_file& file) {
                  vlog(
-                   datalake_log.trace,
+                   logger.trace,
                    "removing local data file: {}",
                    file.local_file);
                  return ss::remove_file(file.local_file.path().string());
              })
       .then([] { return ret_t(std::nullopt); })
-      .handle_exception([](const std::exception_ptr& e) {
-          vlog(datalake_log.warn, "error deleting local data files - {}", e);
+      .handle_exception([&logger](const std::exception_ptr& e) {
+          vlog(logger.warn, "error deleting local data files - {}", e);
           return ret_t(translation_task::errc::file_io_error);
       });
 }
@@ -118,6 +122,7 @@ delete_local_data_files(
 ss::future<
   checked<chunked_vector<coordinator::data_file>, translation_task::errc>>
 upload_files(
+  prefix_logger& logger,
   cloud_data_io& _cloud_io,
   const chunked_vector<partitioning_writer::partitioned_file>& files,
   translation_task::custom_partitioning_enabled is_custom_partitioning_enabled,
@@ -130,11 +135,11 @@ upload_files(
     std::optional<translation_task::errc> upload_error;
     for (auto& file : files) {
         auto r = co_await execute_single_upload(
-          _cloud_io, file, remote_path_prefix, rcn, lazy_as);
+          logger, _cloud_io, file, remote_path_prefix, rcn, lazy_as);
 
         if (r.has_error()) {
             vlog(
-              datalake_log.warn,
+              logger.warn,
               "error uploading file {} to object store - {}",
               file.local_file,
               r.error());
@@ -177,11 +182,11 @@ upload_files(
         ret.push_back(std::move(uploaded));
     }
 
-    auto delete_result = co_await delete_local_data_files(files);
+    auto delete_result = co_await delete_local_data_files(logger, files);
     // for now we simply ignore the local deletion failures
     if (delete_result.has_error()) {
         vlog(
-          datalake_log.warn,
+          logger.warn,
           "error deleting local data files - {}",
           delete_result.error());
     }
@@ -199,7 +204,7 @@ upload_files(
           std::move(files_to_delete), rcn);
         if (remote_del_result.has_error()) {
             vlog(
-              datalake_log.warn,
+              logger.warn,
               "error deleting remote data files - {}",
               remote_del_result.error());
         }
@@ -222,7 +227,8 @@ translation_task::translation_task(
   model::iceberg_invalid_record_action invalid_record_action,
   location_provider location_provider,
   translation_probe& probe)
-  : _cloud_io(&cloud_io)
+  : _log(datalake_log, fmt::format("{}", ntp))
+  , _cloud_io(&cloud_io)
   , _schema_mgr(&schema_mgr)
   , _type_resolver(&type_resolver)
   , _record_translator(&record_translator)
@@ -260,8 +266,8 @@ size_t translation_task::flushed_bytes() const {
 ss::future<checked<void, translation_task::errc>> translation_task::flush() {
     auto result = co_await _multiplexer.flush_writers();
     if (result != writer_error::ok) {
-        vlog(datalake_log.debug, "error flushing writers: {}", result);
-        co_return translation_task::errc::flush_error;
+        vlog(_log.debug, "error flushing writers: {}", result);
+        co_return map_error_code(result);
     }
     co_return outcome::success();
 }
@@ -280,13 +286,13 @@ translation_task::finish(
     auto mux_result = co_await std::move(_multiplexer).finish();
     if (mux_result.has_error()) {
         auto mux_err = mux_result.error();
-        vlog(datalake_log.warn, "Error writing data files - {}", mux_err);
+        vlog(_log.warn, "Error writing data files - {}", mux_err);
         co_return map_error_code(mux_err);
     }
     auto write_result = std::move(mux_result).value();
     if (datalake_log.is_enabled(seastar::log_level::trace)) {
         vlog(
-          datalake_log.trace,
+          _log.trace,
           "translation result base offset: {}, last offset: {}, data files: "
           "{}, dlq files: {}",
           write_result.start_offset,
@@ -321,6 +327,7 @@ translation_task::finish(
     // Data files.
     {
         auto upload_res = co_await upload_files(
+          _log,
           *_cloud_io,
           write_result.data_files,
           is_custom_partitioning_enabled,
@@ -336,6 +343,7 @@ translation_task::finish(
     // DLQ files.
     {
         auto dlq_upload_res = co_await upload_files(
+          _log,
           *_cloud_io,
           write_result.dlq_files,
           is_custom_partitioning_enabled,
@@ -355,27 +363,24 @@ ss::future<checked<std::nullopt_t, translation_task::errc>>
 translation_task::discard() && {
     auto mux_result = co_await std::move(_multiplexer).finish();
     if (mux_result.has_error()) {
-        vlog(
-          datalake_log.warn,
-          "Error writing data files - {}",
-          mux_result.error());
+        vlog(_log.warn, "Error writing data files - {}", mux_result.error());
         co_return errc::file_io_error;
     }
     auto write_result = std::move(mux_result).value();
     auto [data_result, dlq_result] = co_await ss::when_all_succeed(
-      delete_local_data_files(write_result.data_files),
-      delete_local_data_files(write_result.dlq_files));
+      delete_local_data_files(_log, write_result.data_files),
+      delete_local_data_files(_log, write_result.dlq_files));
 
     if (data_result.has_error()) {
         vlog(
-          datalake_log.warn,
+          _log.warn,
           "error deleting local data files - {}",
           data_result.error());
         co_return data_result.error();
     }
     if (dlq_result.has_error()) {
         vlog(
-          datalake_log.warn,
+          _log.warn,
           "error deleting local dlq files - {}",
           data_result.error());
         co_return dlq_result.error();
@@ -405,6 +410,8 @@ std::ostream& operator<<(std::ostream& o, translation_task::errc ec) {
         return o << "shutting down";
     case translation_task::errc::out_of_disk:
         return o << "disk exhausted";
+    case translation_task::errc::type_resolution_error:
+        return o << "type resolution error";
     }
 }
 } // namespace datalake

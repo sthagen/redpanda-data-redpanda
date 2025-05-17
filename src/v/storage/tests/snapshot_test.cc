@@ -10,20 +10,23 @@
 #include "base/seastarx.h"
 #include "random/generators.h"
 #include "storage/snapshot.h"
+#include "test_utils/gtest_exception.h"
 #include "test_utils/random_bytes.h"
 
-#include <seastar/testing/thread_test_case.hh>
+#include <gtest/gtest.h>
 
-SEASTAR_THREAD_TEST_CASE(missing_snapshot_is_not_error) {
+using namespace redpanda::test_utils;
+
+TEST(SnapshotTest, MissingSnapshotIsNotError) {
     storage::simple_snapshot_manager mgr(
       "d/n/e",
       storage::simple_snapshot_manager::default_snapshot_filename,
       ss::default_priority_class());
     auto reader = mgr.open_snapshot().get();
-    BOOST_REQUIRE(!reader);
+    ASSERT_FALSE(reader);
 }
 
-SEASTAR_THREAD_TEST_CASE(reading_from_empty_snapshot_is_error) {
+TEST(SnapshotTest, ReadingFromEmptySnapshotIsError) {
     storage::simple_snapshot_manager mgr(
       ".",
       storage::simple_snapshot_manager::default_snapshot_filename,
@@ -41,11 +44,11 @@ SEASTAR_THREAD_TEST_CASE(reading_from_empty_snapshot_is_error) {
     fd.close().get();
 
     auto reader = mgr.open_snapshot().get();
-    BOOST_REQUIRE(reader);
-    BOOST_CHECK_EXCEPTION(
+    ASSERT_TRUE(reader);
+    ASSERT_THROWS_WITH_PREDICATE(
       reader->read_metadata().get(),
       std::runtime_error,
-      [](std::runtime_error e) {
+      [](const std::runtime_error& e) {
           return std::string(e.what()).find(
                    "Snapshot file does not contain full header")
                  != std::string::npos;
@@ -53,7 +56,7 @@ SEASTAR_THREAD_TEST_CASE(reading_from_empty_snapshot_is_error) {
     reader->close().get();
 }
 
-SEASTAR_THREAD_TEST_CASE(reader_verifies_header_crc) {
+TEST(SnapshotTest, ReaderVerifiesHeaderCrc) {
     storage::simple_snapshot_manager mgr(
       ".",
       storage::simple_snapshot_manager::default_snapshot_filename,
@@ -72,25 +75,25 @@ SEASTAR_THREAD_TEST_CASE(reader_verifies_header_crc) {
         // write some junk into the metadata. we're not using seastar i/o here
         // because for a test its too much to deal with i/o alignment, etc..
         int fd = ::open(mgr.snapshot_path().c_str(), O_WRONLY);
-        BOOST_REQUIRE(fd > 0);
-        BOOST_REQUIRE(::write(fd, &fd, sizeof(fd)) > 0);
-        BOOST_REQUIRE(::fsync(fd) == 0);
-        BOOST_REQUIRE(::close(fd) == 0);
+        ASSERT_GT(fd, 0);
+        ASSERT_GT(::write(fd, &fd, sizeof(fd)), 0);
+        ASSERT_EQ(::fsync(fd), 0);
+        ASSERT_EQ(::close(fd), 0);
     }
 
     auto reader = mgr.open_snapshot().get();
-    BOOST_REQUIRE(reader);
-    BOOST_CHECK_EXCEPTION(
+    ASSERT_TRUE(reader);
+    ASSERT_THROWS_WITH_PREDICATE(
       reader->read_metadata().get(),
       std::runtime_error,
-      [](std::runtime_error e) {
+      [](const std::runtime_error& e) {
           return std::string(e.what()).find("Failed to verify header crc")
                  != std::string::npos;
       });
     reader->close().get();
 }
 
-SEASTAR_THREAD_TEST_CASE(reader_verifies_metadata_crc) {
+TEST(SnapshotTest, ReaderVerifiesMetadataCrc) {
     storage::simple_snapshot_manager mgr(
       ".",
       storage::simple_snapshot_manager::default_snapshot_filename,
@@ -110,26 +113,26 @@ SEASTAR_THREAD_TEST_CASE(reader_verifies_metadata_crc) {
         // write some junk into the header. we're not using seastar i/o here
         // because for a test its too much to deal with i/o alignment, etc..
         int fd = ::open(mgr.snapshot_path().c_str(), O_WRONLY);
-        BOOST_REQUIRE(fd > 0);
+        ASSERT_GT(fd, 0);
         ::lseek(fd, storage::snapshot_header::ondisk_size, SEEK_SET);
-        BOOST_REQUIRE(::write(fd, &fd, sizeof(fd)) > 0);
-        BOOST_REQUIRE(::fsync(fd) == 0);
-        BOOST_REQUIRE(::close(fd) == 0);
+        ASSERT_GT(::write(fd, &fd, sizeof(fd)), 0);
+        ASSERT_EQ(::fsync(fd), 0);
+        ASSERT_EQ(::close(fd), 0);
     }
 
     auto reader = mgr.open_snapshot().get();
-    BOOST_REQUIRE(reader);
-    BOOST_CHECK_EXCEPTION(
+    ASSERT_TRUE(reader);
+    ASSERT_THROWS_WITH_PREDICATE(
       reader->read_metadata().get(),
       std::runtime_error,
-      [](std::runtime_error e) {
+      [](const std::runtime_error& e) {
           return std::string(e.what()).find("Failed to verify metadata crc")
                  != std::string::npos;
       });
     reader->close().get();
 }
 
-SEASTAR_THREAD_TEST_CASE(read_write) {
+TEST(SnapshotTest, ReadWrite) {
     storage::simple_snapshot_manager mgr(
       ".",
       storage::simple_snapshot_manager::default_snapshot_filename,
@@ -150,18 +153,17 @@ SEASTAR_THREAD_TEST_CASE(read_write) {
     mgr.finish_snapshot(writer).get();
 
     auto reader = mgr.open_snapshot().get();
-    BOOST_REQUIRE(reader);
+    ASSERT_TRUE(reader);
     auto read_metadata = reader->read_metadata().get();
-    BOOST_TEST(read_metadata == metadata_orig);
+    EXPECT_EQ(read_metadata, metadata_orig);
     auto blob_read = reader->input().read_exactly(blob.size()).get();
-    BOOST_TEST(
-      reader->get_snapshot_size().get() == mgr.get_snapshot_size().get());
+    EXPECT_EQ(reader->get_snapshot_size().get(), mgr.get_snapshot_size().get());
     reader->close().get();
-    BOOST_TEST(blob_read.size() == 1234);
-    BOOST_TEST(blob == ss::to_sstring(blob_read.clone()));
+    EXPECT_EQ(blob_read.size(), 1234);
+    EXPECT_EQ(blob, ss::to_sstring(blob_read.clone()));
 }
 
-SEASTAR_THREAD_TEST_CASE(remove_partial_snapshots) {
+TEST(SnapshotTest, RemovePartialSnapshots) {
     storage::simple_snapshot_manager mgr(
       ".",
       storage::simple_snapshot_manager::default_snapshot_filename,
@@ -176,11 +178,11 @@ SEASTAR_THREAD_TEST_CASE(remove_partial_snapshots) {
     auto p1 = mk_partial();
     auto p2 = mk_partial();
 
-    BOOST_REQUIRE(ss::file_exists(p1.string()).get());
-    BOOST_REQUIRE(ss::file_exists(p2.string()).get());
+    ASSERT_TRUE(ss::file_exists(p1.string()).get());
+    ASSERT_TRUE(ss::file_exists(p2.string()).get());
 
     mgr.remove_partial_snapshots().get();
 
-    BOOST_REQUIRE(!ss::file_exists(p1.string()).get());
-    BOOST_REQUIRE(!ss::file_exists(p2.string()).get());
+    ASSERT_FALSE(ss::file_exists(p1.string()).get());
+    ASSERT_FALSE(ss::file_exists(p2.string()).get());
 }

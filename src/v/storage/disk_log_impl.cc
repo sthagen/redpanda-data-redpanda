@@ -61,6 +61,7 @@
 #include <fmt/format.h>
 #include <roaring/roaring.hh>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <iterator>
@@ -2197,45 +2198,87 @@ ss::future<> disk_log_impl::apply_segment_ms() {
         co_return;
     }
 
+    // Find the max allowable age of a segment. There are two factors:
+    // 1. `segment.ms` configuration.
+    // 2. For a compacted topic, `max.compaction.lag.ms` configuration,
+    //    because this value is the maximum amount of time a segment
+    //    can be ineligible for compaction, and an active segment is
+    //    ineligible.
+    std::optional<std::chrono::milliseconds> max_age;
     auto seg_ms = config().segment_ms();
-    if (!seg_ms.has_value()) {
-        // skip, disabled or no default value
+    auto& local_config = config::shard_local_cfg();
+    static constexpr auto rate_limit = std::chrono::minutes(5);
+    thread_local static ss::logger::rate_limit rate(rate_limit);
+    if (seg_ms.has_value()) {
+        // Clamp user provided value with (hopefully sane) server min and max
+        // values, this should protect against overflow UB.
+        const auto clamped_seg_ms = std::clamp(
+          seg_ms.value(),
+          local_config.log_segment_ms_min(),
+          local_config.log_segment_ms_max());
+
+        if (seg_ms < clamped_seg_ms) {
+            stlog.log(
+              ss::log_level::warn,
+              rate,
+              "Configured segment.ms={} is lower than the configured cluster "
+              "bound {}={}",
+              seg_ms.value(),
+              local_config.log_segment_ms_min.name(),
+              local_config.log_segment_ms_min());
+        }
+
+        if (seg_ms > clamped_seg_ms) {
+            stlog.log(
+              ss::log_level::warn,
+              rate,
+              "Configured segment.ms={} is higher than the configured cluster "
+              "bound {}={}",
+              seg_ms.value(),
+              local_config.log_segment_ms_max.name(),
+              local_config.log_segment_ms_max());
+        }
+
+        max_age = clamped_seg_ms;
+    }
+
+    // Take max compaction lag into account if the topic is compacted.
+    // Skip if the configuration is the default, which is effectively
+    // no max compaction lag.
+    // Technically, we should roll if a message is too old based on
+    // its own timestamp; however, doing this simpler thing matches
+    // what Kafka does exactly.
+    auto max_lag = config().max_compaction_lag_ms();
+    if (
+      config().is_compacted()
+      && max_lag != local_config.max_compaction_lag_ms.default_value()) {
+        // Clamp for the same reasons.
+        const auto clamped_max_lag = std::clamp(
+          seg_ms.value(),
+          local_config.log_segment_ms_min(),
+          local_config.log_segment_ms_max());
+        max_age = max_age.has_value()
+                    ? std::min(max_age.value(), clamped_max_lag)
+                    : clamped_max_lag;
+
+        // If we're applying max_lag to roll segments, that's likely a
+        // misconfiguration, and it's definitely worth noting.
+        if (max_age == max_lag) {
+            stlog.log(
+              ss::log_level::warn,
+              rate,
+              "Segment roll controlled by max.compaction.lag.ms ({}): this is "
+              "likely a configuration problem",
+              max_lag);
+        }
+    }
+
+    if (!max_age.has_value()) {
+        // No time-based rolling.
         co_return;
     }
 
-    auto& local_config = config::shard_local_cfg();
-    // clamp user provided value with (hopefully sane) server min and max
-    // values, this should protect against overflow UB
-    const auto clamped_seg_ms = std::clamp(
-      seg_ms.value(),
-      local_config.log_segment_ms_min(),
-      local_config.log_segment_ms_max());
-
-    static constexpr auto rate_limit = std::chrono::minutes(5);
-    thread_local static ss::logger::rate_limit rate(rate_limit);
-    if (seg_ms < clamped_seg_ms) {
-        stlog.log(
-          ss::log_level::warn,
-          rate,
-          "Configured segment.ms={} is lower than the configured cluster "
-          "bound {}={}",
-          seg_ms.value(),
-          local_config.log_segment_ms_min.name(),
-          local_config.log_segment_ms_min());
-    }
-
-    if (seg_ms > clamped_seg_ms) {
-        stlog.log(
-          ss::log_level::warn,
-          rate,
-          "Configured segment.ms={} is higher than the configured cluster "
-          "bound {}={}",
-          seg_ms.value(),
-          local_config.log_segment_ms_max.name(),
-          local_config.log_segment_ms_max());
-    }
-
-    if (first_write_ts.value() + clamped_seg_ms > ss::lowres_clock::now()) {
+    if (first_write_ts.value() + max_age.value() > ss::lowres_clock::now()) {
         // skip, time hasn't expired
         co_return;
     }
@@ -2250,9 +2293,9 @@ ss::future<> disk_log_impl::apply_segment_ms() {
     co_await new_segment(new_so, offsets.get_term(), pc);
     vlog(
       stlog.trace,
-      "{} segment.ms applied, new segment start offset: {}",
+      "{} segment rolled, new segment start offset: {}",
       config().ntp(),
-      seg_ms.value());
+      new_so);
 }
 
 ss::future<model::record_batch_reader>
@@ -4447,6 +4490,21 @@ void disk_log_impl::reset_dirty_and_closed_bytes() {
     }
     _dirty_segment_bytes = dirty;
     _closed_segment_bytes = closed;
+}
+
+std::optional<model::timestamp>
+disk_log_impl::earliest_dirty_segment_ts() const {
+    auto dirty_segments_ts = _segs | std::views::filter([](const auto& seg) {
+                                 return !seg->has_appender()
+                                        && !seg->has_clean_compact_timestamp();
+                             })
+                             | std::views::transform([](const auto& seg) {
+                                   return seg->index().base_timestamp();
+                               });
+    if (std::ranges::empty(dirty_segments_ts)) {
+        return std::nullopt;
+    }
+    return *std::ranges::min_element(dirty_segments_ts);
 }
 
 } // namespace storage

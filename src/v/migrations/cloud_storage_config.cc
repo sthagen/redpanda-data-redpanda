@@ -38,7 +38,7 @@ ss::future<> cloud_storage_config::do_mutate() {
     vlog(featureslog.info, "Checking for topic configs to update...");
     size_t update_count = 0;
     for (const auto& i : topic_table.topics_map()) {
-        auto& topic_conf = i.second.metadata.get_configuration();
+        auto& topic_conf = i.second.get_configuration();
 
         auto& props = topic_conf.properties;
 

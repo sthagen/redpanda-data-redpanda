@@ -17,6 +17,7 @@
 #include "cluster/topic_table_probe.h"
 #include "container/chunked_hash_map.h"
 #include "container/contiguous_range_map.h"
+#include "logger.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "utils/stable_iterator_adaptor.h"
@@ -215,17 +216,23 @@ public:
     };
 
     struct topic_metadata_item {
+    protected:
         topic_metadata metadata;
+
+    public:
+        explicit topic_metadata_item(topic_metadata md)
+          : metadata{std::move(md)} {};
+
+        const topic_metadata& get_metadata() const { return metadata; }
+
         contiguous_range_map<model::partition_id::type, partition_meta>
           partitions;
 
-        assignments_set& get_assignments() {
-            return metadata.get_assignments();
+        template<typename Self>
+        decltype(auto) get_assignments(this Self&& self) {
+            return (std::forward<Self>(self).metadata.get_assignments());
         }
 
-        const assignments_set& get_assignments() const {
-            return metadata.get_assignments();
-        }
         model::revision_id get_revision() const {
             return metadata.get_revision();
         }
@@ -236,12 +243,42 @@ public:
         const topic_configuration& get_configuration() const {
             return metadata.get_configuration();
         }
-        topic_configuration& get_configuration() {
-            return metadata.get_configuration();
+
+        template<typename Self>
+        decltype(auto) get_configuration_properties(this Self&& self) {
+            return (
+              std::forward<Self>(self).metadata.get_configuration().properties);
+        }
+
+        template<typename Self>
+        decltype(auto) get_partition_count(this Self&& self) {
+            return (std::forward<Self>(self)
+                      .metadata.get_configuration()
+                      .partition_count);
         }
 
         replication_factor get_replication_factor() const {
             return metadata.get_replication_factor();
+        }
+    };
+
+    // Unsafe wrapper around topic_metadata_item that allows to mutate
+    // configuration that forms part of the key in the underlying map.
+    //
+    // NOTE: Do not add data members.
+    struct unsafe_topic_metadata_item : topic_metadata_item {
+        explicit unsafe_topic_metadata_item(topic_metadata md)
+          : topic_metadata_item(std::move(md)) {}
+
+        unsafe_topic_metadata_item& operator=(topic_metadata_item&& item) {
+            topic_metadata_item::operator=(std::move(item));
+            return *this;
+        }
+
+        topic_metadata& get_metadata() { return metadata; }
+
+        topic_configuration& get_configuration() {
+            return metadata.get_configuration();
         }
     };
 
@@ -250,6 +287,123 @@ public:
       topic_metadata_item,
       model::topic_namespace_hash,
       model::topic_namespace_eq>;
+
+    using topic_id_mapping_t
+      = chunked_hash_map<model::topic_id, model::topic_namespace>;
+
+    // Wrapper around underlying_t that maintains a consistent mapping from
+    // topic id to topic name
+    class underlying_map {
+    public:
+        const auto& by_tp() const { return _by_tp; }
+
+        const auto& by_id() const { return _by_id; }
+
+        template<typename Self>
+        auto begin(this Self&& self) {
+            return std::forward<Self>(self)._by_tp.begin();
+        }
+        template<typename Self>
+        auto end(this Self&& self) {
+            return std::forward<Self>(self)._by_tp.end();
+        }
+        auto size() const { return _by_tp.size(); }
+        auto empty() const { return _by_tp.empty(); }
+
+        template<typename Self>
+        auto find(this Self&& self, model::topic_namespace_view key) {
+            return std::forward<Self>(self)._by_tp.find(key);
+        }
+
+        auto contains(model::topic_namespace_view key) const {
+            return _by_tp.contains(key);
+        }
+
+        auto emplace(topic_metadata_item val) {
+            auto key = val.get_configuration().tp_ns;
+            auto r = _by_tp.emplace(std::move(key), std::move(val));
+            if (r.second) {
+                auto& tp_id = r.first->second.get_configuration().tp_id;
+                if (tp_id) {
+                    auto [_, inserted] = _by_id.insert_or_assign(
+                      *tp_id, r.first->first);
+                    vassert(
+                      inserted,
+                      "must not reassign the same id to multiple topics");
+                } else {
+                    // Should be unreachable once the topic_ids feature is
+                    // active and all topics have a topic id assigned
+                    vlog(
+                      clusterlog.debug,
+                      "Missing topic id while inserting topic: {}",
+                      r.first->first);
+                }
+            }
+            return r;
+        }
+
+        auto erase(underlying_t::const_iterator it) {
+            if (it != _by_tp.end()) {
+                auto& tp_id = it->second.get_configuration().tp_id;
+                if (tp_id) {
+                    _by_id.erase(*tp_id);
+                } else {
+                    // Should be unreachable once the topic_ids feature is
+                    // active and all topics have a topic id assigned
+                    vlog(
+                      clusterlog.debug,
+                      "Missing topic id while erasing topic: {}",
+                      it->first);
+                }
+            }
+            return _by_tp.erase(it);
+        }
+
+        template<std::invocable<unsafe_topic_metadata_item&> Func>
+        bool mutate(const underlying_t::const_iterator it, Func&& func) {
+            auto old_tp = it->second.get_configuration().tp_ns;
+            auto old_id = it->second.get_configuration().tp_id;
+
+            // This is safe because the underlying _by_tp is mutable
+            // NOLINTBEGIN(*-const-cast, *static-cast-downcast)
+            auto& md_item_mut
+              = const_cast<underlying_t::value_type::second_type&>(it->second);
+            // This is safe because unsafe_topic_metadata_item has no new data
+            // members
+            func(static_cast<unsafe_topic_metadata_item&>(md_item_mut));
+            // NOLINTEND(*-const-cast, *static-cast-downcast)
+
+            auto& new_tp = it->second.get_configuration().tp_ns;
+            vassert(old_tp == new_tp, "func must not change the topic name");
+
+            auto& new_id = it->second.get_configuration().tp_id;
+            if (old_id != new_id) {
+                if (old_id) {
+                    _by_id.erase(*old_id);
+                }
+                if (new_id) {
+                    auto [_, inserted] = _by_id.insert_or_assign(
+                      *new_id, it->first);
+                    vassert(
+                      inserted,
+                      "must not reassign the same id to multiple topics");
+                }
+            }
+            return true;
+        }
+
+        std::optional<model::topic_namespace>
+        get_name(const model::topic_id& tp_id) const {
+            if (auto it = _by_id.find(tp_id); it != _by_id.end()) {
+                return it->second;
+            }
+            return std::nullopt;
+        }
+
+    private:
+        underlying_t _by_tp;
+        topic_id_mapping_t _by_id;
+    };
 
     using lifecycle_markers_t = absl::node_hash_map<
       nt_revision,
@@ -502,7 +656,7 @@ public:
     std::optional<partition_assignment>
     get_partition_assignment(const model::ntp&) const;
 
-    const underlying_t& topics_map() const { return _topics; }
+    const underlying_t& topics_map() const { return _topics.by_tp(); }
 
     bool is_update_in_progress(const model::ntp&) const;
 
@@ -661,6 +815,15 @@ public:
     static topic_properties update_topic_properties(
       topic_properties updated_properties, update_topic_properties_cmd cmd);
 
+    const topic_id_mapping_t& get_topic_id_mapping() const {
+        return _topics.by_id();
+    }
+
+    std::optional<model::topic_namespace>
+    get_name_by_id(model::topic_id tp_id) const {
+        return _topics.get_name(tp_id);
+    }
+
 private:
     friend topic_table_probe;
 
@@ -708,7 +871,7 @@ private:
     bool
     topic_multi_property_validation(const topic_properties& properties) const;
 
-    underlying_t _topics;
+    underlying_map _topics;
     lifecycle_markers_t _lifecycle_markers;
     disabled_partitions_t _disabled_partitions;
     iceberg_tombstones_t _iceberg_tombstones;

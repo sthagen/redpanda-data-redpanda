@@ -12,38 +12,37 @@
 #include "kafka/client/client.h"
 #include "kafka/client/test/utils.h"
 #include "test_utils/scoped_config.h"
-#include "test_utils/test.h"
 
 namespace kc = kafka::client;
 
-class PartitionTranslatorTestFixture
-  : public seastar_test
-  , public datalake::tests::datalake_cluster_test_fixture {
+class partition_translator_test_fixture
+  : public datalake::tests::datalake_cluster_test_fixture {
     static constexpr size_t num_brokers = 3;
+    using base = datalake::tests::datalake_cluster_test_fixture;
 
-    ss::future<> SetUpAsync() override {
-        for (int i = 0; i < num_brokers; i++) {
+public:
+    partition_translator_test_fixture() {
+        for (size_t i = 0; i < num_brokers; i++) {
             add_node();
         }
-        co_await wait_for_all_members(5s);
+        wait_for_all_members(5s).get();
         reduced_lag.get("iceberg_target_lag_ms").set_value(10000ms);
 
-        co_await create_iceberg_topic(test_topic.tp);
+        create_iceberg_topic(test_topic.tp).get();
         // create a kafka client for the cluster.
         auto* rp = instance(model::node_id{0});
         _client = std::make_unique<kc::client>(rp->proxy_client_config());
         _client->config().retry_base_backoff.set_value(1ms);
         _client->config().retries.set_value(size_t(20));
-        co_await _client->connect();
+        _client->connect().get();
     }
 
-    ss::future<> TearDownAsync() override {
+    ~partition_translator_test_fixture() {
         if (_client) {
-            co_await _client->stop();
+            _client->stop().get();
         }
     }
 
-public:
     ss::future<>
     produce_data_for(model::ntp& ntp, std::chrono::seconds duration) {
         auto stop_time = ss::lowres_clock::now() + duration;
@@ -82,7 +81,7 @@ public:
     std::unique_ptr<kc::client> _client;
 };
 
-TEST_F_CORO(PartitionTranslatorTestFixture, TestBasic) {
+FIXTURE_TEST(test_basic, partition_translator_test_fixture) {
     auto ntp = model::ntp(test_topic.ns, test_topic.tp, model::partition_id{0});
     std::chrono::seconds test_runtime = 30s;
     std::vector<ss::future<>> background;
@@ -101,6 +100,6 @@ TEST_F_CORO(PartitionTranslatorTestFixture, TestBasic) {
           });
         background.push_back(std::move(f));
     }
-    co_await ss::when_all_succeed(background.begin(), background.end());
-    co_await validate_translated_files(ntp);
+    ss::when_all_succeed(background.begin(), background.end()).get();
+    validate_translated_files(ntp).get();
 }

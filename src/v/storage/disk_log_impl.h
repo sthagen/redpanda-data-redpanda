@@ -286,6 +286,8 @@ public:
     // total number of bytes in all closed segments in the log.
     double dirty_ratio() final;
 
+    std::optional<model::timestamp> earliest_dirty_segment_ts() const final;
+
 private:
     friend class disk_log_appender; // for multi-term appends
     friend class disk_log_builder;  // for tests

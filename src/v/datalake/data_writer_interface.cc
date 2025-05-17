@@ -34,6 +34,8 @@ std::ostream& operator<<(std::ostream& os, const writer_error& ev) {
         return os << "Disk exhausted";
     case writer_error::unknown_error:
         return os << "Unknown error";
+    case writer_error::retryable_type_resolution_error:
+        return os << "Retryable type resolution error";
     }
 }
 std::string data_writer_error_category::message(int ev) const {
@@ -57,19 +59,20 @@ writer_error map_to_writer_error(reservation_error reservation_err) {
     }
 }
 
-bool is_recoverable_error(datalake::writer_error err) {
+bool is_recoverable_error(writer_error err) {
     switch (err) {
-    case datalake::writer_error::ok:
-    case datalake::writer_error::oom_error:
-    case datalake::writer_error::time_limit_exceeded:
-    case datalake::writer_error::out_of_disk:
+    case writer_error::ok:
+    case writer_error::oom_error:
+    case writer_error::time_limit_exceeded:
+    case writer_error::out_of_disk:
         return true;
-    case datalake::writer_error::parquet_conversion_error:
-    case datalake::writer_error::file_io_error:
-    case datalake::writer_error::no_data:
-    case datalake::writer_error::flush_error:
-    case datalake::writer_error::shutting_down:
-    case datalake::writer_error::unknown_error:
+    case writer_error::parquet_conversion_error:
+    case writer_error::retryable_type_resolution_error:
+    case writer_error::file_io_error:
+    case writer_error::no_data:
+    case writer_error::flush_error:
+    case writer_error::shutting_down:
+    case writer_error::unknown_error:
         return false;
     }
 }

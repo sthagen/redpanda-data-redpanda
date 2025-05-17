@@ -1391,7 +1391,7 @@ class SegmentRolledByTimeout(Expression):
     def make_validators(self):
         return [
             LogBasedValidator("SegmentRolledByTimeout_log",
-                              "segment.ms applied, new segment start offset",
+                              "segment rolled, new segment start offset",
                               confidence_threshold=4,
                               execution_stage=TestRunStage.Produce),
         ]

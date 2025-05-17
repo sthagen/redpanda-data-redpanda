@@ -6,6 +6,7 @@
 # As of the Change Date specified in that file, in accordance with
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
+import dataclasses
 import subprocess
 from abc import ABC, abstractmethod
 import concurrent.futures
@@ -76,12 +77,21 @@ from rptest.utils.expiring_value import ExpiringValue
 from rptest.utils.mode_checks import in_fips_environment
 from rptest.utils.rpenv import sample_license
 import enum
+from dataclasses import dataclass
 
 Partition = collections.namedtuple('Partition',
                                    ['topic', 'index', 'leader', 'replicas'])
 
 MetricSample = collections.namedtuple(
     'MetricSample', ['family', 'sample', 'node', 'value', 'labels'])
+
+
+@dataclass
+class UsageStats:
+    bytes_read: int = 0
+    bytes_written: int = 0
+    batches_read: int = 0
+    batches_written: int = 0
 
 
 class CloudStorageCleanupStrategy(enum.Enum):
@@ -1118,6 +1128,20 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
         # the MRO after all the __init__ methods that would set these properties
         self._check_attr('context', TestContext)
         self._check_attr('logger', Logger)
+        self._usage_stats = UsageStats()
+
+    @property
+    def usage_stats(self) -> UsageStats:
+        """
+        Returns usage statistics for Redpanda. The statistics contains
+        information about Redpanda service resource usage. f.e. total amount of
+        bytes read/written during the test.
+        """
+        return self._usage_stats
+
+    @property
+    def usage_stats_dict(self) -> dict:
+        return dataclasses.asdict(self._usage_stats)
 
     @abstractmethod
     def all_up(self):
@@ -4121,7 +4145,34 @@ class RedpandaService(RedpandaServiceBase):
         except Exception as e:
             self.logger.warn(f"Error setting trace loggers: {e}")
 
+    def _update_usage_stats(self, node):
+        def _metrics_sum(name: str) -> int:
+            try:
+                samples = self.metrics_sample(name, [node])
+
+                if samples is None:
+                    return 0
+
+                return sum(s.value for s in samples.samples)
+            except Exception as e:
+                self.logger.warning(f"Cannot check metrics - {e}")
+                return 0
+
+        self._usage_stats.bytes_read += _metrics_sum(
+            "vectorized_io_queue_total_read_bytes_total")
+
+        self._usage_stats.bytes_written += _metrics_sum(
+            "vectorized_io_queue_total_write_bytes_total")
+        self._usage_stats.batches_read += _metrics_sum(
+            "vectorized_storage_log_batches_read")
+
+        self._usage_stats.batches_written += _metrics_sum(
+            "vectorized_storage_log_batches_written")
+
     def stop_node(self, node, timeout=None, forced=False):
+        # collect usage stats before the node is stopped, the usage stats
+        # accumulate metrics from all the nodes before they are stopped.
+        self._update_usage_stats(node)
         # Assume node is stopped once we enter this path. If stopping succeeds
         # it is the obvious thing to do. If stopping fails we can't differentiate
         # between a node that stopped or will eventually stop so for all intents

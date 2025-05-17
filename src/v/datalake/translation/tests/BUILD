@@ -91,3 +91,24 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "translated_log_offset_test",
+    timeout = "short",
+    srcs = [
+        "translated_log_offset_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/datalake/translation:model",
+        "//src/v/datalake/translation:utils",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/storage",
+        "//src/v/storage/tests:disk_log_builder",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

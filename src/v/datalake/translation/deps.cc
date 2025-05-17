@@ -48,6 +48,8 @@ map_error_code(datalake::translation_task::errc errc) {
         return translation_errc::shutting_down;
     case datalake::translation_task::errc::out_of_disk:
         return translation_errc::out_of_disk;
+    case datalake::translation_task::errc::type_resolution_error:
+        return translation_errc::type_resolution_error;
     }
 }
 } // namespace
@@ -474,6 +476,8 @@ std::ostream& operator<<(std::ostream& o, translation_errc ec) {
         return o << "translation_errc::shutting_down";
     case out_of_disk:
         return o << "translation_errc::out_of_disk";
+    case type_resolution_error:
+        return o << "translation_errc::type_resolution_error";
     }
 }
 
@@ -530,43 +534,9 @@ public:
               _invalid_record_action,
               _location_provider,
               *_probe});
-            _discard_translated_state = false;
-        }
-        if (_discard_translated_state) {
-            return std::move(reader).release()->finally().then([] {
-                return ss::make_exception_future(
-                  std::runtime_error("state changed, reset translation"));
-            });
         }
         return _in_progress_translation->translate_once(
           std::move(reader), start_offset, as);
-    }
-
-    void reconcile_properties() final {
-        auto old_invalid_action = _invalid_record_action;
-        auto old_cp_enabled = _cp_enabled;
-
-        // target lag changes will be picked dynamically and does not
-        // need a state reset.
-        _invalid_record_action = compute_invalid_record_action();
-        _cp_enabled = translation_task::custom_partitioning_enabled{
-          _features.is_active(features::feature::datalake_iceberg_ga)};
-
-        auto properties_updated = old_invalid_action != _invalid_record_action
-                                  || old_cp_enabled != _cp_enabled;
-        if (properties_updated) {
-            vlog(
-              datalake_log.info,
-              "[{}] properties updated, new properties: invalid record action: "
-              "{}, custom_partition_enabled: {}",
-              _ntp,
-              _invalid_record_action,
-              _cp_enabled);
-        }
-        if (_in_progress_translation && properties_updated) {
-            // discard any state so far
-            _discard_translated_state = properties_updated;
-        }
     }
 
     size_t flushed_bytes() const final {
@@ -634,10 +604,6 @@ public:
             co_return translation_errc::no_data;
         }
         vlog(datalake_log.debug, "[{}] finishing translation", _ntp);
-        if (_discard_translated_state) {
-            co_await discard().discard_result();
-            co_return translation_errc::discard_error;
-        }
         auto task = std::exchange(_in_progress_translation, std::nullopt);
         auto result = co_await std::move(task.value())
                         .finish(_cp_enabled, _upload_path_prefix, rcn, as);
@@ -711,7 +677,6 @@ private:
     translation_task::custom_partitioning_enabled _cp_enabled;
     translator_mem_tracker _mem_tracker;
     std::optional<translation_task> _in_progress_translation;
-    bool _discard_translated_state{false};
 };
 
 std::unique_ptr<translation_context>

@@ -241,6 +241,10 @@ public:
     // segments in the log.
     virtual double dirty_ratio() = 0;
 
+    // Return the earliest batch timestamp among all dirty segments.
+    virtual std::optional<model::timestamp>
+    earliest_dirty_segment_ts() const = 0;
+
 private:
     ntp_config _config;
 

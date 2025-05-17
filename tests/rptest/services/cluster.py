@@ -104,6 +104,7 @@ def cluster(log_allow_list: LogAllowList | None = None,
                         entry.initialize(self)
             try:
                 r = f(self, *args, **kwargs)
+                test_results = {"result": r}
             except:
                 if self.redpanda is None:
                     # We failed so early there isn't even a RedpandaService instantiated
@@ -135,7 +136,7 @@ def cluster(log_allow_list: LogAllowList | None = None,
                     # If None we passed without instantiating a RedpandaService, for example
                     # in a skipped test.
                     # Also skip if we are running against the cloud
-                    return r
+                    return test_results
 
                 if isinstance(self.redpanda, RedpandaServiceCloud):
                     # Call copy logs function for RedpandaServiceCloud
@@ -199,7 +200,7 @@ def cluster(log_allow_list: LogAllowList | None = None,
                     # Do a check if this is the cloud
                     # since the rest not applies to RedpandaServiceCloud class
                     if isinstance(redpanda, RedpandaServiceCloud):
-                        return r
+                        return test_results
 
                     if check_for_storage_usage_inconsistencies:
                         try:
@@ -221,13 +222,18 @@ def cluster(log_allow_list: LogAllowList | None = None,
                     # stop here explicitly to fail if stop times out, otherwise ducktape won't catch it
                     self.redpanda.stop()
 
+                test_results["usage_stats"] = {
+                    r.who_am_i(): r.usage_stats_dict
+                    for r in all_redpandas(self)
+                }
+
                 # Finally, if the test passed and all post-test checks
                 # also passed, we may trim the logs to INFO level to
                 # save space.
                 for redpanda in all_redpandas(self):
                     redpanda.trim_logs()
 
-                return r
+                return test_results
 
         # Propagate ducktape markers (e.g. parameterize) to our function
         # wrapper

@@ -303,8 +303,9 @@ ss::future<> datalake_manager::start() {
           topic_properties_registration);
     });
     _iceberg_invalid_record_action.watch([this] {
-        for (auto& [_, entry] : _scheduler.all_translators()) {
-            entry.translator_ptr()->reconcile_properties();
+        for (auto& [ntp, _] : _scheduler.all_translators()) {
+            _queue.submit(
+              [this, ntp]() { return handle_translator_state_change(ntp); });
         }
     });
 
@@ -644,20 +645,30 @@ datalake_manager::handle_translator_state_change(const model::ntp& ntp) {
                                  == model::iceberg_mode::disabled;
     auto requires_active_translator = partition && topic_cfg
                                       && !iceberg_disabled && is_leader;
-
     if (translator_exists) {
-        if (requires_active_translator) {
-            // TODO: add more tests that exercise this code path (to ensure new
-            // property updates are getting picked up correctly)
-            translator_it->second.translator_ptr()->reconcile_properties();
-        } else {
-            co_await _scheduler.remove_translator(ntp);
+        // stop the existing translator first and restart if needed
+        // The newer incarnation will pickup any changes to the iceberg
+        // mode or properties.
+        // This is ok because the changes to properties are very rare.
+        auto remove_f = co_await ss::coroutine::as_future(
+          _scheduler.remove_translator(ntp));
+        if (remove_f.failed()) {
+            vlog(
+              datalake_log.warn,
+              "removing existing translator for {} failed {}, retrying in 10s.",
+              ntp,
+              remove_f.get_exception());
+            if (!_gate.is_closed()) {
+                _queue.submit_delayed(10s, [this, ntp]() {
+                    return handle_translator_state_change(ntp);
+                });
+            }
+            co_return;
         }
-        co_return;
     }
 
     if (!requires_active_translator) {
-        // no active translator, so nothing to do
+        // no active translator needed, so nothing to do
         co_return;
     }
 

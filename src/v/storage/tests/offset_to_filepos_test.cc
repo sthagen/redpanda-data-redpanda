@@ -10,12 +10,15 @@
 
 #include "storage/offset_to_filepos.h"
 #include "test_utils/archival.h"
+#include "test_utils/gtest_exception.h"
 #include "test_utils/tmp_dir.h"
 
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
-SEASTAR_THREAD_TEST_CASE(test_search_begin_offset_not_found) {
+#include <gtest/gtest.h>
+
+TEST(OffsetToFileposTest, SearchBeginOffsetNotFound) {
     temporary_dir tmp_dir("offset_to_fpos_translate");
     auto data_path = tmp_dir.get_path();
     using namespace storage;
@@ -46,10 +49,10 @@ SEASTAR_THREAD_TEST_CASE(test_search_begin_offset_not_found) {
                     segment->index().base_timestamp(),
                     ss::default_priority_class())
                     .get();
-    BOOST_REQUIRE(result.error() == std::errc::invalid_seek);
+    ASSERT_EQ(result.error(), std::errc::invalid_seek);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_search_end_offset_not_found) {
+TEST(OffsetToFileposTest, SearchEndOffsetNotFound) {
     temporary_dir tmp_dir("offset_to_fpos_translate");
     auto data_path = tmp_dir.get_path();
     using namespace storage;
@@ -80,10 +83,10 @@ SEASTAR_THREAD_TEST_CASE(test_search_end_offset_not_found) {
                     segment->index().max_timestamp(),
                     ss::default_priority_class())
                     .get();
-    BOOST_REQUIRE(result.error() == std::errc::invalid_seek);
+    ASSERT_EQ(result.error(), std::errc::invalid_seek);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_search_begin_offset_found) {
+TEST(OffsetToFileposTest, SearchBeginOffsetFound) {
     temporary_dir tmp_dir("offset_to_fpos_translate");
     auto data_path = tmp_dir.get_path();
     using namespace storage;
@@ -121,10 +124,10 @@ SEASTAR_THREAD_TEST_CASE(test_search_begin_offset_found) {
       model::offset{3},
       positions[2],
       model::timestamp{segment->index().base_timestamp().value() + 3}};
-    BOOST_REQUIRE(result.value() == expected);
+    ASSERT_EQ(result.value(), expected);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_search_end_offset_found) {
+TEST(OffsetToFileposTest, SearchEndOffsetFound) {
     temporary_dir tmp_dir("offset_to_fpos_translate");
     auto data_path = tmp_dir.get_path();
     using namespace storage;
@@ -162,10 +165,10 @@ SEASTAR_THREAD_TEST_CASE(test_search_end_offset_found) {
       model::offset{3},
       positions[3], // the end byte offset of the batch containing the needle
       model::timestamp{segment->index().base_timestamp().value() + 3}};
-    BOOST_REQUIRE(result.value() == expected);
+    ASSERT_EQ(result.value(), expected);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_search_end_offset_allowed_to_be_missing) {
+TEST(OffsetToFileposTest, SearchEndOffsetAllowedToBeMissing) {
     temporary_dir tmp_dir("offset_to_fpos_translate");
     auto data_path = tmp_dir.get_path();
     using namespace storage;
@@ -201,5 +204,5 @@ SEASTAR_THREAD_TEST_CASE(test_search_end_offset_allowed_to_be_missing) {
       model::offset{1},
       segment->size_bytes(),
       model::timestamp{segment->index().max_timestamp().value()}};
-    BOOST_REQUIRE(result.value() == expected);
+    ASSERT_EQ(result.value(), expected);
 }

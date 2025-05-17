@@ -49,6 +49,7 @@ public:
         time_limit_exceeded,
         shutting_down,
         out_of_disk,
+        type_resolution_error,
     };
 
     using custom_partitioning_enabled
@@ -107,6 +108,7 @@ private:
       chunked_vector<remote_path>, retry_chain_node& parent_rcn);
 
     static constexpr std::chrono::milliseconds _read_timeout{30000};
+    prefix_logger _log;
     cloud_data_io* _cloud_io;
     schema_manager* _schema_mgr;
     type_resolver* _type_resolver;

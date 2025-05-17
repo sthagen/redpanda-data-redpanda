@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "archival/tests/archival_service_fixture.h"
+#include "cluster/archival/tests/archival_service_fixture.h"
 #include "datalake/coordinator/frontend.h"
 #include "datalake/coordinator/state_machine.h"
 

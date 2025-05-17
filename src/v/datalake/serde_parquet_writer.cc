@@ -15,6 +15,10 @@ ss::future<writer_error> serde_parquet_writer::add_data_struct(
     auto conversion_result = co_await to_parquet_value(
       std::make_unique<iceberg::struct_value>(std::move(value)));
     if (conversion_result.has_error()) {
+        vlog(
+          datalake_log.warn,
+          "Error converting iceberg struct to parquet value - {}",
+          conversion_result.error());
         co_return writer_error::parquet_conversion_error;
     }
 

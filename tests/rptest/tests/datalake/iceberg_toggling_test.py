@@ -16,12 +16,29 @@ from ducktape.utils.util import wait_until
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import SISettings
+from rptest.services.redpanda import SchemaRegistryConfig, SISettings
+from confluent_kafka import SerializingProducer
+from confluent_kafka.schema_registry import SchemaRegistryClient
+from confluent_kafka.schema_registry.avro import AvroSerializer
+from confluent_kafka.serialization import StringSerializer
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.tests.redpanda_test import RedpandaTest
+import ducktape.errors
+from threading import Thread
+
+AVRO_SCHEMA_STR = """
+{
+    "type": "record",
+    "namespace": "com.redpanda.examples.avro",
+    "name": "Counter",
+    "fields": [
+        {"name": "count", "type": "long"}
+    ]
+}
+"""
 
 
 class IcebergTogglingTest(RedpandaTest):
@@ -37,6 +54,7 @@ class IcebergTogglingTest(RedpandaTest):
                 # Help datalake verifier queries scan less data.
                 "iceberg_default_partition_spec": "redpanda.partition",
             },
+            schema_registry_config=SchemaRegistryConfig(),
             *args,
             **kwargs)
         self.rpk = RpkTool(self.redpanda)
@@ -45,6 +63,39 @@ class IcebergTogglingTest(RedpandaTest):
 
     def setUp(self):
         pass
+
+    def produce_avro_records(self,
+                             schema=AVRO_SCHEMA_STR,
+                             record_count=100,
+                             seed=0):
+        value_serializer = AvroSerializer(
+            SchemaRegistryClient(
+                {"url": self.redpanda.schema_reg().split(",")[0]}), schema)
+        producer = SerializingProducer({
+            'bootstrap.servers':
+            self.redpanda.brokers(),
+            'key.serializer':
+            StringSerializer('utf_8'),
+            'value.serializer':
+            value_serializer,
+        })
+
+        for i in range(record_count):
+            record = {
+                "count": seed + i,
+            }
+            producer.produce(
+                topic=self.topic_name,
+                key=str(seed + i),
+                value=record,
+            )
+        producer.flush()
+
+    def set_iceberg_mode(self, mode: str):
+        self.rpk.alter_topic_config(self.topic_name,
+                                    TopicSpec.PROPERTY_ICEBERG_MODE, mode)
+        self.logger.info(
+            f"Set iceberg mode to {mode} for topic {self.topic_name}")
 
     @cluster(num_nodes=4)
     @matrix(cloud_storage_type=supported_storage_types())
@@ -176,3 +227,86 @@ class IcebergTogglingTest(RedpandaTest):
             # Verify the data.
             DatalakeVerifier.oneshot(self.redpanda, self.topic_name,
                                      dl.spark())
+
+    @cluster(num_nodes=3)
+    @matrix(cloud_storage_type=supported_storage_types())
+    def test_iceberg_mode_toggling(self, cloud_storage_type):
+        """
+        Test toggling iceberg mode between disabled, value_schema_latest and value_schema_id_prefix
+        on the same partition leader.
+        """
+        NUM_PARTITIONS = 1
+        RECORD_COUNT = 100
+        produced_records = 0
+
+        with DatalakeServices(self.test_context,
+                              self.redpanda,
+                              include_query_engines=[QueryEngineType.SPARK
+                                                     ]) as dl:
+            # Create the topic with iceberg disabled
+            dl.create_iceberg_enabled_topic(self.topic_name,
+                                            partitions=NUM_PARTITIONS,
+                                            iceberg_mode="disabled")
+
+            # Misconfigure iceberg mode to value_schema_latest
+            self.set_iceberg_mode("value_schema_latest:subject=foo")
+            self.produce_avro_records(record_count=RECORD_COUNT)
+            produced_records += RECORD_COUNT
+
+            try:
+                dl.wait_for_translation(self.topic_name,
+                                        msg_count=produced_records,
+                                        timeout=30)
+                assert False, "Expected translation to fail but it did not"
+            except ducktape.errors.TimeoutError:
+                pass
+
+            self.set_iceberg_mode("value_schema_id_prefix")
+
+            dl.wait_for_translation(self.topic_name,
+                                    msg_count=produced_records,
+                                    timeout=30)
+
+    @cluster(num_nodes=3)
+    @matrix(cloud_storage_type=supported_storage_types())
+    def test_concurrent_mode_toggling(self, cloud_storage_type):
+        """
+        Test toggling iceberg mode while producing data and translation is in progress.
+        """
+        NUM_PARTITIONS = 1
+        RECORDS_PER_PRODUCE = 100
+        TOGGLES = 200
+
+        with DatalakeServices(self.test_context,
+                              self.redpanda,
+                              include_query_engines=[QueryEngineType.SPARK
+                                                     ]) as dl:
+            # Create the topic with iceberg disabled
+            dl.create_iceberg_enabled_topic(self.topic_name,
+                                            partitions=NUM_PARTITIONS,
+                                            iceberg_mode="disabled")
+            stopped = False
+            total_produced = 0
+
+            def produce_until_stopped():
+                nonlocal total_produced
+                while not stopped:
+                    self.produce_avro_records(record_count=RECORDS_PER_PRODUCE)
+                    total_produced += RECORDS_PER_PRODUCE
+                    time.sleep(0.1)
+
+            produce_t = Thread(target=produce_until_stopped, daemon=True)
+            produce_t.start()
+
+            for i in range(TOGGLES):
+                self.set_iceberg_mode("value_schema_latest:subject=foo")
+                time.sleep(0.1)
+                self.set_iceberg_mode("value_schema_id_prefix")
+
+            stopped = True
+            produce_t.join()
+
+            self.set_iceberg_mode("value_schema_id_prefix")
+            dl.wait_for_translation(self.topic_name,
+                                    msg_count=total_produced,
+                                    timeout=30)

@@ -87,8 +87,8 @@ public:
         return model::make_memory_record_batch_reader(std::move(batches));
     }
 
-    std::unique_ptr<datalake::parquet_file_writer_factory> get_writer_factory(
-      size_t row_threshold = 200, size_t bytes_threshold = 4096) {
+    std::unique_ptr<datalake::parquet_file_writer_factory>
+    get_writer_factory() {
         return std::make_unique<datalake::local_parquet_file_writer_factory>(
           datalake::local_path(tmp_dir.get_path()),
           "test-prefix",

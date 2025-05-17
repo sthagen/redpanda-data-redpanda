@@ -7,7 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cluster/controller_snapshot.h"
 #include "cluster/tests/topic_table_fixture.h"
+#include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -52,6 +54,16 @@ static void validate_ntp_deltas(
     BOOST_REQUIRE_EQUAL(deletions, removed_partitions);
 }
 
+static void validate_topic_id_mapping(const cluster::topic_table& table) {
+    BOOST_REQUIRE_EQUAL(
+      table.get_topic_id_mapping().size(), table.topics_map().size());
+    for (const auto& [tp, md] : table.topics_map()) {
+        auto& tp_id = md.get_configuration().tp_id;
+        BOOST_REQUIRE(tp_id.has_value());
+        BOOST_REQUIRE_EQUAL(table.get_name_by_id(*tp_id), tp);
+    }
+}
+
 FIXTURE_TEST(test_happy_path_create, topic_table_fixture) {
     std::vector<cluster::topic_table_topic_delta> topic_deltas;
     table.local().register_topic_delta_notification([&](const auto& d) {
@@ -80,6 +92,7 @@ FIXTURE_TEST(test_happy_path_create, topic_table_fixture) {
 
     validate_topic_deltas(topic_deltas, 3, 0);
     validate_ntp_deltas(deltas, 21, 0);
+    validate_topic_id_mapping(table.local());
 }
 
 FIXTURE_TEST(test_happy_path_delete, topic_table_fixture) {
@@ -116,6 +129,7 @@ FIXTURE_TEST(test_happy_path_delete, topic_table_fixture) {
 
     validate_topic_deltas(topic_deltas, 0, 2);
     validate_ntp_deltas(deltas, 0, 20);
+    validate_topic_id_mapping(table.local());
 }
 
 FIXTURE_TEST(test_conflicts, topic_table_fixture) {
@@ -230,8 +244,8 @@ void validate_brokers_revisions(
     auto tp_it = all_metadata.find(model::topic_namespace_view(ntp));
     BOOST_REQUIRE(tp_it != all_metadata.end());
 
-    auto p_it = tp_it->second.metadata.get_assignments().find(ntp.tp.partition);
-    BOOST_REQUIRE(p_it != tp_it->second.metadata.get_assignments().end());
+    auto p_it = tp_it->second.get_assignments().find(ntp.tp.partition);
+    BOOST_REQUIRE(p_it != tp_it->second.get_assignments().end());
 
     auto p_meta_it = tp_it->second.partitions.find(ntp.tp.partition);
     BOOST_REQUIRE(p_meta_it != tp_it->second.partitions.end());
@@ -597,6 +611,69 @@ FIXTURE_TEST(test_topic_with_schema_id_validation_ops, topic_table_fixture) {
     BOOST_REQUIRE(!cfg->properties.record_key_schema_id_validation.has_value());
     BOOST_REQUIRE(
       !cfg->properties.record_key_schema_id_validation_compat.has_value());
+}
+
+FIXTURE_TEST(test_topic_id_assignment, topic_table_fixture) {
+    auto& topics = table.local();
+
+    info("Create an old topic without a topic id");
+    auto create1 = make_create_topic_cmd("pre_25_2_topic", 1, 1);
+    auto tp_ns1 = create1.value.cfg.tp_ns;
+    create1.value.cfg.tp_id = std::nullopt;
+    auto offset = model::offset{10};
+    auto ec = topics.apply(create1, offset++).get();
+    BOOST_REQUIRE_EQUAL(ec, cluster::errc::success);
+    BOOST_REQUIRE_EQUAL(topics.get_topic_id_mapping().size(), 0);
+
+    info("Create a new topic with a topic id");
+    auto create2 = make_create_topic_cmd("post_25_2_topic", 1, 1);
+    auto tp_ns2 = create2.value.cfg.tp_ns;
+    auto tp_id2 = create2.value.cfg.tp_id;
+    ec = topics.apply(create2, offset++).get();
+    BOOST_REQUIRE_EQUAL(ec, cluster::errc::success);
+    BOOST_REQUIRE_EQUAL(topics.get_topic_id_mapping().size(), 1);
+    BOOST_REQUIRE_EQUAL(topics.get_name_by_id(*tp_id2), tp_ns2);
+
+    info("Assign a topic id to the old topic");
+    auto tp_1_new_id = model::create_topic_id();
+    cluster::incremental_topic_updates update;
+    update.topic_id.op = cluster::incremental_update_operation::set;
+    update.topic_id.value = tp_1_new_id;
+    ec = topics
+           .apply(
+             cluster::update_topic_properties_cmd{tp_ns1, update}, offset++)
+           .get();
+    BOOST_REQUIRE_EQUAL(ec, cluster::errc::success);
+    auto check_final_state = [&] {
+        BOOST_REQUIRE_EQUAL(topics.get_topic_id_mapping().size(), 2);
+        BOOST_REQUIRE_EQUAL(topics.get_name_by_id(tp_1_new_id), tp_ns1);
+        BOOST_REQUIRE_EQUAL(topics.get_name_by_id(*tp_id2), tp_ns2);
+    };
+    check_final_state();
+
+    info("Try to create a new topic with a topic id that already exists");
+    auto create3 = make_create_topic_cmd("new_topic_with_id_reused", 1, 1);
+    create3.value.cfg.tp_id = tp_id2;
+    ec = topics.apply(create3, offset++).get();
+    BOOST_REQUIRE_EQUAL(ec, cluster::errc::topic_id_already_exists);
+    check_final_state();
+
+    info("Try to assign an already used topic id to a topic");
+    cluster::incremental_topic_updates update2;
+    update2.topic_id.op = cluster::incremental_update_operation::set;
+    update2.topic_id.value = tp_id2;
+    ec = topics
+           .apply(
+             cluster::update_topic_properties_cmd{tp_ns1, update2}, offset++)
+           .get();
+    BOOST_REQUIRE_EQUAL(ec, cluster::errc::topic_id_already_exists);
+    check_final_state();
+
+    info("Fill and apply a snapshot");
+    cluster::controller_snapshot snap;
+    topics.fill_snapshot(snap).get();
+    topics.apply_snapshot(offset++, snap).get();
+    check_final_state();
 }
 
 FIXTURE_TEST(test_topic_table_iterator_basic, topic_table_fixture) {

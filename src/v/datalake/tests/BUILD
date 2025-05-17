@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_btest", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_test_cc_library(
     name = "catalog_and_registry_fixture",
@@ -304,6 +304,103 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "@fmt",
         "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "translation_task_test",
+    timeout = "short",
+    srcs = [
+        "translation_task_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":test_data_writer",
+        ":test_utils",
+        "//src/v/cloud_io/tests:s3_imposter",
+        "//src/v/cloud_io/tests:scoped_remote",
+        "//src/v/datalake:catalog_schema_manager",
+        "//src/v/datalake:cloud_data_io",
+        "//src/v/datalake:local_parquet_file_writer",
+        "//src/v/datalake:location",
+        "//src/v/datalake:record_schema_resolver",
+        "//src/v/datalake:record_translator",
+        "//src/v/datalake:table_creator",
+        "//src/v/datalake:translation_task",
+        "//src/v/datalake/translation:translation_probe",
+        "//src/v/iceberg:uri",
+        "//src/v/model",
+        "//src/v/storage:record_batch_builder",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "gtest_record_multiplexer_test",
+    timeout = "short",
+    srcs = [
+        "gtest_record_multiplexer_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":catalog_and_registry_fixture",
+        ":record_generator",
+        ":test_data_writer",
+        ":test_utils",
+        "//src/v/cloud_io:provider",
+        "//src/v/datalake:base_types",
+        "//src/v/datalake:catalog_schema_manager",
+        "//src/v/datalake:cloud_data_io",
+        "//src/v/datalake:local_parquet_file_writer",
+        "//src/v/datalake:location",
+        "//src/v/datalake:record_multiplexer",
+        "//src/v/datalake:record_schema_resolver",
+        "//src/v/datalake:record_translator",
+        "//src/v/datalake:serde_parquet_writer",
+        "//src/v/datalake:table_creator",
+        "//src/v/datalake:translation_task",
+        "//src/v/datalake/translation:translation_probe",
+        "//src/v/iceberg:filesystem_catalog",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/storage:record_batch_builder",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_test_cc_library(
+    name = "translator_fixture",
+    hdrs = ["fixture.h"],
+    include_prefix = "datalake/tests",
+    visibility = [":__subpackages__"],
+    deps = [
+        "//src/v/cluster/archival/tests:archival_service_fixture",
+        "//src/v/datalake/coordinator:frontend",
+        "//src/v/datalake/coordinator:stm",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "translator_fixture_test",
+    timeout = "moderate",
+    srcs = [
+        "translator_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":translator_fixture",
+        "//src/v/kafka/client",
+        "//src/v/kafka/client/test:utils",
+        "//src/v/model/tests:random",
+        "//src/v/test_utils:random",
+        "//src/v/test_utils:scoped_config",
         "@seastar",
     ],
 )

@@ -120,10 +120,17 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
         auto val_type_res = co_await _type_resolver.resolve_buf_type(
           std::move(val));
         if (val_type_res.has_error()) {
-            switch (val_type_res.error()) {
+            auto err = val_type_res.error();
+            vlog(
+              _log.warn,
+              "Error resolving type for record at offset {}, batch: {}: {}",
+              offset,
+              batch.header(),
+              err);
+            switch (err) {
             case type_resolver::errc::registry_error:
             case type_resolver::errc::invalid_config:
-                _error = writer_error::parquet_conversion_error;
+                _error = writer_error::retryable_type_resolution_error;
                 co_return ss::stop_iteration::yes;
             case type_resolver::errc::bad_input:
             case type_resolver::errc::translation_error:
@@ -153,14 +160,16 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
           timestamp,
           header_kvs);
         if (record_data_res.has_error()) {
-            switch (record_data_res.error()) {
+            auto err = record_data_res.error();
+            vlog(
+              _log.warn,
+              "Error translating data for record at offset {}, batch: {}: {}",
+              offset,
+              batch.header(),
+              err);
+            switch (err) {
             case record_translator::errc::unexpected_schema:
             case record_translator::errc::translation_error:
-                vlog(
-                  _log.debug,
-                  "Error translating data for record {}: {}",
-                  offset,
-                  record_data_res.error());
                 auto invalid_res = co_await handle_invalid_record(
                   translation_probe::invalid_record_cause::
                     failed_data_translation,
@@ -205,11 +214,13 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                 case table_creator::errc::failed:
                     vlog(
                       _log.warn,
-                      "Error ensuring table schema for record {}",
-                      offset);
-                    [[fallthrough]];
+                      "Error ensuring table schema for record {}: {}",
+                      offset,
+                      e);
+                    _error = writer_error::unknown_error;
+                    break;
                 case table_creator::errc::shutting_down:
-                    _error = writer_error::parquet_conversion_error;
+                    _error = writer_error::shutting_down;
                 }
                 co_return ss::stop_iteration::yes;
             }
@@ -226,10 +237,11 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                       _log.warn,
                       "Error getting table info for record {}: {}",
                       offset,
-                      load_res.error());
-                    [[fallthrough]];
+                      e);
+                    _error = writer_error::unknown_error;
+                    break;
                 case schema_manager::errc::shutting_down:
-                    _error = writer_error::parquet_conversion_error;
+                    _error = writer_error::shutting_down;
                 }
                 co_return ss::stop_iteration::yes;
             }
@@ -242,7 +254,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                   _log.warn,
                   "expected to successfully fill field IDs for record {}",
                   offset);
-                _error = writer_error::parquet_conversion_error;
+                _error = writer_error::unknown_error;
                 co_return ss::stop_iteration::yes;
             }
 
@@ -255,7 +267,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
                   "at offset {}",
                   load_res.value().location,
                   offset);
-                _error = writer_error::parquet_conversion_error;
+                _error = writer_error::unknown_error;
                 co_return ss::stop_iteration::yes;
             }
 
@@ -416,17 +428,21 @@ record_multiplexer::handle_invalid_record(
 
             if (ensure_res.has_error()) {
                 auto e = ensure_res.error();
+
                 switch (e) {
                 case table_creator::errc::incompatible_schema:
-                    [[fallthrough]];
                 case table_creator::errc::failed:
-                    [[fallthrough]];
-                case table_creator::errc::shutting_down:
                     vlog(
                       _log.warn,
-                      "Error ensuring DLQ table schema for invalid record {}",
-                      offset);
-                    co_return writer_error::parquet_conversion_error;
+                      "Error ensuring DLQ table schema for invalid record {}: "
+                      "{}",
+                      offset,
+                      e);
+                    // Normally this is not possible, so we use blanket error
+                    // code.
+                    co_return writer_error::unknown_error;
+                case table_creator::errc::shutting_down:
+                    co_return writer_error::shutting_down;
                 }
             }
 
@@ -441,10 +457,10 @@ record_multiplexer::handle_invalid_record(
                       _log.warn,
                       "Error getting table info for record {}: {}",
                       offset,
-                      load_res.error());
-                    [[fallthrough]];
+                      e);
+                    co_return writer_error::unknown_error;
                 case schema_manager::errc::shutting_down:
-                    co_return writer_error::parquet_conversion_error;
+                    co_return writer_error::shutting_down;
                 }
             }
 
@@ -457,7 +473,7 @@ record_multiplexer::handle_invalid_record(
                   _log.warn,
                   "expected to successfully fill field IDs for record {}",
                   offset);
-                co_return writer_error::parquet_conversion_error;
+                co_return writer_error::unknown_error;
             }
 
             auto table_remote_path = _location_provider.from_uri(
@@ -469,7 +485,7 @@ record_multiplexer::handle_invalid_record(
                   "at offset {}",
                   load_res.value().location,
                   offset);
-                co_return writer_error::parquet_conversion_error;
+                co_return writer_error::unknown_error;
             }
 
             _invalid_record_writer = std::make_unique<partitioning_writer>(
@@ -497,11 +513,11 @@ record_multiplexer::handle_invalid_record(
           headers);
         if (record_data_res.has_error()) {
             vlog(
-              _log.debug,
+              _log.warn,
               "Error translating DLQ data for record {}: {}",
               offset,
               record_data_res.error());
-            co_return writer_error::parquet_conversion_error;
+            co_return writer_error::unknown_error;
         }
 
         if (!_result.has_value()) {

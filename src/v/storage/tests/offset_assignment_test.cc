@@ -9,8 +9,11 @@
 
 #include "model/tests/random_batch.h"
 #include "storage/offset_assignment.h"
+#include "test_utils/gtest_exception.h"
 
 #include <seastar/testing/thread_test_case.hh>
+
+#include <gtest/gtest.h>
 
 using namespace storage; // NOLINT
 
@@ -19,7 +22,7 @@ struct offset_validating_consumer {
       : starting_offset(o) {}
 
     ss::future<ss::stop_iteration> operator()(model::record_batch&& batch) {
-        BOOST_REQUIRE_EQUAL(batch.base_offset(), starting_offset);
+        EXPECT_EQ(batch.base_offset(), starting_offset);
         starting_offset += batch.record_count();
         return ss::make_ready_future<ss::stop_iteration>(
           ss::stop_iteration::no);
@@ -30,7 +33,7 @@ struct offset_validating_consumer {
     model::offset starting_offset;
 };
 
-SEASTAR_THREAD_TEST_CASE(test_offset_assignment) {
+TEST(OffsetAssignmentTest, TestOffsetAssignment) {
     auto batches = model::test::make_random_batches(model::offset(0), 10).get();
     auto reader = model::make_memory_record_batch_reader(std::move(batches));
     auto starting_offset = model::offset(123);
@@ -40,4 +43,4 @@ SEASTAR_THREAD_TEST_CASE(test_offset_assignment) {
           offset_validating_consumer(starting_offset), starting_offset),
         model::no_timeout)
       .get();
-};
+}

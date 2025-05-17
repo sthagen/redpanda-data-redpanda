@@ -27,6 +27,7 @@ redpanda_test_cc_library(
     hdrs = [
         "async.h",
         "fixture.h",
+        "gtest_exception.h",
         "gtest_utils.h",
         "test.h",
         "test_macros.h",

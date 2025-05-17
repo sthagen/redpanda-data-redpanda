@@ -8,14 +8,16 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#define BOOST_TEST_MODULE storage
 
 #include "bytes/bytes.h"
 #include "random/generators.h"
 #include "serde/rw/envelope.h"
 #include "storage/index_state.h"
+#include "test_utils/gtest_exception.h"
 
-#include <boost/test/unit_test.hpp>
+#include <gtest/gtest.h>
+
+using namespace redpanda::test_utils;
 
 static storage::index_state make_random_index_state(
   storage::offset_delta_time apply_offset = storage::offset_delta_time::yes) {
@@ -67,28 +69,28 @@ static void set_version(iobuf& buf, int8_t version) {
 }
 
 // encode/decode using new serde framework
-BOOST_AUTO_TEST_CASE(serde_basic) {
+TEST(IndexState, SerdeBasic) {
     for (int i = 0; i < 100; ++i) {
         auto input = make_random_index_state();
         const auto input_copy = input.copy();
-        BOOST_REQUIRE_EQUAL(input, input_copy);
+        ASSERT_EQ(input, input_copy);
 
         // objects are equal
         const auto buf = serde::to_iobuf(std::move(input));
         auto output = serde::from_iobuf<storage::index_state>(buf.copy());
 
-        BOOST_REQUIRE(output.batch_timestamps_are_monotonic == true);
-        BOOST_REQUIRE(output.with_offset == storage::offset_delta_time::yes);
+        ASSERT_TRUE(output.batch_timestamps_are_monotonic);
+        ASSERT_EQ(output.with_offset, storage::offset_delta_time::yes);
 
-        BOOST_REQUIRE_EQUAL(output, input_copy);
+        ASSERT_EQ(output, input_copy);
 
         // round trip back to equal iobufs
         const auto buf2 = serde::to_iobuf(std::move(output));
-        BOOST_REQUIRE_EQUAL(buf, buf2);
+        ASSERT_EQ(buf, buf2);
     }
 }
 
-BOOST_AUTO_TEST_CASE(serde_no_time_offseting_for_existing_indices) {
+TEST(IndexState, SerdeNoTimeOffsetingForExistingIndices) {
     for (int i = 0; i < 100; ++i) {
         // Create index without time offsetting
         auto input = make_random_index_state(storage::offset_delta_time::no);
@@ -99,45 +101,45 @@ BOOST_AUTO_TEST_CASE(serde_no_time_offseting_for_existing_indices) {
         // Read the index and check that time offsetting was not applied
         auto output = serde::from_iobuf<storage::index_state>(buf.copy());
 
-        BOOST_REQUIRE(output.batch_timestamps_are_monotonic == false);
-        BOOST_REQUIRE(output.with_offset == storage::offset_delta_time::no);
+        ASSERT_FALSE(output.batch_timestamps_are_monotonic);
+        ASSERT_EQ(output.with_offset, storage::offset_delta_time::no);
 
         auto output_copy = output.copy();
 
-        BOOST_REQUIRE_EQUAL(input_copy, output);
+        ASSERT_EQ(input_copy, output);
 
         // Re-encode with version 5 and verify that there is still no offsetting
         const auto buf2 = serde::to_iobuf(std::move(output));
         auto output2 = serde::from_iobuf<storage::index_state>(buf2.copy());
-        BOOST_REQUIRE_EQUAL(output_copy, output2);
+        ASSERT_EQ(output_copy, output2);
 
-        BOOST_REQUIRE(output2.batch_timestamps_are_monotonic == false);
-        BOOST_REQUIRE(output2.with_offset == storage::offset_delta_time::no);
+        ASSERT_FALSE(output2.batch_timestamps_are_monotonic);
+        ASSERT_EQ(output2.with_offset, storage::offset_delta_time::no);
     }
 }
 
 // accept decoding supported old version
-BOOST_AUTO_TEST_CASE(serde_supported_deprecated) {
+TEST(IndexState, SerdeSupportedDeprecated) {
     for (int i = 0; i < 100; ++i) {
         auto input = make_random_index_state(storage::offset_delta_time::no);
         const auto output = serde::from_iobuf<storage::index_state>(
           storage::serde_compat::index_state_serde::encode(input));
 
-        BOOST_REQUIRE(output.batch_timestamps_are_monotonic == false);
-        BOOST_REQUIRE(output.with_offset == storage::offset_delta_time::no);
+        ASSERT_FALSE(output.batch_timestamps_are_monotonic);
+        ASSERT_EQ(output.with_offset, storage::offset_delta_time::no);
 
-        BOOST_REQUIRE_EQUAL(input, output);
+        ASSERT_EQ(input, output);
     }
 }
 
-// reject decoding unsupported old versins
-BOOST_AUTO_TEST_CASE(serde_unsupported_deprecated) {
+// reject decoding unsupported old versions
+TEST(IndexState, SerdeUnsupportedDeprecated) {
     auto test = [](int version) {
         auto input = make_random_index_state(storage::offset_delta_time::no);
         auto buf = storage::serde_compat::index_state_serde::encode(input);
         set_version(buf, version);
 
-        BOOST_REQUIRE_EXCEPTION(
+        ASSERT_THROWS_WITH_PREDICATE(
           const auto output = serde::from_iobuf<storage::index_state>(
             buf.copy()),
           serde::serde_exception,
@@ -153,15 +155,15 @@ BOOST_AUTO_TEST_CASE(serde_unsupported_deprecated) {
 }
 
 // decoding should fail if all the data isn't available
-BOOST_AUTO_TEST_CASE(serde_clipped) {
+TEST(IndexState, SerdeClipped) {
     auto input = make_random_index_state(storage::offset_delta_time::no);
     auto buf = serde::to_iobuf(std::move(input));
 
     // trim off some data from the end
-    BOOST_REQUIRE_GT(buf.size_bytes(), 10);
+    ASSERT_GT(buf.size_bytes(), 10);
     buf.trim_back(buf.size_bytes() - 10);
 
-    BOOST_REQUIRE_EXCEPTION(
+    ASSERT_THROWS_WITH_PREDICATE(
       serde::from_iobuf<storage::index_state>(buf.copy()),
       serde::serde_exception,
       [](const serde::serde_exception& e) {
@@ -171,15 +173,15 @@ BOOST_AUTO_TEST_CASE(serde_clipped) {
 }
 
 // decoding deprecated format should fail if not all data is available
-BOOST_AUTO_TEST_CASE(serde_deprecated_clipped) {
+TEST(IndexState, SerdeDeprecatedClipped) {
     auto input = make_random_index_state(storage::offset_delta_time::no);
     auto buf = storage::serde_compat::index_state_serde::encode(input);
 
     // trim off some data from the end
-    BOOST_REQUIRE_GT(buf.size_bytes(), 10);
+    ASSERT_GT(buf.size_bytes(), 10);
     buf.trim_back(buf.size_bytes() - 10);
 
-    BOOST_REQUIRE_EXCEPTION(
+    ASSERT_THROWS_WITH_PREDICATE(
       serde::from_iobuf<storage::index_state>(buf.copy()),
       serde::serde_exception,
       [](const serde::serde_exception& e) {
@@ -189,7 +191,7 @@ BOOST_AUTO_TEST_CASE(serde_deprecated_clipped) {
       });
 }
 
-BOOST_AUTO_TEST_CASE(serde_crc) {
+TEST(IndexState, SerdeCrc) {
     auto input = make_random_index_state();
     auto good_buf = serde::to_iobuf(std::move(input));
 
@@ -198,7 +200,7 @@ BOOST_AUTO_TEST_CASE(serde_crc) {
     bad_byte += 1;
     auto bad_buf = bytes_to_iobuf(bad_bytes);
 
-    BOOST_REQUIRE_EXCEPTION(
+    ASSERT_THROWS_WITH_PREDICATE(
       serde::from_iobuf<storage::index_state>(bad_buf.copy()),
       serde::serde_exception,
       [](const serde::serde_exception& e) {
@@ -207,7 +209,7 @@ BOOST_AUTO_TEST_CASE(serde_crc) {
       });
 }
 
-BOOST_AUTO_TEST_CASE(serde_deprecated_crc) {
+TEST(IndexState, SerdeDeprecatedCrc) {
     auto input = make_random_index_state(storage::offset_delta_time::no);
     auto good_buf = storage::serde_compat::index_state_serde::encode(input);
 
@@ -216,7 +218,7 @@ BOOST_AUTO_TEST_CASE(serde_deprecated_crc) {
     bad_byte += 1;
     auto bad_buf = bytes_to_iobuf(bad_bytes);
 
-    BOOST_REQUIRE_EXCEPTION(
+    ASSERT_THROWS_WITH_PREDICATE(
       serde::from_iobuf<storage::index_state>(bad_buf.copy()),
       std::exception,
       [](const std::exception& e) {
@@ -229,7 +231,7 @@ BOOST_AUTO_TEST_CASE(serde_deprecated_crc) {
       });
 }
 
-BOOST_AUTO_TEST_CASE(offset_time_index_test) {
+TEST(IndexState, OffsetTimeIndexTest) {
     // Before offsetting: [0, ..., 2 ^ 31 - 1, ..., 2 ^ 32 - 1]
     //                    |             |              |
     //                    |             |______________|
@@ -246,17 +248,17 @@ BOOST_AUTO_TEST_CASE(offset_time_index_test) {
         auto non_offset_delta = storage::offset_time_index{
           model::timestamp{delta_before}, storage::offset_delta_time::no};
 
-        BOOST_REQUIRE(non_offset_delta() == delta_before);
+        ASSERT_EQ(non_offset_delta(), delta_before);
 
         if (delta_before >= max_delta) {
-            BOOST_REQUIRE(offset_delta() == max_delta);
+            ASSERT_EQ(offset_delta(), max_delta);
         } else {
-            BOOST_REQUIRE(offset_delta() == delta_before);
+            ASSERT_EQ(offset_delta(), delta_before);
         }
     }
 }
 
-BOOST_AUTO_TEST_CASE(binary_compatibility_test) {
+TEST(IndexState, BinaryCompatibilityTest) {
     // This test is checking that the binary representation of the serialized
     // index_state did not change. If new index format is introduced this test
     // should be removed. The goal here is to be able to make sure that the
@@ -353,11 +355,11 @@ BOOST_AUTO_TEST_CASE(binary_compatibility_test) {
     auto expected_bytes = serde::to_iobuf(std::move(expected_state));
     set_version(expected_bytes, 4);
     auto actual_bytes = bytes_to_iobuf(serde_serialized);
-    BOOST_REQUIRE_EQUAL(expected_bytes.size_bytes(), actual_bytes.size_bytes());
-    BOOST_REQUIRE(expected_bytes == actual_bytes);
+    ASSERT_EQ(expected_bytes.size_bytes(), actual_bytes.size_bytes());
+    ASSERT_EQ(expected_bytes, actual_bytes);
 }
 
-BOOST_AUTO_TEST_CASE(index_overflow) {
+TEST(IndexState, IndexOverflow) {
     storage::index_state state;
 
     // Previous versions of Redpanda can have an index with offsets spanning
@@ -373,12 +375,12 @@ BOOST_AUTO_TEST_CASE(index_overflow) {
     state.add_entry(static_cast<uint32_t>(uint32_max + 10), time_idx, 4);
     state.max_offset = model::offset{uint32_max + 10};
     auto res = state.find_nearest(model::offset(100));
-    BOOST_REQUIRE(res.has_value());
-    BOOST_CHECK_EQUAL(res->offset, model::offset{0});
-    BOOST_CHECK_EQUAL(res->filepos, 1);
+    ASSERT_TRUE(res.has_value());
+    EXPECT_EQ(res->offset, model::offset{0});
+    EXPECT_EQ(res->filepos, 1);
 }
 
-BOOST_AUTO_TEST_CASE(non_data_timestamps_with_overflow) {
+TEST(IndexState, NonDataTimestampsWithOverflow) {
     storage::index_state state;
 
     // Need to ensure that non_data_timestamps in the segment_index is only set

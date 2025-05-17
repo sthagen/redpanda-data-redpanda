@@ -132,7 +132,7 @@ redpanda_test_cc_library(
         "//src/v/features",
         "//src/v/model/tests:random",
         "//src/v/storage",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:fixture",
     ],
 )
 
@@ -216,7 +216,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "index_state_test",
     timeout = "short",
     srcs = [
@@ -227,7 +227,8 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/serde",
         "//src/v/storage:index_state",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar//:testing",
     ],
 )
@@ -369,7 +370,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "snapshot_test",
     timeout = "short",
     srcs = [
@@ -379,8 +380,9 @@ redpanda_cc_btest(
         "//src/v/base",
         "//src/v/random:generators",
         "//src/v/storage",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:random_bytes",
-        "//src/v/test_utils:seastar_boost",
+        "@googletest//:gtest",
         "@seastar//:testing",
     ],
 )
@@ -420,7 +422,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "offset_translator_state_test",
     timeout = "short",
     srcs = [
@@ -430,13 +432,14 @@ redpanda_cc_btest(
     deps = [
         "//src/v/model",
         "//src/v/storage",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "offset_to_filepos_test",
     timeout = "short",
     srcs = [
@@ -447,7 +450,8 @@ redpanda_cc_btest(
         "//src/v/storage",
         "//src/v/test_utils:archival",
         "//src/v/test_utils:fixture",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",
     ],
@@ -626,7 +630,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "offset_assignment_test",
     timeout = "short",
     srcs = [
@@ -635,8 +639,8 @@ redpanda_cc_btest(
     deps = [
         "//src/v/model/tests:random",
         "//src/v/storage",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",
     ],
@@ -779,6 +783,25 @@ redpanda_cc_btest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "compaction_reducer_fixture_test",
+    timeout = "short",
+    srcs = [
+        "compaction_reducer_fixture_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/model",
+        "//src/v/storage",
+        "//src/v/storage:key_offset_map",
+        "//src/v/storage/tests:storage_test_fixture",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
 redpanda_cc_btest(
     name = "batch_consumer_utils_test",
     timeout = "short",
@@ -872,6 +895,28 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "compaction_e2e_multinode_test",
+    timeout = "moderate",
+    srcs = [
+        "compaction_e2e_multinode_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/cluster/tests:cluster_test_fixture",
+        "//src/v/cluster/tests:tx_compaction_utils",
+        "//src/v/kafka/server/tests:kafka_test_utils",
+        "//src/v/model",
+        "//src/v/storage/tests:manual_mixin",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/test_utils:seastar_boost",
+        "@abseil-cpp//absl/container:btree",
+        "@seastar",
     ],
 )
 

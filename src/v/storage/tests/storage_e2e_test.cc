@@ -5762,6 +5762,75 @@ FIXTURE_TEST(compaction_scheduling, storage_test_fixture) {
     }
 }
 
+FIXTURE_TEST(max_compaction_lag, storage_test_fixture) {
+    using log_manager_accessor = storage::testing_details::log_manager_accessor;
+    storage::log_manager mgr = make_log_manager();
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    std::vector<ss::shared_ptr<storage::log>> logs;
+
+    using overrides_t = storage::ntp_config::default_overrides;
+    overrides_t ov;
+    ov.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+    ov.min_cleanable_dirty_ratio = tristate<double>{1.0};
+    ov.max_compaction_lag_ms = 1000ms;
+
+    auto ntp = model::ntp("kafka", "tapioca", 0);
+    auto log
+      = mgr
+          .manage(storage::ntp_config(
+            ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov)))
+          .get();
+
+    using bflags = storage::log_housekeeping_meta::bitflags;
+    static constexpr auto is_set = [](bflags var, auto flag) {
+        return (var & flag) == flag;
+    };
+
+    auto append_and_force_roll = [this, &log](int num_batches = 10) {
+        auto headers = append_random_batches<linear_int_kv_batch_generator>(
+          log, num_batches);
+        log->force_roll(ss::default_priority_class()).get();
+    };
+
+    // Append and close one segment, then compact.
+    // The one closed segment is compacted because the log is 100% dirty.
+    auto start = std::chrono::steady_clock::now();
+    append_and_force_roll();
+    BOOST_REQUIRE_EQUAL(log->dirty_ratio(), 1.0);
+    log_manager_accessor::housekeeping_scan(mgr).get();
+
+    auto& meta = log_manager_accessor::logs_list(mgr).front();
+    BOOST_REQUIRE(is_set(meta.flags, bflags::lifetime_checked));
+    BOOST_REQUIRE(is_set(meta.flags, bflags::compaction_checked));
+    BOOST_REQUIRE(is_set(meta.flags, bflags::compacted));
+    read_and_validate_all_batches(log);
+
+    // Append more batches and compact.
+    // Now the log is half-dirty, which isn't dirty enough to compact.
+    append_and_force_roll();
+    BOOST_REQUIRE_LT(log->dirty_ratio(), 1.0);
+    log_manager_accessor::housekeeping_scan(mgr).get();
+
+    BOOST_REQUIRE(is_set(meta.flags, bflags::lifetime_checked));
+    BOOST_REQUIRE(is_set(meta.flags, bflags::compaction_checked));
+    // This test should run fast enough that the log is not compacted,
+    // but on the rare occasion it doesn't, let's not fail.
+    BOOST_REQUIRE(
+      !is_set(meta.flags, bflags::compacted)
+      || (std::chrono::steady_clock::now() - start >= ov.max_compaction_lag_ms.value()));
+    read_and_validate_all_batches(log);
+
+    // Wait for the max lag to pass, then compact.
+    // Compaction should happen despite the low dirty ratio.
+    ss::sleep(ov.max_compaction_lag_ms.value() + 50ms).get();
+    log_manager_accessor::housekeeping_scan(mgr).get();
+
+    BOOST_REQUIRE(is_set(meta.flags, bflags::lifetime_checked));
+    BOOST_REQUIRE(is_set(meta.flags, bflags::compaction_checked));
+    BOOST_REQUIRE(is_set(meta.flags, bflags::compacted));
+    read_and_validate_all_batches(log);
+}
+
 // Ensures that the log_housekeeping_meta level locking/concurrency in
 // the log_manager is race free during ntp removal, addition, and housekeeping.
 // By allowing regular housekeeping to run on a quick interval and also

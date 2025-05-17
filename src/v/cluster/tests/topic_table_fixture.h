@@ -23,6 +23,7 @@
 #include "config/configuration.h"
 #include "config/property.h"
 #include "features/feature_table.h"
+#include "model/fundamental.h"
 #include "model/metadata.h"
 #include "random/generators.h"
 #include "test_utils/fixture.h"
@@ -94,7 +95,11 @@ struct topic_table_fixture {
     cluster::topic_configuration_assignment make_tp_configuration(
       const ss::sstring& topic, int partitions, int16_t replication_factor) {
         cluster::topic_configuration cfg(
-          test_ns, model::topic(topic), partitions, replication_factor);
+          test_ns,
+          model::topic(topic),
+          partitions,
+          replication_factor,
+          model::create_topic_id());
 
         cluster::allocation_request req(cfg.tp_ns);
         req.partitions.reserve(partitions);

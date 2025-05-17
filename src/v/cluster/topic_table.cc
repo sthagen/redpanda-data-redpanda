@@ -48,6 +48,11 @@ topic_table::apply(create_topic_cmd cmd, model::offset offset) {
         co_return errc::topic_already_exists;
     }
 
+    auto& tp_id = cmd.value.cfg.tp_id;
+    if (tp_id && _topics.get_name(*tp_id)) {
+        co_return errc::topic_id_already_exists;
+    }
+
     const auto migration_state = _migrated_resources.get_topic_state(cmd.key);
     if (
       !cmd.value.cfg.is_migrated
@@ -79,9 +84,8 @@ topic_table::apply(create_topic_cmd cmd, model::offset offset) {
           ? std::make_optional(
               cmd.value.cfg.properties.remote_topic_properties->remote_revision)
           : std::nullopt;
-    auto md = topic_metadata_item{
-      .metadata = topic_metadata(
-        std::move(cmd.value), model::revision_id(offset()), remote_revision)};
+    auto md = topic_metadata_item{topic_metadata(
+      std::move(cmd.value), model::revision_id(offset()), remote_revision)};
 
     // generate deltas
 
@@ -112,10 +116,7 @@ topic_table::apply(create_topic_cmd cmd, model::offset offset) {
           topic_table_ntp_delta_type::added);
     }
 
-    _topics.insert({
-      cmd.key,
-      std::move(md),
-    });
+    _topics.emplace(std::move(md));
     _topics_map_revision++;
     _probe.handle_topic_creation(std::move(cmd.key));
 
@@ -329,8 +330,7 @@ topic_table::apply(create_partition_cmd cmd, model::offset offset) {
     // add partitions
     auto prev_partition_count = tp->second.get_configuration().partition_count;
     // update partitions count
-    tp->second.get_configuration().partition_count
-      = cmd.value.cfg.new_total_partition_count;
+    tp->second.get_partition_count() = cmd.value.cfg.new_total_partition_count;
     // add assignments of newly created partitions
     auto rev_id = model::revision_id{offset};
     for (auto& p_as : cmd.value.assignments) {
@@ -1182,18 +1182,25 @@ topic_table::apply(update_topic_properties_cmd cmd, model::offset o) {
     }
 
     if (cmd.value.topic_id.op == incremental_update_operation::set) {
+        auto& tp_id = cmd.value.topic_id.value;
+        if (tp_id && _topics.get_name(*tp_id)) {
+            co_return errc::topic_id_already_exists;
+        }
+
         vlog(
           clusterlog.trace,
           "Assigning topic id {} to topic {}",
-          cmd.value.topic_id.value,
+          tp_id,
           cmd.key);
-        tp->second.get_configuration().tp_id = cmd.value.topic_id.value;
+        _topics.mutate(tp, [&](auto& md_item_mut) {
+            md_item_mut.get_configuration().tp_id = tp_id;
+        });
     }
 
     auto updated_properties = update_topic_properties(
       tp->second.get_configuration().properties, std::move(cmd));
 
-    auto& properties = tp->second.get_configuration().properties;
+    auto& properties = tp->second.get_configuration_properties();
     // no configuration change, no need to generate delta
     if (updated_properties == properties) {
         co_return errc::success;
@@ -1291,7 +1298,7 @@ topic_table::fill_snapshot(controller_snapshot& controller_snap) const {
         snap.topics.emplace(
           ns_tp,
           controller_snapshot_parts::topics_t::topic_t{
-            .metadata = md_item.metadata.get_fields(),
+            .metadata = md_item.get_metadata().get_fields(),
             .partitions = std::move(partitions),
             .updates = std::move(updates),
             .disabled_set = std::move(disabled_set),
@@ -1565,10 +1572,14 @@ ss::future<> topic_table::apply_snapshot(
             const auto& topic_snapshot = new_it->second;
             if (
               topic_snapshot.metadata.revision
-              != md_item.metadata.get_revision()) {
+              != md_item.get_metadata().get_revision()) {
                 // The topic was re-created, delete and add it anew.
                 co_await applier.delete_topic(ns_tp, md_item);
-                md_item = co_await applier.create_topic(ns_tp, topic_snapshot);
+                auto new_md = co_await applier.create_topic(
+                  ns_tp, topic_snapshot);
+                _topics.mutate(old_it, [&](auto& md_item_mut) {
+                    md_item_mut = std::move(new_md);
+                });
                 _topics_map_revision++;
             } else {
                 // The topic was present in the previous set, now we need to
@@ -1580,7 +1591,10 @@ ss::future<> topic_table::apply_snapshot(
                   = md_item.get_configuration().properties
                     != topic_snapshot.metadata.configuration.properties;
 
-                md_item.metadata.get_fields() = topic_snapshot.metadata;
+                _topics.mutate(old_it, [&](auto& md_item_mut) {
+                    md_item_mut.get_metadata().get_fields()
+                      = topic_snapshot.metadata;
+                });
 
                 topic_disabled_partitions_set old_disabled_set;
                 if (topic_snapshot.disabled_set) {
@@ -1658,7 +1672,7 @@ ss::future<> topic_table::apply_snapshot(
     // Next, go over the new topics set and add state for new topics.
     for (const auto& [ns_tp, topic] : snap.topics) {
         if (!_topics.contains(ns_tp)) {
-            _topics.emplace(ns_tp, co_await applier.create_topic(ns_tp, topic));
+            _topics.emplace(co_await applier.create_topic(ns_tp, topic));
             _topics_map_revision++;
         }
     }
@@ -1677,7 +1691,7 @@ ss::future<> topic_table::apply_snapshot(
 
     _partition_count = 0;
     for (const auto& [ns_tp, md_item] : _topics) {
-        _partition_count += md_item.metadata.get_assignments().size();
+        _partition_count += md_item.get_assignments().size();
         co_await ss::coroutine::maybe_yield();
     }
 
@@ -1744,14 +1758,14 @@ size_t topic_table::all_topics_count() const { return _topics.size(); }
 std::optional<topic_metadata>
 topic_table::get_topic_metadata(model::topic_namespace_view tp) const {
     if (auto it = _topics.find(tp); it != _topics.end()) {
-        return it->second.metadata.copy();
+        return it->second.get_metadata().copy();
     }
     return {};
 }
 std::optional<std::reference_wrapper<const topic_metadata>>
 topic_table::get_topic_metadata_ref(model::topic_namespace_view tp) const {
     if (auto it = _topics.find(tp); it != _topics.end()) {
-        return it->second.metadata;
+        return it->second.get_metadata();
     }
     return {};
 }
@@ -1789,7 +1803,7 @@ topic_table::get_topic_timestamp_type(model::topic_namespace_view tp) const {
 }
 
 const topic_table::underlying_t& topic_table::all_topics_metadata() const {
-    return _topics;
+    return _topics.by_tp();
 }
 
 std::optional<topic_table::partition_replicas_view>

@@ -85,13 +85,6 @@ partition_translator::partition_translator(
   , _logger(
       datalake_log, fmt::format("{}-term-{}", _data_source->ntp(), _term)) {}
 
-void partition_translator::reconcile_properties() noexcept {
-    if (_gate.is_closed()) {
-        return;
-    }
-    _translation_ctx->reconcile_properties();
-}
-
 ss::future<coordinator::fetch_latest_translated_offset_reply>
 partition_translator::fetch_latest_translated_offset(retry_chain_node& rcn) {
     auto request = coordinator::fetch_latest_translated_offset_request{};

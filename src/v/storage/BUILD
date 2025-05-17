@@ -416,6 +416,7 @@ redpanda_cc_library(
         "//src/v/ssx:semaphore",
         "//src/v/ssx:sformat",
         "//src/v/ssx:watchdog",
+        "//src/v/ssx:when_all",
         "//src/v/strings:static_str",
         "//src/v/strings:string_switch",
         "//src/v/utils:adjustable_semaphore",

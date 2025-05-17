@@ -12,7 +12,12 @@ from ducktape.mark import matrix
 from rptest.context.databricks import DatabricksContext as DatabricksContext
 from rptest.services.catalog_service import CatalogType
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import PandaproxyConfig, SchemaRegistryConfig, SISettings
+from rptest.services.redpanda import (
+    PandaproxyConfig,
+    SchemaRegistryConfig,
+    SISettings,
+    get_cloud_provider,
+)
 from rptest.tests.datalake.datalake_services import DatalakeServices
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
@@ -54,6 +59,13 @@ class DatabricksTest(RedpandaTest):
         if not DatabricksContext.available(self.test_context):
             self.logger.warning(
                 "Skipping test because Databricks context is not available")
+            cleanup_on_early_exit(self)
+            return
+
+        if get_cloud_provider() != "aws":
+            self.logger.warning(
+                f"Skipping test because it is only supported on AWS, but the current cloud provider is {get_cloud_provider()}"
+            )
             cleanup_on_early_exit(self)
             return
 

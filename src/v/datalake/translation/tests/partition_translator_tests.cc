@@ -311,8 +311,6 @@ public:
         return ss::make_ready_future();
     }
 
-    void reconcile_properties() final {}
-
     ss::future<
       checked<datalake::coordinator::translated_offset_range, translation_errc>>
     finish(retry_chain_node&, ss::abort_source&) final {

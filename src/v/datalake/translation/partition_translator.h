@@ -92,8 +92,6 @@ public:
 
     void stop_translation(stop_reason) final;
 
-    void reconcile_properties() noexcept final;
-
     void set_finish_translation() final;
 
     bool get_finish_translation() final;

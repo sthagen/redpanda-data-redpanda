@@ -10,9 +10,10 @@
 #include "base/seastarx.h"
 #include "cluster/distributed_kv_stm.h"
 #include "cluster/tests/raft_fixture_retry_policy.h"
-#include "errc.h"
+#include "raft/errc.h"
 #include "raft/tests/raft_fixture.h"
 #include "serde/envelope.h"
+#include "test_utils/async.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/future.hh>
@@ -72,6 +73,22 @@ struct kv_stm_fixture : stm_raft_fixture<stm_t> {
           TIMEOUT, [new_partition_count](stm_cssshptrr_t stm) {
               return stm->repartition(new_partition_count);
           });
+    }
+
+    std::vector<model::offset> committed_offsets() {
+        std::vector<model::offset> offsets;
+        for (auto& [_, node] : nodes()) {
+            offsets.push_back(node->raft()->committed_offset());
+        }
+        return offsets;
+    }
+
+    std::vector<model::offset> applied_offsets() {
+        std::vector<model::offset> offsets;
+        for (auto& [_, node] : nodes()) {
+            offsets.push_back(get_stm<0>(*node)->last_applied());
+        }
+        return offsets;
     }
 };
 
@@ -201,24 +218,31 @@ TEST_F_CORO(kv_stm_fixture, test_stm_snapshots) {
         }
     }
 
-    auto offset_result = co_await stm_retry_with_leader<0>(
-      TIMEOUT, [](stm_cssshptrr_t stm) {
-          return ss::make_ready_future<result<model::offset>>(
-            stm->last_applied_offset());
-      });
-    auto offset = offset_result.value();
-
-    co_await stm_retry_with_leader<0>(TIMEOUT, [](stm_cssshptrr_t stm) {
-        return stm->write_local_snapshot().then(
-          []() { return ss::make_ready_future<bool>(true); });
+    // Wait for all replicas to catch up
+    RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [this] {
+        auto c_offsets = committed_offsets();
+        auto a_offsets = applied_offsets();
+        auto check_offset = c_offsets[0];
+        return std::all_of(
+                 c_offsets.begin(),
+                 c_offsets.end(),
+                 [check_offset](model::offset o) { return o == check_offset; })
+               && std::all_of(
+                 a_offsets.begin(),
+                 a_offsets.end(),
+                 [check_offset](model::offset o) { return o == check_offset; });
     });
 
-    co_await retry_with_leader(
-      model::timeout_clock::now() + TIMEOUT,
-      [offset](raft_node_instance& node) {
-          return node.raft()
-            ->write_snapshot(raft::write_snapshot_cfg(offset, iobuf()))
-            .then([]() { return ss::make_ready_future<bool>(true); });
+    co_await parallel_for_each_node([this](raft_node_instance& node) {
+        return get_stm<0>(node)->write_local_snapshot();
+    });
+
+    auto snapshot_offset = committed_offsets()[0];
+    // snapshot until tip of the log
+    co_await parallel_for_each_node(
+      [snapshot_offset](raft_node_instance& node) {
+          return node.raft()->write_snapshot(
+            raft::write_snapshot_cfg(snapshot_offset, iobuf()));
       });
 
     // restart raft after trunaction, ensure snapshot is loaded
@@ -230,7 +254,8 @@ TEST_F_CORO(kv_stm_fixture, test_stm_snapshots) {
           return ss::make_ready_future<result<model::offset>>(
             node.raft()->start_offset());
       });
-    ASSERT_RESULT_EQ_CORO(start_offset_result, model::next_offset(offset));
+    ASSERT_RESULT_EQ_CORO(
+      start_offset_result, model::next_offset(snapshot_offset));
 
     for (int i = 0; i < 99; i++) {
         ASSERT_RESULT_EQ_CORO(co_await get(i), test_value{9});

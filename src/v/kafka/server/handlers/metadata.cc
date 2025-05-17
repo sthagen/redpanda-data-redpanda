@@ -293,8 +293,8 @@ get_topic_metadata(
                   authz_quiet{true})) {
                 continue;
             }
-            res.push_back(
-              make_topic_response(ctx, request, md.metadata, is_node_isolated));
+            res.push_back(make_topic_response(
+              ctx, request, md.get_metadata(), is_node_isolated));
         }
 
         return ss::make_ready_future<

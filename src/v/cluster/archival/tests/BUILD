@@ -242,6 +242,7 @@ redpanda_test_cc_library(
     name = "archival_service_fixture",
     hdrs = ["archival_service_fixture.h"],
     include_prefix = "cluster/archival/tests",
+    visibility = ["//visibility:public"],
     deps = [
         ":service_fixture",
         "//src/v/cloud_storage_clients",

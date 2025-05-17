@@ -1157,3 +1157,86 @@ redpanda_cc_btest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "distributed_kv_stm_test",
+    timeout = "short",
+    srcs = [
+        "distributed_kv_stm_tests.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":raft_fixture_retry_policy",
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/raft",
+        "//src/v/raft/tests:raft_fixture",
+        "//src/v/serde",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "rm_stm_test",
+    timeout = "short",
+    srcs = [
+        "rm_stm_tests.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":randoms",
+        ":rm_stm_test_fixture",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/finjector",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/raft",
+        "//src/v/random:generators",
+        "//src/v/storage:record_batch_builder",
+        "//src/v/storage/tests:disk_log_builder",
+        "//src/v/test_utils:random",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:directory_walker",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_test_cc_library(
+    name = "tx_compaction_utils",
+    hdrs = [
+        "tx_compaction_utils.h",
+    ],
+    include_prefix = "cluster/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/storage/tests:storage_test_fixture",
+        "//src/v/test_utils:seastar_boost",
+    ],
+)
+
+redpanda_cc_btest(
+    name = "tx_compaction_tests",
+    timeout = "short",
+    srcs = [
+        "tx_compaction_tests.cc",
+    ],
+    deps = [
+        ":rm_stm_test_fixture",
+        ":tx_compaction_utils",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+    ],
+)

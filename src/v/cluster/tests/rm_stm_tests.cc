@@ -372,12 +372,12 @@ FIXTURE_TEST(test_stale_begin_tx_fenced, rm_stm_test_fixture) {
     auto timeout = std::chrono::milliseconds(
       std::numeric_limits<int32_t>::max());
 
-    auto begin_tx = [&](model::tx_seq seq) {
+    auto begin_tx = [&stm, &pid1, timeout](model::tx_seq seq) {
         return stm.begin_tx(pid1, seq, timeout, model::partition_id(0)).get();
     };
 
-    auto commit_tx = [&](model::tx_seq seq) {
-        return stm.commit_tx(pid1, tx_seq, timeout).get();
+    auto commit_tx = [&stm, &pid1, timeout](model::tx_seq seq) {
+        return stm.commit_tx(pid1, seq, timeout).get();
     };
 
     // begin should succeed.
@@ -394,7 +394,7 @@ FIXTURE_TEST(test_stale_begin_tx_fenced, rm_stm_test_fixture) {
       begin_tx(tx_seq_new).error(), cluster::tx::errc::request_rejected);
 
     // seal the transaction.
-    BOOST_REQUIRE_EQUAL(commit_tx(tx_seq_new), cluster::tx::errc::none);
+    BOOST_REQUIRE_EQUAL(commit_tx(tx_seq), cluster::tx::errc::none);
 
     // older sequence numbers are fenced
     BOOST_REQUIRE_EQUAL(

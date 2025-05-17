@@ -187,11 +187,6 @@ public:
     virtual ss::future<> close() noexcept = 0;
 
     /**
-     * Invoked when any of the translation related properties are altered.
-     */
-    virtual void reconcile_properties() noexcept = 0;
-
-    /**
      * Current status of the translation.
      */
     virtual translation_status status() const = 0;

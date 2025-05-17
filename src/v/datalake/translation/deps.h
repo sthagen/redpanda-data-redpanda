@@ -226,6 +226,7 @@ enum translation_errc {
     time_limit_exceeded,
     shutting_down,
     out_of_disk,
+    type_resolution_error,
 };
 
 std::ostream& operator<<(std::ostream&, translation_errc);
@@ -262,11 +263,6 @@ public:
      * Returns the last translated offset by the translator, if one exists.
      */
     virtual std::optional<kafka::offset> last_translated_offset() const = 0;
-
-    /**
-     * Reconciles the translator configurations.
-     */
-    virtual void reconcile_properties() = 0;
 
     /**
      * Cleans up state and uploads data to cloud storage. Should be called in

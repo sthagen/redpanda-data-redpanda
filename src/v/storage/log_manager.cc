@@ -310,7 +310,21 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
         compaction_heuristic_to_log_metas;
     for (auto& log_meta : _logs_list) {
         auto should_compact_log = [](ss::shared_ptr<log> l) {
-            // Consider the dirty ratio.
+            // A log is eligible for compaction if at least one of the following
+            // is true:
+            // 1. It's gone long enough without compaction: the earliest first
+            //    batch timestamp of a dirty segment is longer ago than
+            //    the max compaction lag.
+            // 2. It's dirty enough: the dirty ratio is at least the minimum
+            //    cleanable dirty ratio.
+            const auto max_lag = l->config().max_compaction_lag_ms();
+            const auto now = to_time_point(model::timestamp::now());
+            const auto earliest_dirty_ts = l->earliest_dirty_segment_ts();
+            if (
+              earliest_dirty_ts
+              && (now - to_time_point(earliest_dirty_ts.value()) > max_lag)) {
+                return true;
+            }
             const auto min_cleanable_dirty_ratio
               = l->config().min_cleanable_dirty_ratio().value_or(0.0);
             const auto dirty_ratio = l->dirty_ratio();
