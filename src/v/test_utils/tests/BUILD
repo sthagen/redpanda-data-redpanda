@@ -44,6 +44,9 @@ redpanda_cc_gtest(
     srcs = [
         "gtest_listener_test.cc",
     ],
+    args = [
+        "--gtest_output=xml:/dev/null",
+    ],
     deps = [
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
