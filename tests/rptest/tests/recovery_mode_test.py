@@ -447,6 +447,7 @@ class DisablingPartitionsTest(RedpandaTest):
             for topic in ts:
                 for p in rpk.describe_topic(topic):
                     ret[f"{topic}/{p.id}"] = p.high_watermark
+            self.logger.debug("high watermarks: %s", ret)
             return ret
 
         orig_hwms = get_hwms()

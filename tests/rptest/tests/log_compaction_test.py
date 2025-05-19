@@ -514,3 +514,58 @@ class LogCompactionSchedulingTest(LogCompactionTestBase, PreallocNodesTest):
 
         # Perform validation with KgoVerifierSeqConsumer
         self.consume_and_validate_log()
+
+
+class LogCompactionEnableSlidingWindow(RedpandaTest):
+    """
+    Test that enabling log_compaction_use_sliding_window when Redpanda is started with it
+    disabled does not result in any broker crashes.
+    """
+    def __init__(self, test_context):
+        self.test_context = test_context
+        # Start with sliding window compaction disabled.
+        self.extra_rp_conf = {
+            'log_compaction_use_sliding_window': False,
+            'log_compaction_interval_ms': 100,
+            'log_segment_size': 2 * 1024**2,  # 2 MiB
+            'compacted_log_segment_size': 1024**2,  # 1 MiB
+        }
+
+        super().__init__(test_context=test_context,
+                         num_brokers=1,
+                         extra_rp_conf=self.extra_rp_conf)
+
+        self._rpk_client = RpkTool(self.redpanda)
+
+    @cluster(num_nodes=2)
+    def test_enable_sliding_window(self):
+        # Redpanda was started with log_compaction_use_sliding_window=false.
+        # Set it to true, thereby leaving the memory reservation for compaction at 0.
+        self._rpk_client.cluster_config_set(
+            "log_compaction_use_sliding_window", True)
+
+        topic_spec = TopicSpec(cleanup_policy=TopicSpec.CLEANUP_COMPACT,
+                               replication_factor=1)
+        self.client().create_topic(topic_spec)
+
+        # Produce a small amount of segments and wait
+        producer = KgoVerifierProducer(context=self.test_context,
+                                       redpanda=self.redpanda,
+                                       topic=topic_spec.name,
+                                       msg_size=1024,
+                                       msg_count=10000)
+
+        producer.start()
+        producer.wait(timeout_sec=180)
+
+        def seen_compacted_segments():
+            return self.redpanda.metric_sum(
+                metric_name="vectorized_storage_log_compacted_segment_total",
+                metrics_endpoint=MetricsEndpoint.METRICS,
+                topic=topic_spec.name,
+                expect_metric=True) > 0
+
+        wait_until(seen_compacted_segments,
+                   timeout_sec=60,
+                   backoff_sec=1,
+                   err_msg=f"Did not see any compacted segments.")

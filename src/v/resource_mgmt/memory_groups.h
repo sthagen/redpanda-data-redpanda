@@ -39,6 +39,10 @@ struct partitions_memory_reservation {
     size_t reserved_bytes(size_t total_memory) const;
 };
 
+namespace testing {
+class system_memory_groups_accessor;
+}
+
 /**
  * Centralized unit for memory management.
  *
@@ -114,6 +118,8 @@ private:
     size_t _total_system_memory;
     bool _wasm_enabled;
     bool _datalake_enabled;
+
+    friend class testing::system_memory_groups_accessor;
 };
 
 /**
@@ -124,3 +130,15 @@ system_memory_groups& memory_groups();
 // Grabs the actual storage for the above. Useful to reset for tests such that
 // the above will reinit using the latest config
 std::optional<system_memory_groups>& memory_groups_holder();
+
+namespace testing {
+
+class system_memory_groups_accessor {
+public:
+    static size_t&
+    compaction_reserved_memory(system_memory_groups& mem_groups) {
+        return mem_groups._compaction_reserved_memory;
+    }
+};
+
+} // namespace testing

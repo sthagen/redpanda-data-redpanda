@@ -23,6 +23,7 @@
 #include "model/timestamp.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
+#include "resource_mgmt/memory_groups.h"
 #include "storage/batch_cache.h"
 #include "storage/disk_log_impl.h"
 #include "storage/log_housekeeping_meta.h"
@@ -5997,4 +5998,45 @@ FIXTURE_TEST(prefix_truncate_offset_range_size, storage_test_fixture) {
               ss::default_priority_class())
             .get());
     }
+}
+
+FIXTURE_TEST(log_compaction_enable_sliding_window, storage_test_fixture) {
+    // Simulate enabling sliding window after starting Redpanda with it disabled
+    // by setting the compaction_reserved_memory in the memory group to 0.
+    auto& mem_groups = memory_groups();
+    testing::system_memory_groups_accessor::compaction_reserved_memory(
+      mem_groups)
+      = 0;
+    storage::log_manager mgr = make_log_manager();
+    info("Configuration: {}", mgr.config());
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp = model::ntp("kafka", "a", 0);
+    using overrides_t = storage::ntp_config::default_overrides;
+    overrides_t ov;
+    ov.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+
+    auto log
+      = mgr
+          .manage(storage::ntp_config(
+            ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov)))
+          .get();
+
+    auto add_segment = [log](size_t size, model::term_id term) {
+        do {
+            append_single_record_batch(log, 1, term, 16_KiB, true);
+        } while (log->segments().back()->size_bytes() < size);
+    };
+
+    // Add a few segments.
+    auto num_segments = 5;
+    for (int i = 0; i < num_segments; ++i) {
+        add_segment(2_MiB, model::term_id(0));
+        log->force_roll(ss::default_priority_class()).get();
+    }
+
+    // config::shard_local_cfg().log_compaction_use_sliding_window is still
+    // `true` at this point. Assert this call doesn't crash when a map with
+    // capacity 0 is used.
+    storage::testing_details::log_manager_accessor::housekeeping_scan(mgr)
+      .get();
 }
