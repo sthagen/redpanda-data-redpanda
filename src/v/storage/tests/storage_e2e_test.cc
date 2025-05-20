@@ -32,6 +32,7 @@
 #include "storage/ntp_config.h"
 #include "storage/record_batch_builder.h"
 #include "storage/segment_utils.h"
+#include "storage/tests/batch_generators.h"
 #include "storage/tests/common.h"
 #include "storage/tests/disk_log_builder_fixture.h"
 #include "storage/tests/storage_test_fixture.h"

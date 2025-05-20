@@ -19,6 +19,7 @@
 #include "storage/segment_deduplication_utils.h"
 #include "storage/segment_set.h"
 #include "storage/segment_utils.h"
+#include "storage/tests/batch_generators.h"
 #include "storage/tests/storage_test_fixture.h"
 #include "storage/types.h"
 #include "test_utils/test.h"

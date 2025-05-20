@@ -11,7 +11,8 @@
 
 #include "cluster/logger.h"
 #include "cluster/rm_stm.h"
-#include "storage/tests/storage_test_fixture.h"
+#include "storage/segment.h"
+#include "storage/tests/batch_generators.h"
 #include "test_utils/async.h"
 #include "test_utils/randoms.h"
 #include "test_utils/test_macros.h"

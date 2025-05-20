@@ -93,6 +93,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
+        "//src/v/storage/tests:batch_generators",
         "//src/v/storage/tests:storage_test_fixture_gtest",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:random",
@@ -1216,6 +1217,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
+        "//src/v/storage/tests:batch_generators",
         "//src/v/storage/tests:storage_test_fixture",
         "//src/v/test_utils:seastar_boost",
     ],

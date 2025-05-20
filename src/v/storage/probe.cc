@@ -239,6 +239,12 @@ void probe::setup_metrics(const model::ntp& ntp) {
           [this] { return _closed_segment_bytes; },
           sm::description("Number of bytes within closed segments of the log"),
           labels),
+        sm::make_counter(
+          "adjacent_segments_compacted",
+          [this] { return _num_adjacent_segments_compacted; },
+          sm::description("Number of segments that have been compacted away "
+                          "during adjacent merge compaction."),
+          labels),
       },
       {},
       {sm::shard_label, partition_label});

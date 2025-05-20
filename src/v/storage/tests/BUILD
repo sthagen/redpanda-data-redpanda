@@ -103,6 +103,27 @@ redpanda_test_cc_library(
 )
 
 redpanda_test_cc_library(
+    name = "batch_generators",
+    hdrs = [
+        "batch_generators.h",
+    ],
+    include_prefix = "storage/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/compression",
+        "//src/v/hashing:crc32c",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/random:generators",
+        "//src/v/reflection:adl",
+        "//src/v/test_utils:fixture",
+        "//src/v/utils:vint",
+        "@seastar",
+    ],
+)
+
+redpanda_test_cc_library(
     name = "storage_test_fixture_gtest",
     hdrs = [
         "storage_test_fixture.h",
@@ -110,10 +131,9 @@ redpanda_test_cc_library(
     include_prefix = "storage/tests",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/compression",
+        ":batch_generators",
         "//src/v/config",
         "//src/v/features",
-        "//src/v/model/tests:random",
         "//src/v/storage",
         "//src/v/test_utils:gtest",
     ],
@@ -127,10 +147,9 @@ redpanda_test_cc_library(
     include_prefix = "storage/tests",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/compression",
+        ":batch_generators",
         "//src/v/config",
         "//src/v/features",
-        "//src/v/model/tests:random",
         "//src/v/storage",
         "//src/v/test_utils:fixture",
     ],
@@ -562,6 +581,7 @@ redpanda_cc_btest(
     ],
     cpu = 1,
     deps = [
+        ":batch_generators",
         ":common",
         ":disk_log_builder",
         ":disk_log_builder_fixture",
@@ -795,6 +815,7 @@ redpanda_cc_gtest(
         "//src/v/model",
         "//src/v/storage",
         "//src/v/storage:key_offset_map",
+        "//src/v/storage/tests:batch_generators",
         "//src/v/storage/tests:storage_test_fixture",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",

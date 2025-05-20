@@ -10,6 +10,7 @@
 #include "cluster/rm_stm.h"
 #include "cluster/tests/rm_stm_test_fixture.h"
 #include "cluster/tests/tx_compaction_utils.h"
+#include "test_utils/fixture.h"
 #include "test_utils/scoped_config.h"
 
 #include <seastar/util/defer.hh>

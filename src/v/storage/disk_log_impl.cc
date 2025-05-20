@@ -1160,6 +1160,8 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
           segment_to_remove, "compact_adjacent_segments");
     }
 
+    _probe->add_adjacent_segments_compacted(segments.size() - 1);
+
     add_dirty_segment_bytes(clean_turning_dirty_bytes);
     const ssize_t removed_bytes = ssize_t(ret.size_before)
                                   - ssize_t(ret.size_after);
