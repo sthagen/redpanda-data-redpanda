@@ -23,5 +23,3 @@ echo "Downloading the maven cache seed from: $seed_url"
 axel -n 10 -o /tmp/m2.tgz "$seed_url"
 tar xzf /tmp/m2.tgz -C /root
 rm -f /tmp/m2.tgz
-
-
