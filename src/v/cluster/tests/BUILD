@@ -1218,7 +1218,6 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/cluster",
         "//src/v/storage/tests:batch_generators",
-        "//src/v/storage/tests:storage_test_fixture",
         "//src/v/test_utils:seastar_boost",
     ],
 )

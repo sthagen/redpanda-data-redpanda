@@ -40,7 +40,15 @@
 #define RPTEST_REQUIRE_EQ_CORO(m, n) BOOST_REQUIRE_EQUAL(m, n)
 #define RPTEST_REQUIRE_NE(m, n) BOOST_REQUIRE_NE(m, n)
 #define RPTEST_REQUIRE_NE_CORO(m, n) BOOST_REQUIRE_NE(m, n)
-#define RPTEST_EXPECT_EQ(m, n) BOOST_REQUIRE_EQUAL(m, n)
+#define RPTEST_EXPECT_EQ(m, n) BOOST_CHECK_EQUAL(m, n)
+#define RPTEST_REQUIRE_GT(m, n) BOOST_REQUIRE_GT(m, n)
+#define RPTEST_REQUIRE_GE(m, n) BOOST_REQUIRE_GE(m, n)
+#define RPTEST_REQUIRE_LE(m, n) BOOST_REQUIRE_LE(m, n)
+#define RPTEST_REQUIRE_LT(m, n) BOOST_REQUIRE_LT(m, n)
+#define RPTEST_REQUIRE_THROW(m, e) BOOST_REQUIRE_THROW(m, e)
+#define RPTEST_REQUIRE_NO_THROW(m) BOOST_REQUIRE_NO_THROW(m)
+#define RPTEST_REQUIRE_CLOSE(m, n, t) BOOST_REQUIRE_CLOSE(m, n, t)
+#define RPTEST_EXPECT(m) BOOST_CHECK(m)
 
 #elif defined(IS_GTEST)
 
@@ -56,6 +64,14 @@
 #define RPTEST_REQUIRE_NE(m, n) ASSERT_NE(m, n)
 #define RPTEST_REQUIRE_NE_CORO(m, n) ASSERT_NE_CORO(m, n)
 #define RPTEST_EXPECT_EQ(m, n) EXPECT_EQ(m, n)
+#define RPTEST_REQUIRE_GT(m, n) ASSERT_GT(m, n)
+#define RPTEST_REQUIRE_GE(m, n) ASSERT_GE(m, n)
+#define RPTEST_REQUIRE_LE(m, n) ASSERT_LE(m, n)
+#define RPTEST_REQUIRE_LT(m, n) ASSERT_LT(m, n)
+#define RPTEST_REQUIRE_THROW(m, e) ASSERT_THROW(m, e)
+#define RPTEST_REQUIRE_NO_THROW(m) ASSERT_NO_THROW(m)
+#define RPTEST_REQUIRE_CLOSE(m, n, t) ASSERT_NEAR(m, n, t)
+#define RPTEST_EXPECT(m) EXPECT_TRUE(m)
 
 #else
 #include "base/vassert.h"

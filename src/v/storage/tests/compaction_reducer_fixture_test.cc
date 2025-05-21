@@ -28,9 +28,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/defer.hh>
 
-class MapBuildingReducerFixtureTest
-  : public storage_test_fixture
-  , public seastar_test {};
+class MapBuildingReducerFixtureTest : public storage_test_fixture {};
 
 TEST_F(MapBuildingReducerFixtureTest, TestMapIndexing) {
     auto cfg = default_log_config(test_dir);
@@ -54,7 +52,7 @@ TEST_F(MapBuildingReducerFixtureTest, TestMapIndexing) {
     append_random_batches<linear_int_kv_batch_generator>(log, num_appends);
     log->flush().get();
     disk_log->force_roll(ss::default_priority_class()).get();
-    BOOST_REQUIRE_EQUAL(disk_log->segment_count(), 2);
+    ASSERT_EQ(disk_log->segment_count(), 2);
 
     auto& segments = disk_log->segments();
     auto& seg = segments.front();

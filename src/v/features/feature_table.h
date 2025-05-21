@@ -73,6 +73,7 @@ enum class feature : std::uint64_t {
     cloud_storage_metadata_rw_fence = 1ULL << 57U,
     node_restart_risk_assessment = 1ULL << 58U,
     topic_ids = 1ULL << 59U,
+    kafka_data_rpc = 1ULL << 60U,
     // Dummy features for testing only
     test_alpha = 1ULL << 61U,
     test_bravo = 1ULL << 62U,
@@ -444,6 +445,12 @@ inline constexpr std::array feature_schema{
     feature::topic_ids,
     feature_spec::available_policy::always,
     feature_spec::prepare_policy::requires_migration},
+  feature_spec{
+    release_version::v25_2_1,
+    "kafka_data_rpc",
+    feature::kafka_data_rpc,
+    feature_spec::available_policy::always,
+    feature_spec::prepare_policy::always},
 };
 
 std::string_view to_string_view(feature);

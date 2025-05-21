@@ -15,6 +15,9 @@
 #include "cluster/errc.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "features/feature_table.h"
+#include "kafka/data/rpc/client.h"
+#include "kafka/data/rpc/deps.h"
 #include "logger.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -181,24 +184,31 @@ std::ostream& operator<<(std::ostream& os, T result) {
 
 client::client(
   model::node_id self,
-  std::unique_ptr<partition_leader_cache> l,
-  std::unique_ptr<topic_metadata_cache> md_cache,
-  std::unique_ptr<topic_creator> t,
+  std::unique_ptr<kafka::data::rpc::partition_leader_cache> l,
+  std::unique_ptr<kafka::data::rpc::topic_metadata_cache> md_cache,
   std::unique_ptr<cluster_members_cache> m,
   ss::sharded<::rpc::connection_cache>* c,
   ss::sharded<local_service>* s,
+  ss::sharded<kafka::data::rpc::client>* k,
+  ss::sharded<features::feature_table>* ft,
   config::binding<size_t> b)
   : _self(self)
   , _cluster_members(std::move(m))
   , _leaders(std::move(l))
   , _topic_metadata(std::move(md_cache))
-  , _topic_creator(std::move(t))
   , _connections(c)
   , _local_service(s)
+  , _kafka_client(k)
+  , _feature_table(ft)
   , _max_wasm_binary_size(std::move(b)) {}
 
 ss::future<cluster::errc> client::produce(
   model::topic_partition tp, ss::chunked_fifo<model::record_batch> batches) {
+    if (_feature_table->local().is_active(features::feature::kafka_data_rpc)) {
+        co_return co_await _kafka_client->local().produce(
+          std::move(tp), std::move(batches));
+    }
+
     if (batches.empty()) {
         co_return cluster::errc::success;
     }
@@ -485,10 +495,10 @@ ss::future<bool> client::try_create_wasm_binary_ntp() {
       = model::cleanup_policy_bitflags::compaction;
 
     auto fut = co_await ss::coroutine::as_future<cluster::errc>(
-      _topic_creator->create_topic(
+      _kafka_client->local().try_create_topic(
         model::topic_namespace_view(model::wasm_binaries_internal_ntp),
-        /*partition_count=*/1,
-        topic_props));
+        topic_props,
+        /*partition_count=*/1));
     if (fut.failed()) {
         vlog(
           log.warn,
@@ -516,8 +526,8 @@ ss::future<bool> client::try_create_transform_offsets_topic() {
     properties.retention_local_target_ms
       = tristate<std::chrono::milliseconds>();
     auto fut = co_await ss::coroutine::as_future<cluster::errc>(
-      _topic_creator->create_topic(
-        model::transform_offsets_nt, 1, std::move(properties)));
+      _kafka_client->local().try_create_topic(
+        model::transform_offsets_nt, std::move(properties), 1));
     if (fut.failed()) {
         vlog(
           log.warn,
@@ -810,33 +820,16 @@ client::generate_remote_report(model::node_id node) {
 }
 
 ss::future<cluster::errc> client::create_transform_logs_topic() {
-    co_return co_await retry(
-      [this]() { return try_create_transform_logs_topic(); });
-}
-
-ss::future<cluster::errc> client::try_create_transform_logs_topic() {
     cluster::topic_properties topic_props;
     topic_props.retention_bytes = tristate<size_t>(2_GiB);
     topic_props.retention_duration = tristate<std::chrono::milliseconds>(
       std::chrono::duration_cast<std::chrono::milliseconds>(24h));
     topic_props.cleanup_policy_bitflags
       = model::cleanup_policy_bitflags::deletion;
-    auto fut = co_await ss::coroutine::as_future<cluster::errc>(
-      _topic_creator->create_topic(
-        model::topic_namespace_view(model::transform_log_internal_nt),
-        config::shard_local_cfg().default_topic_partitions(),
-        std::move(topic_props)));
-    if (fut.failed()) {
-        throw std::runtime_error(fmt::format(
-          "Error creating transform logs topic: {}", fut.get_exception()));
-    }
-    auto ec = fut.get();
-    if (
-      ec != cluster::errc::success
-      && ec != cluster::errc::topic_already_exists) {
-        throw std::runtime_error("Failed to create transform logs topic");
-    }
-    co_return ec;
+    return _kafka_client->local().create_topic(
+      model::topic_namespace_view(model::transform_log_internal_nt),
+      std::move(topic_props),
+      config::shard_local_cfg().default_topic_partitions());
 }
 
 template<typename Func>
@@ -866,7 +859,7 @@ ss::future<> client::update_wasm_binary_size() {
             updates.batch_max_bytes.value = _max_wasm_binary_size();
             updates.batch_max_bytes.op
               = cluster::incremental_update_operation::set;
-            return _topic_creator->update_topic(
+            return _kafka_client->local().update_topic(
               cluster::topic_properties_update(
                 model::topic_namespace(tn),
                 updates,

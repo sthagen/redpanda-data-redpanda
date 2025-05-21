@@ -13,6 +13,8 @@
 #include "storage/ntp_config.h"
 #include "storage/tests/disk_log_builder_fixture.h"
 #include "test_utils/fixture.h"
+#include "test_utils/test_macros.h"
+#include "test_utils/tmp_dir.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/core/reactor.hh>
@@ -218,4 +220,70 @@ FIXTURE_TEST(iterator_invalidation, log_builder_fixture) {
     BOOST_REQUIRE_EQUAL(data_batches.size(), 2);
     BOOST_REQUIRE_EQUAL(config_batches.size(), 2);
     BOOST_REQUIRE_EQUAL(all_batches.size(), 4);
+}
+
+FIXTURE_TEST(test_skipping_compaction_below_start_offset, log_builder_fixture) {
+    using namespace storage;
+
+    ss::abort_source abs;
+    temporary_dir tmp_dir("storage_e2e");
+    auto data_path = tmp_dir.get_path();
+
+    storage::ntp_config config{{"test_ns", "test_tpc", 0}, {data_path}};
+
+    storage::ntp_config::default_overrides overrides;
+    overrides.retention_bytes = tristate<size_t>{1};
+    overrides.cleanup_policy_bitflags
+      = model::cleanup_policy_bitflags::compaction
+        | model::cleanup_policy_bitflags::deletion;
+
+    config.set_overrides(overrides);
+
+    // Create a log and populate it with two segments,
+    // while making sure to close the first segment before
+    // opening the second.
+    b | start(std::move(config));
+
+    auto& log = b.get_disk_log_impl();
+
+    b | add_segment(0) | add_random_batch(0, 100);
+
+    log.force_roll(ss::default_priority_class()).get();
+
+    b | add_segment(100) | add_random_batch(100, 100);
+
+    RPTEST_REQUIRE_EQ(log.segment_count(), 2);
+
+    housekeeping_config cfg{
+      model::timestamp::max(),
+      1,
+      model::offset::max(),
+      std::nullopt,
+      ss::default_priority_class(),
+      abs};
+
+    // Call into `disk_log_impl::gc` and listen for the eviction
+    // notification being created.
+    auto eviction_future = log.monitor_eviction(abs);
+    auto new_start_offset = b.apply_retention(cfg.gc).get();
+    RPTEST_REQUIRE(new_start_offset);
+
+    RPTEST_REQUIRE_EQ(log.segment_count(), 2);
+
+    // Grab the new start offset from the notification and
+    // update the removable offset and start offsets.
+    auto evict_at_offset = eviction_future.get();
+    RPTEST_REQUIRE_EQ(*new_start_offset, model::next_offset(evict_at_offset));
+    RPTEST_REQUIRE(b.update_start_offset(*new_start_offset).get());
+
+    // Call into `disk_log_impl::compact`. The only segment eligible for
+    // compaction is the below the start offset and it should be ignored.
+    auto& first_seg = log.segments().front();
+    RPTEST_REQUIRE_EQ(first_seg->finished_self_compaction(), false);
+
+    b.apply_adjacent_merge_compaction(cfg.compact, *new_start_offset).get();
+
+    RPTEST_REQUIRE_EQ(first_seg->finished_self_compaction(), false);
+
+    b.stop().get();
 }

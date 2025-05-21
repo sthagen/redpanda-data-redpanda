@@ -106,6 +106,8 @@ std::string_view to_string_view(feature f) {
         return "node_restart_risk_assessment";
     case feature::topic_ids:
         return "topic_ids";
+    case feature::kafka_data_rpc:
+        return "kafka_data_rpc";
 
     /*
      * testing features

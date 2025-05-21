@@ -19,14 +19,14 @@
 #include "storage/log_manager.h"
 #include "storage/tests/batch_generators.h"
 #include "storage/types.h"
-#include "test_utils/fixture.h"
+#include "test_utils/test_macros.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/core/reactor.hh>
 
 #include <boost/range/irange.hpp>
-#include <boost/test/tools/old/interface.hpp>
 #include <fmt/core.h>
+#include <gtest/gtest.h>
 
 #include <cstdint>
 #include <optional>
@@ -35,7 +35,7 @@ using namespace std::chrono_literals; // NOLINT
 
 inline ss::logger tlog{"test_log"};
 
-class storage_test_fixture {
+class storage_test_fixture : public ::testing::Test {
 public:
     ss::sstring test_dir;
     storage::kvstore kvstore;

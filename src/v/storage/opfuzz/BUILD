@@ -1,4 +1,4 @@
-load("//bazel:test.bzl", "redpanda_cc_btest", "redpanda_test_cc_library")
+load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_test_cc_library(
     name = "opfuzz",
@@ -24,7 +24,7 @@ redpanda_test_cc_library(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "opfuzz_test",
     timeout = "short",
     srcs = [
@@ -38,7 +38,11 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/storage",
         "//src/v/storage/tests:storage_test_fixture",
+        "//src/v/test_utils:fixture",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:seastar_boost",
+        "@boost//:range",
+        "@googletest//:gtest",
         "@seastar",
     ],
 )

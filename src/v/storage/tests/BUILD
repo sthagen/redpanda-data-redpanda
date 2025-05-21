@@ -151,7 +151,8 @@ redpanda_test_cc_library(
         "//src/v/config",
         "//src/v/features",
         "//src/v/storage",
-        "//src/v/test_utils:fixture",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
     ],
 )
 
@@ -573,7 +574,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "storage_e2e_single_thread",
     timeout = "long",
     srcs = [
@@ -602,14 +603,14 @@ redpanda_cc_btest(
         "//src/v/storage:batch_cache",
         "//src/v/storage:record_batch_builder",
         "//src/v/storage:resources",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:random",
         "//src/v/test_utils:random_bytes",
-        "//src/v/test_utils:seastar_boost",
         "//src/v/utils:directory_walker",
         "//src/v/utils:to_string",
         "//src/v/utils:tristate",
-        "@boost//:test",
         "@fmt",
+        "@googletest//:gtest",
         "@seastar",
     ],
 )
@@ -667,7 +668,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "log_truncate_test",
     timeout = "short",
     srcs = [
@@ -679,11 +680,10 @@ redpanda_cc_btest(
         "//src/v/storage/tests:disk_log_builder",
         "//src/v/storage/tests:storage_test_fixture",
         "//src/v/test_utils:fixture",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
         "@boost//:range",
-        "@boost//:test",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
