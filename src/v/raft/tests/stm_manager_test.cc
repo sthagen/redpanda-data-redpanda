@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "raft/tests/raft_fixture_retry_policy.h"
 #include "raft/tests/stm_test_fixture.h"
 
@@ -315,7 +316,7 @@ TEST_F_CORO(state_machine_fixture, test_recovery_from_snapshot) {
                 return model::consume_reader_to_memory(
                   std::move(rdr), model::no_timeout);
             })
-            .then([](ss::circular_buffer<model::record_batch> batches) {
+            .then([](chunked_circular_buffer<model::record_batch> batches) {
                 return batches.back().last_offset();
             });
       });
@@ -389,7 +390,7 @@ TEST_F_CORO(
                 return model::consume_reader_to_memory(
                   std::move(rdr), model::no_timeout);
             })
-            .then([](ss::circular_buffer<model::record_batch> batches) {
+            .then([](chunked_circular_buffer<model::record_batch> batches) {
                 return batches.back().last_offset();
             });
       });

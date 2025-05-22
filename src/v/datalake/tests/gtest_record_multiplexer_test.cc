@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 #include "cloud_io/provider.h"
+#include "container/chunked_circular_buffer.h"
 #include "datalake/base_types.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/local_parquet_file_writer.h"
@@ -69,7 +70,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexer) {
     batch_spec.records = record_count;
     batch_spec.count = batch_count;
     batch_spec.offset = model::offset{start_offset};
-    ss::circular_buffer<model::record_batch> batches
+    chunked_circular_buffer<model::record_batch> batches
       = model::test::make_random_batches(batch_spec).get();
 
     auto reader = model::make_generating_record_batch_reader(
@@ -118,7 +119,7 @@ TEST(DatalakeMultiplexerTest, TestMultiplexerWriteError) {
     model::test::record_batch_spec batch_spec;
     batch_spec.records = record_count;
     batch_spec.count = batch_count;
-    ss::circular_buffer<model::record_batch> batches
+    chunked_circular_buffer<model::record_batch> batches
       = model::test::make_random_batches(batch_spec).get();
 
     auto reader = model::make_generating_record_batch_reader(
@@ -170,7 +171,7 @@ TEST(DatalakeMultiplexerTest, WritesDataFiles) {
     batch_spec.records = record_count;
     batch_spec.count = batch_count;
     batch_spec.offset = model::offset{start_offset};
-    ss::circular_buffer<model::record_batch> batches
+    chunked_circular_buffer<model::record_batch> batches
       = model::test::make_random_batches(batch_spec).get();
 
     auto reader = model::make_generating_record_batch_reader(
@@ -241,7 +242,7 @@ TEST_F(RecordMultiplexerParquetTest, TestSimple) {
     tests::record_generator gen(&registry);
     auto reg_res = gen.register_avro_schema("schema", avro_schema).get();
     EXPECT_FALSE(reg_res.has_error()) << reg_res.error();
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     model::offset o{0};
     const auto start_offset = o;
     const size_t num_hrs = 3;

@@ -12,6 +12,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/core:write_pipeline",
         "//src/v/cloud_topics/core:write_request",
         "//src/v/cloud_topics/throttler",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/test_utils:gtest",

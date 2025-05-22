@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "model/tests/random_batch.h"
 #include "storage/mvlog/batch_collecting_stream_utils.h"
 #include "storage/mvlog/batch_collector.h"
@@ -42,7 +43,7 @@ public:
         }
     }
 
-    ss::future<ss::circular_buffer<model::record_batch>>
+    ss::future<chunked_circular_buffer<model::record_batch>>
     write_random_batches(int num_batches) {
         segment_appender appender(paging_file_.get());
         auto in_batches = co_await model::test::make_random_batches(

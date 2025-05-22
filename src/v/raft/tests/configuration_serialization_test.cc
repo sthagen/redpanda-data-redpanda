@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "bytes/iobuf_parser.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/adl_serde.h"
 #include "model/metadata.h"
 #include "model/tests/random_batch.h"
@@ -133,19 +134,19 @@ struct test_consumer {
 SEASTAR_THREAD_TEST_CASE(test_config_extracting_reader) {
     auto cfg_1 = random_configuration();
     auto cfg_2 = random_configuration();
-    using batches_t = ss::circular_buffer<model::record_batch>;
-    ss::circular_buffer<model::record_batch> all_batches;
+    using batches_t = chunked_circular_buffer<model::record_batch>;
+    chunked_circular_buffer<model::record_batch> all_batches;
 
     // serialize to batches
     // use adl
     cfg_1.set_version(raft::group_configuration::v_5);
     auto cfg_batch_1 = raft::details::serialize_configuration_as_batch(cfg_1);
-    ss::circular_buffer<model::record_batch> cfg_batches_1;
+    chunked_circular_buffer<model::record_batch> cfg_batches_1;
     cfg_batches_1.push_back(std::move(cfg_batch_1));
     // use serde
     cfg_2.set_version(raft::group_configuration::v_6);
     auto cfg_batch_2 = raft::details::serialize_configuration_as_batch(cfg_2);
-    ss::circular_buffer<model::record_batch> cfg_batches_2;
+    chunked_circular_buffer<model::record_batch> cfg_batches_2;
     cfg_batches_2.push_back(std::move(cfg_batch_2));
     auto batches
       = model::test::make_random_batches(model::offset(0), 10, true).get();

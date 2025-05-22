@@ -134,6 +134,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
         "//src/v/config",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/container:fragmented_vector",
         "//src/v/container:intrusive",
         "//src/v/features",

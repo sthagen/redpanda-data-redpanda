@@ -12,6 +12,7 @@
 #pragma once
 
 #include "base/likely.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/record.h"
 #include "raft/configuration_bootstrap_state.h"
 #include "raft/group_configuration.h"
@@ -20,7 +21,6 @@
 #include "storage/snapshot.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/sstring.hh>
 
@@ -47,8 +47,8 @@ void write_configuration(group_configuration cfg, iobuf& out);
 ss::future<raft::configuration_bootstrap_state> read_bootstrap_state(
   ss::shared_ptr<storage::log>, model::offset, ss::abort_source&);
 
-ss::circular_buffer<model::record_batch> make_ghost_batches_in_gaps(
-  model::offset, ss::circular_buffer<model::record_batch>&&);
+chunked_circular_buffer<model::record_batch> make_ghost_batches_in_gaps(
+  model::offset, chunked_circular_buffer<model::record_batch>&&);
 fragmented_vector<model::record_batch> make_ghost_batches_in_gaps(
   model::offset, fragmented_vector<model::record_batch>&&);
 
@@ -109,7 +109,7 @@ private:
 // clang-format off
 template<typename Func>
     requires requires(Func f, model::record_batch b){
-        { f(std::move(b)) } 
+        { f(std::move(b)) }
             -> std::same_as<ss::futurize_t<std::invoke_result_t<Func, model::record_batch&&>>>;
     }
 // clang-format on

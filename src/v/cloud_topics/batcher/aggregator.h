@@ -14,10 +14,10 @@
 #include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/types.h"
+#include "container/chunked_circular_buffer.h"
 #include "container/fragmented_vector.h"
 #include "model/record.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/weak_ptr.hh>
 
 #include <absl/container/btree_map.h>
@@ -29,7 +29,7 @@ namespace experimental::cloud_topics {
 template<class Clock>
 struct batches_for_req {
     /// Generated placeholder batches
-    ss::circular_buffer<model::record_batch> placeholders;
+    chunked_circular_buffer<model::record_batch> placeholders;
     /// Source write request
     ss::weak_ptr<core::write_request<Clock>> ref;
 };

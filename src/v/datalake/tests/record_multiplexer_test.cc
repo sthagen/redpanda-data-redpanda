@@ -7,6 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
+#include "container/chunked_circular_buffer.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/record_multiplexer.h"
 #include "datalake/record_schema_resolver.h"
@@ -25,8 +26,6 @@
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 #include "storage/record_batch_builder.h"
-
-#include <seastar/core/circular_buffer.hh>
 
 #include <avro/Compiler.hh>
 #include <gtest/gtest.h>
@@ -128,7 +127,7 @@ public:
       const std::function<void(storage::record_batch_builder&)>& cb,
       bool expect_error = false) {
         auto start_offset = o;
-        ss::circular_buffer<model::record_batch> batches;
+        chunked_circular_buffer<model::record_batch> batches;
         const auto start_ts = model::timestamp::now();
         constexpr auto ms_per_hr = 1000 * 3600;
         for (size_t h = 0; h < param.hrs; ++h) {
@@ -155,7 +154,7 @@ public:
         while (!batches.empty()) {
             auto subset_size = random_generators::get_int<size_t>(
               1, batches.size());
-            ss::circular_buffer<model::record_batch> subset;
+            chunked_circular_buffer<model::record_batch> subset;
             while (subset.size() != subset_size) {
                 subset.push_back(batches.front().share());
                 batches.pop_front();

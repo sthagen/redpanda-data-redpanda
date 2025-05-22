@@ -1697,7 +1697,14 @@ class ConsumerGroupOffsetResetTest(RedpandaTest):
         olv = OfflineLogViewer(self.redpanda)
 
         def get_summary(node):
-            summary = olv.consumer_offsets_summary(node)
+            try:
+                summary = olv.consumer_offsets_summary(node)
+            except Exception as e:
+                self.logger.debug(
+                    f"Caught exception {e} while collecting consumer offsets summary, retrying"
+                )
+                return False
+
             for _, cg_partition_summary in summary.items():
                 assert len(
                     cg_partition_summary['raft_configurations']
@@ -1717,7 +1724,6 @@ class ConsumerGroupOffsetResetTest(RedpandaTest):
                 lambda: get_summary(n),
                 timeout_sec=60,
                 backoff_sec=1,
-                retry_on_exc=True,
                 err_msg=
                 f"Failed to get consumer offsets summary for node {n.account.hostname}"
             )

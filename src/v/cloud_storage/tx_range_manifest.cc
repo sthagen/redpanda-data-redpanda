@@ -45,7 +45,7 @@ struct tx_range_manifest_json_handler {
             if (
               compat_version
               > static_cast<int>(tx_range_manifest_version::current_version)) {
-                throw std::runtime_error(fmt::sprintf(
+                throw std::runtime_error(fmt::format(
                   "Can't deserialize tx manifest, supported version {}, "
                   "manifest "
                   "version {}, compatible version {}",

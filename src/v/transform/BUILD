@@ -103,6 +103,7 @@ redpanda_cc_library(
         "//src/v/storage:parser_utils",
         "//src/v/utils:human",
         "@abseil-cpp//absl/algorithm:container",
+        "@boost//:range",
     ],
     include_prefix = "transform",
     visibility = ["//src/v/transform:__subpackages__"],

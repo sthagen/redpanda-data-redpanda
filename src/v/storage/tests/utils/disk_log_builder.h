@@ -13,6 +13,7 @@
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "base/vassert.h"
+#include "container/chunked_circular_buffer.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/record.h"
@@ -418,7 +419,7 @@ private:
     }
 
     ss::future<> write(
-      ss::circular_buffer<model::record_batch> buff,
+      chunked_circular_buffer<model::record_batch> buff,
       const log_append_config& config,
       should_flush_after flush);
 

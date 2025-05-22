@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "container/chunked_hash_map.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/group_metadata.h"
@@ -22,7 +23,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/sstring.hh>
 
 #include <absl/container/node_hash_map.h>
@@ -38,7 +38,7 @@ using namespace std::chrono_literals;
 
 struct cg_recovery_test_fixture : seastar_test {
     ss::future<group_recovery_consumer_state>
-    recover_from_batches(ss::circular_buffer<model::record_batch> batches) {
+    recover_from_batches(chunked_circular_buffer<model::record_batch> batches) {
         group_recovery_consumer consumer(
           make_consumer_offsets_serializer(), as);
 
@@ -69,8 +69,9 @@ struct cg_recovery_test_fixture : seastar_test {
     }
 
     template<typename... Args>
-    ss::circular_buffer<model::record_batch> serialize_metadata(Args... args) {
-        ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch>
+    serialize_metadata(Args... args) {
+        chunked_circular_buffer<model::record_batch> batches;
 
         (batches.push_back(serialize(std::move(args))), ...);
         return batches;
@@ -224,10 +225,9 @@ struct cg_recovery_test_fixture : seastar_test {
         };
     }
 
-    ss::circular_buffer<model::record_batch>
-    copy_batches(const ss::circular_buffer<model::record_batch>& orig) {
-        ss::circular_buffer<model::record_batch> ret;
-        ret.reserve(orig.size());
+    chunked_circular_buffer<model::record_batch>
+    copy_batches(const chunked_circular_buffer<model::record_batch>& orig) {
+        chunked_circular_buffer<model::record_batch> ret;
         std::transform(
           orig.begin(),
           orig.end(),
@@ -240,7 +240,7 @@ struct cg_recovery_test_fixture : seastar_test {
      * member and two committed offsets for test-1/0 at 1024 and for test-2/1 at
      * 256.
      */
-    std::tuple<group_metadata_kv, ss::circular_buffer<model::record_batch>>
+    std::tuple<group_metadata_kv, chunked_circular_buffer<model::record_batch>>
     serialize_single_group() {
         kafka::group_id gr_1("g-1");
         auto g_1_metadata = make_group_metadata(

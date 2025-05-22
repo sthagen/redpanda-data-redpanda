@@ -48,6 +48,7 @@ redpanda_cc_library(
         ":serializer",
         "//src/v/base",
         "//src/v/cloud_topics:types",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/container:intrusive",
         "//src/v/model",
         "@seastar",

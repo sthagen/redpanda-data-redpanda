@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
@@ -31,12 +32,12 @@ public:
           ss::stop_iteration::no);
     }
 
-    ss::circular_buffer<record_batch> end_of_stream() {
+    chunked_circular_buffer<record_batch> end_of_stream() {
         return std::move(_result);
     }
 
 private:
-    ss::circular_buffer<record_batch> _result;
+    chunked_circular_buffer<record_batch> _result;
     size_t _depth;
 };
 
@@ -63,7 +64,7 @@ public:
 
     struct consumer_ret {
         int init_count;
-        ss::circular_buffer<record_batch> batches;
+        chunked_circular_buffer<record_batch> batches;
     };
 
     consumer_ret end_of_stream() {
@@ -76,18 +77,18 @@ public:
 private:
     size_t _depth;
     int _init_count;
-    ss::circular_buffer<record_batch> _result;
+    chunked_circular_buffer<record_batch> _result;
 };
 
 template<typename... Offsets>
-ss::circular_buffer<model::record_batch> make_batches(Offsets... o) {
-    ss::circular_buffer<model::record_batch> batches;
+chunked_circular_buffer<model::record_batch> make_batches(Offsets... o) {
+    chunked_circular_buffer<model::record_batch> batches;
     (batches.emplace_back(model::test::make_random_batch(o, 1, true)), ...);
     return batches;
 }
 
 record_batch_reader
-make_generating_reader(ss::circular_buffer<record_batch> batches) {
+make_generating_reader(chunked_circular_buffer<record_batch> batches) {
     return make_generating_record_batch_reader(
       [batches = std::move(batches)]() mutable {
           return ss::make_ready_future<record_batch_reader::data_t>(
@@ -157,7 +158,6 @@ SEASTAR_THREAD_TEST_CASE(record_batch_sharing) {
     auto v1 = make_batches(
       offset(1), offset(2), offset(3), offset(4), offset(5));
     decltype(v1) v2;
-    v2.reserve(v1.size());
     std::transform(
       v1.begin(), v1.end(), std::back_inserter(v2), [](record_batch& batch) {
           return batch.share();

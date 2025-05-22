@@ -231,6 +231,7 @@ redpanda_cc_gtest(
         "consumer_group_recovery_test.cc",
     ],
     deps = [
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/container:chunked_hash_map",
         "//src/v/kafka/protocol",
         "//src/v/kafka/server",

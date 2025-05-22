@@ -21,6 +21,8 @@
 #include <seastar/core/seastar.hh>
 #include <seastar/core/smp.hh>
 
+#include <boost/range/irange.hpp>
+
 namespace cluster::self_test {
 
 void diskcheck::validate_options(const diskcheck_opts& opts) {

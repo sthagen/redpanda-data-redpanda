@@ -81,6 +81,7 @@ redpanda_test_cc_library(
     include_prefix = "cluster/tests",
     deps = [
         ":cluster_test_fixture",
+        "//src/v/container:chunked_circular_buffer",
     ],
 )
 
@@ -121,6 +122,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/test_utils:seastar_boost",
     ],
 )
@@ -196,6 +198,7 @@ redpanda_cc_gtest(
         "//src/v/bytes:random",
         "//src/v/cluster",
         "//src/v/config",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/raft",
@@ -436,6 +439,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/cluster",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/reflection:adl",

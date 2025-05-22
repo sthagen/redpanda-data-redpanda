@@ -12,6 +12,7 @@
 #include "base/units.h"
 #include "base/vassert.h"
 #include "base/vlog.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/record.h"
 #include "model/tests/random_batch.h"
 #include "model/timestamp.h"
@@ -33,7 +34,7 @@ namespace storage {
 ss::logger fuzzlogger("opfuzz");
 
 static size_t
-record_count(const ss::circular_buffer<model::record_batch>& batches) {
+record_count(const chunked_circular_buffer<model::record_batch>& batches) {
     return std::accumulate(
       batches.begin(),
       batches.end(),

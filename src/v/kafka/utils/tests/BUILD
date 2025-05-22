@@ -8,6 +8,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/bytes:iobuf",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/kafka/utils:txn_reader",
         "//src/v/model",
         "//src/v/model/tests:random",

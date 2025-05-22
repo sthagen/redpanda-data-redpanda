@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/timestamp.h"
@@ -300,7 +301,7 @@ TEST_F(storage_test_fixture, test_truncate_last_single_record_batch) {
       15,
       model::term_id(0),
       [](std::optional<model::timestamp> ts = std::nullopt) {
-          ss::circular_buffer<model::record_batch> ret;
+          chunked_circular_buffer<model::record_batch> ret;
           ret.push_back(model::test::make_random_batch(
             model::offset(0),
             1,

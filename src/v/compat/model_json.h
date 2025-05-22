@@ -11,6 +11,7 @@
 #pragma once
 
 #include "compat/json.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/metadata.h"
 #include "model/record.h"
 
@@ -457,7 +458,7 @@ inline void read_value(const json::Value& rd, model::record_batch_header& out) {
  * circumvent the normal api to which requires default ctor is available.
  */
 inline void read_value(
-  const json::Value& v, ss::circular_buffer<model::record_batch>& target) {
+  const json::Value& v, chunked_circular_buffer<model::record_batch>& target) {
     for (const auto& e : v.GetArray()) {
         model::record_batch_header header;
         std::vector<model::record> records;

@@ -145,9 +145,24 @@ class KgoVerifierService(Service):
             }
         }
 
+    def _log_node_network_state(self, node):
+        """
+        For debugging issues around starting and stopping processes: log which ports are in use.
+        """
+        self.logger.debug(
+            f"Gathering port usage information with 'netstat -panelot' on {node.name} while starting {self.who_am_i()}"
+        )
+
+        # Capture general process informatio
+
+        # Capture network information
+        for line in node.account.ssh_capture("netstat -panelot",
+                                             timeout_sec=30):
+            self.logger.debug(line.strip())
+
     def spawn(self, cmd, node):
         assert self._pid is None
-
+        self._log_node_network_state(node)
         self._remote_port = self._select_port(node)
 
         debug = '--debug' if self._debug_logs else ''

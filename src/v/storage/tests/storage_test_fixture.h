@@ -14,6 +14,7 @@
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "config/configuration.h"
+#include "container/chunked_circular_buffer.h"
 #include "features/feature_table.h"
 #include "storage/kvstore.h"
 #include "storage/log_manager.h"
@@ -135,20 +136,20 @@ public:
               ss::stop_iteration::no);
         }
 
-        ss::circular_buffer<model::record_batch> end_of_stream() {
+        chunked_circular_buffer<model::record_batch> end_of_stream() {
             return std::move(batches);
         }
 
-        ss::circular_buffer<model::record_batch> batches;
+        chunked_circular_buffer<model::record_batch> batches;
     };
 
-    ss::circular_buffer<model::record_batch>
+    chunked_circular_buffer<model::record_batch>
     read_and_validate_all_batches(ss::shared_ptr<storage::log> log) {
         return read_and_validate_all_batches(
           log, model::model_limits<model::offset>::max());
     }
 
-    ss::circular_buffer<model::record_batch> read_and_validate_all_batches(
+    chunked_circular_buffer<model::record_batch> read_and_validate_all_batches(
       ss::shared_ptr<storage::log> log, model::offset max_offset) {
         auto lstats = log->offsets();
         storage::log_reader_config cfg(
@@ -161,7 +162,7 @@ public:
     // clang-format off
     template<typename T = random_batches_generator>
         requires requires(T generator, std::optional<model::timestamp> ts) {
-            { generator(ts) } -> std::same_as<ss::circular_buffer<model::record_batch>>;
+            { generator(ts) } -> std::same_as<chunked_circular_buffer<model::record_batch>>;
         }
     // clang-format on
     std::vector<model::record_batch_header> append_random_batches(
@@ -251,7 +252,7 @@ public:
     // std::vector<model::record_batch_type> type_filter;
     // model::offset max_offset = model::model_limits<model::offset>::max(); //
     // inclusive
-    ss::circular_buffer<model::record_batch> read_range_to_vector(
+    chunked_circular_buffer<model::record_batch> read_range_to_vector(
       ss::shared_ptr<storage::log> log,
       model::offset start,
       model::offset end) {

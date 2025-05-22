@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "kafka/server/tests/produce_consume_utils.h"
 #include "model/fundamental.h"
 #include "random/generators.h"
@@ -140,7 +141,7 @@ FIXTURE_TEST(test_concurrent_log_eviction_and_append, storage_e2e_fixture) {
                     return model::consume_reader_to_memory(
                       std::move(r), model::no_timeout);
                 })
-                .then([](ss::circular_buffer<model::record_batch> batches) {
+                .then([](chunked_circular_buffer<model::record_batch> batches) {
                     model::offset prev_base_offset{model::offset::min()};
                     for (const auto& batch : batches) {
                         BOOST_REQUIRE_GT(batch.base_offset(), prev_base_offset);

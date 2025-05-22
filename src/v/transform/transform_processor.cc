@@ -30,6 +30,8 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/util/variant_utils.hh>
 
+#include <boost/range/irange.hpp>
+
 #include <algorithm>
 #include <optional>
 

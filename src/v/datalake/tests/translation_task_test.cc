@@ -10,6 +10,7 @@
 
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
+#include "container/chunked_circular_buffer.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/cloud_data_io.h"
 #include "datalake/local_parquet_file_writer.h"
@@ -28,6 +29,7 @@
 
 #include <seastar/util/defer.hh>
 
+#include <boost/range/irange.hpp>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -69,7 +71,7 @@ public:
       int64_t batch_count,
       int64_t records_per_batch,
       model::offset start_offset = model::offset{0}) {
-        ss::circular_buffer<model::record_batch> batches;
+        chunked_circular_buffer<model::record_batch> batches;
         auto offset = start_offset;
         for (auto i : boost::irange<int64_t>(batch_count)) {
             storage::record_batch_builder builder(

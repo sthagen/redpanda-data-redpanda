@@ -43,6 +43,7 @@ redpanda_cc_library(
     hdrs = [
         "adl.h",
         "async_adl.h",
+        "chunked_circular_buffer.h",
         "for_each_field.h",
         "seastar/circular_buffer.h",
     ],
@@ -54,6 +55,7 @@ redpanda_cc_library(
         ":type_traits",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/container:fragmented_vector",
         "//src/v/ssx:future_util",
         "//src/v/utils:named_type",

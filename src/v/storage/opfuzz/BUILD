@@ -10,6 +10,7 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
         "//src/v/base",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model/tests:random",
         "//src/v/random:generators",
         "//src/v/utils:directory_walker",

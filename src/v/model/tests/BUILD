@@ -18,6 +18,7 @@ redpanda_test_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:random",
         "//src/v/compression",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/test_utils:random",
@@ -150,6 +151,7 @@ redpanda_cc_btest(
     cpu = 1,
     deps = [
         ":random",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/test_utils:seastar_boost",
         "@seastar",

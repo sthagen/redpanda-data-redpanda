@@ -8,13 +8,13 @@
 // by the Apache License, Version 2.0
 
 #include "cloud_topics/core/write_pipeline.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record_batch_reader.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
@@ -77,7 +77,8 @@ TEST_CORO(write_pipeline_test, single_write_request) {
     ASSERT_TRUE_CORO(res.complete);
     ASSERT_TRUE_CORO(res.requests.size() == 1);
 
-    res.requests.front().set_value(ss::circular_buffer<model::record_batch>{});
+    res.requests.front().set_value(
+      chunked_circular_buffer<model::record_batch>{});
 
     auto write_res = co_await std::move(fut);
     ASSERT_TRUE_CORO(write_res.has_value());
@@ -113,7 +114,8 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     // One req has already expired at this point
     ASSERT_EQ_CORO(res.requests.size(), 1);
-    res.requests.back().set_value(ss::circular_buffer<model::record_batch>{});
+    res.requests.back().set_value(
+      chunked_circular_buffer<model::record_batch>{});
 
     auto [pass_result, fail_result] = co_await ss::when_all_succeed(
       std::move(expect_pass_fut), std::move(expect_fail_fut));

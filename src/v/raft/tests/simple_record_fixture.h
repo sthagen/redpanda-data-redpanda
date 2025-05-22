@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "container/chunked_circular_buffer.h"
 #include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
@@ -28,8 +29,7 @@ struct simple_record_fixture {
     static constexpr int active_nodes = 3;
     template<typename Func>
     model::record_batch_reader reader_gen(std::size_t n, Func&& f) {
-        ss::circular_buffer<model::record_batch> batches;
-        batches.reserve(n);
+        chunked_circular_buffer<model::record_batch> batches;
         while (n-- > 0) {
             batches.push_back(f());
         }

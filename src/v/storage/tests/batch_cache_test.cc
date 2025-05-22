@@ -309,8 +309,8 @@ FIXTURE_TEST(test_random_batch_sizes, batch_cache_test_fixture) {
                        * 100.0;
 
     // assert waste, we have to skip last range
-    for (auto& r : boost::make_iterator_range(
-           get_lru().begin(), std::prev(get_lru().end()))) {
+    for (auto& r :
+         std::ranges::subrange(get_lru().begin(), std::prev(get_lru().end()))) {
         BOOST_REQUIRE_LE(r.waste(), max_waste);
     }
 }

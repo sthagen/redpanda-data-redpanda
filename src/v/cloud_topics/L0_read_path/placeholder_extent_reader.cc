@@ -17,6 +17,7 @@
 #include "cloud_topics/dl_placeholder.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/logger.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
@@ -158,7 +159,7 @@ public:
             throw std::system_error(extents.error());
         }
 
-        ss::circular_buffer<model::record_batch> slice;
+        chunked_circular_buffer<model::record_batch> slice;
         for (auto& e : extents.value()) {
             slice.push_back(make_raft_data_batch(std::move(e)));
         }
@@ -206,7 +207,8 @@ struct dumb_consumer {
     retry_chain_logger* logger;
 };
 
-ss::future<ss::circular_buffer<model::record_batch>> materialize_placeholders(
+ss::future<chunked_circular_buffer<model::record_batch>>
+materialize_placeholders(
   cloud_storage_clients::bucket_name bucket,
   model::record_batch_reader underlying,
   cloud_io::remote_api<ss::lowres_clock>& api,
@@ -232,7 +234,7 @@ ss::future<ss::circular_buffer<model::record_batch>> materialize_placeholders(
         throw std::system_error(extents.error());
     }
 
-    ss::circular_buffer<model::record_batch> results;
+    chunked_circular_buffer<model::record_batch> results;
     for (auto& e : extents.value()) {
         results.push_back(make_raft_data_batch(std::move(e)));
     }

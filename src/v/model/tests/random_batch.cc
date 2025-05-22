@@ -206,15 +206,14 @@ model::record_batch make_random_batch(
       ts);
 }
 
-ss::future<ss::circular_buffer<model::record_batch>> make_random_batches(
+ss::future<chunked_circular_buffer<model::record_batch>> make_random_batches(
   model::offset o,
   int count,
   bool allow_compression,
   std::optional<model::timestamp> base_ts,
   int records_per_batch) {
     // start offset + count
-    ss::circular_buffer<model::record_batch> ret;
-    ret.reserve(count);
+    chunked_circular_buffer<model::record_batch> ret;
     model::timestamp ts = base_ts.value_or(model::timestamp::now());
     for (int i = 0; i < count; i++) {
         // TODO: it looks like a bug: make_random_batch adds
@@ -231,16 +230,15 @@ ss::future<ss::circular_buffer<model::record_batch>> make_random_batches(
     co_return ret;
 }
 
-ss::future<ss::circular_buffer<model::record_batch>>
+ss::future<chunked_circular_buffer<model::record_batch>>
 make_random_batches(model::offset o) {
     return make_random_batches(o, get_int(2, 30), true);
 }
 
-ss::future<ss::circular_buffer<model::record_batch>>
+ss::future<chunked_circular_buffer<model::record_batch>>
 make_random_batches(record_batch_spec spec) {
     // start offset + count
-    ss::circular_buffer<model::record_batch> ret;
-    ret.reserve(spec.count);
+    chunked_circular_buffer<model::record_batch> ret;
     model::offset o = spec.offset;
     int32_t base_sequence = spec.base_sequence;
     model::timestamp ts = spec.timestamp.value_or(model::timestamp::now());

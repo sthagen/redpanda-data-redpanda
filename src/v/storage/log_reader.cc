@@ -24,7 +24,6 @@
 #include "storage/types.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/coroutine.hh>
 
 #include <fmt/ostream.h>
@@ -46,7 +45,7 @@ struct fmt::formatter<storage::log_reader> : fmt::formatter<std::string_view> {
 };
 
 namespace storage {
-using records_t = ss::circular_buffer<model::record_batch>;
+using records_t = chunked_circular_buffer<model::record_batch>;
 
 /**
  * makes multiple ghost batches required to fill the gap in a way that max batch
@@ -450,7 +449,6 @@ log_reader::do_load_slice(model::timeout_clock::time_point timeout) {
             auto& batches = recs.value();
             if (_config.fill_gaps && _expected_next.has_value()) {
                 records_t batches_filled;
-                batches_filled.reserve(batches.size());
                 for (auto& b : batches) {
                     if (b.base_offset() > _expected_next) {
                         auto gb = model::make_ghost_batches(

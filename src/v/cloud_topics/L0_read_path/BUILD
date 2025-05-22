@@ -58,6 +58,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/L0_read_path:placeholder_extent",
         "//src/v/config",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/storage",
         "//src/v/utils:retry_chain_node",

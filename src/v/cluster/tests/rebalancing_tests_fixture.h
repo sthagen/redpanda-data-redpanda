@@ -15,8 +15,8 @@
 #include "cluster/tests/cluster_test_fixture.h"
 #include "cluster/tests/utils.h"
 #include "cluster/types.h"
+#include "container/chunked_circular_buffer.h"
 
-using batches_t = ss::circular_buffer<model::record_batch>;
 using batches_ptr_t = ss::lw_shared_ptr<batches_t>;
 using foreign_batches_t = ss::foreign_ptr<batches_ptr_t>;
 

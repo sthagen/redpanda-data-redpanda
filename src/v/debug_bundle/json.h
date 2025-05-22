@@ -22,6 +22,8 @@
 #include "utils/functional.h"
 #include "utils/uuid.h"
 
+#include <boost/lexical_cast.hpp>
+
 #include <exception>
 #include <type_traits>
 

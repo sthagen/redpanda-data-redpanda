@@ -13,8 +13,6 @@
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 
-#include <seastar/core/circular_buffer.hh>
-
 #include <gtest/gtest.h>
 
 namespace cloud_topics = experimental::cloud_topics;

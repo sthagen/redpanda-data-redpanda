@@ -13,6 +13,7 @@
 #include "cluster/partition_properties_stm.h"
 #include "cluster/tests/raft_fixture_retry_policy.h"
 #include "config/mock_property.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
@@ -24,7 +25,6 @@
 #include "test_utils/async.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/file.hh>
 
@@ -115,7 +115,8 @@ struct partition_properties_stm_fixture : raft::raft_fixture {
                          .count = 10,
                          .records = 50,
                        })
-                .then([&](ss::circular_buffer<model::record_batch> batches) {
+                .then([&](
+                        chunked_circular_buffer<model::record_batch> batches) {
                     return leader_node.raft()
                       ->replicate(
                         chunked_vector<model::record_batch>(std::move(batches)),

@@ -10,10 +10,12 @@
 #include "bytes/hash.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
 #include "random/generators.h"
 #include "reflection/async_adl.h"
+#include "reflection/chunked_circular_buffer.h"
 #include "reflection/seastar/circular_buffer.h"
 
 #include <seastar/testing/thread_test_case.hh>
@@ -76,10 +78,17 @@ struct random_type<model::ntp> {
 };
 
 template<typename T>
+concept CanReserve = requires(T c, size_t s) {
+    { c.reserve(s) };
+};
+
+template<typename T>
 T make_random_collection_vec() {
     const auto size = rand_gen::get_int(0, 5);
     T collection;
-    collection.reserve(size);
+    if constexpr (CanReserve<T>) {
+        collection.reserve(size);
+    }
     for (auto i = 0; i < size; ++i) {
         collection.emplace_back(random_type<typename T::value_type>{}.gen());
     }
@@ -136,6 +145,10 @@ SEASTAR_THREAD_TEST_CASE(test_async_adl_collection_vec) {
       true,
       ser_deser_verify_hash(
         make_random_collection_vec<ss::circular_buffer<model::ntp>>()));
+    BOOST_REQUIRE_EQUAL(
+      true,
+      ser_deser_verify_hash(
+        make_random_collection_vec<chunked_circular_buffer<model::ntp>>()));
 }
 
 SEASTAR_THREAD_TEST_CASE(test_async_adl_collection_map) {

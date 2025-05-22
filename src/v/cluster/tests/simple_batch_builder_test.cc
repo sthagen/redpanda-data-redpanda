@@ -9,6 +9,7 @@
 
 #include "cluster/simple_batch_builder.h"
 #include "cluster/types.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/record_utils.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
@@ -89,7 +90,7 @@ SEASTAR_THREAD_TEST_CASE(round_trip_test) {
     ss::sstring base_dir = random_dir();
     model::ntp test_ntp(
       model::ns("test_ns"), model::topic("test_topic"), model::partition_id(0));
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     batches.push_back(std::move(batch));
 
     tests::persist_log_file(base_dir, test_ntp, std::move(batches)).get();

@@ -75,6 +75,7 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/cluster",
         "//src/v/cluster/tests:randoms",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/container:json",
         "//src/v/json",
         "//src/v/model/tests:random",

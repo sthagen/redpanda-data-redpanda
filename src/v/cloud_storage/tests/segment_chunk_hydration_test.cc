@@ -15,6 +15,7 @@
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/remote_segment.h"
 #include "cloud_storage/tests/cloud_storage_fixture.h"
+#include "container/chunked_circular_buffer.h"
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 #include "utils/lazy_abort_source.h"
@@ -452,7 +453,7 @@ FIXTURE_TEST(test_chunk_multiple_readers, cloud_storage_fixture) {
 
     while (!all_readers_done()) {
         std::vector<
-          ss::future<result<ss::circular_buffer<model::record_batch>>>>
+          ss::future<result<chunked_circular_buffer<model::record_batch>>>>
           reads;
         reads.reserve(readers.size());
         ranges::transform(

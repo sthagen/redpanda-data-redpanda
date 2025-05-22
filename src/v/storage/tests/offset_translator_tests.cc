@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "raft/fundamental.h"
 #include "random/generators.h"
@@ -23,6 +24,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 
+#include <boost/range/irange.hpp>
 #include <boost/test/tools/old/interface.hpp>
 
 #include <utility>
@@ -331,8 +333,7 @@ struct fuzz_checker {
 
     ss::future<> append() {
         size_t number_of_batches = random_generators::get_int(1, 5);
-        ss::circular_buffer<model::record_batch> batches;
-        batches.reserve(number_of_batches);
+        chunked_circular_buffer<model::record_batch> batches;
 
         for (size_t i_batch = 0; i_batch < number_of_batches; ++i_batch) {
             auto batch_type = all_batch_types[random_generators::get_int(

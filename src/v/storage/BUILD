@@ -115,6 +115,7 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/bytes:iobuf_parser",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/ssx:future_util",
         "//src/v/utils:to_string",
         "@fmt",
@@ -386,6 +387,7 @@ redpanda_cc_library(
         "//src/v/bytes:iostream",
         "//src/v/compression",
         "//src/v/config",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:fragmented_vector",
         "//src/v/container:intrusive",

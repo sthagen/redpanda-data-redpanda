@@ -42,6 +42,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/cloud_topics/core:write_pipeline",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
@@ -59,6 +60,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/core:event_filter",
         "//src/v/cloud_topics/core:pipeline_stage",
         "//src/v/cloud_topics/core:write_pipeline",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/random:generators",

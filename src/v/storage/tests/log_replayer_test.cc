@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "base/seastarx.h"
+#include "container/chunked_circular_buffer.h"
 #include "features/feature_table.h"
 #include "model/record_utils.h"
 #include "model/tests/random_batch.h"
@@ -110,7 +111,7 @@ public:
         out.flush().get();
         out.close().get();
     }
-    void write(ss::circular_buffer<model::record_batch>& batches) {
+    void write(chunked_circular_buffer<model::record_batch>& batches) {
         do_write(
           [&batches](segment_appender& appender) {
               for (auto& b : batches) {

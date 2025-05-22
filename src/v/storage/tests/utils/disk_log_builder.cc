@@ -49,7 +49,7 @@ ss::future<> disk_log_builder::add_random_batch(
   log_append_config config,
   should_flush_after flush,
   std::optional<model::timestamp> base_ts) {
-    auto buff = ss::circular_buffer<model::record_batch>();
+    auto buff = chunked_circular_buffer<model::record_batch>();
     buff.push_back(model::test::make_random_batch(
       offset, num_records, bool(comp), bt, std::nullopt, now(base_ts)));
     advance_time(buff.back());
@@ -60,7 +60,7 @@ ss::future<> disk_log_builder::add_random_batch(
   model::test::record_batch_spec spec,
   log_append_config config,
   should_flush_after flush) {
-    auto buff = ss::circular_buffer<model::record_batch>();
+    auto buff = chunked_circular_buffer<model::record_batch>();
     buff.push_back(model::test::make_random_batch(spec));
     advance_time(buff.back());
     return write(std::move(buff), config, flush);
@@ -89,7 +89,7 @@ ss::future<> disk_log_builder::add_batch(
   model::record_batch batch,
   log_append_config config,
   should_flush_after flush) {
-    auto buf = ss::circular_buffer<model::record_batch>();
+    auto buf = chunked_circular_buffer<model::record_batch>();
     advance_time(batch);
     buf.push_back(std::move(batch));
     return write(std::move(buf), config, flush);
@@ -224,7 +224,7 @@ const log_config& disk_log_builder::get_log_config() const {
 
 // Common interface for appending batches
 ss::future<> disk_log_builder::write(
-  ss::circular_buffer<model::record_batch> buff,
+  chunked_circular_buffer<model::record_batch> buff,
   const log_append_config& config,
   should_flush_after flush) {
     if (buff.empty()) {

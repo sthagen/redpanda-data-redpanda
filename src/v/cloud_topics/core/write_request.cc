@@ -48,7 +48,7 @@ size_t write_request<Clock>::size_bytes() const noexcept {
 
 template<class Clock>
 void write_request<Clock>::set_value(
-  ss::circular_buffer<model::record_batch> placeholders) noexcept {
+  chunked_circular_buffer<model::record_batch> placeholders) noexcept {
     try {
         response.set_value(std::move(placeholders));
     } catch (const ss::broken_promise&) {

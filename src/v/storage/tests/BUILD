@@ -81,6 +81,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/features",
         "//src/v/model",
         "//src/v/model/tests:random",
@@ -112,6 +113,7 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/bytes:iobuf",
         "//src/v/compression",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/hashing:crc32c",
         "//src/v/model",
         "//src/v/model/tests:random",
@@ -133,6 +135,7 @@ redpanda_test_cc_library(
     deps = [
         ":batch_generators",
         "//src/v/config",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/features",
         "//src/v/storage",
         "//src/v/test_utils:gtest",
@@ -438,6 +441,7 @@ redpanda_cc_btest(
         ":disk_log_builder",
         "//src/v/model",
         "//src/v/test_utils:seastar_boost",
+        "@boost//:range",
         "@seastar//:testing",
     ],
 )
@@ -505,6 +509,7 @@ redpanda_cc_btest(
     ],
     cpu = 8,
     deps = [
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/raft",
         "//src/v/random:generators",
@@ -512,6 +517,7 @@ redpanda_cc_btest(
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:random_bytes",
         "//src/v/test_utils:seastar_boost",
+        "@boost//:range",
         "@boost//:test",
         "@seastar",
         "@seastar//:testing",
@@ -592,6 +598,7 @@ redpanda_cc_gtest(
         "//src/v/bytes",
         "//src/v/compression",
         "//src/v/config",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/features",
         "//src/v/finjector",
         "//src/v/model",
@@ -637,6 +644,7 @@ redpanda_cc_gtest(
         "log_segment_reader_test.cc",
     ],
     deps = [
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/random:generators",
@@ -675,6 +683,7 @@ redpanda_cc_gtest(
         "log_truncate_test.cc",
     ],
     deps = [
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/storage",
         "//src/v/storage/tests:disk_log_builder",
@@ -851,6 +860,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/base",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/features",
         "//src/v/model",
         "//src/v/model/tests:random",
@@ -874,6 +884,7 @@ redpanda_cc_btest(
     ],
     cpu = 1,
     deps = [
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
         "//src/v/random:generators",

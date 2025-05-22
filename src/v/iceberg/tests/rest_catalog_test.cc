@@ -21,6 +21,7 @@
 #include <seastar/core/sleep.hh>
 
 #include <absl/strings/str_split.h>
+#include <boost/range/irange.hpp>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

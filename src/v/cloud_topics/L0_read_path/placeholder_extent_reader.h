@@ -12,10 +12,10 @@
 
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/remote.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/record_batch_reader.h"
 #include "storage/log_reader.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/lowres_clock.hh>
 
 namespace experimental::cloud_topics {
@@ -50,7 +50,8 @@ model::record_batch_reader make_placeholder_extent_reader(
 /// \param cache is a cloud storage cache instance
 /// \param rtc is a retry chain node to use
 /// \param rtc_logger is a logger that should track the progress
-ss::future<ss::circular_buffer<model::record_batch>> materialize_placeholders(
+ss::future<chunked_circular_buffer<model::record_batch>>
+materialize_placeholders(
   cloud_storage_clients::bucket_name bucket,
   model::record_batch_reader underlying,
   cloud_io::remote_api<ss::lowres_clock>& api,

@@ -14,6 +14,8 @@
 #include "metrics/prometheus_sanitize.h"
 #include "ssx/future-util.h"
 #include "utils/human.h"
+
+#include <boost/range/irange.hpp>
 namespace kafka {
 using namespace std::chrono_literals;
 namespace {

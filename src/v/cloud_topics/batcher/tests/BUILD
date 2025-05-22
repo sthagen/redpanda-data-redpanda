@@ -12,6 +12,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/batcher:aggregator",
         "//src/v/cloud_topics/core:serializer",
         "//src/v/cloud_topics/core:write_request",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/random:generators",

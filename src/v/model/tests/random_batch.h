@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "container/chunked_circular_buffer.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/timestamp.h"
@@ -63,16 +64,16 @@ model::record_batch make_random_batch(
   std::optional<model::timestamp> ts = std::nullopt,
   int records_per_batch = 0);
 
-ss::future<ss::circular_buffer<model::record_batch>> make_random_batches(
+ss::future<chunked_circular_buffer<model::record_batch>> make_random_batches(
   model::offset o,
   int count,
   bool allow_compression = true,
   std::optional<model::timestamp> ts = std::nullopt,
   int records_per_batch = 0);
 
-ss::future<ss::circular_buffer<model::record_batch>>
+ss::future<chunked_circular_buffer<model::record_batch>>
 make_random_batches(model::offset o = model::offset(0));
 
-ss::future<ss::circular_buffer<model::record_batch>>
+ss::future<chunked_circular_buffer<model::record_batch>>
 make_random_batches(record_batch_spec spec);
 } // namespace model::test

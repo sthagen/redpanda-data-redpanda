@@ -11,6 +11,7 @@
 
 #pragma once
 #include "base/seastarx.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 #include "storage/api.h"
@@ -26,7 +27,7 @@ namespace tests {
 static inline ss::future<> persist_log_file(
   ss::sstring base_dir,
   model::ntp file_ntp,
-  ss::circular_buffer<model::record_batch> batches) {
+  chunked_circular_buffer<model::record_batch> batches) {
     return ss::async([base_dir = std::move(base_dir),
                       file_ntp = std::move(file_ntp),
                       batches = std::move(batches)]() mutable {

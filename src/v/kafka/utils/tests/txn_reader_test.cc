@@ -10,6 +10,7 @@
  */
 
 #include "bytes/iobuf.h"
+#include "container/chunked_circular_buffer.h"
 #include "gmock/gmock.h"
 #include "kafka/utils/txn_reader.h"
 #include "model/fundamental.h"
@@ -23,7 +24,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/variant_utils.hh>
@@ -102,7 +102,7 @@ make_aborted_txns(const std::vector<aborted_txn_range>& aborts) {
 model::record_batch_reader
 make_reader(const std::initializer_list<
             std::reference_wrapper<const model::record_batch>>& batches) {
-    ss::circular_buffer<model::record_batch> buffer;
+    chunked_circular_buffer<model::record_batch> buffer;
     for (const auto& b : batches) {
         buffer.push_back(b.get().copy());
     }
@@ -166,7 +166,7 @@ public:
             constexpr static int max_batches = 10;
             auto batch_size = random_generators::get_int<size_t>(
               1, max_batches);
-            ss::circular_buffer<model::record_batch> batches;
+            chunked_circular_buffer<model::record_batch> batches;
             while (batches.size() < batch_size && !producers.empty()) {
                 auto& selected = random_generators::random_choice(producers);
                 auto batch = make_batch(selected.pid, selected.data.back());

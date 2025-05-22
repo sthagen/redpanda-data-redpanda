@@ -13,6 +13,7 @@
 
 #include "bytes/iobuf.h"
 #include "compression/compression.h"
+#include "container/chunked_circular_buffer.h"
 #include "hashing/crc32c.h"
 #include "model/fundamental.h"
 #include "model/record.h"
@@ -23,13 +24,12 @@
 #include "test_utils/test_macros.h"
 #include "utils/vint.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/reactor.hh>
 
 #include <optional>
 
 struct random_batches_generator {
-    ss::circular_buffer<model::record_batch>
+    chunked_circular_buffer<model::record_batch>
     operator()(std::optional<model::timestamp> base_ts = std::nullopt) {
         return model::test::make_random_batches(
                  model::offset(0),
@@ -43,7 +43,7 @@ struct random_batches_generator {
 struct key_limited_random_batch_generator {
     static constexpr int cardinality = 10;
 
-    ss::circular_buffer<model::record_batch>
+    chunked_circular_buffer<model::record_batch>
     operator()(std::optional<model::timestamp> ts = std::nullopt) {
         return model::test::make_random_batches(
                  model::test::record_batch_spec{
@@ -135,10 +135,9 @@ struct linear_int_kv_batch_generator {
         return batch;
     }
 
-    ss::circular_buffer<model::record_batch>
+    chunked_circular_buffer<model::record_batch>
     operator()(std::optional<model::timestamp> ts = std::nullopt) {
-        ss::circular_buffer<model::record_batch> ret;
-        ret.reserve(batches_per_call);
+        chunked_circular_buffer<model::record_batch> ret;
         auto batch_spec = model::test::record_batch_spec{
           .allow_compression = false,
           .count = records_per_batch,
@@ -148,10 +147,9 @@ struct linear_int_kv_batch_generator {
         return operator()(batch_spec, batches_per_call);
     }
 
-    ss::circular_buffer<model::record_batch>
+    chunked_circular_buffer<model::record_batch>
     operator()(model::test::record_batch_spec spec, int num_batches) {
-        ss::circular_buffer<model::record_batch> ret;
-        ret.reserve(num_batches);
+        chunked_circular_buffer<model::record_batch> ret;
         for (int i = 0; i < num_batches; i++) {
             ret.push_back(make_batch(spec, _idx++));
         }
@@ -162,7 +160,7 @@ struct linear_int_kv_batch_generator {
     // and the record should match the index of the batch if compaction
     // ran correctly.
     static void validate_post_compaction(
-      ss::circular_buffer<model::record_batch>&& batches) {
+      chunked_circular_buffer<model::record_batch>&& batches) {
         int idx = 0;
         for (const auto& batch : batches) {
             RPTEST_EXPECT_EQ(batch.record_count(), 1);

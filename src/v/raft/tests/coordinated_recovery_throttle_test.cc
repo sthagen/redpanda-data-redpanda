@@ -15,6 +15,8 @@
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
+#include <boost/range/irange.hpp>
+
 #include <chrono>
 
 using throttler = raft::coordinated_recovery_throttle;

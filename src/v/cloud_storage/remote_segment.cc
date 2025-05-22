@@ -22,6 +22,7 @@
 #include "cloud_storage/tx_range_manifest.h"
 #include "cloud_storage/types.h"
 #include "config/configuration.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
@@ -36,7 +37,6 @@
 #include "utils/stream_utils.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/fstream.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/io_priority_class.hh>
@@ -1446,7 +1446,7 @@ remote_segment_batch_reader::remote_segment_batch_reader(
     _ts_probe.segment_reader_created();
 }
 
-ss::future<result<ss::circular_buffer<model::record_batch>>>
+ss::future<result<chunked_circular_buffer<model::record_batch>>>
 remote_segment_batch_reader::read_some(
   model::timeout_clock::time_point,
   storage::offset_translator_state& ot_state) {
@@ -1491,7 +1491,7 @@ remote_segment_batch_reader::read_some(
                 vlog(_ctxlog.error, "{}", msg);
             }
             _is_unexpected_eof = true;
-            co_return ss::circular_buffer<model::record_batch>{};
+            co_return chunked_circular_buffer<model::record_batch>{};
         }
         _bytes_consumed = new_bytes_consumed.value();
     }

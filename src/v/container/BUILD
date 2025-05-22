@@ -99,3 +99,12 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "chunked_circular_buffer",
+    hdrs = [
+        "chunked_circular_buffer.h",
+    ],
+    include_prefix = "container",
+    visibility = ["//visibility:public"],
+)

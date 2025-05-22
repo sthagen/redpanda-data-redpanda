@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "model/record.h"
 #include "model/record_utils.h"
 #include "model/tests/random_batch.h"
@@ -17,8 +18,6 @@
 #include "storage/segment_appender.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/test_macros.h"
-
-#include <seastar/core/circular_buffer.hh>
 
 #include <gtest/gtest.h>
 
@@ -43,17 +42,16 @@ void check_iters(
 }
 
 void check_batches(
-  const ss::circular_buffer<model::record_batch>& actual,
-  const ss::circular_buffer<model::record_batch>& expected) {
+  const chunked_circular_buffer<model::record_batch>& actual,
+  const chunked_circular_buffer<model::record_batch>& expected) {
     RPTEST_REQUIRE_EQ(actual.size(), expected.size());
     check_iters(actual.begin(), actual.end(), expected.begin(), expected.end());
 }
 
 namespace {
-ss::circular_buffer<model::record_batch>
-copy(ss::circular_buffer<model::record_batch>& input) {
-    ss::circular_buffer<model::record_batch> ret;
-    ret.reserve(input.size());
+chunked_circular_buffer<model::record_batch>
+copy(chunked_circular_buffer<model::record_batch>& input) {
+    chunked_circular_buffer<model::record_batch> ret;
     for (auto& b : input) {
         ret.push_back(b.share());
     }
@@ -61,7 +59,8 @@ copy(ss::circular_buffer<model::record_batch>& input) {
 }
 
 void write(
-  ss::circular_buffer<model::record_batch> batches, disk_log_builder& builder) {
+  chunked_circular_buffer<model::record_batch> batches,
+  disk_log_builder& builder) {
     auto seg = builder.get_log_segments().front().get();
     for (auto& b : batches) {
         b.header().header_crc = model::internal_header_only_crc(b.header());
@@ -155,7 +154,7 @@ TEST(reader_test, test_does_not_read_past_committed_offset_multiple_segments) {
     write(copy(batches), b);
     auto res = b.consume(reader_config).get();
     b | stop();
-    ss::circular_buffer<model::record_batch> first;
+    chunked_circular_buffer<model::record_batch> first;
     first.push_back(std::move(batches.back()));
     check_batches(res, first);
 }
@@ -176,7 +175,7 @@ TEST(reader_test, test_does_not_read_past_max_bytes) {
     write(copy(batches), b);
     auto res = b.consume(reader_config).get();
     b | stop();
-    ss::circular_buffer<model::record_batch> first;
+    chunked_circular_buffer<model::record_batch> first;
     first.push_back(std::move(*batches.begin()));
     check_batches(res, first);
 }
@@ -197,7 +196,7 @@ TEST(reader_test, test_reads_at_least_one_batch) {
     write(copy(batches), b);
     auto res = b.consume(reader_config).get();
     b | stop();
-    ss::circular_buffer<model::record_batch> first;
+    chunked_circular_buffer<model::record_batch> first;
     first.push_back(std::move(batches.front()));
     check_batches(res, first);
 }
@@ -359,7 +358,7 @@ TEST(reader_test, test_ghost_read_with_index_overflow) {
     // Set a pathologically low step size so we'll add every batch into the
     // index.
     s->index().set_step_for_tests(1);
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     auto add = [&batches](model::offset o) {
         auto b = model::test::make_random_batches(
                    o, /*count=*/1, false, std::nullopt, /*records_per_batch=*/1)
@@ -411,7 +410,7 @@ TEST(reader_test, test_read_with_index_overflow_base) {
     // offset 0. This is important to have this test reproduce a bad seek to
     // the start of the segment.
     s->index().set_base_offset_for_tests(model::offset(0));
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     auto add = [&batches](model::offset o) {
         auto b = model::test::make_random_batches(
                    o, /*count=*/1, false, std::nullopt, /*records_per_batch=*/1)

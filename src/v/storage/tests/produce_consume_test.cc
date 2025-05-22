@@ -13,6 +13,8 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
+#include <boost/range/irange.hpp>
+
 using namespace storage; // NOLINT
 
 SEASTAR_THREAD_TEST_CASE(produce_consume_concurrency) {

@@ -9,13 +9,13 @@
 
 #include "cloud_topics/core/pipeline_stage.h"
 #include "cloud_topics/throttler/throttler.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/manual_clock.hh>
 
 #include <chrono>
@@ -80,7 +80,7 @@ struct write_pipeline_accessor {
             auto list0 = pipeline->get_write_requests(
               std::numeric_limits<size_t>::max(), stage);
             for (auto& r : list0.requests) {
-                r.set_value(ss::circular_buffer<model::record_batch>());
+                r.set_value(chunked_circular_buffer<model::record_batch>());
             }
         }
     }
@@ -118,8 +118,8 @@ size_t get_serialized_size(const model::record_batch& rb) {
     return res;
 }
 
-size_t
-get_serialized_size(const ss::circular_buffer<model::record_batch>& batches) {
+size_t get_serialized_size(
+  const chunked_circular_buffer<model::record_batch>& batches) {
     size_t acc = 0;
     for (const auto& rb : batches) {
         auto sz = get_serialized_size(rb);

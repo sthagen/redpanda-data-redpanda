@@ -13,12 +13,12 @@
 
 #include "base/likely.h"
 #include "base/seastarx.h"
+#include "container/chunked_circular_buffer.h"
 #include "container/fragmented_vector.h"
 #include "model/record.h"
 #include "model/timeout_clock.h"
 
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
@@ -46,7 +46,7 @@ concept ReferenceBatchReaderConsumer = requires(
 
 class record_batch_reader final {
 public:
-    using data_t = ss::circular_buffer<model::record_batch>;
+    using data_t = chunked_circular_buffer<model::record_batch>;
     struct foreign_data_t {
         ss::foreign_ptr<std::unique_ptr<data_t>> buffer;
         size_t index{0};
@@ -347,7 +347,6 @@ record_batch_reader make_fragmented_memory_record_batch_reader(
 inline record_batch_reader
 make_memory_record_batch_reader(model::record_batch b) {
     record_batch_reader::data_t batches;
-    batches.reserve(1);
     batches.push_back(std::move(b));
     return make_memory_record_batch_reader(std::move(batches));
 }

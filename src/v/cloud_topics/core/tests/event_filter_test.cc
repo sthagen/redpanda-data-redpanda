@@ -11,6 +11,7 @@
 #include "cloud_topics/core/event_filter.h"
 #include "cloud_topics/core/pipeline_stage.h"
 #include "cloud_topics/core/write_pipeline.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
@@ -18,7 +19,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/lowres_clock.hh>
 
 #include <gtest/gtest.h>
@@ -51,8 +51,8 @@ size_t get_serialized_size(const model::record_batch& rb) {
     return res;
 }
 
-size_t
-get_serialized_size(const ss::circular_buffer<model::record_batch>& batches) {
+size_t get_serialized_size(
+  const chunked_circular_buffer<model::record_batch>& batches) {
     size_t acc = 0;
     for (const auto& rb : batches) {
         auto sz = get_serialized_size(rb);
@@ -107,7 +107,7 @@ TEST_CORO(EventFilterTest, filter_triggered_once) {
     auto pending = stage.pull_write_requests(
       std::numeric_limits<size_t>::max());
     for (auto& req : pending.requests) {
-        req.set_value(ss::circular_buffer<model::record_batch>());
+        req.set_value(chunked_circular_buffer<model::record_batch>());
     }
     std::ignore = co_await std::move(write);
     co_return;
@@ -147,7 +147,7 @@ TEST_CORO(EventFilterTest, filter_has_memory) {
     auto pending = stage.pull_write_requests(
       std::numeric_limits<size_t>::max());
     for (auto& req : pending.requests) {
-        req.set_value(ss::circular_buffer<model::record_batch>());
+        req.set_value(chunked_circular_buffer<model::record_batch>());
     }
     std::ignore = co_await std::move(write);
     co_return;

@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "base/units.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
 #include "random/generators.h"
@@ -53,7 +54,7 @@ public:
         return log_.get();
     }
 
-    ss::future<ss::circular_buffer<model::record_batch>>
+    ss::future<chunked_circular_buffer<model::record_batch>>
     write_random_batches(versioned_log* log, int num_batches) {
         auto in_batches = model::test::make_random_batches(
                             next_offset_, num_batches, true)

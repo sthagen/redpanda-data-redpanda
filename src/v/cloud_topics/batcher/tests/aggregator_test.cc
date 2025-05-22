@@ -12,6 +12,7 @@
 #include "cloud_topics/batcher/aggregator.h"
 #include "cloud_topics/core/serializer.h"
 #include "cloud_topics/core/write_request.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
@@ -19,7 +20,6 @@
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/manual_clock.hh>
 
 #include <gtest/gtest.h>
@@ -34,7 +34,7 @@ static ss::logger test_log("aggregator_test_log"); // NOLINT
 
 cloud_topics::core::serialized_chunk get_random_serialized_chunk(
   int num_batches, int num_records_per_batch) { // NOLINT
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     model::offset o{0};
     for (int ix_batch = 0; ix_batch < num_batches; ix_batch++) {
         auto batch = model::test::make_random_batch(

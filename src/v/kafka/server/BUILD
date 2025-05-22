@@ -384,6 +384,7 @@ redpanda_cc_library(
         "//src/v/storage",
         "//src/v/utils:absl_sstring_hash",
         "//src/v/utils:human",
+        "@boost//:range",
         "@seastar",
     ],
 )

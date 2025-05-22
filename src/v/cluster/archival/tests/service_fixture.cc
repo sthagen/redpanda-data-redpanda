@@ -22,13 +22,13 @@
 #include "cluster/archival/types.h"
 #include "cluster/members_table.h"
 #include "config/configuration.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/tests/random_batch.h"
 #include "random/generators.h"
 #include "storage/directories.h"
 #include "storage/disk_log_impl.h"
 #include "test_utils/async.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/smp.hh>
@@ -110,7 +110,7 @@ archiver_fixture::~archiver_fixture() {
 
 static void write_batches(
   ss::lw_shared_ptr<storage::segment> seg,
-  ss::circular_buffer<model::record_batch> batches) { // NOLINT
+  chunked_circular_buffer<model::record_batch> batches) { // NOLINT
     vlog(fixt_log.trace, "num batches {}", batches.size());
     for (auto& b : batches) {
         b.header().header_crc = model::internal_header_only_crc(b.header());

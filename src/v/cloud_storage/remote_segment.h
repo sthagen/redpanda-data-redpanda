@@ -19,6 +19,7 @@
 #include "cloud_storage/segment_chunk_api.h"
 #include "cloud_storage/types.h"
 #include "cloud_storage_clients/types.h"
+#include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "storage/parser.h"
@@ -27,7 +28,6 @@
 #include "storage/types.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/expiring_fifo.hh>
 #include <seastar/core/io_priority_class.hh>
@@ -388,7 +388,7 @@ public:
       = delete;
     ~remote_segment_batch_reader() noexcept;
 
-    ss::future<result<ss::circular_buffer<model::record_batch>>> read_some(
+    ss::future<result<chunked_circular_buffer<model::record_batch>>> read_some(
       model::timeout_clock::time_point, storage::offset_translator_state&);
 
     ss::future<> stop();
@@ -437,7 +437,7 @@ private:
     storage::log_reader_config _config;
     partition_probe& _probe;
     ts_read_path_probe& _ts_probe;
-    ss::circular_buffer<model::record_batch> _ringbuf;
+    chunked_circular_buffer<model::record_batch> _ringbuf;
     std::optional<std::reference_wrapper<storage::offset_translator_state>>
       _cur_ot_state;
     size_t _total_size{0};

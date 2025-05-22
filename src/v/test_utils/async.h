@@ -55,8 +55,8 @@ namespace tests {
 
 // clang-format off
 template<typename Rep, typename Period, typename Predicate>
-requires ss::ApplyReturns<Predicate, bool> ||
-         ss::ApplyReturns<Predicate, ss::future<bool>>
+requires std::is_invocable_r_v<bool, Predicate> ||
+         std::is_invocable_r_v<ss::future<bool>, Predicate>
 // clang-format on
 /// Used to wait for Prediacate to become true
 ss::future<> cooperative_spin_wait_with_timeout(

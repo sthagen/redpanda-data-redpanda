@@ -17,6 +17,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics:placeholder",
         "//src/v/cloud_topics/core:serializer",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/storage:record_batch_builder",
     ],
     include_prefix = "cloud_topics/batcher",

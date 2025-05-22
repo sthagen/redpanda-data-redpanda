@@ -665,6 +665,7 @@ redpanda_cc_gtest(
         "//src/v/json",
         "//src/v/test_utils:gtest",
         "@abseil-cpp//absl/strings",
+        "@boost//:range",
         "@googletest//:gtest",
         "@seastar",
     ],

@@ -187,6 +187,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
         "//src/v/storage",
         "@seastar",

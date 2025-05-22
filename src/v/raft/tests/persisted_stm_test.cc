@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
@@ -456,7 +457,7 @@ struct persisted_stm_test_fixture : state_machine_fixture {
                     return model::consume_reader_to_memory(
                       std::move(rdr), default_timeout());
                 })
-                .then([](ss::circular_buffer<model::record_batch> batches) {
+                .then([](chunked_circular_buffer<model::record_batch> batches) {
                     return batches.back().last_offset();
                 });
           });

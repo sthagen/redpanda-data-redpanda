@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "container/chunked_circular_buffer.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -30,7 +31,6 @@
 // testing
 #include "test_utils/fixture.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/future-util.hh>
 
@@ -97,8 +97,7 @@ struct foreign_entry_fixture {
     }
     template<typename Func>
     model::record_batch_reader reader_gen(std::size_t n, Func&& f) {
-        ss::circular_buffer<model::record_batch> batches;
-        batches.reserve(n);
+        chunked_circular_buffer<model::record_batch> batches;
         while (n-- > 0) {
             batches.push_back(f());
         }

@@ -14,7 +14,6 @@
 #include "model/record_batch_types.h"
 
 #include <seastar/core/chunked_fifo.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/smp.hh>
@@ -117,7 +116,6 @@ make_foreign_memory_record_batch_reader(record_batch_reader::data_t data) {
 
 record_batch_reader make_foreign_memory_record_batch_reader(record_batch b) {
     record_batch_reader::data_t data;
-    data.reserve(1);
     data.push_back(std::move(b));
     return make_foreign_memory_record_batch_reader(std::move(data));
 }
@@ -214,13 +212,10 @@ make_fragmented_memory_storage_batches(Container batches) {
       = fragmented_vector<model::record_batch>::elements_per_fragment();
     data.reserve(batches.size() / elements_per_fragment);
     record_batch_reader::data_t data_chunk;
-    data_chunk.reserve(std::min(elements_per_fragment, batches.size()));
     size_t i = 0;
     for (auto it = batches.begin(); it != batches.end(); ++i, ++it) {
         if (!data_chunk.empty() && i % elements_per_fragment == 0) {
             data.emplace_back(std::exchange(data_chunk, {}));
-            data_chunk.reserve(
-              std::min(elements_per_fragment, batches.size() - i));
         }
         auto& b = *it;
         data_chunk.push_back(std::move(b));

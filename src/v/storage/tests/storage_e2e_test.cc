@@ -11,6 +11,7 @@
 #include "base/vassert.h"
 #include "bytes/bytes.h"
 #include "config/mock_property.h"
+#include "container/chunked_circular_buffer.h"
 #include "finjector/stress_fiber.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -70,7 +71,7 @@ static ss::logger e2e_test_log("storage_e2e_test");
 void validate_offsets(
   model::offset base,
   const std::vector<model::record_batch_header>& write_headers,
-  const ss::circular_buffer<model::record_batch>& read_batches) {
+  const chunked_circular_buffer<model::record_batch>& read_batches) {
     ASSERT_EQ(write_headers.size(), read_batches.size());
     auto it = read_batches.begin();
     model::offset next_base = base;
@@ -181,7 +182,7 @@ TEST_F(storage_test_fixture, test_single_record_per_segment) {
       10,
       model::term_id(1),
       [](std::optional<model::timestamp> ts = std::nullopt) {
-          ss::circular_buffer<model::record_batch> batches;
+          chunked_circular_buffer<model::record_batch> batches;
           batches.push_back(model::test::make_random_batch(
             model::offset(0),
             1,
@@ -217,8 +218,8 @@ TEST_F(storage_test_fixture, test_segment_rolling) {
       10,
       model::term_id(1),
       [](std::optional<model::timestamp> ts = std::nullopt)
-        -> ss::circular_buffer<model::record_batch> {
-          ss::circular_buffer<model::record_batch> batches;
+        -> chunked_circular_buffer<model::record_batch> {
+          chunked_circular_buffer<model::record_batch> batches;
           batches.push_back(model::test::make_random_batch(
             model::offset(0),
             1,
@@ -246,7 +247,7 @@ TEST_F(storage_test_fixture, test_segment_rolling) {
       10,
       model::term_id(1),
       [](std::optional<model::timestamp> ts = std::nullopt) {
-          ss::circular_buffer<model::record_batch> batches;
+          chunked_circular_buffer<model::record_batch> batches;
           batches.push_back(model::test::make_random_batch(
             model::offset(0),
             1,
@@ -468,7 +469,7 @@ TEST_F(storage_test_fixture, test_append_batches_from_multiple_terms) {
     auto log
       = mgr.manage(storage::ntp_config(ntp, mgr.config().base_dir)).get();
     std::vector<model::record_batch_header> headers;
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     std::vector<size_t> term_batches_counts;
     for (auto i = 0; i < 5; i++) {
         auto term_batches
@@ -510,7 +511,7 @@ struct custom_ts_batch_generator {
     explicit custom_ts_batch_generator(model::timestamp start_ts)
       : _start_ts(start_ts) {}
 
-    ss::circular_buffer<model::record_batch> operator()(
+    chunked_circular_buffer<model::record_batch> operator()(
       [[maybe_unused]] std::optional<model::timestamp> ts = std::nullopt) {
         // The input timestamp is unused, this class does its own timestamping
         auto batches = model::test::make_random_batches(
@@ -907,7 +908,7 @@ ss::future<storage::append_result> append_exactly(
       ss::default_priority_class(),
       model::no_timeout};
 
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     auto val_sz = batch_sz - model::packed_record_batch_header_size;
     iobuf key_buf{};
 
@@ -1215,7 +1216,7 @@ TEST_F(storage_test_fixture, empty_segment_recovery) {
         .should_fsync = storage::log_append_config::fsync::no,
         .io_priority = ss::default_priority_class(),
         .timeout = model::no_timeout});
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     batches.push_back(
       model::test::make_random_batch(model::offset(0), 1, false));
 
@@ -1295,7 +1296,7 @@ TEST_F(storage_test_fixture, test_compaction_preserve_state) {
         .io_priority = ss::default_priority_class(),
         .timeout = model::no_timeout});
 
-    ss::circular_buffer<model::record_batch> batches;
+    chunked_circular_buffer<model::record_batch> batches;
     batches.push_back(
       model::test::make_random_batch(model::offset(0), 1, false));
 
@@ -2407,7 +2408,7 @@ TEST_F(storage_test_fixture, committed_offset_updates) {
             .io_priority = ss::default_priority_class(),
             .timeout = model::no_timeout});
 
-        ss::circular_buffer<model::record_batch> batches;
+        chunked_circular_buffer<model::record_batch> batches;
         batches.push_back(
           model::test::make_random_batch(model::offset(0), 1, false));
 
@@ -2575,9 +2576,9 @@ TEST_F(storage_test_fixture, changing_cleanup_policy_back_and_forth) {
     ASSERT_EQ(first_read.size(), second_read.size());
 }
 
-ss::future<ss::circular_buffer<model::record_batch>>
+ss::future<chunked_circular_buffer<model::record_batch>>
 copy_to_mem(model::record_batch_reader& reader) {
-    using data_t = ss::circular_buffer<model::record_batch>;
+    using data_t = chunked_circular_buffer<model::record_batch>;
     class memory_batch_consumer {
     public:
         ss::future<ss::stop_iteration> operator()(model::record_batch b) {
@@ -2830,7 +2831,7 @@ TEST_F(storage_test_fixture, read_write_truncate) {
     auto produce = ss::do_until(
       [&] { return cnt > max; },
       [&log, &cnt, &log_mutex] {
-          ss::circular_buffer<model::record_batch> batches;
+          chunked_circular_buffer<model::record_batch> batches;
           for (int i = 0; i < 20; ++i) {
               storage::record_batch_builder builder(
                 model::record_batch_type::raft_data, model::offset(0));
@@ -2881,7 +2882,7 @@ TEST_F(storage_test_fixture, read_write_truncate) {
                 return model::consume_reader_to_memory(
                   std::move(rdr), model::no_timeout);
             })
-            .then([](ss::circular_buffer<model::record_batch> batches) {
+            .then([](chunked_circular_buffer<model::record_batch> batches) {
                 if (batches.empty()) {
                     SUCCEED() << "read empty range";
                     return;
@@ -2955,7 +2956,7 @@ TEST_F(storage_test_fixture, write_truncate_compact) {
       = ss::do_until(
           [&] { return cnt > max || done; },
           [&log, &cnt, &log_mutex] {
-              ss::circular_buffer<model::record_batch> batches;
+              chunked_circular_buffer<model::record_batch> batches;
               for (int i = 0; i < 20; ++i) {
                   storage::record_batch_builder builder(
                     model::record_batch_type::raft_data, model::offset(0));
@@ -3267,7 +3268,7 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
     };
 
     auto write_and_compact =
-      [&](ss::circular_buffer<model::record_batch> batches) {
+      [&](chunked_circular_buffer<model::record_batch> batches) {
           auto reader = model::make_memory_record_batch_reader(
             std::move(batches));
 
@@ -3300,7 +3301,7 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
          * segment: [[batch (base_offset: 0)][gap][batch (base_offset: 10)]]
          *
          */
-        ss::circular_buffer<model::record_batch> batches;
+        chunked_circular_buffer<model::record_batch> batches;
 
         // first batch
         batches.push_back(large_batch(1));
@@ -3332,7 +3333,7 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
          * segment: [batch: (base_offset: 11)]
          *
          */
-        ss::circular_buffer<model::record_batch> batches;
+        chunked_circular_buffer<model::record_batch> batches;
 
         // first batch
         batches.push_back(large_batch(1));
@@ -3949,7 +3950,7 @@ TEST_F(storage_test_fixture, issue_8091) {
     auto produce = ss::do_until(
       [&] { return cnt > max; },
       [&log, &cnt, &log_mutex] {
-          ss::circular_buffer<model::record_batch> batches;
+          chunked_circular_buffer<model::record_batch> batches;
           auto bt = random_generators::random_choice(
             std::vector<model::record_batch_type>{
               model::record_batch_type::raft_data,
@@ -4011,7 +4012,7 @@ TEST_F(storage_test_fixture, issue_8091) {
                 return model::consume_reader_to_memory(
                   std::move(rdr), model::no_timeout);
             })
-            .then([](ss::circular_buffer<model::record_batch> batches) {
+            .then([](chunked_circular_buffer<model::record_batch> batches) {
                 if (batches.empty()) {
                     SUCCEED() << "read empty range";
                     return;

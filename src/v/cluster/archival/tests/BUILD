@@ -14,6 +14,7 @@ redpanda_test_cc_library(
         "//src/v/cloud_storage_clients",
         "//src/v/cluster",
         "//src/v/config",
+        "//src/v/container:chunked_circular_buffer",
         "//src/v/http/tests:utils",
         "//src/v/model",
         "//src/v/model/tests:random",

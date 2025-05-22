@@ -850,7 +850,18 @@ ss::future<> connection_context::client_protocol_state::process_request(
         sres->tracker->mark_errored();
         co_return;
     }
-
+    /**
+     * If the gate is closed, then we are shutting down and need to wait for the
+     * response future in the foreground.
+     */
+    if (connection_ctx->_server.conn_gate().is_closed()) {
+        co_return co_await handle_response(
+          std::move(connection_ctx),
+          std::move(res.response),
+          sres,
+          seq,
+          correlation);
+    }
     /**
      * second stage processed in background.
      */
