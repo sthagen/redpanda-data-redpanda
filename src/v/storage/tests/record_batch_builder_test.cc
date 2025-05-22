@@ -16,10 +16,8 @@
 #include "reflection/adl.h"
 #include "storage/record_batch_builder.h"
 
-#include <seastar/testing/thread_test_case.hh>
-
 #include <absl/container/btree_map.h>
-#include <boost/test/tools/old/interface.hpp>
+#include <gtest/gtest.h>
 
 namespace detail {
 
@@ -84,16 +82,16 @@ sample_type deserialize_sample_type(model::record& r) {
 
 } // namespace detail
 
-SEASTAR_THREAD_TEST_CASE(empty_builder) {
+TEST(RecordBatchBuilderTest, empty_builder) {
     // positive case
     {
         storage::record_batch_builder rbb(
           model::record_batch_type::raft_data, model::offset(0));
 
-        BOOST_REQUIRE(rbb.empty());
+        ASSERT_TRUE(rbb.empty());
         auto rb = std::move(rbb).build();
-        BOOST_CHECK(rb.empty());
-        BOOST_CHECK_EQUAL(rb.record_count(), 0);
+        EXPECT_TRUE(rb.empty());
+        EXPECT_EQ(rb.record_count(), 0);
     }
 
     // negative case
@@ -103,14 +101,14 @@ SEASTAR_THREAD_TEST_CASE(empty_builder) {
 
         rbb.add_raw_kv(std::nullopt, std::nullopt);
 
-        BOOST_REQUIRE(!rbb.empty());
+        ASSERT_FALSE(rbb.empty());
         auto rb = std::move(rbb).build();
-        BOOST_CHECK(!rb.empty());
-        BOOST_CHECK_EQUAL(rb.record_count(), 1);
+        EXPECT_FALSE(rb.empty());
+        EXPECT_EQ(rb.record_count(), 1);
     }
 }
 
-SEASTAR_THREAD_TEST_CASE(serialize_deserialize_then_cmp) {
+TEST(RecordBatchBuilderTest, serialize_deserialize_then_cmp) {
     /// 1. Build working set for test
     const std::size_t total = random_generators::get_int(50, 100);
     std::vector<detail::sample_type> sample_data;
@@ -142,5 +140,5 @@ SEASTAR_THREAD_TEST_CASE(serialize_deserialize_then_cmp) {
     record_batch.for_each_record([&sample_output](model::record record) {
         sample_output.push_back(detail::deserialize_sample_type(record));
     });
-    BOOST_CHECK_EQUAL(sample_data, sample_output);
+    EXPECT_EQ(sample_data, sample_output);
 }

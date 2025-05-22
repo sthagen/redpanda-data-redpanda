@@ -221,6 +221,7 @@ def redpanda_cc_gtest(
         env = {},
         cpu = None,
         memory = None,
+        target_compatible_with = [],
         data = [],
         tags = []):
     _redpanda_cc_unit_test(
@@ -234,6 +235,7 @@ def redpanda_cc_gtest(
         deps = deps,
         custom_args = args,
         env = env,
+        target_compatible_with = target_compatible_with,
         data = data,
         local_defines = ["IS_GTEST"],
         tags = tags,

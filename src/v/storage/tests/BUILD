@@ -216,7 +216,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "log_manager_test",
     timeout = "short",
     srcs = [
@@ -231,11 +231,10 @@ redpanda_cc_btest(
         "//src/v/storage:logger",
         "//src/v/storage:record_batch_utils",
         "//src/v/storage:segment_appender",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:random_bytes",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
@@ -275,7 +274,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "batch_cache_reclaim_test",
     timeout = "short",
     srcs = [
@@ -289,10 +288,9 @@ redpanda_cc_btest(
         "//src/v/model",
         "//src/v/storage:batch_cache",
         "//src/v/storage:record_batch_builder",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
@@ -410,7 +408,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "record_batch_builder_test",
     timeout = "short",
     srcs = [
@@ -423,10 +421,9 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/reflection:adl",
         "//src/v/storage:record_batch_builder",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
         "@abseil-cpp//absl/container:btree",
-        "@boost//:test",
-        "@seastar//:testing",
+        "@googletest//:gtest",
     ],
 )
 
@@ -481,7 +478,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "offset_index_utils_tests",
     timeout = "short",
     srcs = [
@@ -492,12 +489,11 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/storage",
         "//src/v/test_utils:fixture",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:tmpbuf_file",
         "//src/v/utils:file_io",
-        "@boost//:test",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
@@ -622,7 +618,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "segment_size_jitter_test",
     timeout = "short",
     srcs = [
@@ -630,10 +626,8 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/storage",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
-        "@seastar",
-        "@seastar//:testing",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
     ],
 )
 

@@ -22,8 +22,9 @@
 #include "test_utils/random_bytes.h"
 
 #include <seastar/core/thread.hh>
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
+
+#include <gtest/gtest.h>
 
 using namespace std::chrono_literals; // NOLINT
 using namespace storage;              // NOLINT
@@ -69,7 +70,7 @@ ntp_config config_from_ntp(const model::ntp& ntp) {
 constexpr size_t default_segment_readahead_size = 128 * 1024;
 constexpr unsigned default_segment_readahead_count = 10;
 
-SEASTAR_THREAD_TEST_CASE(test_can_load_logs) {
+TEST(LogManagerTest, test_can_load_logs) {
     auto conf = make_config();
 
     ss::logger test_logger("test-logger");
@@ -144,14 +145,14 @@ SEASTAR_THREAD_TEST_CASE(test_can_load_logs) {
     m.manage(config_from_ntp(ntps[1].ntp())).get();
     m.manage(config_from_ntp(ntps[2].ntp())).get();
     m.manage(config_from_ntp(ntps[3].ntp())).get();
-    BOOST_CHECK_EQUAL(4, m.size());
-    BOOST_CHECK_EQUAL(m.get(ntps[0].ntp())->segment_count(), 0);
-    BOOST_CHECK_EQUAL(m.get(ntps[1].ntp())->segment_count(), 0);
-    BOOST_CHECK_EQUAL(m.get(ntps[2].ntp())->segment_count(), 1);
-    BOOST_CHECK_EQUAL(m.get(ntps[3].ntp())->segment_count(), 0);
-    BOOST_CHECK(!file_exists(seg->reader().filename()).get());
-    BOOST_CHECK(file_exists(seg3->reader().filename()).get());
-    BOOST_CHECK(!file_exists(seg4->reader().filename()).get());
-    BOOST_CHECK(
+    EXPECT_EQ(4, m.size());
+    EXPECT_EQ(m.get(ntps[0].ntp())->segment_count(), 0);
+    EXPECT_EQ(m.get(ntps[1].ntp())->segment_count(), 0);
+    EXPECT_EQ(m.get(ntps[2].ntp())->segment_count(), 1);
+    EXPECT_EQ(m.get(ntps[3].ntp())->segment_count(), 0);
+    EXPECT_FALSE(file_exists(seg->reader().filename()).get());
+    EXPECT_TRUE(file_exists(seg3->reader().filename()).get());
+    EXPECT_FALSE(file_exists(seg4->reader().filename()).get());
+    EXPECT_TRUE(
       file_exists(seg4->reader().filename() + ".cannotrecover").get());
 }

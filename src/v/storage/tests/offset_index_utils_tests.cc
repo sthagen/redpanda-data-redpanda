@@ -15,12 +15,12 @@
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
 
-#include <boost/test/tools/old/interface.hpp>
+#include <gtest/gtest.h>
 
 using namespace storage;
 
 namespace storage {
-class offset_index_utils_fixture {
+class offset_index_utils_fixture : public testing::Test {
 public:
     offset_index_utils_fixture(model::offset base = model::offset(0)) {
         _base_offset = base;
@@ -52,9 +52,9 @@ public:
     void index_entry_expect(uint32_t offset, size_t filepos) {
         auto o = model::offset(offset);
         auto p = _idx->find_nearest(o);
-        BOOST_REQUIRE(bool(p));
-        BOOST_REQUIRE_EQUAL(p->offset, o);
-        BOOST_REQUIRE_EQUAL(p->filepos, filepos);
+        ASSERT_TRUE(bool(p));
+        ASSERT_EQ(p->offset, o);
+        ASSERT_EQ(p->filepos, filepos);
     }
 
     model::offset _base_offset;
@@ -65,11 +65,11 @@ public:
 };
 } // namespace storage
 
-FIXTURE_TEST(index_round_trip, offset_index_utils_fixture) {
+TEST_F(offset_index_utils_fixture, index_round_trip) {
     start().get();
 
-    BOOST_CHECK(true);
-    info("index: {}", _idx);
+    EXPECT_TRUE(true);
+    SUCCEED() << "index: " << _idx;
     for (uint32_t i = 0; i < 1024; ++i) {
         model::offset o = _base_offset + model::offset(i);
         _idx->maybe_track(
@@ -77,22 +77,22 @@ FIXTURE_TEST(index_round_trip, offset_index_utils_fixture) {
           std::nullopt,
           i);
     }
-    info("About to flush index");
+    SUCCEED() << "About to flush index";
     _idx->flush().get();
     auto data = _data.share_iobuf();
-    info("{} - serializing from bytes into mem: buffer{}", _idx, data);
+    SUCCEED() << _idx << " - serializing from bytes into mem: buffer" << data;
     auto raw_idx = serde::from_iobuf<storage::index_state>(
       data.share(0, data.size_bytes()));
-    info("verifying tracking info: {}", raw_idx);
-    BOOST_REQUIRE_EQUAL(raw_idx.max_offset(), 1023);
-    BOOST_REQUIRE_EQUAL(raw_idx.index.size(), 1024);
+    SUCCEED() << "verifying tracking info: " << raw_idx;
+    ASSERT_EQ(raw_idx.max_offset(), 1023);
+    ASSERT_EQ(raw_idx.index.size(), 1024);
 }
 
-FIXTURE_TEST(bucket_bug1, offset_index_utils_fixture) {
+TEST_F(offset_index_utils_fixture, bucket_bug1) {
     start().get();
 
-    info("index: {}", _idx);
-    info("Testing bucket find");
+    SUCCEED() << "index: " << _idx;
+    SUCCEED() << "Testing bucket find";
     _idx->maybe_track(
       modify_get(model::offset{824}, 155103), std::nullopt, 0); // indexed
     _idx->maybe_track(
@@ -115,16 +115,16 @@ FIXTURE_TEST(bucket_bug1, offset_index_utils_fixture) {
     index_entry_expect(926, 600121);
     {
         auto p = _idx->find_nearest(model::offset(947));
-        BOOST_REQUIRE(bool(p));
-        BOOST_REQUIRE_EQUAL(p->offset, model::offset(926));
-        BOOST_REQUIRE_EQUAL(p->filepos, 600121);
+        ASSERT_TRUE(bool(p));
+        ASSERT_EQ(p->offset, model::offset(926));
+        ASSERT_EQ(p->filepos, 600121);
     }
 }
-FIXTURE_TEST(bucket_truncate, offset_index_utils_fixture) {
+TEST_F(offset_index_utils_fixture, bucket_truncate) {
     start().get();
 
-    info("index: {}", _idx);
-    info("Testing bucket truncate");
+    SUCCEED() << "index: " << _idx;
+    SUCCEED() << "Testing bucket truncate";
     _idx->maybe_track(
       modify_get(model::offset{824}, 155103), std::nullopt, 0); // indexed
     _idx->maybe_track(
@@ -139,39 +139,39 @@ FIXTURE_TEST(bucket_truncate, offset_index_utils_fixture) {
       modify_get(model::offset{948}, 1667),
       std::nullopt,
       727007); // not indexed
-    BOOST_REQUIRE_EQUAL(_idx->num_compactible_records_appended(), 0);
+    ASSERT_EQ(_idx->num_compactible_records_appended(), 0);
 
     // test range truncation next
     _idx->truncate(model::offset(926), model::timestamp{100}).get();
     index_entry_expect(879, 323968);
     index_entry_expect(901, 458048);
-    BOOST_REQUIRE_EQUAL(_idx->num_compactible_records_appended(), 0);
+    ASSERT_EQ(_idx->num_compactible_records_appended(), 0);
     {
         auto p = _idx->find_nearest(model::offset(926));
-        BOOST_REQUIRE(bool(p));
-        BOOST_REQUIRE_EQUAL(p->offset, model::offset(901));
-        BOOST_REQUIRE_EQUAL(p->filepos, 458048);
+        ASSERT_TRUE(bool(p));
+        ASSERT_EQ(p->offset, model::offset(901));
+        ASSERT_EQ(p->filepos, 458048);
     }
     {
         auto p = _idx->find_nearest(model::offset(947));
-        BOOST_REQUIRE(bool(p));
-        BOOST_REQUIRE_EQUAL(p->offset, model::offset(901));
-        BOOST_REQUIRE_EQUAL(p->filepos, 458048);
+        ASSERT_TRUE(bool(p));
+        ASSERT_EQ(p->offset, model::offset(901));
+        ASSERT_EQ(p->filepos, 458048);
     }
 
-    BOOST_REQUIRE(_idx->max_timestamp() == model::timestamp{100});
+    ASSERT_TRUE(_idx->max_timestamp() == model::timestamp{100});
 
     _idx->truncate(model::offset(824), model::timestamp{100}).get();
-    BOOST_REQUIRE_EQUAL(_idx->num_compactible_records_appended(), 0);
+    ASSERT_EQ(_idx->num_compactible_records_appended(), 0);
     {
         auto p = _idx->find_nearest(model::offset(824));
-        BOOST_REQUIRE(bool(!p));
+        ASSERT_FALSE(bool(p));
     }
 
     _idx->truncate(model::offset(823), model::timestamp{100}).get();
-    BOOST_REQUIRE_EQUAL(_idx->num_compactible_records_appended(), 0);
+    ASSERT_EQ(_idx->num_compactible_records_appended(), 0);
     {
         auto p = _idx->find_nearest(model::offset(824));
-        BOOST_REQUIRE(bool(!p));
+        ASSERT_FALSE(bool(p));
     }
 }

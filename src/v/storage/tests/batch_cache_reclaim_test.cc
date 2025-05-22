@@ -14,9 +14,8 @@
 
 #include <seastar/core/memory.hh>
 #include <seastar/core/sleep.hh>
-#include <seastar/testing/thread_test_case.hh>
 
-#include <boost/test/unit_test.hpp>
+#include <gtest/gtest.h>
 
 #include <algorithm>
 
@@ -41,9 +40,7 @@ model::record_batch make_batch(size_t size) {
     return batch;
 }
 
-class fixture {};
-
-FIXTURE_TEST(reclaim, fixture) {
+TEST(BatchCacheReclaimTest, reclaim) {
     using namespace std::chrono_literals;
 
     storage::batch_cache cache(opts);
@@ -53,25 +50,21 @@ FIXTURE_TEST(reclaim, fixture) {
 
     auto stats = ss::memory::stats();
 
-    BOOST_TEST(stats.reclaims() == 0);
-    BOOST_REQUIRE(stats.free_memory() > ss::memory::min_free_memory());
+    EXPECT_EQ(stats.reclaims(), 0);
+    ASSERT_GT(stats.free_memory(), ss::memory::min_free_memory());
     size_t bytes_until_reclaim = stats.free_memory()
                                  - ss::memory::min_free_memory();
 
-    info(
-      "memory stats (kb) total {} free {} min_free {} until_reclaim {} "
-      "reclaims {}",
-      stats.total_memory() / 1024,
-      stats.free_memory() / 1024,
-      ss::memory::min_free_memory() / 1024,
-      bytes_until_reclaim / 1024,
-      stats.reclaims());
+    SUCCEED() << "memory stats (kb) total " << stats.total_memory() / 1024
+              << " free " << stats.free_memory() / 1024 << " min_free "
+              << ss::memory::min_free_memory() / 1024 << " until_reclaim "
+              << bytes_until_reclaim / 1024 << " reclaims " << stats.reclaims();
 
     size_t pages_until_reclaim = bytes_until_reclaim / ss::memory::page_size;
 
     // ensure there is some wiggle room. otherwise the test might be a bit
     // unreliable operating on the edge of reclaim
-    BOOST_TEST_REQUIRE(pages_until_reclaim > 20, "please run with more memory");
+    ASSERT_GT(pages_until_reclaim, 20) << "please run with more memory";
 
     // insert batches into the cache up to roughly have the amount needed to
     // trigger reclaim
@@ -85,20 +78,20 @@ FIXTURE_TEST(reclaim, fixture) {
     ss::thread::yield();
 
     // all of the cache entries should be valid
-    BOOST_CHECK(std::all_of(
+    EXPECT_TRUE(std::all_of(
       cache_entries.begin(),
       cache_entries.end(),
       [](storage::batch_cache::entry& e) { return (bool)e.range(); }));
 
     stats = ss::memory::stats();
-    BOOST_TEST(stats.reclaims() == 0);
+    EXPECT_EQ(stats.reclaims(), 0);
 
     // now allocate past what should cause relcaims to trigger
     for (size_t i = 0; i < pages_until_reclaim; i++) {
         size_t buf_size = ss::memory::page_size - sizeof(model::record_batch);
         auto batch = make_batch(buf_size);
         auto e = cache.put(index, std::move(batch), is_dirty_entry::no);
-        BOOST_REQUIRE((bool)e.range());
+        ASSERT_TRUE((bool)e.range());
         cache_entries.emplace_back(std::move(e));
     }
 
@@ -106,21 +99,17 @@ FIXTURE_TEST(reclaim, fixture) {
     ss::thread::yield();
 
     // now some of the cache entries should have been reclaimed
-    BOOST_CHECK(std::any_of(
+    EXPECT_TRUE(std::any_of(
       cache_entries.begin(),
       cache_entries.end(),
       [](storage::batch_cache::entry& e) { return !e.range(); }));
 
     stats = ss::memory::stats();
-    BOOST_TEST(stats.reclaims() > 0);
+    EXPECT_GT(stats.reclaims(), 0);
 
-    info(
-      "memory stats (kb) total {} free {} min_free {} until_reclaim {} "
-      "reclaims {}",
-      stats.total_memory() / 1024,
-      stats.free_memory() / 1024,
-      ss::memory::min_free_memory() / 1024,
-      bytes_until_reclaim / 1024,
-      stats.reclaims());
+    SUCCEED() << "memory stats (kb) total " << stats.total_memory() / 1024
+              << " free " << stats.free_memory() / 1024 << " min_free "
+              << ss::memory::min_free_memory() / 1024 << " until_reclaim "
+              << bytes_until_reclaim / 1024 << " reclaims " << stats.reclaims();
     cache.stop().get();
 }
