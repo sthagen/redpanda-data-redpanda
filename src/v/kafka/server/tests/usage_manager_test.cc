@@ -11,8 +11,9 @@
 #include "kafka/server/usage_aggregator.h"
 #include "storage/tests/kvstore_fixture.h"
 
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/log.hh>
+
+#include <gtest/gtest.h>
 
 static ss::logger af_logger{"test-accounting-fiber"};
 
@@ -102,7 +103,7 @@ ss::sstring print_window_data(const std::vector<kafka::usage_window>& v) {
 }
 } // namespace
 
-FIXTURE_TEST(test_usage, kvstore_test_fixture) {
+TEST_F(kvstore_test_fixture, test_usage) {
     using namespace std::chrono_literals;
     auto kvstore = make_kvstore();
     kvstore->start().get();
@@ -141,7 +142,7 @@ FIXTURE_TEST(test_usage, kvstore_test_fixture) {
     /// an empty window to properly compare
     data.emplace_back(kafka::usage{.bytes_sent = 0, .bytes_received = 0});
     std::reverse(data.begin(), data.end());
-    BOOST_CHECK_EQUAL(result, data);
+    EXPECT_EQ(result, data);
 
     /// Add to open window
     usage_fiber->add_bytes(10, 10);
@@ -154,8 +155,8 @@ FIXTURE_TEST(test_usage, kvstore_test_fixture) {
       "Clock advanced 4s, data: {}",
       print_window_data(open_windows));
     const auto open_window = open_windows[0];
-    BOOST_CHECK_EQUAL(open_window.u.bytes_sent, 20);
-    BOOST_CHECK_EQUAL(open_window.u.bytes_received, 20);
+    EXPECT_EQ(open_window.u.bytes_sent, 20);
+    EXPECT_EQ(open_window.u.bytes_received, 20);
 
     /// Grab most recent result before shutdown
     result = strip_window_data(usage_fiber->get_usage_stats().get());
@@ -173,15 +174,15 @@ FIXTURE_TEST(test_usage, kvstore_test_fixture) {
     auto result_after_restart = strip_window_data(
       usage_fiber->get_usage_stats().get());
     const auto& new_open_window = result_after_restart[0];
-    BOOST_CHECK_EQUAL(new_open_window.bytes_sent, 20);
-    BOOST_CHECK_EQUAL(new_open_window.bytes_received, 20);
-    BOOST_CHECK_EQUAL(result, result_after_restart);
+    EXPECT_EQ(new_open_window.bytes_sent, 20);
+    EXPECT_EQ(new_open_window.bytes_received, 20);
+    EXPECT_EQ(result, result_after_restart);
 
     usage_fiber->stop().get();
     kvstore->stop().get();
 }
 
-SEASTAR_THREAD_TEST_CASE(test_round_to_interval_method) {
+TEST(UsageManagerTest, test_round_to_interval_method) {
     using namespace std::chrono_literals;
     /// Aug 3rd, 2023 4PM GMT
     const auto ts = ss::lowres_system_clock::time_point(
@@ -191,17 +192,17 @@ SEASTAR_THREAD_TEST_CASE(test_round_to_interval_method) {
 
     for (const auto& ival : intervals) {
         /// Underneath the 2min threshold the method returns the input rounded
-        BOOST_CHECK(ts == kafka::detail::round_to_interval(ival, ts));
-        BOOST_CHECK(ts == kafka::detail::round_to_interval(ival, ts + 10s));
-        BOOST_CHECK(ts == kafka::detail::round_to_interval(ival, ts - 10s));
-        BOOST_CHECK(ts == kafka::detail::round_to_interval(ival, ts + 1min));
-        BOOST_CHECK(ts == kafka::detail::round_to_interval(ival, ts - 1min));
-        BOOST_CHECK(ts == kafka::detail::round_to_interval(ival, ts + 2min));
-        BOOST_CHECK(ts == kafka::detail::round_to_interval(ival, ts - 2min));
+        EXPECT_EQ(ts, kafka::detail::round_to_interval(ival, ts));
+        EXPECT_EQ(ts, kafka::detail::round_to_interval(ival, ts + 10s));
+        EXPECT_EQ(ts, kafka::detail::round_to_interval(ival, ts - 10s));
+        EXPECT_EQ(ts, kafka::detail::round_to_interval(ival, ts + 1min));
+        EXPECT_EQ(ts, kafka::detail::round_to_interval(ival, ts - 1min));
+        EXPECT_EQ(ts, kafka::detail::round_to_interval(ival, ts + 2min));
+        EXPECT_EQ(ts, kafka::detail::round_to_interval(ival, ts - 2min));
         /// Past the 2min threshold the method returns the input unmodified
-        BOOST_CHECK(ts != kafka::detail::round_to_interval(ival, ts + 3min));
-        BOOST_CHECK(ts != kafka::detail::round_to_interval(ival, ts - 3min));
-        BOOST_CHECK(ts != kafka::detail::round_to_interval(ival, ts + 10min));
-        BOOST_CHECK(ts != kafka::detail::round_to_interval(ival, ts - 10min));
+        EXPECT_NE(ts, kafka::detail::round_to_interval(ival, ts + 3min));
+        EXPECT_NE(ts, kafka::detail::round_to_interval(ival, ts - 3min));
+        EXPECT_NE(ts, kafka::detail::round_to_interval(ival, ts + 10min));
+        EXPECT_NE(ts, kafka::detail::round_to_interval(ival, ts - 10min));
     }
 }

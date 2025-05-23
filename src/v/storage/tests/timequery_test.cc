@@ -12,11 +12,10 @@
 #include "model/tests/random_batch.h"
 #include "model/timestamp.h"
 #include "storage/tests/disk_log_builder_fixture.h"
-#include "test_utils/fixture.h"
 
 #include <seastar/core/file.hh>
 
-#include <boost/test/tools/context.hpp>
+#include <gtest/gtest.h>
 
 namespace {
 
@@ -42,7 +41,7 @@ model::record_batch make_random_batch(
 
 } // namespace
 
-FIXTURE_TEST(timequery, log_builder_fixture) {
+TEST_F(log_builder_fixture, timequery) {
     using namespace storage; // NOLINT
 
     b | start();
@@ -68,17 +67,17 @@ FIXTURE_TEST(timequery, log_builder_fixture) {
     }
 
     for (const auto& seg : b.get_log_segments()) {
-        BOOST_TEST(seg->index().batch_timestamps_are_monotonic());
+        EXPECT_TRUE(seg->index().batch_timestamps_are_monotonic());
     }
 
-    BOOST_TEST_CONTEXT(
-      "undershoot the timestamp but keep increasing the start offset") {
+    {
+        SCOPED_TRACE(
+          "undershoot the timestamp but keep increasing the start offset");
         auto log = b.get_log();
         for (auto start_offset = log->offsets().start_offset;
              start_offset < model::offset(10);
              start_offset++) {
-            BOOST_TEST_INFO_SCOPE(
-              fmt::format("start_offset: {}", start_offset));
+            SCOPED_TRACE(fmt::format("start_offset: {}", start_offset));
 
             storage::timequery_config config(
               start_offset,
@@ -88,9 +87,9 @@ FIXTURE_TEST(timequery, log_builder_fixture) {
               std::nullopt);
 
             auto res = log->timequery(config).get();
-            BOOST_TEST(res);
-            BOOST_TEST(res->time == model::timestamp(start_offset));
-            BOOST_TEST(res->offset == start_offset);
+            EXPECT_TRUE(res);
+            EXPECT_EQ(res->time, model::timestamp(start_offset));
+            EXPECT_EQ(res->offset, start_offset);
         }
     }
 
@@ -106,9 +105,9 @@ FIXTURE_TEST(timequery, log_builder_fixture) {
           std::nullopt);
 
         auto res = log->timequery(config).get();
-        BOOST_TEST(res);
-        BOOST_TEST(res->time == model::timestamp(ts));
-        BOOST_TEST(res->offset == model::offset(ts));
+        EXPECT_TRUE(res);
+        EXPECT_EQ(res->time, model::timestamp(ts));
+        EXPECT_EQ(res->offset, model::offset(ts));
     }
 
     // in the second segment
@@ -131,15 +130,15 @@ FIXTURE_TEST(timequery, log_builder_fixture) {
         auto offset = (ts - 100) * 5 + 100;
 
         auto res = log->timequery(config).get();
-        BOOST_TEST(res);
-        BOOST_TEST(res->time == model::timestamp(ts));
-        BOOST_TEST(res->offset == model::offset(offset));
+        EXPECT_TRUE(res);
+        EXPECT_EQ(res->time, model::timestamp(ts));
+        EXPECT_EQ(res->offset, model::offset(offset));
     }
 
     b | stop();
 }
 
-FIXTURE_TEST(timequery_multiple_messages_per_batch, log_builder_fixture) {
+TEST_F(log_builder_fixture, timequery_multiple_messages_per_batch) {
     using namespace storage; // NOLINT
 
     b | start();
@@ -175,7 +174,7 @@ FIXTURE_TEST(timequery_multiple_messages_per_batch, log_builder_fixture) {
     }
 
     for (const auto& seg : b.get_log_segments()) {
-        BOOST_TEST(seg->index().batch_timestamps_are_monotonic());
+        EXPECT_TRUE(seg->index().batch_timestamps_are_monotonic());
     }
 
     auto log = b.get_log();
@@ -183,7 +182,7 @@ FIXTURE_TEST(timequery_multiple_messages_per_batch, log_builder_fixture) {
     for (auto start_offset = log->offsets().start_offset;
          start_offset < model::offset(num_batches * records_per_batch);
          start_offset++) {
-        BOOST_TEST_INFO_SCOPE(fmt::format("start_offset: {}", start_offset));
+        SCOPED_TRACE(fmt::format("start_offset: {}", start_offset));
 
         storage::timequery_config config(
           start_offset,
@@ -193,15 +192,15 @@ FIXTURE_TEST(timequery_multiple_messages_per_batch, log_builder_fixture) {
           std::nullopt);
 
         auto res = log->timequery(config).get();
-        BOOST_TEST(res);
-        BOOST_TEST(res->time == model::timestamp(start_offset));
-        BOOST_TEST(res->offset == start_offset);
+        EXPECT_TRUE(res);
+        EXPECT_EQ(res->time, model::timestamp(start_offset));
+        EXPECT_EQ(res->offset, start_offset);
     }
 
     b | stop();
 }
 
-FIXTURE_TEST(timequery_single_value, log_builder_fixture) {
+TEST_F(log_builder_fixture, timequery_single_value) {
     using namespace storage; // NOLINT
 
     b | start();
@@ -224,19 +223,19 @@ FIXTURE_TEST(timequery_single_value, log_builder_fixture) {
       std::nullopt);
 
     auto empty_res = log->timequery(config).get();
-    BOOST_TEST(!empty_res);
+    EXPECT_FALSE(empty_res);
 
     // ask for 999 it should return first segment
     config.time = model::timestamp(999);
 
     auto res = log->timequery(config).get();
-    BOOST_TEST(res);
-    BOOST_TEST(res->time == model::timestamp(1000));
-    BOOST_TEST(res->offset == model::offset(0));
+    EXPECT_TRUE(res);
+    EXPECT_EQ(res->time, model::timestamp(1000));
+    EXPECT_EQ(res->offset, model::offset(0));
     b | stop();
 }
 
-FIXTURE_TEST(timequery_sparse_index, log_builder_fixture) {
+TEST_F(log_builder_fixture, timequery_sparse_index) {
     using namespace storage;
 
     b | start();
@@ -254,8 +253,8 @@ FIXTURE_TEST(timequery_sparse_index, log_builder_fixture) {
     b | add_batch(std::move(batch3));
 
     const auto& seg = b.get_log_segments().front();
-    BOOST_TEST(seg->index().batch_timestamps_are_monotonic());
-    BOOST_TEST(seg->index().size() == 2);
+    EXPECT_TRUE(seg->index().batch_timestamps_are_monotonic());
+    EXPECT_EQ(seg->index().size(), 2);
 
     auto log = b.get_log();
     storage::timequery_config config(
@@ -266,14 +265,14 @@ FIXTURE_TEST(timequery_sparse_index, log_builder_fixture) {
       std::nullopt);
 
     auto res = log->timequery(config).get();
-    BOOST_TEST(res);
-    BOOST_TEST(res->time == model::timestamp(1600));
-    BOOST_TEST(res->offset == model::offset(1));
+    EXPECT_TRUE(res);
+    EXPECT_EQ(res->time, model::timestamp(1600));
+    EXPECT_EQ(res->offset, model::offset(1));
 
     b | stop();
 }
 
-FIXTURE_TEST(timequery_one_element_index, log_builder_fixture) {
+TEST_F(log_builder_fixture, timequery_one_element_index) {
     using namespace storage;
 
     b | start();
@@ -287,8 +286,8 @@ FIXTURE_TEST(timequery_one_element_index, log_builder_fixture) {
     b | add_batch(std::move(batch));
 
     const auto& seg = b.get_log_segments().front();
-    BOOST_TEST(seg->index().batch_timestamps_are_monotonic());
-    BOOST_TEST(seg->index().size() == 1);
+    EXPECT_TRUE(seg->index().batch_timestamps_are_monotonic());
+    EXPECT_EQ(seg->index().size(), 1);
 
     auto log = b.get_log();
     storage::timequery_config config(
@@ -299,14 +298,14 @@ FIXTURE_TEST(timequery_one_element_index, log_builder_fixture) {
       std::nullopt);
 
     auto res = log->timequery(config).get();
-    BOOST_TEST(res);
-    BOOST_TEST(res->time == model::timestamp(1000));
-    BOOST_TEST(res->offset == model::offset(0));
+    EXPECT_TRUE(res);
+    EXPECT_EQ(res->time, model::timestamp(1000));
+    EXPECT_EQ(res->offset, model::offset(0));
 
     b | stop();
 }
 
-FIXTURE_TEST(timequery_non_monotonic_log, log_builder_fixture) {
+TEST_F(log_builder_fixture, timequery_non_monotonic_log) {
     using namespace storage; // NOLINT
 
     b | start();
@@ -334,8 +333,8 @@ FIXTURE_TEST(timequery_non_monotonic_log, log_builder_fixture) {
     }
 
     const auto& segs = b.get_log_segments();
-    BOOST_TEST(segs.size() == 1);
-    BOOST_TEST(segs.front()->index().batch_timestamps_are_monotonic() == false);
+    EXPECT_EQ(segs.size(), 1);
+    EXPECT_FALSE(segs.front()->index().batch_timestamps_are_monotonic());
 
     auto log = b.get_log();
     for (const auto& [offset, ts] : batch_spec) {
@@ -353,13 +352,13 @@ FIXTURE_TEST(timequery_non_monotonic_log, log_builder_fixture) {
             // first batch that satifies: `batch_max_timestamp >= needle`.
             // So, in this case we pick the first batch with timestamp
             // greater or equal to 1002.
-            BOOST_TEST(res);
-            BOOST_TEST(res->time == model::timestamp(1002));
-            BOOST_TEST(res->offset == model::offset(2));
+            EXPECT_TRUE(res);
+            EXPECT_EQ(res->time, model::timestamp(1002));
+            EXPECT_EQ(res->offset, model::offset(2));
         } else {
-            BOOST_TEST(res);
-            BOOST_TEST(res->time == ts);
-            BOOST_TEST(res->offset == offset);
+            EXPECT_TRUE(res);
+            EXPECT_EQ(res->time, ts);
+            EXPECT_EQ(res->offset, offset);
         }
     }
 
@@ -374,13 +373,13 @@ FIXTURE_TEST(timequery_non_monotonic_log, log_builder_fixture) {
 
     auto res = log->timequery(config).get();
 
-    BOOST_TEST(res);
-    BOOST_TEST(res->offset == model::offset(0));
+    EXPECT_TRUE(res);
+    EXPECT_EQ(res->offset, model::offset(0));
 
     b | stop();
 }
 
-FIXTURE_TEST(timequery_clamp, log_builder_fixture) {
+TEST_F(log_builder_fixture, timequery_clamp) {
     using namespace storage; // NOLINT
 
     b | start();
@@ -402,8 +401,8 @@ FIXTURE_TEST(timequery_clamp, log_builder_fixture) {
     }
 
     const auto& segs = b.get_log_segments();
-    BOOST_TEST(segs.size() == 1);
-    BOOST_TEST(segs.front()->index().batch_timestamps_are_monotonic() == true);
+    EXPECT_EQ(segs.size(), 1);
+    EXPECT_TRUE(segs.front()->index().batch_timestamps_are_monotonic());
 
     auto log = b.get_log();
     storage::timequery_config config(
@@ -415,9 +414,9 @@ FIXTURE_TEST(timequery_clamp, log_builder_fixture) {
 
     const auto& [expected_offset, expected_ts] = batch_spec.back();
     auto res = log->timequery(config).get();
-    BOOST_TEST(res);
-    BOOST_TEST(res->time == expected_ts);
-    BOOST_TEST(res->offset == expected_offset);
+    EXPECT_TRUE(res);
+    EXPECT_EQ(res->time, expected_ts);
+    EXPECT_EQ(res->offset, expected_offset);
 
     b | stop();
 }

@@ -118,6 +118,21 @@ ss::future<> sharded_store::validate_schema(subject_schema schema) {
     __builtin_unreachable();
 }
 
+ss::future<schema_definition>
+sharded_store::format_schema(schema_definition schema, output_format format) {
+    switch (schema.type()) {
+    case schema_type::avro:
+        co_return co_await format_avro_schema_definition(
+          *this, std::move(schema), format);
+    case schema_type::protobuf:
+        co_return co_await format_protobuf_schema_definition(
+          *this, std::move(schema), format);
+    case schema_type::json:
+        // json doesn't act on format parameter
+        co_return schema;
+    }
+}
+
 ss::future<valid_schema>
 sharded_store::make_valid_schema(subject_schema schema) {
     // This method seems to confuse clang 12.0.1
@@ -376,15 +391,12 @@ sharded_store::get_schema_definition(schema_id id) {
 
 ss::future<schema_definition>
 sharded_store::get_schema_definition(schema_id id, output_format format) {
-    // TODO: Implement support for the different modes of format
-    if (format != output_format::none) {
-        throw as_exception(format_not_supported(format));
-    }
-
-    co_return co_await _store.invoke_on(
+    auto def = co_await _store.invoke_on(
       shard_for(id), _smp_opts, [id](store& s) {
           return s.get_schema_definition(id).value();
       });
+
+    co_return co_await format_schema(std::move(def), format);
 }
 
 ss::future<chunked_vector<subject_version>>

@@ -16,7 +16,8 @@
 
 #include <seastar/core/fstream.hh>
 #include <seastar/core/seastar.hh>
-#include <seastar/testing/thread_test_case.hh>
+
+#include <gtest/gtest.h>
 
 const ss::sstring valid_schema = R"(
 {
@@ -136,7 +137,7 @@ void write_to_file(ss::file& f, const ss::sstring& cfg) {
     out.close().get();
 }
 
-SEASTAR_THREAD_TEST_CASE(file_sanitizer_config_parse_test) {
+TEST(FileSanitizerTest, file_sanitizer_config_parse_test) {
     temporary_dir tmp_dir("file_sanitizer_test");
     auto path = tmp_dir.get_path();
 
@@ -170,33 +171,32 @@ SEASTAR_THREAD_TEST_CASE(file_sanitizer_config_parse_test) {
           invalid_batch_path,
           missing_path}) {
         auto res = storage::make_finjector_file_config(path).get();
-        BOOST_REQUIRE(!res.has_value());
+        EXPECT_FALSE(res.has_value());
     }
 
     // Create a configuration from the valid input and validate its contents.
     auto cfg = storage::make_finjector_file_config(valid_path).get();
-    BOOST_REQUIRE(cfg.has_value());
+    EXPECT_TRUE(cfg.has_value());
 
     model::ntp ntp{"kafka", "test", 1};
     const auto& ntp_cfg = cfg->get_config_for_ntp(ntp);
-    BOOST_REQUIRE(ntp_cfg.has_value());
+    EXPECT_TRUE(ntp_cfg.has_value());
 
-    BOOST_REQUIRE_EQUAL(ntp_cfg->sanitize_only, false);
-    BOOST_REQUIRE_EQUAL(ntp_cfg->finjection_cfg.has_value(), true);
+    EXPECT_EQ(ntp_cfg->sanitize_only, false);
+    EXPECT_EQ(ntp_cfg->finjection_cfg.has_value(), true);
 
     const auto& finject_cfg = ntp_cfg->finjection_cfg.value();
 
-    BOOST_REQUIRE_EQUAL(finject_cfg.ntp, ntp);
-    BOOST_REQUIRE_EQUAL(finject_cfg.op_configs.size(), 1);
+    EXPECT_EQ(finject_cfg.ntp, ntp);
+    EXPECT_EQ(finject_cfg.op_configs.size(), 1);
 
     const auto& write_failure_cfg = finject_cfg.op_configs[0];
-    BOOST_REQUIRE_EQUAL(
-      write_failure_cfg.op_type, storage::failable_op_type::write);
-    BOOST_REQUIRE_EQUAL(
+    EXPECT_EQ(write_failure_cfg.op_type, storage::failable_op_type::write);
+    EXPECT_EQ(
       write_failure_cfg.batch_type.value(),
       model::record_batch_type::raft_data);
-    BOOST_REQUIRE_EQUAL(write_failure_cfg.failure_probability.value(), 0.1);
-    BOOST_REQUIRE_EQUAL(write_failure_cfg.delay_probability.value(), 100);
-    BOOST_REQUIRE_EQUAL(write_failure_cfg.min_delay_ms.value(), 0);
-    BOOST_REQUIRE_EQUAL(write_failure_cfg.max_delay_ms.value(), 100);
+    EXPECT_EQ(write_failure_cfg.failure_probability.value(), 0.1);
+    EXPECT_EQ(write_failure_cfg.delay_probability.value(), 100);
+    EXPECT_EQ(write_failure_cfg.min_delay_ms.value(), 0);
+    EXPECT_EQ(write_failure_cfg.max_delay_ms.value(), 100);
 }

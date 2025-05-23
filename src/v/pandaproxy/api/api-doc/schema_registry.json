@@ -430,6 +430,12 @@
             "in": "path",
             "required": true,
             "type": "integer"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "produces": [
@@ -634,6 +640,12 @@
             "in": "query",
             "required": false,
             "type": "boolean"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "type": "string"
           },
           {
             "name": "schema_def",
@@ -864,6 +876,12 @@
             "in": "query",
             "required": false,
             "type": "string"
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "type": "string"
           }
         ],
         "produces": [
@@ -973,6 +991,12 @@
           },
           {
             "name": "deleted",
+            "in": "query",
+            "required": false,
+            "type": "string"
+          },
+          {
+            "name": "format",
             "in": "query",
             "required": false,
             "type": "string"

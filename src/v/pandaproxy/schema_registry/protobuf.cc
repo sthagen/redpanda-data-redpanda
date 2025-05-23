@@ -546,13 +546,21 @@ struct protobuf_schema_definition::impl {
           "{}\n{}\n\n{}\n\n{}\n", header, package, imports, footer);
     }
 
-    schema_definition::raw_string raw() const {
+    schema_definition::raw_string raw(output_format format) const {
+        if (format == output_format::serialized) {
+            iobuf_ostream ios;
+            fdp.SerializeToOstream(&ios.ostream());
+
+            return schema_definition::raw_string{
+              iobuf_to_base64(std::move(ios).buf())};
+        }
         return schema_definition::raw_string{debug_string()};
     }
 };
 
-schema_definition::raw_string protobuf_schema_definition::raw() const {
-    return _impl->raw();
+schema_definition::raw_string
+protobuf_schema_definition::raw(output_format format) const {
+    return _impl->raw(format);
 }
 
 ::result<ss::sstring, kafka::error_code>
@@ -634,18 +642,40 @@ ss::future<protobuf_schema_definition> make_protobuf_schema_definition(
 }
 
 ss::future<schema_definition> validate_protobuf_schema(
-  sharded_store& store, subject_schema schema, normalize norm) {
+  sharded_store& store,
+  subject_schema schema,
+  normalize norm,
+  output_format format) {
     auto res = co_await make_protobuf_schema_definition(
       store, std::move(schema), norm);
-    co_return schema_definition{std::move(res)};
+    co_return schema_definition{res.raw(format), res.type(), res.refs()};
 }
 
 ss::future<subject_schema> make_canonical_protobuf_schema(
-  sharded_store& store, subject_schema schema, normalize norm) {
+  sharded_store& store,
+  subject_schema schema,
+  normalize norm,
+  output_format format) {
     subject sub = schema.sub();
     co_return subject_schema{
       std::move(sub),
-      co_await validate_protobuf_schema(store, std::move(schema), norm)};
+      co_await validate_protobuf_schema(
+        store, std::move(schema), norm, format)};
+}
+
+ss::future<schema_definition> format_protobuf_schema_definition(
+  sharded_store& store, schema_definition schema, output_format format) {
+    switch (format) {
+    case output_format::ignore_extensions:
+        throw as_exception(format_not_supported(format));
+    case output_format::serialized: {
+        auto serialized = co_await make_canonical_protobuf_schema(
+          store, {{}, std::move(schema)}, normalize::no, format);
+        co_return std::move(serialized).def();
+    }
+    default:
+        co_return std::move(schema);
+    }
 }
 
 namespace {

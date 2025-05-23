@@ -60,10 +60,38 @@ struct simple_sharded_store {
     pps::sharded_store store;
 };
 
+std::filesystem::path test_dir() {
+    auto test_path = test_utils::get_runfile_path(
+      "src/v/pandaproxy/schema_registry/test/testdata/protobuf");
+    return {test_path.value_or(".")};
+}
+
+enum class SchemaType { input, sanitized, normalized };
+
+std::string_view to_string_view(const SchemaType st) {
+    switch (st) {
+    case SchemaType::input:
+        return "input";
+    case SchemaType::sanitized:
+        return "sanitized";
+    case SchemaType::normalized:
+        return "normalized";
+    }
+}
+
+ss::sstring read_schema(const std::string_view test_case, const SchemaType pt) {
+    const auto proto_file = fmt::format(
+      "{}_{}.proto", test_case, to_string_view(pt));
+    const auto proto_path = test_dir() / proto_file;
+    return read_fully_to_string(proto_path).get();
+};
+
 } // namespace
 
-std::string
-sanitize(std::string_view raw_proto, pps::normalize norm = pps::normalize::no) {
+std::string sanitize(
+  std::string_view raw_proto,
+  pps::normalize norm = pps::normalize::no,
+  pps::output_format format = pps::output_format::none) {
     simple_sharded_store s;
     iobuf buf = pps::make_canonical_protobuf_schema(
                   s.store,
@@ -71,7 +99,8 @@ sanitize(std::string_view raw_proto, pps::normalize norm = pps::normalize::no) {
                     pps::subject{"foo"},
                     pps::schema_definition{
                       raw_proto, pps::schema_type::protobuf, {}}},
-                  norm)
+                  norm,
+                  format)
                   .get()
                   .def()
                   .raw()();
@@ -83,38 +112,9 @@ auto normalize(std::string_view raw_proto) {
     return sanitize(raw_proto, pps::normalize::yes);
 }
 
-enum class SchemaType { input, sanitized, normalized };
-
-std::ostream& operator<<(std::ostream& os, const SchemaType st) {
-    switch (st) {
-    case SchemaType::input:
-        os << "input";
-        break;
-    case SchemaType::sanitized:
-        os << "sanitized";
-        break;
-    case SchemaType::normalized:
-        os << "normalized";
-        break;
-    }
-    return os;
-}
-
 class ProtoRendering : public testing::TestWithParam<std::string> {};
 
 TEST_P(ProtoRendering, test_protobuf_rendering) {
-    auto test_path = test_utils::get_runfile_path(
-      "src/v/pandaproxy/schema_registry/test/testdata/protobuf");
-    const std::filesystem::path test_dir{test_path.value_or(".")};
-
-    const auto read_schema = [&test_dir](
-                               const std::string_view test_case,
-                               const SchemaType pt) -> std::string {
-        const auto proto_file = fmt::format("{}_{}.proto", test_case, pt);
-        const auto proto_path = test_dir / proto_file;
-        return read_fully_to_string(proto_path).get();
-    };
-
     const auto& test_case = GetParam();
     const auto input = read_schema(test_case, SchemaType::input);
 
@@ -137,6 +137,18 @@ TEST_P(ProtoRendering, test_protobuf_rendering) {
     if (normalized_expected == normalized_processed) {
         EXPECT_EQ(normalized_processed, normalize(normalized_processed));
     }
+}
+
+TEST_P(ProtoRendering, test_protobuf_serialized_mode) {
+    const auto& test_case = GetParam();
+    const auto input = read_schema(test_case, SchemaType::sanitized);
+
+    // Validate that a round trip to serialized and
+    // back results in the starting schema
+    auto schema_b64 = sanitize(
+      input, pps::normalize::no, pps::output_format::serialized);
+    const auto schema_text = sanitize(schema_b64, pps::normalize::no);
+    EXPECT_EQ(input, schema_text);
 }
 
 INSTANTIATE_TEST_SUITE_P(

@@ -10,7 +10,6 @@
 #include "base/seastarx.h"
 #include "storage/backlog_controller.h"
 #include "test_utils/async.h"
-#include "test_utils/fixture.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/io_priority_class.hh>
@@ -20,6 +19,8 @@
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/log.hh>
+
+#include <gtest/gtest.h>
 
 #include <cstdint>
 
@@ -34,7 +35,8 @@ struct simple_backlog_sampler : storage::backlog_controller::sampler {
     int64_t& current_backlog;
 };
 
-struct backlog_controller_fixture {
+class backlog_controller_fixture : public ::testing::Test {
+public:
     const std::map<ss::sstring, ss::sstring> sch_group_label = {
       {"group", "sch_control_gr"}, {"shard", "0"}};
     backlog_controller_fixture()
@@ -62,6 +64,7 @@ struct backlog_controller_fixture {
 
     ~backlog_controller_fixture() { ctrl->stop().get(); }
 
+protected:
     ss::io_priority_class iopc;
     ss::scheduling_group sg;
     std::unique_ptr<storage::backlog_controller> ctrl;
@@ -81,7 +84,7 @@ struct backlog_controller_fixture {
     }
 };
 
-FIXTURE_TEST(test_feedback_loop, backlog_controller_fixture) {
+TEST_F(backlog_controller_fixture, test_feedback_loop) {
     ctrl->start().get();
     /**
      * current backlog is equal to 0, setpoint is set to 20, error = 20.0

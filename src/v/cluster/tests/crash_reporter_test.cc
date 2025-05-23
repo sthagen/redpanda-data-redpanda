@@ -15,13 +15,13 @@
 
 #include <seastar/util/defer.hh>
 
-#include <boost/test/tools/old/interface.hpp>
+#include <gtest/gtest.h>
 
 #include <chrono>
 
 using namespace std::chrono_literals;
 
-FIXTURE_TEST(rate_limiter_test, kvstore_test_fixture) {
+TEST_F(kvstore_test_fixture, rate_limiter_test) {
     auto kvstore = make_kvstore();
     kvstore->start().get();
     auto defer = ss::defer([&] { kvstore->stop().get(); });
@@ -30,12 +30,12 @@ FIXTURE_TEST(rate_limiter_test, kvstore_test_fixture) {
 
     // Initially there is no rate limit
     auto wt = rl.wait_time();
-    BOOST_CHECK_EQUAL(wt, 0s);
+    EXPECT_EQ(wt, 0s);
 
     rl.record().get();
 
     // After calling record, there is a rate limit
     wt = rl.wait_time();
-    BOOST_CHECK_GT(wt, 0s);
-    BOOST_CHECK_LE(wt, cluster::crash_reporter::rate_limiter::upload_rate);
+    EXPECT_GT(wt, 0s);
+    EXPECT_LE(wt, cluster::crash_reporter::rate_limiter::upload_rate);
 }

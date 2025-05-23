@@ -39,6 +39,10 @@ public:
     ///\brief Check the schema parses with the native format
     ss::future<void> validate_schema(subject_schema schema);
 
+    ///\brief Reformat schema to the output format
+    ss::future<schema_definition>
+    format_schema(schema_definition schema, output_format format);
+
     ///\brief Construct a schema in the native format
     ss::future<valid_schema> make_valid_schema(subject_schema schema);
 

@@ -617,6 +617,11 @@ message ProtoType {
   float f = 1;
 }"""
 
+schema_proto_b64 = \
+"CgAiFgoJUHJvdG9UeXBlEgkKAWYYASABKAJKYQoGEgQAAAQBCggKAQwSAwAA" \
+"EgoKCgIEABIEAgAEAQoKCgMEAAESAwIIEQoLCgQEAAIAEgMDAg4KDAoFBAAC" \
+"AAUSAwMCBwoMCgUEAAIAARIDAwgJCgwKBQQAAgADEgMDDA1iBnByb3RvMw=="
+
 schema_avro_def = '{"type":"record","name":"myrecord","fields":[{"name":"f1","type":"string"}]}'
 
 schema_proto_dependee_def = """
@@ -943,7 +948,7 @@ class SchemaRegistryEndpoints(RedpandaTest):
 
         # Error codes that may appear during normal API operation, do not
         # indicate an issue with the service
-        acceptable_errors = {409, 422, 404}
+        acceptable_errors = {409, 422, 404, 501}
 
         def accept_response(resp):
             return 200 <= resp.status_code < 300 or resp.status_code in acceptable_errors
@@ -1204,6 +1209,7 @@ class SchemaRegistryEndpoints(RedpandaTest):
                                data,
                                deleted=False,
                                normalize=False,
+                               format=None,
                                headers=HTTP_POST_HEADERS,
                                **kwargs):
         params = {}
@@ -1211,6 +1217,8 @@ class SchemaRegistryEndpoints(RedpandaTest):
             params['deleted'] = 'true'
         if (normalize):
             params['normalize'] = 'true'
+        if format is not None:
+            params['format'] = format
         return self._request("POST",
                              f"subjects/{subject}",
                              headers=headers,
@@ -1237,11 +1245,31 @@ class SchemaRegistryEndpoints(RedpandaTest):
     def _get_subjects_subject_versions_version(self,
                                                subject,
                                                version,
+                                               format=None,
                                                headers=HTTP_GET_HEADERS,
                                                **kwargs):
+        params = {}
+        if format is not None:
+            params['format'] = format
         return self._request("GET",
                              f"subjects/{subject}/versions/{version}",
                              headers=headers,
+                             params=params,
+                             **kwargs)
+
+    def _get_subjects_subject_versions_version_schema(self,
+                                                      subject,
+                                                      version,
+                                                      format=None,
+                                                      headers=HTTP_GET_HEADERS,
+                                                      **kwargs):
+        params = {}
+        if format is not None:
+            params['format'] = format
+        return self._request("GET",
+                             f"subjects/{subject}/versions/{version}/schema",
+                             headers=headers,
+                             params=params,
                              **kwargs)
 
     def _get_subjects_subject_versions_version_referenced_by(
@@ -3556,60 +3584,184 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         """
         Test support for the format keyword
         """
-        result_raw = self._post_subjects_subject_versions(
-            subject="schema_proto",
-            data=json.dumps({
-                "schema": schema_proto_def,
-                "schemaType": "PROTOBUF"
-            }))
-        assert result_raw.status_code == requests.codes.ok, \
-                f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup. "\
-                f"Request content: {result_raw.content}. Posting PROTOBUF."
 
-        result_raw = self._post_subjects_subject_versions(
-            subject="schema_avro",
-            data=json.dumps({
-                "schema": schema_avro_def,
-                "schemaType": "AVRO"
-            }))
-        assert result_raw.status_code == requests.codes.ok, \
-                f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup. "\
-                f"Request content: {result_raw.content}. Posting AVRO."
+        #Format values to test
+        default_format = ""
+        bad_value = "bad_value"
+        resolved = "resolved"
+        ignore_extensions = "ignore_extensions"
+        serialized = "serialized"
 
-        result_raw = self._post_subjects_subject_versions(
-            subject="schema_json",
-            data=json.dumps({
-                "schema": json_number_schema_def,
-                "schemaType": "JSON"
-            }))
-        assert result_raw.status_code == requests.codes.ok, \
-                f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup. "\
-                f"Request content: {result_raw.content}. Posting JSON."
+        entries = {
+            "proto_def": {
+                "schema": schema_proto_def.strip(),
+                "type": "PROTOBUF",
+                "subject": "schema_proto",
+                "version": 1,
+                "id": 1,
+                "failing_format": [ignore_extensions]
+            },
+            "proto_b64": {
+                "schema": schema_proto_b64.strip(),
+                "type": "PROTOBUF",
+                "subject": "schema_proto",
+                "version": 1,
+                "id": 1,
+                "failing_format": [ignore_extensions]
+            },
+            "avro_def": {
+                "schema": schema_avro_def.strip(),
+                "type": "AVRO",
+                "subject": "schema_avro",
+                "version": 1,
+                "id": 2,
+                "failing_format": [resolved]
+            },
+            "json_def": {
+                "schema": json_number_schema_def.strip(),
+                "type": "JSON",
+                "subject": "schema_json",
+                "version": 1,
+                "id": 3,
+            }
+        }
 
-        def test_ids_id(id, schema, format=None):
-            result_raw = self._get_schemas_ids_id(id, format)
+        def insert_schema(schema_entry):
+            schema = schema_entry["schema"]
+            schema_type = schema_entry["type"]
+            subject = schema_entry["subject"]
+            result_raw = self._post_subjects_subject_versions(subject=subject,
+                                                              data=json.dumps({
+                                                                  "schema":
+                                                                  schema,
+                                                                  "schemaType":
+                                                                  schema_type
+                                                              }))
             assert result_raw.status_code == requests.codes.ok, \
-                    f"expected {requests.codes.ok} but got {result_raw.status_code} for id {id} and format {format}"
-            result = result_raw.json()['schema'].strip()
-            assert result == schema, \
-                    f"expected:\n{schema}\ngot:\n{result}\nfor id {id} and format {format}"
+                    f"Expected {requests.codes.ok} but got {result_raw.status_code} during test setup. "\
+                    f"Request content: {result_raw.content}. Posting {schema_type}."
 
-        test_ids_id(1, schema_proto_def.strip())
-        test_ids_id(2, schema_avro_def.strip())
-        test_ids_id(3, json_number_schema_def.strip())
+        insert_schema(entries["proto_def"])
+        insert_schema(entries["avro_def"])
+        insert_schema(entries["json_def"])
 
-        test_ids_id(1, schema_proto_def.strip(), format="")
-        test_ids_id(2, schema_avro_def.strip(), format="")
-        test_ids_id(3, json_number_schema_def.strip(), format="")
+        def is_successful(schema_entry, format):
+            if "failing_format" not in schema_entry:
+                return True
+            return format not in schema_entry["failing_format"]
 
-        #Test invalid format value
-        result_raw = self._get_schemas_ids_id(1, format="badvalue")
-        assert result_raw.status_code == 400, \
-                f"expected {400} but got {result_raw.status_code} for id 1 and format 'badvalue'"
-        #Test unimplemented format value
-        result_raw = self._get_schemas_ids_id(2, format="resolved")
-        assert result_raw.status_code == 400, \
-                f"expected {400} but got {result_raw.status_code} for id 2 and format 'resolved'"
+        def test_runner(test_func):
+            for entry in ["proto_def", "avro_def", "json_def"]:
+                for format in [
+                        default_format, bad_value, resolved, ignore_extensions
+                ]:
+                    successful = is_successful(entries[entry], format)
+                    test_func(entries[entry], successful, format)
+
+            for entry in ["proto_b64", "avro_def", "json_def"]:
+                successful = is_successful(entries[entry], serialized)
+                test_func(entries[entry], successful, serialized)
+
+        def test_ids_id(schema_entry, successful, format=None):
+            id = schema_entry["id"]
+            result_raw = self._get_schemas_ids_id(id, format)
+            if successful:
+                assert result_raw.status_code == requests.codes.ok, \
+                        f"expected {requests.codes.ok} but got {result_raw.status_code} for id {id} and format '{format}'"
+                schema = schema_entry["schema"]
+                result = result_raw.json()['schema'].strip()
+                assert result == schema, \
+                        f"expected:\n{schema}\ngot:\n{result}\nfor id {id} and format '{format}'"
+            else:
+                assert result_raw.status_code == 501, \
+                        f"expected {501} but got {result_raw.status_code} for id {id} and format '{format}'"
+
+        test_runner(test_ids_id)
+
+        def test_subjects_subject(schema_entry,
+                                  successful,
+                                  format=None,
+                                  expected_output=None):
+            subject = schema_entry["subject"]
+            schema = schema_entry["schema"]
+            schema_type = schema_entry["type"]
+            expected_schema = expected_output if expected_output else schema
+            result_raw = self._post_subjects_subject(subject=subject,
+                                                     format=format,
+                                                     data=json.dumps({
+                                                         "schema":
+                                                         schema,
+                                                         "schemaType":
+                                                         schema_type
+                                                     }))
+            if successful:
+                assert result_raw.status_code == requests.codes.ok, \
+                        f"expected {requests.codes.ok} but got {result_raw.status_code} " \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+                result = result_raw.json()['schema'].strip()
+                assert result == expected_schema.strip(), \
+                        f"expected:\n{schema}\ngot:\n{result}\n" \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+            else:
+                assert result_raw.status_code == 501, \
+                        f"expected {501} but got {result_raw.status_code} " \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+
+        #Test that the schema is discoverable in serialzed mode
+        test_subjects_subject(entries["proto_b64"],
+                              successful=True,
+                              expected_output=schema_proto_def.strip())
+
+        test_runner(test_subjects_subject)
+
+        def test_subjects_subject_versions_version(schema_entry,
+                                                   successful,
+                                                   format=None):
+            subject = schema_entry["subject"]
+            version = schema_entry["version"]
+            schema = schema_entry["schema"]
+            result_raw = self._get_subjects_subject_versions_version(
+                subject=subject, version=version, format=format)
+
+            if successful:
+                assert result_raw.status_code == requests.codes.ok, \
+                        f"expected {requests.codes.ok} but got {result_raw.status_code} " \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+                result = result_raw.json()['schema'].strip()
+                assert result == schema.strip(), \
+                        f"expected:\n{schema}\ngot:\n{result}\n" \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+            else:
+                assert result_raw.status_code == 501, \
+                        f"expected {501} but got {result_raw.status_code} " \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+
+        test_runner(test_subjects_subject_versions_version)
+
+        def test_subjects_subject_versions_version_schema(
+                schema_entry, successful, format=None):
+            subject = schema_entry["subject"]
+            version = schema_entry["version"]
+            schema = schema_entry["schema"]
+            result_raw = self._get_subjects_subject_versions_version_schema(
+                subject=subject, version=version, format=format)
+            schema = schema.strip()
+
+            if successful:
+                assert result_raw.status_code == requests.codes.ok, \
+                        f"expected {requests.codes.ok} but got {result_raw.status_code} " \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+                result = result_raw.text.strip()
+
+                assert result == schema.strip(), \
+                        f"expected:\n{schema}\ngot:\n{result}\n" \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+            else:
+                assert result_raw.status_code == 501, \
+                        f"expected {501} but got {result_raw.status_code} " \
+                        f"for subject {subject}, schema {schema} and format '{format}'"
+
+        test_runner(test_subjects_subject_versions_version_schema)
 
 
 class SchemaRegistryModeNotMutableTest(SchemaRegistryEndpoints):

@@ -12,7 +12,9 @@
 #pragma once
 #include "storage/tests/utils/disk_log_builder.h"
 
-class log_builder_fixture {
+#include <gtest/gtest.h>
+
+class log_builder_fixture : public ::testing::Test {
 public:
     struct log_stats {
         size_t seg_count{0};

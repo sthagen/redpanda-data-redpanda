@@ -20,11 +20,11 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/util/defer.hh>
 
-#include <boost/test/unit_test.hpp>
+#include <gtest/gtest.h>
 
 #include <optional>
 
-FIXTURE_TEST(kitchen_sink, log_builder_fixture) {
+TEST_F(log_builder_fixture, kitchen_sink) {
     using namespace storage; // NOLINT
 
     auto batch = model::test::make_random_batch(model::offset(104), 1, false);
@@ -38,64 +38,68 @@ FIXTURE_TEST(kitchen_sink, log_builder_fixture) {
     auto stats = get_stats().get();
 
     b | stop();
-    BOOST_TEST(stats.seg_count == 3);
-    BOOST_TEST(stats.batch_count == 7);
-    BOOST_TEST(stats.record_count >= 105);
+    EXPECT_EQ(stats.seg_count, 3);
+    EXPECT_EQ(stats.batch_count, 7);
+    EXPECT_GE(stats.record_count, 105);
 }
 
-FIXTURE_TEST(size_bytes_after_offset, log_builder_fixture) {
+TEST_F(log_builder_fixture, size_bytes_after_offset) {
     using namespace storage;
     // see issues/15417, this test segfaults on the first block and returns
     // wrong results on the rest
 
-    BOOST_TEST_CONTEXT("empty log (sanity check)") {
+    {
+        SCOPED_TRACE("empty log (sanity check)");
         b | start();
         auto _ = ss::defer([&] { b | stop(); });
-        BOOST_CHECK_EQUAL(get_stats().get().seg_count, 0);
-        BOOST_CHECK_EQUAL(
+        EXPECT_EQ(get_stats().get().seg_count, 0);
+        EXPECT_EQ(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset::min()),
           0);
-        BOOST_CHECK_EQUAL(
+        EXPECT_EQ(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset{0}), 0);
-        BOOST_CHECK_EQUAL(
+        EXPECT_EQ(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset::max()),
           0);
     }
 
-    BOOST_TEST_CONTEXT("one segment") {
+    {
+        SCOPED_TRACE("one segment");
         b | start() | add_segment(0) | add_random_batch(0, 100);
         auto _ = ss::defer([&] { b | stop(); });
 
-        BOOST_CHECK_EQUAL(get_stats().get().seg_count, 1);
-        BOOST_CHECK_GT(
+        EXPECT_EQ(get_stats().get().seg_count, 1);
+        EXPECT_GT(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset::min()),
           0);
-        BOOST_CHECK_GT(
+        EXPECT_GT(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset{0}), 0);
-        BOOST_CHECK_EQUAL(
+        EXPECT_EQ(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset::max()),
           0);
     }
 
-    BOOST_TEST_CONTEXT("more than one segment") {
+    {
+        SCOPED_TRACE("more than one segment");
         b | start() | add_segment(0) | add_random_batch(0, 100)
           | add_segment(100) | add_random_batch(100, 100);
         auto _ = ss::defer([&] { b | stop(); });
 
-        BOOST_CHECK_EQUAL(get_stats().get().seg_count, 2);
-        BOOST_CHECK_GT(
+        EXPECT_EQ(get_stats().get().seg_count, 2);
+        EXPECT_GT(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset::min()),
           0);
-        BOOST_CHECK_GT(
+        EXPECT_GT(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset{0}), 0);
-        BOOST_CHECK_GT(
+        EXPECT_GT(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset{100}), 0);
-        BOOST_CHECK_EQUAL(
+        EXPECT_EQ(
           b.get_disk_log_impl().size_bytes_after_offset(model::offset::max()),
           0);
     }
 
-    BOOST_TEST_CONTEXT("In the middle of the segment") {
+    {
+        SCOPED_TRACE("In the middle of the segment");
         b | start() | add_segment(0)
           | add_random_batches(
             model::offset(0), 2000, maybe_compress_batches::no);
@@ -106,27 +110,26 @@ FIXTURE_TEST(size_bytes_after_offset, log_builder_fixture) {
 
         auto _ = ss::defer([&] { b | stop(); });
         disk_log_impl& d_log = b.get_disk_log_impl();
-        BOOST_CHECK_EQUAL(get_stats().get().seg_count, 2);
+        EXPECT_EQ(get_stats().get().seg_count, 2);
         auto& s0 = d_log.segments()[0];
         auto& s1 = d_log.segments()[1];
         // all data
-        BOOST_CHECK_EQUAL(
+        EXPECT_EQ(
           d_log.size_bytes_after_offset(model::offset(0)),
           s0->size_bytes() + s1->size_bytes());
         // somewhere in the middle of the first segment
         auto offset = model::offset(s0->offsets().get_committed_offset()() / 2);
-        BOOST_CHECK_GT(d_log.size_bytes_after_offset(offset), s1->size_bytes());
+        EXPECT_GT(d_log.size_bytes_after_offset(offset), s1->size_bytes());
 
         // somewhere in the middle of the second segment
         auto offset_2 = s1->offsets().get_base_offset()
                         + model::offset(
                           s1->offsets().get_committed_offset()
                           - s1->offsets().get_base_offset() / 2);
-        BOOST_CHECK_LT(
-          d_log.size_bytes_after_offset(offset_2), s1->size_bytes());
+        EXPECT_LT(d_log.size_bytes_after_offset(offset_2), s1->size_bytes());
 
         // only the second segment
-        BOOST_CHECK_EQUAL(
+        EXPECT_EQ(
           d_log.size_bytes_after_offset(s0->offsets().get_committed_offset()),
           s1->size_bytes());
     }
@@ -155,7 +158,7 @@ static void do_write_garbage(ss::sstring name) {
     out.close().get();
 }
 
-FIXTURE_TEST(test_valid_segment_name_with_zeroes_data, log_builder_fixture) {
+TEST_F(log_builder_fixture, test_valid_segment_name_with_zeroes_data) {
     using namespace storage; // NOLINT
     auto ntp = model::ntp(
       model::ns("test.ns"), model::topic("zeroes"), model::partition_id(66));
@@ -172,14 +175,14 @@ FIXTURE_TEST(test_valid_segment_name_with_zeroes_data, log_builder_fixture) {
     auto stats = get_stats().get();
     b | stop();
 
-    BOOST_REQUIRE(
-      !ss::file_exists(ssx::sformat("{}/270-1850-v1.log", dir)).get());
-    BOOST_TEST(stats.seg_count == 0);
-    BOOST_TEST(stats.batch_count == 0);
-    BOOST_TEST(stats.record_count >= 0);
+    ASSERT_FALSE(
+      ss::file_exists(ssx::sformat("{}/270-1850-v1.log", dir)).get());
+    EXPECT_EQ(stats.seg_count, 0);
+    EXPECT_EQ(stats.batch_count, 0);
+    EXPECT_GE(stats.record_count, 0);
 }
 
-FIXTURE_TEST(iterator_invalidation, log_builder_fixture) {
+TEST_F(log_builder_fixture, iterator_invalidation) {
     using namespace storage; // NOLINT
     constexpr const model::record_batch_type configuration
       = model::record_batch_type::raft_configuration;
@@ -217,12 +220,12 @@ FIXTURE_TEST(iterator_invalidation, log_builder_fixture) {
                             .get();
     auto all_batches = b.consume().get();
     b | stop();
-    BOOST_REQUIRE_EQUAL(data_batches.size(), 2);
-    BOOST_REQUIRE_EQUAL(config_batches.size(), 2);
-    BOOST_REQUIRE_EQUAL(all_batches.size(), 4);
+    ASSERT_EQ(data_batches.size(), 2);
+    ASSERT_EQ(config_batches.size(), 2);
+    ASSERT_EQ(all_batches.size(), 4);
 }
 
-FIXTURE_TEST(test_skipping_compaction_below_start_offset, log_builder_fixture) {
+TEST_F(log_builder_fixture, test_skipping_compaction_below_start_offset) {
     using namespace storage;
 
     ss::abort_source abs;
@@ -252,7 +255,7 @@ FIXTURE_TEST(test_skipping_compaction_below_start_offset, log_builder_fixture) {
 
     b | add_segment(100) | add_random_batch(100, 100);
 
-    RPTEST_REQUIRE_EQ(log.segment_count(), 2);
+    ASSERT_EQ(log.segment_count(), 2);
 
     housekeeping_config cfg{
       model::timestamp::max(),
@@ -266,24 +269,24 @@ FIXTURE_TEST(test_skipping_compaction_below_start_offset, log_builder_fixture) {
     // notification being created.
     auto eviction_future = log.monitor_eviction(abs);
     auto new_start_offset = b.apply_retention(cfg.gc).get();
-    RPTEST_REQUIRE(new_start_offset);
+    ASSERT_TRUE(new_start_offset);
 
-    RPTEST_REQUIRE_EQ(log.segment_count(), 2);
+    ASSERT_EQ(log.segment_count(), 2);
 
     // Grab the new start offset from the notification and
     // update the removable offset and start offsets.
     auto evict_at_offset = eviction_future.get();
-    RPTEST_REQUIRE_EQ(*new_start_offset, model::next_offset(evict_at_offset));
-    RPTEST_REQUIRE(b.update_start_offset(*new_start_offset).get());
+    ASSERT_EQ(*new_start_offset, model::next_offset(evict_at_offset));
+    ASSERT_TRUE(b.update_start_offset(*new_start_offset).get());
 
     // Call into `disk_log_impl::compact`. The only segment eligible for
     // compaction is the below the start offset and it should be ignored.
     auto& first_seg = log.segments().front();
-    RPTEST_REQUIRE_EQ(first_seg->finished_self_compaction(), false);
+    ASSERT_EQ(first_seg->finished_self_compaction(), false);
 
     b.apply_adjacent_merge_compaction(cfg.compact, *new_start_offset).get();
 
-    RPTEST_REQUIRE_EQ(first_seg->finished_self_compaction(), false);
+    ASSERT_EQ(first_seg->finished_self_compaction(), false);
 
     b.stop().get();
 }

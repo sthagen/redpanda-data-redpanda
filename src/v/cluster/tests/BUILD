@@ -623,7 +623,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "crash_reporter_test",
     timeout = "short",
     srcs = [
@@ -632,10 +632,9 @@ redpanda_cc_btest(
     deps = [
         "//src/v/cluster",
         "//src/v/storage/tests:kvstore_fixture",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 

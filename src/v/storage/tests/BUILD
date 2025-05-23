@@ -40,7 +40,7 @@ redpanda_test_cc_library(
         "//src/v/features",
         "//src/v/random:generators",
         "//src/v/storage",
-        "//src/v/test_utils:seastar_boost",
+        "@googletest//:gtest",
     ],
 )
 
@@ -66,6 +66,7 @@ redpanda_test_cc_library(
     include_prefix = "storage/tests",
     deps = [
         ":disk_log_builder",
+        "@googletest//:gtest",
     ],
 )
 
@@ -308,7 +309,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "kvstore_test",
     timeout = "short",
     srcs = [
@@ -320,10 +321,10 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/reflection:adl",
         "//src/v/storage",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:random_bytes",
-        "//src/v/test_utils:seastar_boost",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
@@ -343,7 +344,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "backlog_controller_test",
     timeout = "short",
     srcs = [
@@ -352,12 +353,13 @@ redpanda_cc_btest(
     deps = [
         "//src/v/base",
         "//src/v/storage",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "concat_segment_reader_test",
     timeout = "short",
     srcs = [
@@ -368,13 +370,13 @@ redpanda_cc_btest(
         "//src/v/bytes:iostream",
         "//src/v/model/tests:random",
         "//src/v/storage",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "timequery_test",
     timeout = "short",
     srcs = [
@@ -385,8 +387,8 @@ redpanda_cc_btest(
         "//src/v/config",
         "//src/v/model",
         "//src/v/model/tests:random",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
     ],
 )
@@ -716,7 +718,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "disk_log_builder_test",
     timeout = "short",
     srcs = [
@@ -729,10 +731,9 @@ redpanda_cc_btest(
         "//src/v/storage",
         "//src/v/storage/tests:disk_log_builder_fixture",
         "//src/v/test_utils:fixture",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
@@ -771,7 +772,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "file_sanitizer_test",
     timeout = "short",
     srcs = [
@@ -782,10 +783,9 @@ redpanda_cc_btest(
         "//src/v/bytes:iostream",
         "//src/v/storage",
         "//src/v/test_utils:fixture",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 

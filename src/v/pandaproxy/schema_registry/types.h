@@ -258,7 +258,8 @@ public:
       : _impl{std::move(p)}
       , _refs(std::move(refs)) {}
 
-    schema_definition::raw_string raw() const;
+    schema_definition::raw_string
+    raw(output_format format = output_format::none) const;
     const schema_definition::references& refs() const { return _refs; };
 
     const impl& operator()() const { return *_impl; }
@@ -271,10 +272,6 @@ public:
     operator<<(std::ostream& os, const protobuf_schema_definition& rhs);
 
     constexpr schema_type type() const { return schema_type::protobuf; }
-
-    explicit operator schema_definition() const {
-        return {raw(), type(), refs()};
-    }
 
     ::result<ss::sstring, kafka::error_code>
     name(const std::vector<int>& fields) const;

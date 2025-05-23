@@ -660,6 +660,16 @@ ss::future<subject_schema> make_canonical_avro_schema(
       sanitize_avro_schema_definition(std::move(schema)).value()};
 }
 
+ss::future<schema_definition> format_avro_schema_definition(
+  schema_getter&, schema_definition schema, output_format format) {
+    switch (format) {
+    case output_format::resolved:
+        throw as_exception(format_not_supported(format));
+    default:
+        co_return std::move(schema);
+    }
+}
+
 compatibility_result check_compatible(
   const avro_schema_definition& reader,
   const avro_schema_definition& writer,

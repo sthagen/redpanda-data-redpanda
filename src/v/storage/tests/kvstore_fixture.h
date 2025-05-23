@@ -12,14 +12,15 @@
 #include "random/generators.h"
 #include "storage/kvstore.h"
 #include "storage/storage_resources.h"
-#include "test_utils/fixture.h"
 
 #include <seastar/util/file.hh>
+
+#include <gtest/gtest.h>
 
 // This fixture manages the dependencies needed to create kvstore instance.
 // It's the responsiblity of the test to stop the kvstore instances created
 // by the fixture.
-class kvstore_test_fixture {
+class kvstore_test_fixture : public ::testing::Test {
 public:
     kvstore_test_fixture()
       : _test_dir(

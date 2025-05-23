@@ -75,6 +75,12 @@ parse_schema_version(const ss::sstring& ver) {
              : parse_numerical_schema_version(ver).value();
 }
 
+output_format parse_output_format(const ss::http::request& req) {
+    return parse::query_param<std::optional<ss::sstring>>(req, "format")
+      .and_then(&from_string_view<output_format>)
+      .value_or(output_format::none);
+}
+
 template<ppj::impl::RjsonParseHandler Handler>
 typename ss::future<typename Handler::rjson_parse_result>
 rjson_parse(ss::http::request& req, Handler handler) {
@@ -333,13 +339,7 @@ get_schemas_ids_id(server::request_t rq, server::reply_t rp) {
     parse_accept_header(rq, rp);
     auto id = parse::request_param<schema_id>(*rq.req, "id");
 
-    const auto format_str = parse::query_param<std::optional<ss::sstring>>(
-                              *rq.req, "format")
-                              .value_or("");
-    const auto format = from_string_view<output_format>(format_str);
-    if (!format.has_value()) {
-        throw as_exception(invalid_format(format_str));
-    }
+    const auto format = parse_output_format(*rq.req);
 
     // With deferred schema validation, there might be a schema that
     // had invalid references. These might have already been posted, so
@@ -347,8 +347,7 @@ get_schemas_ids_id(server::request_t rq, server::reply_t rp) {
     co_await rq.service().writer().read_sync();
 
     auto def = co_await get_or_load(rq, [&rq, id, format]() {
-        return rq.service().schema_store().get_schema_definition(
-          id, format.value_or(output_format::none));
+        return rq.service().schema_store().get_schema_definition(id, format);
     });
 
     auto resp = ppj::rjson_serialize_iobuf(
@@ -449,12 +448,14 @@ post_subject(server::request_t rq, server::reply_t rp) {
         .value_or(include_deleted::no)};
     auto norm{parse::query_param<std::optional<normalize>>(*rq.req, "normalize")
                 .value_or(normalize::no)};
+    const auto format = parse_output_format(*rq.req);
     vlog(
       srlog.debug,
-      "post_subject subject='{}', normalize='{}', deleted='{}'",
+      "post_subject subject='{}', normalize='{}', deleted='{}', format='{}'",
       sub,
       norm,
-      inc_del);
+      inc_del,
+      format);
     // We must sync
     co_await rq.service().writer().read_sync();
 
@@ -479,9 +480,13 @@ post_subject(server::request_t rq, server::reply_t rp) {
     auto sub_schema = co_await rq.service().schema_store().has_schema(
       std::move(schema), inc_del);
 
+    auto [subject, def] = std::move(sub_schema.schema).destructure();
+    auto formatted_schema = co_await rq.service().schema_store().format_schema(
+      std::move(def), format);
+
     auto resp = ppj::rjson_serialize_iobuf(
       post_subject_versions_version_response{
-        .schema{std::move(sub_schema.schema)},
+        .schema{std::move(subject), std::move(formatted_schema)},
         .id{sub_schema.id},
         .version{sub_schema.version}});
     log_response(*rq.req, resp);
@@ -553,6 +558,7 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version(
     auto inc_del{
       parse::query_param<std::optional<include_deleted>>(*rq.req, "deleted")
         .value_or(include_deleted::no)};
+    const auto format = parse_output_format(*rq.req);
 
     co_await rq.service().writer().read_sync();
 
@@ -563,9 +569,13 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version(
           sub, version, inc_del);
     });
 
+    auto [subject, def] = std::move(get_res.schema).destructure();
+    auto formatted_schema = co_await rq.service().schema_store().format_schema(
+      std::move(def), format);
+
     auto resp = ppj::rjson_serialize_iobuf(
       post_subject_versions_version_response{
-        .schema = std::move(get_res.schema),
+        .schema = {std::move(subject), std::move(formatted_schema)},
         .id = get_res.id,
         .version = get_res.version});
     log_response(*rq.req, resp);
@@ -581,6 +591,7 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version_schema(
     auto inc_del{
       parse::query_param<std::optional<include_deleted>>(*rq.req, "deleted")
         .value_or(include_deleted::no)};
+    const auto format = parse_output_format(*rq.req);
 
     co_await rq.service().writer().read_sync();
 
@@ -589,7 +600,11 @@ ss::future<ctx_server<service>::reply_t> get_subject_versions_version_schema(
     auto get_res = co_await rq.service().schema_store().get_subject_schema(
       sub, version, inc_del);
 
-    auto resp = std::move(get_res.schema).def().raw();
+    auto [_, def] = std::move(get_res.schema).destructure();
+    auto formatted_schema = co_await rq.service().schema_store().format_schema(
+      std::move(def), format);
+
+    auto resp = std::move(formatted_schema).raw();
     log_response(*rq.req, resp);
     rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)()));
     co_return rp;

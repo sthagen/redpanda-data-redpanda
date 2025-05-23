@@ -12,12 +12,12 @@
 #include "reflection/adl.h"
 #include "storage/kvstore.h"
 #include "storage/tests/kvstore_fixture.h"
-#include "test_utils/fixture.h"
 #include "test_utils/random_bytes.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/file.hh>
+
+#include <gtest/gtest.h>
 
 template<typename T>
 static void set_configuration(ss::sstring p_name, T v) {
@@ -26,7 +26,7 @@ static void set_configuration(ss::sstring p_name, T v) {
     }).get();
 }
 
-FIXTURE_TEST(key_space, kvstore_test_fixture) {
+TEST_F(kvstore_test_fixture, key_space) {
     set_configuration("disable_metrics", true);
 
     auto kvs = make_kvstore();
@@ -48,28 +48,28 @@ FIXTURE_TEST(key_space, kvstore_test_fixture) {
     kvs->put(storage::kvstore::key_space::consensus, empty_key, value_d.copy())
       .get();
 
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::testing, key).value() == value_a);
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::consensus, key).value() == value_b);
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::testing, empty_key).value()
-      == value_c);
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::consensus, empty_key).value()
-      == value_d);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::testing, key).value(), value_a);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::consensus, key).value(), value_b);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::testing, empty_key).value(),
+      value_c);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::consensus, empty_key).value(),
+      value_d);
 
     std::map<bytes, iobuf> testing_kvs;
     kvs
       ->for_each(
         storage::kvstore::key_space::testing,
         [&](bytes_view key, const iobuf& val) {
-            BOOST_REQUIRE(testing_kvs.emplace(key, val.copy()).second);
+            EXPECT_TRUE(testing_kvs.emplace(key, val.copy()).second);
         })
       .get();
-    BOOST_REQUIRE_EQUAL(testing_kvs.size(), 2);
-    BOOST_REQUIRE(testing_kvs.at(key) == value_a);
-    BOOST_REQUIRE(testing_kvs.at(empty_key) == value_c);
+    EXPECT_EQ(testing_kvs.size(), 2);
+    EXPECT_EQ(testing_kvs.at(key), value_a);
+    EXPECT_EQ(testing_kvs.at(empty_key), value_c);
 
     kvs->stop().get();
 
@@ -77,21 +77,21 @@ FIXTURE_TEST(key_space, kvstore_test_fixture) {
     kvs = make_kvstore();
     kvs->start().get();
 
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::testing, key).value() == value_a);
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::consensus, key).value() == value_b);
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::testing, empty_key).value()
-      == value_c);
-    BOOST_REQUIRE(
-      kvs->get(storage::kvstore::key_space::consensus, empty_key).value()
-      == value_d);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::testing, key).value(), value_a);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::consensus, key).value(), value_b);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::testing, empty_key).value(),
+      value_c);
+    EXPECT_EQ(
+      kvs->get(storage::kvstore::key_space::consensus, empty_key).value(),
+      value_d);
 
     kvs->stop().get();
 }
 
-FIXTURE_TEST(kvstore_empty, kvstore_test_fixture) {
+TEST_F(kvstore_test_fixture, kvstore_empty) {
     set_configuration("disable_metrics", true);
 
     // empty started then stopped
@@ -130,11 +130,11 @@ FIXTURE_TEST(kvstore_empty, kvstore_test_fixture) {
     }
 
     // equal
-    BOOST_REQUIRE(!truth.empty());
+    EXPECT_FALSE(truth.empty());
     for (auto& e : truth) {
-        BOOST_REQUIRE(
-          kvs->get(storage::kvstore::key_space::testing, e.first).value()
-          == e.second);
+        EXPECT_EQ(
+          kvs->get(storage::kvstore::key_space::testing, e.first).value(),
+          e.second);
     }
 
     // now remove all of the keys
@@ -144,17 +144,17 @@ FIXTURE_TEST(kvstore_empty, kvstore_test_fixture) {
     truth.clear();
 
     // the db should be empty now
-    BOOST_REQUIRE(kvs->empty());
+    EXPECT_TRUE(kvs->empty());
     kvs->stop().get();
 
     // now restart the db and ensure still empty
     kvs = make_kvstore();
     kvs->start().get();
-    BOOST_REQUIRE(kvs->empty());
+    EXPECT_TRUE(kvs->empty());
     kvs->stop().get();
 }
 
-FIXTURE_TEST(kvstore, kvstore_test_fixture) {
+TEST_F(kvstore_test_fixture, kvstore) {
     set_configuration("disable_metrics", true);
 
     std::unordered_map<bytes, iobuf> truth;
@@ -169,9 +169,9 @@ FIXTURE_TEST(kvstore, kvstore_test_fixture) {
         truth[key] = value.copy();
         kvs->put(storage::kvstore::key_space::testing, key, std::move(value))
           .get();
-        BOOST_REQUIRE(
-          kvs->get(storage::kvstore::key_space::testing, key).value()
-          == truth[key]);
+        EXPECT_EQ(
+          kvs->get(storage::kvstore::key_space::testing, key).value(),
+          truth[key]);
 
         // maybe delete something
         auto coin = random_generators::get_int(1000);
@@ -182,9 +182,9 @@ FIXTURE_TEST(kvstore, kvstore_test_fixture) {
         }
 
         for (auto& e : truth) {
-            BOOST_REQUIRE(
-              kvs->get(storage::kvstore::key_space::testing, e.first).value()
-              == e.second);
+            EXPECT_EQ(
+              kvs->get(storage::kvstore::key_space::testing, e.first).value(),
+              e.second);
         }
     }
     kvs->stop().get();
@@ -194,9 +194,9 @@ FIXTURE_TEST(kvstore, kvstore_test_fixture) {
     kvs = make_kvstore();
     kvs->start().get();
     for (auto& e : truth) {
-        BOOST_REQUIRE(
-          kvs->get(storage::kvstore::key_space::testing, e.first).value()
-          == e.second);
+        EXPECT_EQ(
+          kvs->get(storage::kvstore::key_space::testing, e.first).value(),
+          e.second);
     }
     kvs->stop().get();
 }
