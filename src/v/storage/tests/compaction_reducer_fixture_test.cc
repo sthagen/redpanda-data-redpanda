@@ -8,7 +8,6 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#include "gtest/gtest.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 #include "storage/compaction_reducers.h"
@@ -27,6 +26,8 @@
 #include <seastar/core/io_priority_class.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/defer.hh>
+
+#include <gtest/gtest.h>
 
 class MapBuildingReducerFixtureTest : public storage_test_fixture {};
 

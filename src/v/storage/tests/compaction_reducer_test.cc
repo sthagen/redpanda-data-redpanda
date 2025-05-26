@@ -13,9 +13,9 @@
 #include "storage/compaction_reducers.h"
 #include "test_utils/random_bytes.h"
 
-#include <seastar/testing/thread_test_case.hh>
+#include <gtest/gtest.h>
 
-SEASTAR_THREAD_TEST_CASE(compaction_reducer_key_clash_test) {
+TEST(CompactionReducerTest, compaction_reducer_key_clash_test) {
     // Insert three elements with the same key in the reducer
     // and validate that the one with the largest offset wins.
 
@@ -49,11 +49,11 @@ SEASTAR_THREAD_TEST_CASE(compaction_reducer_key_clash_test) {
     reducer(std::move(entry_at_1)).get();
 
     auto bitmap = reducer.end_of_stream();
-    BOOST_REQUIRE_EQUAL(bitmap.minimum(), 1);
-    BOOST_REQUIRE_EQUAL(bitmap.maximum(), 1);
+    ASSERT_EQ(bitmap.minimum(), 1);
+    ASSERT_EQ(bitmap.maximum(), 1);
 }
 
-SEASTAR_THREAD_TEST_CASE(compaction_reducer_max_mem_usage_test) {
+TEST(CompactionReducerTest, compaction_reducer_max_mem_usage_test) {
     storage::internal::compaction_key_reducer reducer{16_KiB};
 
     // Empirically, 200 of the entries below use 16KiB of memory.
@@ -67,6 +67,6 @@ SEASTAR_THREAD_TEST_CASE(compaction_reducer_max_mem_usage_test) {
           0);
 
         reducer(std::move(entry)).get();
-        BOOST_REQUIRE_LE(reducer.idx_mem_usage(), 16_KiB);
+        ASSERT_LE(reducer.idx_mem_usage(), 16_KiB);
     }
 }

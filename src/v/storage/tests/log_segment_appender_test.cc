@@ -28,10 +28,8 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
 
-#include <boost/test/results_collector.hpp>
-#include <boost/test/tools/interface.hpp>
-#include <boost/test/tools/old/interface.hpp>
 #include <fmt/format.h>
+#include <gtest/gtest.h>
 
 #include <algorithm>
 #include <chrono>
@@ -154,13 +152,13 @@ static void run_test_can_append_multiple_flushes(size_t fallocate_size) {
 
         auto in = make_file_input_stream(f, 0);
         iobuf result = read_iobuf_exactly(in, expected.size_bytes()).get();
-        BOOST_REQUIRE_EQUAL(result.size_bytes(), expected.size_bytes());
-        BOOST_REQUIRE_EQUAL(result, expected);
+        ASSERT_EQ(result.size_bytes(), expected.size_bytes());
+        ASSERT_EQ(result, expected);
         in.close().get();
     }
 }
 
-SEASTAR_THREAD_TEST_CASE(test_can_append_multiple_flushes) {
+TEST(log_segment_appender_test, test_can_append_multiple_flushes) {
     run_test_can_append_multiple_flushes(16_KiB);
     run_test_can_append_multiple_flushes(32_MiB);
 }
@@ -182,45 +180,47 @@ static void run_test_can_append_mixed(size_t fallocate_size) {
             original.append(data.data(), data.size());
             original.append("\n", 1);
         }
-        BOOST_REQUIRE_EQUAL(step, original.size_bytes());
+        ASSERT_EQ(step, original.size_bytes());
         appender.append(original).get();
         appender.flush().get();
-        BOOST_REQUIRE_EQUAL(acc + step, appender.file_byte_offset());
+        ASSERT_EQ(acc + step, appender.file_byte_offset());
         // now there should be nothing in-flight
-        BOOST_CHECK_EQUAL(access(appender).inflight_dispatched(), 0);
-        BOOST_CHECK_EQUAL(access(appender).inflight().size(), 0);
+        EXPECT_EQ(access(appender).inflight_dispatched(), 0);
+        EXPECT_EQ(access(appender).inflight().size(), 0);
         auto in = make_file_input_stream(f, acc);
         iobuf result = read_iobuf_exactly(in, step).get();
-        fmt::print(
-          "==> i:{}, step:{}, acc:{}, og.size:{}, expected.size{}\n",
-          i,
-          step,
-          acc,
-          original.size_bytes(),
-          result.size_bytes());
         if (original != result) {
+            SCOPED_TRACE(fmt::format(
+              "==> i:{}, step:{}, acc:{}, og.size:{}, expected.size{}\n",
+              i,
+              step,
+              acc,
+              original.size_bytes(),
+              result.size_bytes()));
             auto in = iobuf::iterator_consumer(
               original.cbegin(), original.cend());
-            in.consume(original.size_bytes(), [](const char* src, size_t n) {
-                fmt::print("\nOriginal\n");
+            fmt::memory_buffer comp_str;
+            auto w = std::back_inserter(comp_str);
+            in.consume(original.size_bytes(), [&w](const char* src, size_t n) {
+                fmt::format_to(w, "\nOriginal\n");
                 while (n-- > 0) {
-                    fmt::print("{}", *src++);
+                    fmt::format_to(w, "{}", *src++);
                 }
-                fmt::print("\n");
+                fmt::format_to(w, "\n");
                 return ss::stop_iteration::no;
             });
             in = iobuf::iterator_consumer(result.cbegin(), result.cend());
-            in.consume(original.size_bytes(), [](const char* src, size_t n) {
-                fmt::print("\nResult\n");
+            in.consume(original.size_bytes(), [&w](const char* src, size_t n) {
+                fmt::format_to(w, "\nResult\n");
                 while (n-- > 0) {
-                    fmt::print("{}", *src++);
+                    fmt::format_to(w, "{}", *src++);
                 }
-                fmt::print("\n");
+                fmt::format_to(w, "\n");
                 return ss::stop_iteration::no;
             });
 
             // fail the test
-            BOOST_REQUIRE_EQUAL(original, result);
+            ASSERT_EQ(original, result) << fmt::to_string(comp_str);
         }
         acc += step;
         in.close().get();
@@ -230,14 +230,14 @@ static void run_test_can_append_mixed(size_t fallocate_size) {
     // many writes as iterations, but actually somewhat more because about 1 of
     // every 4 appends gets split across a chunk which means 2 writes
     auto write_count = access(appender).total_dispatched();
-    BOOST_CHECK_GE(write_count, iterations);
-    BOOST_CHECK_LT(write_count, 2 * iterations);
+    EXPECT_GE(write_count, iterations);
+    EXPECT_LT(write_count, 2 * iterations);
 
     // we expect 0 merges with the A+F pattern
-    BOOST_CHECK_EQUAL(access(appender).total_merged(), 0);
+    EXPECT_EQ(access(appender).total_merged(), 0);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_can_append_mixed) {
+TEST(log_segment_appender_test, test_can_append_mixed) {
     run_test_can_append_mixed(16_KiB);
     run_test_can_append_mixed(32_MiB);
 }
@@ -258,12 +258,12 @@ static void run_test_can_append_10MB(size_t fallocate_size) {
         appender.flush().get();
 
         // now there should be nothing in-flight
-        BOOST_CHECK_EQUAL(access(appender).inflight_dispatched(), 0);
-        BOOST_CHECK_EQUAL(access(appender).inflight().size(), 0);
+        EXPECT_EQ(access(appender).inflight_dispatched(), 0);
+        EXPECT_EQ(access(appender).inflight().size(), 0);
 
         auto in = make_file_input_stream(f, i * one_meg);
         iobuf result = read_iobuf_exactly(in, one_meg).get();
-        BOOST_CHECK_EQUAL(original, result);
+        EXPECT_EQ(original, result);
         in.close().get();
     }
 
@@ -274,13 +274,13 @@ static void run_test_can_append_10MB(size_t fallocate_size) {
       = iterations
         * (one_meg / default_chunk_size() + !!(one_meg % default_chunk_size()));
     auto write_count = access(appender).total_dispatched();
-    BOOST_CHECK_EQUAL(write_count, expected_writes);
+    EXPECT_EQ(write_count, expected_writes);
 
     // we expect 0 merges with the A+F pattern
-    BOOST_CHECK_EQUAL(access(appender).total_merged(), 0);
+    EXPECT_EQ(access(appender).total_merged(), 0);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_can_append_10MB) {
+TEST(log_segment_appender_test, test_can_append_10MB) {
     run_test_can_append_10MB(16_KiB);
     run_test_can_append_10MB(32_MiB);
 }
@@ -306,13 +306,14 @@ static void run_test_can_append_10MB_sequential_write_sequential_read(
         iobuf tmp_o = original.share(i * one_meg, one_meg);
         // read_iobuf_exactly can return a short read, but we do not expect that
         // here.
-        BOOST_REQUIRE_EQUAL(one_meg, result.size_bytes());
-        BOOST_REQUIRE_EQUAL(tmp_o, result);
+        ASSERT_EQ(one_meg, result.size_bytes());
+        ASSERT_EQ(tmp_o, result);
         in.close().get();
     }
 }
 
-SEASTAR_THREAD_TEST_CASE(
+TEST(
+  log_segment_appender_test,
   test_can_append_10MB_sequential_write_sequential_read) {
     run_test_can_append_10MB_sequential_write_sequential_read(16_KiB);
     run_test_can_append_10MB_sequential_write_sequential_read(32_MiB);
@@ -320,15 +321,12 @@ SEASTAR_THREAD_TEST_CASE(
 
 /**
  * @brief Returns true iff the current test is currently passing.
- *
- * From https://stackoverflow.com/a/22102899
- * https://creativecommons.org/licenses/by-sa/3.0/
  */
 bool current_test_passing() {
-    using namespace boost::unit_test;
-    test_case::id_t id = framework::current_test_case().p_id;
-    test_results rez = results_collector.results(id);
-    return rez.passed();
+    // In gtest, we don't have an equivalent of checking if test is passing
+    // during execution. We'll assume it's passing unless we have evidence
+    // otherwise. This is used for debug output on test failure.
+    return !::testing::Test::HasFailure();
 }
 
 static void run_concurrent_append_flush(
@@ -343,180 +341,181 @@ static void run_concurrent_append_flush(
     auto seed = random_generators::get_int<size_t>();
     std::default_random_engine rng(seed);
 
-    BOOST_TEST_CONTEXT(
-      "run_concurrent_append_flush, seed: "
-      << seed << ", fallocate_size: " << fallocate_size
-      << ", max_buf_size: " << max_buf_size << ", buf_count :" << buf_count) {
-        // the basic idea is we create a bunch of random buffers, then randomly
-        // perform actions on the segment appedner, like appending one of the
-        // random buffers, flushing the appender, yeilding, etc.
+    SCOPED_TRACE(fmt::format(
+      "run_concurrent_append_flush, seed: {}, fallocate_size: {}, "
+      "max_buf_size: {}, buf_count: {}",
+      seed,
+      fallocate_size,
+      max_buf_size,
+      buf_count));
+    // the basic idea is we create a bunch of random buffers, then randomly
+    // perform actions on the segment appedner, like appending one of the
+    // random buffers, flushing the appender, yeilding, etc.
 
-        std::vector<iobuf> bufs(buf_count);
-        unsigned char v = 1;
-        std::uniform_int_distribution<size_t> bufdist(0, max_buf_size);
-        for (auto& buf : bufs) {
-            buf = make_iobuf_with_char(bufdist(rng), v);
-            if (++v == 0) {
-                v = 1;
-            }
+    std::vector<iobuf> bufs(buf_count);
+    unsigned char v = 1;
+    std::uniform_int_distribution<size_t> bufdist(0, max_buf_size);
+    for (auto& buf : bufs) {
+        buf = make_iobuf_with_char(bufdist(rng), v);
+        if (++v == 0) {
+            v = 1;
         }
+    }
 
-        // At each iteration we chose an action to perform with equal
-        // probability, respecting the rules of the appender, e.g., that any
-        // previous append must have resolved before a new one is invoked.
-        struct action {
-            enum kind_enum { APPEND, FLUSH, WAIT_APPEND, SLEEP, LAST = SLEEP };
+    // At each iteration we chose an action to perform with equal
+    // probability, respecting the rules of the appender, e.g., that any
+    // previous append must have resolved before a new one is invoked.
+    struct action {
+        enum kind_enum { APPEND, FLUSH, WAIT_APPEND, SLEEP, LAST = SLEEP };
 
-            action(int kind)
-              : kind{(kind_enum)kind} {}
+        action(int kind)
+          : kind{(kind_enum)kind} {}
 
-            kind_enum kind;
-            segment_appender_info info{};
-            ss::sstring extra;
-            ss::future<> flush_future
-              = ss::make_ready_future<>(); // if kind == FLUSH
+        kind_enum kind;
+        segment_appender_info info{};
+        ss::sstring extra;
+        ss::future<> flush_future
+          = ss::make_ready_future<>(); // if kind == FLUSH
 
-            ss::sstring to_string() const {
-                ss::sstring astr = [this]() {
-                    switch (kind) {
-                    case APPEND:
-                        return "APPEND";
-                    case FLUSH:
-                        return "FLUSH";
-                    case WAIT_APPEND:
-                        return "WAIT_APPEND";
-                    case SLEEP:
-                        return "SLEEP";
-                    }
-                    vassert(false, "bad kind");
-                }();
+        ss::sstring to_string() const {
+            ss::sstring astr = [this]() {
+                switch (kind) {
+                case APPEND:
+                    return "APPEND";
+                case FLUSH:
+                    return "FLUSH";
+                case WAIT_APPEND:
+                    return "WAIT_APPEND";
+                case SLEEP:
+                    return "SLEEP";
+                }
+                vassert(false, "bad kind");
+            }();
 
-                return fmt::format("{:12}: {}", astr + extra, info.to_string());
-            };
+            return fmt::format("{:12}: {}", astr + extra, info.to_string());
         };
+    };
 
-        std::optional<ss::future<>> last_append;
-        std::vector<ss::future<>> futs;
+    std::optional<ss::future<>> last_append;
+    std::vector<ss::future<>> futs;
 
-        size_t max_inflight = 0, max_dispatched = 0;
+    size_t max_inflight = 0, max_dispatched = 0;
 
-        std::uniform_int_distribution<int> dist(0, action::LAST);
+    std::uniform_int_distribution<int> dist(0, action::LAST);
 
-        std::vector<action> all_actions;
+    std::vector<action> all_actions;
 
-        for (size_t buf_index = 0; buf_index < bufs.size();) {
-            auto& current_action = all_actions.emplace_back(dist(rng));
+    for (size_t buf_index = 0; buf_index < bufs.size();) {
+        auto& current_action = all_actions.emplace_back(dist(rng));
 
-            max_inflight = std::max(
-              max_inflight, access(appender).inflight().size());
-            max_dispatched = std::max(
-              max_dispatched, access(appender).inflight_dispatched());
+        max_inflight = std::max(
+          max_inflight, access(appender).inflight().size());
+        max_dispatched = std::max(
+          max_dispatched, access(appender).inflight_dispatched());
 
-            switch (current_action.kind) {
-            case action::APPEND:
-                if (last_append) {
-                    // skip, as we already have an unawaited append in progress
-                    all_actions.pop_back(); // delete action
-                    continue;
-                }
-                last_append = appender.append(bufs[buf_index++]);
-                break;
-            case action::FLUSH:
-                futs.push_back(appender.flush());
-                break;
-            case action::WAIT_APPEND:
-                if (!last_append) {
-                    // no append to wait for, skip
-                    all_actions.pop_back();
-                    continue;
-                }
-                last_append->get();
-                last_append.reset();
-                break;
-            case action::SLEEP: {
-                // yield 99% of the time, sleep for 0-10 us the other 1%
-                auto sleep_us = std::uniform_int_distribution<int>(0, 1000)(rng)
-                                * 1us;
-                (sleep_us > 10us ? ss::yield() : ss::sleep(sleep_us)).get();
-                current_action.extra += fmt::format(" ({} ms)", sleep_us);
-                break;
+        switch (current_action.kind) {
+        case action::APPEND:
+            if (last_append) {
+                // skip, as we already have an unawaited append in progress
+                all_actions.pop_back(); // delete action
+                continue;
             }
-            default:
-                BOOST_TEST_FAIL("bad action");
+            last_append = appender.append(bufs[buf_index++]);
+            break;
+        case action::FLUSH:
+            futs.push_back(appender.flush());
+            break;
+        case action::WAIT_APPEND:
+            if (!last_append) {
+                // no append to wait for, skip
+                all_actions.pop_back();
+                continue;
             }
-            current_action.info = access(appender).info();
-        }
-
-        // check that we got some visible inflight and dispatched IOs
-        BOOST_CHECK_GT(max_inflight, 0);
-        BOOST_CHECK_GT(max_dispatched, 0);
-
-        // now we need to wait for the last append, if any
-        if (last_append) {
             last_append->get();
+            last_append.reset();
+            break;
+        case action::SLEEP: {
+            // yield 99% of the time, sleep for 0-10 us the other 1%
+            auto sleep_us = std::uniform_int_distribution<int>(0, 1000)(rng)
+                            * 1us;
+            (sleep_us > 10us ? ss::yield() : ss::sleep(sleep_us)).get();
+            current_action.extra += fmt::format(" ({} ms)", sleep_us);
+            break;
         }
-
-        // append a final flush, so we are in a known flushed state for the
-        // following checks
-        futs.emplace_back(appender.flush());
-
-        for (auto& f : futs) {
-            // get all the flush futures
-            // whp these are all available except possibly the last one
-            // (appended above) but this is not actually guaranteed, see
-            // redpanda#13035
-            f.get();
+        default:
+            FAIL() << "bad action";
         }
-        auto sa_state = fmt::format("{}", appender);
+        current_action.info = access(appender).info();
+    }
 
-        // now there should be nothing in-flight
-        BOOST_CHECK_EQUAL(access(appender).inflight_dispatched(), 0);
+    // check that we got some visible inflight and dispatched IOs
+    EXPECT_GT(max_inflight, 0);
+    EXPECT_GT(max_dispatched, 0);
 
-        BOOST_TEST_INFO(fmt::format(
-          "appender inflight operations (should be empty): {}",
-          access(appender).inflight_str()));
-        BOOST_CHECK_EQUAL(access(appender).inflight().size(), 0);
+    // now we need to wait for the last append, if any
+    if (last_append) {
+        last_append->get();
+    }
 
-        // check that we got some writes and merges (we don't know how many)
-        BOOST_CHECK_GT(access(appender).total_dispatched(), 0);
-        BOOST_CHECK_GT(access(appender).total_merged(), 0);
+    // append a final flush, so we are in a known flushed state for the
+    // following checks
+    futs.emplace_back(appender.flush());
 
-        // now we expect all the prior flush futures to be available
-        // we don't guarantee this is in the API currently but it is how it
-        // works currently and we might as well assert it
+    for (auto& f : futs) {
+        // get all the flush futures
+        // whp these are all available except possibly the last one
+        // (appended above) but this is not actually guaranteed, see
+        // redpanda#13035
+        f.get();
+    }
+    auto sa_state = fmt::format("{}", appender);
 
-        // verify the output
-        auto in = make_file_input_stream(seg_file);
-        auto closefile = ss::defer([&] { in.close().get(); });
-        for (auto& buf : bufs) {
-            size_t sz = buf.size_bytes();
-            iobuf result = read_iobuf_exactly(in, sz).get();
-            BOOST_CHECK_EQUAL(buf, result);
+    // now there should be nothing in-flight
+    EXPECT_EQ(access(appender).inflight_dispatched(), 0);
+
+    EXPECT_EQ(access(appender).inflight().size(), 0) << fmt::format(
+      "appender inflight operations (should be empty): {}",
+      access(appender).inflight_str());
+
+    // check that we got some writes and merges (we don't know how many)
+    EXPECT_GT(access(appender).total_dispatched(), 0);
+    EXPECT_GT(access(appender).total_merged(), 0);
+
+    // now we expect all the prior flush futures to be available
+    // we don't guarantee this is in the API currently but it is how it
+    // works currently and we might as well assert it
+
+    // verify the output
+    auto in = make_file_input_stream(seg_file);
+    auto closefile = ss::defer([&] { in.close().get(); });
+    for (auto& buf : bufs) {
+        size_t sz = buf.size_bytes();
+        iobuf result = read_iobuf_exactly(in, sz).get();
+        EXPECT_EQ(buf, result);
+    }
+
+    if (!current_test_passing()) {
+        // test is about to fail, print details
+        // we jump through these hoops because I can't find a better way
+        // to defer generating the entire diagnosis string (which may be
+        // very large) until a test actually fails
+        std::string astr;
+        for (size_t aid = std::max(0, (int)all_actions.size() - 50);
+             aid < all_actions.size();
+             aid++) {
+            auto& ar = all_actions.at(aid);
+            astr += fmt::format("action[{}]: {}\n", aid, ar.to_string());
         }
+        SCOPED_TRACE("actions: \n" + astr);
 
-        if (!current_test_passing()) {
-            // test is about to fail, print details
-            // we jump through these hoops because I can't find a better way
-            // to defer generating the entire diagnosis string (which may be
-            // very large) until a test actually fails
-            std::string astr;
-            for (size_t aid = std::max(0, (int)all_actions.size() - 50);
-                 aid < all_actions.size();
-                 aid++) {
-                auto& ar = all_actions.at(aid);
-                astr += fmt::format("action[{}]: {}\n", aid, ar.to_string());
-            }
-            BOOST_TEST_INFO("actions: \n" << astr);
-
-            BOOST_TEST_INFO("last_append: " << last_append.has_value());
-            BOOST_TEST_INFO("fsize: " << futs.size());
-            BOOST_TEST_INFO("segment_appender: " << sa_state);
-            BOOST_TEST_FAIL("failed see above");
-        }
+        SCOPED_TRACE(fmt::format("last_append: {}", last_append.has_value()));
+        SCOPED_TRACE(fmt::format("fsize: {}", futs.size()));
+        SCOPED_TRACE("segment_appender: " + sa_state);
+        FAIL() << "failed see above";
     }
 }
 
-SEASTAR_THREAD_TEST_CASE(test_concurrent_append_flush) {
+TEST(log_segment_appender_test, test_concurrent_append_flush) {
     // we use smaller buffer counts for the large buffer size tests
     // to keep the runtime manageable (less than ~2 seconds for this test)
 
@@ -556,16 +555,16 @@ static void run_test_can_append_little_data(size_t fallocate_size) {
               data.begin() + std::min<size_t>(data.size(), i + 3),
               std::back_inserter(tmp));
             tmp.push_back('\0');
-            fmt::print("\nINPUT AROUND:{}, i:{}\n", tmp.data(), i);
             // make it fail
-            BOOST_REQUIRE_EQUAL(c, result[0]);
+            ASSERT_EQ(c, result[0])
+              << fmt::format("INPUT AROUND:{}, i:{}", tmp.data(), i);
         }
         in.close().get();
     }
-    BOOST_REQUIRE_EQUAL(appender.file_byte_offset(), data.size());
+    ASSERT_EQ(appender.file_byte_offset(), data.size());
 }
 
-SEASTAR_THREAD_TEST_CASE(test_can_append_little_data) {
+TEST(log_segment_appender_test, test_can_append_little_data) {
     run_test_can_append_little_data(16_KiB);
     run_test_can_append_little_data(32_MiB);
 }
@@ -590,25 +589,25 @@ static void run_test_fallocate_size(size_t fallocate_size) {
                 original.append(data.data(), data.size());
             }
         }
-        BOOST_CHECK_EQUAL(one_meg, original.size_bytes());
+        EXPECT_EQ(one_meg, original.size_bytes());
         appender.append(original).get();
         appender.flush().get();
 
         // now there should be nothing in-flight
-        BOOST_CHECK_EQUAL(access(appender).inflight_dispatched(), 0);
-        BOOST_CHECK_EQUAL(access(appender).inflight().size(), 0);
+        EXPECT_EQ(access(appender).inflight_dispatched(), 0);
+        EXPECT_EQ(access(appender).inflight().size(), 0);
 
         auto in = make_file_input_stream(f, i * one_meg);
         iobuf result = read_iobuf_exactly(in, one_meg).get();
-        BOOST_CHECK_EQUAL(original, result);
+        EXPECT_EQ(original, result);
         in.close().get();
     }
 
     // test that logical file size got updated as well (truncate called)
-    BOOST_CHECK_EQUAL(ss::file_size(filename).get() % fallocate_size, 0);
+    EXPECT_EQ(ss::file_size(filename).get() % fallocate_size, 0);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_fallocate_size) {
+TEST(log_segment_appender_test, test_fallocate_size) {
     for (const size_t fallocate_size : {4096ul, 16_KiB, 32_MiB}) {
         run_test_fallocate_size(fallocate_size);
     }

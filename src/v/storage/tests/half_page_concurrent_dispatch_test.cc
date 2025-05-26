@@ -15,7 +15,10 @@
 #include <seastar/core/file.hh>
 #include <seastar/core/temporary_buffer.hh>
 
-struct fixture {
+#include <fmt/format.h>
+#include <gtest/gtest.h>
+
+struct fixture : public testing::Test {
     storage::disk_log_builder b{storage::log_config(
       storage::random_dir(),
       1_GiB,
@@ -25,7 +28,7 @@ struct fixture {
     ~fixture() { b.stop().get(); }
 };
 
-FIXTURE_TEST(half_next_page, fixture) {
+TEST_F(fixture, half_next_page) {
     using namespace storage; // NOLINT
     // gurantee next half page on 4096 segments(default)
     const size_t data_size = (config::shard_local_cfg().append_chunk_size() / 2)
@@ -42,14 +45,13 @@ FIXTURE_TEST(half_next_page, fixture) {
                    .build();
     b | start() | add_segment(0);
     auto& seg = b.get_segment(0);
-    info("About to append batch: {}", batch);
     seg.append(std::move(batch)).get();
-    info("Segment: {}", seg);
+    SCOPED_TRACE(fmt::format("Segment: {}", seg));
     seg.flush().get();
     b | add_random_batch(1, 1, maybe_compress_batches::yes);
     auto recs = b.consume().get();
-    BOOST_REQUIRE_EQUAL(recs.size(), 2);
+    ASSERT_EQ(recs.size(), 2);
     for (auto& rec : recs) {
-        BOOST_REQUIRE_EQUAL(rec.header().crc, model::crc_record_batch(rec));
+        ASSERT_EQ(rec.header().crc, model::crc_record_batch(rec));
     }
 }

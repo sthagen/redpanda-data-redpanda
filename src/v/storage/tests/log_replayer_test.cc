@@ -27,6 +27,8 @@
 #include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
 
+#include <gtest/gtest.h>
+
 #include <memory>
 
 using namespace storage; // NOLINT
@@ -135,18 +137,18 @@ public:
 };
 } // namespace storage
 
-SEASTAR_THREAD_TEST_CASE(test_can_recover_single_batch) {
+TEST(log_replayer_test, test_can_recover_single_batch) {
     log_replayer_fixture ctx;
     auto batches = model::test::make_random_batches(model::offset(1), 1).get();
     auto last_offset = batches.back().last_offset();
     ctx.write(batches);
     storage::log_replayer::checkpoint recovered
       = ctx.replayer().recover_in_thread(ss::default_priority_class());
-    BOOST_REQUIRE(bool(recovered));
-    BOOST_CHECK_EQUAL(recovered.last_offset.value(), last_offset);
+    ASSERT_TRUE(bool(recovered));
+    EXPECT_EQ(recovered.last_offset.value(), last_offset);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_unrecovered_single_batch) {
+TEST(log_replayer_test, test_unrecovered_single_batch) {
     {
         log_replayer_fixture ctx;
         auto batches
@@ -155,7 +157,7 @@ SEASTAR_THREAD_TEST_CASE(test_unrecovered_single_batch) {
         ctx.write(batches);
         auto recovered = ctx.replayer().recover_in_thread(
           ss::default_priority_class());
-        BOOST_CHECK(!bool(recovered));
+        EXPECT_FALSE(bool(recovered));
     }
     {
         log_replayer_fixture ctx;
@@ -165,31 +167,31 @@ SEASTAR_THREAD_TEST_CASE(test_unrecovered_single_batch) {
         ctx.write(batches);
         auto recovered = ctx.replayer().recover_in_thread(
           ss::default_priority_class());
-        BOOST_CHECK(!bool(recovered));
+        EXPECT_FALSE(bool(recovered));
     }
 }
 
-SEASTAR_THREAD_TEST_CASE(test_malformed_segment) {
+TEST(log_replayer_test, test_malformed_segment) {
     log_replayer_fixture ctx;
     ctx.write_garbage();
     ctx.initialize(model::offset(0));
     auto recovered = ctx.replayer().recover_in_thread(
       ss::default_priority_class());
-    BOOST_CHECK(!bool(recovered));
+    EXPECT_FALSE(bool(recovered));
 }
 
-SEASTAR_THREAD_TEST_CASE(test_can_recover_multiple_batches) {
+TEST(log_replayer_test, test_can_recover_multiple_batches) {
     log_replayer_fixture ctx;
     auto batches = model::test::make_random_batches(model::offset(1), 10).get();
     auto last_offset = batches.back().last_offset();
     ctx.write(batches);
     auto recovered = ctx.replayer().recover_in_thread(
       ss::default_priority_class());
-    BOOST_CHECK(bool(recovered));
-    BOOST_CHECK_EQUAL(recovered.last_offset.value(), last_offset);
+    EXPECT_TRUE(bool(recovered));
+    EXPECT_EQ(recovered.last_offset.value(), last_offset);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_unrecovered_multiple_batches) {
+TEST(log_replayer_test, test_unrecovered_multiple_batches) {
     {
         // bad crc test
         log_replayer_fixture ctx;
@@ -200,8 +202,8 @@ SEASTAR_THREAD_TEST_CASE(test_unrecovered_multiple_batches) {
         ctx.write(batches);
         auto recovered = ctx.replayer().recover_in_thread(
           ss::default_priority_class());
-        BOOST_CHECK(bool(recovered));
-        BOOST_CHECK_EQUAL(recovered.last_offset.value(), last_offset);
+        EXPECT_TRUE(bool(recovered));
+        EXPECT_EQ(recovered.last_offset.value(), last_offset);
     }
     {
         // timestamp test
@@ -213,11 +215,11 @@ SEASTAR_THREAD_TEST_CASE(test_unrecovered_multiple_batches) {
         ctx.write(batches);
         auto recovered = ctx.replayer().recover_in_thread(
           ss::default_priority_class());
-        BOOST_CHECK(bool(recovered));
-        BOOST_CHECK_EQUAL(recovered.last_offset.value(), last_offset);
+        EXPECT_TRUE(bool(recovered));
+        EXPECT_EQ(recovered.last_offset.value(), last_offset);
     }
 }
-SEASTAR_THREAD_TEST_CASE(test_reset_index) {
+TEST(log_replayer_test, test_reset_index) {
     // bad crc test
     log_replayer_fixture ctx;
     ctx.write_garbage_index(); // key
@@ -226,8 +228,8 @@ SEASTAR_THREAD_TEST_CASE(test_reset_index) {
     ctx.write(batches);
     auto recovered = ctx.replayer().recover_in_thread(
       ss::default_priority_class());
-    BOOST_CHECK(bool(recovered));
-    BOOST_CHECK_EQUAL(recovered.last_offset.value(), last_offset);
+    EXPECT_TRUE(bool(recovered));
+    EXPECT_EQ(recovered.last_offset.value(), last_offset);
     storage::stlog.info("Recovered segment:{}", ctx._seg);
-    BOOST_CHECK(ctx._seg->index().needs_persistence());
+    EXPECT_TRUE(ctx._seg->index().needs_persistence());
 }

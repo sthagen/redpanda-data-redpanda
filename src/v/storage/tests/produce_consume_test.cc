@@ -11,13 +11,12 @@
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/fixture.h"
 
-#include <seastar/testing/thread_test_case.hh>
-
 #include <boost/range/irange.hpp>
+#include <gtest/gtest.h>
 
 using namespace storage; // NOLINT
 
-SEASTAR_THREAD_TEST_CASE(produce_consume_concurrency) {
+TEST(ProduceConsumeTest, produce_consume_concurrency) {
     auto cfg = log_builder_config();
     cfg.cache = storage::with_cache::no;
     storage::disk_log_builder builder(std::move(cfg));

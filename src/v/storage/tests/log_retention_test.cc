@@ -14,22 +14,25 @@
 
 #include <seastar/util/defer.hh>
 
+#include <gtest/gtest.h>
+
 #include <optional>
 
 using namespace std::literals;
 
-struct gc_fixture {
+class gc_fixture : public ::testing::Test {
+public:
     storage::disk_log_builder builder;
 };
 
-FIXTURE_TEST(empty_log_garbage_collect, gc_fixture) {
+TEST_F(gc_fixture, empty_log_garbage_collect) {
     builder | storage::start()
       | storage::garbage_collect(
         model::timestamp::now(), std::make_optional<size_t>(1024))
       | storage::stop();
 }
 
-FIXTURE_TEST(retention_test_time, gc_fixture) {
+TEST_F(gc_fixture, retention_test_time) {
     auto base_ts = model::timestamp::now();
     ss::sleep(5s).get();
     builder.set_time(base_ts);
@@ -44,72 +47,70 @@ FIXTURE_TEST(retention_test_time, gc_fixture) {
 
     ss::sleep(5s).get();
     builder | storage::add_segment(104) | storage::add_random_batches(104, 3);
-    BOOST_TEST_MESSAGE(
-      "Should not collect segments with timestamp older than 1");
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 3);
+    // Should not collect segments with timestamp older than 1
+    EXPECT_EQ(builder.get_log()->segment_count(), 3);
 
     builder | storage::garbage_collect(base_ts, std::nullopt);
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 3);
+    EXPECT_EQ(builder.get_log()->segment_count(), 3);
 
-    BOOST_TEST_MESSAGE("Should not collect segments because size is infinity");
+    // Should not collect segments because size is infinity
     builder
       | storage::garbage_collect(
         base_ts,
         std::make_optional<size_t>(std::numeric_limits<size_t>::max()));
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 3);
+    EXPECT_EQ(builder.get_log()->segment_count(), 3);
 
-    BOOST_TEST_MESSAGE("Should leave one active segment");
+    // Should leave one active segment
     builder
       | storage::garbage_collect(
         model::timestamp{base_ts() + 15'000}, std::nullopt)
       | storage::stop();
 
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 1);
+    EXPECT_EQ(builder.get_log()->segment_count(), 1);
 }
 
-FIXTURE_TEST(retention_test_size, gc_fixture) {
+TEST_F(gc_fixture, retention_test_size) {
     builder | storage::start() | storage::add_segment(0)
       | storage::add_random_batch(0, 100, storage::maybe_compress_batches::yes)
       | storage::add_random_batch(100, 2, storage::maybe_compress_batches::yes)
       | storage::add_segment(102)
       | storage::add_random_batch(102, 2, storage::maybe_compress_batches::yes)
       | storage::add_segment(104) | storage::add_random_batches(104, 3);
-    BOOST_TEST_MESSAGE("Should not collect segments because size equal to "
-                       "current partition size");
+    // Should not collect segments because size equal to current partition size
     builder
       | storage::garbage_collect(
         model::timestamp(1),
         std::make_optional(
           builder.get_disk_log_impl().get_probe().partition_size()));
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 3);
+    EXPECT_EQ(builder.get_log()->segment_count(), 3);
 
-    BOOST_TEST_MESSAGE("Should collect all segments");
+    // Should collect all segments
     builder
       | storage::garbage_collect(model::timestamp(1), std::optional<size_t>(0))
       | storage::stop();
 
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 0);
+    EXPECT_EQ(builder.get_log()->segment_count(), 0);
 }
 
-FIXTURE_TEST(retention_test_size_with_one_segment, gc_fixture) {
+TEST_F(gc_fixture, retention_test_size_with_one_segment) {
     builder | storage::start() | storage::add_segment(0)
       | storage::add_random_batch(0, 100, storage::maybe_compress_batches::yes)
       | storage::add_random_batch(100, 2, storage::maybe_compress_batches::yes);
-    BOOST_TEST_MESSAGE("Should not collect the segment because size equal to "
-                       "current partition size");
+    // Should not collect the segment because size equal to current partition
+    // size
     builder
       | storage::garbage_collect(
         model::timestamp(1),
         std::make_optional(
           builder.get_disk_log_impl().get_probe().partition_size()));
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 1);
+    EXPECT_EQ(builder.get_log()->segment_count(), 1);
 
-    BOOST_TEST_MESSAGE("Should not collect the segment");
+    // Should not collect the segment
     builder
       | storage::garbage_collect(model::timestamp(1), std::optional<size_t>(0))
       | storage::stop();
 
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 1);
+    EXPECT_EQ(builder.get_log()->segment_count(), 1);
 }
 
 /*
@@ -128,7 +129,7 @@ FIXTURE_TEST(retention_test_size_with_one_segment, gc_fixture) {
  * for all batches. so we expect that all segments except the active segment to
  * be removed.
  */
-FIXTURE_TEST(retention_test_size_time, gc_fixture) {
+TEST_F(gc_fixture, retention_test_size_time) {
     const auto last_week = model::to_timestamp(
       model::timestamp_clock::now() - std::chrono::days(7));
 
@@ -154,12 +155,12 @@ FIXTURE_TEST(retention_test_size_time, gc_fixture) {
         offset += model::offset(num_records);
     }
 
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().reclaim.retention
        - 2_MiB),
       builder.storage().resources().get_falloc_step({})
         * builder.get_disk_log_impl().segments().size());
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().usage.total()
        - 2_MiB),
       builder.storage().resources().get_falloc_step({})
@@ -182,12 +183,12 @@ FIXTURE_TEST(retention_test_size_time, gc_fixture) {
     }
 
     // the first segment is now eligible for reclaim
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().reclaim.retention
        - 3_MiB),
       builder.storage().resources().get_falloc_step({})
         * builder.get_disk_log_impl().segments().size());
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().usage.total()
        - 3_MiB),
       builder.storage().resources().get_falloc_step({})
@@ -210,12 +211,12 @@ FIXTURE_TEST(retention_test_size_time, gc_fixture) {
     }
 
     // the first,second segment is now eligible for reclaim
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().reclaim.retention
        - 4_MiB),
       builder.storage().resources().get_falloc_step({})
         * builder.get_disk_log_impl().segments().size());
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().usage.total()
        - 4_MiB),
       builder.storage().resources().get_falloc_step({})
@@ -238,12 +239,12 @@ FIXTURE_TEST(retention_test_size_time, gc_fixture) {
     }
 
     // the first,second segment is now eligible for reclaim
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().reclaim.retention
        - 5_MiB),
       builder.storage().resources().get_falloc_step({})
         * builder.get_disk_log_impl().segments().size());
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().usage.total()
        - 5_MiB),
       builder.storage().resources().get_falloc_step({})
@@ -252,29 +253,28 @@ FIXTURE_TEST(retention_test_size_time, gc_fixture) {
     builder | storage::garbage_collect(model::timestamp::now(), 4_MiB);
 
     // right after gc runs there shouldn't be anything reclaimable
-    BOOST_CHECK_EQUAL(
+    EXPECT_EQ(
       builder.disk_usage(model::timestamp::now(), 0).get().reclaim.retention,
       0);
-    BOOST_CHECK_EQUAL(
+    EXPECT_EQ(
       builder.disk_usage(model::timestamp::now(), 0).get().usage.total(), 0);
 
     builder | storage::stop();
 
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 0);
+    EXPECT_EQ(builder.get_log()->segment_count(), 0);
 }
-FIXTURE_TEST(retention_test_after_truncation, gc_fixture) {
-    BOOST_TEST_MESSAGE("Should be safe to garbage collect after truncation");
+TEST_F(gc_fixture, retention_test_after_truncation) {
+    // Should be safe to garbage collect after truncation
     builder | storage::start() | storage::add_segment(0)
       | storage::add_random_batch(0, 100, storage::maybe_compress_batches::yes)
       | storage::truncate_log(model::offset(0))
       | storage::garbage_collect(model::timestamp::now(), std::nullopt)
       | storage::stop();
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 0);
-    BOOST_CHECK_EQUAL(
-      builder.get_disk_log_impl().get_probe().partition_size(), 0);
+    EXPECT_EQ(builder.get_log()->segment_count(), 0);
+    EXPECT_EQ(builder.get_disk_log_impl().get_probe().partition_size(), 0);
 }
 
-FIXTURE_TEST(retention_by_size_with_remote_write, gc_fixture) {
+TEST_F(gc_fixture, retention_by_size_with_remote_write) {
     /*
      * This test sets the size retention limit on a cloud storage topic
      * via the rention.local.target.bytes topic configuration option.
@@ -328,21 +328,21 @@ FIXTURE_TEST(retention_by_size_with_remote_write, gc_fixture) {
         auto segment_count_after_gc = builder.get_log()->segment_count();
 
         if (partition_size > size_limit) {
-            BOOST_CHECK_GE(segment_count_before_gc, segment_count_after_gc);
+            EXPECT_GE(segment_count_before_gc, segment_count_after_gc);
         } else {
-            BOOST_CHECK_EQUAL(segment_count_before_gc, segment_count_after_gc);
+            EXPECT_EQ(segment_count_before_gc, segment_count_after_gc);
         }
     }
 
     auto final_partition_size
       = builder.get_disk_log_impl().get_probe().partition_size();
 
-    BOOST_CHECK_LE(size_limit, final_partition_size);
+    EXPECT_LE(size_limit, final_partition_size);
 
     builder.stop().get();
 }
 
-FIXTURE_TEST(retention_by_time_with_remote_write, gc_fixture) {
+TEST_F(gc_fixture, retention_by_time_with_remote_write) {
     /*
      * This test sets the time retention limit on a cloud storage topic
      * via the rention.local.target.ms topic configuration option.
@@ -394,7 +394,7 @@ FIXTURE_TEST(retention_by_time_with_remote_write, gc_fixture) {
     // Try to garbage collet the segments. None should get collected
     // because we are currently using the default local target retention.
     builder | storage::garbage_collect(model::timestamp{1}, std::nullopt);
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 2);
+    EXPECT_EQ(builder.get_log()->segment_count(), 2);
 
     // Override the local target retention.
     storage::ntp_config::default_overrides time_override;
@@ -406,10 +406,10 @@ FIXTURE_TEST(retention_by_time_with_remote_write, gc_fixture) {
     // Collect again. All segments should be removed this time.
     builder | storage::garbage_collect(model::timestamp{1}, std::nullopt)
       | storage::stop();
-    BOOST_CHECK_EQUAL(builder.get_log()->segment_count(), 0);
+    EXPECT_EQ(builder.get_log()->segment_count(), 0);
 }
 
-FIXTURE_TEST(non_collectible_disk_usage_test, gc_fixture) {
+TEST_F(gc_fixture, non_collectible_disk_usage_test) {
     // a few helpers
     const auto last_week = model::to_timestamp(
       model::timestamp_clock::now() - std::chrono::days(7));
@@ -459,13 +459,12 @@ FIXTURE_TEST(non_collectible_disk_usage_test, gc_fixture) {
         offset += model::offset(num_records);
     }
 
-    BOOST_REQUIRE_EQUAL(
-      builder.get_disk_log_impl().config().is_collectable(), false);
+    ASSERT_EQ(builder.get_disk_log_impl().config().is_collectable(), false);
 
-    BOOST_CHECK_EQUAL(
+    EXPECT_EQ(
       builder.disk_usage(model::timestamp::now(), 0).get().reclaim.retention,
       0);
-    BOOST_CHECK_LE(
+    EXPECT_LE(
       (builder.disk_usage(model::timestamp::now(), 0).get().usage.total()
        - 3_MiB),
       builder.storage().resources().get_falloc_step({})
