@@ -58,6 +58,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol:api_versions",
         "//src/v/kafka/protocol:create_topics",
         "//src/v/kafka/protocol:delete_records",
+        "//src/v/kafka/protocol:describe_configs",
         "//src/v/kafka/protocol:describe_groups",
         "//src/v/kafka/protocol:fetch",
         "//src/v/kafka/protocol:find_coordinator",

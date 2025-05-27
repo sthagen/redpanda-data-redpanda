@@ -216,6 +216,8 @@ public:
             return dispatch(std::move(r), api_version(2));
         } else if constexpr (std::is_same_v<type, sasl_authenticate_request>) {
             return dispatch(std::move(r), api_version(1));
+        } else if constexpr (std::is_same_v<type, describe_configs_request>) {
+            return dispatch(std::move(r), api_version(4));
         }
     }
 

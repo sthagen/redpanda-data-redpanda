@@ -250,3 +250,26 @@ redpanda_cc_btest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_btest(
+    name = "describe_topics",
+    timeout = "short",
+    srcs = [
+        "describe_topics.cc",
+    ],
+    deps = [
+        "//src/v/container:fragmented_vector",
+        "//src/v/kafka/client",
+        "//src/v/kafka/client/test:fixture",
+        "//src/v/kafka/client/test:utils",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:create_topics",
+        "//src/v/kafka/protocol:describe_configs",
+        "//src/v/model",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)

@@ -10,6 +10,7 @@
 #include "kafka/client/client.h"
 
 #include "base/seastarx.h"
+#include "container/fragmented_vector.h"
 #include "kafka/client/broker.h"
 #include "kafka/client/configuration.h"
 #include "kafka/client/consumer.h"
@@ -575,6 +576,38 @@ ss::future<kafka::fetch_response> client::consumer_fetch(
                   [res{std::move(res)}]() mutable { return std::move(res); });
           });
     });
+}
+
+ss::future<kafka::describe_configs_response> client::describe_topics(
+  chunked_vector<model::topic> topics,
+  std::optional<chunked_vector<ss::sstring>> configuration_keys) {
+    co_return co_await gated_retry_with_mitigation(
+      [this, &topics, &configuration_keys]() {
+          // Copy here to ensure retries can call the lambda again
+          return do_describe_topics(
+            topics.copy(),
+            configuration_keys.transform(&chunked_vector<ss::sstring>::copy));
+      });
+}
+
+ss::future<kafka::describe_configs_response> client::do_describe_topics(
+  chunked_vector<model::topic> topics,
+  std::optional<chunked_vector<ss::sstring>> configuration_keys) {
+    auto broker = co_await _brokers.any();
+
+    chunked_vector<describe_configs_resource> dcr;
+    dcr.reserve(topics.size());
+    for (const auto& topic : topics) {
+        dcr.push_back(describe_configs_resource{
+          .resource_type = config_resource_type::topic,
+          .resource_name = topic(),
+          .configuration_keys = configuration_keys.transform(
+            &chunked_vector<ss::sstring>::copy),
+        });
+    }
+
+    co_return co_await broker->dispatch(
+      describe_configs_request{.data = {.resources = std::move(dcr)}});
 }
 
 } // namespace kafka::client

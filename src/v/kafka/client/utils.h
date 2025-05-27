@@ -56,6 +56,18 @@ auto retry_with_mitigation(
                           // ignore failed mitigation
                       });
                 }
+
+                static_assert(
+                  std::is_invocable_v<const Func&>,
+                  "Func must have a const operator(), i.e., it must not be a "
+                  "mutable lambda or functor with non-const call operator. "
+                  "This is to prevent problematic usage patterns where state "
+                  "is moved-from on retries. For example, the following is "
+                  "problematic:\n"
+                  "\tauto bad_func = [movable_state]() mutable {\n"
+                  "\t    auto _ = consume(std::move(movable_state));\n"
+                  "\t};");
+
                 return fut.then(func).handle_exception(
                   [&eptr](std::exception_ptr ex) mutable {
                       eptr = ex;
