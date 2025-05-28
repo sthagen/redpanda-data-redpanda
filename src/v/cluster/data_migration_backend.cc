@@ -275,7 +275,7 @@ ss::future<> backend::work_once() {
 
     // defer RPC retries and topic work
     // todo: configure timeout
-    auto new_deadline = now + 2s;
+    auto new_deadline = now + 500ms;
     for (const auto& node_id : rpc_responses | std::views::keys) {
         if (_node_states.contains(node_id)) {
             _nodes_to_retry.try_emplace(node_id, new_deadline);
@@ -973,7 +973,8 @@ ss::future<> backend::process_delta(cluster::topic_table_ntp_delta&& delta) {
         _local_work_states[nt].try_emplace(
           delta.ntp.tp.partition,
           migration_id,
-          *_migration_states.find(migration_id)->second.scope.sought_state);
+          *_migration_states.find(migration_id)->second.scope.sought_state,
+          migrated_replica_status::waiting_for_rpc);
     } else {
         auto topic_work_it = _local_work_states.find(nt);
         if (topic_work_it != _local_work_states.end()) {
@@ -982,10 +983,7 @@ ss::future<> backend::process_delta(cluster::topic_table_ntp_delta&& delta) {
             if (rwstate_it != topic_work_state.end()) {
                 auto& rwstate = rwstate_it->second;
                 if (rwstate.shard) {
-                    stop_partition_work(
-                      model::topic_namespace_view{delta.ntp},
-                      delta.ntp.tp.partition,
-                      rwstate);
+                    stop_partition_work(delta.ntp, rwstate);
                 }
                 topic_work_state.erase(rwstate_it);
                 if (topic_work_state.empty()) {
@@ -1045,47 +1043,64 @@ backend::check_ntp_states_locally(check_ntp_states_request&& req) {
             continue;
         }
 
-        auto maybe_rwstate = get_replica_work_state(ntp_req.ntp);
-        if (!maybe_rwstate) {
-            vlog(
-              dm_log.debug,
-              "migration_id={} got RPC to move ntp {} to state {}, but "
-              "missing partition state for it",
-              ntp_req.migration,
-              ntp_req.ntp,
-              ntp_req.state);
-            continue;
-        }
-        auto& rwstate = maybe_rwstate->get();
-        if (ntp_req.state != rwstate.sought_state) {
+        auto& topic_work_state
+          = _local_work_states[model::topic_namespace_view{ntp_req.ntp}];
+        auto& rwstate
+          = topic_work_state
+              .try_emplace(
+                ntp_req.ntp.tp.partition,
+                ntp_req.migration,
+                ntp_req.state,
+                migrated_replica_status::waiting_for_controller_update)
+              .first->second;
+
+        if (ntp_req.migration != rwstate.migration_id) {
             vlog(
               dm_log.warn,
-              "migration_id={} got RPC to move ntp {} to state {}, but in "
-              "raft0 its desired state is {}, ignoring",
+              "migration_id={} got RPC to move ntp {} to state {}, but current "
+              "migration id is {}, ignoring",
               ntp_req.migration,
               ntp_req.ntp,
               ntp_req.state,
-              metadata.state);
+              rwstate.migration_id);
             continue;
         }
-        vlog(
-          dm_log.trace,
-          "migration_id={} got both RPC and raft0 message to move ntp {} "
-          "to "
-          "state {}, replica state is {}",
-          ntp_req.migration,
-          ntp_req.ntp,
-          ntp_req.state,
-          rwstate.status);
-        // raft0 and RPC agree => time to do it!
+
+        if (ntp_req.state > rwstate.sought_state) {
+            // RPC request indicates that partition work has already progressed
+            // to a later state. Stop current work and wait for the controller
+            // update.
+            if (rwstate.shard) {
+                stop_partition_work(ntp_req.ntp, rwstate);
+            }
+            rwstate = replica_work_state(
+              ntp_req.migration,
+              ntp_req.state,
+              migrated_replica_status::waiting_for_controller_update);
+        } else if (ntp_req.state < rwstate.sought_state) {
+            vlog(
+              dm_log.warn,
+              "migration_id={} got RPC to move ntp {} to state {}, but current "
+              "replica work state is {}, ignoring",
+              ntp_req.migration,
+              ntp_req.ntp,
+              ntp_req.state,
+              rwstate);
+            continue;
+        }
+
         switch (rwstate.status) {
+        case migrated_replica_status::waiting_for_controller_update:
+            break;
         case migrated_replica_status::waiting_for_rpc:
+            // raft0 and RPC agree => time to do it!
             rwstate.status = migrated_replica_status::can_run;
             [[fallthrough]];
         case migrated_replica_status::can_run: {
             auto new_shard = _shard_table.shard_for(ntp_req.ntp);
             update_partition_shard(ntp_req.ntp, rwstate, new_shard);
-        } break;
+            break;
+        }
         case migrated_replica_status::done:
             reply.actual_states.push_back(
               {.ntp = ntp_req.ntp,
@@ -1113,8 +1128,7 @@ void backend::update_partition_shard(
       new_shard);
     if (new_shard != rwstate.shard) {
         if (rwstate.shard) {
-            stop_partition_work(
-              model::topic_namespace_view{ntp}, ntp.tp.partition, rwstate);
+            stop_partition_work(ntp, rwstate);
         }
         rwstate.shard = new_shard;
         if (new_shard) {
@@ -1161,7 +1175,8 @@ backend::clear_tstate(const topic_map_t::value_type& topic_map_entry) {
           topic_work_state, [this, &nt](auto& partition_local_work_entry) {
               auto& [partition_id, rwstate] = partition_local_work_entry;
               if (rwstate.shard) {
-                  stop_partition_work(nt, partition_id, rwstate);
+                  stop_partition_work(
+                    model::ntp(nt.ns, nt.tp, partition_id), rwstate);
               }
           });
     }
@@ -1252,16 +1267,39 @@ ss::future<> backend::reconcile_existing_topic(
                             migration);
                           auto& topic_work_state = _local_work_states[nt];
                           auto [it, _] = topic_work_state.try_emplace(
-                            assignment.id, migration, *scope.sought_state);
+                            assignment.id,
+                            migration,
+                            *scope.sought_state,
+                            migrated_replica_status::waiting_for_rpc);
                           auto& rwstate = it->second;
                           if (
-                            rwstate.sought_state != scope.sought_state
-                            || rwstate.migration_id != migration) {
+                            rwstate.migration_id != migration
+                            || rwstate.sought_state < *scope.sought_state) {
                               if (it->second.shard) {
-                                  stop_partition_work(
-                                    nt, assignment.id, rwstate);
+                                  stop_partition_work(ntp, rwstate);
                               }
-                              rwstate = {migration, *scope.sought_state};
+                              rwstate = replica_work_state{
+                                migration,
+                                *scope.sought_state,
+                                migrated_replica_status::waiting_for_rpc};
+                          }
+                          if (rwstate.sought_state == *scope.sought_state) {
+                              switch (rwstate.status) {
+                              case migrated_replica_status::
+                                waiting_for_controller_update:
+                                  rwstate.status
+                                    = migrated_replica_status::can_run;
+                                  [[fallthrough]];
+                              case migrated_replica_status::can_run: {
+                                  auto new_shard = _shard_table.shard_for(ntp);
+                                  update_partition_shard(
+                                    ntp, rwstate, new_shard);
+                                  break;
+                              }
+                              case migrated_replica_status::waiting_for_rpc:
+                              case migrated_replica_status::done:
+                                  break;
+                              }
                           }
                       }
                   }
@@ -1442,26 +1480,25 @@ void backend::start_partition_work(
 }
 
 void backend::stop_partition_work(
-  model::topic_namespace_view nt,
-  model::partition_id partition_id,
-  const backend::replica_work_state& rwstate) {
+  model::ntp ntp, const backend::replica_work_state& rwstate) {
     vlog(
       dm_log.info,
       "while working on migration {}, asking worker on shard "
-      "{} to stop trying to advance ntp {}/{} to state {}",
+      "{} to stop trying to advance ntp {} to state {}",
       rwstate.migration_id,
       rwstate.shard,
-      nt,
-      partition_id,
+      ntp,
       rwstate.sought_state);
-    ssx::spawn_with_gate(_gate, [this, &rwstate, &nt, &partition_id]() {
-        return _worker.invoke_on(
-          *rwstate.shard,
-          &worker::abort_partition_work,
-          model::ntp{nt.ns, nt.tp, partition_id},
-          rwstate.migration_id,
-          rwstate.sought_state);
-    });
+    ssx::spawn_with_gate(
+      _gate,
+      [this,
+       &ntp,
+       id = rwstate.migration_id,
+       shard = rwstate.shard.value(),
+       state = rwstate.sought_state] {
+          return _worker.invoke_on(
+            shard, &worker::abort_partition_work, std::move(ntp), id, state);
+      });
 }
 
 void backend::on_partition_work_completed(
@@ -1592,6 +1629,18 @@ void backend::topic_scoped_work_state::set_value(errc ec) {
 
 ss::future<errc> backend::topic_scoped_work_state::future() {
     return _promise.get_shared_future();
+}
+
+std::ostream&
+operator<<(std::ostream& os, const backend::replica_work_state& rws) {
+    fmt::print(
+      os,
+      "{{migration {}, sought_state: {}, shard: {}, status: {}}}",
+      rws.migration_id,
+      rws.sought_state,
+      rws.shard,
+      rws.status);
+    return os;
 }
 
 } // namespace cluster::data_migrations

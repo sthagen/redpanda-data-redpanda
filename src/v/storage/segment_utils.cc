@@ -1063,8 +1063,6 @@ ss::future<> write_concatenated_compacted_index(
     if (segments.empty()) {
         return ss::now();
     }
-    std::vector<compacted_index_reader> readers;
-    readers.reserve(segments.size());
     return ss::do_with(
       std::move(segments),
       [cfg, target_path = std::move(target_path), &resources](

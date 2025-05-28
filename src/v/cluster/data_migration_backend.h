@@ -79,12 +79,17 @@ private:
         state sought_state;
         // shard may only be assigned if replica_status is can_run
         std::optional<seastar::shard_id> shard;
-        migrated_replica_status status
-          = migrated_replica_status::waiting_for_rpc;
-        replica_work_state(id migration_id, state sought_state)
+        migrated_replica_status status;
+
+        replica_work_state(
+          id migration_id, state sought_state, migrated_replica_status status)
           : migration_id(migration_id)
-          , sought_state(sought_state) {}
+          , sought_state(sought_state)
+          , status(status) {}
     };
+
+    friend std::ostream& operator<<(std::ostream&, const replica_work_state&);
+
     struct topic_work_result {
         model::topic_namespace nt;
         id migration;
@@ -168,10 +173,7 @@ private:
     /* communication with partition workers */
     void start_partition_work(
       const model::ntp& ntp, const replica_work_state& rwstate);
-    void stop_partition_work(
-      model::topic_namespace_view nt,
-      model::partition_id partition_id,
-      const replica_work_state& rwstate);
+    void stop_partition_work(model::ntp ntp, const replica_work_state& rwstate);
     void
     on_partition_work_completed(model::ntp&& ntp, id migration, state state);
 
@@ -302,7 +304,11 @@ private:
     /* Node-local data for partition-scoped work */
     using topic_work_state_t
       = chunked_hash_map<model::partition_id, replica_work_state>;
-    chunked_hash_map<model::topic_namespace, topic_work_state_t>
+    chunked_hash_map<
+      model::topic_namespace,
+      topic_work_state_t,
+      model::topic_namespace_hash,
+      model::topic_namespace_eq>
       _local_work_states;
     /*
      * Topic-scoped work states for starting/stopping and disallowing concurrent

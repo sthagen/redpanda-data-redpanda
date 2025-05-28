@@ -85,12 +85,19 @@ std::ostream& operator<<(std::ostream& o, state);
  * For each migration state transition that requires work on partitions
  * a partition replica has the following lifecycle:
  * - waiting_for_rpc: work requested by raft0, shard not assigned;
+ * - waiting_for_controller_update: work requested by RPC request, but we
+ *   haven't yet seen the corresponding raft0 update;
  * - can_run: seconded by RPC request, shard may be assigned to work on;
  * - done: shard completed work and unassigned, done.
  * Unless (or until) the shard is the partition leader, it gets stuck
  * in can_run status.
  */
-enum class migrated_replica_status { waiting_for_rpc, can_run, done };
+enum class migrated_replica_status {
+    waiting_for_rpc,
+    waiting_for_controller_update,
+    can_run,
+    done
+};
 std::ostream& operator<<(std::ostream& o, migrated_replica_status);
 
 /**

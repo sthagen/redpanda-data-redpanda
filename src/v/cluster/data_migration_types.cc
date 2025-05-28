@@ -80,6 +80,8 @@ std::ostream& operator<<(std::ostream& o, migrated_replica_status status) {
     switch (status) {
     case migrated_replica_status::waiting_for_rpc:
         return o << "waiting_for_rpc";
+    case migrated_replica_status::waiting_for_controller_update:
+        return o << "waiting_for_controller_update";
     case migrated_replica_status::can_run:
         return o << "can_run";
     case migrated_replica_status::done:
