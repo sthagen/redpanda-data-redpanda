@@ -126,6 +126,28 @@ public:
         co_return expected_count == 2;
     }
 
+    ss::future<cluster::config_frontend::patch_result>
+    patch_config(const cluster::config_update_request& req) {
+        for (int i = 0; i < 5; i++) {
+            auto result
+              = co_await app.controller->get_config_frontend().local().patch(
+                req, model::timeout_clock::now() + 5s);
+            if (
+              result.errc == cluster::errc::not_leader_controller
+              || result.errc == raft::errc::not_leader) {
+                vlog(
+                  logger.debug,
+                  "Not leader, retrying config patch: {}",
+                  result.errc);
+                co_await ss::sleep(200ms);
+            } else {
+                co_return result;
+            }
+        }
+        co_return cluster::config_frontend::patch_result{
+          .errc = cluster::errc::timeout};
+    }
+
 protected:
     scoped_config test_local_cfg;
     cluster::consensus_ptr raft0;
@@ -326,12 +348,8 @@ TEST_F(cluster_metadata_uploader_fixture, test_upload_in_term) {
 
     // Now do some action and write a new snapshot.
     RPTEST_REQUIRE_EVENTUALLY(5s, [this] { return raft0->is_leader(); });
-    auto result = app.controller->get_config_frontend()
-                    .local()
-                    .patch(
-                      cluster::config_update_request{
-                        .upsert = {{"cluster_id", "foo"}}},
-                      model::timeout_clock::now() + 5s)
+    auto result = patch_config(cluster::config_update_request{
+                                 .upsert = {{"cluster_id", "foo"}}})
                     .get();
     ASSERT_TRUE(!result.errc);
     RPTEST_REQUIRE_EVENTUALLY(
@@ -362,14 +380,12 @@ TEST_F(cluster_metadata_uploader_fixture, test_upload_loop_deletes_orphans) {
     RPTEST_REQUIRE_EVENTUALLY(5s, [this, &manifest] {
         return list_contains_manifest_contents(manifest);
     });
+
     // Now do something to trigger another controller snapshot.
-    auto result = app.controller->get_config_frontend()
-                    .local()
-                    .patch(
-                      cluster::config_update_request{
-                        .upsert = {{"cluster_id", "foo"}}},
-                      model::timeout_clock::now() + 5s)
+    auto result = patch_config(cluster::config_update_request{
+                                 .upsert = {{"cluster_id", "foo"}}})
                     .get();
+
     ASSERT_TRUE(!result.errc);
     RPTEST_REQUIRE_EVENTUALLY(
       5s, [this] { return controller_stm.maybe_write_snapshot(); });
