@@ -1,3 +1,4 @@
+
 /*
  * Copyright 2023 Redpanda Data, Inc.
  *
@@ -67,8 +68,7 @@ scan_remote_partition_incrementally_with_reuploads(
 
     std::vector<model::record_batch_header> headers;
 
-    storage::log_reader_config reader_config(
-      base, max, ss::default_priority_class());
+    storage::log_reader_config reader_config(base, max);
 
     // starting max_bytes
     constexpr size_t max_bytes_limit = 4_KiB;
@@ -474,10 +474,7 @@ FIXTURE_TEST(test_scan_while_shutting_down, cloud_storage_fixture) {
     test_log.info("starting scan op");
     ss::gate g;
     auto scan_future = scan_until_close(
-      partition,
-      storage::log_reader_config(
-        base, model::offset::max(), ss::default_priority_class()),
-      g);
+      partition, storage::log_reader_config(base, model::offset::max()), g);
     auto close_fut
       = ss::maybe_yield()
           .then([] { return ss::maybe_yield(); })

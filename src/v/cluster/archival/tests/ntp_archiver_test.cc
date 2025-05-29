@@ -2165,8 +2165,7 @@ FIXTURE_TEST(test_ntp_archiver_upload_loop_blocked, archiver_fixture) {
     storage::log* partition_log
       = get_local_storage_api().log_mgr().get(manifest_ntp).get();
     partition_log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        model::offset(300), ss::default_priority_class()))
+      ->truncate_prefix(storage::truncate_prefix_config(model::offset(300)))
       .get();
 
     BOOST_REQUIRE(partition_log->offsets().start_offset == model::offset(300));
@@ -2282,8 +2281,7 @@ FIXTURE_TEST(
     storage::log* partition_log
       = get_local_storage_api().log_mgr().get(manifest_ntp).get();
     partition_log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        model::offset(300), ss::default_priority_class()))
+      ->truncate_prefix(storage::truncate_prefix_config(model::offset(300)))
       .get();
 
     BOOST_REQUIRE(partition_log->offsets().start_offset == model::offset(300));

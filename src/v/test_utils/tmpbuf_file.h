@@ -55,7 +55,7 @@ public:
       const uint64_t pos,
       const void* buffer,
       const size_t len,
-      const ss::io_priority_class&) final {
+      ss::io_intent*) final {
         vlog(logger().info, "write_dma pos {} len {}", pos, len);
         auto written = write(pos, buffer, len);
         _store.size = std::max(_store.size, pos + written);
@@ -63,9 +63,7 @@ public:
     }
 
     ss::future<size_t> write_dma(
-      const uint64_t pos,
-      const std::vector<iovec> iov,
-      const ss::io_priority_class&) final {
+      const uint64_t pos, const std::vector<iovec> iov, ss::io_intent*) final {
         vlog(logger().info, "write_iov_dma ({:02}) begin", iov.size());
         size_t written = 0;
         for (auto& io : iov) {
@@ -77,20 +75,16 @@ public:
         return ss::make_ready_future<size_t>(written);
     }
 
-    ss::future<size_t> read_dma(
-      const uint64_t pos,
-      void* buffer,
-      const size_t len,
-      const ss::io_priority_class&) final {
+    ss::future<size_t>
+    read_dma(const uint64_t pos, void* buffer, const size_t len, ss::io_intent*)
+      final {
         vlog(logger().info, "read_dma pos {} len {}", pos, len);
         auto ret = read(pos, buffer, len);
         return ss::make_ready_future<size_t>(ret);
     }
 
     ss::future<size_t> read_dma(
-      const uint64_t pos,
-      const std::vector<iovec> iov,
-      const ss::io_priority_class&) final {
+      const uint64_t pos, const std::vector<iovec> iov, ss::io_intent*) final {
         vlog(logger().info, "read_iov_dma ({:02}) begin", iov.size());
         size_t bytes_read = 0;
         for (auto& io : iov) {
@@ -169,10 +163,8 @@ public:
           std::error_code(ENOTDIR, std::system_category()));
     }
 
-    ss::future<ss::temporary_buffer<uint8_t>> dma_read_bulk(
-      const uint64_t pos,
-      const size_t len,
-      const ss::io_priority_class&) final {
+    ss::future<ss::temporary_buffer<uint8_t>>
+    dma_read_bulk(const uint64_t pos, const size_t len, ss::io_intent*) final {
         vlog(logger().info, "dma_read_bulk pos {} len {}", pos, len);
         ss::temporary_buffer<uint8_t> data(std::min(len, _store.size - pos));
         auto bytes_read = read(pos, data.get_write(), len);

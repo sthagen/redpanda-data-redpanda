@@ -575,11 +575,10 @@ public:
         auto last_offset = res.value().last_offset;
 
         // Read data back starting from the last offset
-        auto reader
-          = partition
-              ->make_reader(storage::log_reader_config(
-                model::offset{0}, last_offset, ss::default_priority_class()))
-              .get();
+        auto reader = partition
+                        ->make_reader(storage::log_reader_config(
+                          model::offset{0}, last_offset))
+                        .get();
 
         return model::consume_reader_to_memory(
                  std::move(reader), model::no_timeout)

@@ -56,7 +56,8 @@ public:
       ss::sharded<cloud_storage::remote>&,
       ss::sharded<cloud_storage::cache>&,
       ss::sharded<node_status_table>&,
-      ss::sharded<cluster::metadata_cache>&);
+      ss::sharded<cluster::metadata_cache>&,
+      ss::scheduling_group);
 
     ~controller();
 
@@ -347,6 +348,7 @@ private:
     ss::sharded<plugin_table> _plugin_table;       // instance per core
     ss::sharded<plugin_backend> _plugin_backend;   // single instance
     bool _is_ready = false;
+    ss::scheduling_group _scheduling_group;
 };
 
 } // namespace cluster

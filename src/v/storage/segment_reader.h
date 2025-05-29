@@ -140,10 +140,9 @@ public:
 
     /// create an input stream _sharing_ the underlying file handle
     /// starting at position @pos
+    ss::future<segment_reader_handle> data_stream(size_t pos);
     ss::future<segment_reader_handle>
-    data_stream(size_t pos, const ss::io_priority_class);
-    ss::future<segment_reader_handle>
-    data_stream(size_t pos_begin, size_t pos_end, const ss::io_priority_class);
+    data_stream(size_t pos_begin, size_t pos_end);
 
 private:
     segment_full_path _path;
@@ -187,8 +186,7 @@ public:
     concat_segment_data_source_impl(
       std::vector<ss::lw_shared_ptr<segment>> segments,
       size_t start_pos,
-      size_t end_pos,
-      ss::io_priority_class priority_class);
+      size_t end_pos);
 
     /// Reads a buffer from the current underlying segment handle. Once the
     /// segment is depleted, moves over to the next segment, until all segments
@@ -218,7 +216,6 @@ private:
 
     // The file position upto which the last segment will be read.
     size_t _end_pos;
-    ss::io_priority_class _priority_class;
 
     ss::gate _gate;
     ss::sstring _name;
@@ -233,8 +230,7 @@ public:
     concat_segment_reader_view(
       std::vector<ss::lw_shared_ptr<segment>> segments,
       size_t start_pos,
-      size_t end_pos,
-      ss::io_priority_class priority_class);
+      size_t end_pos);
 
     /// Moves the composite input stream out of the view.
     ss::input_stream<char> take_stream() override;

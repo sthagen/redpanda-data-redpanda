@@ -52,10 +52,7 @@ static inline ss::future<> persist_log_file(
             },
             [base_dir]() {
                 return storage::log_config(
-                  base_dir,
-                  1_GiB,
-                  ss::default_priority_class(),
-                  storage::make_sanitized_file_config());
+                  base_dir, 1_GiB, storage::make_sanitized_file_config());
             },
             std::ref(feature_table))
           .get();
@@ -67,9 +64,7 @@ static inline ss::future<> persist_log_file(
               .then([b = std::move(batches)](
                       ss::shared_ptr<storage::log> log) mutable {
                   storage::log_append_config cfg{
-                    storage::log_append_config::fsync::yes,
-                    ss::default_priority_class(),
-                    model::no_timeout};
+                    storage::log_append_config::fsync::yes, model::no_timeout};
                   auto reader = model::make_memory_record_batch_reader(
                     std::move(b));
                   return std::move(reader)
@@ -130,10 +125,7 @@ read_log_file(ss::sstring base_dir, model::ntp file_ntp) {
             },
             [base_dir]() {
                 return storage::log_config(
-                  base_dir,
-                  1_GiB,
-                  ss::default_priority_class(),
-                  storage::make_sanitized_file_config());
+                  base_dir, 1_GiB, storage::make_sanitized_file_config());
             },
             std::ref(feature_table))
           .get();
@@ -146,8 +138,7 @@ read_log_file(ss::sstring base_dir, model::ntp file_ntp) {
                       return log
                         ->make_reader(storage::log_reader_config(
                           model::offset(0),
-                          model::model_limits<model::offset>::max(),
-                          ss::default_priority_class()))
+                          model::model_limits<model::offset>::max()))
                         .then([](model::record_batch_reader reader) {
                             return std::move(reader).consume(
                               to_vector_consumer(), model::no_timeout);

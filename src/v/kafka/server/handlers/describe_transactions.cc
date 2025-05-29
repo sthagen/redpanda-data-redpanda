@@ -20,7 +20,6 @@
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
-#include "resource_mgmt/io_priority.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/when_all.hh>

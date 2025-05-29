@@ -21,8 +21,6 @@
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
-#include <seastar/core/io_priority_class.hh>
-
 #include <absl/container/btree_map.h>
 
 using namespace tests;
@@ -70,7 +68,7 @@ FIXTURE_TEST(replicate_after_compaction, compaction_multinode_test) {
     auto [_, first_partition] = get_leader(ntp);
     auto first_log = first_partition->log();
     first_log->flush().get();
-    first_log->force_roll(ss::default_priority_class()).get();
+    first_log->force_roll().get();
     BOOST_REQUIRE_EQUAL(first_log->segment_count(), 2);
     ss::abort_source as;
     storage::housekeeping_config conf(
@@ -78,7 +76,6 @@ FIXTURE_TEST(replicate_after_compaction, compaction_multinode_test) {
       std::nullopt,
       first_log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     first_log->housekeeping(conf).get();
 
@@ -118,7 +115,7 @@ FIXTURE_TEST(replicate_after_compaction, compaction_multinode_test) {
     new_producer.produce_to_partition(topic, pid, kv_t::sequence(0, 5)).get();
     auto new_log = new_partition->log();
     new_log->flush().get();
-    new_log->force_roll(ss::default_priority_class()).get();
+    new_log->force_roll().get();
 
     // The segments should maintain their last records.
     // {[3]} {[5]} {[0 1 2 3 4 5]}
@@ -127,7 +124,6 @@ FIXTURE_TEST(replicate_after_compaction, compaction_multinode_test) {
       std::nullopt,
       new_log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     new_log->housekeeping(conf2).get();
 
@@ -190,17 +186,16 @@ FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
 
     exec.execute(std::move(ops)).get();
     first_partition->log()->flush().get();
-    first_partition->log()->force_roll(ss::default_priority_class()).get();
+    first_partition->log()->force_roll().get();
 
     first_log->flush().get();
-    first_log->force_roll(ss::default_priority_class()).get();
+    first_log->force_roll().get();
     ss::abort_source as;
     storage::housekeeping_config conf(
       model::timestamp::min(),
       std::nullopt,
       first_log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     first_log->housekeeping(conf).get();
 
@@ -222,14 +217,13 @@ FIXTURE_TEST(compact_transactions_and_replicate, compaction_multinode_test) {
 
     auto new_log = new_partition->log();
     new_log->flush().get();
-    new_log->force_roll(ss::default_priority_class()).get();
+    new_log->force_roll().get();
 
     storage::housekeeping_config conf2(
       model::timestamp::min(),
       std::nullopt,
       new_log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     new_log->housekeeping(conf2).get();
     exec.validate(new_log, 2).get();

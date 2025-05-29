@@ -91,7 +91,12 @@ archiver_fixture::archiver_fixture()
     auto sharded_creds_source = ss::sharded_parameter(
       [cfg = remote_cfg] { return cfg.cloud_credentials_source; });
     pool.start(remote_cfg.connection_limit(), sharded_client_conf).get();
-    io.start(std::ref(pool), sharded_client_conf, sharded_creds_source).get();
+    io.start(
+        std::ref(pool),
+        sharded_client_conf,
+        sharded_creds_source,
+        ss::sharded_parameter([] { return ss::default_scheduling_group(); }))
+      .get();
     io.local().start().get();
 
     // Init remote api
@@ -238,7 +243,6 @@ archiver_fixture::get_started_log_builder(
     auto conf = storage::log_config(
       config::node().data_directory().as_sstring(),
       1_MiB,
-      ss::default_priority_class(),
       storage::make_sanitized_file_config());
     auto builder = std::make_unique<storage::disk_log_builder>(std::move(conf));
     builder->start(std::move(ntp_cfg)).get();
@@ -283,7 +287,6 @@ void archiver_fixture::initialize_shard(
                        storage::ntp_config(d.ntp, data_dir.string()),
                        d.base_offset,
                        d.term,
-                       ss::default_priority_class(),
                        128_KiB,
                        10,
                        1_MiB)
@@ -380,8 +383,7 @@ void segment_matcher<Fixture>::verify_segment(
     auto segment = get_segment(ntp, name);
     auto pos = segment->offsets().get_base_offset();
     auto size = segment->size_bytes();
-    auto reader_handle
-      = segment->offset_data_stream(pos, ss::default_priority_class()).get();
+    auto reader_handle = segment->offset_data_stream(pos).get();
     auto tmp = reader_handle.stream().read_exactly(size).get();
     reader_handle.close().get();
     ss::sstring actual = {tmp.get(), tmp.size()};
@@ -402,8 +404,7 @@ void segment_matcher<Fixture>::verify_index(
     auto segment = get_segment(ntp, name);
     auto meta = pm.get(name);
     auto pos = segment->offsets().get_base_offset();
-    auto reader_handle
-      = segment->offset_data_stream(pos, ss::default_priority_class()).get();
+    auto reader_handle = segment->offset_data_stream(pos).get();
     cloud_storage::offset_index ix{
       meta->base_offset,
       meta->base_kafka_offset(),
@@ -453,7 +454,7 @@ void segment_matcher<Fixture>::verify_segments(
       [this, &ntp](auto n) { return get_segment(ntp, n); });
 
     storage::concat_segment_reader_view v{
-      segments, 0, segments.back()->size_bytes(), ss::default_priority_class()};
+      segments, 0, segments.back()->size_bytes()};
 
     auto expected_size = std::accumulate(
       segments.begin(),

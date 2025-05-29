@@ -108,7 +108,6 @@ public:
                     std::nullopt,
                     log->stm_manager()->max_removable_local_log_offset(),
                     std::nullopt,
-                    ss::default_priority_class(),
                     dummy_as,
                   })
                   .handle_exception_type(
@@ -129,9 +128,7 @@ public:
     validate(ss::shared_ptr<storage::log> log, int expected_fences) {
         auto lstats = log->offsets();
         storage::log_reader_config cfg(
-          lstats.start_offset,
-          lstats.committed_offset,
-          ss::default_priority_class());
+          lstats.start_offset, lstats.committed_offset);
         auto reader = co_await log->make_reader(cfg);
         auto batches = co_await copy_to_mem(reader);
 
@@ -220,7 +217,7 @@ public:
 
         //---- Step 3: Force a roll and compact the log.
         log->flush().get();
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
         if (!s._compact) {
             return;
         }
@@ -230,7 +227,6 @@ public:
           std::nullopt,
           model::offset::max(),
           std::nullopt,
-          ss::default_priority_class(),
           as);
         // Compacts until a single sealed segment remains, other than the
         // currently active one.
@@ -344,9 +340,7 @@ public:
     public:
         explicit roll_op(tx_op_ctx&& ctx, int weight)
           : tx_op(std::move(ctx), weight) {}
-        ss::future<> execute() override {
-            co_await _ctx._log->force_roll(ss::default_priority_class());
-        }
+        ss::future<> execute() override { co_await _ctx._log->force_roll(); }
         tx_op_type type() override { return tx_op_type::roll; }
         ss::sstring debug() override { return "roll log"; }
     };

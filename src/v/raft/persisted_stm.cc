@@ -95,8 +95,7 @@ file_backed_stm_snapshot::file_backed_stm_snapshot(
   , _log(log)
   , _snapshot_mgr(
       std::filesystem::path(c->log_config().work_directory()),
-      std::move(snapshot_name),
-      ss::default_priority_class()) {}
+      std::move(snapshot_name)) {}
 
 ss::future<> file_backed_stm_snapshot::perform_initial_cleanup() {
     // Do nothing as the log directory name contains the partition revision,

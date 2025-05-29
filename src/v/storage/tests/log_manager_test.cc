@@ -57,10 +57,7 @@ inline ss::sstring test_directory() {
 
 log_config make_config() {
     return log_config{
-      test_directory(),
-      1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()};
+      test_directory(), 1024, storage::make_sanitized_file_config()};
 }
 
 ntp_config config_from_ntp(const model::ntp& ntp) {
@@ -108,7 +105,6 @@ TEST(LogManagerTest, test_can_load_logs) {
                   ntps[0],
                   model::offset(10),
                   model::term_id(1),
-                  ss::default_priority_class(),
                   default_segment_readahead_size,
                   default_segment_readahead_count,
                   0)
@@ -121,7 +117,6 @@ TEST(LogManagerTest, test_can_load_logs) {
                    ntps[2],
                    model::offset(20),
                    model::term_id(1),
-                   ss::default_priority_class(),
                    default_segment_readahead_size,
                    default_segment_readahead_count,
                    1_MiB)
@@ -133,7 +128,6 @@ TEST(LogManagerTest, test_can_load_logs) {
                    ntps[3],
                    model::offset(2),
                    model::term_id(1),
-                   ss::default_priority_class(),
                    default_segment_readahead_size,
                    default_segment_readahead_count,
                    1_MiB)

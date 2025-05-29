@@ -37,7 +37,6 @@
 #include "model/timeout_clock.h"
 #include "net/connection.h"
 #include "random/generators.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/semaphore.h"
 #include "storage/parser_utils.h"
 #include "utils/to_string.h"
@@ -99,7 +98,6 @@ static ss::future<read_result> read_from_partition(
       config.max_offset,
       0,
       config.max_bytes,
-      kafka_read_priority(),
       std::nullopt,
       std::nullopt,
       config.abort_source.has_value()

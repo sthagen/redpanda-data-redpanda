@@ -17,7 +17,6 @@
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/testing/thread_test_case.hh>
 
@@ -158,24 +157,19 @@ ss::future<ot_state> arrange_and_compact(
             if (
               !arrangement.empty() && b.base_offset() >= arrangement.front()) {
                 arrangement.pop_front();
-                co_await b1.get_disk_log_impl().force_roll(
-                  ss::default_priority_class());
+                co_await b1.get_disk_log_impl().force_roll();
             }
         }
         ss::abort_source as;
         auto compact_cfg = storage::compaction_config(
-          batches.back().last_offset(),
-          std::nullopt,
-          ss::default_priority_class(),
-          as);
+          batches.back().last_offset(), std::nullopt, as);
         std::ignore = co_await b1.apply_sliding_window_compaction(compact_cfg);
         co_await b1.apply_adjacent_merge_compaction(compact_cfg);
     } catch (...) {
         error = std::current_exception();
     }
     auto reader = co_await b1.get_disk_log_impl().make_reader(
-      storage::log_reader_config(
-        model::offset{0}, model::offset::max(), ss::default_priority_class()));
+      storage::log_reader_config(model::offset{0}, model::offset::max()));
     ot_state st{};
     co_await std::move(reader).consume(
       ot_state_consumer{.st = &st}, model::no_timeout);

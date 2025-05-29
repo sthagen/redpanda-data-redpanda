@@ -27,7 +27,6 @@
 #include "test_utils/archival.h"
 #include "test_utils/tmp_dir.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
@@ -255,10 +254,8 @@ SEASTAR_THREAD_TEST_CASE(test_make_upload_candidate_stream) {
     BOOST_REQUIRE_EQUAL(collector.end_inclusive(), model::offset{39});
     BOOST_REQUIRE_EQUAL(3, collector.segments().size());
 
-    auto result = collector
-                    .make_upload_candidate_stream(
-                      ss::default_priority_class(), segment_lock_timeout)
-                    .get();
+    auto result
+      = collector.make_upload_candidate_stream(segment_lock_timeout).get();
     BOOST_REQUIRE(!result.has_failure());
     BOOST_REQUIRE(result.value().skip_offset_range == false);
 
@@ -305,10 +302,8 @@ SEASTAR_THREAD_TEST_CASE(test_make_upload_candidate_skip_offsets) {
       model::offset{4}, m, b.get_disk_log_impl(), max_upload_size};
 
     collector.collect_segments();
-    auto result = collector
-                    .make_upload_candidate_stream(
-                      ss::default_priority_class(), segment_lock_timeout)
-                    .get();
+    auto result
+      = collector.make_upload_candidate_stream(segment_lock_timeout).get();
     BOOST_REQUIRE(!result.has_failure());
     BOOST_REQUIRE(result.value().skip_offset_range == true);
     BOOST_REQUIRE_EQUAL(result.value().end_offset, model::offset{39});
@@ -880,10 +875,7 @@ SEASTAR_THREAD_TEST_CASE(test_upload_candidate_generation) {
     BOOST_REQUIRE(collector.should_replace_manifest_segment());
 
     auto upload_with_locks = require_upload_candidate(
-      collector
-        .make_upload_candidate(
-          ss::default_priority_class(), segment_lock_timeout)
-        .get());
+      collector.make_upload_candidate(segment_lock_timeout).get());
 
     auto upload_candidate = upload_with_locks.candidate;
     BOOST_REQUIRE(!upload_candidate.sources.empty());
@@ -966,10 +958,7 @@ SEASTAR_THREAD_TEST_CASE(test_upload_aligned_to_non_existent_offset) {
     BOOST_REQUIRE(collector.should_replace_manifest_segment());
 
     auto upload_with_locks = require_upload_candidate(
-      collector
-        .make_upload_candidate(
-          ss::default_priority_class(), segment_lock_timeout)
-        .get());
+      collector.make_upload_candidate(segment_lock_timeout).get());
 
     // The upload candidate should align with the manifest's segment
     // boundaries.
@@ -1045,8 +1034,7 @@ SEASTAR_THREAD_TEST_CASE(test_same_size_reupload_skipped) {
         BOOST_REQUIRE(collector.should_replace_manifest_segment());
 
         require_skip_offset(
-          collector.make_upload_candidate(ss::default_priority_class(), 1s)
-            .get(),
+          collector.make_upload_candidate(1s).get(),
           candidate_creation_error::upload_size_unchanged,
           model::offset{1});
     }
@@ -1088,8 +1076,7 @@ SEASTAR_THREAD_TEST_CASE(test_same_size_reupload_skipped) {
         BOOST_REQUIRE(collector.should_replace_manifest_segment());
 
         require_skip_offset(
-          collector.make_upload_candidate(ss::default_priority_class(), 1s)
-            .get(),
+          collector.make_upload_candidate(1s).get(),
           candidate_creation_error::upload_size_unchanged,
           model::offset{3});
     }
@@ -1358,7 +1345,7 @@ SEASTAR_THREAD_TEST_CASE(test_adjacent_segment_collection) {
 
     collector.collect_segments(segment_collector_mode::non_compacted_reupload);
     auto candidate = require_upload_candidate(
-      collector.make_upload_candidate(ss::default_priority_class(), 10s).get());
+      collector.make_upload_candidate(10s).get());
     BOOST_REQUIRE_EQUAL(
       candidate.candidate.starting_offset, model::offset{104});
     BOOST_REQUIRE_EQUAL(candidate.candidate.final_offset, model::offset{115});
@@ -1570,8 +1557,7 @@ SEASTAR_THREAD_TEST_CASE(test_segment_concurrent_compaction) {
 
     // The three compacted segments are collected, with the begin and end
     // markers set to align with manifest segment.
-    auto candidate
-      = collector.make_upload_candidate(ss::default_priority_class(), 1s).get();
+    auto candidate = collector.make_upload_candidate(1s).get();
     BOOST_REQUIRE(std::holds_alternative<candidate_creation_error>(candidate));
     BOOST_REQUIRE(
       std::get<candidate_creation_error>(candidate)
@@ -1948,9 +1934,7 @@ SEASTAR_THREAD_TEST_CASE(test_new_segment_upload_fuzz) {
     // Consume the log to find all batch boundaries
     auto reader = b.get_disk_log_impl()
                     .make_reader(storage::log_reader_config(
-                      model::offset{0},
-                      model::offset{last_offset},
-                      ss::default_priority_class()))
+                      model::offset{0}, model::offset{last_offset}))
                     .get();
 
     vlog(testlog.info, "Consuming from the log 0 - {}", last_offset);
@@ -1989,10 +1973,7 @@ SEASTAR_THREAD_TEST_CASE(test_new_segment_upload_fuzz) {
                                         auto start_bound,
                                         auto end_bound,
                                         size_t expected_size) {
-            auto candidate = collector
-                               .make_upload_candidate(
-                                 ss::default_priority_class(), 10s)
-                               .get();
+            auto candidate = collector.make_upload_candidate(10s).get();
             BOOST_REQUIRE(
               std::holds_alternative<upload_candidate_with_locks>(candidate));
             auto& c = std::get<upload_candidate_with_locks>(candidate);

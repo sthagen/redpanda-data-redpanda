@@ -184,7 +184,7 @@ FIXTURE_TEST(conditional_retention_test, consumer_offsets_fixture) {
     log->set_overrides(ov);
     log->notify_compaction_update();
     log->flush().get();
-    log->force_roll(ss::default_priority_class()).get();
+    log->force_roll().get();
     for (auto retention_enabled : {false, true}) {
         // number of partitions of CO topic.
         cfg.get("unsafe_enable_consumer_offsets_delete_retention")

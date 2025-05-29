@@ -15,7 +15,6 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/timestamp.h"
-#include "resource_mgmt/io_priority.h"
 #include "resource_mgmt/memory_groups.h"
 #include "ssx/async-clear.h"
 #include "ssx/future-util.h"
@@ -79,14 +78,14 @@ using logs_type = absl::flat_hash_map<model::ntp, log_housekeeping_meta>;
 log_config::log_config(
   ss::sstring directory,
   size_t segment_size,
-  ss::io_priority_class compaction_priority,
+
   std::optional<file_sanitize_config> file_cfg) noexcept
   : base_dir(std::move(directory))
   , max_segment_size(config::mock_binding<size_t>(std::move(segment_size)))
   , segment_size_jitter(0) // For deterministic behavior in unit tests.
   , compacted_segment_size(config::mock_binding<size_t>(256_MiB))
   , max_compacted_segment_size(config::mock_binding<size_t>(5_GiB))
-  , compaction_priority(compaction_priority)
+
   , retention_bytes(config::mock_binding<std::optional<size_t>>(std::nullopt))
   , compaction_interval(
       config::mock_binding<std::chrono::milliseconds>(std::chrono::minutes(10)))
@@ -98,14 +97,10 @@ log_config::log_config(
 log_config::log_config(
   ss::sstring directory,
   size_t segment_size,
-  ss::io_priority_class compaction_priority,
+
   with_cache with,
   std::optional<file_sanitize_config> file_cfg) noexcept
-  : log_config(
-      std::move(directory),
-      segment_size,
-      compaction_priority,
-      std::move(file_cfg)) {
+  : log_config(std::move(directory), segment_size, std::move(file_cfg)) {
     cache = with;
 }
 
@@ -115,7 +110,7 @@ log_config::log_config(
   config::binding<size_t> compacted_segment_size,
   config::binding<size_t> max_compacted_segment_size,
   jitter_percents segment_size_jitter,
-  ss::io_priority_class compaction_priority,
+
   config::binding<std::optional<size_t>> ret_bytes,
   config::binding<std::chrono::milliseconds> compaction_ival,
   config::binding<std::optional<std::chrono::milliseconds>> log_ret,
@@ -129,7 +124,7 @@ log_config::log_config(
   , segment_size_jitter(segment_size_jitter)
   , compacted_segment_size(std::move(compacted_segment_size))
   , max_compacted_segment_size(std::move(max_compacted_segment_size))
-  , compaction_priority(compaction_priority)
+
   , retention_bytes(std::move(ret_bytes))
   , compaction_interval(std::move(compaction_ival))
   , log_retention(std::move(log_ret))
@@ -466,7 +461,6 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
           _config.retention_bytes(),
           max_compactible_offset,
           current_log.handle->config().tombstone_retention_ms(),
-          _config.compaction_priority,
           _abort_source,
           std::move(ntp_sanitizer_cfg),
           _compaction_hash_key_map.get()));
@@ -686,7 +680,6 @@ ss::future<ss::lw_shared_ptr<segment>> log_manager::make_log_segment(
   const ntp_config& ntp,
   model::offset base_offset,
   model::term_id term,
-  ss::io_priority_class pc,
   size_t read_buf_size,
   unsigned read_ahead,
   size_t segment_size_hint,
@@ -699,7 +692,6 @@ ss::future<ss::lw_shared_ptr<segment>> log_manager::make_log_segment(
       ntp,
       base_offset,
       term,
-      pc,
       version,
       read_buf_size,
       read_ahead,

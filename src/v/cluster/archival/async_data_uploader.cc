@@ -15,7 +15,6 @@
 #include "cluster/archival/types.h"
 #include "model/record.h"
 #include "model/timeout_clock.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 #include "storage/disk_log_impl.h"
 #include "storage/offset_to_filepos.h"
@@ -238,8 +237,7 @@ ss::future<result<void>> segment_upload::initialize(
       range);
     // Create a log reader config to scan the uploaded offset
     // range. We should skip the batch cache.
-    storage::log_reader_config reader_cfg(
-      range.base, range.last, priority_manager::local().archival_priority());
+    storage::log_reader_config reader_cfg(range.base, range.last);
     reader_cfg.skip_batch_cache = true;
     reader_cfg.skip_readers_cache = true;
     vlog(_ctxlog.debug, "Creating log reader, config: {}", reader_cfg);
@@ -264,9 +262,7 @@ ss::future<result<void>> segment_upload::initialize(
     // Create a log reader config to scan the uploaded offset
     // range. We should skip the batch cache.
     storage::log_reader_config reader_cfg(
-      params.value().offsets.base,
-      params.value().offsets.last,
-      priority_manager::local().archival_priority());
+      params.value().offsets.base, params.value().offsets.last);
     reader_cfg.skip_batch_cache = true;
     reader_cfg.skip_readers_cache = true;
     vlog(_ctxlog.debug, "Creating log reader, config: {}", reader_cfg);
@@ -301,9 +297,7 @@ segment_upload::compute_upload_parameters(
         if (std::holds_alternative<inclusive_offset_range>(input)) {
             auto range = std::get<inclusive_offset_range>(input);
             sz = co_await _part->log()->offset_range_size(
-              range.base,
-              range.last,
-              priority_manager::local().archival_priority());
+              range.base, range.last);
         } else {
             auto range = std::get<size_limited_offset_range>(input);
             sz = co_await _part->log()->offset_range_size(
@@ -311,8 +305,7 @@ segment_upload::compute_upload_parameters(
               storage::log::offset_range_size_requirements_t{
                 .target_size = range.max_size,
                 .min_size = range.min_size,
-              },
-              priority_manager::local().archival_priority());
+              });
         }
         if (!sz.has_value()) {
             // This means that there is not enough data in the log

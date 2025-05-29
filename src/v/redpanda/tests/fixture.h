@@ -603,10 +603,7 @@ public:
 
     storage::log_config make_default_config() {
         return storage::log_config(
-          data_dir.string(),
-          1_GiB,
-          ss::default_priority_class(),
-          storage::make_sanitized_file_config());
+          data_dir.string(), 1_GiB, storage::make_sanitized_file_config());
     }
 
     ss::future<> wait_for_topics(std::vector<cluster::topic_result> results) {
@@ -803,7 +800,6 @@ public:
                 maybe_compress_batches::yes,
                 log_append_config{
                   .should_fsync = log_append_config::fsync::yes,
-                  .io_priority = ss::default_priority_class(),
                   .timeout = model::no_timeout},
                 disk_log_builder::should_flush_after::yes,
                 base_ts)

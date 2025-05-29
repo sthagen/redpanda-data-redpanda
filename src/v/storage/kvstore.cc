@@ -48,8 +48,7 @@ kvstore::kvstore(
   , _ntpc(model::kvstore_ntp(shard), _conf.base_dir)
   , _snap(
       std::filesystem::path(_ntpc.work_directory()),
-      simple_snapshot_manager::default_snapshot_filename,
-      ss::default_priority_class())
+      simple_snapshot_manager::default_snapshot_filename)
   , _timer([this] { _sem.signal(); }) {
     if (_conf.sanitizer_config) {
         _ntp_sanitizer_config = _conf.sanitizer_config->get_config_for_ntp(
@@ -299,7 +298,6 @@ ss::future<> kvstore::roll() {
                  _ntpc,
                  model::offset(_next_offset),
                  model::term_id(0),
-                 ss::default_priority_class(),
                  record_version_type::v1,
                  config::shard_local_cfg().storage_read_buffer_size(),
                  config::shard_local_cfg().storage_read_readahead_count(),
@@ -343,7 +341,6 @@ ss::future<> kvstore::roll() {
                        _ntpc,
                        model::offset(_next_offset),
                        model::term_id(0),
-                       ss::default_priority_class(),
                        record_version_type::v1,
                        config::shard_local_cfg().storage_read_buffer_size(),
                        config::shard_local_cfg().storage_read_readahead_count(),
@@ -569,8 +566,7 @@ ss::future<> kvstore::replay_segments(segment_set segs) {
           seg->offsets().get_base_offset(),
           _next_offset);
 
-        auto reader_handle = co_await seg->reader().data_stream(
-          0, ss::default_priority_class());
+        auto reader_handle = co_await seg->reader().data_stream(0);
         auto parser = std::make_unique<continuous_batch_parser>(
           std::make_unique<replay_consumer>(this), std::move(reader_handle));
         auto p = parser.get();

@@ -103,9 +103,7 @@ ss::file open_file(std::string_view filename) {
 segment_appender
 make_segment_appender(ss::file file, storage::storage_resources& resources) {
     return segment_appender(
-      std::move(file),
-      segment_appender::options(
-        ss::default_priority_class(), 1, std::nullopt, resources));
+      std::move(file), segment_appender::options(1, std::nullopt, resources));
 }
 
 iobuf make_random_data(size_t len) {

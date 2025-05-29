@@ -77,9 +77,7 @@ struct WriteAtOffsetStmFixture
 
     ss::future<bool> validate_node_offsets(raft_node_instance& node) {
         storage::log_reader_config r_cfg(
-          node.raft()->start_offset(),
-          model::offset::max(),
-          ss::default_priority_class());
+          node.raft()->start_offset(), model::offset::max());
         r_cfg.translate_offsets = storage::translate_offsets::yes;
         auto rdr = co_await node.raft()->make_reader(r_cfg);
 

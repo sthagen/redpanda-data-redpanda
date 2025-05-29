@@ -12,7 +12,6 @@
 #include "metrics/metrics.h"
 
 #include <seastar/core/gate.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/metrics_registration.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/util/log.hh>
@@ -28,7 +27,6 @@ struct backlog_controller_config {
       int initial_shares,
       std::chrono::milliseconds sampling_interval,
       ss::scheduling_group sg,
-      ss::io_priority_class iopc,
       int min_shares,
       int max_shares);
 
@@ -40,7 +38,6 @@ struct backlog_controller_config {
     int initial_shares;
     std::chrono::milliseconds sampling_interval;
     ss::scheduling_group scheduling_group;
-    ss::io_priority_class io_priority;
     int min_shares;
     int max_shares;
 };
@@ -116,7 +113,6 @@ private:
     ss::timer<> _sampling_timer;
     // controlled resources
     ss::scheduling_group _scheduling_group;
-    ss::io_priority_class _io_priority;
     // state
     int64_t _current_backlog{0};
     int64_t _prev_error{0};

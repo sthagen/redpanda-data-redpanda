@@ -251,7 +251,9 @@ public:
             ss::sharded_parameter(
               [this] { return get_client_configuration(); }),
             ss::sharded_parameter(
-              [] { return model::cloud_credentials_source::config_file; }))
+              [] { return model::cloud_credentials_source::config_file; }),
+            ss::sharded_parameter(
+              [] { return ss::default_scheduling_group(); }))
           .get();
         _io.invoke_on_all([](cloud_io::remote& io) { return io.start(); })
           .get();

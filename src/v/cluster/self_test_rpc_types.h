@@ -25,7 +25,6 @@
 #include "serde/rw/vector.h"
 #include "utils/uuid.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/scheduling.hh>
 
 namespace cluster {

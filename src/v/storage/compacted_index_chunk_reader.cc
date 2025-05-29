@@ -35,12 +35,10 @@ namespace storage::internal {
 compacted_index_chunk_reader::compacted_index_chunk_reader(
   segment_full_path path,
   ss::file in,
-  ss::io_priority_class pc,
   size_t max_chunk_memory,
   ss::abort_source* as) noexcept
   : compacted_index_reader::impl(std::move(path))
   , _handle(std::move(in))
-  , _iopc(pc)
   , _max_chunk_memory(max_chunk_memory)
   , _as(as) {}
 
@@ -52,7 +50,6 @@ ss::future<> compacted_index_chunk_reader::verify_integrity() {
         // NOTE: these are *different* options from other methods in this class
         ss::file_input_stream_options options;
         options.buffer_size = 4096;
-        options.io_priority_class = _iopc;
         options.read_ahead = 1;
         return ss::do_with(
                  int64_t(_footer->size),
@@ -124,7 +121,6 @@ compacted_index_chunk_reader::load_footer() {
 
     ss::file_input_stream_options options;
     options.buffer_size = 4096;
-    options.io_priority_class = _iopc;
     options.read_ahead = 0;
     auto in = ss::make_file_input_stream(
       _handle,
@@ -269,14 +265,10 @@ operator<<(std::ostream& o, const compacted_index_chunk_reader& r) {
 
 namespace storage {
 compacted_index_reader make_file_backed_compacted_reader(
-  segment_full_path path,
-  ss::file f,
-  ss::io_priority_class iopc,
-  size_t step_chunk,
-  ss::abort_source* as) {
+  segment_full_path path, ss::file f, size_t step_chunk, ss::abort_source* as) {
     return compacted_index_reader(
       ss::make_shared<internal::compacted_index_chunk_reader>(
-        std::move(path), std::move(f), iopc, step_chunk, as));
+        std::move(path), std::move(f), step_chunk, as));
 }
 
 } // namespace storage

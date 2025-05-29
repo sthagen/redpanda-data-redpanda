@@ -19,7 +19,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <chrono>
@@ -60,8 +59,7 @@ PERF_TEST_C(read_pipeline_bench, propagation_latency) {
     ct::core::read_pipeline<> pipeline;
     read_pipeline_sink sink(pipeline);
     sink.start();
-    storage::log_reader_config cfg(
-      model::offset(), model::offset(), ss::default_priority_class());
+    storage::log_reader_config cfg{model::offset(), model::offset()};
 
     perf_tests::start_measuring_time();
     perf_tests::do_not_optimize(co_await pipeline.make_reader(

@@ -650,8 +650,7 @@ ss::future<append_result> segment::append(model::record_batch&& b) {
     });
 }
 
-ss::future<segment_reader_handle>
-segment::offset_data_stream(model::offset o, ss::io_priority_class iopc) {
+ss::future<segment_reader_handle> segment::offset_data_stream(model::offset o) {
     check_segment_not_closed("offset_data_stream()");
     auto nearest = _idx.find_nearest(o);
     size_t position = 0;
@@ -663,7 +662,7 @@ segment::offset_data_stream(model::offset o, ss::io_priority_class iopc) {
     // size) (https://github.com/redpanda-data/redpanda/issues/2101)
     vassert(position < size_bytes(), "Index points beyond file size");
 
-    return _reader->data_stream(position, iopc);
+    return _reader->data_stream(position);
 }
 
 void segment::advance_stable_offset(size_t filepos) {
@@ -805,7 +804,6 @@ ss::future<ss::lw_shared_ptr<segment>> make_segment(
   const ntp_config& ntpc,
   model::offset base_offset,
   model::term_id term,
-  ss::io_priority_class pc,
   record_version_type version,
   size_t buf_size,
   unsigned read_ahead,
@@ -824,26 +822,16 @@ ss::future<ss::lw_shared_ptr<segment>> make_segment(
              resources,
              feature_table,
              ntp_sanitizer_config)
-      .then([path,
-             &ntpc,
-             pc,
-             segment_size_hint,
-             &resources,
-             ntp_sanitizer_config](ss::lw_shared_ptr<segment> seg) mutable {
+      .then([path, &ntpc, segment_size_hint, &resources, ntp_sanitizer_config](
+              ss::lw_shared_ptr<segment> seg) mutable {
           return with_segment(
             std::move(seg),
-            [path,
-             &ntpc,
-             pc,
-             segment_size_hint,
-             &resources,
-             ntp_sanitizer_config](
+            [path, &ntpc, segment_size_hint, &resources, ntp_sanitizer_config](
               const ss::lw_shared_ptr<segment>& seg) mutable {
                 return internal::make_segment_appender(
                          path,
                          internal::number_of_chunks_from_config(ntpc),
                          segment_size_hint,
-                         pc,
                          resources,
                          std::move(ntp_sanitizer_config))
                   .then([seg, &resources](segment_appender_ptr a) {
@@ -861,19 +849,18 @@ ss::future<ss::lw_shared_ptr<segment>> make_segment(
                   });
             });
       })
-      .then([path, &ntpc, pc, &resources, ntp_sanitizer_config](
+      .then([path, &ntpc, &resources, ntp_sanitizer_config](
               ss::lw_shared_ptr<segment> seg) mutable {
           if (!ntpc.is_compacted()) {
               return ss::make_ready_future<ss::lw_shared_ptr<segment>>(seg);
           }
           return with_segment(
             seg,
-            [path, pc, &resources, ntp_sanitizer_config](
+            [path, &resources, ntp_sanitizer_config](
               const ss::lw_shared_ptr<segment>& seg) mutable {
                 auto compacted_path = path.to_compacted_index();
                 auto compact = make_file_backed_compacted_index(
                   compacted_path,
-                  pc,
                   false,
                   resources,
                   std::move(ntp_sanitizer_config));

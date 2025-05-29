@@ -18,7 +18,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/circular_buffer.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/sharded.hh>
@@ -55,9 +54,7 @@ TEST_F_CORO(placeholder_extent_fixture, full_scan_test) {
     produce_placeholders(true, 1);
     auto underlying = make_log_reader();
     storage::log_reader_config config(
-      model::offset(0),
-      get_expected_committed_offset(),
-      ss::default_priority_class());
+      model::offset(0), get_expected_committed_offset());
     ss::abort_source as;
     retry_chain_node rtc(as, 1s, 100ms);
     auto reader = cloud_topics::make_placeholder_extent_reader(
@@ -109,7 +106,7 @@ ss::future<> test_aggregated_log_partial_scan(
     }
 
     auto underlying = fx->make_log_reader();
-    storage::log_reader_config config(base, last, ss::default_priority_class());
+    storage::log_reader_config config(base, last);
 
     ss::abort_source as;
     retry_chain_node rtc(as, 1s, 100ms);

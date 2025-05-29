@@ -178,8 +178,7 @@ ss::future<std::unique_ptr<continuous_batch_parser>>
 log_segment_batch_reader::initialize(
   model::timeout_clock::time_point timeout,
   std::optional<model::offset> next_cached_batch) {
-    auto input = co_await _seg.offset_data_stream(
-      _config.start_offset, _config.prio);
+    auto input = co_await _seg.offset_data_stream(_config.start_offset);
     co_return std::make_unique<continuous_batch_parser>(
       std::make_unique<skipping_consumer>(*this, timeout, next_cached_batch),
       std::move(input));

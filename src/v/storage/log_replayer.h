@@ -38,7 +38,7 @@ public:
     const checkpoint& last_checkpoint() const { return _ckpt; }
 
     // Must be called in the context of a ss::thread
-    checkpoint recover_in_thread(const ss::io_priority_class&);
+    checkpoint recover_in_thread();
 
 private:
     checkpoint _ckpt;

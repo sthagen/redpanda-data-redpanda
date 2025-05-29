@@ -25,7 +25,6 @@
 #include "test_utils/async.h"
 #include "test_utils/fixture.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -115,7 +114,9 @@ struct archival_metadata_stm_base_fixture
             ss::sharded_parameter(
               [this] { return cloud_cfg.local().client_config; }),
             ss::sharded_parameter(
-              [this] { return cloud_cfg.local().cloud_credentials_source; }))
+              [this] { return cloud_cfg.local().cloud_credentials_source; }),
+            ss::sharded_parameter(
+              [] { return ss::default_scheduling_group(); }))
           .get();
         cloud_io.invoke_on_all([](cloud_io::remote& io) { return io.start(); })
           .get();
@@ -651,8 +652,7 @@ ss::future<> make_old_snapshot(
 
     storage::simple_snapshot_manager tmp_snapshot_mgr(
       std::filesystem::path(ntp_cfg.work_directory()),
-      "archival_metadata.snapshot",
-      ss::default_priority_class());
+      "archival_metadata.snapshot");
 
     co_await cluster::details::archival_metadata_stm_accessor::persist_snapshot(
       tmp_snapshot_mgr, std::move(snapshot));

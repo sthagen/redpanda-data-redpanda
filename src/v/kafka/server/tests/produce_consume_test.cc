@@ -749,7 +749,7 @@ FIXTURE_TEST(test_basic_delete_around_batch, prod_consume_fixture) {
         })
       .get();
     log->flush().get();
-    log->force_roll(ss::default_priority_class()).get();
+    log->force_roll().get();
     BOOST_REQUIRE_EQUAL(2, log->segments().size());
 
     tests::kafka_consume_transport consumer(make_kafka_client().get());

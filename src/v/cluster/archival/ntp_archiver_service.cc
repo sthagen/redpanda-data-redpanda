@@ -246,7 +246,7 @@ ntp_archiver::ntp_archiver(
   , _remote(remote)
   , _cache(c)
   , _parent(parent)
-  , _policy(_ntp, conf->time_limit, conf->upload_io_priority)
+  , _policy(_ntp, conf->time_limit)
   , _gate()
   , _rtcnode(_as)
   , _rtclog(archival_log, _rtcnode, _ntp.path())
@@ -1307,14 +1307,10 @@ remote_segment_path ntp_archiver::segment_path_for_candidate(
 }
 
 static std::pair<ss::input_stream<char>, ss::input_stream<char>>
-split_segment_stream(
-  upload_candidate candidate, ss::io_priority_class priority) {
+split_segment_stream(upload_candidate candidate) {
     auto res = input_stream_fanout<2>(
       storage::concat_segment_reader_view{
-        candidate.sources,
-        candidate.file_offset,
-        candidate.final_file_offset,
-        priority}
+        candidate.sources, candidate.file_offset, candidate.final_file_offset}
         .take_stream(),
       config::shard_local_cfg().storage_read_readahead_count());
     return std::make_pair(
@@ -1370,7 +1366,7 @@ ss::future<cloud_storage::upload_result> ntp_archiver::do_upload_segment(
     };
 
     std::optional<ss::input_stream<char>> stream_state = std::move(stream);
-    auto reset_func = [this, candidate, &stream_state] {
+    auto reset_func = [candidate, &stream_state] {
         using provider_t = std::unique_ptr<stream_provider>;
         // On first attempt to upload, the stream-ref passed in is used.
         if (stream_state.has_value()) {
@@ -1385,8 +1381,7 @@ ss::future<cloud_storage::upload_result> ntp_archiver::do_upload_segment(
               std::make_unique<storage::concat_segment_reader_view>(
                 candidate.sources,
                 candidate.file_offset,
-                candidate.final_file_offset,
-                _conf->upload_io_priority));
+                candidate.final_file_offset));
         }
     };
 
@@ -1443,8 +1438,7 @@ ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
       candidate.remote_sources.empty(),
       "This method can only work with local segments");
 
-    auto [stream_upload, stream_index] = split_segment_stream(
-      candidate, _conf->upload_io_priority);
+    auto [stream_upload, stream_index] = split_segment_stream(candidate);
 
     auto path = segment_path_for_candidate(archiver_term, candidate);
 
@@ -2944,10 +2938,7 @@ ss::future<> ntp_archiver::apply_spillover() {
         // Put manifest into cache to avoid roundtrip to the cloud storage
         auto reservation = co_await _cache.reserve_space(len, 1);
         co_await _cache.put(
-          tail.get_manifest_path(remote_path_provider())(),
-          str,
-          reservation,
-          _conf->upload_io_priority);
+          tail.get_manifest_path(remote_path_provider())(), str, reservation);
 
         // Spillover manifests were uploaded to S3
         // Replicate metadata
@@ -3337,7 +3328,7 @@ ntp_archiver::find_reupload_candidate(manifest_scanner_t scanner) {
         collector.collect_segments(
           segment_collector_mode::non_compacted_reupload);
         auto candidate = co_await collector.make_upload_candidate(
-          _conf->upload_io_priority, _conf->segment_upload_timeout());
+          _conf->segment_upload_timeout());
 
         co_return ss::visit(
           candidate,

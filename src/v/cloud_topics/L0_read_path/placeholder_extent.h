@@ -18,7 +18,6 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/coroutine/as_future.hh>

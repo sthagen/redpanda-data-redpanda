@@ -96,15 +96,10 @@ public:
     uint64_t size_bytes_after_offset(model::offset o) const final;
 
     ss::future<std::optional<storage::log::offset_range_size_result_t>>
-    offset_range_size(
-      model::offset first,
-      model::offset last,
-      ss::io_priority_class io_priority) final;
+    offset_range_size(model::offset first, model::offset last) final;
 
     ss::future<std::optional<offset_range_size_result_t>> offset_range_size(
-      model::offset first,
-      offset_range_size_requirements_t target,
-      ss::io_priority_class io_priority) final;
+      model::offset first, offset_range_size_requirements_t target) final;
 
     bool is_compacted(model::offset first, model::offset last) const final;
 
@@ -124,7 +119,7 @@ public:
     const storage::segment_set& segments() const final;
     storage::segment_set& segments() final;
 
-    ss::future<> force_roll(ss::io_priority_class) final;
+    ss::future<> force_roll() final;
 
     storage::probe& get_probe() final;
 

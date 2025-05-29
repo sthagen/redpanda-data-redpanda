@@ -31,7 +31,6 @@
 #include "test_utils/test.h"
 
 #include <seastar/core/circular_buffer.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
@@ -136,8 +135,7 @@ public:
         }
 
         auto rdr = co_await raft_node.raft()->make_reader(
-          storage::log_reader_config(
-            start_offset, last_included_offset, ss::default_priority_class()));
+          storage::log_reader_config(start_offset, last_included_offset));
 
         auto batches = co_await model::consume_reader_to_memory(
           std::move(rdr), default_timeout());

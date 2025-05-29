@@ -55,7 +55,7 @@ class consensus;
  */
 class state_machine {
 public:
-    state_machine(consensus*, ss::logger& log, ss::io_priority_class io_prio);
+    state_machine(consensus*, ss::logger& log);
     state_machine(state_machine&&) = delete;
     state_machine(const state_machine&) = delete;
     state_machine& operator=(state_machine&&) = delete;
@@ -138,7 +138,6 @@ private:
     ss::future<> maybe_apply_raft_snapshot();
     bool stop_batch_applicator();
 
-    ss::io_priority_class _io_prio;
     ss::logger& _log;
     offset_monitor<model::offset> _waiters;
     model::offset _next;

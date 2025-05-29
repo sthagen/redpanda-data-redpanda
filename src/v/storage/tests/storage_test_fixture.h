@@ -114,7 +114,6 @@ public:
         auto cfg = storage::log_config(
           std::move(test_dir),
           200_MiB,
-          ss::default_priority_class(),
           cache,
           storage::make_sanitized_file_config());
         return cfg;
@@ -152,8 +151,7 @@ public:
     chunked_circular_buffer<model::record_batch> read_and_validate_all_batches(
       ss::shared_ptr<storage::log> log, model::offset max_offset) {
         auto lstats = log->offsets();
-        storage::log_reader_config cfg(
-          lstats.start_offset, max_offset, ss::default_priority_class());
+        storage::log_reader_config cfg(lstats.start_offset, max_offset);
         auto reader = log->make_reader(std::move(cfg)).get();
         return reader.consume(batch_validating_consumer{}, model::no_timeout)
           .get();
@@ -174,8 +172,7 @@ public:
       = storage::log_append_config::fsync::no,
       bool flush_after_append = true) {
         auto lstats = log->offsets();
-        storage::log_append_config append_cfg{
-          sync, ss::default_priority_class(), model::no_timeout};
+        storage::log_append_config append_cfg{sync, model::no_timeout};
 
         model::offset base_offset = lstats.dirty_offset < model::offset(0)
                                       ? model::offset(0)
@@ -224,9 +221,7 @@ public:
           batch.header().last_offset_delta);
         buffer.push_back(std::move(batch));
         storage::log_append_config append_cfg{
-          storage::log_append_config::fsync::no,
-          ss::default_priority_class(),
-          model::no_timeout};
+          storage::log_append_config::fsync::no, model::no_timeout};
 
         model::offset old_dirty_offset = log->offsets().dirty_offset;
         model::offset base_offset = old_dirty_offset < model::offset(0)
@@ -248,7 +243,6 @@ public:
     // model::offset start_offset;
     // size_t max_bytes;
     // size_t min_bytes;
-    // io_priority_class prio;
     // std::vector<model::record_batch_type> type_filter;
     // model::offset max_offset = model::model_limits<model::offset>::max(); //
     // inclusive
@@ -256,8 +250,7 @@ public:
       ss::shared_ptr<storage::log> log,
       model::offset start,
       model::offset end) {
-        storage::log_reader_config cfg(
-          start, end, ss::default_priority_class());
+        storage::log_reader_config cfg(start, end);
         tlog.info("read_range_to_vector: {}", cfg);
         auto reader = log->make_reader(std::move(cfg)).get();
         return std::move(reader)

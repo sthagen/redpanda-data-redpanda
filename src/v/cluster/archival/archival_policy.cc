@@ -23,7 +23,6 @@
 #include "storage/segment_set.h"
 #include "storage/version.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -145,12 +144,9 @@ operator<<(std::ostream& os, const skip_offset_range& skip_range) {
 }
 
 archival_policy::archival_policy(
-  model::ntp ntp,
-  std::optional<segment_time_limit> limit,
-  ss::io_priority_class io_priority)
+  model::ntp ntp, std::optional<segment_time_limit> limit)
   : _ntp(std::move(ntp))
-  , _upload_limit(limit)
-  , _io_priority(io_priority) {}
+  , _upload_limit(limit) {}
 
 bool archival_policy::upload_deadline_reached() {
     if (!_upload_limit.has_value()) {
@@ -210,7 +206,7 @@ ss::future<candidate_creation_result> archival_policy::get_next_segment(
         _upload_deadline = ss::lowres_clock::now() + _upload_limit.value()();
     }
     co_return co_await segment_collector.make_upload_candidate(
-      _io_priority, segment_lock_duration);
+      segment_lock_duration);
 }
 
 ss::future<candidate_creation_result>
@@ -239,7 +235,7 @@ archival_policy::get_next_compacted_segment(
     }
 
     co_return co_await compacted_segment_collector.make_upload_candidate(
-      _io_priority, segment_lock_duration);
+      segment_lock_duration);
 }
 
 } // namespace archival

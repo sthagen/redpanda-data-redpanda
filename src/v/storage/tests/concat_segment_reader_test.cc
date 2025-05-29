@@ -49,10 +49,7 @@ TEST(
     using namespace storage;
 
     disk_log_builder b{log_config{
-      data_path.string(),
-      segment_size,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      data_path.string(), segment_size, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"test_ns", "test_tpc", 0}, {data_path}});
     auto defer = ss::defer([&b] { b.stop().get(); });
@@ -117,8 +114,7 @@ TEST(
 
     // All the batches in the view should have user_management_cmd as type. The
     // boundaries should exclude acl_management_cmd.
-    concat_segment_reader_view cv{
-      segments, start_pos, end_pos, ss::default_priority_class()};
+    concat_segment_reader_view cv{segments, start_pos, end_pos};
 
     iobuf buf;
     auto result
@@ -144,10 +140,7 @@ TEST(ConcatSegmentReaderTest, test_single_segment_read_with_bounds) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      data_path.string(),
-      segment_size,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      data_path.string(), segment_size, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"test_ns", "test_tpc", 0}, {data_path}})
       | add_segment(0) | add_random_batch(0, 10);
@@ -160,8 +153,7 @@ TEST(ConcatSegmentReaderTest, test_single_segment_read_with_bounds) {
     size_t start_pos = 20;
     size_t end_pos = log_segments.back()->file_size() - 20;
 
-    concat_segment_reader_view cv{
-      segments, start_pos, end_pos, ss::default_priority_class()};
+    concat_segment_reader_view cv{segments, start_pos, end_pos};
     EXPECT_EQ(b.get_disk_log_impl().size_bytes() - 40, copy_stream(cv));
 }
 
@@ -171,10 +163,7 @@ TEST(ConcatSegmentReaderTest, test_single_segment_read_full) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      data_path.string(),
-      segment_size,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      data_path.string(), segment_size, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"test_ns", "test_tpc", 0}, {data_path}})
       | add_segment(0) | add_random_batch(0, 10);
@@ -186,8 +175,7 @@ TEST(ConcatSegmentReaderTest, test_single_segment_read_full) {
 
     size_t start_pos = 0;
     size_t end_pos = log_segments.back()->file_size();
-    concat_segment_reader_view cv{
-      segments, start_pos, end_pos, ss::default_priority_class()};
+    concat_segment_reader_view cv{segments, start_pos, end_pos};
     EXPECT_EQ(b.get_disk_log_impl().size_bytes(), copy_stream(cv));
 }
 
@@ -197,10 +185,7 @@ TEST(ConcatSegmentReaderTest, test_multiple_segments_read_full) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      data_path.string(),
-      segment_size,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      data_path.string(), segment_size, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"test_ns", "test_tpc", 0}, {data_path}});
     auto defer = ss::defer([&b] { b.stop().get(); });
@@ -218,7 +203,6 @@ TEST(ConcatSegmentReaderTest, test_multiple_segments_read_full) {
 
     size_t start_pos = 0;
     size_t end_pos = log_segments.back()->file_size();
-    concat_segment_reader_view cv{
-      segments, start_pos, end_pos, ss::default_priority_class()};
+    concat_segment_reader_view cv{segments, start_pos, end_pos};
     EXPECT_EQ(b.get_disk_log_impl().size_bytes(), copy_stream(cv));
 }

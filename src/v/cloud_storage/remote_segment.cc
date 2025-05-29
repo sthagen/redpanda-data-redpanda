@@ -27,7 +27,6 @@
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "raft/consensus.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 #include "ssx/sformat.h"
 #include "ssx/watchdog.h"
@@ -39,7 +38,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/fstream.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/queue.hh>
@@ -235,7 +233,7 @@ ss::future<> remote_segment::stop() {
 }
 
 ss::future<storage::segment_reader_handle>
-remote_segment::data_stream(size_t pos, ss::io_priority_class io_priority) {
+remote_segment::data_stream(size_t pos) {
     vlog(_ctxlog.debug, "remote segment file input stream at {}", pos);
     ss::gate::holder g(_gate);
     co_await hydrate();
@@ -243,7 +241,6 @@ remote_segment::data_stream(size_t pos, ss::io_priority_class io_priority) {
     options.buffer_size = config::shard_local_cfg().storage_read_buffer_size();
     options.read_ahead
       = config::shard_local_cfg().storage_read_readahead_count();
-    options.io_priority_class = io_priority;
     auto data_stream = ss::make_file_input_stream(
       _data_file, pos, std::move(options));
     co_return storage::segment_reader_handle(std::move(data_stream));
@@ -254,7 +251,6 @@ remote_segment::offset_data_stream(
   kafka::offset start,
   kafka::offset end,
   std::optional<model::timestamp> first_timestamp,
-  ss::io_priority_class io_priority,
   storage::opt_abort_source_t as) {
     vlog(_ctxlog.debug, "remote segment file input stream at offset {}", start);
     ss::gate::holder g(_gate);
@@ -296,7 +292,6 @@ remote_segment::offset_data_stream(
     options.buffer_size = config::shard_local_cfg().storage_read_buffer_size();
     options.read_ahead
       = config::shard_local_cfg().storage_read_readahead_count();
-    options.io_priority_class = io_priority;
 
     ss::input_stream<char> data_stream;
     if (is_legacy_mode_engaged()) {
@@ -642,8 +637,6 @@ ss::future<bool> remote_segment::do_materialize_txrange() {
               = config::shard_local_cfg().storage_read_buffer_size;
             options.read_ahead
               = config::shard_local_cfg().storage_read_readahead_count;
-            options.io_priority_class
-              = priority_manager::local().shadow_indexing_priority();
             auto inp_stream = ss::make_file_input_stream(
               cache_item->body, options);
             co_await manifest.update(std::move(inp_stream));
@@ -696,8 +689,6 @@ ss::future<bool> remote_segment::maybe_materialize_index() {
               = config::shard_local_cfg().storage_read_buffer_size;
             options.read_ahead
               = config::shard_local_cfg().storage_read_readahead_count;
-            options.io_priority_class
-              = priority_manager::local().shadow_indexing_priority();
             auto inp_stream = ss::make_file_input_stream(
               cache_item->body, options);
             iobuf state;
@@ -1513,7 +1504,6 @@ remote_segment_batch_reader::init_parser() {
       model::offset_cast(_config.start_offset),
       model::offset_cast(_config.max_offset),
       _config.first_timestamp,
-      priority_manager::local().shadow_indexing_priority(),
       _config.abort_source);
 
     vlog(

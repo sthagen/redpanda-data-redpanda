@@ -33,7 +33,6 @@
 
 #include <seastar/core/file-types.hh>
 #include <seastar/core/fstream.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/scheduling.hh>
@@ -149,7 +148,7 @@ public:
     void roll_segment() {
         auto log = get_partition_log();
         log->flush().get();
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     size_t get_on_disk_size() {
@@ -168,7 +167,6 @@ public:
           std::nullopt,
           max_collect_offset,
           std::nullopt,
-          ss::default_priority_class(),
           as);
 
         auto log = get_partition_log();
@@ -195,8 +193,7 @@ public:
     log_map get_log_map() {
         log_map res;
         auto co = get_test_partition()->committed_offset();
-        storage::log_reader_config cfg(
-          model::offset(0), co, ss::default_priority_class());
+        storage::log_reader_config cfg(model::offset(0), co);
         auto rdr = get_test_partition()->make_reader(cfg).get();
 
         class consumer {
@@ -330,8 +327,7 @@ public:
               s.get()->file_size(),
               s.get()->offsets());
         }
-        storage::log_reader_config reader_cfg(
-          range.base, range.last, ss::default_priority_class());
+        storage::log_reader_config reader_cfg(range.base, range.last);
         reader_cfg.skip_batch_cache = true;
 
         auto reader = partition->make_reader(reader_cfg).get();
@@ -393,9 +389,7 @@ public:
     auto load_log_segment(
       ss::lw_shared_ptr<storage::segment> s, inclusive_offset_range range) {
         // Copy the expected byte range from the segment file
-        auto r_handle = s->offset_data_stream(
-                           range.base, ss::default_priority_class())
-                          .get();
+        auto r_handle = s->offset_data_stream(range.base).get();
         iobuf buf;
         auto file_out_s = make_iobuf_ref_output_stream(buf);
         auto closer = ss::defer([&] {
@@ -446,24 +440,18 @@ public:
         auto first_segm = segments.front();
         auto last_segm = segments.back();
         auto start = storage::convert_begin_offset_to_file_pos(
-                       range.base,
-                       first_segm,
-                       model::timestamp{},
-                       ss::default_priority_class())
+                       range.base, first_segm, model::timestamp{})
                        .get()
                        .assume_value()
                        .bytes;
         auto end = storage::convert_end_offset_to_file_pos(
-                     range.last,
-                     last_segm,
-                     model::timestamp{},
-                     ss::default_priority_class())
+                     range.last, last_segm, model::timestamp{})
                      .get()
                      .assume_value()
                      .bytes;
 
         auto cc_view = storage::concat_segment_reader_view(
-          segments, start, end, ss::default_priority_class());
+          segments, start, end);
 
         // Copy the expected byte range from the segment file
         iobuf buf;

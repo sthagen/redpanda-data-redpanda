@@ -22,7 +22,6 @@
 #include "model/timeout_clock.h"
 #include "model/transform.h"
 #include "raft/errc.h"
-#include "resource_mgmt/io_priority.h"
 #include "storage/record_batch_builder.h"
 #include "storage/types.h"
 #include "transform/rpc/deps.h"
@@ -240,7 +239,7 @@ local_service::load_wasm_binary(
             /*max_offset=*/offset,
             /*min_bytes=*/0,
             /*max_bytes=*/1,
-            /*prio=*/wasm_read_priority(),
+
             /*type_filter=*/std::nullopt,
             /*time=*/std::nullopt,
             /*as=*/std::nullopt);

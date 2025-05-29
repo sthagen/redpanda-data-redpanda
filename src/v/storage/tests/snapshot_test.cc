@@ -19,18 +19,14 @@ using namespace redpanda::test_utils;
 
 TEST(SnapshotTest, MissingSnapshotIsNotError) {
     storage::simple_snapshot_manager mgr(
-      "d/n/e",
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      ss::default_priority_class());
+      "d/n/e", storage::simple_snapshot_manager::default_snapshot_filename);
     auto reader = mgr.open_snapshot().get();
     ASSERT_FALSE(reader);
 }
 
 TEST(SnapshotTest, ReadingFromEmptySnapshotIsError) {
     storage::simple_snapshot_manager mgr(
-      ".",
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      ss::default_priority_class());
+      ".", storage::simple_snapshot_manager::default_snapshot_filename);
     try {
         ss::remove_file(mgr.snapshot_path().string()).get();
     } catch (...) {
@@ -58,9 +54,7 @@ TEST(SnapshotTest, ReadingFromEmptySnapshotIsError) {
 
 TEST(SnapshotTest, ReaderVerifiesHeaderCrc) {
     storage::simple_snapshot_manager mgr(
-      ".",
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      ss::default_priority_class());
+      ".", storage::simple_snapshot_manager::default_snapshot_filename);
     try {
         ss::remove_file(mgr.snapshot_path().string()).get();
     } catch (...) {
@@ -95,9 +89,7 @@ TEST(SnapshotTest, ReaderVerifiesHeaderCrc) {
 
 TEST(SnapshotTest, ReaderVerifiesMetadataCrc) {
     storage::simple_snapshot_manager mgr(
-      ".",
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      ss::default_priority_class());
+      ".", storage::simple_snapshot_manager::default_snapshot_filename);
     try {
         ss::remove_file(mgr.snapshot_path().string()).get();
     } catch (...) {
@@ -134,9 +126,7 @@ TEST(SnapshotTest, ReaderVerifiesMetadataCrc) {
 
 TEST(SnapshotTest, ReadWrite) {
     storage::simple_snapshot_manager mgr(
-      ".",
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      ss::default_priority_class());
+      ".", storage::simple_snapshot_manager::default_snapshot_filename);
     try {
         ss::remove_file(mgr.snapshot_path().string()).get();
     } catch (...) {
@@ -165,9 +155,7 @@ TEST(SnapshotTest, ReadWrite) {
 
 TEST(SnapshotTest, RemovePartialSnapshots) {
     storage::simple_snapshot_manager mgr(
-      ".",
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      ss::default_priority_class());
+      ".", storage::simple_snapshot_manager::default_snapshot_filename);
 
     auto mk_partial = [&] {
         auto writer = mgr.start_snapshot().get();

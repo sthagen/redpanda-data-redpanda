@@ -24,7 +24,6 @@
 #include "config/node_config.h"
 #include "features/feature_table.h"
 #include "model/metadata.h"
-#include "resource_mgmt/io_priority.h"
 #include "rpc/connection_cache.h"
 #include "utils/file_io.h"
 

@@ -22,7 +22,6 @@ struct fixture : public testing::Test {
     storage::disk_log_builder b{storage::log_config(
       storage::random_dir(),
       1_GiB,
-      ss::default_priority_class(),
       storage::with_cache::no,
       storage::make_sanitized_file_config())};
     ~fixture() { b.stop().get(); }

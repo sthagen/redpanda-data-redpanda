@@ -47,7 +47,6 @@ public:
 
     spill_key_index(
       ss::sstring filename,
-      ss::io_priority_class,
       bool truncate,
       storage_resources&,
       std::optional<ntp_sanitizer_config> sanitizer_config);
@@ -142,7 +141,6 @@ private:
 
     std::optional<ntp_sanitizer_config> _sanitizer_config;
     storage_resources& _resources;
-    ss::io_priority_class _pc;
     bool _truncate;
     std::optional<segment_appender> _appender;
     underlying_t _midx;

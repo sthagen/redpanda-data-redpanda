@@ -221,9 +221,8 @@ ss::future<result<iobuf>> materialize_from_cache(
 
     auto buffer_size = config::shard_local_cfg().storage_read_buffer_size();
     auto read_ahead = config::shard_local_cfg().storage_read_readahead_count();
-    auto io_priority = ss::default_priority_class(); // FIXME
     auto fut = co_await ss::coroutine::as_future(
-      cache->get(cache_file_name, io_priority, buffer_size, read_ahead));
+      cache->get_stream(cache_file_name, buffer_size, read_ahead));
     auto sz_stream_result = result_from_ready_future<errc::cache_read_error>(
       std::move(fut));
     if (sz_stream_result.has_error()) {
@@ -293,11 +292,8 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
 
     if (!sr_guard.has_error()) {
         // TODO: use proper priority class
-        auto put_future = co_await ss::coroutine::as_future(cache->put(
-          cache_file_name,
-          buf_str,
-          sr_guard.value(),
-          ss::default_priority_class()));
+        auto put_future = co_await ss::coroutine::as_future(
+          cache->put(cache_file_name, buf_str, sr_guard.value()));
 
         if (put_future.failed()) {
             auto e = put_future.get_exception();

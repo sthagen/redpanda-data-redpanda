@@ -100,12 +100,9 @@ class file_snapshot_writer;
 class snapshot_manager {
 public:
     snapshot_manager(
-      ss::sstring partial_prefix,
-      std::filesystem::path dir,
-      ss::io_priority_class io_prio) noexcept
+      ss::sstring partial_prefix, std::filesystem::path dir) noexcept
       : _partial_prefix(partial_prefix)
-      , _dir(std::move(dir))
-      , _io_prio(io_prio) {}
+      , _dir(std::move(dir)) {}
 
     ss::future<std::optional<snapshot_reader>> open_snapshot(ss::sstring);
     ss::future<std::optional<ss::file>>
@@ -133,7 +130,6 @@ public:
 private:
     ss::sstring _partial_prefix;
     std::filesystem::path _dir;
-    ss::io_priority_class _io_prio;
 };
 
 /**
@@ -279,11 +275,9 @@ public:
     static constexpr const char* default_snapshot_filename = "snapshot";
 
     simple_snapshot_manager(
-      std::filesystem::path dir,
-      ss::sstring filename,
-      ss::io_priority_class io_prio) noexcept
+      std::filesystem::path dir, ss::sstring filename) noexcept
       : _filename(filename)
-      , _snapshot(filename, std::move(dir), io_prio) {}
+      , _snapshot(filename, std::move(dir)) {}
 
     ss::future<std::optional<snapshot_reader>> open_snapshot() {
         return _snapshot.open_snapshot(_filename);

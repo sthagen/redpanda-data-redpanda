@@ -143,7 +143,6 @@ redpanda_cc_library(
         "//src/v/config",
         "//src/v/kafka/data:partition_proxy",
         "//src/v/kafka/utils:txn_reader",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/rpc",
         "//src/v/ssx:future_util",
         "//src/v/ssx:semaphore",

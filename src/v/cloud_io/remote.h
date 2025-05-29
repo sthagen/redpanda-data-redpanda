@@ -150,7 +150,8 @@ public:
     remote(
       ss::sharded<cloud_storage_clients::client_pool>& clients,
       const cloud_storage_clients::client_configuration& conf,
-      model::cloud_credentials_source cloud_credentials_source);
+      model::cloud_credentials_source cloud_credentials_source,
+      ss::scheduling_group sg);
 
     ~remote() override;
 

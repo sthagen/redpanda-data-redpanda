@@ -86,8 +86,7 @@ struct group_manager_fixture
 
     ss::future<> force_roll_group_partition_log() {
         auto log = app.storage.local().log_mgr().get(offsets_ntp);
-        co_await consumer_offsets_log()->force_roll(
-          seastar::default_priority_class());
+        co_await consumer_offsets_log()->force_roll();
     }
 
     auto group_tx_stm() {
@@ -119,9 +118,7 @@ struct group_manager_fixture
         RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [log] {
             auto lstats = log->offsets();
             storage::log_reader_config cfg(
-              lstats.start_offset,
-              lstats.committed_offset,
-              ss::default_priority_class());
+              lstats.start_offset, lstats.committed_offset);
             return log->make_reader(std::move(cfg)).then([](auto reader) {
                 return std::move(reader).for_each_ref(
                   version_fence_finder{}, model::no_timeout);
@@ -354,7 +351,6 @@ ss::future<> run_workload(
                 std::nullopt,
                 log->stm_manager()->max_removable_local_log_offset(),
                 std::nullopt,
-                ss::default_priority_class(),
                 dummy_as,
               })
               .handle_exception_type(
@@ -372,7 +368,7 @@ ss::future<> run_workload(
     vlog(logger.info, "Finished workload, validating... {}", params);
     // Wait until all segments are compacted and only two remain
     co_await log->flush();
-    co_await log->force_roll(ss::default_priority_class());
+    co_await log->force_roll();
     RPTEST_REQUIRE_EVENTUALLY_CORO(30s, [&]() {
         return housekeeping().then(
           [log]() { return log->segment_count() == 2; });
@@ -399,9 +395,7 @@ ss::future<> run_workload(
 
     auto lstats = log->offsets();
     storage::log_reader_config cfg(
-      lstats.start_offset,
-      lstats.committed_offset,
-      ss::default_priority_class());
+      lstats.start_offset, lstats.committed_offset);
     auto reader = co_await log->make_reader(cfg);
     co_await reader.for_each_ref(batch_validator{}, model::no_timeout);
 }

@@ -702,7 +702,7 @@ redpanda_cc_btest(
 
 redpanda_cc_btest(
     name = "segment_chunk_hydration_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "segment_chunk_hydration_test.cc",
     ],

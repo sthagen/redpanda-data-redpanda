@@ -27,7 +27,6 @@ public:
     compacted_index_chunk_reader(
       segment_full_path,
       ss::file,
-      ss::io_priority_class,
       size_t max_chunk_memory,
       ss::abort_source* _as) noexcept;
 
@@ -50,7 +49,6 @@ private:
     bool is_footer_loaded() const;
 
     ss::file _handle;
-    ss::io_priority_class _iopc;
     size_t _max_chunk_memory{0};
     size_t _byte_index{0};
     // file size minus footer size

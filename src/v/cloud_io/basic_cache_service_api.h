@@ -15,7 +15,6 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/lowres_clock.hh>
 
@@ -108,9 +107,8 @@ public:
     /// \param key is a cache key
     /// \param read_buffer_size is a read buffer size for the iostream
     /// \param readahead number of pages that can be read asynchronously
-    virtual ss::future<std::optional<cache_item_stream>> get(
+    virtual ss::future<std::optional<cache_item_stream>> get_stream(
       std::filesystem::path key,
-      ss::io_priority_class io_priority,
       size_t read_buffer_size = default_read_buffer_size,
       unsigned int read_ahead = default_read_ahead)
       = 0;
@@ -128,7 +126,6 @@ public:
       std::filesystem::path key,
       ss::input_stream<char>& data,
       basic_space_reservation_guard<Clock>& reservation,
-      ss::io_priority_class io_priority,
       size_t write_buffer_size = default_write_buffer_size,
       unsigned int write_behind = default_write_behind)
       = 0;

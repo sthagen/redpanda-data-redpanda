@@ -30,7 +30,6 @@
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/expiring_fifo.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/temporary_buffer.hh>
@@ -91,8 +90,7 @@ public:
 
     /// create an input stream _sharing_ the underlying file handle
     /// starting at position @pos
-    ss::future<storage::segment_reader_handle>
-    data_stream(size_t pos, ss::io_priority_class);
+    ss::future<storage::segment_reader_handle> data_stream(size_t pos);
 
     struct input_stream_with_offsets {
         ss::input_stream<char> stream;
@@ -105,7 +103,6 @@ public:
       kafka::offset start,
       kafka::offset end,
       std::optional<model::timestamp>,
-      ss::io_priority_class,
       storage::opt_abort_source_t as);
 
     /// Hydrates the segment, index or tx-range depending on segment meta

@@ -29,7 +29,6 @@
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
 #include "model/transform.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 #include "ssx/semaphore.h"
 #include "transform/logging/log_manager.h"
@@ -153,7 +152,6 @@ public:
           _partition.start_offset(),
           ts,
           model::offset::max(),
-          /*iop=*/wasm_read_priority(),
           /*type_filter=*/std::nullopt,
           /*as=*/*as,
           /*client_addr=*/std::nullopt));
@@ -213,7 +211,6 @@ public:
             /*max_offset=*/max_offset,
             /*min_bytes=*/0,
             /*max_bytes=*/max_bytes,
-            /*prio=*/wasm_read_priority(),
             /*type_filter=*/std::nullopt, // Overridden by partition
             /*time=*/std::nullopt,        // Not doing a timequery
             /*as=*/*as));

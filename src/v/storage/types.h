@@ -242,7 +242,6 @@ struct offset_stats {
 struct log_append_config {
     using fsync = ss::bool_class<class skip_tag>;
     fsync should_fsync;
-    ss::io_priority_class io_priority;
     model::timeout_clock::time_point timeout;
 };
 struct append_result {
@@ -267,21 +266,18 @@ struct timequery_config {
       model::offset min_offset,
       model::timestamp t,
       model::offset max_offset,
-      ss::io_priority_class iop,
       std::optional<model::record_batch_type> type_filter,
       opt_abort_source_t as = std::nullopt,
       opt_client_address_t client_addr = std::nullopt) noexcept
       : min_offset(min_offset)
       , time(t)
       , max_offset(max_offset)
-      , prio(iop)
       , type_filter(type_filter)
       , abort_source(as)
       , client_address(std::move(client_addr)) {}
     model::offset min_offset;
     model::timestamp time;
     model::offset max_offset;
-    ss::io_priority_class prio;
     std::optional<model::record_batch_type> type_filter;
     opt_abort_source_t abort_source;
     opt_client_address_t client_address;
@@ -299,12 +295,10 @@ struct timequery_result {
 };
 
 struct truncate_config {
-    truncate_config(model::offset o, ss::io_priority_class p)
-      : base_offset(o)
-      , prio(p) {}
+    truncate_config(model::offset o)
+      : base_offset(o) {}
     // Lowest offset to remove.
     model::offset base_offset;
-    ss::io_priority_class prio;
     friend std::ostream& operator<<(std::ostream&, const truncate_config&);
 };
 
@@ -320,13 +314,10 @@ struct truncate_config {
 struct truncate_prefix_config {
     truncate_prefix_config(
       model::offset o,
-      ss::io_priority_class p,
       std::optional<model::offset_delta> force_truncate_delta = std::nullopt)
       : start_offset(o)
-      , prio(p)
       , force_truncate_delta(force_truncate_delta) {}
     model::offset start_offset;
-    ss::io_priority_class prio;
 
     // When supplied and `start_offset` is ahead of the log's end offset,
     // indicates that truncation should proceed and this delta should be the
@@ -374,7 +365,7 @@ struct log_reader_config {
     model::offset max_offset;
     size_t min_bytes;
     size_t max_bytes;
-    ss::io_priority_class prio;
+
     std::optional<model::record_batch_type> type_filter;
 
     /// \brief gurantees first_timestamp >= record_batch.first_timestamp
@@ -430,7 +421,6 @@ struct log_reader_config {
       model::offset max_offset,
       size_t min_bytes,
       size_t max_bytes,
-      ss::io_priority_class prio,
       std::optional<model::record_batch_type> type_filter,
       std::optional<model::timestamp> time,
       opt_abort_source_t as,
@@ -439,7 +429,6 @@ struct log_reader_config {
       , max_offset(max_offset)
       , min_bytes(min_bytes)
       , max_bytes(max_bytes)
-      , prio(prio)
       , type_filter(type_filter)
       , first_timestamp(time)
       , abort_source(as)
@@ -451,7 +440,6 @@ struct log_reader_config {
     log_reader_config(
       model::offset start_offset,
       model::offset max_offset,
-      ss::io_priority_class prio,
       opt_abort_source_t as = std::nullopt,
       opt_client_address_t client_addr = std::nullopt)
       : log_reader_config(
@@ -459,7 +447,6 @@ struct log_reader_config {
           max_offset,
           0,
           std::numeric_limits<size_t>::max(),
-          prio,
           std::nullopt,
           std::nullopt,
           as,
@@ -470,8 +457,7 @@ struct log_reader_config {
 
 // Empty, invalid reader config which is sometimes useful as a placeholder
 // since log_reader_config doesn't have a default constructor.
-static const log_reader_config empty_reader_config{
-  {}, {}, ss::default_priority_class()};
+static const log_reader_config empty_reader_config{{}, {}};
 
 struct gc_config {
     gc_config(model::timestamp upper, std::optional<size_t> max_bytes_in_log)
@@ -490,7 +476,6 @@ struct compaction_config {
     compaction_config(
       model::offset max_collect_offset,
       std::optional<std::chrono::milliseconds> tombstone_ret_ms,
-      ss::io_priority_class p,
       ss::abort_source& as,
       std::optional<ntp_sanitizer_config> san_cfg = std::nullopt,
       std::optional<size_t> max_keys = std::nullopt,
@@ -498,7 +483,6 @@ struct compaction_config {
       scoped_file_tracker::set_t* to_clean = nullptr)
       : max_removable_local_log_offset(max_collect_offset)
       , tombstone_retention_ms(tombstone_ret_ms)
-      , iopc(p)
       , sanitizer_config(std::move(san_cfg))
       , key_offset_map_max_keys(max_keys)
       , hash_key_map(key_map)
@@ -521,8 +505,6 @@ struct compaction_config {
     // ran on non-archival topics.
     std::optional<std::chrono::milliseconds> tombstone_retention_ms;
 
-    // priority for all IO in compaction
-    ss::io_priority_class iopc;
     // use proxy fileops with assertions and/or failure injection
     std::optional<ntp_sanitizer_config> sanitizer_config;
 
@@ -554,14 +536,12 @@ struct housekeeping_config {
       std::optional<size_t> max_bytes_in_log,
       model::offset max_collect_offset,
       std::optional<std::chrono::milliseconds> tombstone_retention_ms,
-      ss::io_priority_class p,
       ss::abort_source& as,
       std::optional<ntp_sanitizer_config> san_cfg = std::nullopt,
       hash_key_offset_map* key_map = nullptr)
       : compact(
           max_collect_offset,
           tombstone_retention_ms,
-          p,
           as,
           std::move(san_cfg),
           std::nullopt,

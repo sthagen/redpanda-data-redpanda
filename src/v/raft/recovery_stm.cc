@@ -25,7 +25,6 @@
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future-util.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/with_scheduling_group.hh>
 
@@ -64,11 +63,10 @@ ss::future<> recovery_stm::recover() {
     }
 
     return ss::with_scheduling_group(
-      _scheduling.send_sg,
-      [this, iopc = _scheduling.default_iopc] { return do_recover(iopc); });
+      _scheduling.send_sg, [this] { return do_recover(); });
 }
 
-ss::future<> recovery_stm::do_recover(ss::io_priority_class iopc) {
+ss::future<> recovery_stm::do_recover() {
     // We have to send all the records that leader have, event those that are
     // beyond commit index, thanks to that after majority have recovered
     // leader can update its commit index
@@ -152,7 +150,7 @@ ss::future<> recovery_stm::do_recover(ss::io_priority_class iopc) {
     // acquire read memory:
     auto read_memory_units = co_await _memory_quota.acquire_read_memory();
     auto tuple = co_await read_range_for_recovery(
-      follower_next_offset, iopc, is_learner, read_memory_units.count());
+      follower_next_offset, is_learner, read_memory_units.count());
     // no batches for recovery, do nothing
     if (!tuple) {
         co_return;
@@ -243,16 +241,12 @@ recovery_stm::required_snapshot_type recovery_stm::get_required_snapshot_type(
 ss::future<
   std::optional<std::tuple<chunked_vector<model::record_batch>, size_t>>>
 recovery_stm::read_range_for_recovery(
-  model::offset start_offset,
-  ss::io_priority_class iopc,
-  bool is_learner,
-  size_t read_size) {
+  model::offset start_offset, bool is_learner, size_t read_size) {
     storage::log_reader_config cfg(
       start_offset,
       model::offset::max(),
       1,
       read_size,
-      iopc,
       std::nullopt,
       std::nullopt,
       _ptr->_as);

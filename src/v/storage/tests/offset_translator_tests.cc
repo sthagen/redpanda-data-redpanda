@@ -75,10 +75,7 @@ struct base_fixture : public ::testing::Test {
 
     storage::log_config make_log_cfg() const {
         return storage::log_config(
-          _test_dir,
-          100_MiB,
-          ss::default_priority_class(),
-          storage::make_sanitized_file_config());
+          _test_dir, 100_MiB, storage::make_sanitized_file_config());
     }
 
     storage::offset_translator make_offset_translator() {
@@ -311,9 +308,7 @@ collect_base_offsets(ss::shared_ptr<storage::log> log) {
     };
 
     auto r = co_await log->make_reader(storage::log_reader_config(
-      log->offsets().start_offset,
-      log->offsets().dirty_offset,
-      ss::default_priority_class()));
+      log->offsets().start_offset, log->offsets().dirty_offset));
     co_return co_await r.for_each_ref(consumer{}, model::no_timeout);
 }
 
@@ -350,7 +345,6 @@ struct fuzz_checker {
               : _self(self)
               , _appender(self._log->make_appender(storage::log_append_config{
                   .should_fsync = storage::log_append_config::fsync::no,
-                  .io_priority = ss::default_priority_class(),
                   .timeout = model::no_timeout})) {}
 
             ss::future<ss::stop_iteration>
@@ -413,8 +407,7 @@ struct fuzz_checker {
 
         co_await _tr->truncate(truncate_at);
 
-        co_await _log->truncate(
-          storage::truncate_config(truncate_at, ss::default_priority_class()));
+        co_await _log->truncate(storage::truncate_config(truncate_at));
 
         if (_log->offsets().dirty_offset() < 0) {
             _kafka_offsets.clear();
@@ -439,8 +432,8 @@ struct fuzz_checker {
           = batch_base_offsets[random_generators::get_int(
             batch_base_offsets.size() - 1)];
 
-        co_await _log->truncate_prefix(storage::truncate_prefix_config(
-          new_start_offset, ss::default_priority_class()));
+        co_await _log->truncate_prefix(
+          storage::truncate_prefix_config(new_start_offset));
         EXPECT_EQ(new_start_offset, _log->offsets().start_offset);
 
         _snapshot_offset = new_start_offset;

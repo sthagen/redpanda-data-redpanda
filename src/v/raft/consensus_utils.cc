@@ -21,7 +21,6 @@
 #include "raft/logger.h"
 #include "raft/types.h"
 #include "reflection/adl.h"
-#include "resource_mgmt/io_priority.h"
 #include "serde/peek.h"
 #include "serde/rw/rw.h"
 #include "storage/api.h"
@@ -147,7 +146,7 @@ ss::future<configuration_bootstrap_state> read_bootstrap_state(
     // as an optimization
     auto lstats = log->offsets();
     auto rcfg = storage::log_reader_config(
-      start_offset, lstats.dirty_offset, raft_priority(), as);
+      start_offset, lstats.dirty_offset, as);
     auto cfg_state = std::make_unique<configuration_bootstrap_state>();
     return log->make_reader(rcfg).then(
       [state = std::move(cfg_state)](
@@ -407,8 +406,7 @@ ss::future<> create_raft_state_for_pre_existing_partition(
 
     storage::simple_snapshot_manager tmp_snapshot_mgr(
       std::filesystem::path(ntp_cfg.work_directory()),
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      raft_priority());
+      storage::simple_snapshot_manager::default_snapshot_filename);
 
     co_await raft::details::persist_snapshot(
       tmp_snapshot_mgr, std::move(meta), iobuf());

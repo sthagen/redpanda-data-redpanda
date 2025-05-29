@@ -46,7 +46,6 @@
 #include "utils/directory_walker.h"
 #include "utils/tristate.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/sleep.hh>
@@ -94,8 +93,8 @@ void compact_and_prefix_truncate(
     if (eviction_future.available()) {
         auto evict_until = eviction_future.get();
         log
-          .truncate_prefix(storage::truncate_prefix_config{
-            model::next_offset(evict_until), ss::default_priority_class()})
+          .truncate_prefix(
+            storage::truncate_prefix_config{model::next_offset(evict_until)})
           .get();
     } else {
         as.request_abort();
@@ -391,10 +390,7 @@ TEST_F(storage_test_fixture, test_truncation_with_write_caching) {
         return o;
     }();
 
-    log
-      ->truncate(
-        storage::truncate_config(truncate_offset, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(truncate_offset)).get();
 
     // Reclaim everything from cache.
     storage::testing_details::log_manager_accessor::batch_cache(mgr).clear();
@@ -484,9 +480,7 @@ TEST_F(storage_test_fixture, test_append_batches_from_multiple_terms) {
           std::back_inserter(batches));
     }
     storage::log_append_config append_cfg{
-      storage::log_append_config::fsync::yes,
-      ss::default_priority_class(),
-      model::no_timeout};
+      storage::log_append_config::fsync::yes, model::no_timeout};
     auto reader = model::make_memory_record_batch_reader(std::move(batches));
     std::move(reader)
       .for_each_ref(log->make_appender(append_cfg), append_cfg.timeout)
@@ -553,7 +547,6 @@ void append_custom_timestamp_batches(
           {std::move(batch)});
         storage::log_append_config cfg{
           .should_fsync = storage::log_append_config::fsync::no,
-          .io_priority = ss::default_priority_class(),
           .timeout = model::no_timeout,
         };
 
@@ -590,7 +583,6 @@ TEST_F(
           {std::move(batch)});
         storage::log_append_config cfg{
           .should_fsync = storage::log_append_config::fsync::no,
-          .io_priority = ss::default_priority_class(),
           .timeout = model::no_timeout,
         };
 
@@ -613,7 +605,7 @@ TEST_F(
     append_batch_with_no_max_ts(log, model::term_id(0), model::timestamp(100));
     append_batch_with_no_max_ts(log, model::term_id(0), model::timestamp(110));
     append_batch_with_no_max_ts(log, model::term_id(0), model::timestamp(120));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
 
     append_batch_with_no_max_ts(log, model::term_id(0), model::timestamp(200));
     // reordered timestamps
@@ -649,14 +641,14 @@ TEST_F(storage_test_fixture, test_time_based_eviction) {
     // broker timestamp: broker_t0
     append_custom_timestamp_batches(
       disk_log, 10, model::term_id(0), model::timestamp(100));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
 
     // 2. segment timestamps from 200 to 230
     // b ts: broker_t0 + broker_ts_sep
     ss::sleep(broker_ts_sep).get();
     append_custom_timestamp_batches(
       disk_log, 30, model::term_id(0), model::timestamp(200));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
 
     // 3. segment timestamps from 231 to 250
     // b_ts: broker_t0 + broker_ts_sep + broker_ts_sep
@@ -675,7 +667,6 @@ TEST_F(storage_test_fixture, test_time_based_eviction) {
       std::nullopt,
       model::offset::min(), // should prevent compaction
       std::nullopt,
-      ss::default_priority_class(),
       as);
     auto before = disk_log->offsets();
     disk_log->housekeeping(ccfg_no_compact).get();
@@ -690,7 +681,6 @@ TEST_F(storage_test_fixture, test_time_based_eviction) {
             std::nullopt,
             model::offset::max(),
             std::nullopt,
-            ss::default_priority_class(),
             as);
       };
 
@@ -764,7 +754,6 @@ TEST_F(storage_test_fixture, test_size_based_eviction) {
       total_size + first_size,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     compact_and_prefix_truncate(*disk_log, ccfg_no_compact);
 
@@ -794,7 +783,6 @@ TEST_F(storage_test_fixture, test_size_based_eviction) {
       max_size,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     compact_and_prefix_truncate(*disk_log, ccfg);
 
@@ -860,12 +848,7 @@ TEST_F(storage_test_fixture, test_eviction_notification) {
       model::term_id(0),
       custom_ts_batch_generator(model::timestamp(gc_ts() + 10)));
     storage::housekeeping_config ccfg(
-      gc_ts,
-      std::nullopt,
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      as);
+      gc_ts, std::nullopt, model::offset::max(), std::nullopt, as);
 
     log->housekeeping(ccfg).get();
 
@@ -877,8 +860,8 @@ TEST_F(storage_test_fixture, test_eviction_notification) {
     // wait for compaction
     log->housekeeping(ccfg).get();
     log
-      ->truncate_prefix(storage::truncate_prefix_config{
-        model::next_offset(offset), ss::default_priority_class()})
+      ->truncate_prefix(
+        storage::truncate_prefix_config{model::next_offset(offset)})
       .get();
     auto compacted_lstats = log->offsets();
     SUCCEED() << fmt::format("Compacted offsets {}", compacted_lstats);
@@ -904,9 +887,7 @@ ss::future<storage::append_result> append_exactly(
       model::packed_record_batch_header_size,
       batch_sz);
     storage::log_append_config append_cfg{
-      storage::log_append_config::fsync::no,
-      ss::default_priority_class(),
-      model::no_timeout};
+      storage::log_append_config::fsync::no, model::no_timeout};
 
     chunked_circular_buffer<model::record_batch> batches;
     auto val_sz = batch_sz - model::packed_record_batch_header_size;
@@ -979,7 +960,6 @@ TEST_F(storage_test_fixture, write_concurrently_with_gc) {
           1000,
           model::offset::max(),
           std::nullopt,
-          ss::default_priority_class(),
           as);
         return log->housekeeping(ccfg);
     };
@@ -1093,9 +1073,7 @@ TEST_F(storage_test_fixture, append_concurrent_with_prefix_truncate) {
         auto lstats = log->offsets();
         return log
           ->make_reader(storage::log_reader_config(
-            lstats.start_offset,
-            model::offset::max(),
-            ss::default_priority_class()))
+            lstats.start_offset, model::offset::max()))
           .then([](auto reader) {
               return ss::sleep(std::chrono::milliseconds(
                                  random_generators::get_int(15, 30)))
@@ -1110,9 +1088,7 @@ TEST_F(storage_test_fixture, append_concurrent_with_prefix_truncate) {
     auto prefix_truncate = [&] {
         auto offset = model::next_offset(log->offsets().dirty_offset);
 
-        return log
-          ->truncate_prefix(storage::truncate_prefix_config(
-            offset, ss::default_priority_class()))
+        return log->truncate_prefix(storage::truncate_prefix_config(offset))
           .then([offset] {
               SUCCEED() << fmt::format("prefix truncate at: {}", offset);
               return ss::sleep(
@@ -1152,7 +1128,6 @@ TEST_F(storage_test_fixture, empty_segment_recovery) {
     using should_flush_t = storage::disk_log_builder::should_flush_after;
     storage::log_append_config appender_cfg{
       .should_fsync = storage::log_append_config::fsync::no,
-      .io_priority = ss::default_priority_class(),
       .timeout = model::no_timeout};
     builder | storage::start(ntp) | storage::add_segment(0)
       | storage::add_random_batch(
@@ -1178,8 +1153,7 @@ TEST_F(storage_test_fixture, empty_segment_recovery) {
         should_flush_t::no);
 
     builder.get_log()
-      ->truncate(storage::truncate_config(
-        model::offset(6), ss::default_priority_class()))
+      ->truncate(storage::truncate_config(model::offset(6)))
       .get();
 
     builder | storage::add_segment(6);
@@ -1214,7 +1188,6 @@ TEST_F(storage_test_fixture, empty_segment_recovery) {
     storage::log_appender appender = log->make_appender(
       storage::log_append_config{
         .should_fsync = storage::log_append_config::fsync::no,
-        .io_priority = ss::default_priority_class(),
         .timeout = model::no_timeout});
     chunked_circular_buffer<model::record_batch> batches;
     batches.push_back(
@@ -1245,7 +1218,6 @@ TEST_F(storage_test_fixture, test_compaction_preserve_state) {
     using should_flush_t = storage::disk_log_builder::should_flush_after;
     storage::log_append_config appender_cfg{
       .should_fsync = storage::log_append_config::fsync::no,
-      .io_priority = ss::default_priority_class(),
       .timeout = model::no_timeout};
 
     // single segment
@@ -1273,12 +1245,7 @@ TEST_F(storage_test_fixture, test_compaction_preserve_state) {
       ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov));
 
     storage::housekeeping_config compaction_cfg(
-      model::timestamp::min(),
-      1,
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      as);
+      model::timestamp::min(), 1, model::offset::max(), std::nullopt, as);
     auto log = mgr.manage(std::move(ntp_cfg)).get();
     auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
     auto offsets_after_recovery = log->offsets();
@@ -1293,7 +1260,6 @@ TEST_F(storage_test_fixture, test_compaction_preserve_state) {
     storage::log_appender appender = log->make_appender(
       storage::log_append_config{
         .should_fsync = storage::log_append_config::fsync::no,
-        .io_priority = ss::default_priority_class(),
         .timeout = model::no_timeout});
 
     chunked_circular_buffer<model::record_batch> batches;
@@ -1343,7 +1309,6 @@ void append_single_record_batch(
           {std::move(batch)});
         storage::log_append_config cfg{
           .should_fsync = storage::log_append_config::fsync::no,
-          .io_priority = ss::default_priority_class(),
           .timeout = model::no_timeout,
         };
 
@@ -1386,10 +1351,7 @@ TEST_F(storage_test_fixture, truncate_and_roll_segment) {
         // 2) truncate in the middle of segment
         model::offset truncate_at(7);
         SUCCEED() << fmt::format("Truncating at offset:{}", truncate_at);
-        log
-          ->truncate(
-            storage::truncate_config(truncate_at, ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(truncate_at)).get();
         // 3) append some more batches to the same segment
         append_single_record_batch(log, 10, model::term_id(1));
         log->flush().get();
@@ -1443,16 +1405,12 @@ TEST_F(storage_test_fixture, compacted_log_truncation) {
           std::nullopt,
           model::offset::max(),
           std::nullopt,
-          ss::default_priority_class(),
           as);
         log->flush().get();
         check_dirty_and_closed_segment_bytes(log);
         model::offset truncate_at(7);
         SUCCEED() << fmt::format("Truncating at offset:{}", truncate_at);
-        log
-          ->truncate(
-            storage::truncate_config(truncate_at, ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(truncate_at)).get();
         // roll segment
         append_single_record_batch(log, 10, model::term_id(2));
         log->flush().get();
@@ -1512,17 +1470,13 @@ TEST_F(storage_test_fixture, check_segment_roll_after_compacted_log_truncate) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     log->flush().get();
     check_dirty_and_closed_segment_bytes(log);
     model::offset truncate_at(7);
     SUCCEED() << fmt::format("Truncating at offset:{}", truncate_at);
     ASSERT_EQ(log->segment_count(), 1);
-    log
-      ->truncate(
-        storage::truncate_config(truncate_at, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(truncate_at)).get();
     append_single_record_batch(log, 10, model::term_id(1));
     log->flush().get();
     check_dirty_and_closed_segment_bytes(log);
@@ -1563,7 +1517,7 @@ TEST_F(storage_test_fixture, check_max_segment_size) {
 
     // Update cluster level configuration and force a roll.
     mock.update(20_KiB);
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
 
     // 30 * 1_KiB should yield 2 new segments.
     result = append_exactly(log, 30, 1_KiB).get();
@@ -1574,7 +1528,7 @@ TEST_F(storage_test_fixture, check_max_segment_size) {
     overrides_t ov;
     ov.segment_size = 40_KiB;
     disk_log->set_overrides(ov);
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
 
     // 60 * 1_KiB batches should yield 2 segments.
     result = append_exactly(log, 60, 1_KiB).get(); // 60*1_KiB
@@ -1618,7 +1572,7 @@ TEST_F(storage_test_fixture, check_max_segment_size_limits) {
 
         // A too-low segment size: should be clamped to the lower bound
         mock.update(1_KiB);
-        disk_log->force_roll(ss::default_priority_class()).get();
+        disk_log->force_roll().get();
         ASSERT_EQ(disk_log->segments().size(), 3);
 
         // Exceeding the apparent segment size doesn't roll, because it was
@@ -1631,7 +1585,7 @@ TEST_F(storage_test_fixture, check_max_segment_size_limits) {
 
         // A too-high segment size: should be clamped to the upper bound
         mock.update(2000_KiB);
-        disk_log->force_roll(ss::default_priority_class()).get();
+        disk_log->force_roll().get();
         ASSERT_EQ(disk_log->segments().size(), 5);
         // Exceeding the upper bound causes a roll, even if we didn't reach
         // the user-configured segment size
@@ -1698,12 +1652,7 @@ TEST_F(storage_test_fixture, partition_size_while_cleanup) {
     ASSERT_EQ(lstats_before.start_offset, model::offset{0});
 
     storage::housekeeping_config ccfg(
-      model::timestamp::min(),
-      50_KiB,
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      as);
+      model::timestamp::min(), 50_KiB, model::offset::max(), std::nullopt, as);
 
     // Compact 10 times, with a configuration calling for 60kiB max log size.
     // This results in prefix truncating at offset 50.
@@ -1796,11 +1745,11 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction) {
 
     // build some segments
     append_single_record_batch(log, 20, model::term_id(1));
-    log->force_roll(ss::default_priority_class()).get();
+    log->force_roll().get();
     append_single_record_batch(log, 30, model::term_id(1));
-    log->force_roll(ss::default_priority_class()).get();
+    log->force_roll().get();
     append_single_record_batch(log, 40, model::term_id(1));
-    log->force_roll(ss::default_priority_class()).get();
+    log->force_roll().get();
     append_single_record_batch(log, 50, model::term_id(1));
     log->flush().get();
 
@@ -1822,7 +1771,6 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
 
     // There are 4 segments, and the last is the active segments. The first two
@@ -1876,7 +1824,7 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_terms) {
     auto disk_log = log;
     append_single_record_batch(log, 20, model::term_id(1));
     append_single_record_batch(log, 30, model::term_id(2));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     append_single_record_batch(log, 30, model::term_id(2));
     append_single_record_batch(log, 40, model::term_id(3));
     append_single_record_batch(log, 50, model::term_id(4));
@@ -1890,7 +1838,6 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_terms) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
 
     // compact all the individual segments
@@ -1942,15 +1889,15 @@ TEST_F(storage_test_fixture, max_adjacent_segment_compaction) {
     };
 
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(5_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(16_KiB, model::term_id(1));
     log->flush().get();
 
@@ -1961,7 +1908,6 @@ TEST_F(storage_test_fixture, max_adjacent_segment_compaction) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
 
     // self compaction steps
@@ -1989,9 +1935,9 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_range_u32_bounds) {
     auto* disk_log = static_cast<storage::disk_log_impl*>(log.get());
 
     append_single_record_batch(log, 1, model::term_id(0));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     append_single_record_batch(log, 1, model::term_id(0));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     log->flush().get();
     ASSERT_EQ(disk_log->segment_count(), 3);
 
@@ -2023,8 +1969,7 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_range_u32_bounds) {
       storage::segment::offset_tracker::dirty_offset_t{one_past_u32_max});
 
     ss::abort_source as;
-    storage::compaction_config cfg(
-      model::offset::max(), std::nullopt, ss::default_priority_class(), as);
+    storage::compaction_config cfg(model::offset::max(), std::nullopt, as);
     auto range = disk_log->find_adjacent_compaction_range(cfg);
     ASSERT_TRUE(!range.has_value());
 
@@ -2068,11 +2013,11 @@ TEST_F(storage_test_fixture, many_segment_locking) {
 
     auto disk_log = log;
     append_single_record_batch(log, 20, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     append_single_record_batch(log, 30, model::term_id(2));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     append_single_record_batch(log, 40, model::term_id(3));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     append_single_record_batch(log, 50, model::term_id(4));
     log->flush().get();
 
@@ -2139,7 +2084,6 @@ TEST_F(storage_test_fixture, reader_reusability_test_parser_header) {
       model::model_limits<model::offset>::max(),
       0,
       4096,
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -2202,13 +2146,13 @@ TEST_F(storage_test_fixture, compaction_backlog_calculation) {
     };
 
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(5_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(16_KiB, model::term_id(1));
     log->flush().get();
 
@@ -2219,7 +2163,6 @@ TEST_F(storage_test_fixture, compaction_backlog_calculation) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     /**
      * Initially all compaction rations are equal to 1.0 so it is easy to
@@ -2281,13 +2224,13 @@ TEST_F(storage_test_fixture, not_compacted_log_backlog) {
     };
 
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(5_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(16_KiB, model::term_id(1));
     log->flush().get();
 
@@ -2342,7 +2285,6 @@ TEST_F(storage_test_fixture, disposing_in_use_reader) {
       model::offset::max(),
       0,
       4096,
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -2354,8 +2296,7 @@ TEST_F(storage_test_fixture, disposing_in_use_reader) {
         auto rec = copy_reader_to_memory(reader, model::no_timeout).get();
 
         ASSERT_EQ(rec.back().last_offset(), model::offset(17));
-        truncate_f = log->truncate(storage::truncate_config(
-          model::offset(5), ss::default_priority_class()));
+        truncate_f = log->truncate(storage::truncate_config(model::offset(5)));
         // yield to allow truncate fiber to reach waiting for a lock
         ss::sleep(200ms).get();
     }
@@ -2405,7 +2346,6 @@ TEST_F(storage_test_fixture, committed_offset_updates) {
         storage::log_appender appender = log->make_appender(
           storage::log_append_config{
             .should_fsync = storage::log_append_config::fsync::no,
-            .io_priority = ss::default_priority_class(),
             .timeout = model::no_timeout});
 
         chunked_circular_buffer<model::record_batch> batches;
@@ -2529,7 +2469,6 @@ TEST_F(storage_test_fixture, changing_cleanup_policy_back_and_forth) {
                   {std::move(batch)});
                 storage::log_append_config cfg{
                   .should_fsync = storage::log_append_config::fsync::no,
-                  .io_priority = ss::default_priority_class(),
                   .timeout = model::no_timeout,
                 };
 
@@ -2541,9 +2480,9 @@ TEST_F(storage_test_fixture, changing_cleanup_policy_back_and_forth) {
     };
     // add 2 log segments
     add_segment(1_MiB);
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(1_MiB);
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     add_segment(1_MiB);
     log->flush().get();
 
@@ -2554,7 +2493,6 @@ TEST_F(storage_test_fixture, changing_cleanup_policy_back_and_forth) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
 
     // self compaction steps
@@ -2621,7 +2559,6 @@ TEST_F(storage_test_fixture, reader_prevents_log_shutdown) {
       model::model_limits<model::offset>::max(),
       0,
       std::numeric_limits<int64_t>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -2658,7 +2595,7 @@ TEST_F(storage_test_fixture, test_querying_term_last_offset) {
     {
         auto disk_log = log;
         // force segment roll
-        disk_log->force_roll(ss::default_priority_class()).get();
+        disk_log->force_roll().get();
     }
     // append more batches in the same term
     append_random_batches(log, 10, model::term_id(1));
@@ -2681,8 +2618,7 @@ TEST_F(storage_test_fixture, test_querying_term_last_offset) {
 
     log
       ->truncate_prefix(storage::truncate_prefix_config(
-        lstats_term_0.dirty_offset + model::offset(1),
-        ss::default_priority_class()))
+        lstats_term_0.dirty_offset + model::offset(1)))
       .get();
 
     ASSERT_TRUE(!log->get_term_last_offset(model::term_id(0)).has_value());
@@ -2706,7 +2642,6 @@ void write_batch(
     auto reader = model::make_memory_record_batch_reader({std::move(batch)});
     storage::log_append_config cfg{
       .should_fsync = storage::log_append_config::fsync::no,
-      .io_priority = ss::default_priority_class(),
       .timeout = model::no_timeout,
     };
 
@@ -2718,9 +2653,7 @@ absl::
   compact_in_memory(ss::shared_ptr<storage::log> log) {
     auto rdr = log
                  ->make_reader(storage::log_reader_config(
-                   model::offset(0),
-                   model::offset::max(),
-                   ss::default_priority_class()))
+                   model::offset(0), model::offset::max()))
                  .get();
 
     absl::flat_hash_map<
@@ -2785,7 +2718,7 @@ TEST_F(storage_test_fixture, test_compacting_batches_of_different_types) {
     write_batch(log, "key_1", 300, model::record_batch_type::tm_update, false);
     write_batch(log, "key_1", 400, model::record_batch_type::tm_update, false);
 
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
 
     log->flush().get();
 
@@ -2796,7 +2729,6 @@ TEST_F(storage_test_fixture, test_compacting_batches_of_different_types) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     auto before_compaction = compact_in_memory(log);
 
@@ -2845,7 +2777,6 @@ TEST_F(storage_test_fixture, read_write_truncate) {
 
           storage::log_append_config cfg{
             .should_fsync = storage::log_append_config::fsync::no,
-            .io_priority = ss::default_priority_class(),
             .timeout = model::no_timeout,
           };
           SUCCEED() << "append";
@@ -2872,8 +2803,7 @@ TEST_F(storage_test_fixture, read_write_truncate) {
           storage::log_reader_config cfg(
             std::max(model::offset(0), offset.dirty_offset - model::offset(10)),
             cnt % 2 == 0 ? offset.dirty_offset - model::offset(2)
-                         : offset.dirty_offset,
-            ss::default_priority_class());
+                         : offset.dirty_offset);
           auto start = ss::steady_clock_type::now();
           return log->make_reader(cfg)
             .then([start](model::record_batch_reader rdr) {
@@ -2907,8 +2837,7 @@ TEST_F(storage_test_fixture, read_write_truncate) {
               auto start = ss::steady_clock_type::now();
               auto orig_cnt = log->get_log_truncation_counter();
               return log
-                ->truncate(storage::truncate_config(
-                  offset.dirty_offset, ss::default_priority_class()))
+                ->truncate(storage::truncate_config(offset.dirty_offset))
                 .finally([start, orig_cnt, log] {
                     // assert that truncation took less than 5 seconds
                     ASSERT_LT(
@@ -2972,7 +2901,6 @@ TEST_F(storage_test_fixture, write_truncate_compact) {
 
               storage::log_append_config cfg{
                 .should_fsync = storage::log_append_config::fsync::no,
-                .io_priority = ss::default_priority_class(),
                 .timeout = model::no_timeout,
               };
               return log_mutex
@@ -3008,9 +2936,7 @@ TEST_F(storage_test_fixture, write_truncate_compact) {
                     truncate_at);
 
                   auto orig_cnt = log->get_log_truncation_counter();
-                  return log
-                    ->truncate(storage::truncate_config(
-                      truncate_at, ss::default_priority_class()))
+                  return log->truncate(storage::truncate_config(truncate_at))
                     .then_wrapped([log, o = truncate_at, orig_cnt](
                                     ss::future<> f) {
                         vassert(
@@ -3038,7 +2964,6 @@ TEST_F(storage_test_fixture, write_truncate_compact) {
                              std::nullopt,
                              model::offset::max(),
                              std::nullopt,
-                             ss::default_priority_class(),
                              as))
                            .handle_exception_type(
                              [](const storage::segment_closed_exception&) {
@@ -3116,7 +3041,7 @@ TEST_F(storage_test_fixture, compaction_non_raft_batches_regression_test) {
 
     auto print_batch_info = [](ss::shared_ptr<storage::log> log) {
         storage::log_reader_config reader_cfg(
-          model::offset(0), model::offset::max(), ss::default_priority_class());
+          model::offset(0), model::offset::max());
         auto reader = log->make_reader(reader_cfg).get();
         std::move(reader)
           .for_each_ref(logging_consumer{}, model::no_timeout)
@@ -3150,7 +3075,6 @@ TEST_F(storage_test_fixture, compaction_non_raft_batches_regression_test) {
 
     storage::log_append_config appender_cfg{
       .should_fsync = storage::log_append_config::fsync::no,
-      .io_priority = ss::default_priority_class(),
       .timeout = model::no_timeout,
     };
 
@@ -3198,13 +3122,12 @@ TEST_F(storage_test_fixture, compaction_non_raft_batches_regression_test) {
     }
 
     // compact the log
-    log->force_roll(ss::default_priority_class()).get();
+    log->force_roll().get();
     storage::housekeeping_config compaction_cfg(
       model::timestamp::min(),
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     log->housekeeping(compaction_cfg).get();
 
@@ -3274,7 +3197,6 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
 
           storage::log_append_config appender_cfg{
             .should_fsync = storage::log_append_config::fsync::no,
-            .io_priority = ss::default_priority_class(),
             .timeout = model::no_timeout,
           };
 
@@ -3290,7 +3212,6 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
               std::nullopt,
               model::offset::max(),
               std::nullopt,
-              ss::default_priority_class(),
               as))
             .get();
       };
@@ -3318,10 +3239,7 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
 
         model::offset truncate_offset(10);
 
-        log
-          ->truncate(storage::truncate_config(
-            truncate_offset, ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(truncate_offset)).get();
         SUCCEED() << fmt::format(
           "truncated at: {}, offsets: {}", truncate_offset, log->offsets());
         ASSERT_EQ(log->offsets().dirty_offset, model::offset(0));
@@ -3351,15 +3269,10 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
         write_and_compact(std::move(batches));
 
         model::offset truncate_offset(11);
-        log
-          ->truncate_prefix(storage::truncate_prefix_config(
-            truncate_offset, ss::default_priority_class()))
+        log->truncate_prefix(storage::truncate_prefix_config(truncate_offset))
           .get();
 
-        log
-          ->truncate(storage::truncate_config(
-            truncate_offset, ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(truncate_offset)).get();
         SUCCEED() << fmt::format(
           "truncated at: {}, offsets: {}", truncate_offset, log->offsets());
         // empty log have a dirty offset equal to (start_offset - 1)
@@ -3374,7 +3287,6 @@ static storage::log_gap_analysis analyze(storage::log& log) {
       model::model_limits<model::offset>::max(),
       0,
       10_MiB,
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -3410,7 +3322,7 @@ TEST_F(storage_test_fixture, test_max_compact_offset) {
     log->flush().get();
     auto first_stats = log->offsets();
     SUCCEED() << fmt::format("Offsets to be compacted {}", first_stats);
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     headers = append_random_batches<key_limited_random_batch_generator>(
       log, 20);
 
@@ -3419,14 +3331,13 @@ TEST_F(storage_test_fixture, test_max_compact_offset) {
     log->flush().get();
     auto second_stats = log->offsets();
     auto pre_compact_gaps = analyze(*disk_log);
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     auto max_compact_offset = first_stats.committed_offset;
     storage::housekeeping_config ccfg(
       model::timestamp::max(), // no time-based deletion
       std::nullopt,
       max_compact_offset,
       std::nullopt,
-      ss::default_priority_class(),
       as);
     log->housekeeping(ccfg).get();
     auto final_stats = log->offsets();
@@ -3476,7 +3387,7 @@ TEST_F(storage_test_fixture, test_self_compaction_while_reader_is_open) {
     // (2) remember log offset, roll log, and produce more messages
     log->flush().get();
 
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     headers = append_random_batches<key_limited_random_batch_generator>(
       log, 20);
 
@@ -3484,19 +3395,15 @@ TEST_F(storage_test_fixture, test_self_compaction_while_reader_is_open) {
     // after, to observe compaction behavior.
     log->flush().get();
 
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     storage::housekeeping_config ccfg(
       model::timestamp::max(), // no time-based deletion
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     auto& segment = *(disk_log->segments().begin());
-    auto stream = segment
-                    ->offset_data_stream(
-                      model::offset(0), ss::default_priority_class())
-                    .get();
+    auto stream = segment->offset_data_stream(model::offset(0)).get();
     log->housekeeping(std::move(ccfg)).get();
     stream.close().get();
 };
@@ -3524,7 +3431,7 @@ TEST_F(storage_test_fixture, test_simple_compaction_rebuild_index) {
     int num_appends = 5;
     append_random_batches<linear_int_kv_batch_generator>(log, num_appends);
     log->flush().get();
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     ASSERT_EQ(disk_log->segment_count(), 2);
 
     // Remove compacted indexes to trigger a full index rebuild.
@@ -3545,7 +3452,6 @@ TEST_F(storage_test_fixture, test_simple_compaction_rebuild_index) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
 
     log->housekeeping(ccfg).get();
@@ -3608,7 +3514,6 @@ do_compact_test(const compact_test_args args, storage_test_fixture& f) {
           {std::move(batch)});
         storage::log_append_config cfg{
           .should_fsync = storage::log_append_config::fsync::no,
-          .io_priority = ss::default_priority_class(),
           .timeout = model::no_timeout,
         };
 
@@ -3624,7 +3529,7 @@ do_compact_test(const compact_test_args args, storage_test_fixture& f) {
         for (int i = 0; i < args.msg_per_segment; i++) {
             append_batch(log, model::term_id(0), key);
         }
-        disk_log->force_roll(ss::default_priority_class()).get();
+        disk_log->force_roll().get();
     }
     append_batch(log, model::term_id(0)); // write single message for final
                                           // segment after last roll
@@ -3641,7 +3546,6 @@ do_compact_test(const compact_test_args args, storage_test_fixture& f) {
       std::nullopt,
       model::offset(args.max_compact_offs),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     log->housekeeping(ccfg).get();
     auto final_stats = log->offsets();
@@ -3912,7 +3816,6 @@ TEST_F(storage_test_fixture, test_bytes_eviction_overrides) {
             cfg.retention_bytes(),
             model::offset::max(),
             std::nullopt,
-            ss::default_priority_class(),
             as));
 
         // retention won't violate the target
@@ -3973,7 +3876,6 @@ TEST_F(storage_test_fixture, issue_8091) {
 
           storage::log_append_config cfg{
             .should_fsync = storage::log_append_config::fsync::no,
-            .io_priority = ss::default_priority_class(),
             .timeout = model::no_timeout,
           };
           SUCCEED() << "append";
@@ -3999,9 +3901,7 @@ TEST_F(storage_test_fixture, issue_8091) {
           }
           auto offset = log->offsets();
           storage::log_reader_config cfg(
-            last_truncate - model::offset(1),
-            offset.dirty_offset,
-            ss::default_priority_class());
+            last_truncate - model::offset(1), offset.dirty_offset);
           cfg.type_filter = model::record_batch_type::raft_data;
 
           auto start = ss::steady_clock_type::now();
@@ -4038,8 +3938,7 @@ TEST_F(storage_test_fixture, issue_8091) {
                 auto start = ss::steady_clock_type::now();
                 last_truncate = offset.dirty_offset;
                 return log
-                  ->truncate(storage::truncate_config(
-                    offset.dirty_offset, ss::default_priority_class()))
+                  ->truncate(storage::truncate_config(offset.dirty_offset))
                   .finally([start] {
                       // assert that truncation took less than 5 seconds
                       ASSERT_LT(
@@ -4161,7 +4060,6 @@ TEST_F(storage_test_fixture, reader_reusability_max_bytes) {
               model::model_limits<model::offset>::max(),
               0,
               reader_max_bytes,
-              ss::default_priority_class(),
               std::nullopt,
               std::nullopt,
               std::nullopt);
@@ -4253,23 +4151,18 @@ TEST_F(
         if (first_segment_last_offset == model::offset{}) {
             first_segment_last_offset = log->offsets().dirty_offset;
         }
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     // Prefix truncate such that offset 1 is the new log start.
-    log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        model::offset(1), ss::default_priority_class()))
+    log->truncate_prefix(storage::truncate_prefix_config(model::offset(1)))
       .get();
 
     // Run size queries on ranges that don't exist in the log, but whose range
     // is still included in a segment.
 
     EXPECT_TRUE(
-      log
-        ->offset_range_size(
-          model::offset(0), model::offset(1), ss::default_priority_class())
-        .get()
+      log->offset_range_size(model::offset(0), model::offset(1)).get()
       == std::nullopt);
 
     EXPECT_TRUE(
@@ -4279,8 +4172,7 @@ TEST_F(
           storage::log::offset_range_size_requirements_t{
             .target_size = 1,
             .min_size = 0,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 }
@@ -4318,11 +4210,11 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
         if (first_segment_last_offset == model::offset{}) {
             first_segment_last_offset = log->offsets().dirty_offset;
         }
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     storage::log_reader_config reader_cfg(
-      model::offset(0), model::offset::max(), ss::default_priority_class());
+      model::offset(0), model::offset::max());
     auto reader = log->make_reader(reader_cfg).get();
 
     auto acc = std::move(reader)
@@ -4337,9 +4229,7 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
         auto last = summaries[ix_last].last;
 
         auto expected_size = acc.acc_size[ix_last] - acc.prev_size[ix_base];
-        auto result
-          = log->offset_range_size(base, last, ss::default_priority_class())
-              .get();
+        auto result = log->offset_range_size(base, last).get();
 
         ASSERT_TRUE(result.has_value());
 
@@ -4356,8 +4246,7 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
 
         // Validate using the segment reader
         size_t consumed_size = 0;
-        storage::log_reader_config reader_cfg(
-          base, result->last_offset, ss::default_priority_class());
+        storage::log_reader_config reader_cfg(base, result->last_offset);
         reader_cfg.skip_readers_cache = true;
         reader_cfg.skip_batch_cache = true;
         auto log_rdr = log->make_reader(std::move(reader_cfg)).get();
@@ -4369,9 +4258,7 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
     }
 
     auto new_start_offset = model::next_offset(first_segment_last_offset);
-    log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        new_start_offset, ss::default_priority_class()))
+    log->truncate_prefix(storage::truncate_prefix_config(new_start_offset))
       .get();
 
     auto lstat = log->offsets();
@@ -4382,9 +4269,7 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
     ASSERT_TRUE(
       log
         ->offset_range_size(
-          model::offset(0),
-          model::next_offset(new_start_offset),
-          ss::default_priority_class())
+          model::offset(0), model::next_offset(new_start_offset))
         .get()
       == std::nullopt);
 
@@ -4392,8 +4277,7 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
       log
         ->offset_range_size(
           model::next_offset(new_start_offset),
-          model::next_offset(lstat.committed_offset),
-          ss::default_priority_class())
+          model::next_offset(lstat.committed_offset))
         .get()
       == std::nullopt);
 };
@@ -4431,11 +4315,11 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
         if (first_segment_last_offset == model::offset{}) {
             first_segment_last_offset = log->offsets().dirty_offset;
         }
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     storage::log_reader_config reader_cfg(
-      model::offset(0), model::offset::max(), ss::default_priority_class());
+      model::offset(0), model::offset::max());
     auto reader = log->make_reader(reader_cfg).get();
     auto acc = std::move(reader)
                  .consume(batch_summary_accumulator{}, model::no_timeout)
@@ -4460,8 +4344,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
                           storage::log::offset_range_size_requirements_t{
                             .target_size = target_size,
                             .min_size = 0,
-                          },
-                          ss::default_priority_class())
+                          })
                         .get();
 
         ASSERT_TRUE(result.has_value());
@@ -4478,8 +4361,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
 
         // Validate using the segment reader
         size_t consumed_size = 0;
-        storage::log_reader_config reader_cfg(
-          base, result->last_offset, ss::default_priority_class());
+        storage::log_reader_config reader_cfg(base, result->last_offset);
         reader_cfg.skip_readers_cache = true;
         reader_cfg.skip_batch_cache = true;
         auto log_rdr = log->make_reader(std::move(reader_cfg)).get();
@@ -4491,9 +4373,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
     }
 
     auto new_start_offset = model::next_offset(first_segment_last_offset);
-    log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        new_start_offset, ss::default_priority_class()))
+    log->truncate_prefix(storage::truncate_prefix_config(new_start_offset))
       .get();
 
     auto lstat = log->offsets();
@@ -4508,8 +4388,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = 1,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 
@@ -4523,8 +4402,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = 0,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 
@@ -4537,8 +4415,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = 0,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 
@@ -4549,8 +4426,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
                    storage::log::offset_range_size_requirements_t{
                      .target_size = 0x10000,
                      .min_size = 0,
-                   },
-                   ss::default_priority_class())
+                   })
                  .get();
 
     // Only one batch is returned
@@ -4569,8 +4445,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
                   storage::log::offset_range_size_requirements_t{
                     .target_size = 0x10000,
                     .min_size = 0,
-                  },
-                  ss::default_priority_class())
+                  })
                 .get();
 
         ASSERT_EQ(res->last_offset, lstat.committed_offset);
@@ -4586,8 +4461,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = summaries.back().batch_size + 1,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 };
@@ -4631,7 +4505,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
         if (first_segment_last_offset == model::offset{}) {
             first_segment_last_offset = log->offsets().dirty_offset;
         }
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     // Build the maps before and after compaction (nc_ vs c_) to reflect the
@@ -4639,7 +4513,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
 
     // Read non-compacted version
     storage::log_reader_config nc_reader_cfg(
-      model::offset(0), model::offset::max(), ss::default_priority_class());
+      model::offset(0), model::offset::max());
     auto nc_reader = log->make_reader(nc_reader_cfg).get();
 
     auto nc_summary = std::move(nc_reader)
@@ -4656,13 +4530,12 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
       std::nullopt,
       log->offsets().committed_offset,
       std::nullopt,
-      ss::default_priority_class(),
       as);
     log->housekeeping(h_cfg).get();
 
     // Read compacted version
     storage::log_reader_config c_reader_cfg(
-      model::offset(0), model::offset::max(), ss::default_priority_class());
+      model::offset(0), model::offset::max());
     auto c_reader = log->make_reader(c_reader_cfg).get();
     auto c_acc = std::move(c_reader)
                    .consume(batch_summary_accumulator{}, model::no_timeout)
@@ -4732,9 +4605,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
           c_ix_base,
           c_ix_last);
 
-        auto result
-          = log->offset_range_size(base, last, ss::default_priority_class())
-              .get();
+        auto result = log->offset_range_size(base, last).get();
 
         ASSERT_TRUE(result.has_value());
 
@@ -4750,8 +4621,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
         ASSERT_EQ(last, result->last_offset);
 
         size_t consumed_size = 0;
-        storage::log_reader_config c_reader_cfg(
-          base, result->last_offset, ss::default_priority_class());
+        storage::log_reader_config c_reader_cfg(base, result->last_offset);
         c_reader_cfg.skip_readers_cache = true;
         c_reader_cfg.skip_batch_cache = true;
         auto c_log_rdr = log->make_reader(std::move(c_reader_cfg)).get();
@@ -4763,9 +4633,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
     }
 
     auto new_start_offset = model::next_offset(first_segment_last_offset);
-    log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        new_start_offset, ss::default_priority_class()))
+    log->truncate_prefix(storage::truncate_prefix_config(new_start_offset))
       .get();
 
     auto lstat = log->offsets();
@@ -4776,9 +4644,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
     ASSERT_TRUE(
       log
         ->offset_range_size(
-          model::offset(0),
-          model::next_offset(new_start_offset),
-          ss::default_priority_class())
+          model::offset(0), model::next_offset(new_start_offset))
         .get()
       == std::nullopt);
 
@@ -4786,8 +4652,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
       log
         ->offset_range_size(
           model::next_offset(new_start_offset),
-          model::next_offset(lstat.committed_offset),
-          ss::default_priority_class())
+          model::next_offset(lstat.committed_offset))
         .get()
       == std::nullopt);
 };
@@ -4830,7 +4695,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
         if (first_segment_last_offset == model::offset{}) {
             first_segment_last_offset = log->offsets().dirty_offset;
         }
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     // Build the maps before and after compaction (nc_ vs c_) to reflect the
@@ -4838,7 +4703,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
 
     // Read non-compacted version
     storage::log_reader_config nc_reader_cfg(
-      model::offset(0), model::offset::max(), ss::default_priority_class());
+      model::offset(0), model::offset::max());
     auto nc_reader = log->make_reader(nc_reader_cfg).get();
 
     auto nc_summary = std::move(nc_reader)
@@ -4855,13 +4720,12 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
       std::nullopt,
       log->offsets().committed_offset,
       std::nullopt,
-      ss::default_priority_class(),
       as);
     log->housekeeping(h_cfg).get();
 
     // Read compacted version
     storage::log_reader_config c_reader_cfg(
-      model::offset(0), model::offset::max(), ss::default_priority_class());
+      model::offset(0), model::offset::max());
     auto c_reader = log->make_reader(c_reader_cfg).get();
 
     auto c_acc = std::move(c_reader)
@@ -4933,16 +4797,14 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
                           storage::log::offset_range_size_requirements_t{
                             .target_size = target_size,
                             .min_size = 0,
-                          },
-                          ss::default_priority_class())
+                          })
                         .get();
         ASSERT_TRUE(result.has_value());
         auto last_offset = result->last_offset;
 
         size_t expected_size = 0;
 
-        storage::log_reader_config c_reader_cfg(
-          base, last_offset, ss::default_priority_class());
+        storage::log_reader_config c_reader_cfg(base, last_offset);
         c_reader_cfg.skip_readers_cache = true;
         c_reader_cfg.skip_batch_cache = true;
         auto c_log_rdr = log->make_reader(std::move(c_reader_cfg)).get();
@@ -4956,9 +4818,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
 
     SUCCEED() << fmt::format("Prefix truncating");
     auto new_start_offset = model::next_offset(first_segment_last_offset);
-    log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        new_start_offset, ss::default_priority_class()))
+    log->truncate_prefix(storage::truncate_prefix_config(new_start_offset))
       .get();
 
     auto lstat = log->offsets();
@@ -4974,8 +4834,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = 1,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 
@@ -4989,8 +4848,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = 0,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 
@@ -5003,8 +4861,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = 0,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 
@@ -5016,8 +4873,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
                    storage::log::offset_range_size_requirements_t{
                      .target_size = 0x10000,
                      .min_size = 0,
-                   },
-                   ss::default_priority_class())
+                   })
                  .get();
 
     // Only one batch is returned
@@ -5037,8 +4893,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
                   storage::log::offset_range_size_requirements_t{
                     .target_size = 0x10000,
                     .min_size = 0,
-                  },
-                  ss::default_priority_class())
+                  })
                 .get();
 
         ASSERT_EQ(res->last_offset, lstat.committed_offset);
@@ -5055,8 +4910,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
           storage::log::offset_range_size_requirements_t{
             .target_size = 0x10000,
             .min_size = c_summaries.back().batch_size + 1,
-          },
-          ss::default_priority_class())
+          })
         .get()
       == std::nullopt);
 };
@@ -5139,7 +4993,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_incremental) {
         if (first_segment_last_offset == model::offset{}) {
             first_segment_last_offset = log->offsets().dirty_offset;
         }
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
     size_t max_step_size = 0;
     for (auto& s : log->segments()) {
@@ -5169,7 +5023,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_incremental) {
     }
 
     storage::log_reader_config reader_cfg(
-      model::offset(0), model::offset::max(), ss::default_priority_class());
+      model::offset(0), model::offset::max());
     auto reader = log->make_reader(reader_cfg).get();
 
     auto acc = std::move(reader)
@@ -5192,8 +5046,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_incremental) {
                            storage::log::offset_range_size_requirements_t{
                              .target_size = target_size,
                              .min_size = min_size,
-                           },
-                           ss::default_priority_class())
+                           })
                          .get();
             ASSERT_TRUE(res.has_value());
             last_offset = res->last_offset;
@@ -5215,8 +5068,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_incremental) {
             batch_size_accumulator acc{};
             acc.size_bytes = &measured_size;
 
-            storage::log_reader_config reader_cfg(
-              base, res->last_offset, ss::default_priority_class());
+            storage::log_reader_config reader_cfg(base, res->last_offset);
             reader_cfg.skip_readers_cache = true;
             reader_cfg.skip_batch_cache = true;
             auto reader = log->make_reader(reader_cfg).get();
@@ -5284,7 +5136,7 @@ TEST_F(storage_test_fixture, dirty_ratio) {
         // Perform sliding window compaction, which will fully cleanly compact
         // the log.
         static const storage::compaction_config compact_cfg(
-          model::offset::max(), std::nullopt, ss::default_priority_class(), as);
+          model::offset::max(), std::nullopt, as);
         disk_log->sliding_window_compact(compact_cfg).get();
 
         dirty_segments_size_bytes = 0;
@@ -5295,31 +5147,31 @@ TEST_F(storage_test_fixture, dirty_ratio) {
     };
 
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     ASSERT_EQ(disk_log->segment_count(), 2);
     assert_on_new_segment(0);
     compact_and_assert();
 
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     ASSERT_EQ(disk_log->segment_count(), 3);
     assert_on_new_segment(1);
     compact_and_assert();
 
     add_segment(5_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     ASSERT_EQ(disk_log->segment_count(), 4);
     assert_on_new_segment(2);
     compact_and_assert();
 
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     ASSERT_EQ(disk_log->segment_count(), 5);
     assert_on_new_segment(3);
     compact_and_assert();
 
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     ASSERT_EQ(disk_log->segment_count(), 6);
     assert_on_new_segment(4);
     compact_and_assert();
@@ -5327,15 +5179,15 @@ TEST_F(storage_test_fixture, dirty_ratio) {
     // Add more segments, don't perform compaction to allow dirty_segment_bytes
     // to remain non-zero.
     add_segment(2_MiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     assert_on_new_segment(5);
 
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     assert_on_new_segment(6);
 
     add_segment(16_KiB, model::term_id(1));
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     assert_on_new_segment(7);
 
     std::vector<model::offset> base_offsets;
@@ -5354,10 +5206,7 @@ TEST_F(storage_test_fixture, dirty_ratio) {
     // Gradually truncate the log and see that dirty/closed segment bytes
     // have decreased.
     for (const auto& base_offset : base_offsets) {
-        disk_log
-          ->truncate(
-            storage::truncate_config(base_offset, ss::default_priority_class()))
-          .get();
+        disk_log->truncate(storage::truncate_config(base_offset)).get();
 
         auto new_dirty_segment_bytes = disk_log->dirty_segment_bytes();
         auto new_closed_segment_bytes = disk_log->dirty_segment_bytes();
@@ -5401,12 +5250,7 @@ TEST_F(storage_test_fixture, dirty_and_closed_bytes_bookkeeping) {
     auto* disk_log = static_cast<disk_log_impl*>(log.get());
 
     housekeeping_config cfg{
-      model::timestamp::max(),
-      1,
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      abs};
+      model::timestamp::max(), 1, model::offset::max(), std::nullopt, abs};
 
     // add a segment with random keys until a certain size
     auto add_segment = [&](size_t size, model::term_id term) {
@@ -5425,9 +5269,7 @@ TEST_F(storage_test_fixture, dirty_and_closed_bytes_bookkeeping) {
     };
 
     // Force rolls the log.
-    auto force_roll_func = [&]() {
-        disk_log->force_roll(ss::default_priority_class()).get();
-    };
+    auto force_roll_func = [&]() { disk_log->force_roll().get(); };
 
     // Restarts the log manager- this has the added benefit of forcing recovery
     // from the existing segment set.
@@ -5456,9 +5298,7 @@ TEST_F(storage_test_fixture, dirty_and_closed_bytes_bookkeeping) {
     auto prefix_truncate_func = [&]() {
         auto dirty_offset = disk_log->offsets().dirty_offset;
         auto offset = random_generators::get_int(1L, dirty_offset());
-        disk_log
-          ->truncate_prefix(truncate_prefix_config(
-            model::offset(offset), ss::default_priority_class()))
+        disk_log->truncate_prefix(truncate_prefix_config(model::offset(offset)))
           .get();
     };
 
@@ -5466,9 +5306,7 @@ TEST_F(storage_test_fixture, dirty_and_closed_bytes_bookkeeping) {
     auto truncate_func = [&]() {
         auto dirty_offset = disk_log->offsets().dirty_offset;
         auto offset = random_generators::get_int(1L, dirty_offset());
-        disk_log
-          ->truncate(storage::truncate_config(
-            model::offset{offset}, ss::default_priority_class()))
+        disk_log->truncate(storage::truncate_config(model::offset{offset}))
           .get();
     };
 
@@ -5522,7 +5360,7 @@ TEST_F(storage_test_fixture, negative_dirty_and_closed_bytes_triggers_reset) {
         b | add_segment(offset)
           | add_random_batch(
             offset, records_per_seg, maybe_compress_batches::yes);
-        disk_log.force_roll(ss::default_priority_class()).get();
+        disk_log.force_roll().get();
     }
 
     auto saved_dirty_segment_bytes = disk_log.dirty_segment_bytes();
@@ -5597,7 +5435,7 @@ TEST_F(storage_test_fixture, compaction_scheduling) {
     auto append_and_force_roll = [this](auto& log, int num_batches = 10) {
         auto headers = append_random_batches<linear_int_kv_batch_generator>(
           log, num_batches);
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     };
 
     // Attempt a housekeeping scan with no partitions to compact
@@ -5699,7 +5537,7 @@ TEST_F(storage_test_fixture, max_compaction_lag) {
     auto append_and_force_roll = [this, &log](int num_batches = 10) {
         auto headers = append_random_batches<linear_int_kv_batch_generator>(
           log, num_batches);
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     };
 
     // Append and close one segment, then compact.
@@ -5874,7 +5712,7 @@ TEST_F(storage_test_fixture, prefix_truncate_offset_range_size) {
     for (size_t i = 0; i < num_segments; i++) {
         append_random_batches(
           log, 10, model::term_id(0), key_limited_random_batch_generator());
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     auto dirty_offset = log->offsets().dirty_offset;
@@ -5884,9 +5722,7 @@ TEST_F(storage_test_fixture, prefix_truncate_offset_range_size) {
     SUCCEED() << fmt::format(
       "Prefix truncating at offset {}", new_start_offset);
 
-    log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        new_start_offset, ss::default_priority_class()))
+    log->truncate_prefix(storage::truncate_prefix_config(new_start_offset))
       .get();
 
     auto lstat = log->offsets();
@@ -5902,8 +5738,7 @@ TEST_F(storage_test_fixture, prefix_truncate_offset_range_size) {
                             storage::log::offset_range_size_requirements_t{
                               .target_size = 0x10000,
                               .min_size = 1,
-                            },
-                            ss::default_priority_class())
+                            })
                           .get());
     }
 }
@@ -5939,7 +5774,7 @@ TEST_F(storage_test_fixture, log_compaction_enable_sliding_window) {
     auto num_segments = 5;
     for (int i = 0; i < num_segments; ++i) {
         add_segment(2_MiB, model::term_id(0));
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     // config::shard_local_cfg().log_compaction_use_sliding_window is still

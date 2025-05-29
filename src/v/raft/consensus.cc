@@ -141,8 +141,7 @@ consensus::consensus(
   , _features(ft)
   , _snapshot_mgr(
       std::filesystem::path(_log->config().work_directory()),
-      storage::simple_snapshot_manager::default_snapshot_filename,
-      _scheduling.default_iopc)
+      storage::simple_snapshot_manager::default_snapshot_filename)
   , _configuration_manager(std::move(initial_cfg), _group, _storage, _ctxlog)
   , _priority_tracker(_self, is_ready_for_leader_election)
   , _keep_snapshotted_log(should_keep_snapshotted_log)
@@ -268,6 +267,7 @@ void consensus::shutdown_input() {
         _as.request_abort();
         _commit_index_updated.broken();
         _follower_reply.broken();
+        _consumable_offset_monitor.stop();
     }
 }
 
@@ -2247,8 +2247,7 @@ consensus::do_append_entries(append_entries_request&& r) {
           model::prev_offset(truncate_at), _flushed_offset);
 
         try {
-            co_await _log->truncate(
-              storage::truncate_config(truncate_at, _scheduling.default_iopc));
+            co_await _log->truncate(storage::truncate_config(truncate_at));
             // update flushed offset once again after truncation as flush is
             // executed concurrently to append entries and it may race with
             // the truncation
@@ -2440,9 +2439,7 @@ consensus::truncation_cfg_for_snapshot(const snapshot_metadata& metadata) {
           delta);
     }
     return storage::truncate_prefix_config(
-      model::next_offset(_last_snapshot_index),
-      _scheduling.default_iopc,
-      model::offset_delta(delta));
+      model::next_offset(_last_snapshot_index), model::offset_delta(delta));
 }
 
 ss::future<>
@@ -2660,8 +2657,8 @@ ss::future<> consensus::write_snapshot(write_snapshot_cfg cfg) {
 
     // Release the lock when truncating the log because it can take some
     // time while we wait for readers to be evicted.
-    co_await _log->truncate_prefix(storage::truncate_prefix_config(
-      model::next_offset(last_included_index), _scheduling.default_iopc));
+    co_await _log->truncate_prefix(
+      storage::truncate_prefix_config(model::next_offset(last_included_index)));
 
     /*
      * We do not need to keep an oplock when updating the flushed offset here as
@@ -2941,7 +2938,6 @@ ss::future<storage::append_result> consensus::disk_append(
       // no fsync explicit on a per write, we verify at the end to
       // batch fsync
       storage::log_append_config::fsync::no,
-      _scheduling.default_iopc,
       model::timeout_clock::now() + _disk_timeout()};
 
     class consumer {

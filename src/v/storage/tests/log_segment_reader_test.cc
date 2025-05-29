@@ -87,7 +87,6 @@ TEST(reader_test, test_can_read_single_batch_same_offset) {
       model::offset(1),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -107,7 +106,6 @@ TEST(reader_test, test_can_read_multiple_batches) {
       batches.back().last_offset(),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -126,7 +124,6 @@ TEST(reader_test, test_does_not_read_past_committed_offset_one_segment) {
       batches.back().last_offset() + model::offset(1),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -145,7 +142,6 @@ TEST(reader_test, test_does_not_read_past_committed_offset_multiple_segments) {
       batches.back().last_offset(),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -166,7 +162,6 @@ TEST(reader_test, test_does_not_read_past_max_bytes) {
       batches.front().last_offset(),
       0,
       static_cast<size_t>(batches.begin()->size_bytes()),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -187,7 +182,6 @@ TEST(reader_test, test_reads_at_least_one_batch) {
       batches.front().last_offset(),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -208,7 +202,6 @@ TEST(reader_test, test_read_batch_range) {
       batches.back().last_offset(),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -236,7 +229,6 @@ TEST(reader_test, test_batch_type_filter) {
       batches.back().last_offset(),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -257,7 +249,6 @@ TEST(reader_test, test_batch_type_filter) {
           batches.back().last_offset(),
           0,
           std::numeric_limits<size_t>::max(),
-          ss::default_priority_class(),
           type_filter,
           std::nullopt,
           std::nullopt);
@@ -296,7 +287,6 @@ TEST(reader_test, test_does_not_read_past_max_offset) {
       batches.back().last_offset(),
       0,
       std::numeric_limits<size_t>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -380,7 +370,6 @@ TEST(reader_test, test_ghost_read_with_index_overflow) {
       model::offset::max(),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);
@@ -432,7 +421,6 @@ TEST(reader_test, test_read_with_index_overflow_base) {
       model::offset::max(),
       0,
       model::model_limits<model::offset>::max(),
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       std::nullopt);

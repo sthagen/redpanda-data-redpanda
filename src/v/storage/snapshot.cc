@@ -50,7 +50,6 @@ snapshot_manager::open_snapshot(ss::sstring filename) {
     // ss::file::~file will automatically close the file. so no
     // worries about leaking an fd if something goes wrong here.
     ss::file_input_stream_options options;
-    options.io_priority_class = _io_prio;
     auto input = ss::make_file_input_stream(maybe_file.value(), options);
     co_return snapshot_reader(maybe_file.value(), std::move(input), path);
 }
@@ -81,9 +80,8 @@ snapshot_manager::start_snapshot(ss::sstring target) {
                        | ss::open_flags::exclusive;
 
     return internal::make_handle(path, flags, {}, {})
-      .then([this, path](ss::file file) {
+      .then([path](ss::file file) {
           ss::file_output_stream_options options;
-          options.io_priority_class = _io_prio;
           return ss::make_file_output_stream(std::move(file), options);
       })
       .then([this, target, path](ss::output_stream<char> output) {

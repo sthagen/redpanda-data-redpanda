@@ -179,11 +179,7 @@ public:
     /// The 'first' offset should be the first offset of the batch. The 'last'
     /// should be the last offset of the batch. The offset range is inclusive.
     virtual ss::future<std::optional<offset_range_size_result_t>>
-    offset_range_size(
-      model::offset first,
-      model::offset last,
-      ss::io_priority_class io_priority)
-      = 0;
+    offset_range_size(model::offset first, model::offset last) = 0;
 
     /// Find the offset range based on size requirements
     ///
@@ -192,9 +188,7 @@ public:
     /// acceptable size.
     virtual ss::future<std::optional<offset_range_size_result_t>>
     offset_range_size(
-      model::offset first,
-      offset_range_size_requirements_t target,
-      ss::io_priority_class io_priority)
+      model::offset first, offset_range_size_requirements_t target)
       = 0;
 
     virtual bool is_compacted(model::offset first, model::offset last) const
@@ -219,7 +213,7 @@ public:
     virtual segment_set& segments() = 0;
 
     // roll immediately with the current term.
-    virtual ss::future<> force_roll(ss::io_priority_class) = 0;
+    virtual ss::future<> force_roll() = 0;
 
     virtual probe& get_probe() = 0;
 

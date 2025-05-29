@@ -65,7 +65,7 @@ bool_flag(
 
 int_flag(
     name = "api_level",
-    build_setting_default = 6,
+    build_setting_default = 7,
     make_variable = "API_LEVEL",
 )
 

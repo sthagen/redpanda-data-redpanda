@@ -27,7 +27,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/shared_ptr.hh>
 
 #include <absl/container/flat_hash_map.h>
@@ -95,10 +94,8 @@ public:
     ///
     /// The 'first' offset should be the first offset of the batch. The 'last'
     /// should be the last offset of the batch. The offset range is inclusive.
-    ss::future<std::optional<offset_range_size_result_t>> offset_range_size(
-      model::offset first,
-      model::offset last,
-      ss::io_priority_class io_priority) override;
+    ss::future<std::optional<offset_range_size_result_t>>
+    offset_range_size(model::offset first, model::offset last) override;
 
     /// Find the offset range based on size requirements
     ///
@@ -106,9 +103,7 @@ public:
     /// contains size requirements. The desired target size and smallest
     /// acceptable size.
     ss::future<std::optional<offset_range_size_result_t>> offset_range_size(
-      model::offset first,
-      offset_range_size_requirements_t target,
-      ss::io_priority_class io_priority) override;
+      model::offset first, offset_range_size_requirements_t target) override;
 
     /// Return true if the offset range contains compacted data
     bool is_compacted(model::offset first, model::offset last) const override;
@@ -145,13 +140,12 @@ public:
     std::ostream& print(std::ostream&) const final;
 
     // Must be called while _segments_rolling_lock is held.
-    ss::future<> maybe_roll_unlocked(
-      model::term_id, model::offset next_offset, ss::io_priority_class);
+    ss::future<> maybe_roll_unlocked(model::term_id, model::offset next_offset);
 
     // Kicks off a background flush of offset translator state to the kvstore.
     void bg_checkpoint_offset_translator();
 
-    ss::future<> force_roll(ss::io_priority_class) override;
+    ss::future<> force_roll() override;
 
     probe& get_probe() override { return *_probe; }
     model::term_id term() const;
@@ -300,8 +294,7 @@ private:
       ss::lw_shared_ptr<segment> s,
       std::optional<segment_index::entry> index_entry,
       model::offset target,
-      boundary_type boundary,
-      ss::io_priority_class priority);
+      boundary_type boundary);
 
     ss::future<model::record_batch_reader>
       make_unchecked_reader(log_reader_config);
@@ -350,9 +343,7 @@ private:
       std::string_view logging_context_msg);
 
     ss::future<> new_segment(
-      model::offset starting_offset,
-      model::term_id term_for_this_segment,
-      ss::io_priority_class prio);
+      model::offset starting_offset, model::term_id term_for_this_segment);
 
     ss::future<> do_truncate(
       truncate_config,

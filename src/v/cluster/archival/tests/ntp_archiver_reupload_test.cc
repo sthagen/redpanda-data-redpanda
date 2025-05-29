@@ -125,7 +125,6 @@ struct reupload_fixture : public archiver_fixture {
                            storage::ntp_config{seg.ntp, data_dir.string()},
                            seg.base_offset,
                            seg.term,
-                           ss::default_priority_class(),
                            128_KiB,
                            10,
                            1_MiB)
@@ -253,7 +252,6 @@ struct reupload_fixture : public archiver_fixture {
             std::nullopt,
             max_removable,
             std::nullopt,
-            ss::default_priority_class(),
             abort_source})
           .get();
 

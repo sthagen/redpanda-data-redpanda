@@ -203,7 +203,6 @@ TEST_F(log_builder_fixture, iterator_invalidation) {
                                     model::model_limits<model::offset>::max(),
                                     0,
                                     std::numeric_limits<size_t>::max(),
-                                    ss::default_priority_class(),
                                     data,
                                     std::nullopt,
                                     std::nullopt))
@@ -213,7 +212,6 @@ TEST_F(log_builder_fixture, iterator_invalidation) {
                                       model::model_limits<model::offset>::max(),
                                       0,
                                       std::numeric_limits<size_t>::max(),
-                                      ss::default_priority_class(),
                                       configuration,
                                       std::nullopt,
                                       std::nullopt))
@@ -251,19 +249,14 @@ TEST_F(log_builder_fixture, test_skipping_compaction_below_start_offset) {
 
     b | add_segment(0) | add_random_batch(0, 100);
 
-    log.force_roll(ss::default_priority_class()).get();
+    log.force_roll().get();
 
     b | add_segment(100) | add_random_batch(100, 100);
 
     ASSERT_EQ(log.segment_count(), 2);
 
     housekeeping_config cfg{
-      model::timestamp::max(),
-      1,
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      abs};
+      model::timestamp::max(), 1, model::offset::max(), std::nullopt, abs};
 
     // Call into `disk_log_impl::gc` and listen for the eviction
     // notification being created.

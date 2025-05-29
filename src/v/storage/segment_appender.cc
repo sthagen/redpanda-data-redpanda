@@ -255,8 +255,7 @@ ss::future<> segment_appender::hydrate_last_half_page() {
     return _out
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wdeprecated-declarations"
-      .dma_read(
-        sz, buff, read_align /*must be full _write_ alignment*/, _opts.priority)
+      .dma_read(sz, buff, read_align /*must be full _write_ alignment*/)
 #pragma clang diagnostic pop
       .then([this, bytes_to_read](size_t actual) {
           vassert(
@@ -571,8 +570,7 @@ void segment_appender::dispatch_background_head_write() {
                   .dma_write(
                     w->file_start_offset,
                     w->chunk->data() + w->chunk_begin,
-                    dma_size,
-                    _opts.priority)
+                    dma_size)
 #pragma clang diagnostic pop
                   .then([this, w](size_t got) {
                       /*

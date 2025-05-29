@@ -367,7 +367,6 @@ redpanda_cc_btest(
     deps = [
         "//src/v/kafka/protocol:offset_fetch",
         "//src/v/redpanda/tests:fixture",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar",
@@ -384,7 +383,6 @@ redpanda_cc_btest(
     deps = [
         "//src/v/kafka/server",
         "//src/v/redpanda/tests:fixture",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar",
@@ -441,7 +439,6 @@ redpanda_cc_btest(
     deps = [
         "//src/v/kafka/protocol:find_coordinator",
         "//src/v/redpanda/tests:fixture",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar",
@@ -463,7 +460,6 @@ redpanda_cc_btest(
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/redpanda/tests:fixture",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar",
@@ -753,7 +749,6 @@ redpanda_cc_gtest(
         "//src/v/kafka/server",
         "//src/v/model",
         "//src/v/redpanda/tests:fixture",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",

@@ -105,15 +105,15 @@ public:
       uint64_t pos,
       const void* buffer,
       size_t len,
-      const ss::io_priority_class& pc) final {
+      ss::io_intent* intent = nullptr) final {
         assert_file_not_closed();
         return with_op(
           ssx::sformat(
             "ss::future<size_t>::write_dma(pos:{}, *void, len:{})", pos, len),
           maybe_inject_failure(failable_op_type::write)
-            .then([this, pos, buffer, len, &pc]() {
+            .then([this, pos, buffer, len, intent]() {
                 return get_file_impl(_file)
-                  ->write_dma(pos, buffer, len, pc)
+                  ->write_dma(pos, buffer, len, intent)
                   .finally([this]() {
                       if (_appender_ptr) {
                           _appender_ptr->reset_batch_types_to_write();
@@ -125,7 +125,7 @@ public:
     ss::future<size_t> write_dma(
       uint64_t pos,
       std::vector<iovec> iov,
-      const ss::io_priority_class& pc) final {
+      ss::io_intent* intent = nullptr) final {
         assert_file_not_closed();
         auto iov_size = iov.size();
         return with_op(
@@ -134,9 +134,9 @@ public:
             pos,
             iov_size),
           maybe_inject_failure(failable_op_type::write)
-            .then([this, pos, iov = std::move(iov), &pc]() {
+            .then([this, pos, iov = std::move(iov), intent]() {
                 return get_file_impl(_file)
-                  ->write_dma(pos, iov, pc)
+                  ->write_dma(pos, iov, intent)
                   .finally([this]() {
                       if (_appender_ptr) {
                           _appender_ptr->reset_batch_types_to_write();
@@ -149,28 +149,27 @@ public:
       uint64_t pos,
       void* buffer,
       size_t len,
-      const ss::io_priority_class& pc) final {
+      ss::io_intent* intent = nullptr) final {
         assert_file_not_closed();
         return with_op(
           ssx::sformat(
             "ss::future<size_t> read_dma(pos:{}, void* buffer, len:{})",
             pos,
             len),
-          get_file_impl(_file)->read_dma(pos, buffer, len, pc));
+          get_file_impl(_file)->read_dma(pos, buffer, len, intent));
     }
 
     ss::future<size_t> read_dma(
       uint64_t pos,
       std::vector<iovec> iov,
-      const ss::io_priority_class& pc) final {
+      ss::io_intent* intent = nullptr) final {
         assert_file_not_closed();
         return with_op(
           ssx::sformat(
-            "ss::future<size_t> read_dma(pos{}, std::vector<iovec>:{} , "
-            "const ss::io_priority_class& pc)",
+            "ss::future<size_t> read_dma(pos{}, std::vector<iovec>:{}",
             pos,
             iov.size()),
-          get_file_impl(_file)->read_dma(pos, iov, pc));
+          get_file_impl(_file)->read_dma(pos, iov, intent));
     }
 
     ss::future<> flush() final {
@@ -263,7 +262,7 @@ public:
     ss::future<ss::temporary_buffer<uint8_t>> dma_read_bulk(
       uint64_t offset,
       size_t range_size,
-      const ss::io_priority_class& pc) final {
+      ss::io_intent* intent = nullptr) final {
         assert_file_not_closed();
         return with_op(
           ssx::sformat(
@@ -271,7 +270,7 @@ public:
             "dma_read_bulk(offset:{}, range_size:{}",
             offset,
             range_size),
-          get_file_impl(_file)->dma_read_bulk(offset, range_size, pc));
+          get_file_impl(_file)->dma_read_bulk(offset, range_size, intent));
     }
 
 private:

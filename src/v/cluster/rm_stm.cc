@@ -96,9 +96,7 @@ rm_stm::rm_stm(
   , _is_tx_enabled(config::shard_local_cfg().enable_transactions.value())
   , _tx_gateway_frontend(tx_gateway_frontend)
   , _abort_snapshot_mgr(
-      "abort.idx",
-      std::filesystem::path(c->log_config().work_directory()),
-      ss::default_priority_class())
+      "abort.idx", std::filesystem::path(c->log_config().work_directory()))
   , _feature_table(feature_table)
   , _ctx_log(txlog, ssx::sformat("[{}]", c->ntp()))
   , _producer_state_manager(producer_state_manager)

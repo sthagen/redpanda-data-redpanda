@@ -30,7 +30,6 @@
 #include "utils/stream_provider.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/temporary_buffer.hh>
@@ -114,8 +113,7 @@ FIXTURE_TEST(
       probe,
       ts_probe);
 
-    auto reader_handle
-      = segment.data_stream(0, ss::default_priority_class()).get();
+    auto reader_handle = segment.data_stream(0).get();
 
     iobuf downloaded;
     auto rds = make_iobuf_ref_output_stream(downloaded);
@@ -159,9 +157,7 @@ FIXTURE_TEST(test_remote_segment_timeout, cloud_storage_fixture) { // NOLINT
       probe,
       ts_probe);
 
-    BOOST_REQUIRE_THROW(
-      segment.data_stream(0, ss::default_priority_class()).get(),
-      download_exception);
+    BOOST_REQUIRE_THROW(segment.data_stream(0).get(), download_exception);
     segment.stop().get();
 }
 
@@ -232,7 +228,7 @@ FIXTURE_TEST(
     m.add(meta);
 
     storage::log_reader_config reader_config(
-      model::offset(1), model::offset(1), ss::default_priority_class());
+      model::offset(1), model::offset(1));
 
     partition_probe probe(manifest_ntp);
     auto& ts_probe = api.local().materialized().get_read_path_probe();
@@ -338,8 +334,7 @@ void test_remote_segment_batch_reader(
     model::offset begin = headers.at(ix_begin).base_offset;
     model::offset end = headers.at(ix_end).last_offset();
 
-    storage::log_reader_config reader_config(
-      begin, end, ss::default_priority_class());
+    storage::log_reader_config reader_config(begin, end);
     reader_config.max_bytes = std::numeric_limits<size_t>::max();
 
     partition_probe probe(manifest_ntp);
@@ -470,9 +465,7 @@ FIXTURE_TEST(
     remote_segment_batch_reader reader(
       segment,
       storage::log_reader_config(
-        headers.at(0).base_offset,
-        headers.at(0).last_offset(),
-        ss::default_priority_class()),
+        headers.at(0).base_offset, headers.at(0).last_offset()),
       probe,
       ts_probe,
       ssx::semaphore_units());
@@ -554,7 +547,5 @@ FIXTURE_TEST(
 
     auto d = ss::defer([&segment] { segment.stop().get(); });
 
-    BOOST_REQUIRE_THROW(
-      segment.data_stream(0, ss::default_priority_class()).get(),
-      std::runtime_error);
+    BOOST_REQUIRE_THROW(segment.data_stream(0).get(), std::runtime_error);
 }

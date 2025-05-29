@@ -17,7 +17,6 @@
 #include "test_utils/fixture.h"
 
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>
 
 #include <boost/test/tools/old/interface.hpp>
@@ -30,7 +29,7 @@ using namespace std::chrono_literals;
 namespace {
 ss::future<> force_roll_log(storage::disk_log_impl* log) {
     try {
-        co_await log->force_roll(ss::default_priority_class());
+        co_await log->force_roll();
     } catch (...) {
     }
 }
@@ -100,7 +99,6 @@ FIXTURE_TEST(test_concurrent_log_eviction_and_append, storage_e2e_fixture) {
       /*max_bytes_in_log=*/1,
       /*max_collect_offset=*/model::offset::min(),
       /*tombstone_retention_ms=*/std::nullopt,
-      ss::default_priority_class(),
       as);
 
     const auto num_records = 100;
@@ -131,9 +129,7 @@ FIXTURE_TEST(test_concurrent_log_eviction_and_append, storage_e2e_fixture) {
         auto lstats = log->offsets();
         return log
           ->make_reader(storage::log_reader_config(
-            lstats.start_offset,
-            model::offset::max(),
-            ss::default_priority_class()))
+            lstats.start_offset, model::offset::max()))
           .then([](auto reader) {
               return ss::sleep(std::chrono::milliseconds(
                                  random_generators::get_int(15, 30)))

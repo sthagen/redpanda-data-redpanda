@@ -24,9 +24,11 @@ std::unique_ptr<scoped_remote> scoped_remote::create(
     auto sharded_config = ss::sharded_parameter([&config] { return config; });
     ret->pool.start(pool_size, config).get();
     ret->remote
-      .start(std::ref(ret->pool), sharded_config, ss::sharded_parameter([] {
-                 return config_file;
-             }))
+      .start(
+        std::ref(ret->pool),
+        sharded_config,
+        ss::sharded_parameter([] { return config_file; }),
+        ss::sharded_parameter([] { return ss::default_scheduling_group(); }))
       .get();
     ret->remote
       .invoke_on_all(

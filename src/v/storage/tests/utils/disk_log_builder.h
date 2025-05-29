@@ -45,23 +45,17 @@ inline ss::sstring random_dir() {
 
 inline log_config log_builder_config() {
     return log_config(
-      random_dir(),
-      100_MiB,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config());
+      random_dir(), 100_MiB, storage::make_sanitized_file_config());
 }
 
 inline log_reader_config reader_config() {
     return log_reader_config{
-      model::offset(0),
-      model::model_limits<model::offset>::max(),
-      ss::default_priority_class()};
+      model::offset(0), model::model_limits<model::offset>::max()};
 }
 
 inline log_append_config append_config() {
     return log_append_config{
       .should_fsync = storage::log_append_config::fsync::yes,
-      .io_priority = ss::default_priority_class(),
       .timeout = model::no_timeout};
 }
 
@@ -345,10 +339,8 @@ public:
     segment_index& get_seg_index_ptr(size_t index);
 
     // Create segments
-    ss::future<> add_segment(
-      model::offset offset,
-      model::term_id term = model::term_id(0),
-      ss::io_priority_class pc = ss::default_priority_class());
+    ss::future<>
+    add_segment(model::offset offset, model::term_id term = model::term_id(0));
 
     // Read interface
     // Default consume

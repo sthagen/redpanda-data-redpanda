@@ -79,7 +79,9 @@ class DatabricksTest(RedpandaTest):
             dl.create_iceberg_enabled_topic(self.topic_name, partitions=10)
             dl.produce_to_topic(self.topic_name, 1024, count)
 
-            dl.wait_for_translation(self.topic_name, msg_count=count)
+            dl.wait_for_translation(self.topic_name,
+                                    msg_count=count,
+                                    timeout=60)
 
     # This test does not work because Iceberg tables in the managed catalog
     # w/ their databricks sql engine are read only. I.e. there is no support

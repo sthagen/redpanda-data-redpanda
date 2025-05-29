@@ -177,16 +177,14 @@ failure_injectable_log::size_bytes_after_offset(model::offset o) const {
 
 ss::future<std::optional<storage::log::offset_range_size_result_t>>
 failure_injectable_log::offset_range_size(
-  model::offset first, model::offset last, ss::io_priority_class io_priority) {
-    return _underlying_log->offset_range_size(first, last, io_priority);
+  model::offset first, model::offset last) {
+    return _underlying_log->offset_range_size(first, last);
 }
 
 ss::future<std::optional<failure_injectable_log::offset_range_size_result_t>>
 failure_injectable_log::offset_range_size(
-  model::offset first,
-  offset_range_size_requirements_t target,
-  ss::io_priority_class io_priority) {
-    return _underlying_log->offset_range_size(first, target, io_priority);
+  model::offset first, offset_range_size_requirements_t target) {
+    return _underlying_log->offset_range_size(first, target);
 }
 
 bool failure_injectable_log::is_compacted(
@@ -229,8 +227,8 @@ storage::segment_set& failure_injectable_log::segments() {
     return _underlying_log->segments();
 }
 
-ss::future<> failure_injectable_log::force_roll(ss::io_priority_class iop) {
-    return _underlying_log->force_roll(iop);
+ss::future<> failure_injectable_log::force_roll() {
+    return _underlying_log->force_roll();
 }
 
 storage::probe& failure_injectable_log::get_probe() {

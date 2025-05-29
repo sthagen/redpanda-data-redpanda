@@ -1197,6 +1197,7 @@ class DataMigrationsMultiClusterTest(RedpandaTest, DataMigrationTestMixin):
         consumer = self.start_consumer(topic, redpanda)
         self.logger.info(f"expecting to consume {msg_count} messages")
         consumer.wait_total_reads(msg_count, timeout_sec=30, backoff_sec=1)
+        consumer.stop()
         consumer.free()
 
     def start_extra_cluster(self, num_brokers=3):

@@ -28,8 +28,6 @@
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
-#include <seastar/core/io_priority_class.hh>
-
 #include <gtest/gtest.h>
 
 #include <iterator>
@@ -239,7 +237,6 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloud) {
       1,
       log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     partition->log()->housekeeping(housekeeping_conf).get();
     // NOTE: the storage layer only initially requests eviction; it relies on
@@ -323,7 +320,7 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloudWithSpillover) {
           .get();
         total_records += records.size();
         log->flush().get();
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
 
         ASSERT_TRUE(archiver.sync_for_tests().get());
         archiver
@@ -663,7 +660,6 @@ TEST_P(CloudStorageEndToEndManualTest, TestTimequeryAfterArchivalGC) {
       1, // max_bytes_in_log
       log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     partition->log()->housekeeping(housekeeping_conf).get();
     RPTEST_REQUIRE_EVENTUALLY(
@@ -888,7 +884,7 @@ TEST_F(EndToEndFixture, TestLocalTimequery) {
         bool expect_value = false,
         std::optional<model::offset> expected_o = std::nullopt) {
           auto timequery_conf = storage::timequery_config(
-            model::offset(0), t, o, ss::default_priority_class(), std::nullopt);
+            model::offset(0), t, o, std::nullopt);
 
           auto result = partition->timequery(timequery_conf).get();
 
@@ -968,7 +964,6 @@ TEST_P(EndToEndFixture, TestCloudStorageTimequery) {
       0,
       log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       as);
     partition->log()->housekeeping(housekeeping_conf).get();
 
@@ -982,7 +977,7 @@ TEST_P(EndToEndFixture, TestCloudStorageTimequery) {
         bool expect_value = false,
         std::optional<model::offset> expected_o = std::nullopt) {
           auto timequery_conf = storage::timequery_config(
-            model::offset(0), t, o, ss::default_priority_class(), std::nullopt);
+            model::offset(0), t, o, std::nullopt);
 
           auto result = partition->timequery(timequery_conf).get();
 
@@ -1077,7 +1072,7 @@ TEST_F(ReadReplicaFixture, TestCloudStorageTimequeryReadReplicaMode) {
         bool expect_value = false,
         std::optional<model::offset> expected_o = std::nullopt) {
           auto timequery_conf = storage::timequery_config(
-            model::offset(0), t, o, ss::default_priority_class(), std::nullopt);
+            model::offset(0), t, o, std::nullopt);
 
           auto result = rr_partition->timequery(timequery_conf).get();
 
@@ -1186,7 +1181,7 @@ TEST_P(EndToEndFixture, TestMixedTimequery) {
         bool expect_value = false,
         std::optional<model::offset> expected_o = std::nullopt) {
           auto timequery_conf = storage::timequery_config(
-            model::offset(0), t, o, ss::default_priority_class(), std::nullopt);
+            model::offset(0), t, o, std::nullopt);
 
           auto result = partition->timequery(timequery_conf).get();
 

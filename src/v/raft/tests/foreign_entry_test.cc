@@ -21,7 +21,6 @@
 #include "raft/group_configuration.h"
 #include "raft/types.h"
 #include "random/generators.h"
-#include "resource_mgmt/io_priority.h"
 #include "storage/api.h"
 #include "storage/log.h"
 #include "storage/log_manager.h"
@@ -61,10 +60,7 @@ struct foreign_entry_fixture {
           },
           []() {
               return storage::log_config(
-                test_directory(),
-                1_GiB,
-                ss::default_priority_class(),
-                storage::make_sanitized_file_config());
+                test_directory(), 1_GiB, storage::make_sanitized_file_config());
           },
           _feature_table) {
         _feature_table.start().get();
@@ -80,9 +76,7 @@ struct foreign_entry_fixture {
 
     std::vector<storage::append_result> write_n(const std::size_t n) {
         auto cfg = storage::log_append_config{
-          storage::log_append_config::fsync::no,
-          ss::default_priority_class(),
-          model::no_timeout};
+          storage::log_append_config::fsync::no, model::no_timeout};
         std::vector<storage::append_result> res;
         res.push_back(
           gen_data_record_batch_reader(n)

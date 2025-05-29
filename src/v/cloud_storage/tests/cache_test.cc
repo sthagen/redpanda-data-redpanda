@@ -70,8 +70,7 @@ FIXTURE_TEST(stremaing_get_after_put, cache_test_fixture) {
     auto data_string = create_data_string('a', 1_MiB + 1_KiB);
     put_into_cache(data_string, KEY);
 
-    auto stream
-      = sharded_cache.local().get(KEY, seastar::default_priority_class()).get();
+    auto stream = sharded_cache.local().get_stream(KEY).get();
     BOOST_REQUIRE(stream);
     BOOST_CHECK_EQUAL(stream->size, data_string.length());
 

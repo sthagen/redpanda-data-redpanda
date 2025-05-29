@@ -74,7 +74,9 @@ struct cloud_storage_fixture : s3_imposter_fixture {
           .start(
             std::ref(pool),
             ss::sharded_parameter([this] { return conf; }),
-            ss::sharded_parameter([] { return config_file; }))
+            ss::sharded_parameter([] { return config_file; }),
+            ss::sharded_parameter(
+              [] { return ss::default_scheduling_group(); }))
           .get();
         cloud_io
           .invoke_on_all(

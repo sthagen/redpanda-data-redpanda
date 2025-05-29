@@ -379,8 +379,7 @@ ss::future<> metrics_reporter::try_initialize_cluster_info() {
         co_return;
     }
 
-    storage::log_reader_config reader_cfg(
-      model::offset(0), model::offset(2), ss::default_priority_class());
+    storage::log_reader_config reader_cfg(model::offset(0), model::offset(2));
     auto reader = co_await _raft0->make_reader(reader_cfg);
 
     auto batches = co_await model::consume_reader_to_memory(

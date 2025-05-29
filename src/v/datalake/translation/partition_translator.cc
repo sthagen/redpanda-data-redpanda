@@ -12,7 +12,6 @@
 
 #include "config/configuration.h"
 #include "datalake/logger.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/watchdog.h"
 #include "utils/retry_chain_node.h"
 #include "utils/to_string.h"
@@ -254,8 +253,7 @@ partition_translator::run_one_translation_iteration(
          * change such as finishing the on-going translation.
          */
         as.check();
-        auto reader = co_await _data_source->make_log_reader(
-          begin_offset, datalake_priority(), as);
+        auto reader = co_await _data_source->make_log_reader(begin_offset, as);
         if (!reader) {
             co_return result;
         }

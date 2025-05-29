@@ -200,7 +200,6 @@ FIXTURE_TEST(test_remote_segment_chunk_read, cloud_storage_fixture) {
                             // iterate over the entire segment in chunks.
                             kafka::offset{100000000},
                             std::nullopt,
-                            ss::default_priority_class(),
                             as)
                           .get()
                           .stream;
@@ -248,7 +247,6 @@ FIXTURE_TEST(test_remote_segment_chunk_read_fallback, cloud_storage_fixture) {
                             segment.get_base_kafka_offset(),
                             kafka::offset{100000000},
                             std::nullopt,
-                            ss::default_priority_class(),
                             as)
                           .get()
                           .stream;
@@ -437,7 +435,7 @@ FIXTURE_TEST(test_chunk_multiple_readers, cloud_storage_fixture) {
     storage::offset_translator_state ot_state(m.get_ntp());
 
     storage::log_reader_config reader_config(
-      model::offset{1}, model::offset{1000000}, ss::default_priority_class());
+      model::offset{1}, model::offset{1000000});
     reader_config.max_bytes = std::numeric_limits<size_t>::max();
 
     std::vector<std::unique_ptr<remote_segment_batch_reader>> readers{};
@@ -530,7 +528,6 @@ FIXTURE_TEST(test_abort_hydration_timeout, cloud_storage_fixture) {
               segment.get_base_kafka_offset(),
               kafka::offset{100000000},
               std::nullopt,
-              ss::default_priority_class(),
               as)
             .get(),
           ss::timed_out_error);
@@ -548,7 +545,6 @@ FIXTURE_TEST(test_abort_hydration_triggered_externally, cloud_storage_fixture) {
               segment.get_base_kafka_offset(),
               kafka::offset{100000000},
               std::nullopt,
-              ss::default_priority_class(),
               as)
             .get(),
           ss::abort_requested_exception);

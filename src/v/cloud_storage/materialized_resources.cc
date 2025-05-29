@@ -17,7 +17,6 @@
 #include "cloud_storage/remote_segment.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
-#include "resource_mgmt/io_priority.h"
 #include "resource_mgmt/memory_groups.h"
 #include "ssx/future-util.h"
 

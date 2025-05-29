@@ -149,7 +149,6 @@ redpanda_cc_library(
         "//src/v/features",
         "//src/v/model",
         "//src/v/random:time_jitter",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/ssx:future_util",
         "//src/v/ssx:semaphore",
         "//src/v/utils:prefix_logger",

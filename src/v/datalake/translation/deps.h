@@ -23,8 +23,6 @@
 #include "model/timestamp.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/io_priority_class.hh>
-
 namespace datalake::translation {
 
 class translator_out_of_memory_error final : public std::runtime_error {
@@ -189,8 +187,7 @@ public:
       = 0;
 
     virtual ss::future<std::optional<model::record_batch_reader>>
-    make_log_reader(kafka::offset, ss::io_priority_class, ss::abort_source&)
-      = 0;
+    make_log_reader(kafka::offset, ss::abort_source&) = 0;
 
     virtual kafka::offset min_offset_for_translation() const = 0;
 

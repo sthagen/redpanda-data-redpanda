@@ -173,8 +173,7 @@ public:
     ss::future<bool> materialize_index();
 
     /// main read interface
-    ss::future<segment_reader_handle>
-      offset_data_stream(model::offset, ss::io_priority_class);
+    ss::future<segment_reader_handle> offset_data_stream(model::offset);
 
     const offset_tracker& offsets() const { return _tracker; }
     bool empty() const;
@@ -383,7 +382,6 @@ ss::future<ss::lw_shared_ptr<segment>> make_segment(
   const ntp_config& ntpc,
   model::offset base_offset,
   model::term_id term,
-  ss::io_priority_class pc,
   record_version_type version,
   size_t buf_size,
   unsigned read_ahead,

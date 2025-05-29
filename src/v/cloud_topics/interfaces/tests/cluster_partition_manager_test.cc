@@ -17,8 +17,6 @@
 #include "redpanda/tests/fixture.h"
 #include "utils/move_canary.h"
 
-#include <seastar/core/io_priority_class.hh>
-
 #include <gtest/gtest.h>
 
 namespace cloud_topics = experimental::cloud_topics;
@@ -87,9 +85,7 @@ TEST_F(basic_fixture, create_topic) {
       app.partition_manager.local());
     auto part = pm->get_partition(ntp);
     storage::log_reader_config cfg(
-      model::offset(0),
-      model::offset(num_records),
-      ss::default_priority_class());
+      model::offset(0), model::offset(num_records));
     auto reader = part->make_reader(cfg).get();
 
     ss::sleep(1s).get();

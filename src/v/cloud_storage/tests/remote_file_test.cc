@@ -55,7 +55,9 @@ public:
         io.start(
             std::ref(pool),
             ss::sharded_parameter([this] { return get_configuration(); }),
-            ss::sharded_parameter([] { return config_file; }))
+            ss::sharded_parameter([] { return config_file; }),
+            ss::sharded_parameter(
+              [] { return ss::default_scheduling_group(); }))
           .get();
         remote
           .start(std::ref(io), ss::sharded_parameter([this] {

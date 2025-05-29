@@ -144,7 +144,6 @@ redpanda_cc_library(
         "//src/v/random:generators",
         "//src/v/random:time_jitter",
         "//src/v/reflection:adl",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/resource_mgmt:memory_groups",
         "//src/v/rpc",
         "//src/v/serde",

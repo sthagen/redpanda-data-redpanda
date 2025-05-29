@@ -22,7 +22,6 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/fstream.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/shard_id.hh>
 #include <seastar/core/smp.hh>
@@ -931,8 +930,6 @@ ss::future<> cache::load_access_time_tracker() {
     input_opts.buffer_size = config::shard_local_cfg().storage_read_buffer_size;
     input_opts.read_ahead
       = config::shard_local_cfg().storage_read_readahead_count;
-    input_opts.io_priority_class
-      = priority_manager::local().shadow_indexing_priority();
 
     auto exists = co_await ss::file_exists(source.string());
     if (exists) {
@@ -1142,11 +1139,8 @@ ss::future<std::optional<cache_item>> cache::get(std::filesystem::path key) {
     co_return std::move(result);
 }
 
-ss::future<std::optional<cloud_io::cache_item_stream>> cache::get(
-  std::filesystem::path key,
-  ss::io_priority_class io_priority,
-  size_t read_buffer_size,
-  unsigned int read_ahead) {
+ss::future<std::optional<cloud_io::cache_item_stream>> cache::get_stream(
+  std::filesystem::path key, size_t read_buffer_size, unsigned int read_ahead) {
     auto get_res = co_await get(key);
     if (!get_res.has_value()) {
         co_return std::nullopt;
@@ -1155,7 +1149,6 @@ ss::future<std::optional<cloud_io::cache_item_stream>> cache::get(
     ss::file_input_stream_options options{};
     options.buffer_size = read_buffer_size;
     options.read_ahead = read_ahead;
-    options.io_priority_class = io_priority;
     auto stream = ss::make_file_input_stream(
       std::move(get_res->body), 0, std::move(options));
     co_return cloud_io::cache_item_stream{
@@ -1205,7 +1198,6 @@ ss::future<> cache::put(
   std::filesystem::path key,
   ss::input_stream<char>& data,
   space_reservation_guard& reservation,
-  ss::io_priority_class io_priority,
   size_t write_buffer_size,
   unsigned int write_behind) {
     vlog(cst_log.debug, "Trying to put {} to archival cache.", key.native());
@@ -1291,7 +1283,6 @@ ss::future<> cache::put(
     ss::file_output_stream_options options{};
     options.buffer_size = write_buffer_size;
     options.write_behind = write_behind;
-    options.io_priority_class = io_priority;
     auto out = co_await ss::make_file_output_stream(tmp_cache_file, options);
 
     std::exception_ptr eptr;

@@ -9,7 +9,6 @@
 
 #include "kafka/server/handlers/api_versions.h"
 #include "redpanda/tests/fixture.h"
-#include "resource_mgmt/io_priority.h"
 
 #include <seastar/core/smp.hh>
 #include <seastar/net/inet_address.hh>

@@ -358,10 +358,8 @@ public:
         co_return min_offset_for_translation();
     }
 
-    ss::future<std::optional<model::record_batch_reader>> make_log_reader(
-      kafka::offset begin_offset,
-      ss::io_priority_class io_priority,
-      ss::abort_source& as) final {
+    ss::future<std::optional<model::record_batch_reader>>
+    make_log_reader(kafka::offset begin_offset, ss::abort_source& as) final {
         auto max_translatable_offset = max_offset_for_translation();
         if (
           !max_translatable_offset
@@ -373,7 +371,6 @@ public:
            kafka::offset_cast(max_translatable_offset.value()),
            0,
            std::numeric_limits<size_t>::max(),
-           io_priority,
            std::nullopt,
            std::nullopt,
            as});

@@ -44,10 +44,7 @@ TEST(OffsetToFileposTest, SearchBeginOffsetNotFound) {
 
     auto segment = b.get_log_segments().back();
     auto result = convert_begin_offset_to_file_pos(
-                    curr_offset,
-                    segment,
-                    segment->index().base_timestamp(),
-                    ss::default_priority_class())
+                    curr_offset, segment, segment->index().base_timestamp())
                     .get();
     ASSERT_EQ(result.error(), std::errc::invalid_seek);
 }
@@ -78,10 +75,7 @@ TEST(OffsetToFileposTest, SearchEndOffsetNotFound) {
 
     auto segment = b.get_log_segments().back();
     auto result = convert_end_offset_to_file_pos(
-                    curr_offset,
-                    segment,
-                    segment->index().max_timestamp(),
-                    ss::default_priority_class())
+                    curr_offset, segment, segment->index().max_timestamp())
                     .get();
     ASSERT_EQ(result.error(), std::errc::invalid_seek);
 }
@@ -117,8 +111,7 @@ TEST(OffsetToFileposTest, SearchBeginOffsetFound) {
     auto result = convert_begin_offset_to_file_pos(
                     model::offset{3},
                     segment,
-                    segment->index().base_timestamp(),
-                    ss::default_priority_class())
+                    segment->index().base_timestamp())
                     .get();
     storage::offset_to_file_pos_result expected{
       model::offset{3},
@@ -158,8 +151,7 @@ TEST(OffsetToFileposTest, SearchEndOffsetFound) {
     auto result = convert_end_offset_to_file_pos(
                     model::offset{3},
                     segment,
-                    segment->index().base_timestamp(),
-                    ss::default_priority_class())
+                    segment->index().base_timestamp())
                     .get();
     storage::offset_to_file_pos_result expected{
       model::offset{3},
@@ -197,7 +189,6 @@ TEST(OffsetToFileposTest, SearchEndOffsetAllowedToBeMissing) {
                     curr_offset,
                     segment,
                     segment->index().max_timestamp(),
-                    ss::default_priority_class(),
                     should_fail_on_missing_offset::no)
                     .get();
     storage::offset_to_file_pos_result expected{

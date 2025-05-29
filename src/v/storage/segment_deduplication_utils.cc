@@ -75,7 +75,7 @@ ss::future<bool> build_offset_map_for_segment(
       compaction_idx_path, cfg.sanitizer_config);
     std::exception_ptr eptr;
     auto rdr = make_file_backed_compacted_reader(
-      compaction_idx_path, compaction_idx_file, cfg.iopc, 64_KiB, cfg.asrc);
+      compaction_idx_path, compaction_idx_file, 64_KiB, cfg.asrc);
     try {
         co_await rdr.verify_integrity();
     } catch (...) {
@@ -324,7 +324,7 @@ ss::future<bool> segment_needs_rewrite_with_offset_map(
     auto compaction_idx_file = co_await internal::make_reader_handle(
       compaction_idx_path, cfg.sanitizer_config);
     auto rdr = make_file_backed_compacted_reader(
-      compaction_idx_path, compaction_idx_file, cfg.iopc, 64_KiB, cfg.asrc);
+      compaction_idx_path, compaction_idx_file, 64_KiB, cfg.asrc);
 
     auto fut = co_await ss::coroutine::as_future(rdr.verify_integrity());
     if (fut.failed()) {

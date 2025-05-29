@@ -165,8 +165,7 @@ state_machine_manager::state_machine_manager(
   , _apply_sg(apply_sg)
   , _initial_recovery_snapshot_mgr(
       std::filesystem::path(_raft->log_config().work_directory()),
-      "stm_manager.snapshot",
-      ss::default_priority_class()) {
+      "stm_manager.snapshot") {
     for (auto& n_stm : stms) {
         _supports_snapshot_at_offset
           = _supports_snapshot_at_offset
@@ -517,8 +516,7 @@ ss::future<> state_machine_manager::try_apply_in_foreground() {
          * Use default priority for now, it is going to be unified with apply
          * scheduling group soon
          */
-        storage::log_reader_config config(
-          _next, _raft->committed_offset(), ss::default_priority_class());
+        storage::log_reader_config config(_next, _raft->committed_offset());
 
         model::record_batch_reader reader = co_await _raft->make_reader(config);
 
@@ -632,9 +630,7 @@ ss::future<> state_machine_manager::background_apply_fiber(
             continue;
         }
         storage::log_reader_config config(
-          entry->stm->next(),
-          model::prev_offset(_next),
-          ss::default_priority_class());
+          entry->stm->next(), model::prev_offset(_next));
 
         vlog(
           _log.debug,

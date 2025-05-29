@@ -25,8 +25,6 @@
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
-#include <seastar/core/io_priority_class.hh>
-
 #include <absl/container/flat_hash_set.h>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/test/tools/old/interface.hpp>
@@ -412,7 +410,7 @@ FIXTURE_TEST(
           tests::kv_t::sequence(0, records_per_seg))
         .get());
     log->flush().get();
-    log->force_roll(ss::default_priority_class()).get();
+    log->force_roll().get();
     BOOST_REQUIRE_GT(produced_kafka_base_offset, new_start_offset);
     while (produced_kafka_base_offset > stm_manifest.get_next_kafka_offset()) {
         BOOST_REQUIRE(archiver->sync_for_tests().get());

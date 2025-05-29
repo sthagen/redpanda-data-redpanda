@@ -286,6 +286,7 @@ class TestTieredStoragePause(PreallocNodesTest):
         # Pre-populate the topic
         self.start_producer()
         self.producer.wait_for_acks(self._msg_count, 120, 1)
+        self.producer.stop()
         self.producer.free()
 
         # Check that pre-populated data is uploaded to the cloud storage.

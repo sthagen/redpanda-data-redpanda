@@ -39,7 +39,6 @@
 #include "model/record.h"
 #include "raft/errc.h"
 #include "raft/fundamental.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 
 #include <seastar/core/abort_source.hh>
@@ -895,7 +894,6 @@ ss::future<> group_manager::handle_partition_leader_change(
                   model::model_limits<model::offset>::max(),
                   0,
                   std::numeric_limits<size_t>::max(),
-                  kafka_read_priority(),
                   std::nullopt,
                   std::nullopt,
                   std::nullopt);

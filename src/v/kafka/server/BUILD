@@ -308,7 +308,6 @@ redpanda_cc_library(
         "//src/v/random:generators",
         "//src/v/reflection:adl",
         "//src/v/reflection:type_traits",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/rpc",
         "//src/v/security",
         "//src/v/security/audit",

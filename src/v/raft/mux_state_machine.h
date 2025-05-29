@@ -239,7 +239,7 @@ mux_state_machine<T...>::mux_state_machine(
   persistent_last_applied persist,
   absl::flat_hash_set<model::record_batch_type> not_handled_batch_types,
   T&... state)
-  : raft::state_machine(c, logger, ss::default_priority_class())
+  : raft::state_machine(c, logger)
   , _c(c)
   , _persist_last_applied(persist)
   , _not_handled_batch_types(std::move(not_handled_batch_types))

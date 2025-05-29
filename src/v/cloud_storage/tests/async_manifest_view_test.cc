@@ -24,7 +24,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/file-types.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/core/timed_out_error.hh>
@@ -90,10 +89,7 @@ public:
         if (hydrate) {
             auto stream = spm.serialize().get();
             auto reservation = cache.local().reserve_space(123, 1).get();
-            cache.local()
-              .put(
-                path, stream.stream, reservation, ss::default_priority_class())
-              .get();
+            cache.local().put(path, stream.stream, reservation).get();
             stream.stream.close().get();
         }
         // upload to the cloud
@@ -134,9 +130,7 @@ public:
         auto path = spm.get_manifest_path(path_provider);
         auto stream = spm.serialize().get();
         auto reservation = cache.local().reserve_space(123, 1).get();
-        cache.local()
-          .put(path, stream.stream, reservation, ss::default_priority_class())
-          .get();
+        cache.local().put(path, stream.stream, reservation).get();
         stream.stream.close().get();
     }
 
@@ -213,10 +207,7 @@ public:
         if (hydrate) {
             auto stream = spm.serialize().get();
             auto reservation = cache.local().reserve_space(123, 1).get();
-            cache.local()
-              .put(
-                path, stream.stream, reservation, ss::default_priority_class())
-              .get();
+            cache.local().put(path, stream.stream, reservation).get();
             stream.stream.close().get();
         }
         // upload to the cloud

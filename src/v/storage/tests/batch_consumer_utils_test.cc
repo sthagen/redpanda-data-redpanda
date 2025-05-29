@@ -17,7 +17,6 @@
 #include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/tmp_dir.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
@@ -132,10 +131,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_round_robin) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      tmp_path.string(),
-      1024 * 1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      tmp_path.string(), 1024 * 1024, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"kafka", "panda-topic", 0}, {tmp_path}})
       | add_segment(0);
@@ -162,9 +158,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_round_robin) {
     auto cc = std::make_unique<chained_batch_consumer<2>>(
       std::move(c1), std::move(c2));
     auto s = b.get_log_segments().front();
-    auto str = s->offset_data_stream(
-                  s->offsets().get_base_offset(), ss::default_priority_class())
-                 .get();
+    auto str = s->offset_data_stream(s->offsets().get_base_offset()).get();
 
     auto parser = ss::make_lw_shared<storage::continuous_batch_parser>(
       std::move(cc), storage::segment_reader_handle(std::move(str)));
@@ -185,10 +179,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_early_stop) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      tmp_path.string(),
-      1024 * 1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      tmp_path.string(), 1024 * 1024, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"kafka", "panda-topic", 0}, {tmp_path}})
       | add_segment(0);
@@ -221,9 +212,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_early_stop) {
     auto cc = std::make_unique<chained_batch_consumer<3>>(
       std::move(c_stopped), std::move(c1), std::move(c2));
     auto s = b.get_log_segments().front();
-    auto str = s->offset_data_stream(
-                  s->offsets().get_base_offset(), ss::default_priority_class())
-                 .get();
+    auto str = s->offset_data_stream(s->offsets().get_base_offset()).get();
 
     auto parser = ss::make_lw_shared<storage::continuous_batch_parser>(
       std::move(cc), storage::segment_reader_handle(std::move(str)));
@@ -245,10 +234,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_stop_all) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      tmp_path.string(),
-      1024 * 1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      tmp_path.string(), 1024 * 1024, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"kafka", "panda-topic", 0}, {tmp_path}})
       | add_segment(0);
@@ -278,9 +264,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_stop_all) {
       std::move(c1), std::move(c2));
 
     auto s = b.get_log_segments().front();
-    auto str = s->offset_data_stream(
-                  s->offsets().get_base_offset(), ss::default_priority_class())
-                 .get();
+    auto str = s->offset_data_stream(s->offsets().get_base_offset()).get();
 
     auto parser = ss::make_lw_shared<storage::continuous_batch_parser>(
       std::move(cc), storage::segment_reader_handle(std::move(str)));
@@ -302,10 +286,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_skip_all) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      tmp_path.string(),
-      1024 * 1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      tmp_path.string(), 1024 * 1024, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"kafka", "panda-topic", 0}, {tmp_path}})
       | add_segment(0);
@@ -334,9 +315,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_skip_all) {
       std::move(c1), std::move(c2));
 
     auto s = b.get_log_segments().front();
-    auto str = s->offset_data_stream(
-                  s->offsets().get_base_offset(), ss::default_priority_class())
-                 .get();
+    auto str = s->offset_data_stream(s->offsets().get_base_offset()).get();
 
     auto parser = ss::make_lw_shared<storage::continuous_batch_parser>(
       std::move(cc), storage::segment_reader_handle(std::move(str)));
@@ -359,10 +338,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_exception_propagation) {
     using namespace storage;
 
     disk_log_builder b{log_config{
-      tmp_path.string(),
-      1024 * 1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      tmp_path.string(), 1024 * 1024, storage::make_sanitized_file_config()}};
 
     b | start(ntp_config{{"kafka", "panda-topic", 0}, {tmp_path}})
       | add_segment(0);
@@ -386,9 +362,7 @@ SEASTAR_THREAD_TEST_CASE(test_chained_consumers_exception_propagation) {
       std::move(c1), std::move(c_throw));
 
     auto s = b.get_log_segments().front();
-    auto str = s->offset_data_stream(
-                  s->offsets().get_base_offset(), ss::default_priority_class())
-                 .get();
+    auto str = s->offset_data_stream(s->offsets().get_base_offset()).get();
 
     auto parser = ss::make_lw_shared<storage::continuous_batch_parser>(
       std::move(cc), storage::segment_reader_handle(std::move(str)));

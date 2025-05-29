@@ -88,6 +88,7 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/coroutine/switch_to.hh>
 #include <seastar/util/later.hh>
 
 #include <chrono>
@@ -110,7 +111,8 @@ controller::controller(
   ss::sharded<cloud_storage::remote>& cloud_storage_api,
   ss::sharded<cloud_storage::cache>& cloud_cache,
   ss::sharded<node_status_table>& node_status_table,
-  ss::sharded<cluster::metadata_cache>& metadata_cache)
+  ss::sharded<cluster::metadata_cache>& metadata_cache,
+  ss::scheduling_group scheduling_group)
   : _config_preload(std::move(config_preload))
   , _connections(ccache)
   , _partition_manager(pm)
@@ -129,7 +131,8 @@ controller::controller(
   , _cloud_cache(cloud_cache)
   , _node_status_table(node_status_table)
   , _metadata_cache(metadata_cache)
-  , _probe(*this) {}
+  , _probe(*this)
+  , _scheduling_group(scheduling_group) {}
 
 // Explicit destructor in the .cc file just to avoid bloating the header with
 // includes for destructors of all its members (e.g. the metadata uploader).
@@ -233,6 +236,11 @@ ss::future<> controller::start(
   ss::shared_ptr<cluster::cloud_metadata::offsets_recovery_requestor>
     offsets_recovery,
   std::chrono::milliseconds application_start_time) {
+    /**
+     * Switch to cluster scheduling group to ensure that all the controller
+     * services are started within that scheduling group.
+     */
+    co_await ss::coroutine::switch_to(_scheduling_group);
     auto initial_raft0_brokers = discovery.founding_brokers();
     std::vector<model::node_id> seed_nodes;
     seed_nodes.reserve(initial_raft0_brokers.size());
@@ -364,6 +372,7 @@ ss::future<> controller::start(
           std::move(limiter_conf),
           std::ref(_feature_table),
           config::shard_local_cfg().controller_snapshot_max_age_sec.bind(),
+          _scheduling_group,
           std::ref(clusterlog),
           _raft0.get(),
           raft::persistent_last_applied::yes,
@@ -500,6 +509,7 @@ ss::future<> controller::start(
       }),
       ss::sharded_parameter(
         [] { return config::shard_local_cfg().retention_local_strict.bind(); }),
+      _scheduling_group,
       std::ref(_as));
 
     co_await _shard_balancer.start_single(

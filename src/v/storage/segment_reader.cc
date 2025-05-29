@@ -55,8 +55,7 @@ ss::future<> segment_reader::load_size() {
     set_file_size(s.st_size);
 };
 
-ss::future<segment_reader_handle>
-segment_reader::data_stream(size_t pos, const ss::io_priority_class pc) {
+ss::future<segment_reader_handle> segment_reader::data_stream(size_t pos) {
     vassert(
       pos <= _file_size,
       "cannot read negative bytes. Asked to read at position: '{}' - {}",
@@ -76,7 +75,6 @@ segment_reader::data_stream(size_t pos, const ss::io_priority_class pc) {
 
     ss::file_input_stream_options options;
     options.buffer_size = _buffer_size;
-    options.io_priority_class = pc;
     options.read_ahead = _read_ahead;
 
     ss::gate::holder guard{_gate};
@@ -141,8 +139,8 @@ ss::future<struct stat> segment_reader::stat() {
     co_return r;
 }
 
-ss::future<segment_reader_handle> segment_reader::data_stream(
-  size_t pos_begin, size_t pos_end, const ss::io_priority_class pc) {
+ss::future<segment_reader_handle>
+segment_reader::data_stream(size_t pos_begin, size_t pos_end) {
     vassert(
       pos_begin <= _file_size,
       "cannot read negative bytes. Asked to read at positions: '{}-{}' - {}",
@@ -157,7 +155,6 @@ ss::future<segment_reader_handle> segment_reader::data_stream(
       *this);
     ss::file_input_stream_options options;
     options.buffer_size = _buffer_size;
-    options.io_priority_class = pc;
     options.read_ahead = _read_ahead;
 
     ss::gate::holder guard{_gate};
@@ -242,13 +239,11 @@ void segment_reader_handle::operator=(segment_reader_handle&& rhs) noexcept {
 concat_segment_data_source_impl::concat_segment_data_source_impl(
   std::vector<ss::lw_shared_ptr<segment>> segments,
   size_t start_pos,
-  size_t end_pos,
-  ss::io_priority_class priority_class)
+  size_t end_pos)
   : _segments{std::move(segments)}
   , _current_pos{_segments.begin()}
   , _start_pos{start_pos}
   , _end_pos{end_pos}
-  , _priority_class{priority_class}
   , _name{"uninitialized"} {}
 
 ss::future<ss::temporary_buffer<char>> concat_segment_data_source_impl::get() {
@@ -303,8 +298,7 @@ ss::future<> concat_segment_data_source_impl::next_stream() {
     }
 
     _name = segment->filename();
-    _current_handle = co_await segment->reader().data_stream(
-      start, end, _priority_class);
+    _current_handle = co_await segment->reader().data_stream(start, end);
     _current_stream = _current_handle->take_stream();
 
     _current_pos++;
@@ -330,10 +324,9 @@ ss::future<> concat_segment_data_source_impl::close() {
 concat_segment_reader_view::concat_segment_reader_view(
   std::vector<ss::lw_shared_ptr<segment>> segments,
   size_t start_pos,
-  size_t end_pos,
-  ss::io_priority_class priority_class)
+  size_t end_pos)
   : _stream(ss::data_source{std::make_unique<concat_segment_data_source_impl>(
-      std::move(segments), start_pos, end_pos, priority_class)}) {}
+      std::move(segments), start_pos, end_pos)}) {}
 
 ss::input_stream<char> concat_segment_reader_view::take_stream() {
     auto r = std::move(_stream.value());

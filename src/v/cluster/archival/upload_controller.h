@@ -16,7 +16,6 @@
 #include "utils/named_type.h"
 #include "utils/prefix_logger.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/sharded.hh>
 
 #include <filesystem>

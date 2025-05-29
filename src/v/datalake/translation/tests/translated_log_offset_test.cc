@@ -42,10 +42,7 @@ TEST(TranslatedLogOffsetTest, TestTranslatedOffsetsGrowingLog) {
 
     model::ntp test_ntp{"kafka", "tapioca", 0};
     auto log_cfg = storage::log_config{
-      data_path.string(),
-      1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()};
+      data_path.string(), 1024, storage::make_sanitized_file_config()};
     auto translator_batch_types = model::offset_translator_batch_types();
     auto raft_group_id = raft::group_id{0};
     storage::disk_log_builder b{
@@ -153,10 +150,7 @@ TEST(TranslatedLogOffsetTest, TestTranslatedOffsetsGrowingLogConfigBatchStart) {
 
     model::ntp test_ntp{"kafka", "tapioca", 0};
     auto log_cfg = storage::log_config{
-      data_path.string(),
-      1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()};
+      data_path.string(), 1024, storage::make_sanitized_file_config()};
     auto translator_batch_types = model::offset_translator_batch_types();
     auto raft_group_id = raft::group_id{0};
     storage::disk_log_builder b{
@@ -269,10 +263,7 @@ TEST(
 
     model::ntp test_ntp{"kafka", "tapioca", 0};
     auto log_cfg = storage::log_config{
-      data_path.string(),
-      1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()};
+      data_path.string(), 1024, storage::make_sanitized_file_config()};
     auto translator_batch_types = model::offset_translator_batch_types();
     auto raft_group_id = raft::group_id{0};
     storage::disk_log_builder b{

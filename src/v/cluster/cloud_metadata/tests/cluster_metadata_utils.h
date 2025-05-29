@@ -80,7 +80,6 @@ read_recovery_stages(cluster::partition& controller_prt) {
       controller_prt.raft()->committed_offset(),
       0,
       std::numeric_limits<size_t>::max(),
-      ss::default_priority_class(),
       model::record_batch_type::cluster_recovery_cmd,
       std::nullopt,
       std::nullopt,

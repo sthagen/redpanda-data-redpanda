@@ -276,6 +276,7 @@ controller_backend::controller_backend(
   config::binding<std::optional<size_t>> retention_local_target_bytes_default,
   config::binding<std::chrono::milliseconds> retention_local_target_ms_default,
   config::binding<bool> retention_local_strict,
+  ss::scheduling_group scheduling_group,
   ss::sharded<ss::abort_source>& as)
   : _topics(tp_state)
   , _shard_placement(shard_placement.local())
@@ -298,6 +299,7 @@ controller_backend::controller_backend(
   , _retention_local_target_ms_default(
       std::move(retention_local_target_ms_default))
   , _retention_local_strict(std::move(retention_local_strict))
+  , _scheduling_group(scheduling_group)
   , _as(as) {
     _housekeeping_interval.watch([this] {
         _housekeeping_jitter = simple_time_jitter<ss::lowres_clock>(
@@ -392,29 +394,32 @@ create_topic_table_snapshot(
 
 ss::future<> controller_backend::start() {
     setup_metrics();
-    return bootstrap_controller_backend().then([this] {
-        if (ss::this_shard_id() == cluster::controller_stm_shard) {
-            auto bootstrap_revision = _topics.local().last_applied_revision();
-            auto snapshot = create_topic_table_snapshot(_topics, _self);
-            ssx::spawn_with_gate(
-              _gate,
-              [this, bootstrap_revision, snapshot = std::move(snapshot)] {
-                  return clear_orphan_topic_files(
-                           bootstrap_revision, std::move(snapshot))
-                    .handle_exception([](const std::exception_ptr& err) {
-                        vlog(
-                          clusterlog.error,
-                          "Exception while cleaning orphan files {}",
-                          err);
-                    });
-              });
-        }
+    return ss::with_scheduling_group(_scheduling_group, [this] {
+        return bootstrap_controller_backend().then([this] {
+            if (ss::this_shard_id() == cluster::controller_stm_shard) {
+                auto bootstrap_revision
+                  = _topics.local().last_applied_revision();
+                auto snapshot = create_topic_table_snapshot(_topics, _self);
+                ssx::spawn_with_gate(
+                  _gate,
+                  [this, bootstrap_revision, snapshot = std::move(snapshot)] {
+                      return clear_orphan_topic_files(
+                               bootstrap_revision, std::move(snapshot))
+                        .handle_exception([](const std::exception_ptr& err) {
+                            vlog(
+                              clusterlog.error,
+                              "Exception while cleaning orphan files {}",
+                              err);
+                        });
+                  });
+            }
 
-        // unblock reconciliation fibers
-        constexpr size_t max_reconciliation_concurrency = 1024;
-        _reconciliation_sem.signal(max_reconciliation_concurrency);
+            // unblock reconciliation fibers
+            constexpr size_t max_reconciliation_concurrency = 1024;
+            _reconciliation_sem.signal(max_reconciliation_concurrency);
 
-        ssx::background = stuck_ntp_watchdog_fiber();
+            ssx::background = stuck_ntp_watchdog_fiber();
+        });
     });
 }
 

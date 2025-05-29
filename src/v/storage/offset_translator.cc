@@ -201,7 +201,7 @@ ss::future<> offset_translator::sync_with_log(
       log_offsets.dirty_offset);
 
     auto reader_cfg = storage::log_reader_config(
-      start_offset, log_offsets.dirty_offset, ss::default_priority_class(), as);
+      start_offset, log_offsets.dirty_offset, as);
     auto reader = co_await log.make_reader(reader_cfg);
 
     struct log_consumer {

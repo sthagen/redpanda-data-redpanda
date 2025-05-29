@@ -17,7 +17,6 @@
 #include "raft/buffered_protocol.h"
 #include "raft/group_configuration.h"
 #include "raft/rpc_client_protocol.h"
-#include "resource_mgmt/io_priority.h"
 
 #include <seastar/core/scheduling.hh>
 
@@ -136,7 +135,7 @@ ss::future<ss::lw_shared_ptr<raft::consensus>> group_manager::create_group(
       raft::group_configuration(nodes, revision),
       raft::timeout_jitter(_configuration.election_timeout_ms),
       log,
-      scheduling_config(_raft_recv_sg, _raft_send_sg, raft_priority()),
+      scheduling_config(_raft_recv_sg, _raft_send_sg),
       _configuration.raft_io_timeout_ms,
       _configuration.enable_longest_log_detection,
       consensus_client_protocol(_buffered_protocol),

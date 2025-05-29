@@ -47,10 +47,7 @@ struct config_manager_fixture {
           },
           [this]() {
               return storage::log_config(
-                base_dir,
-                100_MiB,
-                ss::default_priority_class(),
-                storage::make_sanitized_file_config());
+                base_dir, 100_MiB, storage::make_sanitized_file_config());
           },
           _feature_table))
       , _logger(

@@ -59,12 +59,10 @@ struct log_config {
     log_config(
       ss::sstring directory,
       size_t segment_size,
-      ss::io_priority_class compaction_priority = ss::default_priority_class(),
       std::optional<file_sanitize_config> file_cfg = std::nullopt) noexcept;
     log_config(
       ss::sstring directory,
       size_t segment_size,
-      ss::io_priority_class compaction_priority,
       with_cache with,
       std::optional<file_sanitize_config> file_cfg = std::nullopt) noexcept;
     log_config(
@@ -73,7 +71,6 @@ struct log_config {
       config::binding<size_t> compacted_segment_size,
       config::binding<size_t> max_compacted_segment_size,
       jitter_percents segment_size_jitter,
-      ss::io_priority_class compaction_priority,
       config::binding<std::optional<size_t>> ret_bytes,
       config::binding<std::chrono::milliseconds> compaction_ival,
       config::binding<std::optional<std::chrono::milliseconds>> log_ret,
@@ -100,7 +97,6 @@ struct log_config {
     // compacted segment size
     config::binding<size_t> compacted_segment_size;
     config::binding<size_t> max_compacted_segment_size;
-    ss::io_priority_class compaction_priority;
     // same as retention.bytes in kafka
     config::binding<std::optional<size_t>> retention_bytes;
     config::binding<std::chrono::milliseconds> compaction_interval;
@@ -210,7 +206,6 @@ public:
       const ntp_config&,
       model::offset,
       model::term_id,
-      ss::io_priority_class pc,
       size_t read_buffer_size,
       unsigned read_ahead,
       size_t segment_size_hint,

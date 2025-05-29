@@ -23,7 +23,6 @@
 #include "utils/named_type.h"
 
 #include <seastar/core/condition-variable.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/net/socket_defs.hh>
 #include <seastar/util/bool_class.hh>
@@ -733,16 +732,12 @@ enum class metadata_key : int8_t {
  */
 struct scheduling_config {
     scheduling_config(
-      ss::scheduling_group recv_sg,
-      ss::scheduling_group send_sg,
-      ss::io_priority_class default_iopc)
+      ss::scheduling_group recv_sg, ss::scheduling_group send_sg)
       : recv_sg(recv_sg)
-      , send_sg(send_sg)
-      , default_iopc(default_iopc) {}
+      , send_sg(send_sg) {}
 
     ss::scheduling_group recv_sg;
     ss::scheduling_group send_sg;
-    ss::io_priority_class default_iopc;
 };
 
 std::ostream& operator<<(std::ostream& o, const consistency_level& l);

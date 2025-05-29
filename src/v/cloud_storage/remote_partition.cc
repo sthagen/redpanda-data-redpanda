@@ -1269,7 +1269,6 @@ remote_partition::timequery(storage::timequery_config cfg) {
       cfg.max_offset,
       0,
       2048, // We just need one record batch
-      cfg.prio,
       cfg.type_filter,
       cfg.time,
       cfg.abort_source,

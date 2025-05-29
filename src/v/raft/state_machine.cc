@@ -21,10 +21,8 @@
 
 namespace raft {
 
-state_machine::state_machine(
-  consensus* raft, ss::logger& log, ss::io_priority_class io_prio)
+state_machine::state_machine(consensus* raft, ss::logger& log)
   : _raft(raft)
-  , _io_prio(io_prio)
   , _log(log)
   , _next(0)
   , _bootstrap_last_applied(_raft->read_last_applied()) {}
@@ -161,7 +159,7 @@ ss::future<> state_machine::apply() {
                * we have to limit reading to the committed offset.
                */
               storage::log_reader_config config(
-                _next, _raft->committed_offset(), _io_prio);
+                _next, _raft->committed_offset());
               return _raft->make_reader(config);
           });
       })

@@ -24,7 +24,6 @@
 #include "fmt/chrono.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 #include "ssx/sformat.h"
 #include "utils/human.h"
@@ -1442,10 +1441,7 @@ async_manifest_view::hydrate_manifest(
         auto [str, len] = co_await manifest.serialize();
         auto reservation = co_await _cache.local().reserve_space(len, 1);
         co_await _cache.local().put(
-          manifest.get_manifest_path(path_provider())(),
-          str,
-          reservation,
-          priority_manager::local().shadow_indexing_priority());
+          manifest.get_manifest_path(path_provider())(), str, reservation);
         _ts_probe.on_spillover_manifest_hydration();
         vlog(
           _ctxlog.debug,
@@ -1672,8 +1668,7 @@ async_manifest_view::materialize_manifest(
                 ss::file_input_stream_options options{
                   .buffer_size = _read_buffer_size(),
                   .read_ahead = static_cast<uint32_t>(_readahead_size()),
-                  .io_priority_class
-                  = priority_manager::local().shadow_indexing_priority()};
+                };
                 auto data_stream = ss::make_file_input_stream(
                   res->body, 0, std::move(options));
                 co_await manifest.update(std::move(data_stream));

@@ -173,8 +173,8 @@ public:
         co_return std::nullopt;
     }
 
-    ss::future<std::optional<model::record_batch_reader>> make_log_reader(
-      kafka::offset o, ss::io_priority_class, ss::abort_source&) final {
+    ss::future<std::optional<model::record_batch_reader>>
+    make_log_reader(kafka::offset o, ss::abort_source&) final {
         auto batches = co_await model::test::make_random_batches(
           kafka::offset_cast(o), 500, false);
         auto reader = model::make_generating_record_batch_reader(

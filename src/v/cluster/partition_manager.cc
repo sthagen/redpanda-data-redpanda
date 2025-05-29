@@ -31,14 +31,12 @@
 #include "raft/fundamental.h"
 #include "raft/group_configuration.h"
 #include "raft/rpc_client_protocol.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/async-clear.h"
 #include "storage/segment_utils.h"
 #include "storage/snapshot.h"
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/shared_ptr.hh>

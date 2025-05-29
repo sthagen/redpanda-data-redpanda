@@ -83,7 +83,6 @@ TEST_F(log_builder_fixture, timequery) {
               start_offset,
               model::timestamp(0),
               log->offsets().dirty_offset,
-              ss::default_priority_class(),
               std::nullopt);
 
             auto res = log->timequery(config).get();
@@ -101,7 +100,6 @@ TEST_F(log_builder_fixture, timequery) {
           log->offsets().start_offset,
           model::timestamp(ts),
           log->offsets().dirty_offset,
-          ss::default_priority_class(),
           std::nullopt);
 
         auto res = log->timequery(config).get();
@@ -124,7 +122,6 @@ TEST_F(log_builder_fixture, timequery) {
           log->offsets().start_offset,
           model::timestamp(ts),
           log->offsets().dirty_offset,
-          ss::default_priority_class(),
           std::nullopt);
 
         auto offset = (ts - 100) * 5 + 100;
@@ -188,7 +185,6 @@ TEST_F(log_builder_fixture, timequery_multiple_messages_per_batch) {
           start_offset,
           model::timestamp(0),
           log->offsets().dirty_offset,
-          ss::default_priority_class(),
           std::nullopt);
 
         auto res = log->timequery(config).get();
@@ -219,7 +215,6 @@ TEST_F(log_builder_fixture, timequery_single_value) {
       log->offsets().start_offset,
       model::timestamp(1200),
       log->offsets().dirty_offset,
-      ss::default_priority_class(),
       std::nullopt);
 
     auto empty_res = log->timequery(config).get();
@@ -261,7 +256,6 @@ TEST_F(log_builder_fixture, timequery_sparse_index) {
       log->offsets().start_offset,
       model::timestamp(1600),
       log->offsets().dirty_offset,
-      ss::default_priority_class(),
       std::nullopt);
 
     auto res = log->timequery(config).get();
@@ -294,7 +288,6 @@ TEST_F(log_builder_fixture, timequery_one_element_index) {
       log->offsets().start_offset,
       model::timestamp(1000),
       log->offsets().dirty_offset,
-      ss::default_priority_class(),
       std::nullopt);
 
     auto res = log->timequery(config).get();
@@ -342,7 +335,6 @@ TEST_F(log_builder_fixture, timequery_non_monotonic_log) {
           log->offsets().start_offset,
           model::timestamp(ts),
           log->offsets().dirty_offset,
-          ss::default_priority_class(),
           std::nullopt);
 
         auto res = log->timequery(config).get();
@@ -368,7 +360,6 @@ TEST_F(log_builder_fixture, timequery_non_monotonic_log) {
       log->offsets().start_offset,
       model::timestamp(-5000),
       log->offsets().dirty_offset,
-      ss::default_priority_class(),
       std::nullopt);
 
     auto res = log->timequery(config).get();
@@ -409,7 +400,6 @@ TEST_F(log_builder_fixture, timequery_clamp) {
       log->offsets().start_offset,
       model::timestamp(storage::offset_time_index::delta_time_max * 2 + 1),
       log->offsets().dirty_offset,
-      ss::default_priority_class(),
       std::nullopt);
 
     const auto& [expected_offset, expected_ts] = batch_spec.back();

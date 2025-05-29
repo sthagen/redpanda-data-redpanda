@@ -93,10 +93,11 @@ using namespace std::chrono_literals;
 remote::remote(
   ss::sharded<cloud_storage_clients::client_pool>& clients,
   const cloud_storage_clients::client_configuration& conf,
-  model::cloud_credentials_source cloud_credentials_source)
+  model::cloud_credentials_source cloud_credentials_source,
+  ss::scheduling_group sg)
   : _pool(clients)
   , _auth_refresh_bg_op{_gate, _as, conf, cloud_credentials_source}
-  , _resources(std::make_unique<io_resources>())
+  , _resources(std::make_unique<io_resources>(sg))
   , _azure_shared_key_binding(
       config::shard_local_cfg().cloud_storage_azure_shared_key.bind())
   , _cloud_storage_backend{cloud_storage_clients::

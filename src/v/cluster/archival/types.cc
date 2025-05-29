@@ -68,8 +68,7 @@ static ss::sstring get_value_or_throw(
     return *opt;
 }
 
-archival::configuration
-get_archival_service_config(ss::scheduling_group sg, ss::io_priority_class p) {
+archival::configuration get_archival_service_config(ss::scheduling_group sg) {
     vlog(archival_log.debug, "Generating archival configuration");
     auto disable_metrics = net::metrics_disabled(
       config::shard_local_cfg().disable_metrics());
@@ -115,8 +114,7 @@ get_archival_service_config(ss::scheduling_group sg, ss::io_priority_class p) {
       .ntp_metrics_disabled = per_ntp_metrics_disabled(
         static_cast<bool>(disable_metrics)),
       .time_limit = time_limit_opt,
-      .upload_scheduling_group = sg,
-      .upload_io_priority = p};
+      .upload_scheduling_group = sg};
     vlog(archival_log.debug, "Archival configuration generated: {}", cfg);
     return cfg;
 }

@@ -23,7 +23,6 @@
 #include "storage/types.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/defer.hh>
 
@@ -52,7 +51,7 @@ TEST_F(MapBuildingReducerFixtureTest, TestMapIndexing) {
     int num_appends = 5;
     append_random_batches<linear_int_kv_batch_generator>(log, num_appends);
     log->flush().get();
-    disk_log->force_roll(ss::default_priority_class()).get();
+    disk_log->force_roll().get();
     ASSERT_EQ(disk_log->segment_count(), 2);
 
     auto& segments = disk_log->segments();
@@ -61,7 +60,7 @@ TEST_F(MapBuildingReducerFixtureTest, TestMapIndexing) {
     static constexpr int64_t max_keys = 4;
     storage::simple_key_offset_map map(max_keys);
     storage::compaction_config compact_cfg(
-      model::offset::max(), std::nullopt, ss::default_priority_class(), as);
+      model::offset::max(), std::nullopt, as);
     auto pb = storage::probe{};
 
     auto last_indexed_offset = model::offset{-1};

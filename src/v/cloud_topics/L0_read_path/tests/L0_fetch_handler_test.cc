@@ -23,7 +23,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/circular_buffer.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/later.hh>
 
@@ -79,8 +78,7 @@ TEST_F_CORO(placeholder_extent_fixture, l0_fetch_handler_test) {
 
     co_await l0_fetch_handler.start();
 
-    auto cfg = storage::log_reader_config(
-      base, last, ss::default_priority_class());
+    auto cfg = storage::log_reader_config(base, last);
 
     auto reader_tx = co_await pipeline.make_reader(ntp, cfg, 1s);
 
@@ -135,8 +133,7 @@ ss::future<> aborted_tx_failure_test(
 
     co_await l0_fetch_handler.start();
 
-    auto cfg = storage::log_reader_config(
-      base, last, ss::default_priority_class());
+    auto cfg = storage::log_reader_config(base, last);
 
     auto reader_tx = co_await pipeline.make_reader(ntp, cfg, 1s);
 
@@ -195,8 +192,7 @@ get_partition_failure(placeholder_extent_fixture& fx, bool shutdown) {
 
     co_await l0_fetch_handler.start();
 
-    auto cfg = storage::log_reader_config(
-      base, last, ss::default_priority_class());
+    auto cfg = storage::log_reader_config(base, last);
 
     auto reader_tx = co_await pipeline.make_reader(ntp, cfg, 1s);
 
@@ -256,8 +252,7 @@ ss::future<> make_reader_failed(
 
     co_await l0_fetch_handler.start();
 
-    auto cfg = storage::log_reader_config(
-      base, last, ss::default_priority_class());
+    auto cfg = storage::log_reader_config(base, last);
 
     auto reader_tx = co_await pipeline.make_reader(ntp, cfg, 1s);
 
@@ -317,8 +312,7 @@ TEST_F_CORO(placeholder_extent_fixture, request_cancel_test) {
 
     co_await l0_fetch_handler.start();
 
-    auto cfg = storage::log_reader_config(
-      base, last, ss::default_priority_class());
+    auto cfg = storage::log_reader_config(base, last);
 
     auto reader_fut = pipeline.make_reader(ntp, cfg, 1s);
     co_await pipeline.stop();

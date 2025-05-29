@@ -18,15 +18,14 @@
 #include "cloud_storage/recursive_directory_walker.h"
 #include "config/configuration.h"
 #include "config/property.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/semaphore.h"
 #include "storage/types.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/sharded.hh>
 #include <seastar/core/thread.hh>
 
 #include <filesystem>
@@ -88,9 +87,8 @@ public:
     /// \param key is a cache key
     ss::future<std::optional<cache_item>> get(std::filesystem::path key);
 
-    ss::future<std::optional<cloud_io::cache_item_stream>> get(
+    ss::future<std::optional<cloud_io::cache_item_stream>> get_stream(
       std::filesystem::path key,
-      ss::io_priority_class io_priority,
       size_t read_buffer_size = cloud_io::default_read_buffer_size,
       unsigned int read_ahead = cloud_io::default_read_ahead) override;
 
@@ -107,8 +105,6 @@ public:
       std::filesystem::path key,
       ss::input_stream<char>& data,
       space_reservation_guard& reservation,
-      ss::io_priority_class io_priority
-      = priority_manager::local().shadow_indexing_priority(),
       size_t write_buffer_size = cloud_io::default_write_buffer_size,
       unsigned int write_behind = cloud_io::default_write_behind) override;
 

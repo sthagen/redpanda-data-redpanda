@@ -18,7 +18,6 @@
 #include "storage/fwd.h"
 #include "storage/ntp_config.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/rwlock.hh>
 
 namespace archival {
@@ -86,9 +85,7 @@ using candidate_creation_result = std::variant<
 class archival_policy {
 public:
     explicit archival_policy(
-      model::ntp ntp,
-      std::optional<segment_time_limit> limit = std::nullopt,
-      ss::io_priority_class io_priority = ss::default_priority_class());
+      model::ntp ntp, std::optional<segment_time_limit> limit = std::nullopt);
 
     ss::future<candidate_creation_result> get_next_compacted_segment(
       model::offset begin_inclusive,
@@ -117,7 +114,6 @@ private:
     model::ntp _ntp;
     std::optional<segment_time_limit> _upload_limit;
     std::optional<ss::lowres_clock::time_point> _upload_deadline;
-    ss::io_priority_class _io_priority;
 };
 
 } // namespace archival

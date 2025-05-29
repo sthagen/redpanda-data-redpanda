@@ -13,7 +13,6 @@
 #include "cloud_io/logger.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 #include "utils/token_bucket.h"
 
@@ -192,7 +191,7 @@ ss::future<std::optional<device_throughput>> get_storage_device_throughput() {
 
 } // namespace
 
-io_resources::io_resources()
+io_resources::io_resources(ss::scheduling_group sg)
   : _max_concurrent_hydrations_per_shard(
       config::shard_local_cfg()
         .cloud_storage_max_concurrent_hydrations_per_shard.bind())
@@ -204,7 +203,8 @@ io_resources::io_resources()
   , _throughput_shard_limit_config(
       config::shard_local_cfg().cloud_storage_max_throughput_per_shard.bind())
   , _relative_throughput(
-      config::shard_local_cfg().cloud_storage_throughput_limit_percent.bind()) {
+      config::shard_local_cfg().cloud_storage_throughput_limit_percent.bind())
+  , _scheduling_group(sg) {
     _max_concurrent_hydrations_per_shard.watch([this]() {
         // The 'max_connections' parameter can't be changed without restarting
         // redpanda.
@@ -263,19 +263,16 @@ ss::future<> io_resources::set_disk_max_bandwidth(size_t tput) {
             vlog(
               log.info,
               "Scheduling group's {} bandwidth is not limited",
-              priority_manager::local().shadow_indexing_priority().get_name());
+              _scheduling_group.name());
             co_return;
         }
         _throttling_disabled = false;
         vlog(
           log.info,
           "Setting scheduling group {} bandwidth to {}",
-          priority_manager::local().shadow_indexing_priority().get_name(),
+          _scheduling_group.name(),
           tput);
-
-        co_await priority_manager::local()
-          .shadow_indexing_priority()
-          .update_bandwidth(tput);
+        co_await _scheduling_group.update_io_bandwidth(tput);
     } catch (...) {
         vlog(
           log.error,

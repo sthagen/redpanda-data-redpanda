@@ -695,7 +695,6 @@ void segment_collector::align_begin_offset_to_manifest() {
 }
 
 ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
-  ss::io_priority_class io_priority_class,
   ss::lowres_clock::duration segment_lock_duration) {
     if (_segments.empty()) {
         vlog(
@@ -789,17 +788,14 @@ ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
 
     auto first = _segments.front();
     auto head_seek_result = co_await storage::convert_begin_offset_to_file_pos(
-      _begin_inclusive,
-      first,
-      first->index().base_timestamp(),
-      io_priority_class);
+      _begin_inclusive, first, first->index().base_timestamp());
 
     if (head_seek_result.has_error()) {
         co_return candidate_creation_error::begin_offset_seek_error;
     }
 
     auto tail_seek_result = co_await storage::convert_end_offset_to_file_pos(
-      _end_inclusive, last, last->index().max_timestamp(), io_priority_class);
+      _end_inclusive, last, last->index().max_timestamp());
 
     if (tail_seek_result.has_error()) {
         co_return candidate_creation_error::end_offset_seek_error;
@@ -902,10 +898,8 @@ ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
 }
 ss::future<result<segment_collector_stream>>
 segment_collector::make_upload_candidate_stream(
-  ss::io_priority_class io_priority_class,
   ss::lowres_clock::duration segment_lock_duration) {
-    auto candidate_res = co_await make_upload_candidate(
-      io_priority_class, segment_lock_duration);
+    auto candidate_res = co_await make_upload_candidate(segment_lock_duration);
 
     if (std::holds_alternative<candidate_creation_error>(candidate_res)) {
         vlog(
@@ -947,10 +941,10 @@ segment_collector::make_upload_candidate_stream(
       [segments = cand.sources,
        locks = std::move(cand_with_locks.read_locks),
        file_offset = cand.file_offset,
-       final_file_offset = cand.final_file_offset,
-       iopc = io_priority_class]() mutable -> ss::input_stream<char> {
+       final_file_offset
+       = cand.final_file_offset]() mutable -> ss::input_stream<char> {
         storage::concat_segment_reader_view crv(
-          std::move(segments), file_offset, final_file_offset, iopc);
+          std::move(segments), file_offset, final_file_offset);
         return crv.take_stream();
     };
     co_return stream;

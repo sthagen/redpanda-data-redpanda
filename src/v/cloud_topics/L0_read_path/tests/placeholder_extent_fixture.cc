@@ -196,18 +196,18 @@ void placeholder_extent_fixture::produce_placeholders(
             };
             switch (failure.cache_get) {
             case injected_cache_get_failure::none:
-                cache.expect_get(kv.first, std::move(s));
+                cache.expect_get_stream(kv.first, std::move(s));
                 break;
             case injected_cache_get_failure::return_error:
-                cache.expect_get(kv.first, std::nullopt);
+                cache.expect_get_stream(kv.first, std::nullopt);
                 break;
             case injected_cache_get_failure::throw_error:
-                cache.expect_get_throws(
+                cache.expect_get_stream_throws(
                   kv.first,
                   std::make_exception_ptr(std::runtime_error("dummy")));
                 break;
             case injected_cache_get_failure::throw_shutdown:
-                cache.expect_get_throws(
+                cache.expect_get_stream_throws(
                   kv.first,
                   std::make_exception_ptr(ss::gate_closed_exception()));
                 break;

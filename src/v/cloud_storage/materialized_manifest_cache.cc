@@ -21,7 +21,6 @@
 #include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/future-util.h"
 #include "ssx/semaphore.h"
 #include "ssx/sformat.h"

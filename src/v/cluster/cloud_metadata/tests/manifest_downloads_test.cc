@@ -19,8 +19,6 @@
 #include "redpanda/tests/fixture.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/io_priority_class.hh>
-
 #include <gtest/gtest.h>
 
 namespace {

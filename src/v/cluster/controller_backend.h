@@ -215,6 +215,7 @@ public:
       config::binding<std::chrono::milliseconds>
         retention_local_target_ms_default,
       config::binding<bool> retention_local_strict,
+      ss::scheduling_group scheduling_group,
       ss::sharded<seastar::abort_source>&);
     ~controller_backend();
 
@@ -403,6 +404,7 @@ private:
     config::binding<std::chrono::milliseconds>
       _retention_local_target_ms_default;
     config::binding<bool> _retention_local_strict;
+    ss::scheduling_group _scheduling_group;
     ss::sharded<ss::abort_source>& _as;
 
     absl::btree_map<model::ntp, ss::lw_shared_ptr<ntp_reconciliation_state>>

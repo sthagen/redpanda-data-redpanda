@@ -50,7 +50,6 @@
 #include <seastar/core/fair_queue.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/seastar.hh>
@@ -1593,13 +1592,12 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
       tmpname,
       segment_appender::write_behind_memory / internal::chunks().chunk_size(),
       std::nullopt,
-      cfg.iopc,
       resources(),
       cfg.sanitizer_config);
 
     auto cmp_idx_name = seg->path().to_compacted_index();
     auto compacted_idx_writer = make_file_backed_compacted_index(
-      cmp_idx_tmpname, cfg.iopc, true, resources(), cfg.sanitizer_config);
+      cmp_idx_tmpname, true, resources(), cfg.sanitizer_config);
 
     vlog(
       gclog.debug,
@@ -1983,8 +1981,7 @@ model::timestamp disk_log_impl::start_timestamp() const {
     return (*seg)->index().base_timestamp();
 }
 
-ss::future<> disk_log_impl::new_segment(
-  model::offset o, model::term_id t, ss::io_priority_class pc) {
+ss::future<> disk_log_impl::new_segment(model::offset o, model::term_id t) {
     vassert(
       o() >= 0 && t() >= 0, "offset:{} and term:{} must be initialized", o, t);
     // Recomputing here means that any roll size checks after this takes into
@@ -1995,7 +1992,6 @@ ss::future<> disk_log_impl::new_segment(
         config(),
         o,
         t,
-        pc,
         config::shard_local_cfg().storage_read_buffer_size(),
         config::shard_local_cfg().storage_read_readahead_count(),
         _max_segment_size)
@@ -2133,38 +2129,36 @@ void disk_log_impl::bg_checkpoint_offset_translator() {
     });
 }
 
-ss::future<> disk_log_impl::force_roll(ss::io_priority_class iopc) {
+ss::future<> disk_log_impl::force_roll() {
     auto roll_lock_holder = co_await _segments_rolling_lock.get_units();
     auto t = term();
     auto next_offset = model::next_offset(offsets().dirty_offset);
     if (_segs.empty()) {
-        co_return co_await new_segment(next_offset, t, iopc);
+        co_return co_await new_segment(next_offset, t);
     }
     auto ptr = _segs.back();
     if (!ptr->has_appender()) {
-        co_return co_await new_segment(next_offset, t, iopc);
+        co_return co_await new_segment(next_offset, t);
     }
 
     add_segment_bytes(ptr, ptr->size_bytes());
     co_return co_await ptr->release_appender(_readers_cache.get())
-      .then([this, next_offset, t, iopc] {
-          return new_segment(next_offset, t, iopc);
-      });
+      .then([this, next_offset, t] { return new_segment(next_offset, t); });
 }
 
 ss::future<> disk_log_impl::maybe_roll_unlocked(
-  model::term_id t, model::offset next_offset, ss::io_priority_class iopc) {
+  model::term_id t, model::offset next_offset) {
     vassert(
       !_segments_rolling_lock.ready(),
       "Must have taken _segments_rolling_lock");
 
     vassert(t >= term(), "Term:{} must be greater than base:{}", t, term());
     if (_segs.empty()) {
-        co_return co_await new_segment(next_offset, t, iopc);
+        co_return co_await new_segment(next_offset, t);
     }
     auto ptr = _segs.back();
     if (!ptr->has_appender() || ptr->is_tombstone()) {
-        co_return co_await new_segment(next_offset, t, iopc);
+        co_return co_await new_segment(next_offset, t);
     }
     bool size_should_roll = false;
 
@@ -2174,7 +2168,7 @@ ss::future<> disk_log_impl::maybe_roll_unlocked(
     if (t != term() || size_should_roll) {
         add_segment_bytes(ptr, ptr->size_bytes());
         co_await ptr->release_appender(_readers_cache.get());
-        co_await new_segment(next_offset, t, iopc);
+        co_await new_segment(next_offset, t);
     }
 }
 
@@ -2287,14 +2281,11 @@ ss::future<> disk_log_impl::apply_segment_ms() {
         co_return;
     }
 
-    auto pc = last->appender()
-                .get_priority_class(); // note: has_appender is true, the
-                                       // bouncer condition checked this
     add_segment_bytes(last, last->size_bytes());
     co_await last->release_appender(_readers_cache.get());
     auto offsets = last->offsets();
     auto new_so = model::next_offset(offsets.get_committed_offset());
-    co_await new_segment(new_so, offsets.get_term(), pc);
+    co_await new_segment(new_so, offsets.get_term());
     vlog(
       stlog.trace,
       "{} segment rolled, new segment start offset: {}",
@@ -2379,8 +2370,7 @@ ss::future<size_t> disk_log_impl::get_file_offset(
   ss::lw_shared_ptr<segment> s,
   std::optional<segment_index::entry> maybe_index_entry,
   model::offset target,
-  boundary_type boundary,
-  ss::io_priority_class priority) {
+  boundary_type boundary) {
     auto index_entry = maybe_index_entry.value_or(segment_index::entry{
       .offset = s->offsets().get_base_offset(),
       .filepos = 0,
@@ -2394,8 +2384,7 @@ ss::future<size_t> disk_log_impl::get_file_offset(
 
     auto reader_start_offset = index_entry.offset;
 
-    storage::log_reader_config reader_cfg(
-      reader_start_offset, target, priority);
+    storage::log_reader_config reader_cfg(reader_start_offset, target);
 
     reader_cfg.skip_batch_cache = true;
     reader_cfg.skip_readers_cache = true;
@@ -2443,8 +2432,7 @@ bool disk_log_impl::log_contains_offset_range(
 }
 
 ss::future<std::optional<log::offset_range_size_result_t>>
-disk_log_impl::offset_range_size(
-  model::offset first, model::offset last, ss::io_priority_class io_priority) {
+disk_log_impl::offset_range_size(model::offset first, model::offset last) {
     vlog(
       stlog.debug,
       "Offset range size, first: {}, last: {}, lstat: {}",
@@ -2545,7 +2533,7 @@ disk_log_impl::offset_range_size(
           segments.front()->offsets());
     }
     auto left_scan_bytes = co_await get_file_offset(
-      segments.front(), ix_left, first, boundary_type::exclusive, io_priority);
+      segments.front(), ix_left, first, boundary_type::exclusive);
 
     // Right subscan
     auto ix_right = segments.back()->index().find_nearest(last);
@@ -2565,7 +2553,7 @@ disk_log_impl::offset_range_size(
           segments.back()->offsets());
     }
     auto right_scan_bytes = co_await get_file_offset(
-      segments.back(), ix_right, last, boundary_type::inclusive, io_priority);
+      segments.back(), ix_right, last, boundary_type::inclusive);
 
     // compute size
     size_t total_size = 0;
@@ -2614,9 +2602,7 @@ disk_log_impl::offset_range_size(
 
 ss::future<std::optional<log::offset_range_size_result_t>>
 disk_log_impl::offset_range_size(
-  model::offset first,
-  offset_range_size_requirements_t target,
-  ss::io_priority_class io_priority) {
+  model::offset first, offset_range_size_requirements_t target) {
     vlog(
       stlog.debug,
       "Offset range size, first: {}, target size: {}/{}, lstat: {}",
@@ -2711,7 +2697,7 @@ disk_log_impl::offset_range_size(
         auto ix_res = first_segment->index().find_nearest(first);
 
         first_segment_file_pos = co_await get_file_offset(
-          first_segment, ix_res, first, boundary_type::exclusive, io_priority);
+          first_segment, ix_res, first, boundary_type::exclusive);
     } else {
         // We expect to find first offset inside the first segment.
         // If this is not the case the log was likely truncated concurrently.
@@ -2972,7 +2958,6 @@ disk_log_impl::make_reader(timequery_config config) {
             cfg.max_offset,
             0,
             2048, // We just need one record batch
-            cfg.prio,
             cfg.type_filter,
             cfg.time,
             cfg.abort_source);
@@ -3359,7 +3344,7 @@ ss::future<> disk_log_impl::do_truncate(
     // starting offset. this is needed because we really do want to read
     // all the data in the segment to find the correct physical offset.
     auto reader = co_await make_unchecked_reader(
-      log_reader_config(start, model::offset::max(), cfg.prio));
+      log_reader_config(start, model::offset::max()));
     auto phs = co_await std::move(reader).consume(
       internal::offset_to_filepos_consumer(
         start, cfg.base_offset, initial_size, initial_timestamp),

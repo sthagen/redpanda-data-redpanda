@@ -12,7 +12,6 @@
 #include "kafka/server/handlers/fetch.h"
 #include "model/fundamental.h"
 #include "redpanda/tests/fixture.h"
-#include "resource_mgmt/io_priority.h"
 #include "test_utils/async.h"
 
 #include <seastar/core/smp.hh>

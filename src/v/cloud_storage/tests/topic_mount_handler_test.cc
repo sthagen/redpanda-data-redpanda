@@ -61,7 +61,9 @@ struct TopicMountHandlerFixture : public s3_imposter_fixture {
         io.start(
             std::ref(pool),
             ss::sharded_parameter([this] { return conf; }),
-            ss::sharded_parameter([] { return config_file; }))
+            ss::sharded_parameter([] { return config_file; }),
+            ss::sharded_parameter(
+              [] { return ss::default_scheduling_group(); }))
           .get();
         remote
           .start(std::ref(io), ss::sharded_parameter([this] { return conf; }))

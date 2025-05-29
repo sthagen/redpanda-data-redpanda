@@ -55,7 +55,6 @@ redpanda_cc_library(
         "//src/v/redpanda/admin",
         "//src/v/resource_mgmt:cpu_profiler",
         "//src/v/resource_mgmt:cpu_scheduling",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/resource_mgmt:memory_groups",
         "//src/v/resource_mgmt:memory_sampling",
         "//src/v/resource_mgmt:scheduling_groups_probe",

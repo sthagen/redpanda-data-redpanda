@@ -101,7 +101,9 @@ public:
             co_await stm_node.cloud_io.start(
               std::ref(stm_node.client_pool),
               ss::sharded_parameter([]() { return get_configuration(); }),
-              ss::sharded_parameter([] { return config_file; }));
+              ss::sharded_parameter([] { return config_file; }),
+              ss::sharded_parameter(
+                [] { return ss::default_scheduling_group(); }));
 
             co_await stm_node.remote.start(
               std::ref(stm_node.cloud_io),

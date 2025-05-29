@@ -14,7 +14,6 @@
 #include "cluster/archival/archival_policy.h"
 #include "model/fundamental.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/util/noncopyable_function.hh>
 
@@ -123,15 +122,13 @@ public:
 
     /// Creates upload candidate by computing file offsets and timestamps from
     /// the collected segments.
-    ss::future<candidate_creation_result> make_upload_candidate(
-      ss::io_priority_class io_priority_class,
-      ss::lowres_clock::duration segment_lock_duration);
+    ss::future<candidate_creation_result>
+    make_upload_candidate(ss::lowres_clock::duration segment_lock_duration);
 
     size_t collected_size() const;
 
     // Create a stream for the upload candidate.
     ss::future<result<segment_collector_stream>> make_upload_candidate_stream(
-      ss::io_priority_class io_priority_class,
       ss::lowres_clock::duration segment_lock_duration);
 
 private:

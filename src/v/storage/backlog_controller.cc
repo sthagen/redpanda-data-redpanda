@@ -31,7 +31,6 @@ backlog_controller_config::backlog_controller_config(
   int initial_shares,
   std::chrono::milliseconds interval,
   ss::scheduling_group sg,
-  ss::io_priority_class iop,
   int min,
   int max)
   : proportional_coeff(kp)
@@ -42,7 +41,6 @@ backlog_controller_config::backlog_controller_config(
   , initial_shares(initial_shares)
   , sampling_interval(interval)
   , scheduling_group(sg)
-  , io_priority(iop)
   , min_shares(min)
   , max_shares(max) {}
 
@@ -58,7 +56,6 @@ backlog_controller::backlog_controller(
   , _norm(cfg.normalization_factor)
   , _sampling_interval(cfg.sampling_interval)
   , _scheduling_group(cfg.scheduling_group)
-  , _io_priority(cfg.io_priority)
   , _setpoint(cfg.setpoint / _norm)
   , _current_shares(cfg.initial_shares)
   , _min_shares(cfg.min_shares)
@@ -128,7 +125,7 @@ ss::future<> backlog_controller::update() {
 ss::future<> backlog_controller::set() {
     vlog(_log.debug, "updating shares {}", _current_shares);
     _scheduling_group.set_shares(static_cast<float>(_current_shares));
-    return _io_priority.update_shares(_current_shares);
+    co_return;
 }
 
 void backlog_controller::setup_metrics(const ss::sstring& controller_label) {

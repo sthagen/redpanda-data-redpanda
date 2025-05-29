@@ -113,8 +113,7 @@ ss::future<> disk_log_builder::start(storage::ntp_config cfg) {
 }
 
 ss::future<> disk_log_builder::truncate(model::offset o) {
-    return get_log()->truncate(
-      storage::truncate_config(o, ss::default_priority_class()));
+    return get_log()->truncate(storage::truncate_config(o));
 }
 
 ss::future<> disk_log_builder::gc(
@@ -130,14 +129,13 @@ ss::future<> disk_log_builder::gc(
         max_partition_retention_size,
         model::offset::max(),
         tombstone_retention_ms,
-        ss::default_priority_class(),
         _abort_source))
       .get();
 
     if (eviction_future.available()) {
         auto evict_until = eviction_future.get();
-        return get_log()->truncate_prefix(storage::truncate_prefix_config{
-          model::next_offset(evict_until), ss::default_priority_class()});
+        return get_log()->truncate_prefix(
+          storage::truncate_prefix_config{model::next_offset(evict_until)});
     } else {
         as.request_abort();
         eviction_future.ignore_ready_future();
@@ -212,9 +210,9 @@ segment_index& disk_log_builder::get_seg_index_ptr(size_t index) {
 }
 
 // Create segments
-ss::future<> disk_log_builder::add_segment(
-  model::offset offset, model::term_id term, ss::io_priority_class pc) {
-    return get_disk_log_impl().new_segment(offset, term, pc);
+ss::future<>
+disk_log_builder::add_segment(model::offset offset, model::term_id term) {
+    return get_disk_log_impl().new_segment(offset, term);
 }
 
 // Configuration getters

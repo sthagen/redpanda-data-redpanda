@@ -27,7 +27,6 @@
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>
 
 #include <gtest/gtest.h>

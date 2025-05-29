@@ -163,11 +163,7 @@ private:
 };
 
 compacted_index_reader make_file_backed_compacted_reader(
-  segment_full_path filename,
-  ss::file,
-  ss::io_priority_class,
-  size_t step_chunk,
-  ss::abort_source*);
+  segment_full_path filename, ss::file, size_t step_chunk, ss::abort_source*);
 
 inline ss::future<ss::circular_buffer<compacted_index::entry>>
 compaction_index_reader_to_memory(compacted_index_reader rdr) {

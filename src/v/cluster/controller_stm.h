@@ -48,12 +48,14 @@ public:
       limiter_configuration limiter_conf,
       ss::sharded<features::feature_table>& feature_table,
       config::binding<std::chrono::seconds>&& snapshot_max_age,
+      ss::scheduling_group scheduling_group,
       Args&&... stm_args)
       : mux_state_machine(std::forward<Args>(stm_args)...)
       , _limiter(std::move(limiter_conf))
       , _feature_table(feature_table)
       , _snapshot_max_age(std::move(snapshot_max_age))
-      , _snapshot_debounce_timer([this] { snapshot_timer_callback(); }) {}
+      , _snapshot_debounce_timer([this] { snapshot_timer_callback(); })
+      , _scheduling_group(scheduling_group) {}
 
     controller_stm(controller_stm&&) = delete;
     controller_stm(const controller_stm&) = delete;
@@ -70,6 +72,18 @@ public:
     bool throttle() {
         return _limiter.throttle<Cmd>();
     }
+
+    /// Replicates record batch
+    ss::future<result<raft::replicate_result>>
+    replicate(model::record_batch&&, std::optional<model::term_id>);
+
+    /// Replicates record batch and waits until state will be applied to the
+    /// state machine
+    ss::future<std::error_code> replicate_and_wait(
+      model::record_batch&& b,
+      model::timeout_clock::time_point timeout,
+      ss::abort_source& as,
+      std::optional<model::term_id> term = std::nullopt);
 
     void shutdown_apply_loop();
     ss::future<> shutdown();
@@ -104,6 +118,7 @@ private:
     metrics_reporter_cluster_info _metrics_reporter_cluster_info;
 
     ss::timer<ss::lowres_clock> _snapshot_debounce_timer;
+    ss::scheduling_group _scheduling_group;
 };
 
 inline constexpr ss::shard_id controller_stm_shard = 0;

@@ -12,7 +12,6 @@
 #include "test_utils/async.h"
 
 #include <seastar/core/coroutine.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/metrics_api.hh>
 #include <seastar/core/metrics_registration.hh>
 #include <seastar/core/reactor.hh>
@@ -39,11 +38,7 @@ class backlog_controller_fixture : public ::testing::Test {
 public:
     const std::map<ss::sstring, ss::sstring> sch_group_label = {
       {"group", "sch_control_gr"}, {"shard", "0"}};
-    backlog_controller_fixture()
-#pragma clang diagnostic push
-#pragma clang diagnostic ignored "-Wdeprecated-declarations"
-      : iopc(ss::io_priority_class::register_one("io_control_gr", 100)) {
-#pragma clang diagnostic pop
+    backlog_controller_fixture() {
         sg = ss::create_scheduling_group("sch_control_gr", 100).get();
         /**
          * Controller settings:
@@ -56,7 +51,7 @@ public:
          * max shares = 800
          */
         auto cfg = storage::backlog_controller_config(
-          -1.0, 0.4, 0.2, 1, 20, 100, 10ms, sg, iopc, 10, 800);
+          -1.0, 0.4, 0.2, 1, 20, 100, 10ms, sg, 10, 800);
 
         ctrl = std::make_unique<storage::backlog_controller>(
           std::make_unique<simple_backlog_sampler>(backlog), ctrl_logger, cfg);
@@ -65,7 +60,6 @@ public:
     ~backlog_controller_fixture() { ctrl->stop().get(); }
 
 protected:
-    ss::io_priority_class iopc;
     ss::scheduling_group sg;
     std::unique_ptr<storage::backlog_controller> ctrl;
     int64_t backlog{0};

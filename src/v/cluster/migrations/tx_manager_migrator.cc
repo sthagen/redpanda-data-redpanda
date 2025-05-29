@@ -32,7 +32,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/sleep.hh>
 #include <seastar/util/log.hh>
 
@@ -215,9 +214,7 @@ ss::future<tx_manager_read_reply> tx_manager_read_handler::do_read(
         co_return tx_manager_read_reply(errc::partition_not_exists);
     }
     storage::log_reader_config reader_cfg(
-      std::max(offset, partition->raft_start_offset()),
-      model::offset::max(),
-      ss::default_priority_class());
+      std::max(offset, partition->raft_start_offset()), model::offset::max());
     // read up to 128 KiB
     reader_cfg.max_bytes = 128_KiB;
     auto reader = co_await partition->make_reader(std::move(reader_cfg));

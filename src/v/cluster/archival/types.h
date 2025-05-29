@@ -20,7 +20,6 @@
 #include "utils/named_type.h"
 #include "utils/retry_chain_node.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/scheduling.hh>
 
 namespace archival {
@@ -65,8 +64,6 @@ struct configuration {
     /// Scheduling group that throttles archival upload
     ss::scheduling_group upload_scheduling_group{
       ss::default_scheduling_group()};
-    /// I/o priority used to throttle file reads
-    ss::io_priority_class upload_io_priority{ss::default_priority_class()};
 
     friend std::ostream& operator<<(std::ostream& o, const configuration& cfg);
 };
@@ -77,8 +74,7 @@ struct configuration {
 /// \param sg is a scheduling group used to run all uploads
 /// \param p is an io priority class used to throttle upload file reads
 archival::configuration get_archival_service_config(
-  ss::scheduling_group sg = ss::default_scheduling_group(),
-  ss::io_priority_class p = ss::default_priority_class());
+  ss::scheduling_group sg = ss::default_scheduling_group());
 
 /// The housekeeping job that performs the long
 /// task incrementally. It can be paused and resumed.

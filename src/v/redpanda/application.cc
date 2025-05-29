@@ -128,7 +128,6 @@
 #include "raft/group_manager.h"
 #include "raft/service.h"
 #include "redpanda/admin/server.h"
-#include "resource_mgmt/io_priority.h"
 #include "resource_mgmt/memory_groups.h"
 #include "resource_mgmt/memory_sampling.h"
 #include "resource_mgmt/scheduling_groups_probe.h"
@@ -1152,7 +1151,6 @@ static storage::log_config manager_config_from_global_config(
       config::shard_local_cfg().max_compacted_log_segment_size.bind(),
       storage::jitter_percents(
         config::shard_local_cfg().log_segment_size_jitter_percent()),
-      priority_manager::local().compaction_priority(),
       config::shard_local_cfg().retention_bytes.bind(),
       config::shard_local_cfg().log_compaction_interval_ms.bind(),
       config::shard_local_cfg().log_retention_ms.bind(),
@@ -1170,8 +1168,8 @@ static storage::log_config manager_config_from_global_config(
       std::move(sanitizer_config));
 }
 
-static storage::backlog_controller_config compaction_controller_config(
-  ss::scheduling_group sg, const ss::io_priority_class& iopc) {
+static storage::backlog_controller_config
+compaction_controller_config(ss::scheduling_group sg) {
     auto space_info = std::filesystem::space(
       config::node().data_directory().path);
     /**
@@ -1211,7 +1209,6 @@ static storage::backlog_controller_config compaction_controller_config(
       200,
       config::shard_local_cfg().compaction_ctrl_update_interval_ms(),
       sg,
-      iopc,
       config::shard_local_cfg().compaction_ctrl_min_shares(),
       config::shard_local_cfg().compaction_ctrl_max_shares());
 }
@@ -1240,11 +1237,9 @@ make_upload_controller_config(ss::scheduling_group sg) {
       config::shard_local_cfg().cloud_storage_upload_ctrl_d_coeff(),
       normalization,
       setpoint,
-      static_cast<int>(
-        priority_manager::local().archival_priority().get_shares()),
+      static_cast<int>(sg.get_shares()),
       config::shard_local_cfg().cloud_storage_upload_ctrl_update_interval_ms(),
       sg,
-      priority_manager::local().archival_priority(),
       config::shard_local_cfg().cloud_storage_upload_ctrl_min_shares(),
       config::shard_local_cfg().cloud_storage_upload_ctrl_max_shares()};
 }
@@ -1602,7 +1597,9 @@ void application::wire_up_redpanda_services(
             [&cloud_configs] { return cloud_configs.local().client_config; }),
           ss::sharded_parameter([&cloud_configs] {
               return cloud_configs.local().cloud_credentials_source;
-          }))
+          }),
+          ss::sharded_parameter(
+            [this] { return sched_groups.archival_upload(); }))
           .get();
         cloud_io.invoke_on_all(&cloud_io::remote::start).get();
         bucket_name = cloud_configs.local().bucket_name;
@@ -1671,12 +1668,11 @@ void application::wire_up_redpanda_services(
       std::ref(shadow_index_cache),
       ss::sharded_parameter(
         [sg = sched_groups.archival_upload(),
-         p = archival_priority(),
          enabled = archival_storage_enabled()]()
           -> ss::lw_shared_ptr<archival::configuration> {
             if (enabled) {
                 return ss::make_lw_shared<archival::configuration>(
-                  archival::get_archival_service_config(sg, p));
+                  archival::get_archival_service_config(sg));
             } else {
                 return nullptr;
             }
@@ -1713,7 +1709,8 @@ void application::wire_up_redpanda_services(
       std::ref(cloud_storage_api),
       std::ref(shadow_index_cache),
       std::ref(node_status_table),
-      std::ref(metadata_cache));
+      std::ref(metadata_cache),
+      sched_groups.cluster_sg());
     controller->wire_up().get();
 
     if (config::node().recovery_mode_enabled()) {
@@ -1791,12 +1788,11 @@ void application::wire_up_redpanda_services(
           std::ref(archival_upload_housekeeping),
           ss::sharded_parameter(
             [sg = sched_groups.archival_upload(),
-             p = archival_priority(),
              enabled = archival_storage_enabled()]()
               -> ss::lw_shared_ptr<const archival::configuration> {
                 if (enabled) {
                     return ss::make_lw_shared<const archival::configuration>(
-                      archival::get_archival_service_config(sg, p));
+                      archival::get_archival_service_config(sg));
                 } else {
                     return nullptr;
                 }
@@ -2394,9 +2390,7 @@ void application::wire_up_redpanda_services(
     construct_service(
       _compaction_controller,
       std::ref(storage),
-      compaction_controller_config(
-        sched_groups.compaction_sg(),
-        priority_manager::local().compaction_priority()))
+      compaction_controller_config(sched_groups.compaction_sg()))
       .get();
 }
 

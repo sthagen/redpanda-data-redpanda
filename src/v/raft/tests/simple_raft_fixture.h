@@ -174,7 +174,6 @@ struct simple_raft_fixture {
         return storage::log_config(
           _data_dir,
           100_MiB,
-          ss::default_priority_class(),
           storage::with_cache::yes,
           storage::make_sanitized_file_config());
     }

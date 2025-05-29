@@ -67,9 +67,7 @@ public:
           ntp_sanitizer_config{.sanitize_only = true})));
 
         auto appender = std::make_unique<segment_appender>(
-          fd,
-          segment_appender::options(
-            ss::default_priority_class(), 1, std::nullopt, resources));
+          fd, segment_appender::options(1, std::nullopt, resources));
         auto indexer = segment_index(
           segment_full_path::mock(base_name + ".index"),
           std::move(fidx),
@@ -143,7 +141,7 @@ TEST(log_replayer_test, test_can_recover_single_batch) {
     auto last_offset = batches.back().last_offset();
     ctx.write(batches);
     storage::log_replayer::checkpoint recovered
-      = ctx.replayer().recover_in_thread(ss::default_priority_class());
+      = ctx.replayer().recover_in_thread();
     ASSERT_TRUE(bool(recovered));
     EXPECT_EQ(recovered.last_offset.value(), last_offset);
 }
@@ -155,8 +153,7 @@ TEST(log_replayer_test, test_unrecovered_single_batch) {
           = model::test::make_random_batches(model::offset(1), 1).get();
         batches.back().header().crc = 10;
         ctx.write(batches);
-        auto recovered = ctx.replayer().recover_in_thread(
-          ss::default_priority_class());
+        auto recovered = ctx.replayer().recover_in_thread();
         EXPECT_FALSE(bool(recovered));
     }
     {
@@ -165,8 +162,7 @@ TEST(log_replayer_test, test_unrecovered_single_batch) {
           = model::test::make_random_batches(model::offset(1), 1).get();
         batches.back().header().first_timestamp = model::timestamp(10);
         ctx.write(batches);
-        auto recovered = ctx.replayer().recover_in_thread(
-          ss::default_priority_class());
+        auto recovered = ctx.replayer().recover_in_thread();
         EXPECT_FALSE(bool(recovered));
     }
 }
@@ -175,8 +171,7 @@ TEST(log_replayer_test, test_malformed_segment) {
     log_replayer_fixture ctx;
     ctx.write_garbage();
     ctx.initialize(model::offset(0));
-    auto recovered = ctx.replayer().recover_in_thread(
-      ss::default_priority_class());
+    auto recovered = ctx.replayer().recover_in_thread();
     EXPECT_FALSE(bool(recovered));
 }
 
@@ -185,8 +180,7 @@ TEST(log_replayer_test, test_can_recover_multiple_batches) {
     auto batches = model::test::make_random_batches(model::offset(1), 10).get();
     auto last_offset = batches.back().last_offset();
     ctx.write(batches);
-    auto recovered = ctx.replayer().recover_in_thread(
-      ss::default_priority_class());
+    auto recovered = ctx.replayer().recover_in_thread();
     EXPECT_TRUE(bool(recovered));
     EXPECT_EQ(recovered.last_offset.value(), last_offset);
 }
@@ -200,8 +194,7 @@ TEST(log_replayer_test, test_unrecovered_multiple_batches) {
         batches.back().header().crc = 10;
         auto last_offset = (batches.end() - 2)->last_offset();
         ctx.write(batches);
-        auto recovered = ctx.replayer().recover_in_thread(
-          ss::default_priority_class());
+        auto recovered = ctx.replayer().recover_in_thread();
         EXPECT_TRUE(bool(recovered));
         EXPECT_EQ(recovered.last_offset.value(), last_offset);
     }
@@ -213,8 +206,7 @@ TEST(log_replayer_test, test_unrecovered_multiple_batches) {
         batches.back().header().first_timestamp = model::timestamp(10);
         auto last_offset = (batches.end() - 2)->last_offset();
         ctx.write(batches);
-        auto recovered = ctx.replayer().recover_in_thread(
-          ss::default_priority_class());
+        auto recovered = ctx.replayer().recover_in_thread();
         EXPECT_TRUE(bool(recovered));
         EXPECT_EQ(recovered.last_offset.value(), last_offset);
     }
@@ -226,8 +218,7 @@ TEST(log_replayer_test, test_reset_index) {
     auto batches = model::test::make_random_batches(model::offset(1), 10).get();
     auto last_offset = batches.back().last_offset();
     ctx.write(batches);
-    auto recovered = ctx.replayer().recover_in_thread(
-      ss::default_priority_class());
+    auto recovered = ctx.replayer().recover_in_thread();
     EXPECT_TRUE(bool(recovered));
     EXPECT_EQ(recovered.last_offset.value(), last_offset);
     storage::stlog.info("Recovered segment:{}", ctx._seg);

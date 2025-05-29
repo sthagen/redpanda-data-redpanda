@@ -34,10 +34,7 @@ using storage::disk_space_alert;
 
 local_monitor_fixture::local_monitor_fixture() {
     auto log_conf = storage::log_config{
-      test_directory(),
-      1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()};
+      test_directory(), 1024, storage::make_sanitized_file_config()};
 
     auto kvstore_conf = storage::kvstore_config(
       1_MiB,

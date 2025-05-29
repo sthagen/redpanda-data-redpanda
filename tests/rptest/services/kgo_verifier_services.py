@@ -361,6 +361,7 @@ class KgoVerifierService(Service):
         )
 
         self._release_port()
+        self._stopped = True
 
         return True
 
@@ -375,6 +376,7 @@ class KgoVerifierService(Service):
             return super(KgoVerifierService, self).allocate_nodes()
 
     def free(self):
+        assert self._stopped, "Cannot free KgoVerifierService before stopping it"
         if self.use_custom_node:
             return
         else:

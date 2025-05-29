@@ -326,8 +326,7 @@ static ss::future<segment_set> unsafe_do_recover(
 
             // Check if the segment was marked clean on shutdown
             auto replayer = log_replayer(*s);
-            auto recovered = replayer.recover_in_thread(
-              ss::default_priority_class());
+            auto recovered = replayer.recover_in_thread();
             if (!recovered) {
                 vlog(stlog.info, "Unable to recover segment: {}", s);
                 s->close().get();

@@ -19,8 +19,6 @@
 #include "storage/record_batch_utils.h"
 #include "storage/types.h"
 
-#include <seastar/core/io_priority_class.hh>
-
 #include <gtest/gtest.h>
 
 namespace storage::experimental::mvlog {
@@ -50,8 +48,7 @@ TEST(BatchCollectingStreamTest, TestBasicStream) {
         buf.append(std::move(entry_body_buf));
     }
 
-    log_reader_config cfg{
-      model::offset{0}, model::offset::max(), ss::default_priority_class()};
+    log_reader_config cfg{model::offset{0}, model::offset::max()};
     batch_collector collector(cfg, model::term_id{1}, 128_MiB);
     entry_stream entries(make_iobuf_input_stream(std::move(buf)));
 

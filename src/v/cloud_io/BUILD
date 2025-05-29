@@ -35,7 +35,6 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/cloud_io:logger",
-        "//src/v/resource_mgmt:io_priority",
     ],
     include_prefix = "cloud_io",
     visibility = ["//visibility:public"],
@@ -85,7 +84,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/bytes:iostream",
         "//src/v/cloud_io:logger",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/ssx:future_util",
         "//src/v/ssx:semaphore",
         "@boost//:beast",

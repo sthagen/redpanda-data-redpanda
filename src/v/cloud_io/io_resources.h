@@ -28,7 +28,7 @@ class io_resources {
     friend class throttled_dl_source;
 
 public:
-    io_resources();
+    explicit io_resources(seastar::scheduling_group);
 
     ss::future<> start();
     ss::future<> stop();
@@ -71,6 +71,7 @@ private:
     config::binding<std::optional<size_t>> _relative_throughput;
     bool _throttling_disabled{false};
     std::optional<size_t> _device_throughput;
+    seastar::scheduling_group _scheduling_group;
 };
 
 } // namespace cloud_io

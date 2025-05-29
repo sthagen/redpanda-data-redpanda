@@ -37,10 +37,7 @@ TEST_F(storage_test_fixture, test_random_workload) {
     // BLOCK on logging so that we can make sense of the logs
     std::cout.setf(std::ios::unitbuf);
     storage::log_manager mngr = make_log_manager(storage::log_config(
-      std::move(test_dir),
-      200_MiB,
-      ss::default_priority_class(),
-      storage::with_cache::yes));
+      std::move(test_dir), 200_MiB, storage::with_cache::yes));
     auto deferred = ss::defer([&mngr]() mutable { mngr.stop().get(); });
 
     // Test parameters
@@ -85,10 +82,7 @@ TEST_F(storage_test_fixture, test_random_remove) {
     // BLOCK on logging so that we can make sense of the logs
     std::cout.setf(std::ios::unitbuf);
     storage::log_manager mngr = make_log_manager(storage::log_config(
-      std::move(test_dir),
-      200_MiB,
-      ss::default_priority_class(),
-      storage::with_cache::yes));
+      std::move(test_dir), 200_MiB, storage::with_cache::yes));
     auto deferred = ss::defer([&mngr]() mutable { mngr.stop().get(); });
 
     // Test parameters

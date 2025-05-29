@@ -85,7 +85,7 @@ TEST_F(eviction_stm_fixture, test_eviction_stm_deadlock) {
 
         auto log = leader.raft()->log();
         offsets.push_back(log->offsets());
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
     auto leader_id = wait_for_leader(10s).get();
     auto& leader = node(leader_id);

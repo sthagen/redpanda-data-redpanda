@@ -144,9 +144,7 @@ public:
                     .then([&pm, ntp](result<raft::replicate_result>) {
                         auto p = pm.get(ntp);
                         return p->make_reader(storage::log_reader_config(
-                          model::offset(0),
-                          p->committed_offset(),
-                          ss::default_priority_class()));
+                          model::offset(0), p->committed_offset()));
                     })
                     .then([](model::record_batch_reader r) {
                         return model::consume_reader_to_memory(

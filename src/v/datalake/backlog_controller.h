@@ -14,7 +14,6 @@
 #include "metrics/metrics.h"
 
 #include <seastar/core/gate.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/metrics_registration.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/util/log.hh>

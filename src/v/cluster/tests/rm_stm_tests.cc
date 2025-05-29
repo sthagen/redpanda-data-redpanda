@@ -566,7 +566,7 @@ FIXTURE_TEST(test_aborted_transactions, rm_stm_test_fixture) {
     };
 
     auto roll_log = [&]() {
-        disk_log->force_roll(ss::default_priority_class()).get();
+        disk_log->force_roll().get();
         segment_count++;
         BOOST_REQUIRE_EQUAL(disk_log->segment_count(), segment_count);
     };

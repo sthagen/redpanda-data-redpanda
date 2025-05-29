@@ -309,7 +309,6 @@ reconciler::make_reader(const attached_partition& partition, size_t max_bytes) {
       kafka::offset_cast(max_offset),
       0,
       max_bytes,
-      ss::default_priority_class(),
       std::nullopt,
       std::nullopt,
       _as));

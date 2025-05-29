@@ -36,7 +36,6 @@ redpanda_cc_library(
         "//src/v/kafka/data/rpc",
         "//src/v/model",
         "//src/v/raft",
-        "//src/v/resource_mgmt:io_priority",
         "//src/v/rpc",
         "//src/v/serde",
         "//src/v/storage",

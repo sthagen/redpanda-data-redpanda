@@ -17,7 +17,6 @@
 #include "storage/mvlog/segment_appender.h"
 
 #include <seastar/core/circular_buffer.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/lowres_clock.hh>
 
 #include <chrono>

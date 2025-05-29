@@ -22,7 +22,6 @@
 #include "kafka/server/response.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
-#include "resource_mgmt/io_priority.h"
 #include "ssx/when_all.h"
 
 namespace kafka {
@@ -147,7 +146,6 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
       min_offset,
       timestamp,
       max_offset,
-      kafka_read_priority(),
       {model::record_batch_type::raft_data},
       octx.rctx.abort_source().local()});
     auto id = ktp.get_partition();

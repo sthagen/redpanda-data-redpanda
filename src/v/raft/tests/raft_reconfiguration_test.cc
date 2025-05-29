@@ -29,7 +29,6 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/util/bool_class.hh>

@@ -21,7 +21,6 @@
 #include "test_utils/fixture.h"
 
 #include <seastar/core/file.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
 
@@ -56,10 +55,7 @@ TEST_F(storage_test_fixture, test_truncate_whole) {
         log->flush().get();
     }
     model::offset truncate_offset{0};
-    log
-      ->truncate(
-        storage::truncate_config(truncate_offset, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(truncate_offset)).get();
 
     auto read_batches = read_and_validate_all_batches(log);
     auto lstats = log->offsets();
@@ -84,10 +80,7 @@ TEST_F(storage_test_fixture, test_truncate_in_the_middle_of_segment) {
 
     // truncate in the middle
     SUCCEED() << "Truncating at offset: " << truncate_offset;
-    log
-      ->truncate(
-        storage::truncate_config(truncate_offset, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(truncate_offset)).get();
     SUCCEED() << "reading all batches";
     auto read_batches = read_and_validate_all_batches(log);
 
@@ -118,8 +111,7 @@ TEST_F(storage_test_fixture, test_truncate_in_the_middle_of_batch) {
       log, model::test::make_random_batch(model::offset{0}, 5, true));
 
     auto truncate_at = [log](model::offset o) mutable {
-        log->truncate(storage::truncate_config(o, ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(o)).get();
     };
 
     EXPECT_THROW(truncate_at(model::offset{7}), std::exception);
@@ -167,9 +159,7 @@ TEST_F(storage_test_fixture, test_truncate_middle_of_old_segment) {
         all_batches.pop_back();
     }
     // truncate @ offset that belongs to an old segment
-    log
-      ->truncate(storage::truncate_config(
-        all_batches.back().base_offset(), ss::default_priority_class()))
+    log->truncate(storage::truncate_config(all_batches.back().base_offset()))
       .get();
     all_batches.pop_back(); // we just removed the last one!
     auto final_batches = read_and_validate_all_batches(log);
@@ -198,14 +188,8 @@ TEST_F(storage_test_fixture, truncate_whole_log_and_then_again) {
     }
 
     const auto truncate_offset = model::offset{0};
-    log
-      ->truncate(
-        storage::truncate_config(truncate_offset, ss::default_priority_class()))
-      .get();
-    log
-      ->truncate(
-        storage::truncate_config(truncate_offset, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(truncate_offset)).get();
+    log->truncate(storage::truncate_config(truncate_offset)).get();
 
     auto read_batches = read_and_validate_all_batches(log);
     ASSERT_EQ(read_batches.size(), 0);
@@ -227,16 +211,13 @@ TEST_F(storage_test_fixture, truncate_before_read) {
         log->flush().get();
     }
     storage::log_reader_config cfg(
-      model::offset(0),
-      model::model_limits<model::offset>::max(),
-      ss::default_priority_class());
+      model::offset(0), model::model_limits<model::offset>::max());
 
     // first create the reader
     auto reader_ptr = std::make_unique<model::record_batch_reader>(
       log->make_reader(std::move(cfg)).get());
     // truncate
-    auto f = log->truncate(
-      storage::truncate_config(model::offset(0), ss::default_priority_class()));
+    auto f = log->truncate(storage::truncate_config(model::offset(0)));
     // Memory log works fine
     reader_ptr->consume(batch_validating_consumer{}, model::no_timeout).get();
     reader_ptr = nullptr;
@@ -264,10 +245,7 @@ TEST_F(
 
     // truncate in the middle
     SUCCEED() << "Truncating at offset: " << truncate_offset;
-    log
-      ->truncate(
-        storage::truncate_config(truncate_offset, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(truncate_offset)).get();
     SUCCEED() << "reading all batches";
     auto read_batches = read_and_validate_all_batches(log);
 
@@ -316,10 +294,7 @@ TEST_F(storage_test_fixture, test_truncate_last_single_record_batch) {
     for (auto lstats = log->offsets(); lstats.dirty_offset > model::offset{};
          lstats = log->offsets()) {
         auto truncate_offset = lstats.dirty_offset;
-        log
-          ->truncate(storage::truncate_config(
-            truncate_offset, ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(truncate_offset)).get();
         auto all_batches = read_and_validate_all_batches(log);
         auto expected = truncate_offset - headers.back().record_count;
         headers.pop_back();
@@ -360,18 +335,10 @@ TEST_F(
     ss::abort_source as;
     log
       ->housekeeping(housekeeping_config(
-        ts,
-        std::nullopt,
-        model::offset::max(),
-        std::nullopt,
-        ss::default_priority_class(),
-        as))
+        ts, std::nullopt, model::offset::max(), std::nullopt, as))
       .get();
     // truncate at 0, offset earlier then the one present in log
-    log
-      ->truncate(storage::truncate_config(
-        model::offset(0), ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(model::offset(0))).get();
 
     auto lstats = log->offsets();
     ASSERT_EQ(lstats.dirty_offset, model::offset{});
@@ -446,10 +413,7 @@ TEST_F(storage_test_fixture, truncated_segment_recovery) {
         truncate_offsets.push_back(all_batches[4].base_offset());
 
         SUCCEED() << "Truncating at offset: " << truncate_offsets.back();
-        log
-          ->truncate(storage::truncate_config(
-            truncate_offsets.back(), ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(truncate_offsets.back())).get();
 
         // force segment roll
         append_random_batches(log, 5, model::term_id(1));
@@ -459,10 +423,7 @@ TEST_F(storage_test_fixture, truncated_segment_recovery) {
         truncate_offsets.push_back(all_batches.back().base_offset());
 
         SUCCEED() << "Truncating at offset: " << truncate_offsets.back();
-        log
-          ->truncate(storage::truncate_config(
-            truncate_offsets.back(), ss::default_priority_class()))
-          .get();
+        log->truncate(storage::truncate_config(truncate_offsets.back())).get();
 
         // force segment roll
         append_random_batches(log, 3, model::term_id(2));
@@ -540,15 +501,10 @@ TEST_F(storage_test_fixture, test_concurrent_prefix_truncate_and_gc) {
     // to evict. The test does not listen for the notification,
     // so this call is basically a no-op.
     auto f1 = log->housekeeping(housekeeping_config(
-      ts,
-      std::nullopt,
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      as));
+      ts, std::nullopt, model::offset::max(), std::nullopt, as));
 
-    auto f2 = log->truncate_prefix(storage::truncate_prefix_config(
-      model::next_offset(lstats.dirty_offset), ss::default_priority_class()));
+    auto f2 = log->truncate_prefix(
+      storage::truncate_prefix_config(model::next_offset(lstats.dirty_offset)));
 
     f1.get();
     f2.get();
@@ -576,7 +532,7 @@ TEST_F(storage_test_fixture, test_concurrent_truncate_and_compaction) {
             append_random_batches(log, 1, model::term_id(0));
         }
         log->flush().get();
-        log->force_roll(ss::default_priority_class()).get();
+        log->force_roll().get();
     }
 
     auto all_batches = read_and_validate_all_batches(log);
@@ -589,8 +545,7 @@ TEST_F(storage_test_fixture, test_concurrent_truncate_and_compaction) {
     // compaction, which initially self compacts one segment at a time, while
     // leaving room for further windowed compaction.
     ss::abort_source as;
-    compaction_config compaction_cfg(
-      model::offset::max(), std::nullopt, ss::default_priority_class(), as);
+    compaction_config compaction_cfg(model::offset::max(), std::nullopt, as);
     auto& disk_log = *dynamic_cast<disk_log_impl*>(log.get());
     disk_log.adjacent_merge_compact(compaction_cfg).get();
     disk_log.adjacent_merge_compact(compaction_cfg).get();
@@ -607,19 +562,13 @@ TEST_F(storage_test_fixture, test_concurrent_truncate_and_compaction) {
     auto ts = now();
     auto sleep_ms1 = random_generators::get_int(0, 100);
     housekeeping_config housekeeping_cfg(
-      ts,
-      std::nullopt,
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      as);
+      ts, std::nullopt, model::offset::max(), std::nullopt, as);
     auto f1 = ss::sleep(sleep_ms1 * 1ms).then([&] {
         return log->housekeeping(housekeeping_cfg);
     });
     auto sleep_ms2 = random_generators::get_int(0, 100);
     auto f2 = ss::sleep(sleep_ms2 * 1ms).then([&] {
-        return log->truncate(truncate_config{
-          model::offset{truncate_offset}, ss::default_priority_class()});
+        return log->truncate(truncate_config{model::offset{truncate_offset}});
     });
 
     std::exception_ptr housekeeping_eptr;
@@ -669,10 +618,7 @@ TEST_F(storage_test_fixture, test_prefix_truncate_in_the_middle_of_batch) {
       log, model::test::make_random_batch(model::offset{0}, 5, true));
 
     auto truncate_at = [log](model::offset o) mutable {
-        log
-          ->truncate_prefix(
-            storage::truncate_prefix_config(o, ss::default_priority_class()))
-          .get();
+        log->truncate_prefix(storage::truncate_prefix_config(o)).get();
     };
 
     truncate_at(model::offset{7});
@@ -711,14 +657,9 @@ TEST_F(storage_test_fixture, test_prefix_truncate_then_truncate_all) {
     append_batch(
       log, model::test::make_random_batch(model::offset{0}, 5, true));
 
-    log
-      ->truncate_prefix(storage::truncate_prefix_config(
-        model::offset{10}, ss::default_priority_class()))
+    log->truncate_prefix(storage::truncate_prefix_config(model::offset{10}))
       .get();
-    log
-      ->truncate(storage::truncate_config(
-        model::offset{10}, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(model::offset{10})).get();
 
     // Check that even though the log is empty, start offset is saved.
 
@@ -772,10 +713,7 @@ TEST_F(storage_test_fixture, test_index_max_timestamp_update) {
         std::vector<size_t>(10, 1024),
         model::timestamp(30000)));
 
-    log
-      ->truncate(storage::truncate_config(
-        model::offset{20}, ss::default_priority_class()))
-      .get();
+    log->truncate(storage::truncate_config(model::offset{20})).get();
 
     auto& impl = *log;
 

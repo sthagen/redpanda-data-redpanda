@@ -30,7 +30,6 @@
 #include "test_utils/test.h"
 #include "utils/directory_walker.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/sleep.hh>
 
 #include <absl/container/btree_map.h>
@@ -154,7 +153,7 @@ public:
                 val_count += records_per_batch;
             }
             co_await log->flush();
-            co_await log->force_roll(ss::default_priority_class());
+            co_await log->force_roll();
         }
     }
 
@@ -216,7 +215,7 @@ public:
                   topic_name, model::partition_id(0), std::move(kvs));
             }
             co_await log->flush();
-            co_await log->force_roll(ss::default_priority_class());
+            co_await log->force_roll();
         }
     }
 
@@ -241,7 +240,6 @@ public:
         storage::compaction_config cfg(
           max_collect_offset,
           tombstone_ret_ms,
-          ss::default_priority_class(),
           never_abort,
           std::nullopt,
           max_keys,
@@ -262,7 +260,6 @@ public:
         storage::compaction_config cfg(
           max_collect_offset,
           tombstone_ret_ms,
-          ss::default_priority_class(),
           never_abort,
           std::nullopt,
           max_keys,
@@ -305,7 +302,6 @@ TEST_P(CompactionFixtureParamTest, TestDedupeOnePass) {
     storage::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt,
       cardinality);
@@ -375,7 +371,6 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPass) {
     storage::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt,
       cardinality - 1);
@@ -508,7 +503,6 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
     storage::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt,
       cardinality - 1);
@@ -605,7 +599,6 @@ TEST_P(CompactionFixtureBatchSizeParamTest, TestRecompactWithNewData) {
     storage::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt,
       cardinality);
@@ -625,7 +618,6 @@ TEST_P(CompactionFixtureBatchSizeParamTest, TestRecompactWithNewData) {
     storage::compaction_config new_cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt,
       cardinality);
@@ -669,7 +661,6 @@ TEST_F(CompactionFixtureTest, TestCompactWithNonDataBatches) {
     storage::compaction_config new_cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt);
     disk_log.sliding_window_compact(new_cfg).get();
@@ -724,11 +715,7 @@ TEST_P(CompactionFilledReaderTest, ReadFilledGaps) {
                                          start_offset(), log_end_offset())};
 
         storage::log_reader_config reader_cfg{
-          start_offset,
-          end_offset,
-          ss::default_priority_class(),
-          std::nullopt,
-          std::nullopt};
+          start_offset, end_offset, std::nullopt, std::nullopt};
         reader_cfg.fill_gaps = true;
         auto reader = disk_log.make_reader(reader_cfg).get();
         auto batches = model::consume_reader_to_memory(
@@ -757,7 +744,6 @@ TEST_P(CompactionFilledReaderTest, ReadFilledGaps) {
     storage::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt,
       10);
@@ -794,11 +780,7 @@ TEST_F(CompactionFixtureTest, TestReadFilledGapsWithTerms) {
         RPTEST_REQUIRE_EVENTUALLY(5s, [&] { return raft->is_leader(); });
     }
     storage::log_reader_config reader_cfg{
-      model::offset(0),
-      model::offset::max(),
-      ss::default_priority_class(),
-      std::nullopt,
-      std::nullopt};
+      model::offset(0), model::offset::max(), std::nullopt, std::nullopt};
     reader_cfg.fill_gaps = true;
 
     // Collect the original term of each batch.
@@ -816,7 +798,6 @@ TEST_F(CompactionFixtureTest, TestReadFilledGapsWithTerms) {
     storage::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
-      ss::default_priority_class(),
       never_abort,
       std::nullopt,
       10);
@@ -1449,9 +1430,7 @@ TEST_P(
 
     {
         auto seg_0_reader_cfg = storage::log_reader_config(
-          segs[0]->offsets().get_base_offset(),
-          model::offset::max(),
-          ss::default_priority_class());
+          segs[0]->offsets().get_base_offset(), model::offset::max());
         auto seg_0_batches = model::consume_reader_to_memory(
                                log->make_reader(seg_0_reader_cfg).get(),
                                model::no_timeout)
@@ -1554,10 +1533,7 @@ TEST_F(CompactionFixtureTest, TestSlidingWindowNoUnecessaryRewrites) {
     auto& segments = disk_log.segments();
 
     storage::compaction_config cfg(
-      model::offset::max(),
-      std::nullopt,
-      ss::default_priority_class(),
-      never_abort);
+      model::offset::max(), std::nullopt, never_abort);
 
     for (auto& seg : segments) {
         if (!seg->has_appender()) {

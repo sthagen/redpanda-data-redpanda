@@ -44,7 +44,6 @@
 #include "storage/types.h"
 #include "test_utils/async.h"
 
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/util/later.hh>
 
 #include <absl/container/flat_hash_map.h>

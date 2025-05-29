@@ -34,6 +34,10 @@ class DatabricksUnity(CatalogService):
     def iceberg_rest_url(self) -> str:
         return self._databricks_context.iceberg_rest_url
 
+    @property
+    def iceberg_rest_port(self) -> int:
+        raise NotImplementedError("Databricks Unity does not expose a port")
+
     def _configure_client(self, conf: Dict[str, Optional[str]]) -> None:
         if isinstance(self._databricks_context.credentials, PatCredentials):
             conf["token"] = self._databricks_context.credentials.token

@@ -38,7 +38,6 @@
 
 #include <seastar/core/app-template.hh>
 #include <seastar/core/future.hh>
-#include <seastar/core/io_priority_class.hh>
 #include <seastar/core/iostream.hh>
 #include <seastar/core/resource.hh>
 #include <seastar/core/temporary_buffer.hh>
@@ -126,7 +125,9 @@ public:
         io.start(
             std::ref(pool),
             ss::sharded_parameter([this] { return conf; }),
-            ss::sharded_parameter([] { return config_file; }))
+            ss::sharded_parameter([] { return config_file; }),
+            ss::sharded_parameter(
+              [] { return ss::default_scheduling_group(); }))
           .get();
         remote
           .start(std::ref(io), ss::sharded_parameter([this] { return conf; }))
@@ -478,10 +479,7 @@ TEST_P(all_types_remote_fixture, test_concat_segment_upload) {
 
     model::ntp test_ntp{"test_ns", "test_tpc", 0};
     disk_log_builder b{log_config{
-      data_path.string(),
-      1024,
-      ss::default_priority_class(),
-      storage::make_sanitized_file_config()}};
+      data_path.string(), 1024, storage::make_sanitized_file_config()}};
     b | start(ntp_config{test_ntp, {data_path}});
 
     auto defer = ss::defer([&b]() { b.stop().get(); });
@@ -508,8 +506,7 @@ TEST_P(all_types_remote_fixture, test_concat_segment_upload) {
             std::vector<ss::lw_shared_ptr<segment>>{
               b.get_log_segments().begin(), b.get_log_segments().end()},
             start_pos,
-            end_pos,
-            ss::default_priority_class()));
+            end_pos));
     };
 
     retry_chain_node fib(never_abort, 100ms, 20ms);

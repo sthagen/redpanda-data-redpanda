@@ -16,7 +16,6 @@
 #include "raft/consensus_utils.h"
 #include "raft/group_configuration.h"
 #include "random/generators.h"
-#include "resource_mgmt/io_priority.h"
 #include "storage/api.h"
 #include "storage/log.h"
 #include "storage/log_manager.h"
@@ -54,7 +53,6 @@ struct bootstrap_fixture : raft::simple_record_fixture {
               return storage::log_config(
                 test_directory(),
                 1_GiB,
-                ss::default_priority_class(),
                 storage::with_cache::no,
                 storage::make_sanitized_file_config());
           },
@@ -73,9 +71,7 @@ struct bootstrap_fixture : raft::simple_record_fixture {
 
     std::vector<storage::append_result> write_n(const std::size_t n) {
         const auto cfg = storage::log_append_config{
-          storage::log_append_config::fsync::no,
-          ss::default_priority_class(),
-          model::no_timeout};
+          storage::log_append_config::fsync::no, model::no_timeout};
         std::vector<storage::append_result> res;
         res.push_back(
           datas(n)
@@ -123,9 +119,7 @@ FIXTURE_TEST(write_configs, bootstrap_fixture) {
 }
 FIXTURE_TEST(mixed_config_versions, bootstrap_fixture) {
     const storage::log_append_config append_cfg{
-      storage::log_append_config::fsync::no,
-      ss::default_priority_class(),
-      model::no_timeout};
+      storage::log_append_config::fsync::no, model::no_timeout};
 
     datas(20)
       .for_each_ref(get_log()->make_appender(append_cfg), append_cfg.timeout)

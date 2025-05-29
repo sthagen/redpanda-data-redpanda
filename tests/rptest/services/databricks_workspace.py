@@ -35,6 +35,10 @@ class DatabricksWorkspace(Service):
     Including post-testing cleanup.
     """
     def __init__(self, context: TestContext):
+        # Resource trackers.
+        self._location_names: Set[str] = set()
+        self._catalog_names: Set[str] = set()
+
         super().__init__(context, num_nodes=0)
 
         self._databricks_context = DatabricksContext.from_context(context)
@@ -44,10 +48,6 @@ class DatabricksWorkspace(Service):
 
         # Fail fast if credentials are invalid.
         self._verify_credentials()
-
-        # Resource trackers.
-        self._location_names: Set[str] = set()
-        self._catalog_names: Set[str] = set()
 
     def stop(self, **kwargs):
         self.logger.debug("Stopping Databricks workspace")
