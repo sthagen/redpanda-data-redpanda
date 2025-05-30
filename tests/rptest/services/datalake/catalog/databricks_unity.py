@@ -44,7 +44,10 @@ class DatabricksUnity(CatalogService):
         elif isinstance(self._databricks_context.credentials,
                         OauthCredentials):
             conf[
-                "credentials"] = f"{self._databricks_context.credentials.client_id}:{self._databricks_context.credentials.client_secret}"
+                "credential"] = f"{self._databricks_context.credentials.client_id}:{self._databricks_context.credentials.client_secret}"
+            conf["scope"] = "all-apis"
+            conf[
+                "oauth2-server-uri"] = f"{self._databricks_context.workspace_url}/oidc/v1/token"
         else:
             raise ValueError(
                 f"Unsupported credentials type for Databricks context for {type(self._databricks_context.credentials)}"

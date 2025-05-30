@@ -273,3 +273,26 @@ redpanda_cc_btest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_btest(
+    name = "test_config_utils",
+    timeout = "short",
+    srcs = [
+        "test_config_utils.cc",
+    ],
+    deps = [
+        "//src/v/config",
+        "//src/v/json",
+        "//src/v/kafka/client",
+        "//src/v/kafka/client/test:fixture",
+        "//src/v/kafka/protocol",
+        "//src/v/model",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+        "@yaml-cpp",
+    ],
+)

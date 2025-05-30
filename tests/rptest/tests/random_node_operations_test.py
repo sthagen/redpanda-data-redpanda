@@ -74,6 +74,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                     'cluster': 'debug',
                     'datalake': 'trace',
                     'cloud_storage': 'debug',
+                    'cloud_io': 'debug',
                 }),
             *args,
             **kwargs)

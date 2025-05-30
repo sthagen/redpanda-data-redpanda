@@ -82,6 +82,10 @@ public:
         co_await _in.close();
     }
 
+    bool attached(unsigned index) const {
+        return (_bitmask & (1U << index)) == 0;
+    }
+
     /// Detach client with 'index' from the fanout
     ///
     /// The remaining clients can proceed as usual.
@@ -223,6 +227,16 @@ struct fanout_data_source final : ss::data_source_impl {
       ss::lw_shared_ptr<input_stream_fanout<Ch>> i, size_t source_id)
       : _isf(std::move(i))
       , _id{source_id} {}
+
+    ~fanout_data_source() final {
+        // Close must have been called before the destructor otherwise we get a
+        // deadlock as the ring buffer is full and we're still expecting
+        // consumption from it.
+        vassert(
+          !_isf->attached(_id),
+          "fanout_data_source destructor called while the source is "
+          "still attached to the fanout");
+    }
 
     ss::future<> close() final { co_await _isf->detach(_id); }
 

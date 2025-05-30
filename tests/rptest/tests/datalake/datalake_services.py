@@ -98,8 +98,8 @@ class DatalakeServices():
                 "true",
             })
 
-            creds = databricks_ctx.DatabricksContext.from_context(
-                self.test_ctx).credentials
+            ctx = databricks_ctx.DatabricksContext.from_context(self.test_ctx)
+            creds = ctx.credentials
             if isinstance(creds, databricks_ctx.PatCredentials):
                 self.redpanda.add_extra_rp_conf({
                     "iceberg_rest_catalog_authentication_mode":
@@ -115,6 +115,10 @@ class DatalakeServices():
                     creds.client_id,
                     "iceberg_rest_catalog_client_secret":
                     creds.client_secret,
+                    "iceberg_rest_catalog_oauth2_server_uri":
+                    f"{ctx.workspace_url}/oidc/v1/token",
+                    "iceberg_rest_catalog_oauth2_scope":
+                    "all-apis",
                 })
             else:
                 raise ValueError(f"Unsupported credentials type {type(creds)}")
