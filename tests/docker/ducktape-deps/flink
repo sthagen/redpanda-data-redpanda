@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -e
+
+source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
+
 mkdir /opt/flink
 
 # Download
@@ -13,15 +16,12 @@ FLINK_FILE=flink-${FLINK_VERSION}-bin-scala_${FLINK_SCALA_VERSION}.tgz
 DEPS_BASEURL=https://vectorized-public.s3.us-west-2.amazonaws.com/dependencies
 FLINK_URL=${DEPS_BASEURL}/${FLINK_FILE}
 KAFKA_CONNECTOR=flink-sql-connector-kafka-3.0.1-1.18.jar
-wget ${FLINK_URL}
 
-# Extract
-tar -xvf ${FLINK_FILE} -C /opt/flink --strip-components 1
-rm ${FLINK_FILE}
+DL_STRIP=1 download_extract ${FLINK_URL} /opt/flink
 
 # Download connector
 mkdir /opt/flink/connectors
-wget ${DEPS_BASEURL}/${KAFKA_CONNECTOR} -O /opt/flink/connectors/${KAFKA_CONNECTOR}
+download ${DEPS_BASEURL}/${KAFKA_CONNECTOR} /opt/flink/connectors/${KAFKA_CONNECTOR}
 
 # Show version
 /opt/flink/bin/flink --version

@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -e
 
+source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
+
 # get keycloak binary
 KC_VERSION=23.0.3
-wget "https://github.com/keycloak/keycloak/releases/download/${KC_VERSION}/keycloak-${KC_VERSION}.tar.gz"
 
-tar -xvzf keycloak-${KC_VERSION}.tar.gz
-rm keycloak-${KC_VERSION}.tar.gz
+download_extract "https://github.com/keycloak/keycloak/releases/download/${KC_VERSION}/keycloak-${KC_VERSION}.tar.gz" .
 
 mv keycloak-${KC_VERSION} /opt/keycloak

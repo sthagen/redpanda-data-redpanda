@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 set -e
+
+source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
+
 apt update
 apt install -y \
   build-essential \
@@ -33,7 +36,7 @@ fi
 tar_file=openjdk-22.0.2_linux-${architecture}_bin.tar.gz
 java22_url=https://download.java.net/java/GA/jdk22.0.2/c9ecb94cd31b495da20a27d4581645e8/9/GPL/${tar_file}
 
-wget $java22_url && tar xvf $tar_file && rm -f $tar_file
+download_extract $java22_url .
 mv jdk-22.0.2 /usr/lib/jvm/java-22-openjdk-${ARCH}
 
 update-java-alternatives -s java-1.17.0-openjdk-${ARCH}

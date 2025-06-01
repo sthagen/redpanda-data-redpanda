@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -e
 
+source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
+
 mkdir /opt/trino
 
 TRINO_VERSION=463
-TRINO_FILE=trino-server-${TRINO_VERSION}.tar.gz
 TRINO_URL=https://repo1.maven.org/maven2/io/trino/trino-server/${TRINO_VERSION}/trino-server-${TRINO_VERSION}.tar.gz
 
-wget ${TRINO_URL}
-tar xvf ${TRINO_FILE} -C /opt/trino --strip-components 1 && rm -f ${TRINO_FILE}
+DL_STRIP=1 download_extract ${TRINO_URL} /opt/trino
 
 # Commonly used directories for data and configurations
 mkdir /opt/trino/data

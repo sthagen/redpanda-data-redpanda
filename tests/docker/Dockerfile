@@ -13,24 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 FROM public.ecr.aws/docker/library/ubuntu:jammy-20240911.1 AS os_base
-
+FROM os_base AS base
+# 1 to use the download-utils caching, 0 to disable
+ARG DL_USE_CACHE=1
 ENV TZ="UTC" \
     DEBIAN_FRONTEND=noninteractive
-
-FROM os_base AS m2_seed
-ARG USE_MAVEN_SEED=1
-# Used to seed the maven cache for the java base image, see script for details
-COPY --chmod=0755 tests/docker/ducktape-deps/seed-maven-cache /
-RUN /seed-maven-cache && rm -rf /seed-maven-cache /var/lib/apt/lists/*
-
-FROM os_base AS base
 
 RUN mkdir -p /opt/redpanda-tests
 COPY --chown=0:0 tests/protobuf /opt/redpanda-tests/protobuf
 
+COPY --chmod=0755 tests/docker/ducktape-deps/download-utils /
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/java-dev-tools /
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/protobuf /
-RUN /java-dev-tools && \
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /java-dev-tools && \
     rm /java-dev-tools && \
     rm -rf /var/lib/apt/lists/*
 
@@ -45,7 +40,11 @@ RUN /tool-pkgs && \
 
 FROM base AS maven_base
 # maven_base is used for all maven-using java stages below
-COPY --from=m2_seed /root/.m2 /root/.m2
+ARG USE_MAVEN_SEED=1
+# Used to seed the maven cache for the java base image, see script for details
+COPY --chmod=0755 tests/docker/ducktape-deps/seed-maven-cache /
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /seed-maven-cache && rm -rf /seed-maven-cache /var/lib/apt/lists/*
+
 
 #################################
 
@@ -83,7 +82,7 @@ FROM maven_base AS kafka-tools
 
 ENV KAFKA_MIRROR="https://s3-us-west-2.amazonaws.com/kafka-packages"
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kafka-tools /
-RUN /kafka-tools && \
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /kafka-tools && \
     rm /kafka-tools
 
 #################################
@@ -174,7 +173,7 @@ RUN /franz-bench && \
 FROM base AS flink
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/flink /
-RUN /flink && \
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /flink && \
     rm /flink
 
 #################################
@@ -222,7 +221,7 @@ RUN /plugin-mock && rm /plugin-mock
 FROM base AS keycloak
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/keycloak /
-RUN /keycloak && rm /keycloak
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /keycloak && rm /keycloak
 
 #################################
 
@@ -271,14 +270,14 @@ RUN /iceberg-rest-catalog && rm /iceberg-rest-catalog
 
 FROM base AS trino
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/trino /
-RUN /trino && rm /trino
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /trino && rm /trino
 
 #################################
 
 FROM maven_base AS spark
 COPY --chown=0:0 tests/java/spark-iceberg-dependencies /opt/redpanda-tests/java/spark-iceberg-dependencies
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/spark /
-RUN /spark && rm /spark
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache /spark && rm /spark
 
 #################################
 # m2-collector creates the final .m2 cache from all images
@@ -296,6 +295,23 @@ COPY --from=omb /root/.m2 /root/.m2
 FROM m2-collector AS m2-all
 COPY --from=kafka-tools /root/.m2 /root/.m2
 COPY --from=spark /root/.m2 /root/.m2
+
+###################################
+# Not used by the final image, but useful for debugging.
+# You can invoke this like:
+# task rp:build-test-docker-image EXTRA_BUILD_ARGS="--target=debug-dl-cache --progress=plain --build-arg=CACHE_BREAK=$RANDOM"
+FROM os_base AS debug-dl-cache
+ARG CACHE_BREAK=0
+COPY --chmod=0755 tests/docker/ducktape-deps/download-utils /
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache bash -c "source /download-utils && debug_cache"
+
+###################################
+# Not used by the final image, but useful to clean the cache mount(s).
+# You can invoke this like:
+# task rp:build-test-docker-image EXTRA_BUILD_ARGS="--target=clean-dl-cache --progress=plain --build-arg=CACHE_BREAK=$RANDOM"
+FROM os_base AS clean-dl-cache
+ARG CACHE_BREAK=0
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache bash -c "rm -rf /dl-cache/* && echo CACHE CLEANED"
 
 
 #################################
