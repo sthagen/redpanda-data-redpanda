@@ -6,12 +6,12 @@ source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
 apt update
 apt install -y \
   build-essential \
-  openjdk-17-jdk \
-  openjdk-21-jdk \
-  git \
-  maven \
   cmake \
   curl \
+  git \
+  maven \
+  openjdk-17-jdk \
+  openjdk-21-jdk \
   wget
 
 SCRIPTPATH="$(

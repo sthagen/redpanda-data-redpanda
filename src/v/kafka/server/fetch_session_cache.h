@@ -11,13 +11,12 @@
 #pragma once
 
 #include "base/units.h"
+#include "container/chunked_hash_map.h"
 #include "kafka/server/fetch_session.h"
 #include "metrics/metrics.h"
 
 #include <seastar/core/metrics_registration.hh>
 #include <seastar/core/smp.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <chrono>
 
@@ -40,8 +39,7 @@ public:
     size_t size() const { return _sessions.size(); }
 
 private:
-    using underlying_t
-      = absl::flat_hash_map<fetch_session_id, fetch_session_ptr>;
+    using underlying_t = chunked_hash_map<fetch_session_id, fetch_session_ptr>;
 
     static constexpr size_t max_mem_usage = 10_MiB;
 
@@ -58,9 +56,7 @@ private:
     void gc_sessions();
 
     size_t mem_usage() const {
-        using debug = absl::container_internal::hashtable_debug_internal::
-          HashtableDebugAccess<underlying_t>;
-        return debug::AllocatedByteSize(_sessions) + _sessions_mem_usage;
+        return memory_usage_lower_bound(_sessions) + _sessions_mem_usage;
     }
 
     void register_metrics();

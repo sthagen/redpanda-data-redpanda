@@ -164,7 +164,7 @@ void fetch_session_cache::gc_sessions() {
         } else {
             vlog(klog.debug, "evicting session {}", it->second->id());
             _sessions_mem_usage -= it->second->mem_usage();
-            _sessions.erase(it++);
+            it = _sessions.erase(it);
         }
     }
 }

@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "container/chunked_hash_map.h"
 #include "container/intrusive_list_helpers.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fetch.h"
@@ -46,7 +47,7 @@ struct fetch_session_partition {
  * list to allow interation with preserved insertion order. We require such
  * semantics as partitions order in fetch request/response have to be the same.
  *
- * Internally the map is based on absl::flat_hash_map containing entries that
+ * Internally the map is based on chunked_hash_map containing entries that
  * are additionally linked by being elements of an intrusive list. The intrusive
  * list provides the insertion order traversal across the partitions.
  */
@@ -100,7 +101,7 @@ private:
         }
     };
 
-    using underlying_t = absl::flat_hash_map<
+    using underlying_t = chunked_hash_map<
       model::topic_partition_view,
       std::unique_ptr<entry>,
       topic_partition_hash,
@@ -162,9 +163,7 @@ public:
     }
 
     size_t mem_usage() {
-        using debug = absl::container_internal::hashtable_debug_internal::
-          HashtableDebugAccess<underlying_t>;
-        return debug::AllocatedByteSize(partitions)
+        return memory_usage_lower_bound(partitions)
                + partitions.size() * sizeof(fetch_session_partition);
     }
 

@@ -1428,6 +1428,9 @@ class RedpandaServiceBase(RedpandaServiceABC, Service):
         'kafka_connections_max': 2048,
         'kafka_connections_max_per_ip': 1024,
         'kafka_connections_max_overrides': ["1.2.3.4:5"],
+        # configure shutdown watchdog timeout to 20 seconds to give it a chance
+        # to fire before Redpanda node that doesn't stopped is killed
+        "partition_manager_shutdown_watchdog_timeout": 20000,
     }
 
     logs = {
@@ -4510,7 +4513,10 @@ class RedpandaService(RedpandaServiceBase):
             # this configuration property was introduced in 22.2, ensure
             # it doesn't appear in older configurations
             del conf['log_segment_size_jitter_percent']
-
+        if cur_ver != RedpandaInstaller.HEAD and cur_ver < (23, 2, 1):
+            # versions prior to 23.2.1 does not support
+            # partition_manager_shutdown_watchdog_timeout property
+            del conf['partition_manager_shutdown_watchdog_timeout']
         if self._extra_rp_conf:
             self.logger.debug(
                 "Setting custom cluster configuration options: {}".format(

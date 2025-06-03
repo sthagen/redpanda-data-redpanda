@@ -2,32 +2,33 @@
 set -e
 apt-get update
 apt-get install -qq \
-  bind9-utils \
   bind9-dnsutils \
+  bind9-utils \
   bsdmainutils \
   dmidecode \
+  faketime \
+  file \
   gnuplot-nox \
+  iproute2 \
+  iptables \
   krb5-admin-server \
   krb5-kdc \
   krb5-user \
-  iproute2 \
-  iptables \
   libatomic1 \
-  libyajl-dev \
   libsasl2-dev \
   libsasl2-modules-gssapi-mit \
   libssl-dev \
-  net-tools \
+  libyajl-dev \
+  libzstd-dev \
+  llvm \
   lsof \
-  pciutils \
+  net-tools \
+  netcat-openbsd \
   nodejs \
   npm \
   openssh-server \
-  netcat-openbsd \
-  sudo \
-  llvm \
+  pciutils \
+  pkg-config \
   python3-pip \
   python3-venv \
-  libzstd-dev \
-  pkg-config \
-  faketime
+  sudo \

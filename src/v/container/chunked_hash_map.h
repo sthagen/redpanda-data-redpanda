@@ -105,3 +105,19 @@ std::ostream& operator<<(std::ostream& o, const chunked_hash_map<K, V>& r) {
     o << "}";
     return o;
 }
+
+/// Returns a lower bound on the memory currently being held by `m`.
+template<
+  typename K,
+  typename V,
+  typename Hash = std::conditional_t<
+    detail::has_absl_hash<K>,
+    detail::avalanching_absl_hash<K>,
+    ankerl::unordered_dense::hash<K>>,
+  typename EqualTo = std::equal_to<K>>
+size_t
+memory_usage_lower_bound(const chunked_hash_map<K, V, Hash, EqualTo>& m) {
+    return m.bucket_count()
+             * sizeof(typename chunked_hash_map<K, V>::bucket_type)
+           + m.values().capacity() * sizeof(m.values()[0]);
+}
