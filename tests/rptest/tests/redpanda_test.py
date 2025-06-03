@@ -122,6 +122,22 @@ class RedpandaTest(RedpandaTestBase):
 
     @property
     def cloud_storage_client(self):
+        """
+        Provides access to the cloud storage client for interacting with remote storage.
+
+        This property performs a runtime check to ensure the client is properly initialized
+        before access. The client will not be available if RedpandaService was created
+        without si_settings or if cloud storage was not properly configured.
+
+        Returns:
+            The initialized cloud storage client instance.
+
+        Raises:
+            RuntimeError: When the cloud storage client is not initialized.
+        """
+        if not self.redpanda._cloud_storage_client:
+            raise RuntimeError("cloud storage client is not initialized.")
+
         return self.redpanda._cloud_storage_client
 
     def client(self):

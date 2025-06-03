@@ -16,6 +16,7 @@
 #include "kafka/client/configuration.h"
 #include "kafka/client/exceptions.h"
 #include "kafka/protocol/find_coordinator.h"
+#include "kafka/protocol/offset_commit.h"
 #include "utils/retry.h"
 
 namespace kafka::client {
@@ -68,8 +69,8 @@ auto retry_with_mitigation(
                   "\t    auto _ = consume(std::move(movable_state));\n"
                   "\t};");
 
-                return fut.then(func).handle_exception(
-                  [&eptr](std::exception_ptr ex) mutable {
+                return fut.then([&func] { return func(); })
+                  .handle_exception([&eptr](std::exception_ptr ex) mutable {
                       eptr = ex;
                       return Futurator::make_exception_future(eptr);
                   });
@@ -95,7 +96,7 @@ std::invoke_result_t<Func> gated_retry_with_mitigation_impl(
        &retry_gate,
        func{std::move(func)},
        errFunc{std::move(errFunc)},
-       as]() {
+       as]() mutable {
           return retry_with_mitigation(
             retries,
             retry_base_backoff,
@@ -144,6 +145,25 @@ ss::future<shared_broker_t> find_coordinator_with_retry_and_mitigation(
             net::unresolved_address(res.data.host, res.data.port),
             client_config);
       });
+}
+
+inline chunked_vector<kafka::offset_commit_request_topic>
+make_copy(const chunked_vector<kafka::offset_commit_request_topic>& topics) {
+    static_assert(
+      reflection::arity<kafka::offset_commit_request_topic>() == 3,
+      "kafka::offset_commit_request_topic must have 3 fields, otherwise this "
+      "function must be updated");
+
+    chunked_vector<kafka::offset_commit_request_topic> res;
+    res.reserve(topics.size());
+    for (const auto& topic : topics) {
+        res.push_back({
+          .name = topic.name,
+          .partitions = topic.partitions.copy(),
+          .unknown_tags = topic.unknown_tags,
+        });
+    }
+    return res;
 }
 
 } // namespace kafka::client

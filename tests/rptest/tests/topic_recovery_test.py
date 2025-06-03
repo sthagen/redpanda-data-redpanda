@@ -1376,7 +1376,7 @@ class TopicRecoveryTest(RedpandaTest):
         # For each topic/partition, wait for local storage to be truncated according
         # to retention policy.
 
-        cloud_sizes = deque(maxlen=6)
+        deltas = deque(maxlen=6)
         total_partitions = sum([t.partition_count for t in expected_topics])
         tolerance = default_log_segment_size * total_partitions
         path_matcher = PathMatcher(expected_topics)
@@ -1444,29 +1444,50 @@ class TopicRecoveryTest(RedpandaTest):
             # If sizes match, we can stop
             if not delta:
                 return True
-            cloud_sizes.append(size_in_cloud)
-            # We want to make sure we're no longer uploading, and that the diff
-            # is less than the tolerated limit.
-            is_stable = (delta <= tolerance
-                         and len(cloud_sizes) == cloud_sizes.maxlen and
-                         cloud_sizes.count(size_in_cloud) == len(cloud_sizes))
+            deltas.append(delta)
+
+            # We need to verify that: 1) the upload process has completed, and
+            # 2) the size difference (delta) between local and cloud storage is
+            # within the tolerated limit. Some minor fluctuations in cloud
+            # storage usage are expected, as new small segments may be created
+            # during leadership changes.
+            is_stable = (len(deltas) == deltas.maxlen
+                         and all([delta <= tolerance for delta in deltas]))
             if not is_stable:
                 self.logger.info(
                     f"not enough data uploaded to S3, "
                     f"uploaded {size_in_cloud} bytes, "
                     f"with {size_on_disk} bytes on disk. "
                     f"current delta: {delta} "
-                    f"tracked cloud_sizes: {pprint.pformat(cloud_sizes, indent=2)}"
-                )
+                    f"tracked deltas: {pprint.pformat(deltas, indent=2)}")
                 return False
             return True
 
-        wait_until(
-            verify,
-            timeout_sec=timeout.total_seconds(),
-            # Upload should happen not more than in cloud_storage_segment_max_upload_interval_sec
-            backoff_sec=CLOUD_STORAGE_SEGMENT_MAX_UPLOAD_INTERVAL_SEC / 2,
-            err_msg='objects not found in S3')
+        try:
+            wait_until(
+                verify,
+                timeout_sec=timeout.total_seconds(),
+                # Upload should happen not more than in cloud_storage_segment_max_upload_interval_sec
+                backoff_sec=CLOUD_STORAGE_SEGMENT_MAX_UPLOAD_INTERVAL_SEC / 2,
+                err_msg='objects not found in S3')
+        except TimeoutError:
+            assert deltas.maxlen is not None
+            missing_measurements = deltas.maxlen - len(deltas)
+            if missing_measurements > 0:
+                self.logger.warning(
+                    f"not enough measurements collected in the given time, "
+                    f"expected {deltas.maxlen}, got {len(deltas)}. "
+                    f"Retrying with a longer timeout to collect more measurements."
+                )
+                wait_until(
+                    verify,
+                    timeout_sec=(timeout.total_seconds() /
+                                 max(1, len(deltas)) *
+                                 (missing_measurements * 2)),
+                    backoff_sec=CLOUD_STORAGE_SEGMENT_MAX_UPLOAD_INTERVAL_SEC /
+                    2,
+                    err_msg='objects not found in S3 after retry')
+            raise
 
     def _wait_for_topic(self,
                         recovered_topics,
