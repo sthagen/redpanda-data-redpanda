@@ -74,14 +74,10 @@ public:
       chunked_vector<file_to_append> files,
       chunked_vector<std::pair<ss::sstring, ss::sstring>> snapshot_props = {},
       std::optional<ss::sstring> tag_name = std::nullopt,
-      std::optional<int64_t> tag_expiration_ms = std::nullopt,
-      size_t min_to_merge_new_files = default_min_to_merge_new_files,
-      size_t mfile_target_size_bytes = default_target_size_bytes)
+      std::optional<int64_t> tag_expiration_ms = std::nullopt)
       : io_(io)
       , table_(table)
       , commit_uuid_(uuid_t::create())
-      , min_to_merge_new_files_(min_to_merge_new_files)
-      , mfile_target_size_bytes_(mfile_target_size_bytes)
       , new_data_files_(std::move(files))
       , snapshot_props_(std::move(snapshot_props))
       , tag_name_(std::move(tag_name))
@@ -150,13 +146,6 @@ private:
     manifest_io& io_;
     const table_metadata& table_;
     const uuid_t commit_uuid_;
-
-    // The size in number of manifest files at which the _latest_ bin (the one
-    // new files are added to) should be merged.
-    const size_t min_to_merge_new_files_;
-
-    // The target size in bytes to bin-pack manifest files.
-    const size_t mfile_target_size_bytes_;
 
     size_t next_manifest_num_{0};
     chunked_vector<file_to_append> new_data_files_;

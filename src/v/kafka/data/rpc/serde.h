@@ -93,22 +93,25 @@ struct produce_reply
 template<>
 struct fmt::formatter<kafka::data::rpc::produce_request>
   : formatter<std::string_view> {
-    auto format(const kafka::data::rpc::produce_request&, format_context& ctx)
-      const -> format_context::iterator;
+    auto
+    format(const kafka::data::rpc::produce_request&, format_context& ctx) const
+      -> format_context::iterator;
 };
 
 template<>
 struct fmt::formatter<kafka::data::rpc::kafka_topic_data>
   : formatter<std::string_view> {
-    auto format(const kafka::data::rpc::kafka_topic_data&, format_context& ctx)
-      const -> format_context::iterator;
+    auto
+    format(const kafka::data::rpc::kafka_topic_data&, format_context& ctx) const
+      -> format_context::iterator;
 };
 
 template<>
 struct fmt::formatter<kafka::data::rpc::produce_reply>
   : formatter<std::string_view> {
-    auto format(const kafka::data::rpc::produce_reply&, format_context& ctx)
-      const -> format_context::iterator;
+    auto
+    format(const kafka::data::rpc::produce_reply&, format_context& ctx) const
+      -> format_context::iterator;
 };
 
 template<>

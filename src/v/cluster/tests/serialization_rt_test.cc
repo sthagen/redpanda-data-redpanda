@@ -831,9 +831,15 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
 
         roundtrip_test(p_as);
     }
-    { roundtrip_test(random_remote_topic_properties()); }
-    { roundtrip_test(old_random_topic_properties()); }
-    { roundtrip_test(random_topic_properties()); }
+    {
+        roundtrip_test(random_remote_topic_properties());
+    }
+    {
+        roundtrip_test(old_random_topic_properties());
+    }
+    {
+        roundtrip_test(random_topic_properties());
+    }
     {
         roundtrip_test(
           random_property_update(random_generators::gen_alphanum_string(10)));
@@ -865,9 +871,15 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
             [] { return model::random_shadow_indexing_mode(); }));
         roundtrip_test(updates);
     }
-    { roundtrip_test(old_random_topic_configuration()); }
-    { roundtrip_test(random_topic_configuration()); }
-    { roundtrip_test(random_create_partitions_configuration()); }
+    {
+        roundtrip_test(old_random_topic_configuration());
+    }
+    {
+        roundtrip_test(random_topic_configuration());
+    }
+    {
+        roundtrip_test(random_create_partitions_configuration());
+    }
     {
         cluster::topic_configuration_assignment cfg;
         cfg.cfg = old_random_topic_configuration();
@@ -913,7 +925,9 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
 
         roundtrip_test(status);
     }
-    { roundtrip_test(random_property_kv()); }
+    {
+        roundtrip_test(random_property_kv());
+    }
     {
         cluster::cluster_config_delta_cmd_data data;
         data.upsert = {
@@ -933,7 +947,9 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
 
         roundtrip_test(data);
     }
-    { roundtrip_test(random_feature_update_action()); }
+    {
+        roundtrip_test(random_feature_update_action());
+    }
     {
         cluster::feature_update_cmd_data data;
         data.actions = {
@@ -1157,9 +1173,15 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
         roundtrip_test(data);
         // adl roundtrip doesn't work because family is not serialized
     }
-    { roundtrip_test(model::random_broker_endpoint()); }
-    { roundtrip_test(model::random_broker_properties()); }
-    { roundtrip_test(model::random_broker()); }
+    {
+        roundtrip_test(model::random_broker_endpoint());
+    }
+    {
+        roundtrip_test(model::random_broker_properties());
+    }
+    {
+        roundtrip_test(model::random_broker());
+    }
     {
         cluster::configuration_update_request data{
           model::random_broker(), tests::random_named_int<model::node_id>()};
@@ -1663,8 +1685,12 @@ SEASTAR_THREAD_TEST_CASE(serde_reflection_roundtrip) {
         };
         roundtrip_test(data);
     }
-    { roundtrip_test(cluster::random_node_state()); }
-    { roundtrip_test(random_cluster_health_report()); }
+    {
+        roundtrip_test(cluster::random_node_state());
+    }
+    {
+        roundtrip_test(random_cluster_health_report());
+    }
     {
         cluster::get_cluster_health_reply data{
           .error = cluster::errc::join_request_dispatch_error,

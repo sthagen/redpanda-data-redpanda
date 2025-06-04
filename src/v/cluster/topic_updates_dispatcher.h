@@ -54,7 +54,6 @@ public:
     topic_updates_dispatcher(
       ss::sharded<partition_allocator>&,
       ss::sharded<topic_table>&,
-      ss::sharded<partition_leaders_table>&,
       ss::sharded<partition_balancer_state>&);
 
     ss::future<std::error_code> apply_update(model::record_batch);
@@ -135,7 +134,6 @@ private:
 
     ss::sharded<partition_allocator>& _partition_allocator;
     ss::sharded<topic_table>& _topic_table;
-    ss::sharded<partition_leaders_table>& _partition_leaders_table;
     ss::sharded<partition_balancer_state>& _partition_balancer_state;
 };
 

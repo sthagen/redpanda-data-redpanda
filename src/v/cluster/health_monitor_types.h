@@ -371,7 +371,7 @@ struct restart_risk_report {
     size_t limit;
 
     void push(
-      partitions_t restart_risk_report::*member,
+      partitions_t restart_risk_report::* member,
       const model::topic_namespace&,
       model::partition_id);
 };

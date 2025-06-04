@@ -49,7 +49,7 @@ auto fmt::formatter<iceberg::rest_client::http_call_error>::format(
 }
 
 auto fmt::formatter<iceberg::rest_client::domain_error>::format(
-  const iceberg::rest_client::domain_error& err,
-  fmt::format_context& ctx) const -> decltype(ctx.out()) {
+  const iceberg::rest_client::domain_error& err, fmt::format_context& ctx) const
+  -> decltype(ctx.out()) {
     return std::visit(domain_error_printing_visitor{.ctx = &ctx}, err);
 }

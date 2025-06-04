@@ -351,7 +351,9 @@ FIXTURE_TEST(test_change_limits, conn_quota_fixture) {
       .get();
 
     // We cleared the limit, should be able to get as many tokens as we like
-    { auto u = take_units(addr1, initial_limit * 2); }
+    {
+        auto u = take_units(addr1, initial_limit * 2);
+    }
 
     // Releasing a bunch of units after disabling the limit should
     // work (they should be dropped)

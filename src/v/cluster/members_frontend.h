@@ -35,7 +35,6 @@ public:
       ss::sharded<controller_stm>&,
       ss::sharded<rpc::connection_cache>&,
       ss::sharded<partition_leaders_table>&,
-      ss::sharded<features::feature_table>&,
       ss::sharded<ss::abort_source>&);
 
     ss::future<std::error_code> decommission_node(model::node_id);
@@ -67,7 +66,6 @@ private:
     ss::sharded<controller_stm>& _stm;
     ss::sharded<rpc::connection_cache>& _connections;
     ss::sharded<partition_leaders_table>& _leaders;
-    ss::sharded<features::feature_table>& _feature_table;
     ss::sharded<ss::abort_source>& _as;
 };
 } // namespace cluster

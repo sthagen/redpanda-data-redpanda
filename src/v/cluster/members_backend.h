@@ -64,7 +64,6 @@ public:
       ss::sharded<controller_api>&,
       ss::sharded<members_manager>&,
       ss::sharded<members_frontend>&,
-      ss::sharded<features::feature_table>&,
       consensus_ptr,
       ss::sharded<ss::abort_source>&);
 
@@ -115,7 +114,6 @@ private:
     ss::sharded<controller_api>& _api;
     ss::sharded<members_manager>& _members_manager;
     ss::sharded<members_frontend>& _members_frontend;
-    ss::sharded<features::feature_table>& _features;
     consensus_ptr _raft0;
     ss::sharded<ss::abort_source>& _as;
     ss::gate _bg;

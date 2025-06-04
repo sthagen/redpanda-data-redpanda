@@ -3339,7 +3339,7 @@ ntp_archiver::find_reupload_candidate(manifest_scanner_t scanner) {
           },
           [this, &run, &rw_fence, units = std::move(units)](
             upload_candidate_with_locks& upload_candidate) mutable
-          -> find_reupload_candidate_result {
+            -> find_reupload_candidate_result {
               if (
                 upload_candidate.candidate.content_length
                   != run->meta.size_bytes

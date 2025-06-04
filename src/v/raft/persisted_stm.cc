@@ -273,15 +273,25 @@ kvstore_backed_stm_snapshot::load_snapshot() {
     if (!snapshot_blob) {
         co_return std::nullopt;
     }
-    auto thin_snapshot = serde::from_iobuf<stm_thin_snapshot>(
-      std::move(*snapshot_blob));
-    stm_snapshot snapshot;
-    snapshot.header = raft::stm_snapshot_header{
-      .version = stm_snapshot_version,
-      .snapshot_size = static_cast<int32_t>(thin_snapshot.data.size_bytes()),
-      .offset = thin_snapshot.offset};
-    snapshot.data = std::move(thin_snapshot.data);
-    co_return snapshot;
+    try {
+        auto thin_snapshot = serde::from_iobuf<stm_thin_snapshot>(
+          std::move(*snapshot_blob));
+        stm_snapshot snapshot;
+        snapshot.header = raft::stm_snapshot_header{
+          .version = stm_snapshot_version,
+          .snapshot_size = static_cast<int32_t>(
+            thin_snapshot.data.size_bytes()),
+          .offset = thin_snapshot.offset};
+        snapshot.data = std::move(thin_snapshot.data);
+        co_return snapshot;
+    } catch (...) {
+        vlog(
+          _log.warn,
+          "Failed to deserialize snapshot from kvstore for ntp {}: {}",
+          _ntp,
+          std::current_exception());
+        throw;
+    }
 }
 
 ss::future<>

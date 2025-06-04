@@ -30,7 +30,6 @@ public:
     cluster_recovery_manager(
       ss::sharded<ss::abort_source>&,
       ss::sharded<controller_stm>&,
-      ss::sharded<features::feature_table>&,
       ss::sharded<cloud_storage::remote>& remote,
       ss::sharded<cluster_recovery_table>&,
       ss::sharded<storage::api>&,
@@ -87,7 +86,6 @@ private:
     // Still only used on shard-0.
     ss::sharded<ss::abort_source>& _sharded_as;
     ss::sharded<controller_stm>& _controller_stm;
-    ss::sharded<features::feature_table>& _feature_table;
 
     ss::sharded<cloud_storage::remote>& _remote;
 

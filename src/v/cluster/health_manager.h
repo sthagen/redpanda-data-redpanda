@@ -41,7 +41,6 @@ public:
       config::binding<size_t> max_concurrent_moves,
       ss::sharded<topic_table>&,
       ss::sharded<topics_frontend>&,
-      ss::sharded<partition_allocator>&,
       ss::sharded<partition_leaders_table>&,
       ss::sharded<members_table>&,
       ss::sharded<ss::abort_source>&);
@@ -60,7 +59,6 @@ private:
     config::binding<size_t> _max_concurrent_moves;
     ss::sharded<topic_table>& _topics;
     ss::sharded<topics_frontend>& _topics_frontend;
-    ss::sharded<partition_allocator>& _allocator;
     ss::sharded<partition_leaders_table>& _leaders;
     ss::sharded<members_table>& _members;
     ss::sharded<ss::abort_source>& _as;

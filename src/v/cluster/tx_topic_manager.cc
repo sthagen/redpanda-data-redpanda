@@ -16,7 +16,6 @@
 #include "cluster/controller_api.h"
 #include "cluster/logger.h"
 #include "cluster/topics_frontend.h"
-#include "features/feature_table.h"
 #include "model/namespace.h"
 #include "ssx/future-util.h"
 #include "utils/tristate.h"
@@ -35,12 +34,10 @@ static constexpr auto topic_operation_timeout = 20s;
 
 tx_topic_manager::tx_topic_manager(
   controller& controller,
-  ss::sharded<features::feature_table>& features,
   config::binding<int32_t> partition_count,
   config::binding<uint64_t> segment_size,
   config::binding<std::chrono::milliseconds> retention_duration)
   : _controller(controller)
-  , _features(features)
   , _partition_count(std::move(partition_count))
   , _segment_size(std::move(segment_size))
   , _retention_duration(std::move(retention_duration)) {}

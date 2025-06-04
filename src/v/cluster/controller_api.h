@@ -39,7 +39,6 @@ public:
       ss::sharded<topic_table>&,
       ss::sharded<shard_table>&,
       ss::sharded<rpc::connection_cache>&,
-      ss::sharded<health_monitor_frontend>&,
       ss::sharded<members_table>&,
       ss::sharded<partition_balancer_backend>&,
       ss::sharded<partition_manager>&,
@@ -103,7 +102,6 @@ private:
     ss::sharded<topic_table>& _topics;
     ss::sharded<shard_table>& _shard_table;
     ss::sharded<rpc::connection_cache>& _connections;
-    ss::sharded<health_monitor_frontend>& _health_monitor;
     ss::sharded<members_table>& _members;
     ss::sharded<partition_balancer_backend>& _partition_balancer;
     ss::sharded<partition_manager>& _partition_manager;

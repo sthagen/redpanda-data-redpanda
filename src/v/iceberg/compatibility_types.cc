@@ -58,13 +58,13 @@ operator+=(schema_transform_state& lhs, const schema_transform_state& rhs) {
 } // namespace iceberg
 
 auto fmt::formatter<iceberg::schema_evolution_errc>::format(
-  iceberg::schema_evolution_errc ec,
-  format_context& ctx) const -> format_context::iterator {
+  iceberg::schema_evolution_errc ec, format_context& ctx) const
+  -> format_context::iterator {
     return formatter<string_view>::format(iceberg::to_string_view(ec), ctx);
 }
 
 auto fmt::formatter<iceberg::type_promoted>::format(
-  iceberg::type_promoted ec,
-  format_context& ctx) const -> format_context::iterator {
+  iceberg::type_promoted ec, format_context& ctx) const
+  -> format_context::iterator {
     return formatter<string_view>::format(iceberg::to_string_view(ec), ctx);
 }

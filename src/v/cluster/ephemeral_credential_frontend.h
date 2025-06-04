@@ -35,7 +35,6 @@ public:
       model::node_id self,
       ss::sharded<security::credential_store>&,
       ss::sharded<security::ephemeral_credential_store>&,
-      ss::sharded<features::feature_table>&,
       ss::sharded<rpc::connection_cache>&);
 
     ss::future<> start();
@@ -66,7 +65,6 @@ private:
     model::node_id _self;
     ss::sharded<security::credential_store>& _c_store;
     ss::sharded<security::ephemeral_credential_store>& _e_store;
-    ss::sharded<features::feature_table>& _feature_table;
     ss::sharded<rpc::connection_cache>& _connections;
     ss::gate _gate;
 };

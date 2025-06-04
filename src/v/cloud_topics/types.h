@@ -47,8 +47,8 @@ template<>
 struct fmt::formatter<experimental::cloud_topics::dl_stm_key>
   : fmt::formatter<std::string_view> {
     auto format(
-      experimental::cloud_topics::dl_stm_key,
-      fmt::format_context& ctx) const -> decltype(ctx.out());
+      experimental::cloud_topics::dl_stm_key, fmt::format_context& ctx) const
+      -> decltype(ctx.out());
 };
 
 template<>

@@ -3,71 +3,71 @@
 # Common utilities for downloading files, intended to be sourced.
 
 set_vars() {
-    DL_SLEEP_TIME=0s
-    if [[ ${DL_USE_CACHE:=1} == "1" ]]; then
-        DL_DEFAULT_CACHE_DIR="/dl-cache"
+  DL_SLEEP_TIME=0s
+  if [[ ${DL_USE_CACHE:=1} == "1" ]]; then
+    DL_DEFAULT_CACHE_DIR="/dl-cache"
 
-    else
-        DL_DEFAULT_CACHE_DIR="/tmp/dl-cache"
-    fi
-    echo >&2 "DL_CACHE_DIR=${DL_CACHE_DIR:=${DL_DEFAULT_CACHE_DIR}}"
-    echo >&2 "DL_STRIP=${DL_STRIP:=0}"
-    if [[ ${DL_USE_CACHE:=1} == "1" && ! -d $DL_CACHE_DIR ]]; then
-        echo >&2 "DL_CACHE_DIR does not exist, did you forget RUN --mount: $DL_CACHE_DIR"
-        exit 1
-    fi
+  else
+    DL_DEFAULT_CACHE_DIR="/tmp/dl-cache"
+  fi
+  echo >&2 "DL_CACHE_DIR=${DL_CACHE_DIR:=${DL_DEFAULT_CACHE_DIR}}"
+  echo >&2 "DL_STRIP=${DL_STRIP:=0}"
+  if [[ ${DL_USE_CACHE:=1} == "1" && ! -d $DL_CACHE_DIR ]]; then
+    echo >&2 "DL_CACHE_DIR does not exist, did you forget RUN --mount: $DL_CACHE_DIR"
+    exit 1
+  fi
 }
 
 _do_download() {
-    set -euo pipefail
-    local url url_hash out_dir out_path
-    url="$1"
-    url_hash=$(echo -n "$url" | sha256sum | head -c8)
-    out_dir="$DL_CACHE_DIR/$url_hash"
-    out_path="$out_dir/$(basename "$url")"
-    echo >&2 "Downloading $url to $out_path"
-    sleep $DL_SLEEP_TIME
-    # --no-if-modified-since is needed since otherwise a partially downloaded file will
-    # treated as complete, due to a wget bug.
-    wget --progress=dot:giga --no-if-modified-since -c -N -P "$out_dir" "$url"
-    echo "$out_path"
+  set -euo pipefail
+  local url url_hash out_dir out_path
+  url="$1"
+  url_hash=$(echo -n "$url" | sha256sum | head -c8)
+  out_dir="$DL_CACHE_DIR/$url_hash"
+  out_path="$out_dir/$(basename "$url")"
+  echo >&2 "Downloading $url to $out_path"
+  sleep $DL_SLEEP_TIME
+  # --no-if-modified-since is needed since otherwise a partially downloaded file will
+  # treated as complete, due to a wget bug.
+  wget --progress=dot:giga --no-if-modified-since -c -N -P "$out_dir" "$url"
+  echo "$out_path"
 }
 
 # we use _-prefixed helper functions so we can set -euo pipefail
 # but not have that persist to the caller (who may not be tolerant
 # of set -u in particular)
 _download() {
-    set -euo pipefail
-    set_vars
-    out_file=$(_do_download "$1")
-    echo "Copying $out_file to $2"
-    cp "$out_file" "$2"
+  set -euo pipefail
+  set_vars
+  out_file=$(_do_download "$1")
+  echo "Copying $out_file to $2"
+  cp "$out_file" "$2"
 }
 
 _download_extract() {
-    set -euo pipefail
-    set_vars
-    out_file=$(_do_download "$1")
-    echo "Unpacking $out_file to $2"
-    tar xvf "$out_file" -C "$2" --strip-components="$DL_STRIP"
+  set -euo pipefail
+  set_vars
+  out_file=$(_do_download "$1")
+  echo "Unpacking $out_file to $2"
+  tar xvf "$out_file" -C "$2" --strip-components="$DL_STRIP"
 }
 
 # Download a cached tarball from a URL $1 and unpack it to $2.
 download_extract() {
-    (_download_extract "$@")
+  (_download_extract "$@")
 }
 
 # Do a cached download of a file from URL $1 and store it at $2
 download() {
-    (_download "$@")
+  (_download "$@")
 }
 
 debug_cache() {
-    set_vars
-    echo "DEBUG DL-CACHE:"
-    if [[ -d $DL_CACHE_DIR ]]; then
-        find $DL_CACHE_DIR -ls
-    else
-        echo "DL_CACHE_DIR does not exist: $DL_CACHE_DIR"
-    fi
+  set_vars
+  echo "DEBUG DL-CACHE:"
+  if [[ -d $DL_CACHE_DIR ]]; then
+    find $DL_CACHE_DIR -ls
+  else
+    echo "DL_CACHE_DIR does not exist: $DL_CACHE_DIR"
+  fi
 }

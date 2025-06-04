@@ -22,12 +22,10 @@ config_frontend::config_frontend(
   ss::sharded<controller_stm>& stm,
   ss::sharded<rpc::connection_cache>& connections,
   ss::sharded<partition_leaders_table>& leaders,
-  ss::sharded<features::feature_table>& features,
   ss::sharded<ss::abort_source>& as)
   : _stm(stm)
   , _connections(connections)
   , _leaders(leaders)
-  , _features(features)
   , _as(as)
   , _self(*config::node().node_id()) {}
 

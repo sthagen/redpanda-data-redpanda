@@ -14,7 +14,6 @@
 #include "cluster/controller_snapshot.h"
 #include "cluster/logger.h"
 #include "cluster/partition_balancer_state.h"
-#include "cluster/partition_leaders_table.h"
 #include "cluster/scheduling/partition_allocator.h"
 #include "cluster/topic_table.h"
 #include "model/fundamental.h"
@@ -36,11 +35,9 @@ namespace cluster {
 topic_updates_dispatcher::topic_updates_dispatcher(
   ss::sharded<partition_allocator>& pal,
   ss::sharded<topic_table>& table,
-  ss::sharded<partition_leaders_table>& leaders,
   ss::sharded<partition_balancer_state>& pb_state)
   : _partition_allocator(pal)
   , _topic_table(table)
-  , _partition_leaders_table(leaders)
   , _partition_balancer_state(pb_state) {}
 
 ss::future<std::error_code> topic_updates_dispatcher::do_topic_delete(

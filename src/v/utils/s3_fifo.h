@@ -307,7 +307,7 @@ private:
 
     template<
       typename T,
-      cache_hook T::*Hook,
+      cache_hook T::* Hook,
       cache_evictor<T> Evictor,
       cache_cost<T> Cost>
     friend class cache;
@@ -351,7 +351,7 @@ struct default_cache_cost {
  */
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor = default_cache_evictor,
   cache_cost<T> Cost = default_cache_cost>
 class cache {
@@ -479,7 +479,7 @@ private:
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 cache<T, Hook, Evictor, Cost>::cache(
@@ -494,7 +494,7 @@ cache<T, Hook, Evictor, Cost>::cache(
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 void cache<T, Hook, Evictor, Cost>::insert(T& entry) noexcept {
@@ -521,7 +521,7 @@ void cache<T, Hook, Evictor, Cost>::insert(T& entry) noexcept {
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 void cache<T, Hook, Evictor, Cost>::remove(const T& entry) noexcept {
@@ -546,7 +546,7 @@ void cache<T, Hook, Evictor, Cost>::remove(const T& entry) noexcept {
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 bool cache<T, Hook, Evictor, Cost>::evict() noexcept {
@@ -558,7 +558,7 @@ bool cache<T, Hook, Evictor, Cost>::evict() noexcept {
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 struct cache<T, Hook, Evictor, Cost>::stat
@@ -571,7 +571,7 @@ cache<T, Hook, Evictor, Cost>::stat() const noexcept {
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 bool cache<T, Hook, Evictor, Cost>::ghost_queue_contains(
@@ -595,7 +595,7 @@ bool cache<T, Hook, Evictor, Cost>::ghost_queue_contains(
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 bool cache<T, Hook, Evictor, Cost>::evict_small() noexcept {
@@ -642,7 +642,7 @@ bool cache<T, Hook, Evictor, Cost>::evict_small() noexcept {
 
 template<
   typename T,
-  cache_hook T::*Hook,
+  cache_hook T::* Hook,
   cache_evictor<T> Evictor,
   cache_cost<T> Cost>
 bool cache<T, Hook, Evictor, Cost>::evict_main() noexcept {
@@ -678,7 +678,7 @@ bool cache<T, Hook, Evictor, Cost>::evict_main() noexcept {
 
 template<
   typename T,
-  utils::s3_fifo::cache_hook T::*Hook,
+  utils::s3_fifo::cache_hook T::* Hook,
   utils::s3_fifo::cache_evictor<T> Evictor,
   utils::s3_fifo::cache_cost<T> Cost>
 struct fmt::formatter<utils::s3_fifo::cache<T, Hook, Evictor, Cost>>

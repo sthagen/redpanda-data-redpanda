@@ -1386,9 +1386,6 @@ void application::wire_up_runtime_services(
           &raft_group_manager,
           &partition_manager,
           &controller->get_topics_state(),
-          &controller->get_topics_frontend(),
-          &controller->get_partition_leaders(),
-          &controller->get_shard_table(),
           &feature_table,
           &_datalake_coordinator_fe,
           &cloud_io,
@@ -2191,7 +2188,6 @@ void application::wire_up_redpanda_services(
     construct_single_service_sharded(
       tx_topic_manager,
       std::ref(*controller),
-      std::ref(feature_table),
       config::shard_local_cfg().transaction_coordinator_partitions.bind(),
       config::shard_local_cfg().transaction_coordinator_log_segment_size.bind(),
       config::shard_local_cfg()
@@ -2969,7 +2965,7 @@ void application::start_runtime_services(
     syschecks::systemd_message("Starting the partition manager").get();
     partition_manager
       .invoke_on_all([this](cluster::partition_manager& pm) {
-          pm.register_factory<cluster::tm_stm_factory>(feature_table);
+          pm.register_factory<cluster::tm_stm_factory>();
           pm.register_factory<cluster::id_allocator_stm_factory>();
           pm.register_factory<transform::transform_offsets_stm_factory>();
           pm.register_factory<cluster::rm_stm_factory>(

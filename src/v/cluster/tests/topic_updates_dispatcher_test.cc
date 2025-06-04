@@ -21,7 +21,7 @@ ss::logger logger{"dispatcher_test"};
 
 struct topic_table_updates_dispatcher_fixture : topic_table_fixture {
     topic_table_updates_dispatcher_fixture()
-      : dispatcher(allocator, table, leaders, pb_state) {}
+      : dispatcher(allocator, table, pb_state) {}
 
     template<typename Cmd>
     void dispatch_command(Cmd cmd) {

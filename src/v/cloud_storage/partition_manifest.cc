@@ -2620,8 +2620,9 @@ static_assert(
 
 // construct partition_manifest_serde while keeping
 // std::is_aggregate<partition_manifest_serde> true
-static auto partition_manifest_serde_from_partition_manifest(
-  const partition_manifest& m) -> partition_manifest_serde {
+static auto
+partition_manifest_serde_from_partition_manifest(const partition_manifest& m)
+  -> partition_manifest_serde {
     partition_manifest_serde tmp{};
     // copy every field that is not segment_meta_cstore in
     // partition_manifest_serde, and uses to_iobuf for segment_meta_cstore

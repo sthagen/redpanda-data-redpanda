@@ -64,8 +64,8 @@ template<>
 struct fmt::formatter<iceberg::rest_client::domain_error>
   : fmt::formatter<std::string_view> {
     auto format(
-      const iceberg::rest_client::domain_error&,
-      fmt::format_context& ctx) const -> decltype(ctx.out());
+      const iceberg::rest_client::domain_error&, fmt::format_context& ctx) const
+      -> decltype(ctx.out());
 };
 
 template<>

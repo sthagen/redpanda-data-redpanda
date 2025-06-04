@@ -18,7 +18,6 @@
 #include "cluster/tx_hash_ranges.h"
 #include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
-#include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/timestamp.h"
@@ -230,8 +229,7 @@ public:
         locally_hosted_txs hash_ranges;
     };
 
-    explicit tm_stm(
-      ss::logger&, raft::consensus*, ss::sharded<features::feature_table>&);
+    explicit tm_stm(ss::logger&, raft::consensus*);
 
     void try_rm_lock(const kafka::transactional_id& tid) {
         auto it = _transactions.find(tid);
@@ -408,7 +406,6 @@ private:
       _pid_tx_id;
     chunked_hash_map<kafka::transactional_id, ss::lw_shared_ptr<mutex>>
       _tx_locks;
-    ss::sharded<features::feature_table>& _feature_table;
 
     struct tx_wrapper {
         tx_wrapper() = default;
@@ -462,7 +459,7 @@ inline txlock_unit::~txlock_unit() noexcept {
 
 class tm_stm_factory : public state_machine_factory {
 public:
-    explicit tm_stm_factory(ss::sharded<features::feature_table>&);
+    tm_stm_factory() = default;
     bool is_applicable_for(const storage::ntp_config& raft) const final;
 
     void create(
@@ -471,7 +468,6 @@ public:
       const cluster::stm_instance_config& cfg) final;
 
 private:
-    ss::sharded<features::feature_table>& _feature_table;
 };
 
 } // namespace cluster

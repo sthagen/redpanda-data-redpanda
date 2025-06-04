@@ -52,7 +52,7 @@ def _test_options():
     data = [
         "//:ubsan_suppressions",
         "//:lsan_suppressions",
-        "@llvm_18_toolchain//:llvm-symbolizer",
+        "@current_llvm_toolchain//:llvm-symbolizer",
     ]
     env = {
         "BOOST_TEST_LOG_LEVEL": "test_suite",
@@ -61,7 +61,7 @@ def _test_options():
         "BOOST_TEST_REPORT_LEVEL": "no",
         "BOOST_LOGGER": "HRF,test_suite",
         "ASAN_OPTIONS": "disable_coredump=0:abort_on_error=1",
-        "ASAN_SYMBOLIZER_PATH": "$(rootpath @llvm_18_toolchain//:llvm-symbolizer)",
+        "ASAN_SYMBOLIZER_PATH": "$(rootpath @current_llvm_toolchain//:llvm-symbolizer)",
         "LSAN_OPTIONS": "suppressions=$(rootpath //:lsan_suppressions)",
         "UBSAN_OPTIONS": "halt_on_error=1:abort_on_error=1:report_error_type=1:suppressions=$(rootpath //:ubsan_suppressions)",
     }

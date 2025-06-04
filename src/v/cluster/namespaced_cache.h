@@ -91,7 +91,7 @@ private:
 template<
   typename CacheT,
   typename EntryT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   typename PreEvictionHookT,
   typename PostEvictionHookT>
 concept namespace_cache = requires(
@@ -113,7 +113,7 @@ concept namespace_cache = requires(
  */
 template<
   typename EntryT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT,
   post_eviction_hook<EntryT> PostEvictionHookT>
 struct lru_cache {
@@ -195,7 +195,7 @@ private:
 template<
   typename EntryT,
   typename NamespaceT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT = always_allow_to_evict,
   post_eviction_hook<EntryT> PostEvictionHookT = noop_post_eviction_hook,
   namespace_cache<EntryT, HookPtr, PreEvictionHookT, PostEvictionHookT> CacheT
@@ -325,7 +325,7 @@ private:
 template<
   typename EntryT,
   typename NamespaceT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT,
   post_eviction_hook<EntryT> PostEvictionHookT,
   namespace_cache<EntryT, HookPtr, PreEvictionHookT, PostEvictionHookT> CacheT>
@@ -369,7 +369,7 @@ bool namespaced_cache<
 template<
   typename EntryT,
   typename NamespaceT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT,
   post_eviction_hook<EntryT> PostEvictionHookT,
   namespace_cache<EntryT, HookPtr, PreEvictionHookT, PostEvictionHookT> CacheT>
@@ -415,7 +415,7 @@ void namespaced_cache<
 template<
   typename EntryT,
   typename NamespaceT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT,
   post_eviction_hook<EntryT> PostEvictionHookT,
   namespace_cache<EntryT, HookPtr, PreEvictionHookT, PostEvictionHookT> CacheT>
@@ -442,7 +442,7 @@ void namespaced_cache<
 template<
   typename EntryT,
   typename NamespaceT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT,
   post_eviction_hook<EntryT> PostEvictionHookT,
   namespace_cache<EntryT, HookPtr, PreEvictionHookT, PostEvictionHookT> CacheT>
@@ -463,7 +463,7 @@ void namespaced_cache<
 template<
   typename EntryT,
   typename NamespaceT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT,
   post_eviction_hook<EntryT> PostEvictionHookT,
   namespace_cache<EntryT, HookPtr, PreEvictionHookT, PostEvictionHookT> CacheT>
@@ -492,7 +492,7 @@ namespaced_cache<
 template<
   typename EntryT,
   typename NamespaceT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> PreEvictionHookT,
   post_eviction_hook<EntryT> PostEvictionHookT,
   namespace_cache<EntryT, HookPtr, PreEvictionHookT, PostEvictionHookT> CacheT>
@@ -519,7 +519,7 @@ void namespaced_cache<
 
 template<
   typename EntryT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> EvictionPredicate,
   post_eviction_hook<EntryT> PostEvictionHookT>
 void lru_cache<EntryT, HookPtr, EvictionPredicate, PostEvictionHookT>::insert(
@@ -533,7 +533,7 @@ void lru_cache<EntryT, HookPtr, EvictionPredicate, PostEvictionHookT>::insert(
 
 template<
   typename EntryT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> EvictionPredicate,
   post_eviction_hook<EntryT> PostEvictionHookT>
 bool lru_cache<EntryT, HookPtr, EvictionPredicate, PostEvictionHookT>::evict(
@@ -552,7 +552,7 @@ bool lru_cache<EntryT, HookPtr, EvictionPredicate, PostEvictionHookT>::evict(
 
 template<
   typename EntryT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> EvictionPredicate,
   post_eviction_hook<EntryT> PostEvictionHookT>
 void lru_cache<EntryT, HookPtr, EvictionPredicate, PostEvictionHookT>::remove(
@@ -563,7 +563,7 @@ void lru_cache<EntryT, HookPtr, EvictionPredicate, PostEvictionHookT>::remove(
 
 template<
   typename EntryT,
-  safe_intrusive_list_hook EntryT::*HookPtr,
+  safe_intrusive_list_hook EntryT::* HookPtr,
   pre_eviction_hook<EntryT> EvictionPredicate,
   post_eviction_hook<EntryT> PostEvictionHookT>
 void lru_cache<EntryT, HookPtr, EvictionPredicate, PostEvictionHookT>::touch(

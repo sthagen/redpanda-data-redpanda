@@ -20,7 +20,6 @@
 #include "cluster/commands.h"
 #include "cluster/config_frontend.h"
 #include "cluster/errc.h"
-#include "cluster/feature_manager.h"
 #include "cluster/logger.h"
 #include "cluster/security_frontend.h"
 #include "config/configuration.h"
@@ -36,14 +35,12 @@ namespace cluster {
 cluster_recovery_manager::cluster_recovery_manager(
   ss::sharded<ss::abort_source>& sharded_as,
   ss::sharded<controller_stm>& controller_stm,
-  ss::sharded<features::feature_table>& feature_table,
   ss::sharded<cloud_storage::remote>& remote,
   ss::sharded<cluster_recovery_table>& recovery_table,
   ss::sharded<storage::api>& storage,
   consensus_ptr raft0)
   : _sharded_as(sharded_as)
   , _controller_stm(controller_stm)
-  , _feature_table(feature_table)
   , _remote(remote)
   , _recovery_table(recovery_table)
   , _storage(storage)

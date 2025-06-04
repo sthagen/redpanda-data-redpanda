@@ -1188,11 +1188,11 @@ ss::future<add_partitions_tx_reply> tx_gateway_frontend::add_partition_to_tx(
       _ssg,
       [request = std::move(request), timeout, tm = tx_ntp.tp.partition](
         tx_gateway_frontend& self) mutable
-      -> ss::future<add_partitions_tx_reply> {
+        -> ss::future<add_partitions_tx_reply> {
           return ss::with_gate(
             self._gate,
             [request = std::move(request), timeout, tm, &self]() mutable
-            -> ss::future<add_partitions_tx_reply> {
+              -> ss::future<add_partitions_tx_reply> {
                 return self.with_stm(
                   tm,
                   [request = std::move(request), timeout, &self](
@@ -1527,7 +1527,7 @@ ss::future<add_offsets_tx_reply> tx_gateway_frontend::add_offsets_to_tx(
           return ss::with_gate(
             self._gate,
             [request = std::move(request), timeout, tm, &self]() mutable
-            -> ss::future<add_offsets_tx_reply> {
+              -> ss::future<add_offsets_tx_reply> {
                 return self.with_stm(
                   tm,
                   [request = std::move(request), timeout, &self](
@@ -1667,7 +1667,7 @@ ss::future<end_tx_reply> tx_gateway_frontend::end_txn(
           return ss::with_gate(
             self._gate,
             [request = std::move(request), timeout, tm, &self]() mutable
-            -> ss::future<end_tx_reply> {
+              -> ss::future<end_tx_reply> {
                 return self.with_stm(
                   tm,
                   [request = std::move(request), timeout, &self](

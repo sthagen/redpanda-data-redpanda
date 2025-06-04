@@ -351,7 +351,7 @@ void consumer::refresh_inactivity_timer() {
 
 ss::future<describe_groups_response> consumer::describe_group() {
     auto req_builder = [this]() {
-        return describe_groups_request{.data{.groups = {{_group_id}}}};
+        return describe_groups_request{.data{.groups = {_group_id}}};
     };
     return req_res(req_builder);
 }

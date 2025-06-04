@@ -14,7 +14,6 @@
 #include "cluster/controller_backend.h"
 #include "cluster/controller_service.h"
 #include "cluster/errc.h"
-#include "cluster/health_monitor_frontend.h"
 #include "cluster/logger.h"
 #include "cluster/members_table.h"
 #include "cluster/partition_balancer_backend.h"
@@ -48,7 +47,6 @@ controller_api::controller_api(
   ss::sharded<topic_table>& topics,
   ss::sharded<shard_table>& shard_table,
   ss::sharded<rpc::connection_cache>& cache,
-  ss::sharded<health_monitor_frontend>& health_monitor,
   ss::sharded<members_table>& members,
   ss::sharded<partition_balancer_backend>& partition_balancer,
   ss::sharded<partition_manager>& partition_manager,
@@ -58,7 +56,6 @@ controller_api::controller_api(
   , _topics(topics)
   , _shard_table(shard_table)
   , _connections(cache)
-  , _health_monitor(health_monitor)
   , _members(members)
   , _partition_balancer(partition_balancer)
   , _partition_manager(partition_manager)

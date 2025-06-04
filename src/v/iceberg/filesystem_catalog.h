@@ -75,8 +75,7 @@ public:
       cloud_io::remote& io,
       const cloud_storage_clients::bucket_name& bucket,
       ss::sstring base_location)
-      : io_(io)
-      , table_io_(io, bucket)
+      : table_io_(io, bucket)
       , base_location_(std::move(base_location)) {}
 
     ~filesystem_catalog() override = default;
@@ -145,7 +144,6 @@ private:
     ss::future<checked<table_and_version, errc>>
     read_table_meta(const table_identifier& table_ident);
 
-    cloud_io::remote& io_;
     table_io table_io_;
 
     // Base location for the cluster.

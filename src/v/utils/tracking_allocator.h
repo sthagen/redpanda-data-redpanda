@@ -181,8 +181,7 @@ concept is_unordered_set = requires {
 };
 
 template<
-  template<class...>
-  class Map,
+  template<class...> class Map,
   class K,
   class V,
   class Hasher = typename Map<K, V>::hasher,
@@ -191,8 +190,7 @@ template<
 using unordered_map_t = Map<K, V, Hasher, KeyEq, Allocator>;
 
 template<
-  template<class...>
-  class Map,
+  template<class...> class Map,
   class K,
   class V,
   class Compare = typename Map<K, V>::key_compare,
@@ -200,8 +198,7 @@ template<
 using map_t = Map<K, V, Compare, Allocator>;
 
 template<
-  template<class...>
-  class Set,
+  template<class...> class Set,
   class K,
   class Hash = typename Set<K>::hasher,
   class KeyEqual = typename Set<K>::key_equal,
@@ -209,16 +206,14 @@ template<
 using unordered_set_t = Set<K, Hash, KeyEqual, Allocator>;
 
 template<
-  template<class...>
-  class Set,
+  template<class...> class Set,
   class K,
   class Compare = typename Set<K>::key_compare,
   class Allocator = tracking_allocator<typename Set<K>::key_type>>
 using set_t = Set<K, Compare, Allocator>;
 
 template<
-  template<class...>
-  class Map,
+  template<class...> class Map,
   class K,
   class V,
   class Hasher = typename Map<K, V>::hasher,
@@ -233,8 +228,7 @@ auto map(ss::shared_ptr<mem_tracker> tracker)
 }
 
 template<
-  template<class...>
-  class Map,
+  template<class...> class Map,
   class K,
   class V,
   class Compare = typename Map<K, V>::key_compare,
@@ -248,8 +242,7 @@ auto map(ss::shared_ptr<mem_tracker> tracker)
 }
 
 template<
-  template<class...>
-  class Set,
+  template<class...> class Set,
   class K,
   class Hash = typename Set<K>::hasher,
   class KeyEqual = typename Set<K>::key_equal,
@@ -261,8 +254,7 @@ auto set(ss::shared_ptr<mem_tracker> tracker)
 }
 
 template<
-  template<class...>
-  class Set,
+  template<class...> class Set,
   class K,
   class Compare = typename Set<K>::key_compare,
   class Allocator = tracking_allocator<K>>

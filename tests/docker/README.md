@@ -1,6 +1,6 @@
 ## tests/docker
 
-This Dockerfile is used to back the ducktape cluster nodes when running ducktape in docker/podman mode. It relies heavily on multi-root builds to build the relatively heavy dependencies (mostly large Java projects) in parallel and to limit layer rebuilds when only a subset change.
+This Dockerfile is used to back the ducktape cluster nodes when running ducktape in docker mode. It relies heavily on multi-root builds to build the relatively heavy dependencies (mostly large Java projects) in parallel and to limit layer rebuilds when only a subset change.
 
 ## Caching
 

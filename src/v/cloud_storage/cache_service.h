@@ -128,7 +128,7 @@ public:
     // Call this before starting a download, to trim the cache if necessary
     // and wait until enough free space is available.
     ss::future<space_reservation_guard>
-      reserve_space(uint64_t, size_t) override;
+    reserve_space(uint64_t, size_t) override;
 
     // Release capacity acquired via `reserve_space`.  This spawns
     // a background fiber in order to be callable from the guard destructor.

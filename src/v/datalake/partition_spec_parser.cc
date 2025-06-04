@@ -292,8 +292,7 @@ private:
 
     template<
       typename Elem,
-      template<typename...>
-      class Container,
+      template<typename...> class Container,
       fixed_string Delim>
     parse_result<Container<Elem>> parse_separated_list(
       parse_result<Elem> (self::*elem_parser)(position), position pos) {

@@ -98,7 +98,7 @@ public:
     template<typename T, size_t Size, typename MemberType>
     const MemberType& access(
       const fragmented_vector<T, Size>& v,
-      MemberType fragmented_vector<T, Size>::*member) {
+      MemberType fragmented_vector<T, Size>::* member) {
         return v.*member;
     }
 };

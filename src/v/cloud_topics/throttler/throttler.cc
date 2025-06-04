@@ -126,7 +126,7 @@ size_t throttler<Clock>::apply_throttle(
     // Advance all write requests which are not throttled to next stage
     _my_stage.process(
       [](const core::write_request<Clock>&) noexcept
-      -> checked<core::request_processing_result, errc> {
+        -> checked<core::request_processing_result, errc> {
           return core::request_processing_result::advance_and_continue;
       });
     _total_events++;

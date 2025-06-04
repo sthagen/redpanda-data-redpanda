@@ -46,8 +46,8 @@ produce_request produce_request::share() {
 } // namespace kafka::data::rpc
 
 auto fmt::formatter<kafka::data::rpc::produce_request>::format(
-  const kafka::data::rpc::produce_request& req,
-  format_context& ctx) const -> format_context::iterator {
+  const kafka::data::rpc::produce_request& req, format_context& ctx) const
+  -> format_context::iterator {
     return fmt::format_to(
       ctx.out(),
       "{{ topic_data: {}, timeout: {} }}",
@@ -56,8 +56,8 @@ auto fmt::formatter<kafka::data::rpc::produce_request>::format(
 }
 
 auto fmt::formatter<kafka::data::rpc::kafka_topic_data>::format(
-  const kafka::data::rpc::kafka_topic_data& data,
-  format_context& ctx) const -> format_context::iterator {
+  const kafka::data::rpc::kafka_topic_data& data, format_context& ctx) const
+  -> format_context::iterator {
     return fmt::format_to(
       ctx.out(),
       "{{ tp: {}, batches_size: {} }}",
@@ -66,8 +66,8 @@ auto fmt::formatter<kafka::data::rpc::kafka_topic_data>::format(
 }
 
 auto fmt::formatter<kafka::data::rpc::produce_reply>::format(
-  const kafka::data::rpc::produce_reply& reply,
-  format_context& ctx) const -> format_context::iterator {
+  const kafka::data::rpc::produce_reply& reply, format_context& ctx) const
+  -> format_context::iterator {
     return fmt::format_to(
       ctx.out(), "{{ results: {} }}", fmt::join(reply.results, ", "));
 }

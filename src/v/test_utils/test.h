@@ -47,12 +47,12 @@ private:
         ~GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)() override         \
           = default;                                                           \
         GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)                     \
-        (const GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) &) = delete; \
+        (const GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)&) = delete;  \
         GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) &                   \
         operator=(const GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) &)  \
           = delete; /* NOLINT */                                               \
         GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)                     \
-        (GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) &&) noexcept       \
+        (GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)&&) noexcept        \
           = delete;                                                            \
         GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) & operator=(        \
           GTEST_TEST_CLASS_NAME_(test_suite_name, test_name) &&) noexcept      \

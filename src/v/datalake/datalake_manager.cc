@@ -147,9 +147,6 @@ datalake_manager::datalake_manager(
   ss::sharded<raft::group_manager>* group_mgr,
   ss::sharded<cluster::partition_manager>* partition_mgr,
   ss::sharded<cluster::topic_table>* topic_table,
-  ss::sharded<cluster::topics_frontend>* topics_frontend,
-  ss::sharded<cluster::partition_leaders_table>* leaders,
-  ss::sharded<cluster::shard_table>* shards,
   ss::sharded<features::feature_table>* features,
   ss::sharded<coordinator::frontend>* frontend,
   ss::sharded<cloud_io::remote>* cloud_io,
@@ -163,9 +160,6 @@ datalake_manager::datalake_manager(
   , _group_mgr(group_mgr)
   , _partition_mgr(partition_mgr)
   , _topic_table(topic_table)
-  , _topics_frontend(topics_frontend)
-  , _leaders(leaders)
-  , _shards(shards)
   , _features(features)
   , _coordinator_frontend(frontend)
   , _cloud_data_io(

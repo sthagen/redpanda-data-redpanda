@@ -23,11 +23,11 @@
 static const model::ntp ntp;
 
 /// Convert to redpanda log offset
-constexpr model::offset operator"" _rp(unsigned long long o) {
+constexpr model::offset operator""_rp(unsigned long long o) {
     return model::offset((int64_t)o);
 }
 
-constexpr model::offset_delta operator"" _do(unsigned long long o) {
+constexpr model::offset_delta operator""_do(unsigned long long o) {
     return model::offset_delta((int64_t)o);
 }
 

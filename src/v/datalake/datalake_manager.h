@@ -59,9 +59,6 @@ public:
       ss::sharded<raft::group_manager>*,
       ss::sharded<cluster::partition_manager>*,
       ss::sharded<cluster::topic_table>*,
-      ss::sharded<cluster::topics_frontend>*,
-      ss::sharded<cluster::partition_leaders_table>*,
-      ss::sharded<cluster::shard_table>*,
       ss::sharded<features::feature_table>*,
       ss::sharded<coordinator::frontend>*,
       ss::sharded<cloud_io::remote>*,
@@ -166,9 +163,6 @@ private:
     ss::sharded<raft::group_manager>* _group_mgr;
     ss::sharded<cluster::partition_manager>* _partition_mgr;
     ss::sharded<cluster::topic_table>* _topic_table;
-    ss::sharded<cluster::topics_frontend>* _topics_frontend;
-    ss::sharded<cluster::partition_leaders_table>* _leaders;
-    ss::sharded<cluster::shard_table>* _shards;
     ss::sharded<features::feature_table>* _features;
     ss::sharded<coordinator::frontend>* _coordinator_frontend;
     std::unique_ptr<datalake::cloud_data_io> _cloud_data_io;

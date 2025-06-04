@@ -283,7 +283,7 @@ ss::future<produce_response> client::produce_records(
     auto responses = co_await ssx::parallel_transform(
       std::move(partitions),
       [this, topic](kafka::produce_request::partition p) mutable
-      -> ss::future<produce_response::partition> {
+        -> ss::future<produce_response::partition> {
           return produce_record_batch(
             model::topic_partition(topic, p.partition_index),
             std::move(*p.records->adapter.batch));

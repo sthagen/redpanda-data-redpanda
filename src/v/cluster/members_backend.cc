@@ -13,7 +13,6 @@
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "features/feature_table.h"
 #include "metrics/prometheus_sanitize.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
@@ -33,7 +32,6 @@ members_backend::members_backend(
   ss::sharded<controller_api>& api,
   ss::sharded<members_manager>& members_manager,
   ss::sharded<members_frontend>& members_frontend,
-  ss::sharded<features::feature_table>& features,
   consensus_ptr raft0,
   ss::sharded<ss::abort_source>& as)
   : _topics_frontend(topics_frontend)
@@ -43,7 +41,6 @@ members_backend::members_backend(
   , _api(api)
   , _members_manager(members_manager)
   , _members_frontend(members_frontend)
-  , _features(features)
   , _raft0(raft0)
   , _as(as)
   , _retry_timeout(config::shard_local_cfg().members_backend_retry_ms())

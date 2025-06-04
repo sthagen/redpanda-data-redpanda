@@ -63,7 +63,7 @@ create_allocation_node(model::node_id nid, uint32_t cores) {
 struct controller_workers {
 public:
     controller_workers()
-      : dispatcher(allocator, table, leaders, state) {
+      : dispatcher(allocator, table, state) {
         migrated_resources.start().get();
         table
           .start(ss::sharded_parameter(

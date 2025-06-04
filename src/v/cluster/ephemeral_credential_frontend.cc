@@ -12,7 +12,6 @@
 #include "cluster/ephemeral_credential_rpc_service.h"
 #include "cluster/ephemeral_credential_serde.h"
 #include "cluster/logger.h"
-#include "features/feature_table.h"
 #include "random/generators.h"
 #include "rpc/connection_cache.h"
 #include "security/acl.h"
@@ -65,12 +64,10 @@ ephemeral_credential_frontend::ephemeral_credential_frontend(
   model::node_id self,
   ss::sharded<security::credential_store>& c_store,
   ss::sharded<security::ephemeral_credential_store>& e_store,
-  ss::sharded<features::feature_table>& feature_table,
   ss::sharded<rpc::connection_cache>& connections)
   : _self(self)
   , _c_store{c_store}
   , _e_store{e_store}
-  , _feature_table{feature_table}
   , _connections{connections}
   , _gate{} {}
 

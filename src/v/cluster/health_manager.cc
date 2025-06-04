@@ -16,7 +16,6 @@
 #include "cluster/logger.h"
 #include "cluster/members_table.h"
 #include "cluster/partition_leaders_table.h"
-#include "cluster/scheduling/partition_allocator.h"
 #include "cluster/topic_table.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
@@ -36,7 +35,6 @@ health_manager::health_manager(
   config::binding<size_t> max_concurrent_moves,
   ss::sharded<topic_table>& topics,
   ss::sharded<topics_frontend>& topics_frontend,
-  ss::sharded<partition_allocator>& allocator,
   ss::sharded<partition_leaders_table>& leaders,
   ss::sharded<members_table>& members,
   ss::sharded<ss::abort_source>& as)
@@ -46,7 +44,6 @@ health_manager::health_manager(
   , _max_concurrent_moves(std::move(max_concurrent_moves))
   , _topics(topics)
   , _topics_frontend(topics_frontend)
-  , _allocator(allocator)
   , _leaders(leaders)
   , _members(members)
   , _as(as)

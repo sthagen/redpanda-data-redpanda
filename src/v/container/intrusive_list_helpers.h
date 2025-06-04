@@ -54,7 +54,7 @@ using intrusive_list_hook = boost::intrusive::list_member_hook<
  * The elements stored in the list must contain an intrusive_list_hook member
  * variable.
  */
-template<typename T, intrusive_list_hook T::*PtrToMember>
+template<typename T, intrusive_list_hook T::* PtrToMember>
 using intrusive_list = boost::intrusive::list<
   T,
   boost::intrusive::member_hook<T, intrusive_list_hook, PtrToMember>,
@@ -103,7 +103,7 @@ using safe_intrusive_list_hook = boost::intrusive::list_member_hook<
  * The elements stored in the list must contain an safe_intrusive_link_hook
  * member variable.
  */
-template<typename T, safe_intrusive_list_hook T::*PtrToMember>
+template<typename T, safe_intrusive_list_hook T::* PtrToMember>
 using counted_intrusive_list = boost::intrusive::list<
   T,
   boost::intrusive::member_hook<T, safe_intrusive_list_hook, PtrToMember>,
@@ -115,7 +115,7 @@ using counted_intrusive_list = boost::intrusive::list<
  * Use this when you want a safe mode list, but don't want to pay the size cost
  * of the extra field to track the size.
  */
-template<typename T, safe_intrusive_list_hook T::*PtrToMember>
+template<typename T, safe_intrusive_list_hook T::* PtrToMember>
 using uncounted_intrusive_list = boost::intrusive::list<
   T,
   boost::intrusive::member_hook<T, safe_intrusive_list_hook, PtrToMember>,

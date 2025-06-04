@@ -27,7 +27,9 @@ TEST(ScopedFileTrackerTest, TestBasic) {
     ASSERT_EQ(0, tracked.size());
 
     // If we leave scope without clearing, we leave behind some files.
-    { scoped_file_tracker t(&tracked, {"foo"}); }
+    {
+        scoped_file_tracker t(&tracked, {"foo"});
+    }
     ASSERT_EQ(1, tracked.size());
 
     // Even if we clear from a new tracker, we don't affect the already tracked

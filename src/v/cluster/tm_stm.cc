@@ -52,15 +52,11 @@ model::record_batch tm_stm::serialize_tx(tx_metadata tx) {
     return std::move(b).build();
 }
 
-tm_stm::tm_stm(
-  ss::logger& logger,
-  raft::consensus* c,
-  ss::sharded<features::feature_table>& feature_table)
+tm_stm::tm_stm(ss::logger& logger, raft::consensus* c)
   : raft::persisted_stm<>(tm_stm_snapshot, logger, c)
   , _sync_timeout(config::shard_local_cfg().tm_sync_timeout_ms.value())
   , _transactional_id_expiration(
       config::shard_local_cfg().transactional_id_expiration_ms.bind())
-  , _feature_table(feature_table)
   , _ctx_log(logger, ssx::sformat("[{}]", _raft->ntp())) {}
 
 ss::future<> tm_stm::start() { co_await raft::persisted_stm<>::start(); }
@@ -871,10 +867,6 @@ ss::future<> tm_stm::apply_raft_snapshot(const iobuf&) {
       });
 }
 
-tm_stm_factory::tm_stm_factory(
-  ss::sharded<features::feature_table>& feature_table)
-  : _feature_table(feature_table) {}
-
 bool tm_stm_factory::is_applicable_for(const storage::ntp_config& cfg) const {
     const auto& ntp = cfg.ntp();
     return ntp.ns == model::kafka_internal_namespace
@@ -885,8 +877,7 @@ void tm_stm_factory::create(
   raft::state_machine_manager_builder& builder,
   raft::consensus* raft,
   const cluster::stm_instance_config&) {
-    auto tm_stm = builder.create_stm<cluster::tm_stm>(
-      txlog, raft, _feature_table);
+    auto tm_stm = builder.create_stm<cluster::tm_stm>(txlog, raft);
     raft->log()->stm_manager()->add_stm(tm_stm);
 }
 

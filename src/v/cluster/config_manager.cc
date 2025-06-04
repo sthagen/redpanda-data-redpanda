@@ -60,14 +60,12 @@ config_manager::config_manager(
   ss::sharded<config_frontend>& cf,
   ss::sharded<rpc::connection_cache>& cc,
   ss::sharded<partition_leaders_table>& pl,
-  ss::sharded<features::feature_table>& ft,
   ss::sharded<cluster::members_table>& mt,
   ss::sharded<ss::abort_source>& as)
   : _self(*config::node().node_id())
   , _frontend(cf)
   , _connection_cache(cc)
   , _leaders(pl)
-  , _feature_table(ft)
   , _members(mt)
   , _as(as) {
     if (ss::this_shard_id() == controller_stm_shard) {

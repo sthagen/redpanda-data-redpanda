@@ -14,7 +14,6 @@
 #include "cluster/commands.h"
 #include "cluster/fwd.h"
 #include "cluster/notification.h"
-#include "features/feature_table.h"
 #include "model/metadata.h"
 #include "model/record.h"
 #include "rpc/fwd.h"
@@ -54,7 +53,6 @@ public:
       ss::sharded<config_frontend>&,
       ss::sharded<rpc::connection_cache>&,
       ss::sharded<partition_leaders_table>&,
-      ss::sharded<features::feature_table>&,
       ss::sharded<cluster::members_table>&,
       ss::sharded<ss::abort_source>&);
 
@@ -135,7 +133,6 @@ private:
     ss::sharded<config_frontend>& _frontend;
     ss::sharded<rpc::connection_cache>& _connection_cache;
     ss::sharded<partition_leaders_table>& _leaders;
-    ss::sharded<features::feature_table>& _feature_table;
     ss::sharded<cluster::members_table>& _members;
     notification_id_type _member_update_notification;
     notification_id_type _raft0_leader_changed_notification;

@@ -78,8 +78,8 @@ void index_schema(schema_element& root) {
 } // namespace serde::parquet
 
 auto fmt::formatter<serde::parquet::schema_element>::format(
-  const serde::parquet::schema_element& e,
-  fmt::format_context& ctx) const -> decltype(ctx.out()) {
+  const serde::parquet::schema_element& e, fmt::format_context& ctx) const
+  -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
       "{{ position: {}, type: {}, repetition_type: {}, max_def_level: {}, "

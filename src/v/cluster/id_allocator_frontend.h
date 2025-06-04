@@ -166,7 +166,7 @@ private:
     // Sets the underlying stm's next id to the given id, returning an error if
     // there was a problem (e.g. not leader, timed out, etc).
     ss::future<allocate_id_reply>
-      do_reset_next_id(int64_t, model::timeout_clock::duration);
+    do_reset_next_id(int64_t, model::timeout_clock::duration);
 
     ss::future<bool> try_create_id_allocator_topic();
     ss::future<bool> ensure_id_allocator_topic_exists();

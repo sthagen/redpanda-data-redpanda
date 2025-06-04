@@ -1198,7 +1198,7 @@ private:
              foreign_read,
              configs = fetch.requests.copy(),
              &octx](cluster::partition_manager& mgr) mutable
-            -> ss::future<fetch_worker::worker_result> {
+              -> ss::future<fetch_worker::worker_result> {
                 // Although this and octx are captured by reference across
                 // shards it is safe since they are not modified by any shard
                 // for the duration of the capture and they are protected from

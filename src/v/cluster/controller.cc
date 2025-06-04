@@ -120,10 +120,7 @@ controller::controller(
   , _storage(storage)
   , _local_monitor(local_monitor)
   , _tp_updates_dispatcher(
-      _partition_allocator,
-      _tp_state,
-      _partition_leaders,
-      _partition_balancer_state)
+      _partition_allocator, _tp_state, _partition_balancer_state)
   , _security_manager(_credentials, _authorizer, _roles)
   , _raft_manager(raft_manager)
   , _feature_table(feature_table)
@@ -286,7 +283,6 @@ ss::future<> controller::start(
     co_await _recovery_manager.start_single(
       std::ref(_as),
       std::ref(_stm),
-      std::ref(_feature_table),
       std::ref(_cloud_storage_api),
       std::ref(_recovery_table),
       std::ref(_storage),
@@ -302,14 +298,12 @@ ss::future<> controller::start(
       std::ref(_stm),
       std::ref(_connections),
       std::ref(_partition_leaders),
-      std::ref(_feature_table),
       std::ref(_as));
     co_await _config_manager.start_single(
       std::ref(_config_preload),
       std::ref(_config_frontend),
       std::ref(_connections),
       std::ref(_partition_leaders),
-      std::ref(_feature_table),
       std::ref(_members_table),
       std::ref(_as));
 
@@ -396,7 +390,6 @@ ss::future<> controller::start(
       std::ref(_stm),
       std::ref(_connections),
       std::ref(_partition_leaders),
-      std::ref(_feature_table),
       std::ref(_as));
 
     co_await _security_frontend.start(
@@ -412,7 +405,6 @@ ss::future<> controller::start(
       self(),
       std::ref(_credentials),
       std::ref(_ephemeral_credentials),
-      std::ref(_feature_table),
       std::ref(_connections));
 
     co_await _tp_frontend.start(
@@ -474,7 +466,6 @@ ss::future<> controller::start(
       std::ref(_api),
       std::ref(_members_manager),
       std::ref(_members_frontend),
-      std::ref(_feature_table),
       _raft0,
       std::ref(_as));
 
@@ -632,7 +623,6 @@ ss::future<> controller::start(
       std::ref(_tp_state),
       std::ref(_shard_table),
       std::ref(_connections),
-      std::ref(_hm_frontend),
       std::ref(_members_table),
       std::ref(_partition_balancer),
       std::ref(_partition_manager),
@@ -662,7 +652,6 @@ ss::future<> controller::start(
       config::shard_local_cfg().partition_autobalancing_concurrent_moves.bind(),
       std::ref(_tp_state),
       std::ref(_tp_frontend),
-      std::ref(_partition_allocator),
       std::ref(_partition_leaders),
       std::ref(_members_table),
       std::ref(_as));

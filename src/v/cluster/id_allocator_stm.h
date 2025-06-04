@@ -108,7 +108,7 @@ private:
     // Moves the state forward to the given value if the curent id is lower
     // than it.
     ss::future<stm_allocation_result>
-      advance_state(int64_t, model::timeout_clock::duration);
+    advance_state(int64_t, model::timeout_clock::duration);
 
     ss::future<> write_snapshot();
     ss::future<raft::local_snapshot_applied>

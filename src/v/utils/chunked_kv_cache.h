@@ -195,9 +195,7 @@ void chunked_kv_cache<Key, Value, Hash, EqualTo>::gc_ghost_fifo() {
 template<typename Key, typename Value, typename Hash, typename EqualTo>
 struct chunked_kv_cache<Key, Value, Hash, EqualTo>::stat
 chunked_kv_cache<Key, Value, Hash, EqualTo>::stat() const noexcept {
-    struct stat s {
-        _cache.stat()
-    };
+    struct stat s{_cache.stat()};
     s.index_size = _map.size();
     s.hit_count = _hit_count;
     s.access_count = _access_count;

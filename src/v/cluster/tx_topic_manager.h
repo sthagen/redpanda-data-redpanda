@@ -36,7 +36,6 @@ public:
 
     tx_topic_manager(
       controller& controller,
-      ss::sharded<features::feature_table>& features,
       config::binding<int32_t> partition_count,
       config::binding<uint64_t> segment_size,
       config::binding<std::chrono::milliseconds> retention_duration);
@@ -55,7 +54,6 @@ private:
     ss::future<> do_reconcile_topic_properties();
 
     controller& _controller;
-    ss::sharded<features::feature_table>& _features;
     config::binding<int32_t> _partition_count;
     config::binding<uint64_t> _segment_size;
     config::binding<std::chrono::milliseconds> _retention_duration;

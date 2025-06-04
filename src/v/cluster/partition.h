@@ -443,7 +443,6 @@ private:
 
     std::optional<cloud_storage_clients::bucket_name> _read_replica_bucket{
       std::nullopt};
-    bool _remote_delete_enabled{storage::ntp_config::default_remote_delete};
 
     // Populated for partition 0 only, used by cloud storage uploads
     // to generate topic manifests.

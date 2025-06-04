@@ -144,7 +144,7 @@ public:
     // Call this before starting a download, to trim the cache if necessary
     // and wait until enough free space is available.
     virtual ss::future<basic_space_reservation_guard<Clock>>
-      reserve_space(uint64_t, size_t) = 0;
+    reserve_space(uint64_t, size_t) = 0;
 
     // Release capacity acquired via `reserve_space`.  This spawns
     // a background fiber in order to be callable from the guard destructor.

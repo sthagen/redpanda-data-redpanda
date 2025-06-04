@@ -310,7 +310,7 @@ std::ostream& operator<<(std::ostream& o, const get_cluster_health_reply& r) {
 }
 
 void restart_risk_report::push(
-  partitions_t restart_risk_report::*member,
+  partitions_t restart_risk_report::* member,
   const model::topic_namespace& nt,
   model::partition_id pid) {
     auto& list = this->*member;

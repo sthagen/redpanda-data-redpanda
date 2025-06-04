@@ -16,7 +16,6 @@
 #include "cluster/partition_leaders_table.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "features/feature_table.h"
 #include "model/metadata.h"
 #include "model/record.h"
 #include "model/timeout_clock.h"
@@ -33,7 +32,6 @@ members_frontend::members_frontend(
   ss::sharded<controller_stm>& stm,
   ss::sharded<rpc::connection_cache>& connections,
   ss::sharded<partition_leaders_table>& leaders,
-  ss::sharded<features::feature_table>& feature_table,
   ss::sharded<ss::abort_source>& as)
   : _self(*config::node().node_id())
   , _node_op_timeout(
@@ -41,7 +39,6 @@ members_frontend::members_frontend(
   , _stm(stm)
   , _connections(connections)
   , _leaders(leaders)
-  , _feature_table(feature_table)
   , _as(as) {}
 
 ss::future<std::error_code> members_frontend::finish_node_reallocations(
