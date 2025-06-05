@@ -154,12 +154,14 @@ redpanda_cc_btest(
         "base64_test.cc",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/bytes:iobuf_parser",
         "//src/v/random:generators",
         "//src/v/test_utils:random_bytes",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:base64",
         "@boost//:test",
+        "@seastar",
     ],
 )
 

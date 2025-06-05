@@ -186,7 +186,7 @@ struct corpus_helper {
             w.Key("name");
             w.String(b.name);
             w.Key("data");
-            w.String(iobuf_to_base64(b.data));
+            w.String(iobuf_to_base64_string(b.data, b.data.size_bytes()));
             w.Key("crc32c");
             w.Uint(crc.value());
             w.EndObject();

@@ -4,15 +4,22 @@ on:
   push:
     branches: [dev]
     paths:
+      - '**.bash'
       - '**.sh'
       - '.github/workflows/lint-sh.yml'
+      - '.buildkite/hooks/*'
+      - 'tests/docker/ducktape-deps/*'
+      - 'tools/*'
     tags-ignore:
       - '**'
   pull_request:
     paths:
+      - '**.bash'
       - '**.sh'
-      - tests/docker/ducktape-deps/tinygo-wasi-transforms
       - '.github/workflows/lint-sh.yml'
+      - '.buildkite/hooks/*'
+      - 'tests/docker/ducktape-deps/*'
+      - 'tools/*'
 jobs:
   sh:
     name: Lint shell scripts

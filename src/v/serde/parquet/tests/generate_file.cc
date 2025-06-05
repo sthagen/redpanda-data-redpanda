@@ -49,9 +49,11 @@ void json(json_writer& w, const schema_element& schema, const value& v) {
           auto str = fmt::format("{:.8f}", v.val);
           w.RawValue(str.data(), str.size(), rapidjson::kNumberType);
       },
-      [&w](const byte_array_value& v) { w.String(iobuf_to_base64(v.val)); },
+      [&w](const byte_array_value& v) {
+          w.String(iobuf_to_base64_string(v.val, v.val.size_bytes()));
+      },
       [&w](const fixed_byte_array_value& v) {
-          w.String(iobuf_to_base64(v.val));
+          w.String(iobuf_to_base64_string(v.val, v.val.size_bytes()));
       },
       [&w, &schema](const group_value& v) {
           w.StartObject();

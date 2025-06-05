@@ -221,7 +221,6 @@ class std_unique_ptr:
         self.obj = obj
 
     def get(self):
-        # return self.obj['_M_t']['_M_t']['_M_head_impl']
         return self.obj['__ptr_']['__value_']
 
     def dereference(self):
@@ -300,7 +299,7 @@ class std_vector:
             # For example:
             #   std::__1::__compressed_pair_elem<seastar::shared_object*, 0, false>)
             s = str(end_cap_type)
-            m = re.match("struct ([\w:]+) \*", s)
+            m = re.match("struct ([\\w:]+) \\*", s)
             if m:
                 self.end_cap_type = gdb.lookup_type(
                     end_cap_type_fmt.format(m.group(1) + "*"))
@@ -494,42 +493,133 @@ class absl_btree_map:
         return self.ref["tree_"]["size_"]
 
 
-class absl_flat_hash_map:
-    signed_byte_t = gdb.lookup_type('int8_t')
+def print_fields(value):
+    print(
+        f"# Type {value.type.name} has {len(value.type.strip_typedefs().fields())} fields"
+    )
+    for i, field in enumerate(value.type.fields()):
+        print(
+            f"# Field: {i} bc: {field.is_base_class} name: {field.name} == {value[field]}"
+        )
 
+
+def get_base_class(value):
+    value.type.fields()
+    for field in value.type.fields():
+        if field.is_base_class:
+            return value[field]
+    return None
+
+
+def absl_insert_version_after_absl(cpp_name):
+    """Insert version inline namespace after the first `absl` namespace found in the given string."""
+    # See more:
+    # https://github.com/abseil/abseil-cpp/blob/929c17cf481222c35ff1652498994871120e832a/absl/base/options.h#L203
+    ABSL_OPTION_INLINE_NAMESPACE_NAME = "lts_20230802"
+
+    absl_ns_str = "absl::"
+    absl_ns_start = cpp_name.find(absl_ns_str)
+    if absl_ns_start == -1:
+        raise ValueError("No `absl` namespace found in " + cpp_name)
+
+    absl_ns_end = absl_ns_start + len(absl_ns_str)
+
+    return (cpp_name[:absl_ns_end] + ABSL_OPTION_INLINE_NAMESPACE_NAME + "::" +
+            cpp_name[absl_ns_end:])
+
+
+def absl_container_size(settings):
+    return settings["compressed_tuple_"]["value"]
+
+
+def absl_get_settings(val):
+    """Gets the settings_ field for abseil (flat/node)_hash_(map/set)."""
+    return val["settings_"]["value"]
+
+
+MAIN_GLOBAL_BLOCK = None
+
+
+def lookup_type(gdb_type_str: str) -> gdb.Type:
+    """
+    Try to find the type object from string.
+
+    GDB says it searches the global blocks, however this appear not to be the
+    case or at least it doesn't search all global blocks, sometimes it required
+    to get the global block based off the current frame.
+    """
+    global MAIN_GLOBAL_BLOCK
+
+    exceptions = []
+    try:
+        return gdb.lookup_type(gdb_type_str)
+    except Exception as exc:
+        exceptions.append(exc)
+
+    if MAIN_GLOBAL_BLOCK is None:
+        MAIN_GLOBAL_BLOCK = gdb.lookup_symbol("main")[0].symtab.global_block()
+
+    try:
+        return gdb.lookup_type(gdb_type_str, MAIN_GLOBAL_BLOCK)
+    except Exception as exc:
+        exceptions.append(exc)
+
+    raise gdb.error("Failed to get type, tried:\n%s" %
+                    "\n".join([str(exc) for exc in exceptions]))
+
+
+def absl_get_nodes(val):
+    """Return a generator of every node in absl::container_internal::raw_hash_set and derived classes."""
+    settings = absl_get_settings(val)
+    size = absl_container_size(settings)
+    if size == 0:
+        return
+
+    capacity = int(settings["capacity_"])
+    ctrl = settings["control_"]
+
+    # Derive the underlying type stored in the container.
+    slot_type = lookup_type(str(val.type.strip_typedefs()) +
+                            "::slot_type").strip_typedefs()
+    # Using the array of ctrl bytes, search for in-use slots and return them
+    # https://github.com/abseil/abseil-cpp/blob/8a3caf7dea955b513a6c1b572a2423c6b4213402/absl/container/internal/raw_hash_set.h#L2108-L2113
+    for item in range(capacity):
+        ctrl_t = int(ctrl[item])
+        if ctrl_t >= 0:
+            yield settings["slots_"].cast(slot_type.pointer())[item]
+
+
+class absl_flat_hash_map:
+    """
+    This is based off of absl::lts_20230802. This can be inspected dynamically
+    by looking at the container type derived in the constructor and then we can
+    use that to dynamically select different implementations when it comes time
+    to revise this implementation for a newer version of abseil.
+    """
     def __init__(self, p):
         self.map = p
-        container_type = self.map.type.strip_typedefs()
-        self.kt = container_type.template_argument(0)
-        self.vt = container_type.template_argument(1)
-        self._begin()
+        self.container_type = self.map.type.strip_typedefs()
+        self.kt = self.container_type.template_argument(0)
+        self.vt = self.container_type.template_argument(1)
+        self.settings = self.map["settings_"]["value"]
 
     def capacity(self):
-        return self.map["capacity_"]
+        return self.settings["capacity_"]
 
     def __len__(self):
-        return self.map["size_"]
-
-    def _begin(self):
-        self.it_ctrl = self.map["ctrl_"]
-        self.it_slot = self.map["slots_"]
-        self._skip_empty_or_deleted()
+        return self.settings["compressed_tuple_"]["value"]
 
     def __iter__(self):
-        while self.it_ctrl != (self.map["ctrl_"] + self.map["capacity_"]):
-            value = self.it_slot["value"]
-            yield value["first"], value["second"]
-            self.it_ctrl += 1
-            self.it_slot += 1
-            self._skip_empty_or_deleted()
+        slot_type = lookup_type(
+            f"{self.container_type}::slot_type").strip_typedefs()
+        control = self.settings["control_"]
+        slots = self.settings["slots_"].cast(slot_type.pointer())
 
-    def _skip_empty_or_deleted(self):
-        while self._ctrl_value() < -1:
-            self.it_ctrl += 1
-            self.it_slot += 1
-
-    def _ctrl_value(self):
-        return self.it_ctrl.cast(self.signed_byte_t.pointer()).dereference()
+        for i in range(self.capacity()):
+            if int(control[i]) < 0:
+                continue
+            slot = slots[i]
+            yield slot["value"]["first"], slot["value"]["second"]
 
 
 def has_enable_lw_shared_from_this(type):
@@ -768,6 +858,18 @@ def get_local_task_queues():
         yield std_unique_ptr(tq_ptr).dereference()
 
 
+def get_local_tasks(tq_id=None):
+    """ Return a list of task pointers for the local reactor. """
+    if tq_id is not None:
+        tqs = filter(lambda x: x['_id'] == tq_id, get_local_task_queues())
+    else:
+        tqs = get_local_task_queues()
+
+    for tq in tqs:
+        for t in seastar_circular_buffer(tq['_q']):
+            yield t
+
+
 # addr (int) -> name (str)
 names = {}
 
@@ -965,6 +1067,13 @@ def find_storage_api(shard=None):
         '__begin_'][shard]['service']['_p']
 
 
+def find_partition_manager(shard=None):
+    if shard is None:
+        shard = current_shard()
+    return gdb.parse_and_eval('debug::app')['partition_manager']['_instances'][
+        '__begin_'][shard]['service']['_p']
+
+
 class index_state:
     def __init__(self, ref):
         self.ref = ref
@@ -1039,26 +1148,25 @@ class offset_tracker:
 
     @property
     def base_offset(self):
-        return model_offset(self.ref['base_offset'])
+        return model_offset(self.ref['_base_offset'])
 
     @property
     def dirty_offset(self):
-        return model_offset(self.ref['dirty_offset'])
+        return model_offset(self.ref['_dirty_offset'])
 
     @property
     def term(self):
-        return model_offset(self.ref['term'])
+        return model_offset(self.ref['_term'])
 
     @property
     def committed_offset(self):
-        return model_offset(self.ref['committed_offset'])
+        return model_offset(self.ref['_committed_offset'])
 
     @property
     def stable_offset(self):
-        return model_offset(self.ref['stable_offset'])
+        return model_offset(self.ref['_stable_offset'])
 
     def __str__(self):
-
         return f"[base_offset: {self.base_offset}, dirty_offset: {self.dirty_offset}, term: {self.term} committed_offset: {self.committed_offset}, stable_offset: {self.stable_offset}]"
 
 
@@ -1123,6 +1231,9 @@ class model_ntp:
 
     def partition(self):
         return self.ref['tp']['partition']['_value']
+
+    def __repr__(self):
+        return f"{self.namespace()}/{self.topic()}/{self.partition()}"
 
 
 def template_arguments(gdb_type):
@@ -1223,12 +1334,28 @@ class disk_log_impl:
         return readers_cache(std_unique_ptr(self.ref["_readers_cache"]).get())
 
 
+class log_housekeeping_meta:
+    """
+    This is based on the v24.2.x implementation. When implementing decoding for
+    newer versions it is often sufficient to use a try/catch block to
+    incrementally fall back when field names and types change.
+    """
+    log_housekeeping_meta_t = gdb.lookup_type("storage::log_housekeeping_meta")
+
+    def __init__(self, ref):
+        self.ref = ref.cast(self.log_housekeeping_meta_t.pointer())
+
+    def handle(self):
+        h = self.ref["handle"]
+        return seastar_shared_ptr(h).get()
+
+
 def find_logs(shard=None):
     storage = find_storage_api(shard)
     log_mgr = std_unique_ptr(storage["_log_mgr"]).dereference()
     for ntp, log in absl_flat_hash_map(log_mgr["_logs"]):
-        log_meta_ptr = std_unique_ptr(log)
-        impl = seastar_shared_ptr(log_meta_ptr["handle"]["_impl"]).get()
+        meta = log_housekeeping_meta(std_unique_ptr(log).get())
+        impl = meta.handle()
         yield ntp, disk_log_impl(impl)
 
 
@@ -1418,6 +1545,175 @@ class redpanda_storage(gdb.Command):
     def invoke(self, arg, from_tty):
         self.print_segments()
         self.print_readers_cache_memory()
+
+
+class chunked_fifo:
+    class chunk:
+        def __init__(self, ref):
+            self.items = ref['items']
+            self.begin = ref['begin']
+            self.end = ref['end']
+            self.next_one = ref['next']
+
+        def __len__(self):
+            return self.end - self.begin
+
+    class iterator:
+        def __init__(self, fifo, chunk):
+            self.fifo = fifo
+            self.chunk = chunk
+            self.index = self.chunk.begin if chunk else 0
+
+        def __next__(self):
+            if self.index == 0:
+                raise StopIteration
+            if self.index == self.chunk.end:
+                if not self.chunk.next_one:
+                    raise StopIteration
+                self.chunk = chunked_fifo.chunk(self.chunk.next_one)
+                self.index = self.chunk.begin
+            index = self.index
+            self.index += 1
+            return self.chunk.items[self.fifo.mask(index)]['data']
+
+    def __init__(self, ref):
+        self._ref = ref
+        # try to access the member variable, so the constructor throws if the
+        # inspected variable is of the wrong type
+        _ = self.front_chunk
+
+    def mask(self, index):
+        return index & (self.items_per_chunk - 1)
+
+    @property
+    def items_per_chunk(self):
+        return self._ref.type.template_argument(1)
+
+    @property
+    def front_chunk(self):
+        return self._ref['_front_chunk']
+
+    @property
+    def back_chunk(self):
+        return self._ref['_back_chunk']
+
+    def __len__(self):
+        if not self.front_chunk:
+            return 0
+        if self.back_chunk == self.front_chunk:
+            front_chunk = self.chunk(self.front_chunk.dereference())
+            return len(front_chunk)
+        else:
+            front_chunk = self.chunk(self.front_chunk.dereference())
+            back_chunk = self.chunk(self.back_chunk.dereference())
+            num_chunks = self._ref['_nchunks'] - 2
+            return (len(front_chunk) + len(back_chunk) +
+                    num_chunks * self.items_per_chunk)
+
+    def __iter__(self):
+        return self.iterator(self, self.front_chunk)
+
+
+class abortable_fifo:
+    class entry:
+        def __init__(self, ref):
+            self.ref = ref
+            self.payload = ref['payload']
+
+    def __init__(self, ref):
+        self.ref = ref
+        self.front = abortable_fifo.entry(
+            std_unique_ptr(ref['_front']).dereference())
+        self.list = chunked_fifo(ref['_list'])
+        self.size = self.ref['_size']
+
+    class iterator:
+        def __init__(self, fifo):
+            self.fifo = fifo
+            self.index = 0
+            self.it = iter(self.fifo.list)
+
+        def __next__(self):
+            if self.fifo.size == 0:
+                raise StopIteration
+            if self.index == 0:
+                self.index += 1
+                return self.fifo.front
+            else:
+                return abortable_fifo.entry(next(self.it))
+
+    def __iter__(self):
+        return self.iterator(self)
+
+
+class named_samaphore:
+    def __init__(self, ref):
+        self.ref = ref
+        self.wait_list = abortable_fifo(ref['_wait_list'])
+        self.count = ref['_count']
+
+    def __repr__(self):
+        return f"named_samaphore(count={self.count}, wait_list_size={self.wait_list.size})"
+
+
+def lowres_clock_now():
+    """Returns the current time in lowres_clock format."""
+    return gdb.parse_and_eval('seastar::lowres_clock::_now')
+
+
+class time_point:
+    NOW = lowres_clock_now()['__d_']['__rep_']
+
+    def __init__(self, ref) -> None:
+        self.value = ref['__d_']['__rep_']
+        self.time_from_now = time_point.NOW - self.value
+
+    def __repr__(self):
+        return f"time_point(value={self.value}, time_from_now={self.time_from_now/1000000}ms)"
+
+
+class ntp_archiver:
+    def __init__(self, ref):
+        self.ref = ref
+        self.mutex = named_samaphore(ref['_mutex'])
+        self.last_upload_time = time_point(ref['_last_upload_time'])
+        self.uploads_active = named_samaphore(ref['_uploads_active'])
+        self.last_marked_clean_time = time_point(
+            ref['_last_marked_clean_time'])
+        self.gate_count = ref['_gate']['_count']
+
+    def __repr__(self):
+        return f"ntp_archiver(mutex={self.mutex}, last_upload_time={self.last_upload_time}, uploads_active={self.uploads_active}, last_marked_clean_time={self.last_marked_clean_time}, gate_count={self.gate_count})"
+
+
+class redpanda_partition:
+    def __init__(self, ptr):
+        self.ptr = ptr
+        self.archiver = ntp_archiver(
+            std_unique_ptr(ptr['_archiver']).dereference())
+
+
+class redpanda_partitions(gdb.Command):
+    """Summarize the state of redpanda storage layer
+    """
+    def __init__(self):
+        gdb.Command.__init__(self, 'redpanda partitions', gdb.COMMAND_USER,
+                             gdb.COMPLETE_COMMAND)
+
+    def print_partitions(self):
+        for i in range(cpus()):
+            print(f"# Partitions on shard {i}")
+            pm_ptr = find_partition_manager()
+
+            for v in absl_get_nodes(pm_ptr['_ntp_table']):
+                ntp = v['value']['first']
+                p = redpanda_partition(
+                    seastar_lw_shared_ptr(v['value']['second']).get())
+                print("ntp: {}, partition: {}".format(model_ntp(ntp),
+                                                      p.archiver))
+
+    def invoke(self, arg, from_tty):
+        self.print_partitions()
 
 
 class iobuf:
@@ -1953,11 +2249,14 @@ class redpanda_task_queues(gdb.Command):
         return ' '
 
     def invoke(self, arg, for_tty):
+        current_sg = gdb.parse_and_eval(
+            '(seastar::scheduling_group) \'seastar::internal::current_scheduling_group_ptr()::sg\''
+        )
         gdb.write('   {:2} {:32} {:7} {}\n'.format("id", "name", "shares",
                                                    "tasks"))
         for tq in get_local_task_queues():
             gdb.write('{}{} {:02} {:32} {:>7.2f} {}\n'.format(
-                self._current(bool(tq['_current'])),
+                self._current(current_sg['_id'] == tq['_id']),
                 self._active(bool(tq['_active'])), int(tq['_id']),
                 str(tq['_name']), float(tq['_shares']),
                 len(seastar_circular_buffer(tq['_q']))))
@@ -2063,6 +2362,37 @@ class redpanda_smp_queues(gdb.Command):
             h[(a, b)] += 1
 
         gdb.write('{}\n'.format(h))
+
+
+class redpanda_tasks(gdb.Command):
+    """ Prints contents of reactor pending tasks queue.
+
+    Example:
+    (gdb) redpanda tasks
+    (task*) 0x60017d8c7f88  _ZTV12continuationIZN6futureIJEE12then_wrappedIZN17smp_message_queu...
+    (task*) 0x60019a391730  _ZTV12continuationIZN6futureIJEE12then_wrappedIZNS1_16handle_except...
+    (task*) 0x60018fac2208  vtable for lambda_task<yield()::{lambda()#1}> + 16
+    (task*) 0x60016e8b7428  _ZTV12continuationIZN6futureIJEE12then_wrappedINS1_12finally_bodyIZ...
+    (task*) 0x60017e5bece8  _ZTV12continuationIZN6futureIJEE12then_wrappedINS1_12finally_bodyIZ...
+    (task*) 0x60017e7f8aa0  _ZTV12continuationIZN6futureIJEE12then_wrappedIZNS1_16handle_except...
+    (task*) 0x60018fac21e0  vtable for lambda_task<yield()::{lambda()#1}> + 16
+    (task*) 0x60016e8b7540  _ZTV12continuationIZN6futureIJEE12then_wrappedINS1_12finally_bodyIZ...
+    (task*) 0x600174c34d58  _ZTV12continuationIZN6futureIJEE12then_wrappedINS1_12finally_bodyIZ...
+
+            ^               ^
+            |               |
+            |               '------------ symbol name for task's vtable pointer
+            '---------------------------- task pointer
+    """
+    def __init__(self):
+        gdb.Command.__init__(self, 'redpanda tasks', gdb.COMMAND_USER,
+                             gdb.COMPLETE_NONE, True)
+
+    def invoke(self, arg, for_tty):
+        vptr_type = gdb.lookup_type('uintptr_t').pointer()
+        for ptr in get_local_tasks():
+            vptr = int(ptr.reinterpret_cast(vptr_type).dereference())
+            gdb.write('(task*) 0x%x  %s\n' % (ptr, resolve(vptr)))
 
 
 class redpanda(gdb.Command):
@@ -2190,7 +2520,7 @@ def print_tree(root_node,
                node_filter=None):
     def print_node(node, is_last_history):
         stems = (" |   ", "     ")
-        branches = (" |-- ", " \-- ")
+        branches = (" |-- ", " \\-- ")
 
         label_lines = formatter(node).rstrip('\n').split('\n')
         prefix_without_branch = ''.join(
@@ -2348,4 +2678,6 @@ redpanda_task_queues()
 redpanda_smp_queues()
 redpanda_small_objects()
 redpanda_task_histogram()
+redpanda_tasks()
 redpanda_heapprof()
+redpanda_partitions()
