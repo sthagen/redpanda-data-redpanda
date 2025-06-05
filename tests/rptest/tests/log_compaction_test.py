@@ -523,9 +523,13 @@ class LogCompactionEnableSlidingWindow(RedpandaTest):
     """
     def __init__(self, test_context):
         self.test_context = test_context
-        # Start with sliding window compaction disabled.
+
+        # Start with sliding window compaction set per the starting_config argument.
+        use_sliding_window_starting_config = self.test_context.injected_args[
+            'starting_config']
         self.extra_rp_conf = {
-            'log_compaction_use_sliding_window': False,
+            'log_compaction_use_sliding_window':
+            use_sliding_window_starting_config,
             'log_compaction_interval_ms': 100,
             'log_segment_size': 2 * 1024**2,  # 2 MiB
             'compacted_log_segment_size': 1024**2,  # 1 MiB
@@ -538,34 +542,52 @@ class LogCompactionEnableSlidingWindow(RedpandaTest):
         self._rpk_client = RpkTool(self.redpanda)
 
     @cluster(num_nodes=2)
-    def test_enable_sliding_window(self):
-        # Redpanda was started with log_compaction_use_sliding_window=false.
-        # Set it to true, thereby leaving the memory reservation for compaction at 0.
+    @matrix(starting_config=[False, True])
+    def test_toggle_sliding_window(self, starting_config):
+        next_sliding_window_config = not starting_config
+        # If Redpanda was started with log_compaction_use_sliding_window=false and
+        # we set it to true, the memory reservation for compaction will be left at 0.
         self._rpk_client.cluster_config_set(
-            "log_compaction_use_sliding_window", True)
+            "log_compaction_use_sliding_window", next_sliding_window_config)
 
         topic_spec = TopicSpec(cleanup_policy=TopicSpec.CLEANUP_COMPACT,
+                               min_cleanable_dirty_ratio=0.0,
                                replication_factor=1)
         self.client().create_topic(topic_spec)
 
-        # Produce a small amount of segments and wait
-        producer = KgoVerifierProducer(context=self.test_context,
-                                       redpanda=self.redpanda,
-                                       topic=topic_spec.name,
-                                       msg_size=1024,
-                                       msg_count=10000)
+        # The number of times log_compaction_use_sliding_window will be flipped on/off.
+        self.prev_num_compacted_segments = 0
+        num_rounds = 5
+        for i in range(0, num_rounds):
+            # Produce a small amount of segments and wait
+            producer = KgoVerifierProducer(context=self.test_context,
+                                           redpanda=self.redpanda,
+                                           topic=topic_spec.name,
+                                           msg_size=1024,
+                                           msg_count=10000)
 
-        producer.start()
-        producer.wait(timeout_sec=180)
+            producer.start()
+            producer.wait(timeout_sec=180)
 
-        def seen_compacted_segments():
-            return self.redpanda.metric_sum(
-                metric_name="vectorized_storage_log_compacted_segment_total",
-                metrics_endpoint=MetricsEndpoint.METRICS,
-                topic=topic_spec.name,
-                expect_metric=True) > 0
+            def seen_compacted_segments():
+                num_compacted_segments = self.redpanda.metric_sum(
+                    metric_name=
+                    "vectorized_storage_log_compacted_segment_total",
+                    metrics_endpoint=MetricsEndpoint.METRICS,
+                    topic=topic_spec.name,
+                    expect_metric=True)
+                ret = num_compacted_segments > self.prev_num_compacted_segments
+                self.prev_num_compacted_segments = num_compacted_segments
+                return ret
 
-        wait_until(seen_compacted_segments,
-                   timeout_sec=60,
-                   backoff_sec=1,
-                   err_msg=f"Did not see any compacted segments.")
+            wait_until(seen_compacted_segments,
+                       timeout_sec=60,
+                       backoff_sec=1,
+                       err_msg=f"Did not see any compacted segments.")
+
+            producer.free()
+
+            next_sliding_window_config = not next_sliding_window_config
+            self._rpk_client.cluster_config_set(
+                "log_compaction_use_sliding_window",
+                next_sliding_window_config)

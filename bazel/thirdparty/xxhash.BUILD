@@ -7,6 +7,8 @@
 # default quoted include paths and remove the `includes` parameter here.
 #
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 cc_library(
     name = "xxhash",
     srcs = [

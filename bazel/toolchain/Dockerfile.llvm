@@ -31,9 +31,11 @@ RUN wget https://apt.llvm.org/llvm.sh && chmod +x llvm.sh && /llvm.sh ${STAGE_0_
 # Set working directory
 WORKDIR /src
 
-ARG LLVM_VERSION=18
+ARG LLVM_VERSION=20
 
 # Clone LLVM project (includes Clang, clang-tidy, clangd, and BOLT)
+# We use the latest version of the release branch to pick up fixes quicker rather than waiting for a full
+# release to happen
 RUN git clone --depth 1 --branch release/${LLVM_VERSION}.x https://github.com/llvm/llvm-project.git
 
 # LTO builds take a bunch of RAM, limit them to a low number by default

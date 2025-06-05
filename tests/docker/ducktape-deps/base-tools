@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+########################################################
+#                                                      #
+# ONLY ADD NEEDED TOOLS HERE:                          #
+# "Base" packages are those needed by multiple         #
+# subsequent sibling stages.                           #
+# Tools which are just needed by ducktape at runtime   #
+# should be added to runtime-tools, while tools needed #
+# by a single stage should be added to/before that     #
+# stage.                                               #
+#                                                      #
+########################################################
+
+set -euo pipefail
+apt-get update
+apt-get install -y \
+  build-essential \
+  ca-certificates \
+  cmake \
+  curl \
+  git \
+  libsasl2-dev \
+  libsasl2-modules-gssapi-mit \
+  libssl-dev \
+  libzstd-dev \
+  pkg-config \
+  python3 \
+  python3-pip \
+  python3-venv \
+  wget

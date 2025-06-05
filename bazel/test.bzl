@@ -6,6 +6,9 @@ changes. For example, redpanda_cc_gtest will automatically configure Seastar for
 running tests, like setting a reasonable number of cores and amount of memory.
 """
 
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
 load("@rules_python//python:defs.bzl", "py_binary", "py_test")
 load(":internal.bzl", "redpanda_copts")
 
@@ -129,8 +132,7 @@ def _redpanda_cc_test(
         args = ["--"] + args
 
     test_data, test_env = _test_options()
-
-    native.cc_test(
+    cc_test(
         name = name,
         timeout = timeout,
         srcs = srcs,
@@ -170,7 +172,7 @@ def _redpanda_cc_fuzz_test(
       env: environment variables
       data: data file dependencies
     """
-    native.cc_test(
+    cc_test(
         name = name,
         timeout = timeout,
         srcs = srcs,
@@ -299,7 +301,7 @@ def redpanda_cc_btest_no_seastar(
         cpu = 1,
         memory = "128MiB",
         deps = []):
-    native.cc_test(
+    cc_test(
         name = name,
         timeout = timeout,
         tags = [
@@ -325,7 +327,7 @@ def redpanda_test_cc_library(
         include_prefix = None,
         implementation_deps = [],
         deps = []):
-    native.cc_library(
+    cc_library(
         name = name,
         srcs = srcs,
         hdrs = hdrs,
@@ -408,7 +410,7 @@ def redpanda_cc_bench(
     tags = tags + ["bench"]
 
     binary_name = name + "_binary"
-    native.cc_binary(
+    cc_binary(
         name = binary_name,
         srcs = srcs,
         defines = defines,

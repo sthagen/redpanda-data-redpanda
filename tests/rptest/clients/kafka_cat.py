@@ -11,6 +11,7 @@ import subprocess
 import time
 import json
 from typing import Any, cast
+import rptest.utils.process_utils as process_utils
 
 from rptest.services.redpanda_types import RedpandaServiceForClients
 from rptest.util import wait_until_result
@@ -84,12 +85,15 @@ class KafkaCat:
                 res = subprocess.check_output(
                     ["kcat", "-b", self._redpanda.brokers()] + cmd,
                     text=True,
-                    input=input)
+                    input=input,
+                    stderr=subprocess.PIPE)
                 self._redpanda.logger.debug(res)
                 return res
             except subprocess.CalledProcessError as e:
                 if retry == 0:
-                    raise
+                    self._redpanda.logger.info(
+                        f"kcat failed: stderr:\n{e.stderr}")
+                    raise process_utils.CalledProcessError(e) from e
                 self._redpanda.logger.debug(
                     "kcat retrying after exit code {}: {}".format(
                         e.returncode, e.output))

@@ -693,11 +693,11 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
-    name = "compaction_index_format_tests",
+redpanda_cc_gtest(
+    name = "compaction_index_format_test",
     timeout = "short",
     srcs = [
-        "compaction_index_format_tests.cc",
+        "compaction_index_format_test.cc",
     ],
     deps = [
         "//src/v/base",
@@ -709,12 +709,14 @@ redpanda_cc_btest(
         "//src/v/storage",
         "//src/v/storage:logger",
         "//src/v/test_utils:fixture",
+        "//src/v/test_utils:gtest",
         "//src/v/test_utils:random",
         "//src/v/test_utils:random_bytes",
-        "//src/v/test_utils:seastar_boost",
         "//src/v/test_utils:tmpbuf_file",
         "//src/v/utils:vint",
-        "@boost//:test",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
         "@seastar//:testing",
     ],
 )
@@ -824,7 +826,7 @@ redpanda_cc_gtest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "batch_consumer_utils_test",
     timeout = "short",
     srcs = [
@@ -836,10 +838,9 @@ redpanda_cc_btest(
         "//src/v/storage",
         "//src/v/storage/tests:disk_log_builder",
         "//src/v/test_utils:fixture",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 
@@ -944,7 +945,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "compaction_fuzz_test",
     timeout = "moderate",
     srcs = [
@@ -958,11 +959,10 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/storage",
         "//src/v/storage:record_batch_builder",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
         "@abseil-cpp//absl/container:btree",
-        "@boost//:test",
+        "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 

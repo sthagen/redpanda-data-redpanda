@@ -18,11 +18,9 @@
 #include "storage/types.h"
 
 #include <seastar/core/sleep.hh>
-#include <seastar/testing/thread_test_case.hh>
 
 #include <absl/container/btree_map.h>
-#include <boost/test/tools/old/interface.hpp>
-#include <boost/test/unit_test.hpp>
+#include <gtest/gtest.h>
 
 #include <exception>
 
@@ -39,7 +37,7 @@ static model::record_batch make_random_batch(
   std::vector<std::optional<ss::sstring>> keys,
   std::vector<std::optional<ss::sstring>> values,
   int num_records) {
-    BOOST_REQUIRE(keys.size() == values.size());
+    EXPECT_EQ(keys.size(), values.size());
     storage::record_batch_builder builder(type, offset);
     auto to_iobuf = [](std::optional<ss::sstring> x) {
         std::optional<iobuf> result;
@@ -180,7 +178,7 @@ ss::future<ot_state> arrange_and_compact(
           "Error triggered while appending or compacting: {}",
           error);
     }
-    BOOST_REQUIRE(error == nullptr);
+    EXPECT_EQ(error, nullptr);
     co_return st;
 }
 
@@ -188,7 +186,7 @@ ss::future<ot_state> arrange_and_compact(
 /// that will be written into the log.
 std::deque<model::offset> generate_random_arrangement(
   const fragmented_vector<model::record_batch>& batches, size_t num_segments) {
-    BOOST_REQUIRE(num_segments <= batches.size());
+    EXPECT_LE(num_segments, batches.size());
     std::deque<model::offset> arr;
     // User reservoir sample to produce num_segments
     for (size_t i = 0; i < num_segments; i++) {
@@ -203,7 +201,8 @@ std::deque<model::offset> generate_random_arrangement(
     return arr;
 }
 
-SEASTAR_THREAD_TEST_CASE(test_compaction_with_different_segment_arrangements) {
+TEST(
+  compaction_fuzz_test, test_compaction_with_different_segment_arrangements) {
 #ifdef NDEBUG
     static constexpr auto num_batches = 1000;
     std::vector<size_t> num_segments = {10, 100, 1000};
@@ -217,12 +216,13 @@ SEASTAR_THREAD_TEST_CASE(test_compaction_with_different_segment_arrangements) {
     for (auto num : num_segments) {
         auto arrangement = generate_random_arrangement(batches, num);
         auto actual_ot = arrange_and_compact(batches, arrangement, false).get();
-        BOOST_REQUIRE(expected_ot.gap_offset == actual_ot.gap_offset);
-        BOOST_REQUIRE(expected_ot.gap_length == actual_ot.gap_length);
+        ASSERT_EQ(expected_ot.gap_offset, actual_ot.gap_offset);
+        ASSERT_EQ(expected_ot.gap_length, actual_ot.gap_length);
     }
 }
 
-SEASTAR_THREAD_TEST_CASE(
+TEST(
+  compaction_fuzz_test,
   test_compaction_with_different_segment_arrangements_simulate_internal_topic) {
 #ifdef NDEBUG
     static constexpr auto num_batches = 1000;
@@ -237,7 +237,7 @@ SEASTAR_THREAD_TEST_CASE(
     for (auto num : num_segments) {
         auto arrangement = generate_random_arrangement(batches, num);
         auto actual_ot = arrange_and_compact(batches, arrangement, true).get();
-        BOOST_REQUIRE(expected_ot.gap_offset == actual_ot.gap_offset);
-        BOOST_REQUIRE(expected_ot.gap_length == actual_ot.gap_length);
+        ASSERT_EQ(expected_ot.gap_offset, actual_ot.gap_offset);
+        ASSERT_EQ(expected_ot.gap_length, actual_ot.gap_length);
     }
 }

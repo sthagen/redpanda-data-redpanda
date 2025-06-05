@@ -243,6 +243,7 @@ public:
           never_abort,
           std::nullopt,
           max_keys,
+          std::chrono::milliseconds{0},
           nullptr,
           nullptr);
         auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
@@ -263,6 +264,7 @@ public:
           never_abort,
           std::nullopt,
           max_keys,
+          std::chrono::milliseconds{0},
           nullptr,
           nullptr);
         auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);

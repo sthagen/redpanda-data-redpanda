@@ -19,6 +19,7 @@ from rptest.services.redpanda import (
     get_cloud_provider,
 )
 from rptest.tests.datalake.datalake_services import DatalakeServices
+from rptest.tests.datalake.datalake_verifier import DatalakeVerifier
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 from rptest.tests.datalake.utils import supported_storage_types
 from rptest.tests.redpanda_test import RedpandaTest
@@ -82,6 +83,10 @@ class DatabricksTest(RedpandaTest):
             dl.wait_for_translation(self.topic_name,
                                     msg_count=count,
                                     timeout=60)
+
+            DatalakeVerifier.oneshot(
+                self.redpanda, self.topic_name,
+                dl.query_engine(QueryEngineType.DATABRICKS_SQL))
 
     # This test does not work because Iceberg tables in the managed catalog
     # w/ their databricks sql engine are read only. I.e. there is no support

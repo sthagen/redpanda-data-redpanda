@@ -335,7 +335,12 @@ TEST_F(
     ss::abort_source as;
     log
       ->housekeeping(housekeeping_config(
-        ts, std::nullopt, model::offset::max(), std::nullopt, as))
+        ts,
+        std::nullopt,
+        model::offset::max(),
+        std::nullopt,
+        std::chrono::milliseconds{0},
+        as))
       .get();
     // truncate at 0, offset earlier then the one present in log
     log->truncate(storage::truncate_config(model::offset(0))).get();
@@ -501,7 +506,12 @@ TEST_F(storage_test_fixture, test_concurrent_prefix_truncate_and_gc) {
     // to evict. The test does not listen for the notification,
     // so this call is basically a no-op.
     auto f1 = log->housekeeping(housekeeping_config(
-      ts, std::nullopt, model::offset::max(), std::nullopt, as));
+      ts,
+      std::nullopt,
+      model::offset::max(),
+      std::nullopt,
+      std::chrono::milliseconds{0},
+      as));
 
     auto f2 = log->truncate_prefix(
       storage::truncate_prefix_config(model::next_offset(lstats.dirty_offset)));
@@ -562,7 +572,12 @@ TEST_F(storage_test_fixture, test_concurrent_truncate_and_compaction) {
     auto ts = now();
     auto sleep_ms1 = random_generators::get_int(0, 100);
     housekeeping_config housekeeping_cfg(
-      ts, std::nullopt, model::offset::max(), std::nullopt, as);
+      ts,
+      std::nullopt,
+      model::offset::max(),
+      std::nullopt,
+      std::chrono::milliseconds{0},
+      as);
     auto f1 = ss::sleep(sleep_ms1 * 1ms).then([&] {
         return log->housekeeping(housekeeping_cfg);
     });

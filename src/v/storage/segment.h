@@ -218,7 +218,7 @@ public:
     const compacted_index_writer& compaction_index() const;
     // We currently use `max_removable_local_log_offset` to control both
     // deletion/eviction, and compaction.
-    bool has_compactible_offsets(const compaction_config& cfg) const;
+    bool is_compactible(const compaction_config& cfg) const;
 
     // Calls `_cache->reset()`, iff the optional `_cache` has a value. This
     // leaves the object in a re-usable state. If there is no contained object
@@ -436,10 +436,16 @@ inline bool segment::has_compaction_index() const {
     return _compaction_index != std::nullopt;
 }
 
-inline bool
-segment::has_compactible_offsets(const compaction_config& cfg) const {
-    // since we don't support partially-compacted segments, a segment must
-    // end before the max compactible offset to be eligible for compaction.
+inline bool segment::is_compactible(const compaction_config& cfg) const {
+    // Because we don't support partially-compacted segments, to be eligible for
+    // compaction a segment must both
+    // 1. have latest batch timestamp longer ago than min.compaction.lag.ms, and
+    // 2. end before the max compactible offset.
+    const auto now = to_time_point(model::timestamp::now());
+    const auto max_batch_ts = to_time_point(index().retention_timestamp());
+    if (now - max_batch_ts < cfg.min_lag_ms) {
+        return false;
+    }
     return _tracker.get_stable_offset() <= cfg.max_removable_local_log_offset;
 }
 

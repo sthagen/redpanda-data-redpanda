@@ -260,6 +260,7 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds> max_compaction_lag_ms;
     property<bool> log_disable_housekeeping_for_tests;
     property<bool> log_compaction_use_sliding_window;
+    property<bool> log_compaction_pause_use_sliding_window;
     property<std::optional<size_t>>
       log_compaction_adjacent_merge_self_compaction_count;
     // same as retention.size in kafka - TODO: size not implemented

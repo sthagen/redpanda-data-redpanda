@@ -1,5 +1,6 @@
 # This file is injected into the crate BUILD file
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 expand_template(
     name = "gen_conf",

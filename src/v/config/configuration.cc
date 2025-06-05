@@ -1069,6 +1069,15 @@ configuration::configuration()
       "Use sliding window compaction.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       true)
+  , log_compaction_pause_use_sliding_window(
+      *this,
+      "log_compaction_pause_use_sliding_window",
+      "Pause use of sliding window compaction. This should only be toggled "
+      "to `true` when it is desired to force adjacent segment compaction. The "
+      "memory reserved by `storage_compaction_key_map_memory` is not freed "
+      "when this is set to `true`.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      false)
   , log_compaction_adjacent_merge_self_compaction_count(
       *this,
       "log_compaction_adjacent_merge_self_compaction_count",
@@ -1501,7 +1510,7 @@ configuration::configuration()
       {.needs_restart = needs_restart::no,
        .example = "10737418240",
        .visibility = visibility::tunable},
-      5_GiB)
+      512_MiB)
   , storage_ignore_timestamps_in_future_sec(
       *this,
       "storage_ignore_timestamps_in_future_sec",

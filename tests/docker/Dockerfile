@@ -32,20 +32,24 @@ COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/protobuf /
 # these /running/<name> mounts exist solely to appear first in the command such
 # that you can tell what's running when the first part of a command would otherwise
 # just be a long series of common mount options
+COPY --chmod=0755 tests/docker/ducktape-deps/base-tools /
+RUN --mount=target=/running/base-tools,type=tmpfs --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    /base-tools && rm /base-tools
+
+COPY --chmod=0755 tests/docker/ducktape-deps/protobuf /
+RUN --mount=target=/running/protobuf,type=tmpfs --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    /protobuf && rm /protobuf
+
+##########################################
+FROM base AS java-base
+COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/java-dev-tools /
 RUN --mount=target=/running/java-dev-tools,type=tmpfs --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked --mount=type=cache,id=dl-cache,target=/dl-cache \
     /java-dev-tools && \
     rm /java-dev-tools
 
-# - install distro-packaged depedencies
-# - install dependencies of 'rpk debug' system scan
-COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/tool-pkgs /
-RUN --mount=target=/running/tool-pkgs,type=tmpfs --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked \
-    /tool-pkgs && \
-    rm /tool-pkgs
-
 #################################
 
-FROM base AS maven_base
+FROM java-base AS maven-base
 # maven_base is used for all maven-using java stages below
 ARG USE_MAVEN_SEED=1
 # Used to seed the maven cache for the java base image, see script for details
@@ -57,7 +61,7 @@ RUN --mount=type=cache,id=dl-cache,target=/dl-cache \
 
 #################################
 
-FROM maven_base AS kafka-streams-examples
+FROM maven-base AS kafka-streams-examples
 
 # Install kafka streams examples.  This is a very slow step (tens of minutes), doing
 # many maven dependency downloads without any parallelism.  To avoid re-running it
@@ -68,7 +72,7 @@ RUN /kafka-streams-examples && \
 
 #################################
 
-FROM maven_base AS omb
+FROM maven-base AS omb
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/omb /
 RUN /omb && \
@@ -76,7 +80,7 @@ RUN /omb && \
 
 #################################
 
-FROM maven_base AS java-verifiers
+FROM maven-base AS java-verifiers
 
 COPY --chown=0:0 tests/java/e2e-verifiers /opt/redpanda-tests/java/e2e-verifiers
 COPY --chown=0:0 tests/java/verifiers /opt/redpanda-tests/java/verifiers
@@ -87,7 +91,7 @@ RUN /java-verifiers && \
 
 #################################
 
-FROM maven_base AS kafka-tools
+FROM maven-base AS kafka-tools
 
 ENV KAFKA_MIRROR="https://s3-us-west-2.amazonaws.com/kafka-packages"
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kafka-tools /
@@ -96,7 +100,15 @@ RUN --mount=type=cache,id=dl-cache,target=/dl-cache /kafka-tools && \
 
 #################################
 
-FROM base AS librdkafka
+FROM java-base AS base-with-tools
+
+COPY --chmod=0755 tests/docker/ducktape-deps/tool-pkgs /
+RUN --mount=target=/running/tool-pkgs,type=tmpfs --mount=type=cache,target=/var/cache/apt,sharing=locked --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    /tool-pkgs && rm /tool-pkgs
+
+#################################
+
+FROM base-with-tools AS librdkafka
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/librdkafka /
 RUN /librdkafka && \
@@ -179,7 +191,7 @@ RUN /franz-bench && \
 
 #################################
 
-FROM base AS flink
+FROM java-base AS flink
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/flink /
 RUN --mount=type=cache,id=dl-cache,target=/dl-cache /flink && \
@@ -259,19 +271,19 @@ RUN --mount=target=/running/ocsf-server,type=tmpfs --mount=type=cache,target=/va
 
 #################################
 
-FROM base AS polaris
+FROM java-base AS polaris
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/polaris /
 RUN /polaris && rm /polaris
 
 #################################
 
-FROM base AS nessie
+FROM java-base AS nessie
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/nessie /
 RUN /nessie && rm /nessie
 
 #################################
 
-FROM base AS iceberg-rest
+FROM java-base AS iceberg-rest
 COPY --chown=0:0 tests/java/iceberg-rest-catalog /opt/redpanda-tests/java/iceberg-rest-catalog
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/iceberg-rest-catalog /
 RUN /iceberg-rest-catalog && rm /iceberg-rest-catalog
@@ -284,7 +296,7 @@ RUN --mount=type=cache,id=dl-cache,target=/dl-cache /trino && rm /trino
 
 #################################
 
-FROM maven_base AS spark
+FROM maven-base AS spark
 COPY --chown=0:0 tests/java/spark-iceberg-dependencies /opt/redpanda-tests/java/spark-iceberg-dependencies
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/spark /
 RUN --mount=type=cache,id=dl-cache,target=/dl-cache /spark && rm /spark

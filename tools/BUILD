@@ -1,6 +1,7 @@
 load("@bazel_skylib//rules:native_binary.bzl", "native_binary")
 load("@buildifier_prebuilt//:rules.bzl", "buildifier")
 load("@rules_python//python:defs.bzl", "py_binary")
+load("@rules_shell//shell:sh_binary.bzl", "sh_binary")
 
 buildifier(
     name = "buildifier.check",
@@ -20,7 +21,7 @@ buildifier(
         "./build/*",
         "./vbuild/*",
     ],
-    lint_mode = "warn",
+    lint_mode = "fix",
     mode = "fix",
 )
 

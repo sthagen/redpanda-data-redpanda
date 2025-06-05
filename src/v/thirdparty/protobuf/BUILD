@@ -1,3 +1,5 @@
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 #
 # TODO(bazel) this is a temporary hack to fix layering check violation with
 # protobuf v24 until we upgrade to v26, which doesn't seem to have the problem,

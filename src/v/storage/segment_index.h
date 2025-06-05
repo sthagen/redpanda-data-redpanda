@@ -193,6 +193,12 @@ public:
           _state.broker_timestamp, _state.max_timestamp, _retention_timestamp);
     }
 
+    model::timestamp retention_timestamp() const {
+        const auto cfg = time_based_retention_cfg::make(
+          _feature_table.get().local());
+        return retention_timestamp(cfg);
+    }
+
     // Check if compacted timestamp has a value.
     bool has_clean_compact_timestamp() const {
         return _state.clean_compact_timestamp.has_value();

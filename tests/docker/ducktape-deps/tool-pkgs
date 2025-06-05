@@ -1,4 +1,9 @@
 #!/usr/bin/env bash
+
+# "tool packages" are generally those which are needed for running ducktape
+# tests, but not for building the early layers of the image themselves. They
+# are installed relatively late in the Dockerfile, after most of the heavy
+# "non mainline" layers have forked off.
 set -e
 apt-get update
 apt-get install -qq \
@@ -15,11 +20,7 @@ apt-get install -qq \
   krb5-kdc \
   krb5-user \
   libatomic1 \
-  libsasl2-dev \
-  libsasl2-modules-gssapi-mit \
-  libssl-dev \
   libyajl-dev \
-  libzstd-dev \
   llvm \
   lsof \
   net-tools \
@@ -28,7 +29,4 @@ apt-get install -qq \
   npm \
   openssh-server \
   pciutils \
-  pkg-config \
-  python3-pip \
-  python3-venv \
   sudo

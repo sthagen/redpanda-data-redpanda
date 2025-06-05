@@ -108,6 +108,7 @@ public:
                     std::nullopt,
                     log->stm_manager()->max_removable_local_log_offset(),
                     std::nullopt,
+                    std::chrono::milliseconds{0},
                     dummy_as,
                   })
                   .handle_exception_type(
@@ -227,6 +228,7 @@ public:
           std::nullopt,
           model::offset::max(),
           std::nullopt,
+          std::chrono::milliseconds{0},
           as);
         // Compacts until a single sealed segment remains, other than the
         // currently active one.

@@ -3,6 +3,7 @@
 # https://gitlab.freedesktop.org/xorg/lib/libpciaccess/-/blob/2ec2576cabefef1eaa5dd9307c97de2e887fc347/meson.build
 #
 load("@bazel_skylib//lib:selects.bzl", "selects")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
 
 # Selects with AND'd conditions require a standalone helper.
 # https://bazel.build/docs/configurable-attributes#and-chaining

@@ -4,21 +4,11 @@ set -e
 source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
 
 apt update
-apt install -y \
-  build-essential \
-  cmake \
-  curl \
-  git \
-  maven \
+apt-get install -y \
   openjdk-17-jdk \
   openjdk-21-jdk \
-  wget
+  maven
 
-SCRIPTPATH="$(
-  cd -- "$(dirname "$0")" >/dev/null 2>&1
-  pwd -P
-)"
-$SCRIPTPATH/protobuf
 ARCH=$(dpkg-architecture -q DEB_BUILD_ARCH)
 
 architecture=""

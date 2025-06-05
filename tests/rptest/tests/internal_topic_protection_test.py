@@ -135,7 +135,7 @@ class InternalTopicProtectionTest(RedpandaTest):
         try:
             produce_fn(test_topic, "test_msg")
         except Exception as e:
-            assert type(e) == failure_exception_type
+            assert isinstance(e, failure_exception_type)
         else:
             assert False, "Call to delete topic returned sucess"
         post_produce_hw = get_hw(test_topic, partition_id)

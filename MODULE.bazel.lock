@@ -43,8 +43,8 @@
     "https://bcr.bazel.build/modules/bazel_skylib/1.7.1/source.json": "f121b43eeefc7c29efbd51b83d08631e2347297c95aac9764a701f2a6a2bb953",
     "https://bcr.bazel.build/modules/boringssl/0.0.0-20240530-2db0eb3/MODULE.bazel": "d0405b762c5e87cd445b7015f2b8da5400ef9a8dbca0bfefa6c1cea79d528a97",
     "https://bcr.bazel.build/modules/boringssl/0.0.0-20240530-2db0eb3/source.json": "0d413869349e82e5d679802abe9ce23e0326bbf56daa97ae9e7dbdcec72982fc",
-    "https://bcr.bazel.build/modules/buildifier_prebuilt/7.3.1/MODULE.bazel": "537faf0ad9f5892910074b8e43b4c91c96f1d5d86b6ed04bdbe40cf68aa48b68",
-    "https://bcr.bazel.build/modules/buildifier_prebuilt/7.3.1/source.json": "55153a5e6ca9c8a7e266c4b46b951e8a010d25ec6062bc35d5d4f89925796bad",
+    "https://bcr.bazel.build/modules/buildifier_prebuilt/8.0.3/MODULE.bazel": "4791b031727d1183c183a0b8fd5fc0fe8d8834c45f9a22efd26be6c962b9cfee",
+    "https://bcr.bazel.build/modules/buildifier_prebuilt/8.0.3/source.json": "68ee16210562f325ff961aabeb4d46ed10e6638b5e842cd48d8d83dea220dfbd",
     "https://bcr.bazel.build/modules/buildozer/7.1.2/MODULE.bazel": "2e8dd40ede9c454042645fd8d8d0cd1527966aa5c919de86661e62953cd73d84",
     "https://bcr.bazel.build/modules/buildozer/7.1.2/source.json": "c9028a501d2db85793a6996205c8de120944f50a0d570438fcae0457a5f9d1f8",
     "https://bcr.bazel.build/modules/bzip2/1.0.8.bcr.2/MODULE.bazel": "43b570f55b7479bfa7c6675b227ccc3155d56377bb7782f178b2d1733196a435",
@@ -183,7 +183,8 @@
     "https://bcr.bazel.build/modules/rules_rust/0.60.0/source.json": "2b17f77e27489aa1b86b765a141642a1966a2a35fed0207277f3327fd09ef3d4",
     "https://bcr.bazel.build/modules/rules_shell/0.2.0/MODULE.bazel": "fda8a652ab3c7d8fee214de05e7a9916d8b28082234e8d2c0094505c5268ed3c",
     "https://bcr.bazel.build/modules/rules_shell/0.3.0/MODULE.bazel": "de4402cd12f4cc8fda2354fce179fdb068c0b9ca1ec2d2b17b3e21b24c1a937b",
-    "https://bcr.bazel.build/modules/rules_shell/0.3.0/source.json": "c55ed591aa5009401ddf80ded9762ac32c358d2517ee7820be981e2de9756cf3",
+    "https://bcr.bazel.build/modules/rules_shell/0.4.1/MODULE.bazel": "00e501db01bbf4e3e1dd1595959092c2fadf2087b2852d3f553b5370f5633592",
+    "https://bcr.bazel.build/modules/rules_shell/0.4.1/source.json": "4757bd277fe1567763991c4425b483477bb82e35e777a56fd846eb5cceda324a",
     "https://bcr.bazel.build/modules/snappy/1.2.1/MODULE.bazel": "ccfc05c2f321f33fa4190a57280f3b0b428982f7c66618f2acadf162fa0bbb95",
     "https://bcr.bazel.build/modules/snappy/1.2.1/source.json": "9a3e0181edc27543b4304f377a216ad09e014859db57921261552d0a4939ee1d",
     "https://bcr.bazel.build/modules/stardoc/0.5.1/MODULE.bazel": "1a05d92974d0c122f5ccf09291442580317cdd859f07a8655f1db9a60374f9f8",
@@ -887,8 +888,8 @@
     },
     "@@buildifier_prebuilt+//:defs.bzl%buildifier_prebuilt_deps_extension": {
       "general": {
-        "bzlTransitiveDigest": "qC/0s/MZ8q8Sf6/o/iJNMssZNgXa3CjJ7vEVbpHFQRs=",
-        "usagesDigest": "eWMDBEn8E8CrwAPXrlrjIap2pseSMhxDyDdrntHBOOE=",
+        "bzlTransitiveDigest": "YG9b6AzHuIdOM5begt59eoHL6Xy3A/8U8VYJqdUJVEo=",
+        "usagesDigest": "E92htUw9elHOT0ZHIEdwgPVnslFqL2iu3pcplYXXAxk=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -897,116 +898,116 @@
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildifier-darwin-amd64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildifier-darwin-amd64"
               ],
               "downloaded_file_path": "buildifier",
               "executable": true,
-              "sha256": "375f823103d01620aaec20a0c29c6cbca99f4fd0725ae30b93655c6704f44d71"
+              "sha256": "b7a3152cde0b3971b1107f2274afe778c5c154dcdf6c9c669a231e3c004f047e"
             }
           },
           "buildifier_darwin_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildifier-darwin-arm64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildifier-darwin-arm64"
               ],
               "downloaded_file_path": "buildifier",
               "executable": true,
-              "sha256": "5a6afc6ac7a09f5455ba0b89bd99d5ae23b4174dc5dc9d6c0ed5ce8caac3f813"
+              "sha256": "674c663f7b5cd03c002f8ca834a8c1c008ccb527a0a2a132d08a7a355883b22d"
             }
           },
           "buildifier_linux_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildifier-linux-amd64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildifier-linux-amd64"
               ],
               "downloaded_file_path": "buildifier",
               "executable": true,
-              "sha256": "5474cc5128a74e806783d54081f581662c4be8ae65022f557e9281ed5dc88009"
+              "sha256": "c969487c1af85e708576c8dfdd0bb4681eae58aad79e68ae48882c70871841b7"
             }
           },
           "buildifier_linux_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildifier-linux-arm64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildifier-linux-arm64"
               ],
               "downloaded_file_path": "buildifier",
               "executable": true,
-              "sha256": "0bf86c4bfffaf4f08eed77bde5b2082e4ae5039a11e2e8b03984c173c34a561c"
+              "sha256": "bdd9b92e2c65d46affeecaefb54e68d34c272d1f4a8c5b54929a3e92ab78820a"
             }
           },
           "buildifier_windows_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildifier-windows-amd64.exe"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildifier-windows-amd64.exe"
               ],
               "downloaded_file_path": "buildifier.exe",
               "executable": true,
-              "sha256": "370cd576075ad29930a82f5de132f1a1de4084c784a82514bd4da80c85acf4a8"
+              "sha256": "63a242f57e253efe7b9573d739c08a3d0e628efd84015c8dad17d87b6429e443"
             }
           },
           "buildozer_darwin_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildozer-darwin-amd64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildozer-darwin-amd64"
               ],
               "downloaded_file_path": "buildozer",
               "executable": true,
-              "sha256": "854c9583efc166602276802658cef3f224d60898cfaa60630b33d328db3b0de2"
+              "sha256": "7aa7929faddcee5a879135356bb4d38af3e895893c78d361e7cdb8dfb3e7d5e4"
             }
           },
           "buildozer_darwin_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildozer-darwin-arm64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildozer-darwin-arm64"
               ],
               "downloaded_file_path": "buildozer",
               "executable": true,
-              "sha256": "31b1bfe20d7d5444be217af78f94c5c43799cdf847c6ce69794b7bf3319c5364"
+              "sha256": "33b776862c31bfb4e2e6e88186cae02746d9084da8b7341930e77d42718277cc"
             }
           },
           "buildozer_linux_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildozer-linux-amd64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildozer-linux-amd64"
               ],
               "downloaded_file_path": "buildozer",
               "executable": true,
-              "sha256": "3305e287b3fcc68b9a35fd8515ee617452cd4e018f9e6886b6c7cdbcba8710d4"
+              "sha256": "775d17118aecd023352e75611dbe7c12a340e23615ffb270a1dec3f339239949"
             }
           },
           "buildozer_linux_arm64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildozer-linux-arm64"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildozer-linux-arm64"
               ],
               "downloaded_file_path": "buildozer",
               "executable": true,
-              "sha256": "0b5a2a717ac4fc911e1fec8d92af71dbb4fe95b10e5213da0cc3d56cea64a328"
+              "sha256": "058ad60f279a7b1db339bb287aed2056a992eddfe1b5d2e56d86256bdc9a93b3"
             }
           },
           "buildozer_windows_amd64": {
             "repoRuleId": "@@bazel_tools//tools/build_defs/repo:http.bzl%http_file",
             "attributes": {
               "urls": [
-                "https://github.com/bazelbuild/buildtools/releases/download/v7.3.1/buildozer-windows-amd64.exe"
+                "https://github.com/bazelbuild/buildtools/releases/download/v8.0.3/buildozer-windows-amd64.exe"
               ],
               "downloaded_file_path": "buildozer.exe",
               "executable": true,
-              "sha256": "58d41ce53257c5594c9bc86d769f580909269f68de114297f46284fbb9023dcf"
+              "sha256": "5ba106b25230e0e321b7259bee325ae6fa5b5771e54163ad865b1d18856f59ca"
             }
           },
           "buildifier_prebuilt_toolchains": {
             "repoRuleId": "@@buildifier_prebuilt+//:defs.bzl%_buildifier_toolchain_setup",
             "attributes": {
-              "assets_json": "[{\"arch\":\"amd64\",\"name\":\"buildifier\",\"platform\":\"darwin\",\"sha256\":\"375f823103d01620aaec20a0c29c6cbca99f4fd0725ae30b93655c6704f44d71\",\"version\":\"v7.3.1\"},{\"arch\":\"arm64\",\"name\":\"buildifier\",\"platform\":\"darwin\",\"sha256\":\"5a6afc6ac7a09f5455ba0b89bd99d5ae23b4174dc5dc9d6c0ed5ce8caac3f813\",\"version\":\"v7.3.1\"},{\"arch\":\"amd64\",\"name\":\"buildifier\",\"platform\":\"linux\",\"sha256\":\"5474cc5128a74e806783d54081f581662c4be8ae65022f557e9281ed5dc88009\",\"version\":\"v7.3.1\"},{\"arch\":\"arm64\",\"name\":\"buildifier\",\"platform\":\"linux\",\"sha256\":\"0bf86c4bfffaf4f08eed77bde5b2082e4ae5039a11e2e8b03984c173c34a561c\",\"version\":\"v7.3.1\"},{\"arch\":\"amd64\",\"name\":\"buildifier\",\"platform\":\"windows\",\"sha256\":\"370cd576075ad29930a82f5de132f1a1de4084c784a82514bd4da80c85acf4a8\",\"version\":\"v7.3.1\"},{\"arch\":\"amd64\",\"name\":\"buildozer\",\"platform\":\"darwin\",\"sha256\":\"854c9583efc166602276802658cef3f224d60898cfaa60630b33d328db3b0de2\",\"version\":\"v7.3.1\"},{\"arch\":\"arm64\",\"name\":\"buildozer\",\"platform\":\"darwin\",\"sha256\":\"31b1bfe20d7d5444be217af78f94c5c43799cdf847c6ce69794b7bf3319c5364\",\"version\":\"v7.3.1\"},{\"arch\":\"amd64\",\"name\":\"buildozer\",\"platform\":\"linux\",\"sha256\":\"3305e287b3fcc68b9a35fd8515ee617452cd4e018f9e6886b6c7cdbcba8710d4\",\"version\":\"v7.3.1\"},{\"arch\":\"arm64\",\"name\":\"buildozer\",\"platform\":\"linux\",\"sha256\":\"0b5a2a717ac4fc911e1fec8d92af71dbb4fe95b10e5213da0cc3d56cea64a328\",\"version\":\"v7.3.1\"},{\"arch\":\"amd64\",\"name\":\"buildozer\",\"platform\":\"windows\",\"sha256\":\"58d41ce53257c5594c9bc86d769f580909269f68de114297f46284fbb9023dcf\",\"version\":\"v7.3.1\"}]"
+              "assets_json": "[{\"arch\":\"amd64\",\"name\":\"buildifier\",\"platform\":\"darwin\",\"sha256\":\"b7a3152cde0b3971b1107f2274afe778c5c154dcdf6c9c669a231e3c004f047e\",\"version\":\"v8.0.3\"},{\"arch\":\"arm64\",\"name\":\"buildifier\",\"platform\":\"darwin\",\"sha256\":\"674c663f7b5cd03c002f8ca834a8c1c008ccb527a0a2a132d08a7a355883b22d\",\"version\":\"v8.0.3\"},{\"arch\":\"amd64\",\"name\":\"buildifier\",\"platform\":\"linux\",\"sha256\":\"c969487c1af85e708576c8dfdd0bb4681eae58aad79e68ae48882c70871841b7\",\"version\":\"v8.0.3\"},{\"arch\":\"arm64\",\"name\":\"buildifier\",\"platform\":\"linux\",\"sha256\":\"bdd9b92e2c65d46affeecaefb54e68d34c272d1f4a8c5b54929a3e92ab78820a\",\"version\":\"v8.0.3\"},{\"arch\":\"amd64\",\"name\":\"buildifier\",\"platform\":\"windows\",\"sha256\":\"63a242f57e253efe7b9573d739c08a3d0e628efd84015c8dad17d87b6429e443\",\"version\":\"v8.0.3\"},{\"arch\":\"amd64\",\"name\":\"buildozer\",\"platform\":\"darwin\",\"sha256\":\"7aa7929faddcee5a879135356bb4d38af3e895893c78d361e7cdb8dfb3e7d5e4\",\"version\":\"v8.0.3\"},{\"arch\":\"arm64\",\"name\":\"buildozer\",\"platform\":\"darwin\",\"sha256\":\"33b776862c31bfb4e2e6e88186cae02746d9084da8b7341930e77d42718277cc\",\"version\":\"v8.0.3\"},{\"arch\":\"amd64\",\"name\":\"buildozer\",\"platform\":\"linux\",\"sha256\":\"775d17118aecd023352e75611dbe7c12a340e23615ffb270a1dec3f339239949\",\"version\":\"v8.0.3\"},{\"arch\":\"arm64\",\"name\":\"buildozer\",\"platform\":\"linux\",\"sha256\":\"058ad60f279a7b1db339bb287aed2056a992eddfe1b5d2e56d86256bdc9a93b3\",\"version\":\"v8.0.3\"},{\"arch\":\"amd64\",\"name\":\"buildozer\",\"platform\":\"windows\",\"sha256\":\"5ba106b25230e0e321b7259bee325ae6fa5b5771e54163ad865b1d18856f59ca\",\"version\":\"v8.0.3\"}]"
             }
           }
         },
@@ -5181,7 +5182,7 @@
         "recordedFileInputs": {
           "@@//bazel/thirdparty/Cargo.lock": "ccf410ef5c36e9543e1aacb4c1a6bee1d0e93c21a7b2e23adb16ef0e81140b23",
           "@@//bazel/thirdparty/Cargo.toml": "f0f36130d850a0292ab6e0ad401e4acdb9035131bb665636fb0aa46a6714b20b",
-          "@@//bazel/thirdparty/wasmtime.BUILD": "5965c67bc62387fb92e086be8ed5ed07e84d1c272bdbc84525e1f38184f1b42c"
+          "@@//bazel/thirdparty/wasmtime.BUILD": "4a5b22c3d4fa6c1423a97d7cd03d18ac017df27f555e62479d8f759e7202e78a"
         },
         "recordedDirentsInputs": {},
         "envVariables": {
@@ -6737,7 +6738,7 @@
                 "https://static.crates.io/crates/wasmtime-c-api-impl/32.0.0/download"
               ],
               "strip_prefix": "wasmtime-c-api-impl-32.0.0",
-              "build_file_content": "###############################################################################\n# @generated\n# DO NOT MODIFY: This file is auto-generated by a crate_universe tool. To \n# regenerate this file, run the following:\n#\n#     bazel mod show_repo 'redpanda'\n###############################################################################\n\nload(\"@rules_rust//cargo:defs.bzl\", \"cargo_toml_env_vars\")\n\nload(\"@rules_rust//rust:defs.bzl\", \"rust_library\")\n\n# buildifier: disable=bzl-visibility\nload(\"@rules_rust//crate_universe/private:selects.bzl\", \"selects\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\ncargo_toml_env_vars(\n    name = \"cargo_toml_env_vars\",\n    src = \"Cargo.toml\",\n)\n\nrust_library(\n    name = \"wasmtime_c_api\",\n    deps = [\n        \"@crates__anyhow-1.0.98//:anyhow\",\n        \"@crates__futures-0.3.31//:futures\",\n        \"@crates__log-0.4.27//:log\",\n        \"@crates__tracing-0.1.41//:tracing\",\n        \"@crates__wasmtime-32.0.0//:wasmtime\",\n        \"@crates__wat-1.230.0//:wat\",\n    ],\n    proc_macro_deps = [\n        \"@crates__wasmtime-c-api-macros-32.0.0//:wasmtime_c_api_macros\",\n    ],\n    compile_data = glob(\n        allow_empty = True,\n        include = [\"**\"],\n        exclude = [\n            \"**/* *\",\n            \".tmp_git_root/**/*\",\n            \"BUILD\",\n            \"BUILD.bazel\",\n            \"WORKSPACE\",\n            \"WORKSPACE.bazel\",\n        ],\n    ),\n    crate_features = [\n        \"addr2line\",\n        \"async\",\n        \"cranelift\",\n        \"futures\",\n        \"gc\",\n        \"gc-drc\",\n        \"wat\",\n    ],\n    crate_root = \"src/lib.rs\",\n    edition = \"2021\",\n    rustc_env_files = [\n        \":cargo_toml_env_vars\",\n    ],\n    rustc_flags = [\n        \"--cap-lints=allow\",\n    ],\n    srcs = glob(\n        allow_empty = True,\n        include = [\"**/*.rs\"],\n    ),\n    tags = [\n        \"cargo-bazel\",\n        \"crate-name=wasmtime-c-api-impl\",\n        \"manual\",\n        \"noclippy\",\n        \"norustfmt\",\n    ],\n    target_compatible_with = select({\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [],\n        \"//conditions:default\": [\"@platforms//:incompatible\"],\n    }),\n    version = \"32.0.0\",\n)\n\n# Additive BUILD file content\n# This file is injected into the crate BUILD file\nload(\"@bazel_skylib//rules:expand_template.bzl\", \"expand_template\")\n\nexpand_template(\n    name = \"gen_conf\",\n    out = \"include/wasmtime/conf.h\",\n    substitutions = {\n        \"#cmakedefine WASMTIME_FEATURE_ADDR2LINE\": \"#define WASMTIME_FEATURE_ADDR2LINE\",\n        \"#cmakedefine WASMTIME_FEATURE_ASYNC\": \"#define WASMTIME_FEATURE_ASYNC\",\n        \"#cmakedefine WASMTIME_FEATURE_CACHE\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_COMPONENT_MODEL\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_COREDUMP\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_CRANELIFT\": \"#define WASMTIME_FEATURE_CRANELIFT\",\n        \"#cmakedefine WASMTIME_FEATURE_DEBUG_BUILTINS\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_DEMANGLE\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_DISABLE_LOGGING\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_GC_DRC\": \"#define WASMTIME_FEATURE_GC_DRC\",\n        \"#cmakedefine WASMTIME_FEATURE_GC_NULL\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_GC\": \"#define WASMTIME_FEATURE_GC\",\n        \"#cmakedefine WASMTIME_FEATURE_LOGGING\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_PARALLEL_COMPILATION\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_POOLING_ALLOCATOR\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_PROFILING\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_THREADS\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_WASI\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_WAT\": \"#define WASMTIME_FEATURE_WAT\",\n        \"#cmakedefine WASMTIME_FEATURE_WINCH\": \"\",\n    },\n    template = \"include/wasmtime/conf.h.in\",\n)\n\ncc_library(\n    name = \"wasmtime_c\",\n    hdrs = glob([\"include/**\"]) + [\":gen_conf\"],\n    strip_include_prefix = \"include\",\n    deps = [\":wasmtime_c_api\"],\n)\n"
+              "build_file_content": "###############################################################################\n# @generated\n# DO NOT MODIFY: This file is auto-generated by a crate_universe tool. To \n# regenerate this file, run the following:\n#\n#     bazel mod show_repo 'redpanda'\n###############################################################################\n\nload(\"@rules_rust//cargo:defs.bzl\", \"cargo_toml_env_vars\")\n\nload(\"@rules_rust//rust:defs.bzl\", \"rust_library\")\n\n# buildifier: disable=bzl-visibility\nload(\"@rules_rust//crate_universe/private:selects.bzl\", \"selects\")\n\npackage(default_visibility = [\"//visibility:public\"])\n\ncargo_toml_env_vars(\n    name = \"cargo_toml_env_vars\",\n    src = \"Cargo.toml\",\n)\n\nrust_library(\n    name = \"wasmtime_c_api\",\n    deps = [\n        \"@crates__anyhow-1.0.98//:anyhow\",\n        \"@crates__futures-0.3.31//:futures\",\n        \"@crates__log-0.4.27//:log\",\n        \"@crates__tracing-0.1.41//:tracing\",\n        \"@crates__wasmtime-32.0.0//:wasmtime\",\n        \"@crates__wat-1.230.0//:wat\",\n    ],\n    proc_macro_deps = [\n        \"@crates__wasmtime-c-api-macros-32.0.0//:wasmtime_c_api_macros\",\n    ],\n    compile_data = glob(\n        allow_empty = True,\n        include = [\"**\"],\n        exclude = [\n            \"**/* *\",\n            \".tmp_git_root/**/*\",\n            \"BUILD\",\n            \"BUILD.bazel\",\n            \"WORKSPACE\",\n            \"WORKSPACE.bazel\",\n        ],\n    ),\n    crate_features = [\n        \"addr2line\",\n        \"async\",\n        \"cranelift\",\n        \"futures\",\n        \"gc\",\n        \"gc-drc\",\n        \"wat\",\n    ],\n    crate_root = \"src/lib.rs\",\n    edition = \"2021\",\n    rustc_env_files = [\n        \":cargo_toml_env_vars\",\n    ],\n    rustc_flags = [\n        \"--cap-lints=allow\",\n    ],\n    srcs = glob(\n        allow_empty = True,\n        include = [\"**/*.rs\"],\n    ),\n    tags = [\n        \"cargo-bazel\",\n        \"crate-name=wasmtime-c-api-impl\",\n        \"manual\",\n        \"noclippy\",\n        \"norustfmt\",\n    ],\n    target_compatible_with = select({\n        \"@rules_rust//rust/platform:aarch64-unknown-linux-gnu\": [],\n        \"@rules_rust//rust/platform:x86_64-unknown-linux-gnu\": [],\n        \"//conditions:default\": [\"@platforms//:incompatible\"],\n    }),\n    version = \"32.0.0\",\n)\n\n# Additive BUILD file content\n# This file is injected into the crate BUILD file\nload(\"@bazel_skylib//rules:expand_template.bzl\", \"expand_template\")\nload(\"@rules_cc//cc:cc_library.bzl\", \"cc_library\")\n\nexpand_template(\n    name = \"gen_conf\",\n    out = \"include/wasmtime/conf.h\",\n    substitutions = {\n        \"#cmakedefine WASMTIME_FEATURE_ADDR2LINE\": \"#define WASMTIME_FEATURE_ADDR2LINE\",\n        \"#cmakedefine WASMTIME_FEATURE_ASYNC\": \"#define WASMTIME_FEATURE_ASYNC\",\n        \"#cmakedefine WASMTIME_FEATURE_CACHE\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_COMPONENT_MODEL\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_COREDUMP\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_CRANELIFT\": \"#define WASMTIME_FEATURE_CRANELIFT\",\n        \"#cmakedefine WASMTIME_FEATURE_DEBUG_BUILTINS\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_DEMANGLE\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_DISABLE_LOGGING\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_GC_DRC\": \"#define WASMTIME_FEATURE_GC_DRC\",\n        \"#cmakedefine WASMTIME_FEATURE_GC_NULL\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_GC\": \"#define WASMTIME_FEATURE_GC\",\n        \"#cmakedefine WASMTIME_FEATURE_LOGGING\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_PARALLEL_COMPILATION\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_POOLING_ALLOCATOR\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_PROFILING\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_THREADS\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_WASI\": \"\",\n        \"#cmakedefine WASMTIME_FEATURE_WAT\": \"#define WASMTIME_FEATURE_WAT\",\n        \"#cmakedefine WASMTIME_FEATURE_WINCH\": \"\",\n    },\n    template = \"include/wasmtime/conf.h.in\",\n)\n\ncc_library(\n    name = \"wasmtime_c\",\n    hdrs = glob([\"include/**\"]) + [\":gen_conf\"],\n    strip_include_prefix = \"include\",\n    deps = [\":wasmtime_c_api\"],\n)\n"
             }
           },
           "crates__wasmtime-c-api-macros-32.0.0": {
@@ -7377,7 +7378,7 @@
     "@@toolchains_llvm+//toolchain/extensions:llvm.bzl%llvm": {
       "general": {
         "bzlTransitiveDigest": "A+u2LOTdHfpDgS94zRvkPJu/Zdu++ZN5a8ruhZFRcRI=",
-        "usagesDigest": "RGxra9pIIm/nFwOBjKKefyeexC1ea1s/1qU84ZbMpqI=",
+        "usagesDigest": "7cQCQMYHRMakftftFUSW1bvDzzyScYxgeOeZwTw/O6A=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
@@ -7566,20 +7567,20 @@
               "exec_os": "",
               "libclang_rt": {},
               "llvm_mirror": "",
-              "llvm_version": "20.1.4",
+              "llvm_version": "20.1.6",
               "llvm_versions": {},
               "netrc": "",
               "sha256": {
-                "linux-aarch64": "c67a6f9091344274299bfc34875585d5688c10f88c7aa029535a9bc3ce010b69",
-                "linux-x86_64": "e45a9d5e763829f249635244dae9f7653a006549e67253c51730fabc59563501"
+                "linux-aarch64": "a543fc0d1d9608e52bc5aaa0c7a66f1303f198a483fc8695bc8af39ec0847e02",
+                "linux-x86_64": "7583b655e6b309ae72353f53181f4aa72ae98c81582de01aa08ba669dc03b1e4"
               },
               "strip_prefix": {},
               "urls": {
                 "linux-aarch64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.4/llvm-20.1.4-debian-11-aarch64-2025-05-13.tar.zst"
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.6/llvm-20.1.6-debian-11-aarch64-2025-06-04.tar.zst"
                 ],
                 "linux-x86_64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.4/llvm-20.1.4-debian-11-x86_64-2025-05-13.tar.zst"
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.6/llvm-20.1.6-debian-11-x86_64-2025-06-04.tar.zst"
                 ]
               }
             }
@@ -7629,7 +7630,7 @@
               "link_flags": {},
               "link_libs": {},
               "llvm_versions": {
-                "": "20.1.4"
+                "": "20.1.6"
               },
               "opt_compile_flags": {},
               "opt_link_flags": {},

@@ -479,12 +479,14 @@ struct compaction_config {
       ss::abort_source& as,
       std::optional<ntp_sanitizer_config> san_cfg = std::nullopt,
       std::optional<size_t> max_keys = std::nullopt,
+      std::chrono::milliseconds min_lag_ms = std::chrono::milliseconds{0},
       hash_key_offset_map* key_map = nullptr,
       scoped_file_tracker::set_t* to_clean = nullptr)
       : max_removable_local_log_offset(max_collect_offset)
       , tombstone_retention_ms(tombstone_ret_ms)
       , sanitizer_config(std::move(san_cfg))
       , key_offset_map_max_keys(max_keys)
+      , min_lag_ms(min_lag_ms)
       , hash_key_map(key_map)
       , files_to_cleanup(to_clean)
       , asrc(&as) {}
@@ -511,6 +513,9 @@ struct compaction_config {
     // Limit the number of keys stored by a compaction's key-offset map.
     std::optional<size_t> key_offset_map_max_keys;
 
+    // The value of min.compaction.lag.ms for this compaction.
+    std::chrono::milliseconds min_lag_ms;
+
     // Hash key-offset map to reuse across compactions.
     hash_key_offset_map* hash_key_map;
 
@@ -536,6 +541,7 @@ struct housekeeping_config {
       std::optional<size_t> max_bytes_in_log,
       model::offset max_collect_offset,
       std::optional<std::chrono::milliseconds> tombstone_retention_ms,
+      std::chrono::milliseconds min_lag_ms,
       ss::abort_source& as,
       std::optional<ntp_sanitizer_config> san_cfg = std::nullopt,
       hash_key_offset_map* key_map = nullptr)
@@ -545,6 +551,7 @@ struct housekeeping_config {
           as,
           std::move(san_cfg),
           std::nullopt,
+          min_lag_ms,
           key_map)
       , gc(upper, max_bytes_in_log) {}
 

@@ -1,3 +1,6 @@
+load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 #
 # This build is a translation from the cmake build. The second link below is a
 # cleaned up version of the first.

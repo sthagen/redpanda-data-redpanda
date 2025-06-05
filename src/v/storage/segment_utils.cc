@@ -743,7 +743,7 @@ ss::future<compaction_result> self_compact_segment(
 
     const bool may_remove_tombstones = may_have_removable_tombstones(s, cfg);
     if (
-      !s->has_compactible_offsets(cfg)
+      !s->is_compactible(cfg)
       || (s->finished_self_compaction() && !may_remove_tombstones)) {
         co_return compaction_result{s->size_bytes()};
     }

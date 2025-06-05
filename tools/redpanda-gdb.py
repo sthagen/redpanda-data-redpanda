@@ -657,6 +657,15 @@ class seastar_lw_shared_ptr():
             return self.ref['_p'].cast(self._no_esft_type())['_value'].address
 
 
+class seastar_basic_rwlock():
+    def __init__(self, ref):
+        self.ref = ref
+        self.count = ref["_sem"]["_count"]
+
+    def __repr__(self):
+        return f"basic_rwlock(count={self.count})"
+
+
 class seastar_shared_ptr():
     def __init__(self, ref):
         self.ref = ref
@@ -1681,9 +1690,31 @@ class ntp_archiver:
         self.last_marked_clean_time = time_point(
             ref['_last_marked_clean_time'])
         self.gate_count = ref['_gate']['_count']
+        self.paused = ref["_paused"]
 
     def __repr__(self):
-        return f"ntp_archiver(mutex={self.mutex}, last_upload_time={self.last_upload_time}, uploads_active={self.uploads_active}, last_marked_clean_time={self.last_marked_clean_time}, gate_count={self.gate_count})"
+        return f"ntp_archiver(mutex={self.mutex}, last_upload_time={self.last_upload_time}, uploads_active={self.uploads_active}, last_marked_clean_time={self.last_marked_clean_time}, gate_count={self.gate_count}, paused={self.paused})"
+
+
+class archival_metadata_stm:
+    def __init__(self, ref):
+        self.ref = ref
+        self.lock = named_samaphore(ref['_lock']['_sem'])
+        self.last_clean_at = model_offset(ref['_last_clean_at'])
+        self.last_dirty_at = model_offset(ref['_last_dirty_at'])
+
+    def __repr__(self):
+        return f"archival_metadata_stm(lock={self.lock}, last_clean_at={self.last_clean_at}, last_dirty_at={self.last_dirty_at})"
+
+
+class rm_stm:
+    def __init__(self, ref):
+        self.ref = ref
+        self.state_lock = seastar_basic_rwlock(ref['_state_lock'])
+        self.last_known_lso = model_offset(ref['_last_known_lso'])
+
+    def __repr__(self):
+        return f"rm_stm(state_lock={self.state_lock}, last_known_lso={self.last_known_lso})"
 
 
 class redpanda_partition:
@@ -1691,6 +1722,9 @@ class redpanda_partition:
         self.ptr = ptr
         self.archiver = ntp_archiver(
             std_unique_ptr(ptr['_archiver']).dereference())
+        self.archival_meta = archival_metadata_stm(
+            seastar_shared_ptr(ptr['_archival_meta_stm']).get())
+        self.rm = rm_stm(seastar_shared_ptr(ptr['_rm_stm']).get())
 
 
 class redpanda_partitions(gdb.Command):
@@ -1706,11 +1740,15 @@ class redpanda_partitions(gdb.Command):
             pm_ptr = find_partition_manager()
 
             for v in absl_get_nodes(pm_ptr['_ntp_table']):
-                ntp = v['value']['first']
-                p = redpanda_partition(
-                    seastar_lw_shared_ptr(v['value']['second']).get())
-                print("ntp: {}, partition: {}".format(model_ntp(ntp),
-                                                      p.archiver))
+                try:
+                    ntp = v['value']['first']
+                    p = redpanda_partition(
+                        seastar_lw_shared_ptr(v['value']['second']).get())
+                    print("ntp: {}, partition: {}, {}, {}".format(
+                        model_ntp(ntp), p.archiver, p.archival_meta, p.rm))
+                except Exception as e:
+                    ntp = v['value']['first']
+                    print("Skipping ntp {}: {}".format(model_ntp(ntp), e))
 
     def invoke(self, arg, from_tty):
         self.print_partitions()

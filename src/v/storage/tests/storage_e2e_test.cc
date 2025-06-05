@@ -667,6 +667,7 @@ TEST_F(storage_test_fixture, test_time_based_eviction) {
       std::nullopt,
       model::offset::min(), // should prevent compaction
       std::nullopt,
+      0ms,
       as);
     auto before = disk_log->offsets();
     disk_log->housekeeping(ccfg_no_compact).get();
@@ -681,6 +682,7 @@ TEST_F(storage_test_fixture, test_time_based_eviction) {
             std::nullopt,
             model::offset::max(),
             std::nullopt,
+            0ms,
             as);
       };
 
@@ -754,6 +756,7 @@ TEST_F(storage_test_fixture, test_size_based_eviction) {
       total_size + first_size,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
     compact_and_prefix_truncate(*disk_log, ccfg_no_compact);
 
@@ -783,6 +786,7 @@ TEST_F(storage_test_fixture, test_size_based_eviction) {
       max_size,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
     compact_and_prefix_truncate(*disk_log, ccfg);
 
@@ -848,7 +852,7 @@ TEST_F(storage_test_fixture, test_eviction_notification) {
       model::term_id(0),
       custom_ts_batch_generator(model::timestamp(gc_ts() + 10)));
     storage::housekeeping_config ccfg(
-      gc_ts, std::nullopt, model::offset::max(), std::nullopt, as);
+      gc_ts, std::nullopt, model::offset::max(), std::nullopt, 0ms, as);
 
     log->housekeeping(ccfg).get();
 
@@ -960,6 +964,7 @@ TEST_F(storage_test_fixture, write_concurrently_with_gc) {
           1000,
           model::offset::max(),
           std::nullopt,
+          0ms,
           as);
         return log->housekeeping(ccfg);
     };
@@ -1245,7 +1250,7 @@ TEST_F(storage_test_fixture, test_compaction_preserve_state) {
       ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov));
 
     storage::housekeeping_config compaction_cfg(
-      model::timestamp::min(), 1, model::offset::max(), std::nullopt, as);
+      model::timestamp::min(), 1, model::offset::max(), std::nullopt, 0ms, as);
     auto log = mgr.manage(std::move(ntp_cfg)).get();
     auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
     auto offsets_after_recovery = log->offsets();
@@ -1405,6 +1410,7 @@ TEST_F(storage_test_fixture, compacted_log_truncation) {
           std::nullopt,
           model::offset::max(),
           std::nullopt,
+          0ms,
           as);
         log->flush().get();
         check_dirty_and_closed_segment_bytes(log);
@@ -1470,6 +1476,7 @@ TEST_F(storage_test_fixture, check_segment_roll_after_compacted_log_truncate) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
     log->flush().get();
     check_dirty_and_closed_segment_bytes(log);
@@ -1652,7 +1659,12 @@ TEST_F(storage_test_fixture, partition_size_while_cleanup) {
     ASSERT_EQ(lstats_before.start_offset, model::offset{0});
 
     storage::housekeeping_config ccfg(
-      model::timestamp::min(), 50_KiB, model::offset::max(), std::nullopt, as);
+      model::timestamp::min(),
+      50_KiB,
+      model::offset::max(),
+      std::nullopt,
+      0ms,
+      as);
 
     // Compact 10 times, with a configuration calling for 60kiB max log size.
     // This results in prefix truncating at offset 50.
@@ -1771,6 +1783,7 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
 
     // There are 4 segments, and the last is the active segments. The first two
@@ -1838,6 +1851,7 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_terms) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
 
     // compact all the individual segments
@@ -1908,6 +1922,7 @@ TEST_F(storage_test_fixture, max_adjacent_segment_compaction) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
 
     // self compaction steps
@@ -2163,6 +2178,7 @@ TEST_F(storage_test_fixture, compaction_backlog_calculation) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
     /**
      * Initially all compaction rations are equal to 1.0 so it is easy to
@@ -2493,6 +2509,7 @@ TEST_F(storage_test_fixture, changing_cleanup_policy_back_and_forth) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
 
     // self compaction steps
@@ -2729,6 +2746,7 @@ TEST_F(storage_test_fixture, test_compacting_batches_of_different_types) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
     auto before_compaction = compact_in_memory(log);
 
@@ -2964,6 +2982,7 @@ TEST_F(storage_test_fixture, write_truncate_compact) {
                              std::nullopt,
                              model::offset::max(),
                              std::nullopt,
+                             0ms,
                              as))
                            .handle_exception_type(
                              [](const storage::segment_closed_exception&) {
@@ -3128,6 +3147,7 @@ TEST_F(storage_test_fixture, compaction_non_raft_batches_regression_test) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
     log->housekeeping(compaction_cfg).get();
 
@@ -3212,6 +3232,7 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
               std::nullopt,
               model::offset::max(),
               std::nullopt,
+              0ms,
               as))
             .get();
       };
@@ -3338,6 +3359,7 @@ TEST_F(storage_test_fixture, test_max_compact_offset) {
       std::nullopt,
       max_compact_offset,
       std::nullopt,
+      0ms,
       as);
     log->housekeeping(ccfg).get();
     auto final_stats = log->offsets();
@@ -3401,6 +3423,7 @@ TEST_F(storage_test_fixture, test_self_compaction_while_reader_is_open) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
     auto& segment = *(disk_log->segments().begin());
     auto stream = segment->offset_data_stream(model::offset(0)).get();
@@ -3452,6 +3475,7 @@ TEST_F(storage_test_fixture, test_simple_compaction_rebuild_index) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      0ms,
       as);
 
     log->housekeeping(ccfg).get();
@@ -3546,6 +3570,7 @@ do_compact_test(const compact_test_args args, storage_test_fixture& f) {
       std::nullopt,
       model::offset(args.max_compact_offs),
       std::nullopt,
+      0ms,
       as);
     log->housekeeping(ccfg).get();
     auto final_stats = log->offsets();
@@ -3816,6 +3841,7 @@ TEST_F(storage_test_fixture, test_bytes_eviction_overrides) {
             cfg.retention_bytes(),
             model::offset::max(),
             std::nullopt,
+            0ms,
             as));
 
         // retention won't violate the target
@@ -4530,6 +4556,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
       std::nullopt,
       log->offsets().committed_offset,
       std::nullopt,
+      0ms,
       as);
     log->housekeeping(h_cfg).get();
 
@@ -4720,6 +4747,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
       std::nullopt,
       log->offsets().committed_offset,
       std::nullopt,
+      0ms,
       as);
     log->housekeeping(h_cfg).get();
 
@@ -5250,7 +5278,7 @@ TEST_F(storage_test_fixture, dirty_and_closed_bytes_bookkeeping) {
     auto* disk_log = static_cast<disk_log_impl*>(log.get());
 
     housekeeping_config cfg{
-      model::timestamp::max(), 1, model::offset::max(), std::nullopt, abs};
+      model::timestamp::max(), 1, model::offset::max(), std::nullopt, 0ms, abs};
 
     // add a segment with random keys until a certain size
     auto add_segment = [&](size_t size, model::term_id term) {
@@ -5577,6 +5605,68 @@ TEST_F(storage_test_fixture, max_compaction_lag) {
     ASSERT_TRUE(is_set(meta.flags, bflags::compaction_checked));
     ASSERT_TRUE(is_set(meta.flags, bflags::compacted));
     read_and_validate_all_batches(log);
+}
+
+TEST_F(storage_test_fixture, min_compaction_lag) {
+    using log_manager_accessor = storage::testing_details::log_manager_accessor;
+    storage::log_manager mgr = make_log_manager();
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+
+    using overrides_t = storage::ntp_config::default_overrides;
+    overrides_t ov;
+    ov.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+    // Surely, no test could run this slow...
+    ov.min_compaction_lag_ms = 100000s;
+
+    auto ntp = model::ntp("kafka", "tapioca", 0);
+    auto log
+      = mgr
+          .manage(storage::ntp_config(
+            ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov)))
+          .get();
+
+    using bflags = storage::log_housekeeping_meta::bitflags;
+    static constexpr auto is_set = [](bflags var, auto flag) {
+        return (var & flag) == flag;
+    };
+
+    auto append_and_force_roll = [this, &log]() {
+        auto headers = append_random_batches<linear_int_kv_batch_generator>(
+          log, 10);
+        log->force_roll().get();
+    };
+
+    // Append and close one segment, then compact.
+    // Because of min lag, no segments should be compacted.
+    append_and_force_roll();
+    log_manager_accessor::housekeeping_scan(mgr).get();
+
+    auto& meta = log_manager_accessor::logs_list(mgr).front();
+    ASSERT_TRUE(is_set(meta.flags, bflags::lifetime_checked));
+    ASSERT_TRUE(is_set(meta.flags, bflags::compaction_checked));
+    // The log was compacted, but no segments were eligible due to min lag.
+    ASSERT_TRUE(is_set(meta.flags, bflags::compacted));
+    for (const auto& batch : read_and_validate_all_batches(log)) {
+        // The batches should not have been compacted.
+        ASSERT_EQ(
+          batch.record_count(),
+          linear_int_kv_batch_generator::records_per_batch);
+    }
+
+    // Roll to reset compaction checks. Appending more batches breaks
+    // the batch generator's expectation after compacting.
+    log->force_roll().get();
+    overrides_t ov2;
+    ov2.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+    ov2.min_compaction_lag_ms = 0s; // The default.
+    log->set_overrides(ov2);
+
+    log_manager_accessor::housekeeping_scan(mgr).get();
+    ASSERT_TRUE(is_set(meta.flags, bflags::lifetime_checked));
+    ASSERT_TRUE(is_set(meta.flags, bflags::compaction_checked));
+    ASSERT_TRUE(is_set(meta.flags, bflags::compacted));
+    auto batches = read_and_validate_all_batches(log);
+    linear_int_kv_batch_generator::validate_post_compaction(std::move(batches));
 }
 
 // Ensures that the log_housekeeping_meta level locking/concurrency in

@@ -256,7 +256,12 @@ TEST_F(log_builder_fixture, test_skipping_compaction_below_start_offset) {
     ASSERT_EQ(log.segment_count(), 2);
 
     housekeeping_config cfg{
-      model::timestamp::max(), 1, model::offset::max(), std::nullopt, abs};
+      model::timestamp::max(),
+      1,
+      model::offset::max(),
+      std::nullopt,
+      std::chrono::milliseconds{0},
+      abs};
 
     // Call into `disk_log_impl::gc` and listen for the eviction
     // notification being created.

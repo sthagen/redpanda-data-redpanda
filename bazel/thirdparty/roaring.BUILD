@@ -5,6 +5,8 @@
 # - Take a closer look at compile options that control cpu features.
 #
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 cc_library(
     name = "roaring",
     srcs = glob([

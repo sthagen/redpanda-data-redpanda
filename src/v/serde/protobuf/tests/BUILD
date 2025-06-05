@@ -1,3 +1,4 @@
+load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 

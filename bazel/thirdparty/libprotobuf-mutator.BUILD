@@ -1,5 +1,7 @@
 # See google/libprotobuf-mutator#91
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+
 cc_library(
     name = "libprotobuf_mutator",
     testonly = 1,

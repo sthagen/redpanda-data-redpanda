@@ -49,8 +49,10 @@ bazel_dep(name = "zstd", version = "1.5.7")
 bazel_dep(name = "patchelf", version = "0.18.0")
 bazel_dep(name = "bzip2", version = "1.0.8.bcr.2")
 
-bazel_dep(name = "buildifier_prebuilt", version = "7.3.1", dev_dependency = True)
+bazel_dep(name = "buildifier_prebuilt", version = "8.0.3", dev_dependency = True)
 bazel_dep(name = "rules_python", version = "1.0.0", dev_dependency = True)
+bazel_dep(name = "rules_cc", version = "0.1.1", dev_dependency = True)
+bazel_dep(name = "rules_shell", version = "0.4.1", dev_dependency = True)
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python", dev_dependency = True)
 python.toolchain(
@@ -165,16 +167,15 @@ COMPILERS = {
     "next": {
         "tars": {
             "aarch64": {
-                "build_date": "2025-05-13",
-                "sha": "c67a6f9091344274299bfc34875585d5688c10f88c7aa029535a9bc3ce010b69",
+                "build_date": "2025-06-04",
+                "sha": "a543fc0d1d9608e52bc5aaa0c7a66f1303f198a483fc8695bc8af39ec0847e02",
             },
             "x86_64": {
-                "build_date": "2025-05-13",
-                "sha": "e45a9d5e763829f249635244dae9f7653a006549e67253c51730fabc59563501",
+                "build_date": "2025-06-04",
+                "sha": "7583b655e6b309ae72353f53181f4aa72ae98c81582de01aa08ba669dc03b1e4",
             },
         },
-        # TODO: try again when the version with llvm/llvm-project#142648 is released
-        "version": "20.1.4",
+        "version": "20.1.6",
     },
 }
 
