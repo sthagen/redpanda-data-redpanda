@@ -27,6 +27,7 @@
 #include "kafka/protocol/describe_configs.h"
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/list_offset.h"
+#include "model/timestamp.h"
 #include "ssx/semaphore.h"
 #include "utils/retry.h"
 #include "utils/unresolved_address.h"
@@ -65,21 +66,13 @@ private:
     ssx::semaphore _lock{1, "k/client"};
 };
 
-namespace impl {
-
-constexpr auto default_external_mitigate = [](std::exception_ptr ex) {
-    return ss::make_exception_future(ex);
-};
-
-} // namespace impl
-
 class client {
 public:
     using external_mitigate
       = ss::noncopyable_function<ss::future<>(std::exception_ptr)>;
     explicit client(
       const YAML::Node& cfg,
-      external_mitigate mitigater = impl::default_external_mitigate);
+      std::optional<external_mitigate> mitigater = std::nullopt);
 
     /// \brief Connect to all brokers.
     ss::future<> connect();
@@ -119,6 +112,8 @@ public:
 
     ss::future<produce_response>
     produce_records(model::topic topic, chunked_vector<record_essence> batch);
+
+    ss::future<list_offsets_response> list_offsets(list_offsets_request req);
 
     ss::future<list_offsets_response> list_offsets(model::topic_partition tp);
 
@@ -187,7 +182,7 @@ public:
 
 private:
     ss::future<list_offsets_response>
-    do_list_offsets(model::topic_partition tp);
+    do_list_offsets(const list_offsets_request&);
 
     ss::future<describe_configs_response> do_describe_topics(
       chunked_vector<model::topic> topics,
@@ -207,6 +202,10 @@ private:
     /// \brief Handle errors by performing an action that may fix the cause of
     /// the error
     ss::future<> mitigate_error(std::exception_ptr ex);
+
+    /// \brief Handle errors by performing the optionally-configurable external
+    /// mitigation action that may fix the cause of the error
+    ss::future<> external_mitigate_error(std::exception_ptr ex) const;
 
     /// \brief Apply metadata update
     ss::future<> apply(metadata_response res);
@@ -244,8 +243,7 @@ private:
     /// \brief Wait for retries.
     ss::gate _gate;
 
-    ss::noncopyable_function<ss::future<>(std::exception_ptr)>
-      _external_mitigate;
+    std::optional<external_mitigate> _external_mitigate;
     ss::abort_source _as;
 };
 

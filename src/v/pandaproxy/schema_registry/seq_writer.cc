@@ -111,6 +111,13 @@ struct batch_builder : public storage::record_batch_builder {
 ss::future<> seq_writer::read_sync() {
     auto offsets = co_await _client.local().list_offsets(
       model::schema_registry_internal_tp);
+    if (
+      offsets.data.topics.size() != 1
+      || offsets.data.topics[0].partitions.size() != 1) {
+        throw kafka::exception(
+          kafka::error_code::unknown_server_error,
+          "Malformed ListOffsets Kafka response for internal topic");
+    }
 
     auto max_offset = offsets.data.topics[0].partitions[0].offset;
     co_await wait_for(max_offset - model::offset{1});

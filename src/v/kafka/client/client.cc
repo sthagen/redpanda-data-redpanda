@@ -10,6 +10,7 @@
 #include "kafka/client/client.h"
 
 #include "base/seastarx.h"
+#include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
 #include "kafka/client/broker.h"
 #include "kafka/client/configuration.h"
@@ -18,6 +19,7 @@
 #include "kafka/client/logger.h"
 #include "kafka/client/partitioners.h"
 #include "kafka/client/sasl_client.h"
+#include "kafka/client/topic_cache.h"
 #include "kafka/client/utils.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fetch.h"
@@ -39,13 +41,15 @@
 
 #include <absl/container/node_hash_map.h>
 
+#include <algorithm>
 #include <cstdlib>
 #include <exception>
+#include <iterator>
 #include <system_error>
 
 namespace kafka::client {
 
-client::client(const YAML::Node& cfg, external_mitigate mitigater)
+client::client(const YAML::Node& cfg, std::optional<external_mitigate> mitigater)
   : _config{cfg}
   , _seeds{_config.brokers()}
   , _topic_cache{}
@@ -81,7 +85,7 @@ ss::future<> client::connect() {
           },
           [this, &retries](std::exception_ptr ex) {
               ++retries;
-              return _external_mitigate(ex);
+              return external_mitigate_error(ex);
           },
           _as);
     });
@@ -155,8 +159,15 @@ ss::future<> client::apply(metadata_response res) {
     }
 }
 
+ss::future<> client::external_mitigate_error(std::exception_ptr ex) const {
+    if (_external_mitigate) {
+        return (*_external_mitigate)(ex);
+    }
+    return ss::make_exception_future(ex);
+}
+
 ss::future<> client::mitigate_error(std::exception_ptr ex) {
-    return _external_mitigate(ex).handle_exception(
+    return external_mitigate_error(ex).handle_exception(
       [this](std::exception_ptr ex) {
           _gate.check();
           try {
@@ -334,41 +345,118 @@ client::create_topic(kafka::creatable_topic req) {
     });
 }
 
+namespace {
+
+template<typename T, typename ErrorPredicate>
+requires(KafkaApi<typename T::api_type>)
+void throw_on_error(const T& r, ErrorPredicate should_throw) {
+    using type = std::remove_cvref_t<T>;
+    if constexpr (std::is_same_v<type, list_offsets_response>) {
+        for (const auto& topic : r.data.topics) {
+            for (const auto& partition : topic.partitions) {
+                if (
+                  partition.error_code != error_code::none
+                  && should_throw(partition.error_code)) {
+                    throw partition_error(
+                      model::topic_partition{
+                        topic.name, partition.partition_index},
+                      partition.error_code);
+                }
+            }
+        }
+    }
+}
+
+template<typename T>
+requires(KafkaApi<typename T::api_type>)
+void throw_on_error(const T& r) {
+    return throw_on_error(r, [](error_code) { return true; });
+}
+
+} // namespace
+
 ss::future<list_offsets_response>
-client::list_offsets(model::topic_partition tp) {
-    return gated_retry_with_mitigation(
-      [this, tp{std::move(tp)}]() { return do_list_offsets(tp); });
+client::list_offsets(list_offsets_request req) {
+    co_return co_await gated_retry_with_mitigation([this, &req]() {
+        return do_list_offsets(req);
+    }).then([](auto res) {
+        throw_on_error<list_offsets_response>(res);
+        return res;
+    });
 }
 
 ss::future<list_offsets_response>
-client::do_list_offsets(model::topic_partition tp) {
-    auto node_id = co_await _topic_cache.leader(tp);
-    auto broker = co_await _brokers.find(node_id);
-    chunked_vector<kafka::list_offset_topic> cv;
-    cv.push_back(kafka::list_offset_topic{
-      .name{tp.topic},
-      .partitions{
-        {
-          {.partition_index{tp.partition}, .max_num_offsets = 1},
-        },
-      },
-    });
-    auto res = co_await broker->dispatch(kafka::list_offsets_request{
-      .data = {
-        .topics = std::move(cv),
-      }});
+client::list_offsets(model::topic_partition tp) {
+    kafka::list_offsets_request req;
+    req.data.topics.emplace_back(kafka::list_offset_topic{
+      .name = std::move(tp.topic),
+      .partitions = {kafka::list_offset_partition{
+        .partition_index = tp.partition,
+        .max_num_offsets = 1,
+      }}});
+    return list_offsets(std::move(req));
+}
 
-    const auto& topics = res.data.topics;
-    auto ec = error_code::none;
-    if (topics.size() != 1 || topics[0].partitions.size() != 1) {
-        co_return ss::coroutine::exception(std::make_exception_ptr(
-          broker_error(node_id, error_code::unknown_server_error)));
+ss::future<list_offsets_response>
+client::do_list_offsets(const list_offsets_request& unsharded_req) {
+    // Group requests by the broker they are sent to
+    chunked_hash_map<model::node_id, kafka::list_offsets_request> reqs;
+
+    for (const auto& topic : unsharded_req.data.topics) {
+        for (const auto& partition : topic.partitions) {
+            model::topic_partition tp{topic.name, partition.partition_index};
+            auto node_id = co_await _topic_cache.leader(tp);
+
+            auto& topics
+              = reqs.try_emplace(node_id, kafka::list_offsets_request{})
+                  .first->second.data.topics;
+            auto topic_it = std::ranges::find(
+              topics, tp.topic, &list_offset_topic::name);
+            auto& topic = topic_it == topics.end()
+                            ? topics.emplace_back(std::move(tp.topic))
+                            : *topic_it;
+            topic.partitions.emplace_back(partition);
+        }
     }
-    ec = topics[0].partitions[0].error_code;
-    if (ec != error_code::none) {
-        co_return ss::coroutine::exception(
-          std::make_exception_ptr(partition_error(tp, ec)));
-    }
+
+    auto mapper = [this](auto kv) {
+        auto node_id = kv.first;
+        return _brokers.find(node_id).then(
+          [req = std::move(kv.second)](shared_broker_t broker) mutable {
+              return broker->dispatch(std::move(req));
+          });
+    };
+
+    auto reducer = [](list_offsets_response result, list_offsets_response val) {
+        result.data.throttle_time_ms += val.data.throttle_time_ms;
+        for (auto& topic : val.data.topics) {
+            auto topic_it = std::ranges::find(
+              result.data.topics,
+              topic.name,
+              &list_offset_topic_response::name);
+            if (topic_it == result.data.topics.end()) {
+                result.data.topics.push_back(std::move(topic));
+            } else {
+                std::ranges::move(
+                  topic.partitions, std::back_inserter(topic_it->partitions));
+            }
+        }
+        return result;
+    };
+
+    auto res = co_await ss::map_reduce(
+      std::make_move_iterator(reqs.begin()),
+      std::make_move_iterator(reqs.end()),
+      mapper,
+      list_offsets_response{},
+      reducer);
+
+    // We must always throw and retry if a custom mitigator is
+    // configured, as the mitigator may need to handle this error
+    throw_on_error(res, [&](auto ec) {
+        return kafka::is_retriable(ec) || _external_mitigate.has_value();
+    });
+
     co_return res;
 }
 

@@ -243,6 +243,7 @@ std::ostream& operator<<(std::ostream&, error_code);
 std::string_view error_code_to_str(error_code error);
 std::error_code make_error_code(error_code);
 const std::error_category& error_category() noexcept;
+bool is_retriable(error_code);
 
 } // namespace kafka
 

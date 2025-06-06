@@ -313,3 +313,26 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_btest(
+    name = "list_offsets",
+    timeout = "short",
+    srcs = [
+        "list_offsets.cc",
+    ],
+    deps = [
+        "//src/v/container:fragmented_vector",
+        "//src/v/kafka/client",
+        "//src/v/kafka/client/test:fixture",
+        "//src/v/kafka/client/test:utils",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:create_topics",
+        "//src/v/kafka/protocol:describe_configs",
+        "//src/v/model",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)

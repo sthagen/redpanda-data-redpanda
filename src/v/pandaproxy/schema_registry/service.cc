@@ -595,6 +595,14 @@ ss::future<> service::fetch_internal_topic() {
 
     auto offset_res = co_await _client.local().list_offsets(
       model::schema_registry_internal_tp);
+    if (
+      offset_res.data.topics.size() != 1
+      || offset_res.data.topics[0].partitions.size() != 1) {
+        throw kafka::exception(
+          kafka::error_code::unknown_server_error,
+          "Malformed ListOffsets Kafka response for internal topic");
+    }
+
     auto max_offset = offset_res.data.topics[0].partitions[0].offset;
     vlog(srlog.debug, "Schema registry: _schemas max_offset: {}", max_offset);
 
