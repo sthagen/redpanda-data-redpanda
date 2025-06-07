@@ -9,7 +9,9 @@ redpanda_cc_btest(
     deps = [
         "//src/v/http",
         "//src/v/kafka/protocol:join_group",
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy:json",
+        "//src/v/pandaproxy:rest_requests",
+        "//src/v/pandaproxy/rest:server",
         "//src/v/pandaproxy/test:fixture",
         "//src/v/pandaproxy/test:utils",
         "//src/v/test_utils:seastar_boost",
@@ -29,7 +31,9 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/http",
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy:json",
+        "//src/v/pandaproxy:rest_requests",
+        "//src/v/pandaproxy/rest:server",
         "//src/v/pandaproxy/test:fixture",
         "//src/v/pandaproxy/test:utils",
         "//src/v/test_utils:seastar_boost",

@@ -22,7 +22,7 @@
 #include "json/stringbuffer.h"
 #include "pandaproxy/json/exceptions.h"
 #include "pandaproxy/json/types.h"
-#include "pandaproxy/util.h"
+#include "pandaproxy/json/util.h"
 
 #include <seastar/core/loop.hh>
 #include <seastar/core/sstring.hh>
@@ -45,8 +45,6 @@ Buffer rjson_serialize_buf(T&& v) {
     Buffer buf;
     ::json::iobuf_writer<Buffer> wrt{buf};
 
-    using ::json::rjson_serialize;
-    using ::pandaproxy::json::rjson_serialize;
     rjson_serialize(wrt, std::forward<T>(v));
 
     return buf;

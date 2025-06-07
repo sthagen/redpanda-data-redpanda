@@ -35,7 +35,7 @@ redpanda_cc_library(
     include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy/schema_registry:types",
         "//src/v/serde",
         "@boost//:container_hash",
     ],
@@ -146,7 +146,7 @@ redpanda_cc_library(
         "//src/v/datalake/translation:translation_probe",
         "//src/v/features",
         "//src/v/model",
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy/schema_registry:types",
         "//src/v/raft",
         "//src/v/schema:registry",
         "//src/v/serde",
@@ -283,7 +283,7 @@ redpanda_cc_library(
     include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy/schema_registry:types",
     ],
 )
 
@@ -338,7 +338,7 @@ redpanda_cc_library(
         "//src/v/iceberg/conversion:schema_avro",
         "//src/v/iceberg/conversion:schema_protobuf",
         "//src/v/metrics",
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy/schema_registry:registry",
         "//src/v/schema:registry",
         "@avro",
         "@protobuf",
@@ -373,6 +373,7 @@ redpanda_cc_library(
         "//src/v/iceberg/conversion:conversion_outcome",
         "//src/v/iceberg/conversion:values_avro",
         "//src/v/iceberg/conversion:values_protobuf",
+        "//src/v/metrics",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@avro",
         "@protobuf",

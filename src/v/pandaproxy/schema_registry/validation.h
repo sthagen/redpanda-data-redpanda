@@ -10,13 +10,11 @@
 
 #pragma once
 
-#include "base/outcome.h"
 #include "base/seastarx.h"
 #include "cluster/fwd.h"
-#include "cluster/types.h"
+#include "cluster/topic_properties.h"
 #include "kafka/protocol/errors.h"
 #include "model/fundamental.h"
-#include "model/record_batch_reader.h"
 #include "pandaproxy/schema_registry/api.h"
 #include "pandaproxy/schema_registry/schema_id_validation.h"
 

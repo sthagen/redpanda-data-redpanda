@@ -11,7 +11,6 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "container/fragmented_vector.h"
 #include "pandaproxy/schema_registry/types.h"
 
 #include <seastar/core/future.hh>

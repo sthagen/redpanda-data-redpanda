@@ -12,7 +12,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy/schema_registry:types",
         "//src/v/schema:registry",
         "@seastar",
     ],

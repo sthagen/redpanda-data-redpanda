@@ -12,13 +12,10 @@
 #pragma once
 
 #include "kafka/protocol/errors.h"
-#include "pandaproxy/error.h"
 #include "pandaproxy/json/error.h"
-#include "pandaproxy/json/requests/error_reply.h"
 
 #include <fmt/format.h>
 
-#include <stdexcept>
 #include <string>
 
 namespace pandaproxy::json {

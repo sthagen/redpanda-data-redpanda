@@ -7,7 +7,9 @@ redpanda_cc_btest(
         "from_chars.cc",
     ],
     deps = [
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy:parsing",
+        "//src/v/reflection:type_traits",
+        "//src/v/strings:utf8",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:named_type",
         "@boost//:mpl",
@@ -24,7 +26,10 @@ redpanda_cc_btest(
         "httpd.cc",
     ],
     deps = [
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy:json",
+        "//src/v/pandaproxy:parsing",
+        "//src/v/reflection:type_traits",
+        "//src/v/strings:utf8",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@boost//:tuple",

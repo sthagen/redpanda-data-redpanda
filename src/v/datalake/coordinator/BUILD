@@ -85,7 +85,7 @@ redpanda_cc_library(
         "//src/v/datalake:table_creator",
         "//src/v/datalake:types",
         "//src/v/iceberg:filesystem_catalog",
-        "//src/v/pandaproxy",
+        "//src/v/pandaproxy/schema_registry:types",
         "//src/v/schema:registry",
         "//src/v/storage",
         "//src/v/storage:record_batch_builder",

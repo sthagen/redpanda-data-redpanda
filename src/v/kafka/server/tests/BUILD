@@ -168,7 +168,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/kafka/protocol/schemata:create_topics_request",
         "//src/v/kafka/server",
-        "//src/v/pandaproxy:subject_name_strategy",
+        "//src/v/pandaproxy/schema_registry:subject_name_strategy",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar//:testing",

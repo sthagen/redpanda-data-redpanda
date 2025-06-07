@@ -45,7 +45,6 @@
 #include "metrics/metrics.h"
 #include "net/conn_quota.h"
 #include "net/fwd.h"
-#include "pandaproxy/fwd.h"
 #include "pandaproxy/rest/configuration.h"
 #include "pandaproxy/rest/fwd.h"
 #include "pandaproxy/schema_registry/configuration.h"
