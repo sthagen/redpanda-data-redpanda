@@ -41,6 +41,9 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             "iceberg_enabled": "true",
             "iceberg_catalog_commit_interval_ms": 1000,
             "iceberg_target_lag_ms": 1000,
+
+            # Allow tests to alter _schemas (e.g. to disable uploads).
+            "kafka_nodelete_topics": [],
         }
         si_settings = SISettings(
             test_context,
@@ -411,9 +414,29 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                               redpanda=self.redpanda,
                               include_query_engines=[QueryEngineType.SPARK],
                               catalog_type=catalog_type) as dl:
+            # To make this test more robust, on top of lowering the upload
+            # rate, we'll just avoid uploading the schemas topic to allow us to
+            # reliably check that the schemas topic is not restored below
+            # (otherwise a leadership transfer could trigger an upload).
+            rpk: RpkTool = RpkTool(self.redpanda)
+            rpk.create_topic("_schemas",
+                             partitions=1,
+                             config={"redpanda.remote.write": "false"})
+
             all_topics, all_streams = self.start_all_topic_streams(dl)
             for t in all_topics:
                 dl.wait_for_translation_until_offset(t, 50)
+
+            # To simulate slow tiered storage, disable writes and then
+            # push more data to Iceberg.
+            for t in all_topics:
+                rpk.alter_topic_config(t, "redpanda.remote.write", "false")
+            offsets_snap = self.offsets_per_table(dl, all_topics)
+            wait_until(
+                lambda: self.tables_translated_more(dl, offsets_snap, 50),
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg="Translation not progressing after disabling uploads")
 
             for s in all_streams:
                 self.rpcn.stop_stream(s, should_finish=None)
@@ -447,12 +470,6 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             # and instead should write to their DLQs.
             for t in structured_tables:
                 dl.wait_for_translation_until_offset(f"{t}~dlq", 50)
-                offset_zero_res = dl.spark().run_query_fetch_all(
-                    f"select * from redpanda.`{t}~dlq` where redpanda.offset = 0"
-                )
-                assert len(
-                    offset_zero_res
-                ) == 1, f"Expected exactly one record with offset zero, got: {offset_zero_res}"
 
             structured_offsets_snap_after = self.offsets_per_table(
                 dl, structured_tables)
@@ -478,6 +495,12 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                        backoff_sec=1,
                        err_msg="Translation not progressing after restore")
 
+            # Reenable tiered storage writes to allow for end-of-test
+            # scrubbing.
+            for t in all_topics:
+                rpk.alter_topic_config(t, "redpanda.remote.write", "true")
+            rpk.alter_topic_config("_schemas", "redpanda.remote.write", "true")
+
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())
@@ -497,9 +520,29 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                               redpanda=self.redpanda,
                               include_query_engines=[QueryEngineType.SPARK],
                               catalog_type=catalog_type) as dl:
+            # To make this test more robust, on top of lowering the upload
+            # rate, we'll just avoid uploading the schemas topic to allow us to
+            # reliably check that the schemas topic is not restored below
+            # (otherwise a leadership transfer could trigger an upload).
+            rpk: RpkTool = RpkTool(self.redpanda)
+            rpk.create_topic("_schemas",
+                             partitions=1,
+                             config={"redpanda.remote.write": "false"})
+
             all_topics, all_streams = self.start_all_topic_streams(dl)
             for t in all_topics:
                 dl.wait_for_translation_until_offset(t, 50)
+
+            # To simulate slow tiered storage, disable writes and then
+            # push more data to Iceberg.
+            for t in all_topics:
+                rpk.alter_topic_config(t, "redpanda.remote.write", "false")
+            offsets_snap = self.offsets_per_table(dl, all_topics)
+            wait_until(
+                lambda: self.tables_translated_more(dl, offsets_snap, 50),
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg="Translation not progressing after disabling uploads")
 
             for s in all_streams:
                 self.rpcn.stop_stream(s, should_finish=None)
@@ -516,7 +559,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             offsets_snap = self.offsets_per_table(dl, all_topics)
 
             # All of our topics should continue to write with no issues since
-            # we have recreated some schemas.
+            # we have recreated our schemas.
             wait_until(
                 lambda: self.tables_translated_more(dl, offsets_snap, 50),
                 timeout_sec=60,
@@ -532,10 +575,12 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                 self.redpanda.logger.debug(f"Duplicate offsets for {t}: {res}")
                 assert len(
                     res) > 0, f"Expected some duplicate offsets for table {t}"
-                zero_offset_count_res = [tup for tup in res if tup[0] == 0]
-                assert [
-                    (0, 2)
-                ] == zero_offset_count_res, f"Expected offset 0 to be duplicated: {zero_offset_count_res}"
             assert dl.num_tables() == len(
                 all_topics
             ), "Expected one table per topic (i.e. no DLQ tables)"
+
+            # Reenable tiered storage writes to allow for end-of-test
+            # scrubbing.
+            for t in all_topics:
+                rpk.alter_topic_config(t, "redpanda.remote.write", "true")
+            rpk.alter_topic_config("_schemas", "redpanda.remote.write", "true")

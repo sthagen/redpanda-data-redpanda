@@ -65,8 +65,8 @@ struct diskcheck_opts
     /// Scheduling group that the benchmark will operate under
     ss::scheduling_group sg;
 
-    /// Total size a single shard will write/read to disk
-    uint64_t file_size() const { return data_size / ss::smp::count; }
+    /// Total size a single shard will write/read to a single file on disk
+    uint64_t file_size() const { return data_size / parallelism; }
     /// Address where allocated memory is placed will be a multiple of this
     uint64_t alignment() const { return request_size >= 4096 ? 4096ULL : 512; }
 

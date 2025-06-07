@@ -96,18 +96,18 @@ private:
 
     ss::future<std::vector<self_test_result>> initialize_benchmark(ss::sstring);
     ss::future<std::vector<self_test_result>>
-    run_configured_benchmarks(ss::file&);
+    run_configured_benchmarks(std::vector<ss::file>&);
 
     ss::future<> verify_remaining_space(size_t dataset_size);
 
     template<read_or_write mode>
-    ss::future<metrics> do_run_benchmark(ss::file&);
+    ss::future<metrics> do_run_benchmark(std::vector<ss::file>&);
 
     template<read_or_write mode>
     ss::future<> run_benchmark_fiber(
       ss::lowres_clock::time_point start, ss::file& file, metrics& m);
 
-    uint64_t get_pos();
+    uint64_t get_next_pos(uint64_t pos);
 
 private:
     /// To ensure test doesn't attempt to take all available disk space
@@ -115,8 +115,6 @@ private:
 
     ss::io_intent _intent{};
     bool _cancelled{false};
-    /// Next read/write offset in file
-    uint64_t _last_pos{0};
     /// For shutting down service
     ss::abort_source _as;
     ss::gate _gate;

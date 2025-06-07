@@ -16,12 +16,15 @@
 #include "cluster/logger.h"
 #include "random/generators.h"
 #include "ssx/sformat.h"
+#include "utils/directory_walker.h"
 #include "utils/uuid.h"
 
 #include <seastar/core/seastar.hh>
 #include <seastar/core/smp.hh>
 
 #include <boost/range/irange.hpp>
+
+#include <cstdint>
 
 namespace cluster::self_test {
 
@@ -90,50 +93,69 @@ ss::future<std::vector<self_test_result>> diskcheck::run(diskcheck_opts opts) {
       opts);
     _cancelled = false;
     _opts = opts;
-    _last_pos = 0;
     if (std::filesystem::exists(_opts.dir)) {
         /// Ensure no leftover large files in the event there was a
         /// crash mid run and cleanup didn't get a chance to occur
         std::filesystem::remove_all(_opts.dir);
     }
     std::filesystem::create_directory(_opts.dir);
+    const auto self_test_prefix = "rp-self-test";
     const auto fname = ssx::sformat(
-      "{}/rp-self-test-{}-{}",
+      "{}/{}-{}-{}",
       _opts.dir.string(),
+      self_test_prefix,
       uuid_t::create(),
       ss::this_shard_id());
-    co_return co_await initialize_benchmark(fname).finally([fname] {
-        vlog(
-          clusterlog.debug,
-          "redpanda self-test disk benchmark completed gracefully");
-        return ss::remove_file(fname).handle_exception_type(
-          [fname](const std::filesystem::filesystem_error& fs_ex) {
-              vlog(
-                clusterlog.error,
-                "Couldn't delete {}, reason {}",
-                fname,
-                fs_ex);
-          });
-    });
+    co_return co_await initialize_benchmark(fname).finally(
+      [this, &self_test_prefix] {
+          vlog(
+            clusterlog.debug,
+            "redpanda self-test disk benchmark completed gracefully");
+          return directory_walker::walk(
+            _opts.dir.string(),
+            [this,
+             &self_test_prefix](const ss::directory_entry& de) -> ss::future<> {
+                if (!de.name.contains(self_test_prefix)) {
+                    return ss::now();
+                }
+                auto full_name = fmt::format(
+                  "{}/{}", _opts.dir.string(), de.name);
+                vlog(clusterlog.debug, "Deleting file: {}", full_name);
+                return ss::remove_file(full_name).handle_exception_type(
+                  [full_name](const std::filesystem::filesystem_error& fs_ex)
+                    -> ss::future<> {
+                      vlog(
+                        clusterlog.error,
+                        "Couldn't delete {}, reason {}",
+                        full_name,
+                        fs_ex);
+                      return ss::now();
+                  });
+            });
+      });
 }
 
 ss::future<std::vector<self_test_result>>
-diskcheck::initialize_benchmark(ss::sstring fname) {
+diskcheck::initialize_benchmark(ss::sstring basename) {
     auto flags = ss::open_flags::create | ss::open_flags::rw;
-    if (_opts.dsync) {
-        flags |= ss::open_flags::dsync;
-    }
     ss::file_open_options file_opts{
       .extent_allocation_size_hint = _opts.file_size(),
       .append_is_unlikely = true};
     try {
-        vlog(clusterlog.debug, "Creating file: {}", fname);
-        auto file = co_await ss::open_file_dma(fname, flags, file_opts);
-        co_await file.truncate(_opts.file_size());
-        co_await file.flush();
+        std::vector<ss::file> files;
+        for (size_t i = 0; i < _opts.parallelism; ++i) {
+            auto filename = fmt::format("{}-{}", basename, i);
+            vlog(clusterlog.debug, "Creating file: {}", filename);
+            auto file = co_await ss::open_file_dma(filename, flags, file_opts);
+            co_await file.allocate(0, _opts.file_size());
+            co_await file.truncate(_opts.file_size());
+            co_await file.flush();
+            files.push_back(std::move(file));
+        }
         co_return co_await ss::with_scheduling_group(
-          _opts.sg,
-          [this, &file]() mutable { return run_configured_benchmarks(file); });
+          _opts.sg, [this, &files]() mutable {
+              return run_configured_benchmarks(files);
+          });
     } catch (const diskcheck_aborted_exception& ex) {
         vlog(clusterlog.debug, "diskcheck stopped due to call to stop()");
     }
@@ -141,9 +163,9 @@ diskcheck::initialize_benchmark(ss::sstring fname) {
 }
 
 ss::future<std::vector<self_test_result>>
-diskcheck::run_configured_benchmarks(ss::file& file) {
+diskcheck::run_configured_benchmarks(std::vector<ss::file>& files) {
     std::vector<self_test_result> r;
-    auto write_metrics = co_await do_run_benchmark<read_or_write::write>(file);
+    auto write_metrics = co_await do_run_benchmark<read_or_write::write>(files);
     auto result = write_metrics.to_st_result();
     result.name = _opts.name;
     result.info = fmt::format(
@@ -155,7 +177,7 @@ diskcheck::run_configured_benchmarks(ss::file& file) {
     r.push_back(std::move(result));
     if (!_opts.skip_read) {
         auto read_metrics = co_await do_run_benchmark<read_or_write::read>(
-          file);
+          files);
         auto result = read_metrics.to_st_result();
         result.name = _opts.name;
         result.info = "read run";
@@ -169,7 +191,7 @@ diskcheck::run_configured_benchmarks(ss::file& file) {
 }
 
 template<diskcheck::read_or_write mode>
-ss::future<metrics> diskcheck::do_run_benchmark(ss::file& file) {
+ss::future<metrics> diskcheck::do_run_benchmark(std::vector<ss::file>& files) {
     auto irange = boost::irange<uint16_t>(0, _opts.parallelism);
     auto start = ss::lowres_clock::now();
     auto start_highres = ss::lowres_system_clock::now();
@@ -179,9 +201,10 @@ ss::future<metrics> diskcheck::do_run_benchmark(ss::file& file) {
     timer.set_callback([this] { _intent.cancel(); });
     timer.rearm(start + _opts.duration);
     try {
-        co_await ss::parallel_for_each(irange, [this, &start, &file, &m](auto) {
-            return run_benchmark_fiber<mode>(start, file, m);
-        });
+        co_await ss::parallel_for_each(
+          irange, [this, &start, &files, &m](uint64_t i) {
+              return this->run_benchmark_fiber<mode>(start, files[i], m);
+          });
     } catch (const ss::cancelled_error&) {
         /// Expect this to be thrown from cancelled futures via io calls, due to
         /// _intent.cancel() having been called
@@ -191,8 +214,20 @@ ss::future<metrics> diskcheck::do_run_benchmark(ss::file& file) {
     auto end = ss::lowres_system_clock::now();
     m.set_start_end_time(start_highres, end);
     m.set_total_time(end - start_highres);
-    _last_pos = 0;
     co_return m;
+}
+
+ss::future<size_t> write_and_maybe_flush(
+  ss::file& file,
+  uint64_t pos,
+  const std::vector<iovec>& iov,
+  bool dsync,
+  ss::io_intent* intent) {
+    auto bytes_written = co_await file.dma_write(pos, iov, intent);
+    if (dsync) {
+        co_await file.flush();
+    }
+    co_return bytes_written;
 }
 
 template<diskcheck::read_or_write mode>
@@ -209,35 +244,30 @@ ss::future<> diskcheck::run_benchmark_fiber(
         iov.push_back(iovec{buf.get(), len});
     }
 
+    uint64_t pos = 0;
     auto stop = start + _opts.duration;
     while (stop > ss::lowres_clock::now() && !_cancelled) {
         if (unlikely(_as.abort_requested())) {
             throw diskcheck_aborted_exception();
         }
-        co_await m.measure([this, &iov, &file] {
+        co_await m.measure([this, &iov, &file, &pos] {
             if constexpr (mode == read_or_write::write) {
-                return file.dma_write(get_pos(), iov, &_intent);
+                return write_and_maybe_flush(
+                  file, pos, iov, _opts.dsync, &_intent);
             } else {
-                return file.dma_read(get_pos(), iov, &_intent);
+                return file.dma_read(pos, iov, &_intent);
             }
         });
+        pos = get_next_pos(pos);
     }
 }
 
-/// Gets the next offset in the file to write. All fibers will be accessing
-/// _last_pos without explicit synchronization, within one shard. The order of
-/// what is written is not important it is just random data. Functionally this
-/// will boil down to different fibers calling this method, obtaining
-/// monotonically increasing offsets, making io calls that will be queued in
-/// order of increasing offset.
-uint64_t diskcheck::get_pos() {
-    uint64_t pos = _last_pos;
-    if (pos + _opts.request_size >= _opts.file_size()) {
-        _last_pos = 0;
+uint64_t diskcheck::get_next_pos(uint64_t pos) {
+    uint64_t next_pos = pos + _opts.request_size;
+    if (next_pos >= _opts.file_size()) {
         return 0;
     }
-    _last_pos += _opts.request_size;
-    return pos;
+    return next_pos;
 }
 
 } // namespace cluster::self_test

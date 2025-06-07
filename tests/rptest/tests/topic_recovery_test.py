@@ -23,6 +23,8 @@ from ducktape.cluster.cluster import ClusterNode
 from ducktape.mark import matrix
 from ducktape.tests.test import TestContext
 from ducktape.utils.util import wait_until
+import ducktape
+import ducktape.errors
 
 from rptest.archival.abs_client import ABSClient
 from rptest.archival.s3_client import S3Client
@@ -1470,7 +1472,7 @@ class TopicRecoveryTest(RedpandaTest):
                 # Upload should happen not more than in cloud_storage_segment_max_upload_interval_sec
                 backoff_sec=CLOUD_STORAGE_SEGMENT_MAX_UPLOAD_INTERVAL_SEC / 2,
                 err_msg='objects not found in S3')
-        except TimeoutError:
+        except ducktape.errors.TimeoutError:
             assert deltas.maxlen is not None
             missing_measurements = deltas.maxlen - len(deltas)
             if missing_measurements > 0:

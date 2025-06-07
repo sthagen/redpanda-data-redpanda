@@ -661,9 +661,16 @@ class seastar_basic_rwlock():
     def __init__(self, ref):
         self.ref = ref
         self.count = ref["_sem"]["_count"]
+        self.wait_list = abortable_fifo(ref["_sem"]["_wait_list"])
+        self.wait_list_nrs = [
+            int(std_optional(e.payload).get()['nr']) for e in self.wait_list
+        ]
+        self.wait_list_prs = [
+            std_optional(e.payload).get()['pr'] for e in self.wait_list
+        ]
 
     def __repr__(self):
-        return f"basic_rwlock(count={self.count})"
+        return f"basic_rwlock(count={self.count}, wait_list_size={self.wait_list.size}, wait_list_nrs={self.wait_list_nrs}, wait_list_prs={self.wait_list_prs})"
 
 
 class seastar_shared_ptr():
@@ -1083,6 +1090,13 @@ def find_partition_manager(shard=None):
         '__begin_'][shard]['service']['_p']
 
 
+def find_cloud_storage_clients(shard=None):
+    if shard is None:
+        shard = current_shard()
+    return gdb.parse_and_eval('debug::app')['cloud_storage_clients'][
+        '_instances']['__begin_'][shard]['service']['_p']
+
+
 class index_state:
     def __init__(self, ref):
         self.ref = ref
@@ -1200,6 +1214,9 @@ class segment:
 
     def offsets_tracker(self):
         return offset_tracker(self.ref['_tracker'])
+
+    def destructive_ops(self):
+        return seastar_basic_rwlock(self.ref['_destructive_ops'])
 
     def reader(self):
         return segment_reader(self.ref["_reader"])
@@ -1321,6 +1338,9 @@ class boost_intrusive_list:
 
     def __len__(self):
         return len(list(iter(self)))
+
+    def __repr__(self):
+        return ",".join([str(x) for x in self])
 
 
 class readers_cache:
@@ -1537,7 +1557,8 @@ class redpanda_storage(gdb.Command):
             print(f"{ntp} segment count {log.segments().size()}")
             for segment in log.segments():
                 offsets = segment.offsets_tracker()
-                print(f"{ntp} - {offsets}")
+                destructive_ops = segment.destructive_ops()
+                print(f"{ntp} - {offsets} - {destructive_ops}")
 
     def print_readers_cache_memory(self):
         print(f"# Readers cache")
@@ -1665,6 +1686,26 @@ class named_samaphore:
         return f"named_samaphore(count={self.count}, wait_list_size={self.wait_list.size})"
 
 
+class offset_monitor:
+    def __init__(self, ref):
+        self.ref = ref
+        self.waiters_size = self.ref['_waiters']['tree_']['size_']
+
+    def __repr__(self):
+        return f"offset_monitor(waiters_size={self.waiters_size})"
+
+
+class condition_variable:
+    def __init__(self, ref):
+        self.ref = ref
+        self.waiters = boost_intrusive_list(ref['_waiters'])
+        self.signaled = ref['_signalled']
+        self.ex = ref['_ex']
+
+    def __repr__(self):
+        return f"condition_variable(waiters_count={len(self.waiters)}, signalled={self.signaled}, ex={self.ex})"
+
+
 def lowres_clock_now():
     """Returns the current time in lowres_clock format."""
     return gdb.parse_and_eval('seastar::lowres_clock::_now')
@@ -1681,19 +1722,66 @@ class time_point:
         return f"time_point(value={self.value}, time_from_now={self.time_from_now/1000000}ms)"
 
 
-class ntp_archiver:
+class cloud_client_ptr:
+    def __init__(self, shared_ptr):
+        self.client_raw_ptr = seastar_shared_ptr(shared_ptr).get()
+        self.client = self.client_raw_ptr.dereference()
+
+    def __repr__(self):
+
+        return f"client({self.client_raw_ptr}, {self.client})"
+
+
+class cloud_client_lease:
     def __init__(self, ref):
+        self.ref = ref
+        self.client = cloud_client_ptr(ref['client'])
+
+    def __repr__(self):
+        return f"lease(client={self.client})"
+
+
+class cloud_client_pool:
+    def __init__(self, ref):
+        self.ref = ref
+        self.pool = [
+            cloud_client_ptr(c) for c in seastar_circular_buffer(ref['_pool'])
+        ]
+        self.leased = [
+            cloud_client_lease(l)
+            for l in boost_intrusive_list(ref['_leased'], "_hook")
+        ]
+
+    def __repr__(self):
+        return f"client_pool(pool={self.pool}, leased={self.leased})"
+
+
+class cloud_storage_remote:
+    def __init__(self, ref):
+        self.ref = ref
+        self.gate_count = ref['_gate']['_count']
+
+    def __repr__(self):
+        return f"cloud_storage_remote(gate_count={self.gate_count})"
+
+
+class ntp_archiver:
+    def __init__(self, ref, shard=None):
         self.ref = ref
         self.mutex = named_samaphore(ref['_mutex'])
         self.last_upload_time = time_point(ref['_last_upload_time'])
         self.uploads_active = named_samaphore(ref['_uploads_active'])
+        self.start_term = model_offset(ref['_start_term'])
         self.last_marked_clean_time = time_point(
             ref['_last_marked_clean_time'])
         self.gate_count = ref['_gate']['_count']
         self.paused = ref["_paused"]
+        self.leader_cond = condition_variable(ref['_leader_cond'])
+        self.flush_cond = condition_variable(ref['_flush_cond'])
+        self.remote = cloud_storage_remote(ref['_remote'].referenced_value())
 
     def __repr__(self):
-        return f"ntp_archiver(mutex={self.mutex}, last_upload_time={self.last_upload_time}, uploads_active={self.uploads_active}, last_marked_clean_time={self.last_marked_clean_time}, gate_count={self.gate_count}, paused={self.paused})"
+        return f"ntp_archiver(mutex={self.mutex}, start_term={self.start_term}, last_upload_time={self.last_upload_time}, uploads_active={self.uploads_active}, last_marked_clean_time={self.last_marked_clean_time}, gate_count={self.gate_count}, paused={self.paused}, leader_cond={self.leader_cond}, flush_cond={self.flush_cond}, remote={self.remote})"
 
 
 class archival_metadata_stm:
@@ -1702,9 +1790,30 @@ class archival_metadata_stm:
         self.lock = named_samaphore(ref['_lock']['_sem'])
         self.last_clean_at = model_offset(ref['_last_clean_at'])
         self.last_dirty_at = model_offset(ref['_last_dirty_at'])
+        self.op_lock = named_samaphore(ref['_op_lock']['_sem'])
+        self.apply_lock = named_samaphore(ref['_apply_lock']['_sem'])
 
     def __repr__(self):
-        return f"archival_metadata_stm(lock={self.lock}, last_clean_at={self.last_clean_at}, last_dirty_at={self.last_dirty_at})"
+        return f"archival_metadata_stm(lock={self.lock}, last_clean_at={self.last_clean_at}, last_dirty_at={self.last_dirty_at}, op_lock={self.op_lock}, apply_lock={self.apply_lock})"
+
+
+class log_eviction_stm:
+    def __init__(self, ref):
+        self.ref = ref
+        self.storage_eviction_offset = model_offset(
+            ref['_storage_eviction_offset'])
+        self.delete_records_eviction_offset = model_offset(
+            ref['_delete_records_eviction_offset'])
+        self.cached_kafka_offset_override = model_offset(
+            ref['_cached_kafka_start_offset_override'])
+        self.has_pending_truncation = condition_variable(
+            ref['_has_pending_truncation'])
+        self.gate_count = ref['_gate']['_count']
+        self.op_lock = named_samaphore(ref['_op_lock']['_sem'])
+        self.apply_lock = named_samaphore(ref['_apply_lock']['_sem'])
+
+    def __repr__(self):
+        return f"log_eviction_stm(has_pending_truncation={self.has_pending_truncation}, storage_eviction_offset={self.storage_eviction_offset}, delete_records_eviction_offset={self.delete_records_eviction_offset}, cached_kafka_offset_override={self.cached_kafka_offset_override}, gate_count={self.gate_count}, op_lock={self.op_lock}, apply_lock={self.apply_lock})"
 
 
 class rm_stm:
@@ -1712,9 +1821,30 @@ class rm_stm:
         self.ref = ref
         self.state_lock = seastar_basic_rwlock(ref['_state_lock'])
         self.last_known_lso = model_offset(ref['_last_known_lso'])
+        self.op_lock = named_samaphore(ref['_op_lock']['_sem'])
+        self.apply_lock = named_samaphore(ref['_apply_lock']['_sem'])
 
     def __repr__(self):
-        return f"rm_stm(state_lock={self.state_lock}, last_known_lso={self.last_known_lso})"
+        return f"rm_stm(state_lock={self.state_lock}, last_known_lso={self.last_known_lso}, op_lock={self.op_lock}, apply_lock={self.apply_lock})"
+
+
+class consensus:
+    def __init__(self, ref):
+        self.ref = ref
+        self.term = ref['_term']
+        self.confirmed_term = ref['_confirmed_term']
+        self.election_lock = named_samaphore(ref['_election_lock']['_sem'])
+        self.op_lock = named_samaphore(ref['_op_lock']['_sem'])
+        self.snapshot_lock = named_samaphore(ref['_snapshot_lock']['_sem'])
+        self.v_state = ref['_vstate']
+        self.offset_monitor = offset_monitor(ref['_consumable_offset_monitor'])
+
+    # vote state reference: leader = 2, follower = 1, candidate = 0
+    def is_leader(self):
+        return self.v_state == 2 and self.term == self.confirmed_term
+
+    def __repr__(self):
+        return f"consensus(term={self.term}, confirmed_term={self.confirmed_term}, v_state={self.v_state}, is_leader={self.is_leader()}, election_lock={self.election_lock}, op_lock={self.op_lock}, snapshot_lock={self.snapshot_lock}, offset_monitor={self.offset_monitor})"
 
 
 class redpanda_partition:
@@ -1725,6 +1855,9 @@ class redpanda_partition:
         self.archival_meta = archival_metadata_stm(
             seastar_shared_ptr(ptr['_archival_meta_stm']).get())
         self.rm = rm_stm(seastar_shared_ptr(ptr['_rm_stm']).get())
+        self.log_eviction = log_eviction_stm(
+            seastar_shared_ptr(ptr['_log_eviction_stm']).get())
+        self.raft = consensus(seastar_lw_shared_ptr(ptr['_raft']).get())
 
 
 class redpanda_partitions(gdb.Command):
@@ -1734,24 +1867,44 @@ class redpanda_partitions(gdb.Command):
         gdb.Command.__init__(self, 'redpanda partitions', gdb.COMMAND_USER,
                              gdb.COMPLETE_COMMAND)
 
-    def print_partitions(self):
-        for i in range(cpus()):
+    def print_partitions(self, cpu=None):
+        cpu_list = range(cpus()) if cpu is None else [int(cpu)]
+        for i in cpu_list:
             print(f"# Partitions on shard {i}")
-            pm_ptr = find_partition_manager()
+            pm_ptr = find_partition_manager(i)
 
             for v in absl_get_nodes(pm_ptr['_ntp_table']):
                 try:
                     ntp = v['value']['first']
                     p = redpanda_partition(
                         seastar_lw_shared_ptr(v['value']['second']).get())
-                    print("ntp: {}, partition: {}, {}, {}".format(
-                        model_ntp(ntp), p.archiver, p.archival_meta, p.rm))
+                    print("ntp: {}\n {}\n, {}\n, {}\n, {}\n, {}\n".format(
+                        model_ntp(ntp), p.archiver, p.archival_meta, p.rm,
+                        p.log_eviction, p.raft))
                 except Exception as e:
                     ntp = v['value']['first']
                     print("Skipping ntp {}: {}".format(model_ntp(ntp), e))
 
     def invoke(self, arg, from_tty):
-        self.print_partitions()
+        self.print_partitions(arg)
+
+
+class redpanda_cloud_clients(gdb.Command):
+    def __init__(self):
+        gdb.Command.__init__(self, 'redpanda cloud-clients', gdb.COMMAND_USER,
+                             gdb.COMPLETE_NONE, True)
+
+    def invoke(self, arg, from_tty):
+        for i in range(cpus()):
+            client_pool_ref = find_cloud_storage_clients(i)
+            client_pool = cloud_client_pool(client_pool_ref)
+            print(f"Client pool on shard {i}")
+            print(f"  Available clients ({len(client_pool.pool)}):")
+            for c in client_pool.pool:
+                print(f"    {c}")
+            print(f"  Leased ({len(client_pool.leased)}):")
+            for l in client_pool.leased:
+                print(f"    {l}")
 
 
 class iobuf:
@@ -2719,3 +2872,4 @@ redpanda_task_histogram()
 redpanda_tasks()
 redpanda_heapprof()
 redpanda_partitions()
+redpanda_cloud_clients()
