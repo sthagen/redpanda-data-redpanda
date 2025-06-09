@@ -36,10 +36,10 @@ Type:           exec.cachemount
 
 This shows the "dl-cache" and "gradle" cache mounts.
 
-You can also examine the specific contents of the download cache mount using:
+You can also examine the contents and summary statistics for all cache mounts using:
 
 ```
-task rp:build-test-docker-image EXTRA_BUILD_ARGS="--target=debug-dl-cache --progress=plain --build-arg=CACHE_BREAK=$RANDOM"
+task rp:build-test-docker-image EXTRA_BUILD_ARGS="--target=debug-caches --progress=plain --build-arg=CACHE_BREAK=$RANDOM"
 ```
 
 

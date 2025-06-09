@@ -61,13 +61,3 @@ download_extract() {
 download() {
   (_download "$@")
 }
-
-debug_cache() {
-  set_vars
-  echo "DEBUG DL-CACHE:"
-  if [[ -d $DL_CACHE_DIR ]]; then
-    find $DL_CACHE_DIR -ls
-  else
-    echo "DL_CACHE_DIR does not exist: $DL_CACHE_DIR"
-  fi
-}

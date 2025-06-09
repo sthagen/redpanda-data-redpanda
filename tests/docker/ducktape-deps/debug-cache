@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+source "$(dirname "${BASH_SOURCE[0]}")/download-utils" # import download-utils
+
+sep() {
+  echo "-------------------------------------"
+}
+
+dir_stats() {
+  local target_dir="${1:-.}" # Default to current directory if no argument is provided
+  local file_count
+  local total_size
+
+  # Check if the target directory exists
+  if [ ! -d "$target_dir" ]; then
+    echo "DEBUG_CACHE: ERROR: directory '$target_dir' not found."
+    return
+  fi
+
+  file_count=$(find "$target_dir" -type f | wc -l)
+  total_size=$(du -sh "$target_dir" | cut -f1)
+
+  sep
+  echo "Cache directory : $target_dir"
+  echo "Number of Files : $file_count"
+  echo "Total Size      : $total_size"
+}
+
+debug_cache() {
+  set_vars
+  local all_caches
+  all_caches=("$DL_CACHE_DIR" /var/cache/apt /var/lib/apt /gradle_polaris /gradle_nessie /gradle_iceberg /root/go/pkg/mod)
+  local logdir=/debug-cache-logs
+
+  mkdir -p $logdir
+
+  for cache_dir in "${all_caches[@]}"; do
+    if [[ -d $cache_dir ]]; then
+      name=$(echo "${cache_dir#/}" | tr '/' '_')
+      echo "DEBUG CACHE: writing contents of $cache_dir to $logdir/$name.txt"
+      find $cache_dir -ls >"$logdir/$name.txt"
+    else
+      echo "CACHE_DIR does not exist: $cache_dir"
+    fi
+  done
+
+  for cache_dir in "${all_caches[@]}"; do
+    dir_stats "$cache_dir"
+  done
+  sep
+}

@@ -127,8 +127,8 @@ RUN /kcat && \
 FROM base AS golang
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/golang /
-RUN /golang && \
-    rm /golang
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /golang && rm /golang
 ENV PATH="${PATH}:/usr/local/go/bin"
 
 #################################
@@ -169,8 +169,8 @@ RUN /rp-storage-tool && \
 FROM golang AS sarama-examples
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/sarama-examples /
-RUN /sarama-examples && \
-    rm /sarama-examples
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /sarama-examples && rm /sarama-examples
 
 #################################
 
@@ -178,16 +178,16 @@ FROM golang AS golang-test-clients
 
 COPY --chown=0:0 --chmod=0755 tests/go /opt/redpanda-tests/go
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/golang-test-clients /
-RUN /golang-test-clients && \
-    rm /golang-test-clients
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /golang-test-clients && rm /golang-test-clients
 
 #################################
 
 FROM golang AS franz-bench
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/franz-bench /
-RUN /franz-bench && \
-    rm /franz-bench
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /franz-bench && rm /franz-bench
 
 #################################
 
@@ -202,16 +202,16 @@ RUN --mount=type=cache,id=dl-cache,target=/dl-cache /flink && \
 FROM golang AS kcl
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kcl /
-RUN /kcl && \
-    rm /kcl
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /kcl && rm /kcl
 
 #################################
 
 FROM golang AS kgo-verifier
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kgo-verifier /
-RUN /kgo-verifier && \
-    rm /kgo-verifier
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /kgo-verifier && rm /kgo-verifier
 
 #################################
 
@@ -227,7 +227,8 @@ FROM golang AS byoc-mock
 
 COPY --chown=0:0 --chmod=0755 tests/go/byoc-mock /opt/redpanda-tests/go/byoc-mock
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/byoc-mock /
-RUN /byoc-mock && rm /byoc-mock
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /byoc-mock && rm /byoc-mock
 
 #################################
 
@@ -235,7 +236,8 @@ FROM golang AS plugin-mock
 
 COPY --chown=0:0 --chmod=0755 tests/go/plugin-mock /opt/redpanda-tests/go/plugin-mock
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/plugin-mock /
-RUN /plugin-mock && rm /plugin-mock
+RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    /plugin-mock && rm /plugin-mock
 
 #################################
 
@@ -273,20 +275,23 @@ RUN --mount=target=/running/ocsf-server,type=tmpfs --mount=type=cache,target=/va
 
 FROM java-base AS polaris
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/polaris /
-RUN /polaris && rm /polaris
+RUN --mount=type=cache,target=/root/.gradle/caches/modules-2,id=gradle-polaris \
+    /polaris && rm /polaris
 
 #################################
 
 FROM java-base AS nessie
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/nessie /
-RUN /nessie && rm /nessie
+RUN --mount=type=cache,target=/root/.gradle/caches/modules-2,id=gradle-nessie \
+    /nessie && rm /nessie
 
 #################################
 
 FROM java-base AS iceberg-rest
 COPY --chown=0:0 tests/java/iceberg-rest-catalog /opt/redpanda-tests/java/iceberg-rest-catalog
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/iceberg-rest-catalog /
-RUN /iceberg-rest-catalog && rm /iceberg-rest-catalog
+RUN --mount=type=cache,target=/root/.gradle/caches/modules-2,id=gradle-iceberg \
+    /iceberg-rest-catalog && rm /iceberg-rest-catalog
 
 #################################
 
@@ -319,13 +324,20 @@ COPY --from=kafka-tools /root/.m2 /root/.m2
 COPY --from=spark /root/.m2 /root/.m2
 
 ###################################
-# Not used by the final image, but useful for debugging.
+# Not used by the final image, but useful for debugging the cache mount contents.
 # You can invoke this like:
-# task rp:build-test-docker-image EXTRA_BUILD_ARGS="--target=debug-dl-cache --progress=plain --build-arg=CACHE_BREAK=$RANDOM"
-FROM os_base AS debug-dl-cache
+# task rp:build-test-docker-image EXTRA_BUILD_ARGS="--target=debug-caches --progress=plain --build-arg=CACHE_BREAK=$RANDOM"
+FROM os_base AS debug-caches
 ARG CACHE_BREAK=0
-COPY --chmod=0755 tests/docker/ducktape-deps/download-utils /
-RUN --mount=type=cache,id=dl-cache,target=/dl-cache bash -c "source /download-utils && debug_cache"
+COPY --chmod=0755 tests/docker/ducktape-deps/download-utils tests/docker/ducktape-deps/debug-cache /
+RUN --mount=type=cache,id=dl-cache,target=/dl-cache \
+    --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    --mount=type=cache,target=/gradle_polaris,id=gradle-polaris \
+    --mount=type=cache,target=/gradle_nessie,id=gradle-nessie \
+    --mount=type=cache,target=/gradle_iceberg,id=gradle-iceberg \
+    --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
+    bash -c "source /debug-cache && debug_cache"
 
 ###################################
 # Not used by the final image, but useful to clean the cache mount(s).
