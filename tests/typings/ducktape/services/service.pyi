@@ -1,0 +1,125 @@
+from _typeshed import Incomplete
+from ducktape.cluster.cluster import ClusterNode
+from ducktape.cluster.cluster_spec import ClusterSpec as ClusterSpec
+from ducktape.command_line.defaults import ConsoleDefaults as ConsoleDefaults
+from ducktape.errors import TimeoutError as TimeoutError
+from ducktape.template import TemplateRenderer as TemplateRenderer
+from ducktape.cluster.node_container import NodeContainer
+from logging import Logger
+from typing import Any
+
+
+class ServiceIdFactory:
+    def generate_service_id(self, service):
+        ...
+
+
+class MultiRunServiceIdFactory:
+    run_number: Incomplete
+
+    def __init__(self, run_number: int = ...) -> None:
+        ...
+
+    def generate_service_id(self, service):
+        ...
+
+
+service_id_factory: Incomplete
+
+
+class Service(TemplateRenderer):
+    logs: Incomplete
+    service_id_factory: Incomplete
+    cluster_spec: Incomplete
+    context: Incomplete
+    nodes: list[ClusterNode]
+    skip_nodes_allocation: Incomplete
+
+    def __init__(self,
+                 context,
+                 num_nodes: Incomplete | None = ...,
+                 cluster_spec: Incomplete | None = ...,
+                 *args,
+                 **kwargs) -> None:
+        ...
+
+    @staticmethod
+    def setup_cluster_spec(num_nodes: Incomplete | None = ...,
+                           cluster_spec: Incomplete | None = ...):
+        ...
+
+    @property
+    def num_nodes(self):
+        ...
+
+    @property
+    def local_scratch_dir(self):
+        ...
+
+    @property
+    def service_id(self):
+        ...
+
+    @property
+    def logger(self) -> Logger:
+        ...
+
+    @property
+    def cluster(self):
+        ...
+
+    @property
+    def allocated(self):
+        ...
+
+    def who_am_i(self, node: Incomplete | None = ...):
+        ...
+
+    def allocate_nodes(self) -> None:
+        ...
+
+    def start(self, **kwargs: Any) -> None:
+        ...
+
+    def start_node(self, node, **kwargs: Any) -> None:
+        ...
+
+    def wait(self, timeout_sec: int = ...) -> None:
+        ...
+
+    def wait_node(self, node, timeout_sec: Incomplete | None = ...) -> bool:
+        ...
+
+    def stop(self, **kwargs: Any) -> None:
+        ...
+
+    def stop_node(self, node, **kwargs: Any) -> None:
+        ...
+
+    def clean(self, **kwargs: Any) -> None:
+        ...
+
+    def clean_node(self, node, **kwargs: Any) -> None:
+        ...
+
+    def free(self) -> None:
+        ...
+
+    def run(self) -> None:
+        ...
+
+    def get_node(self, idx):
+        ...
+
+    def idx(self, node):
+        ...
+
+    def close(self) -> None:
+        ...
+
+    @staticmethod
+    def run_parallel(*args) -> None:
+        ...
+
+    def to_json(self):
+        ...
