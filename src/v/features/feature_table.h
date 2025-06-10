@@ -38,6 +38,7 @@ struct feature_table_snapshot;
 /// only used at runtime.  Therefore it is safe to re-use an integer that
 /// has been made available by another feature being retired.
 enum class feature : std::uint64_t {
+    panda_linking_dr = 1ULL << 1U,
     cloud_retention = 1ULL << 11U,
     node_isolation = 1ULL << 19U,
     group_offset_retention = 1ULL << 20U,
@@ -450,6 +451,12 @@ inline constexpr std::array feature_schema{
     "kafka_data_rpc",
     feature::kafka_data_rpc,
     feature_spec::available_policy::always,
+    feature_spec::prepare_policy::always},
+  feature_spec{
+    release_version::v25_2_1,
+    "panda_linking_dr",
+    feature::panda_linking_dr,
+    feature_spec::available_policy::explicit_only,
     feature_spec::prepare_policy::always},
 };
 

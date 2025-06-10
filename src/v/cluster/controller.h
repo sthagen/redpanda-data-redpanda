@@ -16,6 +16,7 @@
 #include "cluster/controller_stm.h"
 #include "cluster/fwd.h"
 #include "cluster/node_status_table.h"
+#include "cluster/panda_link/fwd.h"
 #include "cluster/scheduling/leader_balancer.h"
 #include "cluster/types.h"
 #include "crash_reporter.h"
@@ -184,6 +185,10 @@ public:
 
     ss::sharded<client_quota::store>& get_quota_store() { return _quota_store; }
 
+    ss::sharded<cluster::panda_link::frontend>& get_panda_link_frontend() {
+        return _panda_link_frontend;
+    }
+
     bool is_raft0_leader() const {
         vassert(
           ss::this_shard_id() == ss::shard_id(0),
@@ -347,6 +352,12 @@ private:
     ss::sharded<plugin_frontend> _plugin_frontend; // instance per core
     ss::sharded<plugin_table> _plugin_table;       // instance per core
     ss::sharded<plugin_backend> _plugin_backend;   // single instance
+
+    ss::sharded<cluster::panda_link::frontend>
+      _panda_link_frontend; // instance per core
+    ss::sharded<cluster::panda_link::table>
+      _panda_link_table; // instance per core
+
     bool _is_ready = false;
     ss::scheduling_group _scheduling_group;
 };

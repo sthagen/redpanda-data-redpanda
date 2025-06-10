@@ -116,4 +116,77 @@
           }
         },
       }
+    },
+    "security_acl": {
+      "type": "object",
+      "required": [
+        "principal",
+        "principal_type",
+        "resource",
+        "resource_type",
+        "pattern_type",
+        "host",
+        "operation",
+        "permission"
+      ],
+      "properties": {
+        "principal": {
+          "type": "string",
+          "description": "The name of the principal (e.g., User or RedpandaRole). Use \"*\" to represent wildcard."
+        },
+        "principal_type": {
+          "type": "string",
+          "enum": [
+            "USER",
+            "REDPANDA_ROLE"
+          ],
+          "description": "The type of the principal."
+        },
+        "resource": {
+          "type": "string",
+          "description": "The name of the resource. Use \"*\" to represent wildcard."
+        },
+        "resource_type": {
+          "type": "string",
+          "enum": [
+            "GLOBAL",
+            "SUBJECT"
+          ],
+          "description": "Type of the resource being secured."
+        },
+        "pattern_type": {
+          "type": "string",
+          "enum": [
+            "LITERAL",
+            "PREFIX"
+          ],
+          "description": "Pattern match type for the resource. Only applies when resource_type is SUBJECT."
+        },
+        "host": {
+          "type": "string",
+          "description": "Originating host for which this rule applies. Use \"*\" to represent wildcard."
+        },
+        "operation": {
+          "type": "string",
+          "enum": [
+            "ALL",
+            "READ",
+            "WRITE",
+            "REMOVE",
+            "DESCRIBE",
+            "DESCRIBE_CONFIGS",
+            "ALTER",
+            "ALTER_CONFIGS"
+          ],
+          "description": "The operation to allow or deny."
+        },
+        "permission": {
+          "type": "string",
+          "enum": [
+            "ALLOW",
+            "DENY"
+          ],
+          "description": "Specifies whether the operation is allowed or denied."
+        }
+      }
     }

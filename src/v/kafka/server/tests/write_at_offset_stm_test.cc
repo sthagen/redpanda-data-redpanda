@@ -392,10 +392,12 @@ INSTANTIATE_TEST_SUITE_P(
 TEST_F(WriteAtOffsetStmFixture, test_recovery_from_snapshot) {
     enable_offset_translation();
     initialize_state_machines(3).get();
-    wait_for_leader(10s).get();
+    auto leader_id = wait_for_leader(10s).get();
     auto stm = get_leader_stm();
     kafka::offset expected_offset{0};
-
+    // store the truncation point, it is the base offset of second replicated
+    // batch.
+    model::offset snapshot_offset{};
     for (int i = 0; i < 10; ++i) {
         auto batches = generate_batches(
           expected_offset,
@@ -411,13 +413,15 @@ TEST_F(WriteAtOffsetStmFixture, test_recovery_from_snapshot) {
             ASSERT_FALSE(result.has_error());
             expected_offset += bsz;
         }
+        if (snapshot_offset == model::offset{}) {
+            snapshot_offset = node(leader_id).raft()->dirty_offset();
+        }
     }
 
     ASSERT_TRUE(logs_content_is_valid().get());
-    auto leader_id = wait_for_leader(10s).get();
+    leader_id = wait_for_leader(10s).get();
     auto& leader = node(leader_id);
     auto dirty_offset = leader.raft()->dirty_offset();
-    auto first_left = leader.random_batch_base_offset(dirty_offset).get();
 
     auto to_restart = random_follower_id();
     for (auto& [id, node] : nodes()) {
@@ -426,8 +430,7 @@ TEST_F(WriteAtOffsetStmFixture, test_recovery_from_snapshot) {
             continue;
         }
         node->raft()
-          ->write_snapshot(
-            raft::write_snapshot_cfg(model::prev_offset(first_left), iobuf{}))
+          ->write_snapshot(raft::write_snapshot_cfg(snapshot_offset, iobuf{}))
           .get();
     }
 
@@ -435,7 +438,9 @@ TEST_F(WriteAtOffsetStmFixture, test_recovery_from_snapshot) {
     auto& follower = node(*to_restart);
     // wait for recovery
     wait_for_committed_offset(dirty_offset, 10s).get();
-    ASSERT_THAT(follower.raft()->log()->offsets().start_offset, Eq(first_left));
+    ASSERT_THAT(
+      follower.raft()->log()->offsets().start_offset,
+      Eq(model::next_offset(snapshot_offset)));
     ASSERT_TRUE(logs_content_is_valid().get());
 }
 
