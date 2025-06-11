@@ -94,6 +94,24 @@ make_concatenated_segment(
   storage_resources& resources,
   ss::sharded<features::feature_table>& feature_table);
 
+// Must be called with _segments_rewrite_lock from the parent log held.
+// Concatenates all segments in `segments` and replaces the in-memory and
+// on-disk state of `target` with the built replacement. Self compaction is
+// performed on the replacement target before the swap occurs to ensure its
+// state is fully re-built (.base_index file, .compaction_index file, in-memory
+// states). Write locks for all passed segments will be held during
+// concatenation.
+ss::future<compaction_result> concatenate_and_rebuild_target_segment(
+  ss::lw_shared_ptr<segment> target,
+  std::vector<ss::lw_shared_ptr<segment>>& segments,
+  ss::lw_shared_ptr<storage::stm_manager> stm_manager,
+  compaction_config cfg,
+  storage::probe& pb,
+  storage::readers_cache& readers_cache,
+  storage_resources& resources,
+  ss::sharded<features::feature_table>& feature_table,
+  mutex& segment_rewrite_lock);
+
 ss::future<> write_concatenated_compacted_index(
   std::filesystem::path,
   std::vector<ss::lw_shared_ptr<segment>>,

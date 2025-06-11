@@ -1002,9 +1002,6 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
     auto segments = std::vector<ss::lw_shared_ptr<segment>>(
       range.first, range.second);
 
-    const bool all_window_compacted = std::ranges::all_of(
-      segments, &segment::finished_windowed_compaction);
-
     const bool all_segments_self_compacted = std::ranges::all_of(
       segments, &segment::finished_self_compaction);
 
@@ -1053,93 +1050,34 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
     // the segment which will be expanded to replace
     auto target = segments.front();
 
-    target->clear_cached_disk_usage();
-
-    // concatenate segments from the compaction range into replacement segment
-    // backed by a staging file. the process is completed while holding a read
-    // lock on the range, which is then released. the remainder of the
-    // compaction process operates on replacement segment, and any conflicting
-    // log operations are later identified before committing changes.
-    auto staging_path = target->reader().path().to_compaction_staging();
-    auto staging_to_clean = scoped_file_tracker{
-      cfg.files_to_cleanup, {staging_path, staging_path.to_compacted_index()}};
-    auto [replacement, generations]
-      = co_await storage::internal::make_concatenated_segment(
-        staging_path, segments, cfg, _manager.resources(), _feature_table);
-
-    // compact the combined data in the replacement segment. the partition size
-    // tracking needs to be adjusted as compaction routines assume the segment
-    // size is already contained in the partition size probe
-    replacement->mark_as_compacted_segment();
-    if (all_window_compacted) {
-        // replacement's _clean_compact_timestamp will have been set in
-        // make_concatenated_segment if both segments were cleanly compacted
-        // already.
-        replacement->mark_as_finished_windowed_compaction();
-    }
-    _probe->add_initial_segment(*replacement.get());
-
-    auto ret = co_await segment_self_compact(cfg, replacement);
-
-    _probe->delete_segment(*replacement.get());
-    vlog(gclog.debug, "Final compacted segment {}", replacement);
-
-    /*
-     * remove index files. they will be rebuilt by the single segment compaction
-     * operation, and also ensures we examine segments correctly on recovery.
-     */
-    if (co_await ss::file_exists(target->index().path().string())) {
-        co_await ss::remove_file(target->index().path().string());
+    std::optional<compaction_result> opt_ret;
+    try {
+        opt_ret
+          = co_await storage::internal::concatenate_and_rebuild_target_segment(
+            target,
+            segments,
+            _stm_manager,
+            cfg,
+            *_probe,
+            *_readers_cache,
+            _manager.resources(),
+            _feature_table,
+            _segment_rewrite_lock);
+    } catch (const generation_id_mismatch_exception& e) {
+        // Early abort
+        vlog(gclog.info, "{}", e.what());
+        const auto total_size = std::accumulate(
+          segments.begin(),
+          segments.end(),
+          size_t(0),
+          [](size_t acc, ss::lw_shared_ptr<segment>& seg) {
+              return acc + seg->size_bytes();
+          });
+        co_return compaction_result{total_size};
     }
 
-    auto compact_index = target->reader().path().to_compacted_index();
-    if (co_await ss::file_exists(compact_index.string())) {
-        co_await ss::remove_file(compact_index.string());
-    }
-
-    // Evict segment readers and prevent new ones from being added to the cache.
-    std::vector<ss::future<readers_cache::range_lock_holder>> holder_futs;
-    holder_futs.reserve(segments.size());
-    for (auto& segment : segments) {
-        holder_futs.push_back(_readers_cache->evict_segment_readers(segment));
-    }
-    auto holders = co_await ss::when_all_succeed(
-      holder_futs.begin(), holder_futs.end());
-
-    // lock the range. only metadata (e.g. open/rename/delete) i/o occurs with
-    // these locks held so it is a relatively short duration. all of the data
-    // copying and compaction i/o occurred above with no locks held. 5 retries
-    // with a max lock timeout of 1 second. if we don't get the locks there is
-    // probably a reader. compaction will revisit.
-    auto locks = co_await internal::write_lock_segments(segments, 1s, 5);
-
-    // fast check if we should abandon all the expensive i/o work if we happened
-    // to be racing with an operation like truncation or shutdown.
-    vassert(
-      generations.size() == segments.size(),
-      "Each segment must have corresponding generation");
-    auto gen_it = generations.begin();
-    for (const auto& segment : segments) {
-        // check generation id under write lock
-        if (unlikely(segment->get_generation_id() != *gen_it)) {
-            vlog(
-              gclog.info,
-              "Aborting compaction of a segment: {}. Generation id mismatch, "
-              "previous generation: {}",
-              *segment,
-              *gen_it);
-            ret.executed_compaction = false;
-            ret.size_after = ret.size_before;
-            co_return ret;
-        }
-        if (unlikely(segment->is_closed())) {
-            throw segment_closed_exception();
-        }
-        ++gen_it;
-    }
-    // transfer segment state from replacement to target
-    locks = co_await internal::transfer_segment(
-      target, replacement, cfg, *_probe, std::move(locks));
+    // This is guaranteed to have a value.
+    auto ret = *opt_ret;
 
     auto segment_to_remove = segments.back();
     // We are going to remove one of the segments, but its bytes have not
@@ -1156,9 +1094,7 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
     // the segment set.  the current adjacent segment compaction limits
     // compaction to two segments, and we check that assumption here and use
     // simplified clean-up routine.
-    locks.clear();
-    holders.clear();
-    staging_to_clean.clear();
+
     vassert(segments.size() == 2, "Cannot compact more than two segments");
     auto it = std::find(_segs.begin(), _segs.end(), segment_to_remove);
     if (it != _segs.end()) {

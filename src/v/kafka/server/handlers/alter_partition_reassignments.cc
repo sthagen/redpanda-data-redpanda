@@ -296,7 +296,7 @@ ss::future<reassignable_topic_response> do_handle_topic(
       std::move(alive_nodes),
       tp_metadata_ref);
 
-    return ssx::async_transform(
+    return ssx::async_transform<std::vector<reassignable_partition_response>>(
              topic.partitions.begin(),
              valid_partitions_end,
              [&octx,

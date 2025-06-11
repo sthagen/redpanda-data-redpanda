@@ -76,3 +76,13 @@ ss::future<> write_fully(const std::filesystem::path& p, iobuf buf) {
         return out.close();
     });
 }
+
+ss::future<> maybe_remove_file(std::string_view name) {
+    try {
+        co_await ss::remove_file(name);
+    } catch (const std::filesystem::filesystem_error& e) {
+        if (e.code() != std::errc::no_such_file_or_directory) {
+            throw;
+        }
+    }
+}

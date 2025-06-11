@@ -560,6 +560,28 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "segment_concatenation_test",
+    timeout = "short",
+    srcs = [
+        "segment_concatenation_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        ":disk_log_builder",
+        ":disk_log_builder_fixture",
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iostream",
+        "//src/v/model",
+        "//src/v/random:generators",
+        "//src/v/storage",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:mutex",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "readers_cache_test",
     timeout = "short",
     srcs = [

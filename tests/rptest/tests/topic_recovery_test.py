@@ -1489,7 +1489,8 @@ class TopicRecoveryTest(RedpandaTest):
                     backoff_sec=CLOUD_STORAGE_SEGMENT_MAX_UPLOAD_INTERVAL_SEC /
                     2,
                     err_msg='objects not found in S3 after retry')
-            raise
+            else:
+                raise
 
     def _wait_for_topic(self,
                         recovered_topics,

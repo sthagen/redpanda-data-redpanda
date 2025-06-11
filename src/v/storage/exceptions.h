@@ -39,3 +39,14 @@ public:
 private:
     ss::sstring _msg;
 };
+
+class generation_id_mismatch_exception : public std::exception {
+public:
+    explicit generation_id_mismatch_exception(ss::sstring s)
+      : _msg(std::move(s)) {}
+
+    const char* what() const noexcept override { return _msg.c_str(); }
+
+private:
+    ss::sstring _msg;
+};

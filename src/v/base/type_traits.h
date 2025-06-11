@@ -78,3 +78,8 @@ template<typename T>
 concept is_std_optional = ::detail::is_specialization_of_v<T, std::optional>;
 
 }
+
+template<typename T>
+concept CanReserve = requires(T c, size_t s) {
+    { c.reserve(s) };
+};

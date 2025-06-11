@@ -340,7 +340,7 @@ ss::future<> segment::flush() {
     });
 }
 ss::future<> segment::do_flush() {
-    _generation_id++;
+    advance_generation();
     if (!_appender) {
         return ss::make_ready_future<>();
     }
@@ -403,7 +403,7 @@ ss::future<> segment::do_truncate(
       "truncating segment {} at {}",
       _reader->filename(),
       new_max_offset);
-    _generation_id++;
+    advance_generation();
     cache_truncate(new_max_offset + model::offset(1));
     auto f = ss::now();
     if (is_compacted_segment()) {
@@ -543,7 +543,7 @@ ss::future<append_result> segment::do_append(const model::record_batch& b) {
     const auto expected_end_physical = start_physical_offset
                                        + b.header().size_bytes;
 
-    _generation_id++;
+    advance_generation();
 
     // inflight index. trimmed on every dma_write in appender
     _inflight.emplace(expected_end_physical, b.last_offset());
@@ -702,10 +702,12 @@ void segment::advance_stable_offset(size_t filepos) {
 std::ostream& operator<<(std::ostream& o, const segment::offset_tracker& t) {
     fmt::print(
       o,
-      "{{term:{}, base_offset:{}, committed_offset:{}, dirty_offset:{}}}",
+      "{{term:{}, base_offset:{}, committed_offset:{}, stable_offset:{}, "
+      "dirty_offset:{}}}",
       t.get_term(),
       t.get_base_offset(),
       t.get_committed_offset(),
+      t.get_stable_offset(),
       t.get_dirty_offset());
     return o;
 }

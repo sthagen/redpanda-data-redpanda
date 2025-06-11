@@ -795,14 +795,15 @@ ss::future<std::error_code> health_monitor_backend::collect_cluster_health() {
     vlog(clusterlog.debug, "collecting cluster health statistics");
     // collect all reports
     auto ids = _members.local().node_ids();
-    auto collected_reports = co_await ssx::async_transform(
-      ids.begin(), ids.end(), [this](model::node_id id) {
-          if (id == _self) {
-              return _report_collection_mutex.with(
-                [this] { return collect_current_node_health(); });
-          }
-          return collect_remote_node_health(id);
-      });
+    auto collected_reports
+      = co_await ssx::async_transform<std::vector<result<node_health_report>>>(
+        ids.begin(), ids.end(), [this](model::node_id id) {
+            if (id == _self) {
+                return _report_collection_mutex.with(
+                  [this] { return collect_current_node_health(); });
+            }
+            return collect_remote_node_health(id);
+        });
     auto new_reports = ss::make_lw_shared<report_cache_t>();
 
     // update nodes reports and cache cluster-level data disk health

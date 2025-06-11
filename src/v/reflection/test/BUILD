@@ -21,6 +21,7 @@ redpanda_cc_btest(
         "async_adl_test.cc",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/bytes:hash",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",

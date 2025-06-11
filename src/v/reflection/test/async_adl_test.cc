@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "base/type_traits.h"
 #include "bytes/hash.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
@@ -75,11 +76,6 @@ struct random_type<model::ntp> {
         auto partition_id = rand_gen::get_int(0, 20);
         return model::ntp(ns, topic, partition_id);
     }
-};
-
-template<typename T>
-concept CanReserve = requires(T c, size_t s) {
-    { c.reserve(s) };
 };
 
 template<typename T>

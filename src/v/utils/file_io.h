@@ -34,3 +34,8 @@ ss::future<ss::sstring> read_fully_to_string(const std::filesystem::path&);
 
 /// \brief Write an entire buffer into the file at location 'path'
 ss::future<> write_fully(const std::filesystem::path&, iobuf buf);
+
+// Maybe removes the file with filename `name`. No error or indication is
+// returned if the file does not exist. Any other errors are propagated via
+// thrown exception.
+ss::future<> maybe_remove_file(std::string_view name);

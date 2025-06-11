@@ -91,7 +91,7 @@ ss::future<std::vector<self_test_result>> netcheck::run(netcheck_opts opts) {
           "Starting redpanda self-test network benchmark, with options: {}",
           opts);
         co_return co_await ss::with_scheduling_group(opts.sg, [this]() {
-            return ssx::async_transform(
+            return ssx::async_transform<std::vector<self_test_result>>(
               _opts.peers, [this](model::node_id peer) {
                   return run_individual_benchmark(peer);
               });

@@ -73,6 +73,7 @@ public:
     }
 
     size_t waiters() const noexcept { return _sem.waiters(); }
+    bool is_held() const noexcept { return _sem.current() == 0; }
 
 private:
     ssx::semaphore _sem;

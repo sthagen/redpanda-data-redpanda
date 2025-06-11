@@ -12,7 +12,11 @@
 #include "test_utils/random_bytes.h"
 #include "utils/file_io.h"
 
+#include <seastar/core/file.hh>
+
 #include <gtest/gtest.h>
+
+#include <filesystem>
 
 class ReadFully : public ::testing::TestWithParam<size_t> {};
 
@@ -21,6 +25,31 @@ TEST_P(ReadFully, RoundTrip) {
     write_fully("out.dat", input.copy()).get();
     const auto output = read_fully("out.dat").get();
     EXPECT_EQ(input, output);
+}
+
+TEST(MaybeRemoveFile, FileIsRemoved) {
+    auto file = ss::sstring("panda_world.dat");
+    ss::open_file_dma(file, ss::open_flags::create).get();
+    EXPECT_TRUE(ss::file_exists(file).get());
+    EXPECT_NO_THROW(maybe_remove_file(file).get());
+    EXPECT_FALSE(ss::file_exists(file).get());
+}
+
+TEST(MaybeRemoveFile, MissingFileNoThrownException) {
+    auto file = "panda_world.dat";
+    EXPECT_FALSE(ss::file_exists(file).get());
+    EXPECT_NO_THROW(maybe_remove_file(file).get());
+}
+
+TEST(MaybeRemoveFile, OtherErrorThrowsException) {
+    // Using a non-empty directory removal attempt to demonstrate that any
+    // exception thrown other than a missing file is propagated by
+    // maybe_remove_file().
+    auto outer_dir = "panda_world";
+    auto dir = ss::sstring(outer_dir) + ss::sstring("/panda_city");
+    ss::recursive_touch_directory(dir).get();
+    EXPECT_THROW(
+      maybe_remove_file(outer_dir).get(), std::filesystem::filesystem_error);
 }
 
 namespace {
