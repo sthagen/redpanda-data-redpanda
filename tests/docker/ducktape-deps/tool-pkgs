@@ -21,7 +21,6 @@ apt-get install -qq \
   krb5-user \
   libatomic1 \
   libyajl-dev \
-  llvm \
   lsof \
   net-tools \
   netcat-openbsd \

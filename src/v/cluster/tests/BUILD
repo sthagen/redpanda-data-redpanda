@@ -1168,7 +1168,7 @@ redpanda_cc_gtest(
     srcs = [
         "distributed_kv_stm_tests.cc",
     ],
-    cpu = 1,
+    cpu = 3,
     deps = [
         ":raft_fixture_retry_policy",
         "//src/v/base",

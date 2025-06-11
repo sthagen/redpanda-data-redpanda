@@ -275,6 +275,30 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_btest(
+    name = "metadata",
+    timeout = "short",
+    srcs = [
+        "metadata.cc",
+    ],
+    deps = [
+        "//src/v/cluster",
+        "//src/v/kafka/client",
+        "//src/v/kafka/client/test:fixture",
+        "//src/v/kafka/client/test:utils",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:metadata",
+        "//src/v/kafka/server",
+        "//src/v/model",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
+
+redpanda_cc_btest(
     name = "test_config_utils",
     timeout = "short",
     srcs = [

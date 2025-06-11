@@ -27,7 +27,7 @@
 #include "kafka/protocol/describe_configs.h"
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/list_offset.h"
-#include "model/timestamp.h"
+#include "kafka/protocol/metadata.h"
 #include "ssx/semaphore.h"
 #include "utils/retry.h"
 #include "utils/unresolved_address.h"
@@ -104,6 +104,10 @@ public:
             });
         });
     }
+
+    /// \brief Dispatch a request to a specific broker.
+    /// \param req The metadata request to send
+    ss::future<metadata_response> fetch_metadata(metadata_request req);
 
     ss::future<create_topics_response> create_topic(kafka::creatable_topic req);
 

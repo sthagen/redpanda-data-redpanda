@@ -48,6 +48,28 @@ struct metadata_request {
         }
     }
 
+    metadata_request copy() const {
+        static_assert(
+          api_type::max_valid == api_version(11),
+          "Please update the metadata_request::copy method when updating the "
+          "Metadata API");
+        return {
+          .data{
+            .topics
+            = data.topics.has_value()
+                ? std::make_optional<chunked_vector<metadata_request_topic>>(
+                    data.topics->copy())
+                : std::nullopt,
+            .allow_auto_topic_creation = data.allow_auto_topic_creation,
+            .include_cluster_authorized_operations
+            = data.include_cluster_authorized_operations,
+            .include_topic_authorized_operations
+            = data.include_topic_authorized_operations,
+            .unknown_tags = data.unknown_tags},
+          .list_all_topics = list_all_topics,
+        };
+    }
+
     friend std::ostream&
     operator<<(std::ostream& os, const metadata_request& r) {
         return os << r.data;

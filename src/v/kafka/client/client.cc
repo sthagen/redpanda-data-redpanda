@@ -26,6 +26,7 @@
 #include "kafka/protocol/find_coordinator.h"
 #include "kafka/protocol/leave_group.h"
 #include "kafka/protocol/list_offset.h"
+#include "kafka/protocol/metadata.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/timeout_clock.h"
@@ -308,6 +309,16 @@ ss::future<produce_response> client::produce_records(
       .data = produce_response_data{
         .responses = std::move(responses_cv),
         .throttle_time_ms{{std::chrono::milliseconds{0}}}}};
+}
+
+ss::future<metadata_response> client::fetch_metadata(metadata_request req) {
+    co_return co_await gated_retry_with_mitigation(
+      [this, req{std::move(req)}]() {
+          return _brokers.any().then(
+            [req{req.copy()}](shared_broker_t broker) mutable {
+                return broker->dispatch(std::move(req));
+            });
+      });
 }
 
 ss::future<create_topics_response>

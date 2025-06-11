@@ -199,7 +199,7 @@ public:
         } else if constexpr (std::is_same_v<type, leave_group_request>) {
             return dispatch(std::move(r), api_version(2));
         } else if constexpr (std::is_same_v<type, metadata_request>) {
-            return dispatch(std::move(r), api_version(7));
+            return dispatch(std::move(r), api_version(8));
         } else if constexpr (std::is_same_v<type, find_coordinator_request>) {
             return dispatch(std::move(r), api_version(2));
         } else if constexpr (std::is_same_v<type, list_groups_request>) {

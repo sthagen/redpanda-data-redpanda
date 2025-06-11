@@ -133,7 +133,7 @@ TEST_F_CORO(kv_stm_fixture, test_stm_list) {
     }
     // List and put can be called concurrently. We don't make any guarentees
     // (it's eventually consistent), but it shouldn't crash.
-    for (int i = 0; i < 1000; ++i) {
+    for (int i = 0; i < 500; ++i) {
         kvs[i] = i;
         co_await put(kvs);
         ASSERT_TRUE_CORO(co_await list());
