@@ -7,9 +7,8 @@
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
 import random
-import time
-from collections import defaultdict
-from collections import deque
+from collections import defaultdict, deque
+from dataclasses import dataclass
 
 from ducktape.utils.util import wait_until
 
@@ -22,15 +21,15 @@ from rptest.services.redpanda import MetricsEndpoint, SISettings
 from rptest.tests.partition_movement import PartitionMovementMixin
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.utils.mode_checks import skip_debug_mode
-from rptest.utils.si_utils import BucketView, NTP, quiesce_uploads
+from rptest.utils.si_utils import NTP, BucketView, quiesce_uploads
 
 
 class CloudStorageUsageTest(RedpandaTest, PartitionMovementMixin):
     message_size = 32 * 1024  # 32KiB
-    log_segment_size = 1024 * 1024  # 256KiB
+    log_segment_size = 1024 * 1024  # 1 MiB
     produce_byte_rate_per_ntp = 512 * 1024  # 512 KiB
     target_runtime = 60  # seconds
-    check_interval = 5  # seconds
+    num_rounds = 10
 
     topics = [
         TopicSpec(name="test-topic-1",
@@ -60,16 +59,18 @@ class CloudStorageUsageTest(RedpandaTest, PartitionMovementMixin):
         self.admin = Admin(self.redpanda)
         self.s3_port = self.si_settings.cloud_storage_api_endpoint_port
 
-    def _create_producers(self) -> list[KgoVerifierProducer]:
-        producers = []
+    def _run_produce_round(self):
+        producers: list[KgoVerifierProducer] = []
 
         for topic in self.topics:
             bps = self.produce_byte_rate_per_ntp * topic.partition_count
-            bytes_count = bps * self.target_runtime
+            bytes_count = bps * self.target_runtime // self.num_rounds
             msg_count = bytes_count // self.message_size
 
+            assert msg_count > 0, "Want to produce at least one message"
+
             self.logger.info(f"Will produce {bytes_count / 1024}KiB at"
-                             f"{bps / 1024}KiB/s on topic={topic.name}")
+                             f" {bps / 1024}KiB/s on topic={topic.name}")
             producers.append(
                 KgoVerifierProducer(self.test_context,
                                     self.redpanda,
@@ -80,7 +81,12 @@ class CloudStorageUsageTest(RedpandaTest, PartitionMovementMixin):
                                     batch_max_bytes=self.log_segment_size //
                                     2))
 
-        return producers
+        for p in producers:
+            p.start()
+
+        for p in producers:
+            p.wait(self.target_runtime)
+            p.free()
 
     def _check_usage(self, timeout_sec):
         bucket_view = BucketView(self.redpanda)
@@ -115,8 +121,8 @@ class CloudStorageUsageTest(RedpandaTest, PartitionMovementMixin):
 
     def _test_epilogue(self):
         # Assert tht retention was active
-        self.redpanda.metric_sum(
-            "redpanda_cloud_storage_deleted_segments",
+        assert self.redpanda.metric_sum(
+            "redpanda_cloud_storage_deleted_segments_total",
             metrics_endpoint=MetricsEndpoint.PUBLIC_METRICS) > 0
 
         # Assert that compacted segment re-upload operated during the test
@@ -157,18 +163,9 @@ class CloudStorageUsageTest(RedpandaTest, PartitionMovementMixin):
         """
         assert self.admin.cloud_storage_usage() == 0
 
-        producers = self._create_producers()
-        for p in producers:
-            p.start()
-
-        producers_done = lambda: all([p.is_complete() for p in producers])
-        while not producers_done():
-            self._check_usage(timeout_sec=5)
-
-            time.sleep(self.check_interval)
-
-        for p in producers:
-            p.wait()
+        for _ in range(self.num_rounds):
+            self._run_produce_round()
+            self._check_usage(timeout_sec=10)
 
         self._test_epilogue()
 
@@ -181,29 +178,27 @@ class CloudStorageUsageTest(RedpandaTest, PartitionMovementMixin):
         This test has the same workload as test_cloud_storage_usage_reporting,
         but also includes random partition movements.
         """
+        @dataclass
+        class TopicPartition:
+            name: str
+            partition: int
+
+        partitions: list[TopicPartition] = []
+        for topic in self.topics:
+            partitions.extend([
+                TopicPartition(name=topic.name, partition=pid)
+                for pid in range(topic.partition_count)
+            ])
+
         assert self.admin.cloud_storage_usage() == 0
 
-        producers = self._create_producers()
-        for p in producers:
-            p.start()
+        for _ in range(self.num_rounds):
+            self._run_produce_round()
 
-        partitions = []
-        for topic in self.topics:
-            partitions.extend([(topic.name, pid)
-                               for pid in range(topic.partition_count)])
-
-        producers_done = lambda: all([p.is_complete() for p in producers])
-
-        while not producers_done():
             ntp_to_move = random.choice(partitions)
-            self._dispatch_random_partition_move(ntp_to_move[0],
-                                                 ntp_to_move[1])
+            self._dispatch_random_partition_move(ntp_to_move.name,
+                                                 ntp_to_move.partition)
 
             self._check_usage(timeout_sec=10)
-
-            time.sleep(self.check_interval)
-
-        for p in producers:
-            p.wait()
 
         self._check_describe_log_dirs()

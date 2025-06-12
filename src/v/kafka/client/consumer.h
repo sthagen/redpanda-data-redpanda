@@ -58,7 +58,8 @@ public:
       group_id group_id,
       member_id name,
       ss::noncopyable_function<void(const member_id&)> on_stopped,
-      ss::noncopyable_function<ss::future<>(std::exception_ptr)> mitigater);
+      ss::noncopyable_function<ss::future<>(std::exception_ptr)> mitigater,
+      prefix_logger& logger);
 
     const kafka::group_id& group_id() const { return _group_id; }
     const kafka::member_id& member_id() const { return _member_id; }
@@ -175,6 +176,7 @@ private:
     ss::noncopyable_function<void(const kafka::member_id&)> _on_stopped;
     ss::noncopyable_function<ss::future<>(std::exception_ptr)>
       _external_mitigate;
+    prefix_logger* _logger;
 
     friend std::ostream& operator<<(std::ostream& os, const consumer& c) {
         fmt::print(
@@ -197,7 +199,8 @@ ss::future<shared_consumer_t> make_consumer(
   group_id group_id,
   member_id name,
   ss::noncopyable_function<void(const member_id&)> _on_stopped,
-  ss::noncopyable_function<ss::future<>(std::exception_ptr)> mitigater);
+  ss::noncopyable_function<ss::future<>(std::exception_ptr)> mitigater,
+  prefix_logger& logger);
 
 namespace detail {
 

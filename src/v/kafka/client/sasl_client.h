@@ -19,7 +19,8 @@
 
 namespace kafka::client {
 
-ss::future<> do_authenticate(shared_broker_t, const configuration& config);
+ss::future<> do_authenticate(
+  shared_broker_t, const configuration& config, prefix_logger& logger);
 /*
  * SASL handshake negotiates mechanism. In this case that process is simple: if
  * the server doesn't support the requested mechanism there is no fallback.

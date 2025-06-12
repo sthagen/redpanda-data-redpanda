@@ -17,6 +17,7 @@
 #include "kafka/client/topic_cache.h"
 #include "model/fundamental.h"
 #include "ssx/future-util.h"
+#include "utils/prefix_logger.h"
 
 #include <absl/container/flat_hash_map.h>
 
@@ -37,9 +38,11 @@ public:
       topic_cache& topic_cache,
       brokers& brokers,
       int16_t acks,
+      prefix_logger& logger,
       error_handler&& error_handler)
       : _config{config}
       , _partitions{}
+      , _logger(&logger)
       , _error_handler(std::move(error_handler))
       , _topic_cache(topic_cache)
       , _brokers(brokers)
@@ -76,6 +79,7 @@ private:
     const configuration& _config;
     absl::flat_hash_map<model::topic_partition, shared_produce_partition>
       _partitions;
+    prefix_logger* _logger;
     error_handler _error_handler;
     topic_cache& _topic_cache;
     brokers& _brokers;

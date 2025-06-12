@@ -42,8 +42,8 @@ produce_request make_produce_request(
     return produce_request(t_id, acks, std::move(topics));
 }
 
-produce_response::partition
-make_produce_response(model::partition_id p_id, std::exception_ptr ex) {
+produce_response::partition make_produce_response(
+  model::partition_id p_id, std::exception_ptr ex, prefix_logger& logger) {
     auto response = produce_response::partition{
       .partition_index{p_id},
       .error_code = error_code::none,
@@ -51,27 +51,27 @@ make_produce_response(model::partition_id p_id, std::exception_ptr ex) {
     try {
         std::rethrow_exception(std::move(ex));
     } catch (const partition_error& ex) {
-        vlog(kclog.debug, "handling partition_error {}", ex.what());
+        vlog(logger.debug, "handling partition_error {}", ex.what());
         response.error_code = ex.error;
     } catch (const broker_error& ex) {
-        vlog(kclog.debug, "handling broker_error {}", ex.what());
+        vlog(logger.debug, "handling broker_error {}", ex.what());
         response.error_code = ex.error;
     } catch (const ss::gate_closed_exception&) {
-        vlog(kclog.debug, "gate_closed_exception");
+        vlog(logger.debug, "gate_closed_exception");
         response.error_code = error_code::operation_not_attempted;
     } catch (const ss::abort_requested_exception&) {
         /// Could only occur when abort_source is triggered via stop()
-        vlog(kclog.debug, "sleep_aborted / abort_requested exception");
+        vlog(logger.debug, "sleep_aborted / abort_requested exception");
         response.error_code = error_code::operation_not_attempted;
     } catch (const std::exception& ex) {
-        vlog(kclog.warn, "std::exception {}", ex.what());
+        vlog(logger.warn, "std::exception {}", ex.what());
         response.error_code = error_code::unknown_server_error;
     }
     return response;
 }
 
 ss::future<> producer::stop() {
-    vlog(kclog.debug, "Stopping kafka/client producer");
+    vlog(_logger->debug, "Stopping kafka/client producer");
     /// Stop new messages from entering the system, the second abort source is
     /// triggered when the timeout below expires
     _ingest_as.request_abort();
@@ -89,7 +89,7 @@ ss::future<> producer::stop() {
     ss::abort_source exit;
     if (_config.produce_shutdown_delay() > 0ms) {
         vlog(
-          kclog.debug,
+          _logger->debug,
           "Waiting {}ms to allow final flush of producers batched records",
           _config.produce_shutdown_delay());
     }
@@ -97,20 +97,20 @@ ss::future<> producer::stop() {
                    .then([this] {
                        if (_config.produce_shutdown_delay() > 0ms) {
                            vlog(
-                             kclog.warn,
+                             _logger->warn,
                              "Forcefully stopping kafka client producer after "
                              "waiting {}ms for its gate to close",
                              _config.produce_shutdown_delay());
                        }
                        _as.request_abort();
                    })
-                   .handle_exception_type([](ss::sleep_aborted) {
-                       vlog(kclog.debug, "Producer shutdown cleanly");
+                   .handle_exception_type([this](ss::sleep_aborted) {
+                       vlog(_logger->debug, "Producer shutdown cleanly");
                    });
     co_await _gate.close();
     exit.request_abort();
     co_await std::move(abort);
-    vlog(kclog.debug, "Waiting for inflight state of false");
+    vlog(_logger->debug, "Waiting for inflight state of false");
     /// Wait until the produce_partition has no inflight records. That is
     /// because if in_flight is true, drain() and stop() will actually not call
     /// consume -> send(). This may have been the case when maybe_drain() above
@@ -118,13 +118,13 @@ ss::future<> producer::stop() {
     co_await ssx::parallel_transform(
       _partitions,
       [](partitions_t::value_type p) { return p.second->await_in_flight(); });
-    vlog(kclog.debug, "Calling produce_partition::stop()");
+    vlog(_logger->debug, "Calling produce_partition::stop()");
     /// At this point in time there are no inflight requests, for any data that
     /// remains in the buffers stop() will be guaranteed to call send() which
     /// will return error responses to the initial caller
     co_await ssx::parallel_transform(
       _partitions, [](partitions_t::value_type p) { return p.second->stop(); });
-    vlog(kclog.debug, "Producer stopped");
+    vlog(_logger->debug, "Producer stopped");
 }
 
 ss::future<produce_response::partition>
@@ -133,7 +133,8 @@ producer::produce(model::topic_partition tp, model::record_batch&& batch) {
         return ss::make_ready_future<produce_response::partition>(
           make_produce_response(
             tp.partition,
-            std::make_exception_ptr(ss::abort_requested_exception())));
+            std::make_exception_ptr(ss::abort_requested_exception()),
+            *_logger));
     }
     return get_context(std::move(tp))->produce(std::move(batch));
 }
@@ -159,7 +160,7 @@ ss::future<>
 producer::send(model::topic_partition tp, model::record_batch&& batch) {
     auto record_count = batch.record_count();
     vlog(
-      kclog.debug,
+      _logger->debug,
       "send record_batch: {}, {{record_count: {}}}",
       tp,
       record_count);
@@ -176,9 +177,9 @@ producer::send(model::topic_partition tp, model::record_batch&& batch) {
                        },
                        [this](std::exception_ptr ex) {
                            return _error_handler(std::move(ex))
-                             .handle_exception([](std::exception_ptr ex) {
+                             .handle_exception([this](std::exception_ptr ex) {
                                  vlog(
-                                   kclog.trace,
+                                   _logger->trace,
                                    "Error during mitigation: {}",
                                    ex);
                                  // ignore failed mitigation
@@ -187,12 +188,12 @@ producer::send(model::topic_partition tp, model::record_batch&& batch) {
                        _as);
                  });
              })
-      .handle_exception([p_id](std::exception_ptr ex) {
-          return make_produce_response(p_id, std::move(ex));
+      .handle_exception([this, p_id](std::exception_ptr ex) {
+          return make_produce_response(p_id, std::move(ex), *_logger);
       })
       .then([this, tp, record_count](produce_response::partition res) mutable {
           vlog(
-            kclog.debug,
+            _logger->debug,
             "sent record_batch: {}, {{record_count: {}}}, {}",
             tp,
             record_count,

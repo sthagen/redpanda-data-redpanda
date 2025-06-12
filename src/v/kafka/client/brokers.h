@@ -33,8 +33,10 @@ class brokers {
       = absl::flat_hash_set<shared_broker_t, broker_hash, broker_eq>;
 
 public:
-    explicit brokers(const configuration& config)
-      : _config(config) {};
+    explicit brokers(const configuration& config, prefix_logger& logger)
+      : _config(config)
+      , _logger(&logger) {};
+
     brokers(const brokers&) = delete;
     brokers(brokers&&) = default;
     brokers& operator=(const brokers&) = delete;
@@ -67,6 +69,7 @@ private:
     brokers_t _brokers;
     /// \brief Next broker to select with round-robin
     size_t _next_broker{0};
+    prefix_logger* _logger;
 };
 
 } // namespace kafka::client

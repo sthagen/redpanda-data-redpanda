@@ -29,6 +29,7 @@
 #include "kafka/protocol/list_offset.h"
 #include "kafka/protocol/metadata.h"
 #include "ssx/semaphore.h"
+#include "utils/prefix_logger.h"
 #include "utils/retry.h"
 #include "utils/unresolved_address.h"
 
@@ -185,6 +186,7 @@ public:
     configuration& config() { return _config; }
 
 private:
+    friend class client_fetcher;
     ss::future<list_offsets_response>
     do_list_offsets(const list_offsets_request&);
 
@@ -214,18 +216,12 @@ private:
     /// \brief Apply metadata update
     ss::future<> apply(metadata_response res);
 
-    /// \brief Log the client ID if it exists, otherwise don't log
-    friend std::ostream& operator<<(std::ostream& os, const client& c) {
-        if (c._config.client_identifier().has_value()) {
-            fmt::print(os, "{}: ", c._config.client_identifier().value());
-        }
-        return os;
-    }
-
+    prefix_logger& logger() { return _logger; }
     /// \brief Client holds a copy of its configuration
     configuration _config;
     /// \brief Seeds are used when no brokers are connected.
     std::vector<net::unresolved_address> _seeds;
+    prefix_logger _logger;
     /// \brief Cache of topic information.
     topic_cache _topic_cache;
     /// \brief Broker lookup from topic_partition.

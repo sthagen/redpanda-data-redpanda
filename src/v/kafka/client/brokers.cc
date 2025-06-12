@@ -65,7 +65,8 @@ ss::future<> brokers::apply(chunked_vector<metadata_response::broker>&& res) {
                      return make_broker(
                        b.node_id,
                        net::unresolved_address(b.host, b.port),
-                       _config);
+                       _config,
+                       *_logger);
                  })
           .then([this, &new_brokers, new_brokers_begin](
                   std::vector<shared_broker_t> broker_endpoints) mutable {

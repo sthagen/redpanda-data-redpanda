@@ -18,6 +18,7 @@
 #include "model/metadata.h"
 #include "net/connection.h"
 #include "utils/mutex.h"
+#include "utils/prefix_logger.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -123,7 +124,8 @@ using shared_broker_t = ss::lw_shared_ptr<broker>;
 ss::future<shared_broker_t> make_broker(
   model::node_id node_id,
   net::unresolved_address addr,
-  const configuration& config);
+  const configuration& config,
+  prefix_logger& logger);
 
 struct broker_hash {
     using is_transparent = void;

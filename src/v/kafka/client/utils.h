@@ -117,6 +117,7 @@ ss::future<shared_broker_t> find_coordinator_with_retry_and_mitigation(
   brokers& cluster_brokers,
   const group_id& group_id,
   member_id name,
+  prefix_logger& logger,
   ErrFunc errFunc) {
     return gated_retry_with_mitigation_impl(
              retry_gate,
@@ -139,11 +140,12 @@ ss::future<shared_broker_t> find_coordinator_with_retry_and_mitigation(
                    });
              },
              errFunc)
-      .then([&client_config](find_coordinator_response res) {
+      .then([&client_config, &logger](find_coordinator_response res) {
           return make_broker(
             res.data.node_id,
             net::unresolved_address(res.data.host, res.data.port),
-            client_config);
+            client_config,
+            logger);
       });
 }
 

@@ -16,16 +16,13 @@
 
 namespace kafka::client {
 
-ss::future<>
-do_authenticate(shared_broker_t broker, const configuration& config) {
-    auto prefix = config.client_identifier().has_value()
-                    ? ssx::sformat("{}: ", *config.client_identifier())
-                    : "";
+ss::future<> do_authenticate(
+  shared_broker_t broker, const configuration& config, prefix_logger& logger) {
     if (config.sasl_mechanism().empty()) {
         vlog(
-          kclog.debug,
-          "{}Connecting to broker {} without authentication",
-          prefix,
+          logger.debug,
+          "Connecting to broker {} without authentication",
+
           broker->id());
         co_return;
     }
@@ -45,9 +42,8 @@ do_authenticate(shared_broker_t broker, const configuration& config) {
     auto username = config.scram_username();
 
     vlog(
-      kclog.debug,
-      "{}Connecting to broker {} with authentication: {}:{}",
-      prefix,
+      logger.debug,
+      "Connecting to broker {} with authentication: {}:{}",
       broker->id(),
       mechanism,
       username);

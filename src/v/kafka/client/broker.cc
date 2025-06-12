@@ -43,7 +43,8 @@ namespace kafka::client {
 ss::future<shared_broker_t> make_broker(
   model::node_id node_id,
   net::unresolved_address addr,
-  const configuration& config) {
+  const configuration& config,
+  prefix_logger& logger) {
     return rpc::maybe_build_reloadable_certificate_credentials(
              config.broker_tls())
       .then([addr, client_id = config.client_identifier()](
@@ -53,32 +54,32 @@ ss::future<shared_broker_t> make_broker(
               .server_addr = addr, .credentials = std::move(creds)},
             std::move(client_id));
       })
-      .then([node_id, addr](ss::lw_shared_ptr<transport> client) {
+      .then([node_id, addr, &logger](
+              ss::lw_shared_ptr<transport> client) mutable {
           return client->connect().then(
-            [node_id, addr = std::move(addr), client] {
+            [node_id, addr = std::move(addr), client, &logger] {
                 auto prefix = client->client_id().has_value()
                                 ? ssx::sformat("{}: ", *client->client_id())
                                 : "";
                 vlog(
-                  kclog.info,
-                  "{}connected to broker:{} - {}:{}",
-                  prefix,
+                  logger.info,
+                  "connected to broker:{} - {}:{}",
                   node_id,
                   addr.host(),
                   addr.port());
                 return ss::make_lw_shared<broker>(node_id, std::move(*client));
             });
       })
-      .handle_exception_type([node_id](const std::system_error& ex) {
+      .handle_exception_type([node_id, &logger](const std::system_error& ex) {
           if (net::is_reconnect_error(ex) || is_dns_failure_error(ex)) {
               return ss::make_exception_future<shared_broker_t>(
                 broker_error(node_id, error_code::network_exception));
           }
-          vlog(kclog.warn, "std::system_error: {}", ex.what());
+          vlog(logger.warn, "std::system_error: {}", ex.what());
           return ss::make_exception_future<shared_broker_t>(ex);
       })
-      .then([&config](shared_broker_t broker) {
-          return do_authenticate(broker, config)
+      .then([&config, &logger](shared_broker_t broker) {
+          return do_authenticate(broker, config, logger)
             .then([broker]() { return broker; })
             .handle_exception([broker](std::exception_ptr ex) {
                 return broker->stop().then([ex]() {

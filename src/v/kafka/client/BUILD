@@ -88,6 +88,7 @@ redpanda_cc_library(
         "//src/v/strings:string_switch",
         "//src/v/thirdparty/c-ares",
         "//src/v/utils:mutex",
+        "//src/v/utils:prefix_logger",
         "//src/v/utils:retry",
         "//src/v/utils:truncating_logger",
         "//src/v/utils:unresolved_address",

@@ -201,7 +201,6 @@ TEST_F(TranslateTaskTest, TestHappyPathTranslation) {
     auto result = std::move(task)
                     .finish(
                       translation_task::custom_partitioning_enabled::yes,
-                      datalake::remote_path("test/location/1"),
                       test_rcn,
                       as)
                     .get();
@@ -232,7 +231,6 @@ TEST_F(TranslateTaskTest, TestDataFileMissing) {
     auto result = std::move(task)
                     .finish(
                       translation_task::custom_partitioning_enabled::yes,
-                      datalake::remote_path("test/location/1"),
                       test_rcn,
                       as)
                     .get();
@@ -267,7 +265,6 @@ TEST_F(TranslateTaskTest, TestUploadError) {
     auto result = std::move(task)
                     .finish(
                       translation_task::custom_partitioning_enabled::yes,
-                      datalake::remote_path("test/location/1"),
                       test_rcn,
                       as)
                     .get();
