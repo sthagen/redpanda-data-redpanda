@@ -1576,9 +1576,6 @@ class redpanda_storage(gdb.Command):
         print(f"# Log segments")
 
         for ntp, log in find_logs():
-
-            if str(model_ntp(ntp).partition()) != "40":
-                continue
             print(f"{ntp} segment count {log.segments().size()}")
             for segment in log.segments():
                 offsets = segment.offsets_tracker()
@@ -1888,6 +1885,7 @@ class seastar_data_source:
         self.session_ssl = std_unique_ptr(
             self.session['_ssl']).get().dereference()
         self.rbio = self.session_ssl['rbio'].dereference()
+        self.wbio = self.session_ssl['wbio'].dereference()
 
         self.session_sock = std_unique_ptr(
             self.session['_sock']).get().dynamic_cast(
@@ -1909,6 +1907,7 @@ session_sock_fd={self.session_sock_fd},
 session_sock={self.session_sock},
 ssl = {self.session_ssl}, 
 rbio={self.rbio}, 
+wbio={self.wbio}, 
 session_in={self.session_in},
 out_pending={self.out_pending}),
 """
@@ -2096,6 +2095,12 @@ class consensus:
         return f"consensus(term={self.term}, confirmed_term={self.confirmed_term}, v_state={self.v_state}, is_leader={self.is_leader()}, election_lock={self.election_lock}, op_lock={self.op_lock}, snapshot_lock={self.snapshot_lock}, offset_monitor={self.offset_monitor})"
 
 
+def parse_shard_arg(arg):
+    if arg is None or arg == "":
+        return None
+    return int(arg)
+
+
 class redpanda_partition:
     def __init__(self, ptr):
         self.ptr = ptr
@@ -2135,7 +2140,7 @@ class redpanda_partitions(gdb.Command):
                     print("Skipping ntp {}: {}".format(model_ntp(ntp), e))
 
     def invoke(self, arg, from_tty):
-        self.print_partitions(arg)
+        self.print_partitions(parse_shard_arg(arg))
 
 
 class redpanda_cloud_clients(gdb.Command):
@@ -2144,7 +2149,7 @@ class redpanda_cloud_clients(gdb.Command):
                              gdb.COMPLETE_NONE, True)
 
     def invoke(self, arg, from_tty):
-        cpu = arg
+        cpu = parse_shard_arg(arg)
         cpu_list = range(cpus()) if cpu is None else [int(cpu)]
         for i in cpu_list:
             client_pool_ref = find_cloud_storage_clients(i)

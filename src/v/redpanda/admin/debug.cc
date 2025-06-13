@@ -117,6 +117,18 @@ void fill_raft_state(
     }
     replica.raft_state = std::move(raft_state);
 }
+
+// noinline because this is the characteristic frame we look for the backtrace
+// test
+[[gnu::noinline]] void log_backtrace(std::unique_ptr<ss::http::request> req) {
+    bool simple = admin::get_boolean_query_param(*req, "simple");
+    if (simple) {
+        vlog(adminlog.info, "Backtrace: {}", ss::current_backtrace_tasklocal());
+    } else {
+        vlog(adminlog.info, "Backtrace:\n{}", ss::current_backtrace());
+    }
+}
+
 } // namespace
 
 void admin_server::register_debug_routes() {
@@ -506,6 +518,14 @@ void admin_server::register_debug_routes() {
       [this](std::unique_ptr<ss::http::request>)
         -> ss::future<ss::json::json_return_type> {
           return get_node_uuid_handler();
+      });
+
+    register_route<superuser>(
+      ss::httpd::debug_json::log_backtrace,
+      [](std::unique_ptr<ss::http::request> req)
+        -> ss::future<ss::json::json_return_type> {
+          log_backtrace(std::move(req));
+          co_return ss::json::json_void{};
       });
 
     if constexpr (admin_server::is_store_message_enabled()) {

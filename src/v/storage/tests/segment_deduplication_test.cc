@@ -9,6 +9,7 @@
 
 #include "config/configuration.h"
 #include "gmock/gmock.h"
+#include "model/fundamental.h"
 #include "model/record_batch_types.h"
 #include "model/tests/random_batch.h"
 #include "model/timestamp.h"

@@ -11,6 +11,8 @@ import math
 import random
 import re
 import threading
+from enum import Enum
+
 from rptest.clients.rpk import RpkTool
 from rptest.services.admin import Admin
 from rptest.services.apache_iceberg_catalog import IcebergRESTCatalog
@@ -48,6 +50,12 @@ TS_LOG_ALLOW_LIST = [
         """.*state_machine_manager.* error applying raft snapshot - std::runtime_error \\(couldn't download manifest: cloud_storage::error_outcome:2\\).*"""
     )
 ]
+
+
+class CompactionMode(str, Enum):
+    SLIDING_WINDOW = "sliding_window"
+    CHUNKED_SLIDING_WINDOW = "chunked_sliding_window"
+    ADJACENT_MERGE = "adjacent_merge"
 
 
 class RandomNodeOperationsTest(PreallocNodesTest):
@@ -161,9 +169,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
             f"running test with: [message_size {self.msg_size},  total_bytes: {self.total_data}, message_count: {self.msg_count}, rate_limit: {self.rate_limit}, cluster_operations: {self.node_operations}]"
         )
 
-    def _start_redpanda(self, mixed_versions, with_iceberg,
-                        with_chunked_compaction):
-
+    def _start_redpanda(self, mixed_versions, with_iceberg, compaction_mode):
         # since this test is deleting topics we must tolerate missing manifests
         self._si_settings.set_expected_damage(
             {"ntr_no_topic_manifest", "ntpr_no_manifest"})
@@ -183,7 +189,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                 "panda-secret",
             })
 
-        if with_chunked_compaction:
+        if compaction_mode == CompactionMode.CHUNKED_SLIDING_WINDOW:
             # This may not be recognized on certain nodes in mixed-version run.
             environment = {
                 "__REDPANDA_TEST_DISABLE_BOUNDED_PROPERTY_CHECKS": "ON"
@@ -192,6 +198,9 @@ class RandomNodeOperationsTest(PreallocNodesTest):
             # Use 3 KiB of memory for compaction map, which should force chunked compaction.
             self.redpanda.add_extra_rp_conf(
                 {"storage_compaction_key_map_memory": 3 * 1024})
+        elif compaction_mode == CompactionMode.ADJACENT_MERGE:
+            self.redpanda.add_extra_rp_conf(
+                {"log_compaction_use_sliding_window": False})
 
         self.redpanda.set_seed_servers(self.redpanda.nodes)
         if mixed_versions:
@@ -343,10 +352,14 @@ class RandomNodeOperationsTest(PreallocNodesTest):
     @matrix(enable_failures=[True, False],
             mixed_versions=[True, False],
             with_iceberg=[True, False],
-            with_chunked_compaction=[True, False],
+            compaction_mode=[
+                CompactionMode.SLIDING_WINDOW,
+                CompactionMode.CHUNKED_SLIDING_WINDOW,
+                CompactionMode.ADJACENT_MERGE
+            ],
             cloud_storage_type=get_cloud_storage_type())
     def test_node_operations(self, enable_failures, mixed_versions,
-                             with_iceberg, with_chunked_compaction,
+                             with_iceberg, compaction_mode,
                              cloud_storage_type):
         # In order to reduce the number of parameters and at the same time cover
         # as many use cases as possible this test uses 3 topics which 3 separate
@@ -389,7 +402,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
         # start redpanda process
         self._start_redpanda(mixed_versions,
                              with_iceberg=with_iceberg,
-                             with_chunked_compaction=with_chunked_compaction)
+                             compaction_mode=compaction_mode)
 
         self.redpanda.set_cluster_config(
             {"controller_snapshot_max_age_sec": 1})

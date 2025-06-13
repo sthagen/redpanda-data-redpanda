@@ -945,8 +945,7 @@ SEASTAR_THREAD_TEST_CASE(test_upload_aligned_to_non_existent_offset) {
     b | storage::add_segment(*first)
       | storage::add_random_batch(*first, spec.last_segment_num_records);
 
-    // Compaction will rewrite each segment, and merge the first two.
-    // Segment boundaries: [5, 24][25, 34][35, 50]...
+    // Compaction will rewrite each segment, and merge the first few.
     b.gc(model::timestamp::max(), std::nullopt).get();
 
     size_t max_size = b.get_segment(0).size_bytes()
@@ -965,7 +964,7 @@ SEASTAR_THREAD_TEST_CASE(test_upload_aligned_to_non_existent_offset) {
     auto upload_candidate = upload_with_locks.candidate;
     BOOST_REQUIRE(!upload_candidate.sources.empty());
     BOOST_REQUIRE_EQUAL(upload_candidate.starting_offset, model::offset{10});
-    BOOST_REQUIRE_EQUAL(upload_candidate.final_offset, model::offset{29});
+    BOOST_REQUIRE_EQUAL(upload_candidate.final_offset, model::offset{39});
 
     // Start with all the segments collected
     auto expected_content_length = collector.collected_size();
@@ -979,7 +978,7 @@ SEASTAR_THREAD_TEST_CASE(test_upload_aligned_to_non_existent_offset) {
     BOOST_REQUIRE_EQUAL(
       expected_content_length, upload_candidate.content_length);
 
-    BOOST_REQUIRE_EQUAL(upload_with_locks.read_locks.size(), 2);
+    BOOST_REQUIRE_EQUAL(upload_with_locks.read_locks.size(), 1);
 }
 
 SEASTAR_THREAD_TEST_CASE(test_same_size_reupload_skipped) {

@@ -10,8 +10,10 @@
  */
 #pragma once
 
+#include "model/fundamental.h"
 #include "storage/batch_cache.h"
 #include "storage/log_manager.h"
+#include "storage/segment.h"
 
 namespace storage::testing_details {
 class log_manager_accessor {
@@ -29,4 +31,12 @@ public:
         return m._logs_list;
     }
 };
+
+class offset_tracker_accessor {
+public:
+    static model::offset& base_offset(storage::segment::offset_tracker& ot) {
+        return ot._base_offset;
+    }
+};
+
 } // namespace storage::testing_details

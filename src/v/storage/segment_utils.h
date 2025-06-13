@@ -85,11 +85,12 @@ ss::future<> rebuild_compaction_index(
  * segment, and upper range offsets (e.g. stable_offset) taken from the last
  * segment in the input range.
  */
-ss::future<
-  std::tuple<ss::lw_shared_ptr<segment>, std::vector<segment::generation_id>>>
+ss::future<std::tuple<
+  ss::lw_shared_ptr<segment>,
+  chunked_vector<segment::generation_id>>>
 make_concatenated_segment(
   segment_full_path,
-  std::vector<ss::lw_shared_ptr<segment>>,
+  chunked_vector<ss::lw_shared_ptr<segment>>&,
   compaction_config,
   storage_resources& resources,
   ss::sharded<features::feature_table>& feature_table);
@@ -103,7 +104,7 @@ make_concatenated_segment(
 // concatenation.
 ss::future<compaction_result> concatenate_and_rebuild_target_segment(
   ss::lw_shared_ptr<segment> target,
-  std::vector<ss::lw_shared_ptr<segment>>& segments,
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
   compaction_config cfg,
   storage::probe& pb,
@@ -114,16 +115,16 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
 
 ss::future<> write_concatenated_compacted_index(
   std::filesystem::path,
-  std::vector<ss::lw_shared_ptr<segment>>,
+  chunked_vector<ss::lw_shared_ptr<segment>>&,
   compaction_config,
   storage_resources& resources);
 
-ss::future<std::vector<ss::rwlock::holder>> transfer_segment(
+ss::future<chunked_vector<ss::rwlock::holder>> transfer_segment(
   ss::lw_shared_ptr<segment> to,
   ss::lw_shared_ptr<segment> from,
   compaction_config cfg,
   probe& probe,
-  std::vector<ss::rwlock::holder>);
+  chunked_vector<ss::rwlock::holder>);
 
 /*
  * Acquire write locks on multiple segments. The process will proceed until
@@ -132,8 +133,8 @@ ss::future<std::vector<ss::rwlock::holder>> transfer_segment(
  * fairness. If a lock cannot be acquired all held locks are released and the
  * process is retried. Favor more retries over longer timeouts.
  */
-ss::future<std::vector<ss::rwlock::holder>> write_lock_segments(
-  std::vector<ss::lw_shared_ptr<segment>>& segments,
+ss::future<chunked_vector<ss::rwlock::holder>> write_lock_segments(
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   ss::semaphore::clock::duration timeout,
   int retries);
 

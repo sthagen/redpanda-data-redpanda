@@ -21,13 +21,16 @@
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 #include "redpanda/tests/fixture.h"
+#include "storage/log_reader.h"
 #include "storage/segment.h"
+#include "storage/segment_set.h"
 #include "storage/segment_utils.h"
 #include "storage/tests/manual_mixin.h"
 #include "storage/types.h"
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 #include "test_utils/test.h"
+#include "utils/adjustable_semaphore.h"
 #include "utils/directory_walker.h"
 
 #include <seastar/core/sleep.hh>
@@ -129,7 +132,8 @@ public:
       size_t records_per_batch = 1,
       size_t starting_value = 0,
       bool produce_tombstones = false,
-      map_t* latest_kv = nullptr) {
+      map_t* latest_kv = nullptr,
+      size_t base = 0) {
         tests::kafka_produce_transport producer(co_await make_kafka_client());
         co_await producer.start();
 
@@ -142,7 +146,8 @@ public:
                   records_per_batch,
                   val_count,
                   cardinality,
-                  produce_tombstones);
+                  produce_tombstones,
+                  base);
                 if (latest_kv) {
                     for (const auto& kv : kvs) {
                         latest_kv->insert_or_assign(kv.key, kv.val);
@@ -1600,4 +1605,409 @@ TEST_F(CompactionFixtureTest, TestSlidingWindowNoUnecessaryRewrites) {
 
     segments_compacted = log->get_probe().get_segments_compacted();
     ASSERT_EQ(segments_compacted, 6);
+}
+
+TEST_F(CompactionFixtureParamTest, TestSegmentConcatenation) {
+    auto num_segments = 10;
+    auto cardinality = 1000000; // High enough to ensure no duplicates/removable
+                                // records- we want to first ensure
+                                // concatenation works on its own without
+                                // considering compaction.
+    auto batches_per_segment = 100;
+    auto records_per_batch = 100;
+    generate_data(
+      num_segments, cardinality, batches_per_segment, records_per_batch)
+      .get();
+
+    auto reader_cfg = storage::log_reader_config(
+      model::offset{0}, model::offset::max());
+    auto pre_compact_batches = model::consume_reader_to_chunked_vector(
+                                 log->make_reader(reader_cfg).get(),
+                                 model::no_timeout)
+                                 .get();
+
+    // Sanity check we created the right number of segments.
+    // NOTE: ignore the active segment.
+    auto segment_count_before = log->segment_count() - 1;
+    ASSERT_EQ(segment_count_before, num_segments);
+
+    const auto closed_segment_filter = [](const auto& s) -> bool {
+        return !s->has_appender();
+    };
+
+    auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
+    storage::segment_set::underlying_t filtered_segs;
+    for (const auto& segment :
+         disk_log.segments() | std::views::filter(closed_segment_filter)) {
+        filtered_segs.push_back(segment);
+    }
+
+    storage::segment_set filtered_seg_set(std::move(filtered_segs));
+
+    ss::abort_source never_abort;
+    storage::compaction_config cfg(
+      model::offset::max(),
+      std::nullopt,
+
+      never_abort,
+      std::nullopt,
+      cardinality);
+
+    disk_log.adjacent_merge_compact(filtered_seg_set, cfg).get();
+    auto post_compact_batches = model::consume_reader_to_chunked_vector(
+                                  log->make_reader(reader_cfg).get(),
+                                  model::no_timeout)
+                                  .get();
+
+    ASSERT_EQ(disk_log.segment_count(), 2);
+    ASSERT_EQ(pre_compact_batches, post_compact_batches);
+}
+
+TEST_F(CompactionFixtureTest, TestAdjacentCompaction) {
+    auto num_segments = 10;
+    auto cardinality = 1000;
+    auto batches_per_segment = 100;
+    auto records_per_batch = 100;
+    map_t latest_kv_map;
+    generate_data(
+      num_segments,
+      cardinality,
+      batches_per_segment,
+      records_per_batch,
+      0,
+      false,
+      &latest_kv_map)
+      .get();
+
+    // Sanity check we created the right number of segments.
+    // NOTE: ignore the active segment.
+    auto segment_count_before = log->segment_count() - 1;
+    ASSERT_EQ(segment_count_before, num_segments);
+
+    ss::abort_source never_abort;
+    auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
+    storage::compaction_config cfg(
+      model::offset::max(),
+      std::nullopt,
+
+      never_abort,
+      std::nullopt,
+      cardinality);
+
+    const auto closed_segment_filter = [](const auto& s) -> bool {
+        return !s->has_appender();
+    };
+
+    storage::segment_set::underlying_t filtered_segs;
+    for (const auto& segment :
+         disk_log.segments() | std::views::filter(closed_segment_filter)) {
+        filtered_segs.push_back(segment);
+    }
+
+    storage::segment_set filtered_seg_set(std::move(filtered_segs));
+
+    // All but the active segment
+    ASSERT_EQ(filtered_seg_set.size(), segment_count_before);
+
+    disk_log.adjacent_merge_compact(filtered_seg_set, cfg).get();
+
+    // Another sanity check after compaction.
+    ASSERT_EQ(disk_log.segment_count(), 2);
+
+    {
+        tests::kafka_consume_transport consumer(make_kafka_client().get());
+        consumer.start().get();
+        auto consumed_kvs = consumer
+                              .consume_from_partition(
+                                topic_name,
+                                model::partition_id(0),
+                                model::offset(0))
+                              .get();
+        ASSERT_NO_FATAL_FAILURE();
+
+        // Assert the key consumed is in the latest_kv_map.
+        for (const auto& kv : consumed_kvs) {
+            ASSERT_TRUE(latest_kv_map.contains(kv.key));
+            ASSERT_EQ(kv.val, latest_kv_map[kv.key]);
+        }
+        ASSERT_EQ(consumed_kvs.size(), latest_kv_map.size());
+    }
+}
+
+TEST_F(CompactionFixtureTest, TestAdjacentCompactionMultipleRanges) {
+    auto num_segments = 10;
+    auto cardinality = 10;
+    auto batches_per_segment = 100;
+    auto records_per_batch = 100;
+    map_t latest_kv_map;
+
+    // Write some data in different terms. Adjacent compaction should be able to
+    // compact several ranges all in one run without fear of dereferencing
+    // invalid iterators or running into other issues.
+    auto raft = partition->raft();
+    auto orig_term = raft->term();
+    auto num_raft_terms = 5;
+
+    int term_idx = 0;
+    while (raft->term()() < orig_term() + num_raft_terms) {
+        // Produced records in segments should look like
+        // [0, 1, 2, ..., 9] | [10, 11, 12, ..., 19] | [...]
+        // where | marks a demarcation point in raft term. This ensures that
+        // the latest key-values can still be verified by the Kafka consumer
+        // below, as we won't compact across raft terms.
+        auto term_base = term_idx * cardinality;
+        generate_data(
+          num_segments,
+          cardinality,
+          batches_per_segment,
+          records_per_batch,
+          term_base,
+          false,
+          &latest_kv_map,
+          term_base)
+          .get();
+        raft->step_down("test").get();
+        RPTEST_REQUIRE_EVENTUALLY(5s, [&] { return raft->is_leader(); });
+        ++term_idx;
+    }
+
+    ss::abort_source never_abort;
+    auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
+    storage::compaction_config cfg(
+      model::offset::max(),
+      std::nullopt,
+
+      never_abort,
+      std::nullopt,
+      cardinality);
+
+    const auto closed_segment_filter = [](const auto& s) -> bool {
+        return !s->has_appender();
+    };
+
+    storage::segment_set::underlying_t filtered_segs;
+    for (const auto& segment :
+         disk_log.segments() | std::views::filter(closed_segment_filter)) {
+        filtered_segs.push_back(segment);
+    }
+
+    storage::segment_set filtered_seg_set(std::move(filtered_segs));
+
+    // All but the active segment.
+    ASSERT_EQ(filtered_seg_set.size(), disk_log.segment_count() - 1);
+
+    disk_log.adjacent_merge_compact(filtered_seg_set, cfg).get();
+
+    // Another sanity check after compaction.
+    ASSERT_EQ(disk_log.segment_count(), num_raft_terms + 1);
+
+    {
+        tests::kafka_consume_transport consumer(make_kafka_client().get());
+        consumer.start().get();
+        auto consumed_kvs = consumer
+                              .consume_from_partition(
+                                topic_name,
+                                model::partition_id(0),
+                                model::offset(0))
+                              .get();
+        ASSERT_NO_FATAL_FAILURE();
+
+        // Assert the key consumed is in the latest_kv_map.
+        for (const auto& kv : consumed_kvs) {
+            ASSERT_TRUE(latest_kv_map.contains(kv.key));
+            ASSERT_EQ(kv.val, latest_kv_map[kv.key]);
+        }
+        ASSERT_EQ(consumed_kvs.size(), latest_kv_map.size());
+    }
+}
+
+TEST_F(
+  CompactionFixtureTest, TestAdjacentCompactionSimulateCrashDuringFileRemoval) {
+    auto num_segments = 5;
+    auto cardinality = 10;
+    auto batches_per_segment = 100;
+    auto records_per_batch = 100;
+
+    generate_data(
+      num_segments, cardinality, batches_per_segment, records_per_batch)
+      .get();
+
+    auto* disk_log = dynamic_cast<storage::disk_log_impl*>(log);
+
+    // All but the active segment.
+    auto segment_count_before = disk_log->segment_count() - 1;
+
+    auto do_adjacent_compact = [](const auto& l) {
+        ss::abort_source never_abort;
+        storage::compaction_config cfg(
+          model::offset::max(), std::nullopt, never_abort);
+
+        const auto closed_segment_filter = [](const auto& s) -> bool {
+            return !s->has_appender();
+        };
+
+        storage::segment_set::underlying_t filtered_segs;
+        for (const auto& segment :
+             l->segments() | std::views::filter(closed_segment_filter)) {
+            filtered_segs.push_back(segment);
+        }
+
+        storage::segment_set filtered_seg_set(std::move(filtered_segs));
+        l->adjacent_merge_compact(filtered_seg_set, cfg).get();
+        // Including the active segment
+        ASSERT_EQ(l->segment_count(), 2);
+    };
+
+    // This test uses 5 (+1 active) segments, which will be adjacently compacted
+    // like so: [0][1][2][3][4][A] -> [0`][A]
+    // We are going to simulate a "crash" during segment removal, in which some
+    // of the segments which were concatenated are left on disk after a restart
+    // like so: [0`][2][3][4][A].
+    // Then, using various consumers/readers of segment data, we will see the
+    // effects of what happens when segments with redundant data are left on
+    // disk.
+    {
+        // Hold the gate for one of the segments in order to block
+        // segment::close().
+        auto& seg = disk_log->segments()[2];
+        auto holder = seg->gate().hold();
+        auto adjacent_compact_fut = [&]() {
+            try {
+                do_adjacent_compact(disk_log);
+            } catch (...) {
+            }
+        };
+
+        // A future which breaks the inflight close semaphore and then releases
+        // the held gate, causing segment::close() to throw exceptions while
+        // attempting to close segments [2][3][4] as seen above.
+        auto break_close_fut
+          = ss::sleep(2s)
+              .then([&disk_log]() {
+                  auto& resources = disk_log->resources();
+                  storage::testing_details::storage_resources_accessor::
+                    inflight_close_flush_sem(resources)
+                      .broken();
+              })
+              .finally([h = std::move(holder)]() {});
+
+        ss::when_all(
+          std::move(adjacent_compact_fut), std::move(break_close_fut))
+          .get();
+
+        // Reset close semaphore.
+        auto& resources = disk_log->resources();
+        storage::testing_details::storage_resources_accessor::
+          inflight_close_flush_sem(resources)
+          = adjustable_semaphore(1);
+    }
+
+    restart(should_wipe::no);
+    wait_for_leader(ntp).get();
+    partition = app.partition_manager.local().get(ntp).get();
+    log = partition->log().get();
+    disk_log = dynamic_cast<storage::disk_log_impl*>(log);
+
+    // Some of the concatenated segments will have been left on disk.
+    auto segment_count_after = disk_log->segment_count();
+    ASSERT_EQ(segment_count_before, segment_count_after);
+
+    // Read log with a Kafka consumer.
+    auto make_kafka_consumer = [&]() {
+        tests::kafka_consume_transport consumer(make_kafka_client().get());
+        consumer.start().get();
+        auto kvs = consumer
+                     .consume_from_partition(
+                       topic_name, model::partition_id(0), model::offset(0))
+                     .get();
+        return kvs;
+    };
+
+    // Read log with a log reader.
+    auto make_log_reader = [&]() {
+        auto reader_cfg = storage::log_reader_config(
+          model::offset{0}, model::offset::max());
+
+        reader_cfg.skip_readers_cache = true;
+        reader_cfg.skip_batch_cache = true;
+
+        auto batches = model::consume_reader_to_chunked_vector(
+                         log->make_reader(reader_cfg).get(), model::no_timeout)
+                         .get();
+
+        return batches;
+    };
+
+    // Read raw log data on disk using a log_segment_batch_reader.
+    auto make_log_segment_batch_reader = [&]() {
+        chunked_vector<model::record_batch> all_batches;
+        for (auto& seg : log->segments()) {
+            if (seg->has_appender()) {
+                break;
+            }
+            auto reader_cfg = storage::log_reader_config(
+              model::offset{0}, model::offset::max());
+
+            reader_cfg.skip_readers_cache = true;
+            reader_cfg.skip_batch_cache = true;
+
+            auto rdr = storage::log_segment_batch_reader(
+              *seg, reader_cfg, log->get_probe());
+            auto recs = rdr.read_some(model::no_timeout).get();
+            while (recs.has_value() && !recs.value().empty()) {
+                auto& batches = recs.value();
+                for (auto& batch : batches) {
+                    all_batches.push_back(std::move(batch));
+                }
+                recs = rdr.read_some(model::no_timeout).get();
+            }
+            rdr.close().get();
+        }
+        return all_batches;
+    };
+
+    // Get total number of data records from a collection of batches.
+    auto num_data_records = [](const auto& batches) {
+        int record_count = 0;
+        for (const auto& batch : batches) {
+            record_count += (batch.header().type
+                             == model::record_batch_type::raft_data)
+                              ? batch.record_count()
+                              : 0;
+        }
+        return record_count;
+    };
+
+    // Kafka consumer
+    auto consumed_kvs_before = make_kafka_consumer();
+    ASSERT_EQ(consumed_kvs_before.size(), cardinality);
+
+    // Log reader
+    auto log_reader_batches_before = make_log_reader();
+    ASSERT_EQ(num_data_records(log_reader_batches_before), cardinality);
+
+    // Raw batches on disk in segment files
+    // We will see that the old data is actually still around.
+    auto on_disk_batches_before = make_log_segment_batch_reader();
+    ASSERT_EQ(
+      num_data_records(on_disk_batches_before),
+      cardinality * (segment_count_after - 1));
+
+    // One more adjacent compact. There should be no differences in batches
+    // processed by the log reader or kafka consumer after this compaction.
+    // However, expect the redundant data on disk to be removed.
+    do_adjacent_compact(disk_log);
+
+    // Kafka consumer
+    auto consumed_kvs_after = make_kafka_consumer();
+    ASSERT_EQ(consumed_kvs_before.size(), consumed_kvs_after.size());
+
+    // Log reader
+    auto log_reader_batches_after = make_log_reader();
+    ASSERT_EQ(log_reader_batches_before, log_reader_batches_after);
+
+    // Raw batches on disk in segment files.
+    auto on_disk_batches_after = make_log_segment_batch_reader();
+    ASSERT_EQ(num_data_records(on_disk_batches_after), cardinality);
+    ASSERT_NE(on_disk_batches_before, on_disk_batches_after);
 }

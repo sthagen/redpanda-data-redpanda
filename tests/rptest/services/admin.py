@@ -1978,3 +1978,12 @@ class Admin:
                              f'debug/ctracker/va/{shard}',
                              node=node,
                              data=json.dumps(params))
+
+    def log_backtrace(self, node: ClusterNode, simple_backtrace: bool = False):
+        """
+        Logs a backtrace to the redpanda log using the admin API.
+        :simple_backtrace: If true, a one-line backtrace is logged, no tasktrace,
+            if false, a full backtrace is logged including taasktrace.
+        """
+        path = f"debug/log_backtrace?simple={str(simple_backtrace).lower()}"
+        return self._request('post', path, node=node)

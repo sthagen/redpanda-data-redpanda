@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import signal
 from subprocess import CalledProcessError
 from ducktape.mark import matrix
 from ducktape.mark.resource import cluster as dt_cluster
@@ -21,7 +22,7 @@ from rptest.services.failure_injector import FailureSpec, make_failure_injector
 from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.kgo_repeater_service import repeater_traffic
 from rptest.services.kgo_verifier_services import KgoVerifierRandomConsumer, KgoVerifierSeqConsumer, KgoVerifierConsumerGroupConsumer, KgoVerifierProducer
-from rptest.services.redpanda import RedpandaServiceCloud, SISettings, CloudStorageType, get_cloud_storage_type, make_redpanda_service, make_redpanda_mixed_service
+from rptest.services.redpanda import RedpandaService, RedpandaServiceCloud, SISettings, CloudStorageType, get_cloud_storage_type, make_redpanda_service, make_redpanda_mixed_service
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.utils.si_utils import BucketView
 from rptest.util import expect_exception
@@ -443,3 +444,25 @@ class FailureInjectorSelfTest(Test):
     def test_finjector(self):
         fi = make_failure_injector(self.redpanda)
         fi.inject_failure(FailureSpec(FailureSpec.FAILURE_ISOLATE, None))
+
+
+class RedpandaServiceSelfTest(RedpandaTest):
+    @cluster(num_nodes=1, log_allow_list=["Segmentation fault"])
+    @matrix(simple_backtrace=[True, False])
+    def test_backtrace(self, simple_backtrace: bool):
+        rp = self.redpanda
+        node = rp.nodes[0]
+
+        # before anything happens, the backtrace capture file should not exist
+        assert not node.account.exists(RedpandaService.BACKTRACE_CAPTURE), \
+            "Backtrace capture file should not exist before test"
+
+        rp._admin.log_backtrace(node, simple_backtrace=simple_backtrace)
+        rp.decode_backtraces(raise_on_failure=True)
+        backtrace_contents = node.account.ssh_output(
+            f"cat {RedpandaService.BACKTRACE_CAPTURE}").decode()
+        self.logger.debug(f"Backtrace contents: {backtrace_contents}")
+        # we look for this characteristic string in the backtrace, which is
+        # the method int he admin API that was called to capture the backtrace
+        assert "::log_backtrace" in backtrace_contents, \
+            "Didn't find expected string in backtrace (see debug log for contents)"

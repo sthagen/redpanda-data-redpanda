@@ -183,14 +183,27 @@ class CompactionTest(RedpandaTest):
                 metrics_endpoint=MetricsEndpoint.METRICS,
                 topic=self.topic_name)
 
+        def get_complete_sliding_window_rounds():
+            return self.redpanda.metric_sum(
+                metric_name=
+                "vectorized_storage_log_complete_sliding_window_rounds_total",
+                metrics_endpoint=MetricsEndpoint.METRICS,
+                topic=self.topic_name)
+
+        self.prev_sliding_window_rounds = -1
+
         def compaction_has_completed():
-            return get_dirty_segment_bytes() == 0
+            new_sliding_window_rounds = get_complete_sliding_window_rounds()
+            res = self.prev_sliding_window_rounds == new_sliding_window_rounds and get_dirty_segment_bytes(
+            ) == 0
+            self.prev_sliding_window_rounds = new_sliding_window_rounds
+            return res
 
         wait_until(
             compaction_has_completed,
             timeout_sec=180,
             backoff_sec=self.extra_rp_conf['log_compaction_interval_ms'] /
-            1000,
+            1000 * 4,
             err_msg="Compaction did not stabilize.")
 
     def verify_log_and_table(self, dl: DatalakeServices):

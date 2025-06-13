@@ -786,6 +786,29 @@
                     }
                 }
             ]
+        },
+        {
+            "path": "/v1/debug/log_backtrace",
+            "operations": [
+                {
+                    "method": "POST",
+                    "summary": "Emit a backtrace to the log",
+                    "type": "void",
+                    "nickname": "log_backtrace",
+                    "produces": [
+                        "application/json"
+                    ],
+                    "parameters": [
+                        {
+                            "name": "simple",
+                            "in": "query",
+                            "required": false,
+                            "allowMultiple": false,
+                            "type": "boolean"
+                        }
+                    ]
+                }
+            ]
         }
     ],
     "models": {

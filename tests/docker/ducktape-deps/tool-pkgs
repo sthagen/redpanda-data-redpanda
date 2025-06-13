@@ -28,4 +28,18 @@ apt-get install -qq \
   npm \
   openssh-server \
   pciutils \
+  software-properties-common \
   sudo
+
+# install llvm-addr2line-$(version), which is not available in the default ubuntu/debian repos,
+# but is needed to demangle seastar backtraces (much faster than binutils addr2line)
+
+LLVM_VERSION=20
+
+cd "$(mktemp -d)"
+wget https://apt.llvm.org/llvm.sh
+chmod +x llvm.sh
+./llvm.sh $LLVM_VERSION
+mkdir -p /opt/llvm
+# make it available in a version-independent way
+ln -s /usr/bin/llvm-addr2line-$LLVM_VERSION /opt/llvm/llvm-addr2line

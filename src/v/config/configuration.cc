@@ -1079,14 +1079,27 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       false)
   , log_compaction_adjacent_merge_self_compaction_count(
+      *this, "log_compaction_adjacent_merge_self_compaction_count")
+  , log_compaction_merge_max_segments_per_range(
       *this,
-      "log_compaction_adjacent_merge_self_compaction_count",
-      "The number of self compactions that must occur before an adjacent "
-      "compaction is attempted in the log. If set to `std::nullopt`, every "
-      "segment in the log must be self-compacted before an adjacent compaction "
-      "is attempted.",
+      "log_compaction_merge_max_segments_per_range",
+      "The maximum number of segments that can be combined into a single "
+      "segment during an adjacent merge operation. If `null` (the default "
+      "value), no maximum is imposed on the number of segments that can be "
+      "combined at once. A value below 2 effectively disables adjacent merge "
+      "compaction.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      10)
+      std::nullopt)
+  , log_compaction_merge_max_ranges(
+      *this,
+      "log_compaction_merge_max_ranges",
+      "The maximum number of ranges of segments that can be processed in a "
+      "single round of adjacent segment compaction. If `null` (the default "
+      "value), no maximum is imposed on the number of ranges that can be "
+      "processed at once. A value below 1 effectively disables adjacent merge "
+      "compaction.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      std::nullopt)
   , retention_bytes(
       *this,
       "retention_bytes",

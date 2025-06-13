@@ -22,6 +22,10 @@ namespace storage {
 
 class node_api;
 
+namespace testing_details {
+class storage_resources_accessor;
+}
+
 /**
  * This class is used by various storage components to control consumption
  * of shared system resources.  It broadly does this in two ways:
@@ -153,6 +157,18 @@ private:
     // memory footprint compared with the batch's original size, we must
     // limit how many of these we do in parallel.
     adjustable_semaphore _inflight_compaction_compression{1};
+
+    friend class testing_details::storage_resources_accessor;
 };
+
+namespace testing_details {
+class storage_resources_accessor {
+public:
+    static adjustable_semaphore&
+    inflight_close_flush_sem(storage_resources& resources) {
+        return resources._inflight_close_flush;
+    }
+};
+} // namespace testing_details
 
 } // namespace storage

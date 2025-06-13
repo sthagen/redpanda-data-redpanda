@@ -165,10 +165,12 @@ void concatenate_segments_from_log(
     // the segment which will be expanded to replace
     auto target = segments.front();
 
+    chunked_vector<ss::lw_shared_ptr<storage::segment>> chunked_segments(
+      segments.begin(), segments.end());
     [[maybe_unused]] auto ret
       = storage::internal::concatenate_and_rebuild_target_segment(
           target,
-          segments,
+          chunked_segments,
           log.stm_manager(),
           cfg,
           log.get_probe(),

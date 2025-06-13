@@ -42,14 +42,15 @@ struct kv_t {
       size_t num_records,
       std::optional<size_t> val_start = std::nullopt,
       size_t key_cardinality = 0,
-      bool produce_tombstones = false) {
+      bool produce_tombstones = false,
+      size_t base = 0) {
         size_t vstart = val_start.value_or(start);
         std::vector<kv_t> records;
         records.reserve(num_records);
         for (size_t i = 0; i < num_records; i++) {
             auto key = start + i;
             if (key_cardinality > 0) {
-                key = key % key_cardinality;
+                key = (key % key_cardinality) + base;
             }
             auto key_str = ssx::sformat("key{}", key);
             if (produce_tombstones) {

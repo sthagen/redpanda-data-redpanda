@@ -226,19 +226,8 @@ public:
     ss::future<compaction_result>
     segment_self_compact(compaction_config, ss::lw_shared_ptr<segment> seg);
 
-    // Finds a range of adjacent segments that can be compacted together.
-    // A valid segment range consists of segments with the same raft term, a
-    // combined size less than max_compacted_segment_size, and spanning
-    // a range of offsets that fits in a uint32_t.
-    //
-    // Returns std::nullopt if a valid range of two segments could not be found.
-    // Otherwise, a pair of iterators to the segments.
-    std::optional<std::pair<segment_set::iterator, segment_set::iterator>>
-    find_adjacent_compaction_range(const compaction_config& cfg);
-
-    // Performs self-compaction on the earliest segment possible, and then
-    // attempts to perform compaction on adjacent segments.
     ss::future<> adjacent_merge_compact(
+      segment_set& segments,
       compaction_config,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
@@ -282,6 +271,26 @@ public:
 
     std::optional<model::timestamp> earliest_dirty_segment_ts() const final;
 
+    // Finds every sub-range of adjacent segments that can be compacted
+    // together. A valid segment range consists of segments with the same raft
+    // term, and a combined size less than max_compacted_segment_size.
+    // This function guarantees that segments in returned ranges can be
+    // combined. The ranges are guaranteed to contain two or more segments.
+    //
+    // Returns std::nullopt if no valid ranges of segments could be found.
+    // Otherwise, a vector containing pairs of iterators representing the
+    // [start, end) of segment ranges (e.g inclusive start, exclusive end).
+    std::optional<
+      chunked_vector<std::pair<segment_set::iterator, segment_set::iterator>>>
+    find_adjacent_compaction_ranges(
+      const compaction_config& cfg,
+      std::optional<model::offset> new_start_offset = std::nullopt);
+
+    ss::future<std::optional<chunked_vector<compaction_result>>>
+    compact_adjacent_segment_ranges(
+      storage::compaction_config cfg,
+      std::optional<model::offset> new_start_offset = std::nullopt);
+
 private:
     friend class disk_log_appender; // for multi-term appends
     friend class disk_log_builder;  // for tests
@@ -308,28 +317,16 @@ private:
     // Returns if the update actually took place.
     ss::future<bool> update_start_offset(model::offset o);
 
-    // Requests compaction of adjacent segments per the
-    // max_removable_local_log_offset in the compaction_config.
-    //
-    // Returns std::nullopt if an adjacent pair could not be found for adjacent
-    // compaction, or a compaction_result. This result should also have its
-    // did_compact() function checked to verify whether adjacent segment
-    // compaction actually occurred.
-    ss::future<std::optional<compaction_result>>
-    compact_adjacent_segments(storage::compaction_config cfg);
-
-    // Performs compaction of adjacent segments. This pair of segments is
+    // Performs compaction of adjacent segments. The sub-array of segments is
     // physically combined to replace the first segment. The resulting combined
-    // segment is then self-compacted, and the redundant second segment is
+    // segment is then self-compacted, and the redundant segments are
     // permanently removed.
-    // Currently, only two adjacent segments can be compacted at a time (i.e,
-    // there must be, and are only, two segments in the range).
     //
     // Returns a compaction_result indicating whether or not compaction was
     // executed, and the total size of the segments before and after the
     // operation.
     ss::future<compaction_result> do_compact_adjacent_segments(
-      std::pair<segment_set::iterator, segment_set::iterator>,
+      chunked_vector<ss::lw_shared_ptr<segment>>& segments,
       storage::compaction_config cfg);
 
     ss::future<std::optional<model::offset>> do_gc(gc_config);
@@ -521,14 +518,6 @@ private:
     void reset_dirty_and_closed_bytes();
 
     bool _compaction_enabled;
-
-    // The counter for the number of self compactions that have occured in
-    // adjacent_merge_compact() since the last adjacent merge operation was
-    // triggered. Used in combination with the cluster tunable
-    // `log_compaction_adjacent_merge_self_compaction_count`, which sets the
-    // number of self compactions that must occur before attempting to
-    // compaction adjacent segments.
-    size_t _adjacent_merge_counter{0};
 };
 
 } // namespace storage

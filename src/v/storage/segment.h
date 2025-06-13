@@ -36,6 +36,9 @@ struct segment_closed_exception final : std::exception {
         return "segment_closed exception";
     }
 };
+namespace testing_details {
+class offset_tracker_accessor;
+};
 
 class segment {
 public:
@@ -110,6 +113,7 @@ public:
         model::offset _dirty_offset;
 
         friend std::ostream& operator<<(std::ostream&, const offset_tracker&);
+        friend class testing_details::offset_tracker_accessor;
     };
     enum class bitflags : uint32_t {
         none = 0,
@@ -277,6 +281,10 @@ public:
     /// Fallback timestamp method, for use if the timestamps in the index
     /// appear to be invalid (e.g. too far in the future)
     ss::future<model::timestamp> get_file_timestamp() const;
+
+    // For use in testing. _gate.close() is called during segment::close()
+    // and is used to ensure release_appender_in_background() safely completes.
+    ss::gate& gate() { return _gate; }
 
 private:
     void set_close();

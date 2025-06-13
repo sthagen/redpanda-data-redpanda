@@ -15,12 +15,14 @@
 #include "base/vlog.h"
 #include "bytes/iobuf_parser.h"
 #include "config/configuration.h"
+#include "container/fragmented_vector.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 #include "random/generators.h"
 #include "reflection/adl.h"
 #include "ssx/future-util.h"
+#include "ssx/when_all.h"
 #include "storage/chunk_cache.h"
 #include "storage/compacted_index.h"
 #include "storage/compacted_index_writer.h"
@@ -797,18 +799,19 @@ ss::future<compaction_result> self_compact_segment(
     co_return compaction_result(sz_before, *sz_after);
 }
 
-ss::future<
-  std::tuple<ss::lw_shared_ptr<segment>, std::vector<segment::generation_id>>>
+ss::future<std::tuple<
+  ss::lw_shared_ptr<segment>,
+  chunked_vector<segment::generation_id>>>
 make_concatenated_segment(
   segment_full_path path,
-  std::vector<ss::lw_shared_ptr<segment>> segments,
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   compaction_config cfg,
   storage_resources& resources,
   ss::sharded<features::feature_table>& feature_table) {
     // read locks on source segments
-    std::vector<ss::rwlock::holder> locks;
+    chunked_vector<ss::rwlock::holder> locks;
     locks.reserve(segments.size());
-    std::vector<segment::generation_id> generations;
+    chunked_vector<segment::generation_id> generations;
     generations.reserve(segments.size());
     for (auto& segment : segments) {
         locks.push_back(co_await segment->read_lock());
@@ -943,11 +946,11 @@ make_concatenated_segment(
       std::move(generations));
 }
 
-ss::future<std::vector<compacted_index_reader>> make_indices_readers(
-  std::vector<ss::lw_shared_ptr<segment>>& segments,
+ss::future<chunked_vector<compacted_index_reader>> make_indices_readers(
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   std::optional<ntp_sanitizer_config> ntp_sanitizer_config,
   ss::abort_source* as) {
-    return ssx::async_transform<std::vector<compacted_index_reader>>(
+    return ssx::async_transform<chunked_vector<compacted_index_reader>>(
       segments.begin(),
       segments.end(),
       [san_cfg = ntp_sanitizer_config, as](ss::lw_shared_ptr<segment>& seg) {
@@ -968,7 +971,7 @@ ss::future<std::vector<compacted_index_reader>> make_indices_readers(
 
 ss::future<> rewrite_concatenated_indicies(
   std::unique_ptr<compacted_index_writer> writer,
-  std::vector<compacted_index_reader>& readers) {
+  chunked_vector<compacted_index_reader>& readers) {
     return ss::do_with(
       std::move(writer),
       [&readers](std::unique_ptr<compacted_index_writer>& writer) {
@@ -992,20 +995,19 @@ ss::future<> rewrite_concatenated_indicies(
 
 ss::future<> do_write_concatenated_compacted_index(
   std::filesystem::path target_path,
-  std::vector<ss::lw_shared_ptr<segment>>& segments,
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   compaction_config cfg,
   storage_resources& resources) {
     return make_indices_readers(segments, cfg.sanitizer_config, cfg.asrc)
       .then([cfg, target_path = std::move(target_path), &resources](
-              std::vector<compacted_index_reader> readers) mutable {
+              chunked_vector<compacted_index_reader> readers) mutable {
           vlog(gclog.debug, "concatenating {} indicies", readers.size());
           return ss::do_with(
             std::move(readers),
             [cfg, target_path = std::move(target_path), &resources](
-              std::vector<compacted_index_reader>& readers) mutable {
+              chunked_vector<compacted_index_reader>& readers) mutable {
                 return ss::parallel_for_each(
-                         readers.begin(),
-                         readers.end(),
+                         readers,
                          [](compacted_index_reader& reader) {
                              return reader.verify_integrity();
                          })
@@ -1046,27 +1048,22 @@ ss::future<> do_write_concatenated_compacted_index(
 
 ss::future<> write_concatenated_compacted_index(
   std::filesystem::path target_path,
-  std::vector<ss::lw_shared_ptr<segment>> segments,
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   compaction_config cfg,
   storage_resources& resources) {
     if (segments.empty()) {
         return ss::now();
     }
-    return ss::do_with(
-      std::move(segments),
-      [cfg, target_path = std::move(target_path), &resources](
-        std::vector<ss::lw_shared_ptr<segment>>& segments) mutable {
-          return do_write_concatenated_compacted_index(
-            std::move(target_path), segments, cfg, resources);
-      });
+    return do_write_concatenated_compacted_index(
+      std::move(target_path), segments, cfg, resources);
 }
 
-ss::future<std::vector<ss::rwlock::holder>> transfer_segment(
+ss::future<chunked_vector<ss::rwlock::holder>> transfer_segment(
   ss::lw_shared_ptr<segment> to,
   ss::lw_shared_ptr<segment> from,
   compaction_config cfg,
   probe& probe,
-  std::vector<ss::rwlock::holder> locks) {
+  chunked_vector<ss::rwlock::holder> locks) {
     co_await from->close();
 
     co_await to->index().drop_all_data();
@@ -1094,7 +1091,7 @@ ss::future<std::vector<ss::rwlock::holder>> transfer_segment(
 
 ss::future<compaction_result> concatenate_and_rebuild_target_segment(
   ss::lw_shared_ptr<segment> target,
-  std::vector<ss::lw_shared_ptr<segment>>& segments,
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
   compaction_config cfg,
   storage::probe& pb,
@@ -1153,7 +1150,7 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
       maybe_remove_file(target->reader().path().to_compacted_index().string()));
 
     // Evict segment readers and prevent new ones from being added to the cache.
-    std::vector<ss::future<readers_cache::range_lock_holder>> holder_futs;
+    chunked_vector<ss::future<readers_cache::range_lock_holder>> holder_futs;
     holder_futs.reserve(segments.size());
     for (auto& segment : segments) {
         holder_futs.push_back(readers_cache.evict_segment_readers(segment));
@@ -1202,22 +1199,23 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
     co_return ret;
 }
 
-ss::future<std::vector<ss::rwlock::holder>> write_lock_segments(
-  std::vector<ss::lw_shared_ptr<segment>>& segments,
+ss::future<chunked_vector<ss::rwlock::holder>> write_lock_segments(
+  chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   ss::semaphore::clock::duration timeout,
   int retries) {
+    using vec_t = chunked_vector<ss::rwlock::holder>;
     vassert(retries >= 0, "Invalid retries value");
-    std::vector<ss::rwlock::holder> held;
+    vec_t held;
     held.reserve(segments.size());
     while (true) {
         try {
-            std::vector<ss::future<ss::rwlock::holder>> held_f;
+            chunked_vector<ss::future<ss::rwlock::holder>> held_f;
             held_f.reserve(segments.size());
             for (auto& segment : segments) {
                 held_f.push_back(
                   segment->write_lock(ss::semaphore::clock::now() + timeout));
             }
-            held = co_await ss::when_all_succeed(held_f.begin(), held_f.end());
+            held = co_await ssx::when_all_succeed<vec_t>(std::move(held_f));
             break;
         } catch (const ss::semaphore_timed_out&) {
             held.clear();
