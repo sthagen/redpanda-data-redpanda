@@ -259,3 +259,18 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "checkpoint_mutex_test",
+    timeout = "short",
+    srcs = [
+        "checkpoint_mutex_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/ssx:checkpoint_mutex",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
