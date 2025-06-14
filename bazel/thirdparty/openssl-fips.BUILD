@@ -68,7 +68,7 @@ genrule(
     name = "fipsmodule_cnf",
     srcs = [":gen_dir"],
     outs = ["fipsmodule.cnf"],
-    cmd = "cp -L $(SRCS)/etc/ssl/fipsmodule.cnf $@ && sed -i '/activate = 1/d' $@",
+    cmd = "cp -L $(SRCS)/etc/ssl/fipsmodule.cnf $@",
     visibility = [
         "//visibility:public",
     ],
