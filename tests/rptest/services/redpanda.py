@@ -4149,7 +4149,10 @@ class RedpandaService(RedpandaServiceBase):
         except Exception as e:
             self.logger.warn(f"Error setting trace loggers: {e}")
 
-    def _update_usage_stats(self, node):
+    def _update_usage_stats(self, node: ClusterNode):
+        if node not in self._started:
+            return
+
         def _metrics_sum(name: str) -> int:
             try:
                 samples = self.metrics_sample(name, [node])
