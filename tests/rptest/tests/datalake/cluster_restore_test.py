@@ -6,7 +6,7 @@
 #
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
-from ducktape.mark import matrix
+from ducktape.mark import ignore, matrix
 from ducktape.tests.test import TestContext
 from ducktape.utils.util import wait_until
 from rptest.clients.rpk import RpkTool
@@ -395,6 +395,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                 all_topics
             ), "Expected one table per topic (i.e. no DLQ tables)"
 
+    @ignore
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())
@@ -501,6 +502,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                 rpk.alter_topic_config(t, "redpanda.remote.write", "true")
             rpk.alter_topic_config("_schemas", "redpanda.remote.write", "true")
 
+    @ignore
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())

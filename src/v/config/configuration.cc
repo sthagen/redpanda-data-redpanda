@@ -1736,6 +1736,13 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       {},
       &validate_non_empty_string_vec)
+  , kafka_topics_max(
+      *this,
+      "kafka_topics_max",
+      "Maximum number of Kafka user topics that can be created. If `null`, "
+      "then no limit is enforced.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      std::nullopt)
   , compaction_ctrl_update_interval_ms(
       *this,
       "compaction_ctrl_update_interval_ms",

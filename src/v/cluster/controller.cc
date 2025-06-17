@@ -443,7 +443,9 @@ ss::future<> controller::start(
       ss::sharded_parameter([] {
           return config::shard_local_cfg()
             .partition_autobalancing_topic_aware.bind();
-      }));
+      }),
+      ss::sharded_parameter(
+        [] { return config::shard_local_cfg().kafka_topics_max.bind(); }));
 
     co_await _plugin_frontend.start(
       _raft0->self().id(),

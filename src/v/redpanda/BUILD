@@ -33,6 +33,7 @@ redpanda_cc_library(
         "//src/v/datalake:types",
         "//src/v/datalake:cloud_data_io",
         "//src/v/datalake:manager",
+        "//src/v/datalake:datalake_usage_aggregator",
         "//src/v/datalake/coordinator:coordinator_manager",
         "//src/v/datalake/coordinator:frontend",
         "//src/v/datalake/coordinator:stm",

@@ -290,7 +290,8 @@ topics_frontend::topics_frontend(
   metadata_cache& metadata_cache,
   config::binding<unsigned> hard_max_disk_usage_ratio,
   config::binding<int16_t> minimum_topic_replication,
-  config::binding<bool> partition_autobalancing_topic_aware)
+  config::binding<bool> partition_autobalancing_topic_aware,
+  config::binding<std::optional<uint32_t>> max_user_topics)
   : _self(self)
   , _stm(s)
   , _allocator(pal)
@@ -312,7 +313,8 @@ topics_frontend::topics_frontend(
   , _hard_max_disk_usage_ratio(hard_max_disk_usage_ratio)
   , _minimum_topic_replication(minimum_topic_replication)
   , _partition_autobalancing_topic_aware(
-      std::move(partition_autobalancing_topic_aware)) {
+      std::move(partition_autobalancing_topic_aware))
+  , _max_user_topics(std::move(max_user_topics)) {
     if (ss::this_shard_id() == 0) {
         _minimum_topic_replication.watch(
           [this]() { print_rf_warning_message(); });
@@ -661,6 +663,30 @@ ss::future<topic_result> topics_frontend::do_create_topic(
         co_return topic_result(tp_ns, errc::topic_already_exists);
     }
 
+    // Enforce cluster-wide topic count limit only on user created topics.
+    if (auto max_user_topics_opt = _max_user_topics()) {
+        // This is intended to approximate the number of topics that are
+        // user-defined and may return a count slightly smaller than the actual
+        // amount.
+        auto user_topic_count = std::max(
+                                  _topics.local().all_topics_count(),
+                                  model::non_user_topics.size())
+                                - model::non_user_topics.size();
+        if (
+          user_topic_count >= *max_user_topics_opt
+          && model::is_user_topic(tp_ns)) {
+            vlog(
+              clusterlog.warn,
+              "unable to create topic {} as the number of user topics exceeds "
+              "the cluster limit",
+              tp_ns);
+            co_return make_error_result(
+              assignable_config.cfg.tp_ns,
+              make_error_code(errc::topic_operation_error),
+              "number of topics exceeds cluster limit");
+        }
+    }
+
     bool blocked = assignable_config.cfg.is_migrated
                      ? _migrated_resources.get_topic_state(tp_ns)
                          > data_migrations::migrated_resource_state::create_only
@@ -841,6 +867,7 @@ ss::future<topic_result> topics_frontend::do_create_topic(
     if (!units) {
         co_return make_error_result(assignable_config.cfg.tp_ns, units.error());
     }
+
     co_return co_await replicate_create_topic(
       std::move(assignable_config.cfg), std::move(units.value()), timeout);
 }

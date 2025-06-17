@@ -265,6 +265,8 @@ private:
 
     bool kafka_data_rpc_enabled();
 
+    ss::shared_ptr<kafka::datalake_usage_api> make_datalake_usage_aggregator();
+
     // Stop the service.
     // The method should be invoked in the ss::thread context.
     template<class Service>

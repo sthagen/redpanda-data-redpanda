@@ -74,7 +74,8 @@ public:
       metadata_cache&,
       config::binding<unsigned> hard_max_disk_usage_ratio,
       config::binding<int16_t> minimum_topic_replication,
-      config::binding<bool> partition_autobalancing_topic_aware);
+      config::binding<bool> partition_autobalancing_topic_aware,
+      config::binding<std::optional<uint32_t>> max_user_topics);
 
     ss::future<std::vector<topic_result>> create_topics(
       custom_assignable_topic_configuration_vector,
@@ -323,6 +324,7 @@ private:
     config::binding<unsigned> _hard_max_disk_usage_ratio;
     config::binding<int16_t> _minimum_topic_replication;
     config::binding<bool> _partition_autobalancing_topic_aware;
+    config::binding<std::optional<uint32_t>> _max_user_topics;
 
     static constexpr std::chrono::seconds _get_health_report_timeout = 10s;
 };

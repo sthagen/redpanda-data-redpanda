@@ -357,6 +357,7 @@ struct configuration final : public config_store {
     property<uint32_t> kafka_batch_max_bytes;
     property<std::vector<ss::sstring>> kafka_nodelete_topics;
     property<std::vector<ss::sstring>> kafka_noproduce_topics;
+    property<std::optional<uint32_t>> kafka_topics_max;
 
     // Compaction controller
     property<std::chrono::milliseconds> compaction_ctrl_update_interval_ms;

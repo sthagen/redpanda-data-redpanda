@@ -16,6 +16,8 @@
 
 #include <seastar/core/smp.hh>
 
+#include <algorithm>
+
 namespace model {
 
 inline const model::ns redpanda_ns("redpanda");
@@ -84,12 +86,17 @@ inline const model::topic datalake_coordinator_topic("datalake_coordinator");
 inline const model::topic_namespace datalake_coordinator_nt(
   model::kafka_internal_namespace, model::datalake_coordinator_topic);
 
+// Topics in the Kafka namespace that are not user-created topics.
+inline const std::array non_user_topics{
+  kafka_consumer_offsets_topic,
+  schema_registry_internal_tp.topic,
+  kafka_audit_logging_topic,
+  transform_log_internal_topic,
+};
+
 inline bool is_user_topic(topic_namespace_view tp_ns) {
     return tp_ns.ns == kafka_namespace
-           && tp_ns.tp != kafka_consumer_offsets_topic
-           && tp_ns.tp != schema_registry_internal_tp.topic
-           && tp_ns.tp != kafka_audit_logging_topic
-           && tp_ns.tp != transform_log_internal_topic;
+           && !std::ranges::contains(non_user_topics, tp_ns.tp);
 }
 
 inline bool is_user_topic(const ntp& ntp) {
