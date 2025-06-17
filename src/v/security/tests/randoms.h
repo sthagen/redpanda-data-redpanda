@@ -18,6 +18,11 @@
 
 namespace tests {
 
+enum class serialization_format {
+    adl,
+    serde,
+};
+
 inline security::scram_credential random_credential() {
     return security::scram_credential(
       tests::random_bytes(256),
@@ -44,6 +49,17 @@ inline security::resource_pattern random_resource_pattern() {
       random_resource_type(),
       random_generators::gen_alphanum_string(10),
       random_pattern_type()};
+}
+
+inline security::resource_pattern_filter::resource_subsystem
+random_resource_subsystem(serialization_format fmt) {
+    if (fmt == serialization_format::adl) {
+        return security::resource_pattern_filter::resource_subsystem::kafka;
+    }
+    return random_generators::random_choice<
+      security::resource_pattern_filter::resource_subsystem>(
+      {security::resource_pattern_filter::resource_subsystem::kafka,
+       security::resource_pattern_filter::resource_subsystem::schema_registry});
 }
 
 inline security::acl_principal random_acl_principal() {
@@ -87,7 +103,8 @@ inline security::acl_binding random_acl_binding() {
     return {random_resource_pattern(), random_acl_entry()};
 }
 
-inline security::resource_pattern_filter random_resource_pattern_filter() {
+inline security::resource_pattern_filter
+random_resource_pattern_filter(serialization_format fmt) {
     auto resource = tests::random_optional(
       [] { return random_resource_type(); });
 
@@ -95,9 +112,7 @@ inline security::resource_pattern_filter random_resource_pattern_filter() {
       [] { return random_generators::gen_alphanum_string(14); });
 
     auto pattern = tests::random_optional([] {
-        using ret_t = std::variant<
-          security::pattern_type,
-          security::resource_pattern_filter::pattern_match>;
+        using ret_t = security::resource_pattern_filter::pattern_filter_type;
         if (tests::random_bool()) {
             return ret_t(random_pattern_type());
         } else {
@@ -105,7 +120,7 @@ inline security::resource_pattern_filter random_resource_pattern_filter() {
         }
     });
 
-    return {resource, std::move(name), pattern};
+    return {resource, std::move(name), pattern, random_resource_subsystem(fmt)};
 }
 
 inline security::acl_entry_filter random_acl_entry_filter() {
@@ -123,8 +138,9 @@ inline security::acl_entry_filter random_acl_entry_filter() {
     return {std::move(principal), host, operation, permission};
 }
 
-inline security::acl_binding_filter random_acl_binding_filter() {
-    return {random_resource_pattern_filter(), random_acl_entry_filter()};
+inline security::acl_binding_filter
+random_acl_binding_filter(serialization_format fmt) {
+    return {random_resource_pattern_filter(fmt), random_acl_entry_filter()};
 }
 
 } // namespace tests

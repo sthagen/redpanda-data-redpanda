@@ -72,6 +72,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/config",
+        "//src/v/pandaproxy/schema_registry:types",
         "//src/v/random:generators",
         "//src/v/security",
         "//src/v/test_utils:seastar_boost",
@@ -227,5 +228,22 @@ redpanda_cc_bench(
         "@boost//:range",
         "@seastar",
         "@seastar//:benchmark",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "acl_serde_test",
+    timeout = "short",
+    srcs = [
+        "acl_serde_test.cc",
+    ],
+    deps = [
+        ":utils",
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/security",
+        "//src/v/serde",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
     ],
 )

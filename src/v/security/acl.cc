@@ -12,6 +12,9 @@
 
 #include "security/acl_store.h"
 #include "security/logger.h"
+#include "serde/envelope.h"
+#include "serde/read_header.h"
+#include "serde/rw/rw.h"
 #include "utils/to_string.h"
 
 #include <seastar/coroutine/maybe_yield.hh>
@@ -331,6 +334,10 @@ std::ostream& operator<<(std::ostream& os, resource_type type) {
         return os << "cluster";
     case resource_type::transactional_id:
         return os << "transactional_id";
+    case resource_type::sr_subject:
+        return os << "schema_registry_subject";
+    case resource_type::sr_global:
+        return os << "schema_registry_global";
     }
     __builtin_unreachable();
 }
@@ -407,13 +414,26 @@ operator<<(std::ostream& os, const resource_pattern_filter::pattern_match&) {
     return os;
 }
 
+std::ostream&
+operator<<(std::ostream& os, resource_pattern_filter::resource_subsystem s) {
+    using resource_subsystem = resource_pattern_filter::resource_subsystem;
+    switch (s) {
+    case resource_subsystem::kafka:
+        return os << "kafka";
+    case resource_subsystem::schema_registry:
+        return os << "schema_registry";
+    }
+    __builtin_unreachable();
+}
+
 std::ostream& operator<<(std::ostream& o, const resource_pattern_filter& f) {
     fmt::print(
       o,
-      "{{ resource: {} name: {} pattern: {} }}",
+      "{{ resource: {} name: {} pattern: {} subsystem: {}}}",
       f._resource,
       f._name,
-      f._pattern);
+      f._pattern,
+      f._subsystem);
     return o;
 }
 
@@ -498,6 +518,19 @@ bool resource_pattern_filter::matches(const resource_pattern& pattern) const {
         return false;
     }
 
+    switch (_subsystem) {
+    case resource_subsystem::kafka:
+        if (pattern.resource() > resource_type::transactional_id) {
+            return false;
+        }
+        break;
+    case resource_subsystem::schema_registry:
+        if (pattern.resource() < resource_type::sr_subject) {
+            return false;
+        }
+        break;
+    }
+
     if (
       _pattern && std::holds_alternative<pattern_type>(*_pattern)
       && std::get<pattern_type>(*_pattern) != pattern.pattern()) {
@@ -526,7 +559,7 @@ bool resource_pattern_filter::matches(const resource_pattern& pattern) const {
     __builtin_unreachable();
 }
 
-void read_nested(
+void read_nested_v0(
   iobuf_parser& in,
   resource_pattern_filter& filter,
   const size_t bytes_left_limit) {
@@ -560,7 +593,7 @@ void read_nested(
     }
 }
 
-void write(iobuf& out, resource_pattern_filter filter) {
+void write_v0(iobuf& out, resource_pattern_filter filter) {
     using serde::write;
 
     using serialized_pattern_type
@@ -581,6 +614,150 @@ void write(iobuf& out, resource_pattern_filter filter) {
     write(out, filter._resource);
     write(out, filter._name);
     write(out, pattern);
+}
+
+namespace {
+[[maybe_unused]] void write_v0_dummy_resource_pattern_filter(iobuf& out) {
+    using serde::write;
+
+    write<std::optional<resource_type>>(out, std::nullopt);
+    write<std::optional<ss::sstring>>(out, std::nullopt);
+    write<std::optional<resource_pattern_filter::serialized_pattern_type>>(
+      out, std::nullopt);
+}
+} // namespace
+
+void acl_binding_filter::serde_write(iobuf& out) const {
+    using serde::write;
+
+    // Wire format for backwards/forwards compatibility:
+    // clang-format off
+    // V0: | serde header | raw resource_pattern_filter | enveloped acl_entry_filter |
+    // V1: | serde header | raw resource_pattern_filter | enveloped acl_entry_filter | enveloped resource_pattern_filter |
+    // V?: | serde header | dummy resource_pattern_filter | enveloped acl_entry_filter | enveloped resource_pattern_filter |
+    // clang-format on
+    //
+    // V1 duplicates resource_pattern_filter (raw + enveloped) to support
+    // migration:
+    // - V0 readers can read the raw field and ignore the enveloped fields
+    // - V1+ readers ignore the raw field and use the enveloped fields
+    // Future version will replace raw field with 3-byte dummy once V0
+    // compatibility is dropped
+
+    // Write actual V0 data for backwards compatibility with old readers
+    write_v0(out, _pattern);
+    // TODO: Switch to dummy write once old readers are no longer supported
+    // (earliest_logical_version > 25.2.1):
+    // write_v0_dummy_resource_pattern_filter(out);
+
+    write(out, _acl);
+    write(out, _pattern);
+}
+
+void acl_binding_filter::serde_read(iobuf_parser& in, const serde::header& h) {
+    using serde::read_nested;
+
+    if (h._version == 0) {
+        // V0: read actual data from the V0 field
+        read_nested_v0(in, _pattern, h._bytes_left_limit);
+    } else {
+        // V1+: read and discard V0 field (written for old reader compatibility)
+        resource_pattern_filter ignored;
+        read_nested_v0(in, ignored, h._bytes_left_limit);
+    }
+
+    _acl = read_nested<decltype(_acl)>(in, h._bytes_left_limit);
+
+    if (h._version >= 1) {
+        // V1+: read actual data from new enveloped field
+        _pattern = read_nested<decltype(_pattern)>(in, h._bytes_left_limit);
+    }
+}
+
+namespace {
+template<typename Other, typename Writer>
+void write_other_version(iobuf& out, Writer writer) {
+    // This is a test-only, simplified version of:
+    // `void tag_invoke(tag_t<write_tag>, iobuf& out, T t)`
+
+    serde::write(out, Other::redpanda_serde_version);
+    serde::write(out, Other::redpanda_serde_compat_version);
+
+    auto size_placeholder = out.reserve(sizeof(serde::serde_size_t));
+
+    const auto size_before = out.size_bytes();
+
+    writer();
+
+    const auto written_size = out.size_bytes() - size_before;
+    if (unlikely(
+          written_size > std::numeric_limits<serde::serde_size_t>::max())) {
+        throw serde::serde_exception("envelope too big");
+    }
+    const auto size = ss::cpu_to_le(
+      static_cast<serde::serde_size_t>(written_size));
+    size_placeholder.write(
+      reinterpret_cast<const char*>(&size), sizeof(serde::serde_size_t));
+}
+} // namespace
+
+void acl_binding_filter::testing_serde_full_write_v0(iobuf& out) const {
+    write_other_version<testing::acl_binding_filter_v0>(out, [&]() {
+        using serde::write;
+
+        write_v0(out, _pattern);
+        write(out, _acl);
+    });
+}
+
+void acl_binding_filter::testing_serde_full_read_v0(
+  iobuf_parser& in, const std::size_t bytes_left_limit) {
+    // This follows the pattern of:
+    // `void tag_invoke(tag_t<read_tag>, iobuf_parser& in, T& t, const
+    // std::size_t bytes_left_limit)`
+
+    auto h = serde::read_header<testing::acl_binding_filter_v0>(
+      in, bytes_left_limit);
+
+    read_nested_v0(in, _pattern, h._bytes_left_limit);
+
+    if (unlikely(in.bytes_left() < h._bytes_left_limit)) {
+        throw serde::serde_exception(fmt_with_ctx(
+          ssx::sformat,
+          "field spill over in {}, field type {}: envelope_end={}, "
+          "in.bytes_left()={}",
+          serde::type_str<testing::acl_binding_filter_v0>(),
+          serde::type_str<decltype(_acl)>(),
+          h._bytes_left_limit,
+          in.bytes_left()));
+    }
+
+    if (h._bytes_left_limit != in.bytes_left()) {
+        _acl = serde::read_nested<decltype(_acl)>(in, h._bytes_left_limit);
+    }
+
+    if (in.bytes_left() > h._bytes_left_limit) {
+        in.skip(in.bytes_left() - h._bytes_left_limit);
+    }
+}
+
+void acl_binding_filter::testing_serde_full_write_v2(iobuf& out) const {
+    write_other_version<testing::acl_binding_filter_v2>(out, [&]() {
+        using serde::write;
+
+        write_v0_dummy_resource_pattern_filter(out);
+        write(out, _acl);
+        write(out, _pattern);
+    });
+}
+
+void acl_binding_filter::testing_serde_full_read_v2(
+  iobuf_parser& in, const std::size_t bytes_left_limit) {
+    // The V2 read path will be identical to the V0 read path, the only
+    // difference being the serde version and compat version
+    auto res = serde::read_nested<testing::acl_binding_filter_v2>(
+      in, bytes_left_limit);
+    *this = acl_binding_filter{res._pattern, res._acl};
 }
 
 } // namespace security

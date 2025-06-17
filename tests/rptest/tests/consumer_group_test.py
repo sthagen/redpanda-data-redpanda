@@ -556,12 +556,18 @@ class ConsumerGroupTest(RedpandaTest):
         ev_loop = asyncio.new_event_loop()
 
         def poll_once(i):
-            consumer = KafkaConsumer(group_id=f"g-{i}",
-                                     bootstrap_servers=self.redpanda.brokers(),
-                                     enable_auto_commit=True)
-            consumer.subscribe([self.topic_spec.name])
-            consumer.poll(1)
-            consumer.close(autocommit=True)
+            try:
+                consumer = KafkaConsumer(
+                    group_id=f"g-{i}",
+                    bootstrap_servers=self.redpanda.brokers(),
+                    enable_auto_commit=True,
+                    client_id=f"python-consumer-client-{i}")
+                consumer.subscribe([self.topic_spec.name])
+                consumer.poll(1)
+                consumer.close(autocommit=True)
+            except Exception as e:
+                self.logger.error(f"Failed to poll group g-{i}: {e}")
+                raise
 
         async def create_groups(r):
             await asyncio.gather(*[

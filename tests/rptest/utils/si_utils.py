@@ -458,7 +458,7 @@ def verify_file_layout(baseline_per_host,
                 f"NTP {ntp} uses size override {orig_ntp_size} - {size_overrides[ntp]}"
             )
             orig_ntp_size -= size_overrides[ntp]
-        assert ntp in restored_ntps, f"NTP {ntp} is missing in the restored data"
+        assert ntp in restored_ntps, f"NTP {ntp} is missing in the restored data: {restored_ntps}"
         rest_ntp_size = restored_ntps[ntp]
         fraction = float(max(rest_ntp_size, orig_ntp_size)) / float(
             min(rest_ntp_size, orig_ntp_size))

@@ -60,7 +60,9 @@ struct variant : public std::variant<Types...> {
     template<class T>
     constexpr variant(T&& t) // NOLINT(*-explicit-*)
       noexcept(std::is_nothrow_constructible_v<type, decltype(t)>)
-    requires(!std::is_same_v<std::decay_t<T>, type>)
+    requires(
+      !std::is_same_v<std::decay_t<T>, type>
+      && std::is_constructible_v<type, T>)
       : type(std::forward<T>(t)){};
     // Allow explicit conversion from std::variant
     explicit constexpr variant(type v) noexcept(

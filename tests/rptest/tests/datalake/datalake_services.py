@@ -8,7 +8,7 @@
 # by the Apache License, Version 2.0
 
 import operator
-from typing import Any, Optional
+from typing import Any, Literal, Optional
 from ducktape.utils.util import wait_until
 from rptest.clients.rpk import RpkTool, TopicSpec
 from rptest.context import databricks as databricks_ctx
@@ -203,13 +203,16 @@ class DatalakeServices():
                 return e
         return None
 
-    def create_iceberg_enabled_topic(self,
-                                     name,
-                                     partitions=1,
-                                     replicas=1,
-                                     iceberg_mode="key_value",
-                                     target_lag_ms: Optional[int] = None,
-                                     config: dict[str, Any] = dict()):
+    def create_iceberg_enabled_topic(
+        self,
+        name,
+        partitions=1,
+        replicas=1,
+        iceberg_mode: Literal["key_value"]
+        | Literal["value_schema_id_prefix"]
+        | Literal["value_schema_latest"] = "key_value",
+        target_lag_ms: Optional[int] = None,
+        config: dict[str, Any] = dict()):
         config[TopicSpec.PROPERTY_ICEBERG_MODE] = iceberg_mode
         if target_lag_ms:
             config[TopicSpec.PROPERTY_ICEBERG_TARGET_LAG_MS] = target_lag_ms
