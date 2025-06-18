@@ -99,10 +99,11 @@ public:
 
     model::offset get_expected_committed_offset();
 
-    model::record_batch_reader make_log_reader();
+    /// Create a list of batches that contain placeholders
+    ss::circular_buffer<model::record_batch> make_underlying();
 
-    fragmented_vector<model::record_batch> partition;
-    fragmented_vector<model::record_batch> expected;
+    ss::circular_buffer<model::record_batch> partition;
+    chunked_circular_buffer<model::record_batch> expected;
     remote_mock remote;
     cache_mock cache;
 };
