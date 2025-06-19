@@ -16,8 +16,10 @@
 #include "net/dns.h"
 #include "rpc/rpc_utils.h"
 #include "thirdparty/c-ares/ares.h"
+#include "utils/unresolved_address.h"
 
 #include <seastar/core/coroutine.hh>
+#include <seastar/coroutine/as_future.hh>
 #include <seastar/net/dns.hh>
 
 namespace {
@@ -40,53 +42,82 @@ bool is_dns_failure_error(const std::system_error& e) {
 
 namespace kafka::client {
 
-ss::future<shared_broker_t> make_broker(
-  model::node_id node_id,
-  net::unresolved_address addr,
-  const configuration& config,
-  prefix_logger& logger) {
-    return rpc::maybe_build_reloadable_certificate_credentials(
-             config.broker_tls())
-      .then([addr, client_id = config.client_identifier()](
-              ss::shared_ptr<ss::tls::certificate_credentials> creds) mutable {
-          return ss::make_lw_shared<transport>(
-            net::base_transport::configuration{
-              .server_addr = addr, .credentials = std::move(creds)},
-            std::move(client_id));
-      })
-      .then([node_id, addr, &logger](
-              ss::lw_shared_ptr<transport> client) mutable {
-          return client->connect().then(
-            [node_id, addr = std::move(addr), client, &logger] {
-                auto prefix = client->client_id().has_value()
-                                ? ssx::sformat("{}: ", *client->client_id())
-                                : "";
-                vlog(
-                  logger.info,
-                  "connected to broker:{} - {}:{}",
-                  node_id,
-                  addr.host(),
-                  addr.port());
-                return ss::make_lw_shared<broker>(node_id, std::move(*client));
-            });
-      })
-      .handle_exception_type([node_id, &logger](const std::system_error& ex) {
-          if (net::is_reconnect_error(ex) || is_dns_failure_error(ex)) {
-              return ss::make_exception_future<shared_broker_t>(
-                broker_error(node_id, error_code::network_exception));
-          }
-          vlog(logger.warn, "std::system_error: {}", ex.what());
-          return ss::make_exception_future<shared_broker_t>(ex);
-      })
-      .then([&config, &logger](shared_broker_t broker) {
-          return do_authenticate(broker, config, logger)
-            .then([broker]() { return broker; })
-            .handle_exception([broker](std::exception_ptr ex) {
-                return broker->stop().then([ex]() {
-                    return ss::make_exception_future<shared_broker_t>(ex);
-                });
-            });
-      });
+broker_factory::broker_factory(
+  const connection_configuration& config, prefix_logger& logger)
+  : _config(config)
+  , _logger(&logger)
+  , _client_id(_config.client_id.value_or("redpanda-client")) {}
+
+ss::future<shared_broker_t> broker_factory::create_broker(
+  model::node_id node_id, net::unresolved_address addr) {
+    net::base_transport::configuration transport_cfg{
+      .server_addr = addr,
+    };
+    vlog(
+      _logger->debug,
+      "Creating transport for broker {} - {}:{}",
+      node_id,
+      addr.host(),
+      addr.port());
+    if (_config.broker_tls) {
+        transport_cfg.credentials
+          = co_await _config.broker_tls->build_credentials();
+    }
+    auto broker_transport = ss::make_lw_shared<transport>(
+      std::move(transport_cfg), _config.client_id);
+    try {
+        vlog(
+          _logger->debug,
+          "connecting to {} - {}:{}",
+          node_id,
+          addr.host(),
+          addr.port());
+        co_await broker_transport->connect();
+    } catch (const std::system_error& ex) {
+        if (net::is_reconnect_error(ex) || is_dns_failure_error(ex)) {
+            throw broker_error(node_id, error_code::network_exception);
+        }
+        vlog(_logger->warn, "std::system_error: {}", ex.what());
+        throw;
+    }
+    vlog(
+      _logger->info,
+      "connected to broker:{} - {}:{}",
+      node_id,
+      addr.host(),
+      addr.port());
+    auto connected_broker = ss::make_lw_shared<broker>(
+      node_id, std::move(*broker_transport));
+    if (!_config.sasl_cfg) {
+        vlog(
+          _logger->debug,
+          "broker {} - {}:{}, doesn't require authentication",
+          node_id,
+          addr.host(),
+          addr.port());
+        co_return connected_broker;
+    }
+    auto f = co_await ss::coroutine::as_future(
+      do_authenticate(connected_broker, _config.sasl_cfg.value(), *_logger));
+    if (f.failed()) {
+        auto ex = f.get_exception();
+        vlog(
+          _logger->warn,
+          "broker {} - {}:{}, error during authentication: {}",
+          node_id,
+          addr.host(),
+          addr.port(),
+          ex);
+        co_await connected_broker->stop();
+        std::rethrow_exception(ex);
+    }
+    vlog(
+      _logger->trace,
+      "broker {} - {}:{} authenticated",
+      node_id,
+      addr.host(),
+      addr.port());
+    co_return connected_broker;
 }
 
 } // namespace kafka::client

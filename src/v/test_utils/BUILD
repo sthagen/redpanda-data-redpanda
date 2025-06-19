@@ -224,3 +224,16 @@ redpanda_test_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_test_cc_library(
+    name = "tee_log",
+    hdrs = [
+        "tee_log.h",
+    ],
+    include_prefix = "test_utils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "@boost//:iostreams",
+        "@seastar",
+    ],
+)

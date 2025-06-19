@@ -15,6 +15,7 @@
 #include "http/tests/http_imposter.h"
 #include "test_definitions.h"
 #include "test_utils/fixture.h"
+#include "utils/file_io.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/testing/thread_test_case.hh>
@@ -115,19 +116,11 @@ FIXTURE_TEST(test_sts_credentials_fetch, fixture) {
     setenv("AWS_ROLE_ARN", cloud_role_tests::aws_role, 1);
     setenv("AWS_WEB_IDENTITY_TOKEN_FILE", cloud_role_tests::token_file, 1);
 
-    auto token_f = ss::open_file_dma(
-                     cloud_role_tests::token_file,
-                     ss::open_flags::create | ss::open_flags::rw)
-                     .get();
-
-    ss::sstring token{"token"};
-    auto wrote = token_f.dma_write(0, token.data(), token.size()).get();
-    BOOST_REQUIRE_EQUAL(wrote, token.size());
+    write_fully(cloud_role_tests::token_file, iobuf::from("token")).get();
 
     auto cl = cloud_roles::aws_sts_refresh_impl{address(), region, as};
     auto resp = cl.fetch_credentials().get();
 
-    token_f.close().get();
     ss::remove_file(cloud_role_tests::token_file).get();
     BOOST_REQUIRE(std::holds_alternative<iobuf>(resp));
     BOOST_REQUIRE_EQUAL(std::get<iobuf>(resp), cloud_role_tests::sts_creds);

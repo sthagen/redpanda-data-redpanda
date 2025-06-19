@@ -101,7 +101,7 @@ public:
       std::optional<kafka::offset> prev_log_offset,
       model::timeout_clock::duration timeout);
 
-    ss::future<iobuf> take_snapshot(model::offset) final;
+    ss::future<iobuf> take_raft_snapshot(model::offset) final;
     ss::future<> apply_raft_snapshot(const iobuf&) final;
 
     raft::stm_initial_recovery_policy

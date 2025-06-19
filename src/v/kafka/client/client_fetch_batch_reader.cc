@@ -49,7 +49,6 @@ public:
             auto res = co_await _client.fetch_partition(
               _tp,
               _next_offset,
-              _client.config().consumer_request_max_bytes,
               std::chrono::duration_cast<std::chrono::milliseconds>(
                 t - model::timeout_clock::now()));
             vlog(

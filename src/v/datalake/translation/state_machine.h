@@ -38,7 +38,7 @@ public:
       take_local_snapshot(ssx::semaphore_units) override;
 
     ss::future<> apply_raft_snapshot(const iobuf&) final;
-    ss::future<iobuf> take_snapshot(model::offset) final;
+    ss::future<iobuf> take_raft_snapshot(model::offset) final;
 
     raft::consensus* raft() const { return _raft; }
 

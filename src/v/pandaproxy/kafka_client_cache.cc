@@ -95,9 +95,14 @@ std::pair<client_ptr, client_mu_ptr> kafka_client_cache::fetch_or_insert(
     } else {
         // If the passwords don't match, update the password on the client, so
         // that it can reconnect.
-        if (it_hash->client->config().scram_password.value() != user.pass) {
+        auto& current_credentials = it_hash->client->get_credentials();
+        if (current_credentials && current_credentials->password != user.pass) {
             vlog(plog.debug, "Updating password for user {}", k);
-            it_hash->client->config().scram_password.set_value(user.pass);
+            it_hash->client->set_credentials(kafka::client::sasl_configuration{
+              .mechanism = current_credentials->mechanism,
+              .username = current_credentials->username,
+              .password = user.pass,
+            });
         } else {
             vlog(plog.debug, "Reuse client for user {}", k);
         }

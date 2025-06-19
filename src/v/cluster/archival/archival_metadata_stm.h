@@ -279,7 +279,9 @@ public:
 
     model::offset max_removable_local_log_offset() override;
 
-    ss::future<iobuf> take_snapshot(model::offset) final { co_return iobuf{}; }
+    ss::future<iobuf> take_raft_snapshot(model::offset) final {
+        co_return iobuf{};
+    }
 
     size_t get_compacted_replaced_bytes() const {
         return _compacted_replaced_bytes;

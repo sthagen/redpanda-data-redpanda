@@ -84,8 +84,8 @@ FIXTURE_TEST(consumer_group, kafka_client_fixture) {
 
     info("Connecting client");
     auto client = make_connected_client();
-    client.config().retry_base_backoff.set_value(10ms);
-    client.config().retries.set_value(size_t(10));
+    client.set_retry_base_backoff(10ms);
+    client.set_max_retries(size_t(10));
     client.connect().get();
     auto stop_client = ss::defer([&client]() { client.stop().get(); });
 

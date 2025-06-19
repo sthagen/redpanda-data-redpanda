@@ -35,8 +35,8 @@ FIXTURE_TEST(fetch, kafka_client_fixture) {
 
     info("Connecting client");
     auto client = make_connected_client();
-    client.config().retry_base_backoff.set_value(10ms);
-    client.config().retries.set_value(size_t(1));
+    client.set_retry_base_backoff(10ms);
+    client.set_max_retries(size_t(1));
     client.connect().get();
 
     {
@@ -44,7 +44,7 @@ FIXTURE_TEST(fetch, kafka_client_fixture) {
         auto ntp = make_default_ntp(
           model::topic("unknown"), model::partition_id(0));
         auto res{
-          client.fetch_partition(ntp.tp, model::offset(0), 1024, 1000ms).get()};
+          client.fetch_partition(ntp.tp, model::offset(0), 1000ms, 1024).get()};
         const auto& p = res.data.responses[0];
         BOOST_REQUIRE_EQUAL(p.topic, ntp.tp.topic);
         BOOST_REQUIRE_EQUAL(p.partitions.size(), 1);
@@ -63,9 +63,9 @@ FIXTURE_TEST(fetch, kafka_client_fixture) {
 
     {
         info("Fetching from nonempty known topic");
-        client.config().retries.set_value(size_t(3));
+        client.set_max_retries(size_t(3));
         auto res{
-          client.fetch_partition(ntp.tp, model::offset(0), 1024, 1000ms).get()};
+          client.fetch_partition(ntp.tp, model::offset(0), 1000ms, 1024).get()};
         const auto& p = res.data.responses[0];
         BOOST_REQUIRE_EQUAL(p.topic, ntp.tp.topic);
         BOOST_REQUIRE_EQUAL(p.partitions.size(), 1);

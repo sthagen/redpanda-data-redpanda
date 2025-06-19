@@ -26,7 +26,7 @@
 namespace kafka {
 
 static const auto fixed_client_id = "shared-client-id";
-static const size_t total_requests{3 << 20};
+static const size_t total_requests = 100000;
 static const size_t unique_client_id_count = 1000;
 
 std::vector<ss::sstring> initialize_client_ids() {

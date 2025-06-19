@@ -34,7 +34,7 @@ public:
       storage::kvstore& kvstore,
       config::binding<std::chrono::milliseconds> sync_timeout);
 
-    ss::future<iobuf> take_snapshot(model::offset) final;
+    ss::future<iobuf> take_raft_snapshot(model::offset) final;
 
     // Updates partition properties to disable writes;
     // returns the offset of the blocking message

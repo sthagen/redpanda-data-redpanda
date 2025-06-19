@@ -8,14 +8,11 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "bytes/iostream.h"
 #include "cloud_topics/batcher/aggregator.h"
 #include "cloud_topics/core/serializer.h"
 #include "cloud_topics/core/write_request.h"
-#include "container/chunked_circular_buffer.h"
 #include "model/namespace.h"
 #include "model/record.h"
-#include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
 #include "model/timeout_clock.h"
 #include "random/generators.h"
@@ -34,7 +31,7 @@ static ss::logger test_log("aggregator_test_log"); // NOLINT
 
 cloud_topics::core::serialized_chunk get_random_serialized_chunk(
   int num_batches, int num_records_per_batch) { // NOLINT
-    chunked_circular_buffer<model::record_batch> batches;
+    chunked_vector<model::record_batch> batches;
     model::offset o{0};
     for (int ix_batch = 0; ix_batch < num_batches; ix_batch++) {
         auto batch = model::test::make_random_batch(
@@ -42,9 +39,7 @@ cloud_topics::core::serialized_chunk get_random_serialized_chunk(
         o = model::next_offset(batch.last_offset());
         batches.push_back(std::move(batch));
     }
-    auto reader = model::make_memory_record_batch_reader(std::move(batches));
-    auto fut = cloud_topics::core::serialize_in_memory_record_batch_reader(
-      std::move(reader));
+    auto fut = cloud_topics::core::serialize_batches(std::move(batches));
     return fut.get();
 }
 

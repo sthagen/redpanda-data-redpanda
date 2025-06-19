@@ -167,15 +167,15 @@ COMPILERS = {
     "next": {
         "tars": {
             "aarch64": {
-                "build_date": "2025-06-04",
-                "sha": "a543fc0d1d9608e52bc5aaa0c7a66f1303f198a483fc8695bc8af39ec0847e02",
+                "build_date": "2025-06-18",
+                "sha": "895bc671e9d75e80fb09b1cf842b3191239d4aeb1bf79bb8108490571481c177",
             },
             "x86_64": {
-                "build_date": "2025-06-04",
-                "sha": "7583b655e6b309ae72353f53181f4aa72ae98c81582de01aa08ba669dc03b1e4",
+                "build_date": "2025-06-18",
+                "sha": "6eee67bc40ffe6a8470df0f8bea5ab0e99ad5785d1cc84d2c5d14c1a9021b3da",
             },
         },
-        "version": "20.1.6",
+        "version": "20.1.7",
     },
 }
 

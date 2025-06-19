@@ -259,7 +259,7 @@ bool write_at_offset_stm::is_offset_translated_batch(
            != _offset_translated_batches.end();
 }
 
-ss::future<iobuf> write_at_offset_stm::take_snapshot(model::offset) {
+ss::future<iobuf> write_at_offset_stm::take_raft_snapshot(model::offset) {
     // this state machine doesn't need snapshot as its state is based on
     // snapshot metadata i.e. start offset
     co_return iobuf{};

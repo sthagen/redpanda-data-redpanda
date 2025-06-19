@@ -37,6 +37,7 @@ class service : public ss::peering_sharded_service<service> {
 public:
     service(
       const YAML::Node& config,
+      const YAML::Node& client_config,
       ss::smp_service_group smp_sg,
       size_t max_memory,
       ss::sharded<kafka::client::client>& client,
@@ -49,7 +50,6 @@ public:
     ss::future<> stop();
 
     configuration& config();
-    kafka::client::configuration& client_config();
     ss::sharded<kafka::client::client>& client() { return _client; }
     seq_writer& writer() { return _writer.local(); }
     sharded_store& schema_store() { return _store; }
@@ -68,6 +68,7 @@ private:
     ss::future<> create_internal_topic();
     ss::future<> fetch_internal_topic();
     configuration _config;
+    kafka::client::configuration _client_config;
     ssx::semaphore _mem_sem;
     adjustable_semaphore _inflight_sem;
     config::binding<size_t> _inflight_config_binding;

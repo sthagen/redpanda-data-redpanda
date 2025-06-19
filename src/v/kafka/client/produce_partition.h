@@ -31,9 +31,9 @@ public:
     using response = produce_batcher::partition_response;
     using consumer = ss::noncopyable_function<void(model::record_batch&&)>;
 
-    produce_partition(const configuration& config, consumer&& c)
-      : _config{config}
-      , _batcher{compression_from_str(config.produce_compression_type())}
+    produce_partition(producer_configuration config, consumer&& c)
+      : _config{std::move(config)}
+      , _batcher{_config.compression_type}
       , _timer{[this]() {
           ssx::spawn_with_gate(_gate, [this]() { return try_consume(); });
       }}
@@ -112,7 +112,7 @@ private:
         // nearly immediately after this call.  Otherwise use the produce
         // batch delay when arming the timer.
         if (!threshold_met()) {
-            rearm_timer_delay = _config.produce_batch_delay();
+            rearm_timer_delay = _config.batch_delay;
         }
         _timer.cancel();
         _timer.arm(rearm_timer_delay);
@@ -120,11 +120,8 @@ private:
 
     /// \brief Validates that the size threshold has been met to trigger produce
     bool threshold_met() const {
-        auto batch_record_count = _config.produce_batch_record_count();
-        auto batch_size_bytes = _config.produce_batch_size_bytes();
-
-        return _record_count >= batch_record_count
-               || _size_bytes >= batch_size_bytes;
+        return _record_count >= _config.batch_record_count
+               || _size_bytes >= _config.batch_size_bytes;
     }
 
     /// \brief Checks to see if the consumer can run
@@ -133,7 +130,7 @@ private:
     /// records available
     bool consumer_can_run() const { return !_in_flight && _record_count > 0; }
 
-    const configuration& _config;
+    producer_configuration _config;
     produce_batcher _batcher{};
     ss::timer<> _timer{};
     consumer _consumer;

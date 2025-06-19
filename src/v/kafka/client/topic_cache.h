@@ -47,14 +47,13 @@ public:
     ~topic_cache() noexcept = default;
 
     /// \brief Apply the given metadata response.
-    ss::future<>
-    apply(small_fragment_vector<metadata_response::topic>&& topics);
+    void apply(small_fragment_vector<metadata_response::topic>&& topics);
 
     /// \brief Obtain the leader for the given topic-partition
-    ss::future<model::node_id> leader(model::topic_partition tp) const;
+    model::node_id leader(model::topic_partition tp) const;
 
     /// \brief Obtain the partition_id for the given record
-    ss::future<model::partition_id>
+    model::partition_id
     partition_for(model::topic_view tv, const record_essence& rec);
 
 private:

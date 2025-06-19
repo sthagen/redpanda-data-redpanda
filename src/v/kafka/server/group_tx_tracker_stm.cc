@@ -162,7 +162,7 @@ ss::future<> group_tx_tracker_stm::apply_raft_snapshot(const iobuf&) {
     return ss::now();
 }
 
-ss::future<iobuf> group_tx_tracker_stm::take_snapshot(model::offset) {
+ss::future<iobuf> group_tx_tracker_stm::take_raft_snapshot(model::offset) {
     return ss::make_ready_future<iobuf>(iobuf());
 }
 

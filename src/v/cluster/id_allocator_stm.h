@@ -44,7 +44,9 @@ public:
     ss::future<stm_allocation_result>
     allocate_id(model::timeout_clock::duration timeout);
 
-    ss::future<iobuf> take_snapshot(model::offset) final { co_return iobuf{}; }
+    ss::future<iobuf> take_raft_snapshot(model::offset) final {
+        co_return iobuf{};
+    }
 
     ss::future<stm_allocation_result>
     reset_next_id(int64_t, model::timeout_clock::duration timeout);

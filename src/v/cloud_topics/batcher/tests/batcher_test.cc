@@ -51,14 +51,14 @@ namespace cloud_topics = experimental::cloud_topics;
 struct reader_with_content {
     chunked_vector<bytes> keys;
     chunked_vector<bytes> records;
-    model::record_batch_reader reader;
+    chunked_vector<model::record_batch> batches;
 };
 
 reader_with_content
-get_random_reader(int num_batches, int num_records) { // NOLINT
+get_random_batches(int num_batches, int num_records) { // NOLINT
     chunked_vector<bytes> keys;
     chunked_vector<bytes> records;
-    ss::chunked_fifo<model::record_batch> fifo;
+    chunked_vector<model::record_batch> batches;
     model::offset offset{0};
     for (int i = 0; i < num_batches; i++) {
         // Build a record batch
@@ -73,14 +73,12 @@ get_random_reader(int num_batches, int num_records) { // NOLINT
             builder.add_raw_kv(std::move(k), std::move(v));
             offset += 1;
         }
-        fifo.push_back(std::move(builder).build());
+        batches.push_back(std::move(builder).build());
     }
-    auto reader = model::make_fragmented_memory_record_batch_reader(
-      std::move(fifo));
     return {
       .keys = std::move(keys),
       .records = std::move(records),
-      .reader = std::move(reader),
+      .batches = std::move(batches),
     };
 }
 
@@ -146,7 +144,7 @@ TEST_CORO(batcher_test, single_write_request) {
       .pipeline = &pipeline,
     };
     int num_batches = 10;
-    auto [_, records, reader] = get_random_reader(num_batches, 10);
+    auto [_, records, reader] = get_random_batches(num_batches, 10);
     // Expect single upload to be made
     mock.expect_upload_object(records);
 
@@ -194,9 +192,9 @@ TEST_CORO(batcher_test, many_write_requests) {
     };
 
     std::vector<size_t> expected_num_batches = {10, 20, 10};
-    auto [_1, records1, reader1] = get_random_reader(10, 10);
-    auto [_2, records2, reader2] = get_random_reader(20, 10);
-    auto [_3, records3, reader3] = get_random_reader(10, 20);
+    auto [_1, records1, reader1] = get_random_batches(10, 10);
+    auto [_2, records2, reader2] = get_random_batches(20, 10);
+    auto [_3, records3, reader3] = get_random_batches(10, 20);
 
     chunked_vector<bytes> all_records;
     std::copy(
@@ -277,9 +275,9 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     int expected_num_batches = 33;
     int expected_num_records = 33;
-    auto [_1, included_records, included_reader] = get_random_reader(
+    auto [_1, included_records, included_batches] = get_random_batches(
       expected_num_batches, expected_num_records);
-    auto [_2, timedout_records, timedout_reader] = get_random_reader(1, 1);
+    auto [_2, timedout_records, timedout_batches] = get_random_batches(1, 1);
 
     chunked_vector<bytes> all_records;
     std::copy(
@@ -296,7 +294,7 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     const auto timeout = 1s;
     auto expect_fail_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(timedout_reader), timeout);
+      model::controller_ntp, std::move(timedout_batches), timeout);
 
     // Let time pass to invalidate the first enqueued write request
     co_await sleep_until(
@@ -304,7 +302,7 @@ TEST_CORO(batcher_test, expired_write_request) {
     ss::manual_clock::advance(timeout);
 
     auto expect_pass_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(included_reader), timeout);
+      model::controller_ntp, std::move(included_batches), timeout);
 
     // Make sure that both write requests are pending
     co_await sleep_until(

@@ -34,24 +34,34 @@ public:
       = absl::flat_hash_map<model::topic_partition, shared_produce_partition>;
 
     producer(
-      const configuration& config,
+      producer_configuration config,
+      retries_configuration& retries_config,
       topic_cache& topic_cache,
       brokers& brokers,
-      int16_t acks,
       prefix_logger& logger,
       error_handler&& error_handler)
       : _config{config}
+      , _retries_config(retries_config)
       , _partitions{}
       , _logger(&logger)
       , _error_handler(std::move(error_handler))
       , _topic_cache(topic_cache)
-      , _brokers(brokers)
-      , _acks(acks) {}
+      , _brokers(brokers) {}
 
     ss::future<produce_response::partition>
     produce(model::topic_partition tp, model::record_batch&& batch);
 
     ss::future<> stop();
+
+    void set_batch_record_count(int32_t count) {
+        _config.batch_record_count = count;
+    }
+
+    void set_batch_size_bytes(int32_t size) { _config.batch_size_bytes = size; }
+
+    void set_batch_delay(std::chrono::milliseconds delay) {
+        _config.batch_delay = delay;
+    }
 
 private:
     ss::future<> send(model::topic_partition tp, model::record_batch&& batch);
@@ -76,14 +86,14 @@ private:
           .first->second;
     }
 
-    const configuration& _config;
+    producer_configuration _config;
+    retries_configuration& _retries_config;
     absl::flat_hash_map<model::topic_partition, shared_produce_partition>
       _partitions;
     prefix_logger* _logger;
     error_handler _error_handler;
     topic_cache& _topic_cache;
     brokers& _brokers;
-    int16_t _acks;
     ss::abort_source _as;
     ss::abort_source _ingest_as;
     ss::gate _gate;

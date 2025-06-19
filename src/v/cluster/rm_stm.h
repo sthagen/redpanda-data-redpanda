@@ -221,7 +221,9 @@ public:
 
     uint64_t get_local_snapshot_size() const override;
 
-    ss::future<iobuf> take_snapshot(model::offset) final { co_return iobuf{}; }
+    ss::future<iobuf> take_raft_snapshot(model::offset) final {
+        co_return iobuf{};
+    }
 
     const producers_t& get_producers() const { return _producers; }
 

@@ -113,22 +113,19 @@ std::invoke_result_t<Func> gated_retry_with_mitigation_impl(
 template<typename ErrFunc>
 ss::future<shared_broker_t> find_coordinator_with_retry_and_mitigation(
   ss::gate& retry_gate,
-  const configuration& client_config,
+  size_t max_retries,
+  std::chrono::milliseconds retry_base_backoff,
   brokers& cluster_brokers,
   const group_id& group_id,
   member_id name,
-  prefix_logger& logger,
   ErrFunc errFunc) {
     return gated_retry_with_mitigation_impl(
              retry_gate,
-             client_config.retries(),
-             client_config.retry_base_backoff(),
+             max_retries,
+             retry_base_backoff,
              [group_id, name, &cluster_brokers]() {
                  return cluster_brokers.any()
-                   .then([group_id](shared_broker_t broker) {
-                       return broker->dispatch(
-                         find_coordinator_request(group_id));
-                   })
+                   ->dispatch(find_coordinator_request(group_id))
                    .then([group_id, name](find_coordinator_response res) {
                        if (res.data.error_code != error_code::none) {
                            return ss::make_exception_future<
@@ -140,12 +137,10 @@ ss::future<shared_broker_t> find_coordinator_with_retry_and_mitigation(
                    });
              },
              errFunc)
-      .then([&client_config, &logger](find_coordinator_response res) {
-          return make_broker(
+      .then([&cluster_brokers](find_coordinator_response res) {
+          return cluster_brokers.create_broker(
             res.data.node_id,
-            net::unresolved_address(res.data.host, res.data.port),
-            client_config,
-            logger);
+            net::unresolved_address(res.data.host, res.data.port));
       });
 }
 

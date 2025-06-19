@@ -55,5 +55,7 @@ class DatabricksSQL(Service, QueryEngineBase):
             "DatabricksSQL count_parquet_files is not implemented yet")
 
     def optimize_parquet_files(self, namespace: str, table: str) -> None:
-        raise NotImplementedError(
-            "DatabricksSQL optimize_parquet_files is not implemented yet")
+        result = self.run_query_fetch_one(
+            f"OPTIMIZE {self.escape_identifier(namespace)}.{self.escape_identifier(table)}"
+        )
+        self.logger.debug(f"OPTIMIZE result: {result}")

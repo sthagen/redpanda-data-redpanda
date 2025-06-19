@@ -106,7 +106,9 @@ public:
     /// if a start offset override exists and if so what its value is.
     kafka::offset kafka_start_offset_override();
 
-    ss::future<iobuf> take_snapshot(model::offset) final { co_return iobuf{}; }
+    ss::future<iobuf> take_raft_snapshot(model::offset) final {
+        co_return iobuf{};
+    }
 
     raft::stm_initial_recovery_policy
     get_initial_recovery_policy() const final {

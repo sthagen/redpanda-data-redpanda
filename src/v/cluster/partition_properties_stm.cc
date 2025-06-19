@@ -45,10 +45,12 @@ partition_properties_stm::partition_properties_stm(
       .writes_disabled = writes_disabled::no,
       .update_offset = model::offset{}}}) {}
 
-ss::future<iobuf> partition_properties_stm::take_snapshot(model::offset o) {
+ss::future<iobuf>
+partition_properties_stm::take_raft_snapshot(model::offset o) {
     if (o < _raft->start_offset()) {
         throw std::invalid_argument(fmt::format(
-          "can not take raft snapshot at offset {} which is smaller than raft "
+          "can not take raft snapshot at offset {} which is smaller than "
+          "raft "
           "start offset",
           o,
           _raft->start_offset()));

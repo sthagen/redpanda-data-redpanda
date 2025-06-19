@@ -102,9 +102,10 @@ FIXTURE_TEST(test_authz_response, metadata_fixture) {
     BOOST_REQUIRE(!errors_in_acl_results(acl_result));
 
     auto client = make_client();
-    client.config().sasl_mechanism.set_value(ss::sstring{"SCRAM-SHA-256"});
-    client.config().scram_username.set_value(username);
-    client.config().scram_password.set_value(password);
+    client.set_credentials(kc::sasl_configuration{
+      .mechanism = ss::sstring{"SCRAM-SHA-256"},
+      .username = username,
+      .password = password});
     client.connect().get();
     auto stop_client = ss::defer([&client]() { client.stop().get(); });
 

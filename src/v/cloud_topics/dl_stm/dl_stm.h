@@ -40,7 +40,7 @@ private:
     take_local_snapshot(ssx::semaphore_units u) override;
 
     ss::future<> apply_raft_snapshot(const iobuf&) override;
-    ss::future<iobuf> take_snapshot(model::offset) override;
+    ss::future<iobuf> take_raft_snapshot(model::offset) override;
 
 private:
     dl_stm_state _state;

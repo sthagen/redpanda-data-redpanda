@@ -41,15 +41,14 @@ template<class Clock>
 ss::future<result<chunked_circular_buffer<model::record_batch>>>
 write_pipeline<Clock>::write_and_debounce(
   model::ntp ntp,
-  model::record_batch_reader r,
+  chunked_vector<model::record_batch> batches,
   std::chrono::milliseconds timeout) {
     auto h = this->hold_gate();
     // The write request is stored on the stack of the
     // fiber until the 'response' promise is set. The
     // promise can be set by any fiber that completed
     // the request processing.
-    auto data_chunk = co_await core::serialize_in_memory_record_batch_reader(
-      std::move(r));
+    auto data_chunk = co_await core::serialize_batches(std::move(batches));
     auto sz = data_chunk.payload.size_bytes();
     // Grab the semaphore after the size of the write request
     // is known. It's impossible to do this in advance because

@@ -231,7 +231,7 @@ ss::future<> translation_stm::apply_raft_snapshot(const iobuf&) {
     co_return;
 }
 
-ss::future<iobuf> translation_stm::take_snapshot(model::offset) {
+ss::future<iobuf> translation_stm::take_raft_snapshot(model::offset) {
     co_return iobuf{};
 }
 

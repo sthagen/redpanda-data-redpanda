@@ -32,8 +32,8 @@ public:
         // create a kafka client for the cluster.
         auto* rp = instance(model::node_id{0});
         _client = std::make_unique<kc::client>(rp->proxy_client_config());
-        _client->config().retry_base_backoff.set_value(1ms);
-        _client->config().retries.set_value(size_t(20));
+        _client->set_retry_base_backoff(1ms);
+        _client->set_max_retries(size_t(20));
         _client->connect().get();
     }
 

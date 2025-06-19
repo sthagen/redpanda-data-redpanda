@@ -115,7 +115,7 @@ ss::future<> dl_stm::apply_raft_snapshot(const iobuf& buf) {
     co_return;
 }
 
-ss::future<iobuf> dl_stm::take_snapshot(model::offset snapshot_at) {
+ss::future<iobuf> dl_stm::take_raft_snapshot(model::offset snapshot_at) {
     auto st = _state.get_state_at(snapshot_at);
     co_return serde::to_iobuf(std::move(st));
 }

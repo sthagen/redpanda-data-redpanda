@@ -85,7 +85,8 @@ reduce_fetch_response(fetch_response result, fetch_response val) {
 } // namespace detail
 
 consumer::consumer(
-  const configuration& config,
+  consumer_configuration config,
+  retries_configuration& retries_cfg,
   topic_cache& topic_cache,
   brokers& brokers,
   shared_broker_t coordinator,
@@ -94,7 +95,8 @@ consumer::consumer(
   ss::noncopyable_function<void(const kafka::member_id&)> on_stopped,
   ss::noncopyable_function<ss::future<>(std::exception_ptr)> mitigater,
   prefix_logger& logger)
-  : _config(config)
+  : _config(std::move(config))
+  , _retries_cfg(retries_cfg)
   , _topic_cache(topic_cache)
   , _brokers(brokers)
   , _coordinator(std::move(coordinator))
@@ -136,7 +138,7 @@ void consumer::start() {
                 e);
           });
     });
-    _heartbeat_timer.rearm_periodic(_config.consumer_heartbeat_interval());
+    _heartbeat_timer.rearm_periodic(_config.heartbeat_interval);
 }
 
 ss::future<> consumer::stop() {
@@ -171,8 +173,8 @@ ss::future<> consumer::join() {
         req.client_id = kafka::client_id("test_client");
         req.data = {
           .group_id = me->_group_id,
-          .session_timeout_ms = cfg.consumer_session_timeout(),
-          .rebalance_timeout_ms = cfg.consumer_rebalance_timeout(),
+          .session_timeout_ms = cfg.session_timeout,
+          .rebalance_timeout_ms = cfg.rebalance_timeout,
           .member_id = me->_member_id,
           .protocol_type = consumer_group_protocol_type,
           .protocols = make_join_group_request_protocols(me->_topics)};
@@ -190,7 +192,7 @@ ss::future<> consumer::join() {
           case error_code::illegal_generation:
               return join();
           case error_code::not_coordinator:
-              return ss::sleep_abortable(_config.retry_base_backoff(), _as)
+              return ss::sleep_abortable(_retries_cfg.retry_base_backoff, _as)
                 .then([this]() { return join(); });
           case error_code::none:
               _generation_id = res.data.generation_id;
@@ -358,8 +360,7 @@ ss::future<> consumer::heartbeat() {
 }
 
 void consumer::refresh_inactivity_timer() {
-    _inactive_timer.rearm(
-      ss::timer<>::clock::now() + _config.consumer_session_timeout());
+    _inactive_timer.rearm(ss::timer<>::clock::now() + _config.session_timeout);
 }
 
 ss::future<describe_groups_response> consumer::describe_group() {
@@ -436,8 +437,8 @@ ss::future<fetch_response> consumer::fetch(
     for (const auto& [t, ps] : _assignment) {
         for (const auto& p : ps) {
             auto tp = model::topic_partition{t, p};
-            auto leader = co_await _topic_cache.leader(tp);
-            auto broker = co_await _brokers.find(leader);
+            auto leader = _topic_cache.leader(tp);
+            auto broker = _brokers.find(leader);
             auto& session = _fetch_sessions[broker];
 
             auto& req = broker_reqs
@@ -447,9 +448,9 @@ ss::future<fetch_response> consumer::fetch(
                               .data = {
                               .replica_id = consumer_replica_id,
                               .max_wait_ms = timeout,
-                              .min_bytes = _config.consumer_request_min_bytes,
+                              .min_bytes = _config.fetch_min_bytes,
                               .max_bytes = max_bytes.value_or(
-                                _config.consumer_request_max_bytes),
+                                _config.fetch_max_bytes),
                               .isolation_level = model::isolation_level::
                                 read_uncommitted, // READ_UNCOMMITTED
                               .session_id = session.id(),
@@ -466,7 +467,7 @@ ss::future<fetch_response> consumer::fetch(
                 .partition = p,
                 .fetch_offset = session.offset(tp),
                 .partition_max_bytes = max_bytes.value_or(
-                  _config.consumer_request_max_bytes)});
+                  _config.fetch_max_bytes)});
         }
     }
 
@@ -488,11 +489,11 @@ ss::future<
 consumer::reset_coordinator_and_retry_request(request_factory req) {
     return find_coordinator_with_retry_and_mitigation(
              _gate,
-             _config,
+             _retries_cfg.max_retries,
+             _retries_cfg.retry_base_backoff,
              _brokers,
              group_id(),
              name(),
-             *_logger,
              [this](std::exception_ptr ex) { return _external_mitigate(ex); })
       .then(
         [this, req{std::move(req)}](shared_broker_t new_coordinator) mutable {
@@ -593,7 +594,8 @@ ss::future<describe_groups_response> consumer::maybe_process_response_errors(
 }
 
 ss::future<shared_consumer_t> make_consumer(
-  const configuration& config,
+  const consumer_configuration& config,
+  retries_configuration& retries_config,
   topic_cache& topic_cache,
   brokers& brokers,
   shared_broker_t coordinator,
@@ -604,6 +606,7 @@ ss::future<shared_consumer_t> make_consumer(
   prefix_logger& logger) {
     auto c = ss::make_lw_shared<consumer>(
       config,
+      retries_config,
       topic_cache,
       brokers,
       std::move(coordinator),

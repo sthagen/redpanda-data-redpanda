@@ -47,6 +47,6 @@ struct serialized_chunk {
 /// Serialize record batch reader into the iobuf.
 ///
 ss::future<serialized_chunk>
-serialize_in_memory_record_batch_reader(model::record_batch_reader rdr);
+serialize_batches(chunked_vector<model::record_batch> batches);
 
 } // namespace experimental::cloud_topics::core

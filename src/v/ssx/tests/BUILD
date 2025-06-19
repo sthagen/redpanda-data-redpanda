@@ -246,6 +246,19 @@ redpanda_cc_bench(
     ],
 )
 
+redpanda_cc_bench(
+    name = "async_algorithm_rpbench",
+    srcs = [
+        "async_algorithm_bench.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/ssx:async_algorithm",
+        "@seastar",
+        "@seastar//:benchmark",
+    ],
+)
+
 redpanda_cc_gtest(
     name = "rate_limited_function_test",
     timeout = "short",

@@ -23,8 +23,8 @@ FIXTURE_TEST(test_unknown_topic, list_offsets_fixture) {
     auto client = make_connected_client();
     auto stop_client = ss::defer([&client]() { client.stop().get(); });
 
-    client.config().retry_base_backoff.set_value(10ms);
-    client.config().retries.set_value(size_t(5));
+    client.set_retry_base_backoff(10ms);
+    client.set_max_retries(size_t(5));
 
     BOOST_REQUIRE_EXCEPTION(
       client.list_offsets(unknown_tp).get(),

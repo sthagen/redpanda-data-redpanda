@@ -239,10 +239,11 @@ ss::future<> audit_client::set_client_credentials() {
         throw std::runtime_error(fmt::format(
           "Failed to fetch credential for principal: {}", audit_principal));
     }
-
-    _client.config().sasl_mechanism.set_value(pw.credential.mechanism());
-    _client.config().scram_username.set_value(pw.credential.user()());
-    _client.config().scram_password.set_value(pw.credential.password()());
+    _client.set_credentials(kafka::client::sasl_configuration{
+      .mechanism = pw.credential.mechanism(),
+      .username = pw.credential.user()(),
+      .password = pw.credential.password()(),
+    });
 }
 
 ss::future<> audit_client::configure() {
@@ -265,7 +266,7 @@ ss::future<> audit_client::configure() {
         /// client to refresh its metadata on a subsequent request.
         /// Explicitly set `client::config::retries` to its default value.
         /// We might want to make this tunable at some point.
-        _client.config().retries.reset();
+        _client.set_max_retries(5);
         vlog(adtlog.info, "Audit log client initialized");
     } catch (...) {
         vlog(

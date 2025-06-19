@@ -345,7 +345,9 @@ public:
     size_t tx_cache_size() const;
 
     std::optional<tx_metadata> oldest_tx() const;
-    ss::future<iobuf> take_snapshot(model::offset) final { co_return iobuf{}; }
+    ss::future<iobuf> take_raft_snapshot(model::offset) final {
+        co_return iobuf{};
+    }
 
     /**
      * Resets state of finished transaction. This operation is done in memory.

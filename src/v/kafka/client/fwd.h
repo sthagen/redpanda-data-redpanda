@@ -14,6 +14,7 @@
 namespace kafka::client {
 
 struct configuration;
+struct sasl_configuration;
 class client;
 
 } // namespace kafka::client

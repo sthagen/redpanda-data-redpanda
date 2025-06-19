@@ -94,14 +94,15 @@ TEST_CORO(EventFilterTest, filter_triggered_once) {
     };
     auto batches = co_await model::test::make_random_batches(spec);
     size_t reader_size_bytes = get_serialized_size(batches);
-    auto reader = model::make_memory_record_batch_reader(std::move(batches));
     core::write_pipeline<ss::lowres_clock> pipeline;
     auto stage = pipeline.register_write_pipeline_stage();
     core::event_filter<ss::lowres_clock> flt(
       core::event_type::new_write_request, stage.id());
     auto sub = pipeline.subscribe(flt);
     auto write = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), 1s);
+      model::controller_ntp,
+      chunked_vector<model::record_batch>(std::move(batches)),
+      1s);
     auto event = co_await std::move(sub);
     ASSERT_EQ_CORO(event.pending_write_bytes, reader_size_bytes);
     auto pending = stage.pull_write_requests(
@@ -128,11 +129,12 @@ TEST_CORO(EventFilterTest, filter_has_memory) {
     };
     auto batches = co_await model::test::make_random_batches(spec);
     size_t reader_size_bytes = get_serialized_size(batches);
-    auto reader = model::make_memory_record_batch_reader(std::move(batches));
     core::write_pipeline<ss::lowres_clock> pipeline;
     auto stage = pipeline.register_write_pipeline_stage();
     auto write = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), 1s);
+      model::controller_ntp,
+      chunked_vector<model::record_batch>(std::move(batches)),
+      1s);
     // wait until submitted
     // this is needed because 'write_and_debounce' has a scheduling point
     // before the write request is added to the list

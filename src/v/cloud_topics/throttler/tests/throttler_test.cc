@@ -118,8 +118,7 @@ size_t get_serialized_size(const model::record_batch& rb) {
     return res;
 }
 
-size_t get_serialized_size(
-  const chunked_circular_buffer<model::record_batch>& batches) {
+size_t get_serialized_size(const chunked_vector<model::record_batch>& batches) {
     size_t acc = 0;
     for (const auto& rb : batches) {
         auto sz = get_serialized_size(rb);
@@ -136,9 +135,9 @@ TEST_CORO(throttler_test, no_throttling) {
       .count = 100,
       .records = 10,
     };
-    auto batches = co_await model::test::make_random_batches(spec);
+    auto batches = chunked_vector<model::record_batch>(
+      co_await model::test::make_random_batches(spec));
     size_t reader_size_bytes = get_serialized_size(batches);
-    auto reader = model::make_memory_record_batch_reader(std::move(batches));
 
     cloud_topics::core::write_pipeline<ss::manual_clock> pipeline;
 
@@ -171,7 +170,7 @@ TEST_CORO(throttler_test, no_throttling) {
     // This fut will become ready when something will get the write
     // request from the pipeline and acknowledge it.
     auto write_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), 1s);
+      model::controller_ntp, std::move(batches), 1s);
     co_await sleep_until(1ms, [throttler_accessor, reader_size_bytes] {
         return throttler_accessor.units_available() == reader_size_bytes;
     });

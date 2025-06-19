@@ -61,9 +61,15 @@ struct serializing_consumer {
 };
 
 ss::future<serialized_chunk>
-serialize_in_memory_record_batch_reader(model::record_batch_reader rdr) {
-    co_return co_await std::move(rdr).consume(
-      serializing_consumer{}, model::no_timeout);
+serialize_batches(chunked_vector<model::record_batch> batches) {
+    serializing_consumer consumer;
+    for (auto& batch : batches) {
+        auto stop = co_await consumer(std::move(batch));
+        if (stop) {
+            break;
+        }
+    }
+    co_return consumer.end_of_stream();
 }
 
 } // namespace experimental::cloud_topics::core

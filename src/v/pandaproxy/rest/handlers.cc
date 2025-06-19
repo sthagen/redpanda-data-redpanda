@@ -148,7 +148,7 @@ get_topics_records(server::request_t rq, server::reply_t rp) {
       .dispatch([offset, timeout, max_bytes, res_fmt, tp{std::move(tp)}](
                   kafka::client::client& client) mutable {
           return client
-            .fetch_partition(std::move(tp), offset, max_bytes, timeout)
+            .fetch_partition(std::move(tp), offset, timeout, max_bytes)
             .then([res_fmt](kafka::fetch_response res) {
                 ::json::chunked_buffer buf;
                 ::json::iobuf_writer<::json::chunked_buffer> w(buf);

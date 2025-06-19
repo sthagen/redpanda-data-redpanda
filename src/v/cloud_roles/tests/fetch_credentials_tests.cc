@@ -17,6 +17,7 @@
 #include "test_utils/fixture.h"
 #include "test_utils/scoped_config.h"
 #include "test_utils/tee_log.h"
+#include "utils/file_io.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/core/fstream.hh>
@@ -269,12 +270,7 @@ FIXTURE_TEST(test_sts_credentials, fixture) {
 
     one_shot_fetch s(c);
 
-    auto token_f = ss::open_file_dma(
-                     "test_sts_creds_f",
-                     ss::open_flags::create | ss::open_flags::rw)
-                     .get();
-    ss::sstring token{"token"};
-    token_f.dma_write(0, token.data(), token.size()).get();
+    write_fully("test_sts_creds_f", iobuf::from("token")).get();
 
     auto refresh = cloud_roles::make_refresh_credentials(
       model::cloud_credentials_source::sts,
@@ -290,7 +286,6 @@ FIXTURE_TEST(test_sts_credentials, fixture) {
         return c.has_value();
     }).get();
 
-    token_f.close().get();
     ss::remove_file("test_sts_creds_f").get();
 
     auto aws_creds = std::get<cloud_roles::aws_credentials>(c.value());
@@ -335,12 +330,7 @@ FIXTURE_TEST(test_short_lived_sts_credentials, fixture) {
     two_fetches s(c);
     auto count = s.get_counter();
 
-    auto token_f = ss::open_file_dma(
-                     "test_short_sts_f",
-                     ss::open_flags::create | ss::open_flags::rw)
-                     .get();
-    ss::sstring token{"token"};
-    token_f.dma_write(0, token.data(), token.size()).get();
+    write_fully("test_short_sts_f", iobuf::from("token")).get();
 
     auto refresh = cloud_roles::make_refresh_credentials(
       model::cloud_credentials_source::sts,
@@ -356,7 +346,6 @@ FIXTURE_TEST(test_short_lived_sts_credentials, fixture) {
         return *count >= 2;
     }).get();
 
-    token_f.close().get();
     ss::remove_file("test_short_sts_f").get();
     auto aws_creds = std::get<cloud_roles::aws_credentials>(c.value());
     BOOST_REQUIRE_EQUAL("sts-key", aws_creds.access_key_id());

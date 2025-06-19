@@ -51,7 +51,8 @@ public:
     /// The consumer may become inactive of its own accord through a timeout.
     /// This callback can be used as a notification system for cleanup.
     consumer(
-      const configuration& config,
+      consumer_configuration config,
+      retries_configuration& retries_cfg,
       topic_cache& topic_cache,
       brokers& brokers,
       shared_broker_t coordinator,
@@ -153,7 +154,8 @@ private:
       typename std::invoke_result_t<request_factory>::api_type::response_type>
     reset_coordinator_and_retry_request(request_factory req);
 
-    const configuration& _config;
+    consumer_configuration _config;
+    retries_configuration& _retries_cfg;
     topic_cache& _topic_cache;
     brokers& _brokers;
     shared_broker_t _coordinator;
@@ -192,7 +194,8 @@ private:
 using shared_consumer_t = ss::lw_shared_ptr<consumer>;
 
 ss::future<shared_consumer_t> make_consumer(
-  const configuration& config,
+  const consumer_configuration& config,
+  retries_configuration& retries_cfg,
   topic_cache& topic_cache,
   brokers& brokers,
   shared_broker_t coordinator,

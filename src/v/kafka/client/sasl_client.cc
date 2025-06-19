@@ -17,17 +17,10 @@
 namespace kafka::client {
 
 ss::future<> do_authenticate(
-  shared_broker_t broker, const configuration& config, prefix_logger& logger) {
-    if (config.sasl_mechanism().empty()) {
-        vlog(
-          logger.debug,
-          "Connecting to broker {} without authentication",
-
-          broker->id());
-        co_return;
-    }
-
-    auto mechanism = config.sasl_mechanism();
+  shared_broker_t broker,
+  const sasl_configuration& config,
+  prefix_logger& logger) {
+    const auto mechanism = config.mechanism;
 
     if (
       mechanism != security::scram_sha256_authenticator::name
@@ -39,7 +32,7 @@ ss::future<> do_authenticate(
           fmt_with_ctx(ssx::sformat, "Unknown mechanism: {}", mechanism)};
     }
 
-    auto username = config.scram_username();
+    auto username = config.username;
 
     vlog(
       logger.debug,
@@ -51,7 +44,7 @@ ss::future<> do_authenticate(
     // perform handshake
     co_await do_sasl_handshake(broker, mechanism);
 
-    auto password = config.scram_password();
+    auto password = config.password;
 
     if (username.empty() || password.empty()) {
         throw broker_error{

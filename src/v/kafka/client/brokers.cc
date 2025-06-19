@@ -20,29 +20,26 @@ ss::future<> brokers::stop() {
       [](const shared_broker_t& broker) { return broker->stop(); });
 }
 
-ss::future<shared_broker_t> brokers::any() {
+shared_broker_t brokers::any() {
     if (_brokers.empty()) {
-        return ss::make_exception_future<shared_broker_t>(
-          broker_error(unknown_node_id, error_code::broker_not_available));
+        throw broker_error(unknown_node_id, error_code::broker_not_available);
     }
-
-    return ss::make_ready_future<shared_broker_t>(
-      *std::next(_brokers.begin(), _next_broker++ % _brokers.size()));
+    _next_broker = ++_next_broker % _brokers.size();
+    return *std::next(_brokers.begin(), _next_broker);
 }
 
-ss::future<shared_broker_t> brokers::find(model::node_id id) {
+shared_broker_t brokers::find(model::node_id id) {
     auto b_it = _brokers.find(id);
     if (b_it == _brokers.end()) {
-        return ss::make_exception_future<shared_broker_t>(
-          broker_error(id, error_code::broker_not_available));
+        throw broker_error(id, error_code::broker_not_available);
     }
-    return ss::make_ready_future<shared_broker_t>(*b_it);
+    return *b_it;
 }
 
 ss::future<> brokers::erase(model::node_id node_id) {
     if (auto b_it = _brokers.find(node_id); b_it != _brokers.end()) {
         auto broker = *b_it;
-        _brokers.erase(broker);
+        _brokers.erase(b_it);
         return broker->stop().finally([broker]() {});
     }
     return ss::now();
@@ -62,11 +59,8 @@ ss::future<> brokers::apply(chunked_vector<metadata_response::broker>&& res) {
                  new_brokers_begin,
                  new_brokers.end(),
                  [this](const metadata_response::broker& b) {
-                     return make_broker(
-                       b.node_id,
-                       net::unresolved_address(b.host, b.port),
-                       _config,
-                       *_logger);
+                     return _factory.create_broker(
+                       b.node_id, net::unresolved_address(b.host, b.port));
                  })
           .then([this, &new_brokers, new_brokers_begin](
                   std::vector<shared_broker_t> broker_endpoints) mutable {
@@ -91,9 +85,11 @@ ss::future<> brokers::apply(chunked_vector<metadata_response::broker>&& res) {
           });
     });
 }
-
-ss::future<bool> brokers::empty() const {
-    return ss::make_ready_future<bool>(_brokers.empty());
+ss::future<shared_broker_t>
+brokers::create_broker(model::node_id node_id, net::unresolved_address addr) {
+    return _factory.create_broker(node_id, std::move(addr));
 }
+
+bool brokers::empty() const { return _brokers.empty(); }
 
 } // namespace kafka::client

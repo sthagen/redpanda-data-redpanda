@@ -54,7 +54,7 @@ public:
     ss::future<result<chunked_circular_buffer<model::record_batch>>>
     write_and_debounce(
       model::ntp ntp,
-      model::record_batch_reader r,
+      chunked_vector<model::record_batch> batches,
       std::chrono::milliseconds timeout);
 
     using write_requests_list

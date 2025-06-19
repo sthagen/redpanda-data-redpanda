@@ -456,12 +456,12 @@ ss::future<> create_acls(cluster::security_frontend& security_fe) {
 }
 
 ss::future<> service::configure() {
-    auto config = co_await kafka::client::create_client_credentials(
-      *_controller,
-      config::shard_local_cfg(),
-      _client.local().config(),
-      principal);
-    co_await kafka::client::set_client_credentials(*config, _client);
+    auto sasl_config = co_await kafka::client::create_client_credentials(
+      *_controller, config::shard_local_cfg(), _client_config, principal);
+    co_await _client.invoke_on_all(
+      [sasl_config = std::move(sasl_config)](kafka::client::client& c) {
+          c.set_credentials(sasl_config);
+      });
 
     const auto& store = _controller->get_ephemeral_credential_store().local();
     bool has_ephemeral_credentials = store.has(store.find(principal));
@@ -621,6 +621,7 @@ ss::future<> service::fetch_internal_topic() {
 
 service::service(
   const YAML::Node& config,
+  const YAML::Node& client_config,
   ss::smp_service_group smp_sg,
   size_t max_memory,
   ss::sharded<kafka::client::client>& client,
@@ -629,6 +630,7 @@ service::service(
   std::unique_ptr<cluster::controller>& controller,
   ss::sharded<security::audit::audit_log_manager>& audit_mgr)
   : _config(config)
+  , _client_config(client_config)
   , _mem_sem(max_memory, "pproxy/schema-svc")
   , _inflight_sem(config::shard_local_cfg()
                     .max_in_flight_schema_registry_requests_per_shard())
@@ -679,9 +681,5 @@ ss::future<> service::stop() {
 }
 
 configuration& service::config() { return _config; }
-
-kafka::client::configuration& service::client_config() {
-    return _client.local().config();
-}
 
 } // namespace pandaproxy::schema_registry

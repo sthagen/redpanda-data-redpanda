@@ -237,12 +237,12 @@ TEST_F_CORO(partition_properties_stm_fixture, test_snapshot) {
 
     auto snap_before_disabled
       = partition_properties_stm_accessor::snap_from_iobuf(
-        co_await get_leader_stm()->take_snapshot(o));
+        co_await get_leader_stm()->take_raft_snapshot(o));
     ASSERT_EQ_CORO(
       snap_before_disabled.writes_disabled, stm_t::writes_disabled::no);
     // take snapshot at disable command offset
     auto snap_at_disabled = partition_properties_stm_accessor::snap_from_iobuf(
-      co_await get_leader_stm()->take_snapshot(
+      co_await get_leader_stm()->take_raft_snapshot(
         model::next_offset(before_disabled.value())));
     ASSERT_EQ_CORO(
       snap_at_disabled.writes_disabled, stm_t::writes_disabled::yes);
@@ -252,12 +252,12 @@ TEST_F_CORO(partition_properties_stm_fixture, test_snapshot) {
       before_enabled.value(), before_disabled.value() + model::offset(2));
     auto snap_before_enabled
       = partition_properties_stm_accessor::snap_from_iobuf(
-        co_await get_leader_stm()->take_snapshot(o));
+        co_await get_leader_stm()->take_raft_snapshot(o));
     ASSERT_EQ_CORO(
       snap_before_enabled.writes_disabled, stm_t::writes_disabled::yes);
 
     auto snap_at_enabled = partition_properties_stm_accessor::snap_from_iobuf(
-      co_await get_leader_stm()->take_snapshot(
+      co_await get_leader_stm()->take_raft_snapshot(
         model::next_offset(before_enabled.value())));
     ASSERT_EQ_CORO(snap_at_enabled.writes_disabled, stm_t::writes_disabled::no);
 
@@ -266,7 +266,7 @@ TEST_F_CORO(partition_properties_stm_fixture, test_snapshot) {
       before_enabled.value() + model::offset(2));
     auto snap_after_enabled
       = partition_properties_stm_accessor::snap_from_iobuf(
-        co_await get_leader_stm()->take_snapshot(
+        co_await get_leader_stm()->take_raft_snapshot(
           model::next_offset(before_enabled.value())));
     ASSERT_EQ_CORO(
       snap_after_enabled.writes_disabled, stm_t::writes_disabled::no);

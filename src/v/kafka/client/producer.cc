@@ -29,7 +29,7 @@ using namespace std::chrono_literals;
 namespace kafka::client {
 
 produce_request make_produce_request(
-  model::topic_partition tp, model::record_batch&& batch, int16_t acks) {
+  model::topic_partition tp, model::record_batch&& batch, acks acks) {
     chunked_vector<produce_request::partition> partitions;
     partitions.emplace_back(produce_request::partition{
       .partition_index{tp.partition},
@@ -87,20 +87,20 @@ ss::future<> producer::stop() {
     /// configured interval or when the gate is eventually closed whichever
     /// comes first.
     ss::abort_source exit;
-    if (_config.produce_shutdown_delay() > 0ms) {
+    if (_config.shutdown_delay > 0ms) {
         vlog(
           _logger->debug,
           "Waiting {}ms to allow final flush of producers batched records",
-          _config.produce_shutdown_delay());
+          _config.shutdown_delay);
     }
-    auto abort = ss::sleep_abortable(_config.produce_shutdown_delay(), exit)
+    auto abort = ss::sleep_abortable(_config.shutdown_delay, exit)
                    .then([this] {
-                       if (_config.produce_shutdown_delay() > 0ms) {
+                       if (_config.shutdown_delay > 0ms) {
                            vlog(
                              _logger->warn,
                              "Forcefully stopping kafka client producer after "
                              "waiting {}ms for its gate to close",
-                             _config.produce_shutdown_delay());
+                             _config.shutdown_delay);
                        }
                        _as.request_abort();
                    })
@@ -141,10 +141,10 @@ producer::produce(model::topic_partition tp, model::record_batch&& batch) {
 
 ss::future<produce_response::partition>
 producer::do_send(model::topic_partition tp, model::record_batch batch) {
-    auto leader = co_await _topic_cache.leader(tp);
-    auto broker = co_await _brokers.find(leader);
+    auto leader = _topic_cache.leader(tp);
+    auto broker = _brokers.find(leader);
     auto res = co_await broker->dispatch(
-      make_produce_request(std::move(tp), std::move(batch), _acks));
+      make_produce_request(std::move(tp), std::move(batch), _config.ack_level));
     auto topic = std::move(res.data.responses[0]);
     auto partition = std::move(topic.partitions[0]);
     if (partition.error_code != error_code::none) {
@@ -170,8 +170,8 @@ producer::send(model::topic_partition tp, model::record_batch&& batch) {
              [this, tp](model::record_batch& batch) mutable {
                  return ss::with_gate(_gate, [this, tp, &batch]() {
                      return retry_with_mitigation(
-                       _config.retries(),
-                       _config.retry_base_backoff(),
+                       _retries_config.max_retries,
+                       _retries_config.retry_base_backoff,
                        [this, tp{std::move(tp)}, &batch]() {
                            return do_send(tp, batch.share());
                        },

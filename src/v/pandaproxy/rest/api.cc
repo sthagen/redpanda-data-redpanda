@@ -49,6 +49,7 @@ ss::future<> api::start() {
 
     co_await _proxy.start(
       config::to_yaml(_cfg, config::redact_secrets::no),
+      config::to_yaml(_client_cfg, config::redact_secrets::no),
       _sg,
       _max_memory,
       std::ref(_client),
@@ -80,7 +81,21 @@ ss::future<> api::set_config(ss::sstring name, std::any val) {
 ss::future<> api::set_client_config(ss::sstring name, std::any val) {
     return _proxy.invoke_on_all(
       [name{std::move(name)}, val{std::move(val)}](pandaproxy::rest::proxy& p) {
-          p.client_config().get(name).set_value(val);
+          return p.client().invoke_on_all(
+            [name, val](kafka::client::client& client) {
+                if (name == "retries") {
+                    client.set_max_retries(std::any_cast<size_t>(val));
+                } else if (name == "retry_base_backoff_ms") {
+                    client.set_retry_base_backoff(
+                      std::any_cast<std::chrono::milliseconds>(val));
+                } else if (name == "produce_batch_delay_ms") {
+                    client.set_batch_delay(
+                      std::any_cast<std::chrono::milliseconds>(val));
+                } else {
+                    throw std::runtime_error(
+                      fmt::format("Unsupported client config: {}", name));
+                }
+            });
       });
 }
 } // namespace pandaproxy::rest

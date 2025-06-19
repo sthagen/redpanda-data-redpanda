@@ -50,22 +50,27 @@
 
 namespace kafka::client {
 
-client::client(const YAML::Node& cfg, std::optional<external_mitigate> mitigater)
-  : _config{cfg}
-  , _seeds{_config.brokers()}
-  , _logger{kclog, _config.client_identifier().value_or("")}
+client::client(
+  const YAML::Node& cfg, std::optional<external_mitigate> mitigater)
+  : _config{client_configuration::from_config_store(configuration(cfg))}
+  , _seeds{_config.connection_cfg.initial_brokers}
+  , _logger{kclog, _config.connection_cfg.client_id.value_or("")}
   , _topic_cache{}
-  , _brokers{_config,_logger}
+  , _brokers{_config.connection_cfg, _logger}
   , _wait_or_start_update_metadata{[this](wait_or_start::tag tag) {
       return update_metadata(tag);
   }}
-  , _producer{_config, _topic_cache, _brokers, _config.produce_ack_level(), _logger, [this](std::exception_ptr ex) {
-      return mitigate_error(std::move(ex));
-  }}
+  , _producer(
+      _config.producer_cfg,
+      _config.retries_cfg,
+      _topic_cache,
+      _brokers,
+      _logger,
+      [this](std::exception_ptr ex) { return mitigate_error(std::move(ex)); })
   , _external_mitigate(std::move(mitigater)) {}
 
 ss::future<> client::do_connect(net::unresolved_address addr) {
-    return make_broker(unknown_node_id, addr, _config, _logger)
+    return _brokers.create_broker(unknown_node_id, std::move(addr))
       .then([this](shared_broker_t broker) {
           return broker->dispatch(metadata_request{.list_all_topics = true})
             .then(
@@ -80,13 +85,18 @@ ss::future<> client::connect() {
 
     return ss::do_with(size_t{0}, [this](size_t& retries) {
         return retry_with_mitigation(
-          _config.retries(),
-          _config.retry_base_backoff(),
+          _config.retries_cfg.max_retries,
+          _config.retries_cfg.retry_base_backoff,
           [this, retries]() {
               return do_connect(_seeds[retries % _seeds.size()]);
           },
           [this, &retries](std::exception_ptr ex) {
               ++retries;
+              vlog(
+                _logger.info,
+                "Failed to connect to seed {}: {}, retrying",
+                retries,
+                ex);
               return external_mitigate_error(ex);
           },
           _as);
@@ -125,9 +135,15 @@ ss::future<> client::stop() noexcept {
 ss::future<> client::update_metadata(wait_or_start::tag) {
     return ss::try_with_gate(_gate, [this]() {
         vlog(_logger.debug, "updating metadata");
-        return _brokers.any()
-          .then([this](shared_broker_t broker) {
-              return broker->dispatch(metadata_request{.list_all_topics = true})
+        auto f = ss::now();
+        if (_brokers.empty()) {
+            // If there are no brokers, connect to the seeds
+            f = connect();
+        }
+        return f
+          .then([this] {
+              return _brokers.any()
+                ->dispatch(metadata_request{.list_all_topics = true})
                 .then([this](metadata_response res) {
                     // Create new seeds from the returned set of brokers if
                     // they're not empty
@@ -141,23 +157,28 @@ ss::future<> client::update_metadata(wait_or_start::tag) {
                     }
 
                     return apply(std::move(res));
-                })
-                .finally([this]() { vlog(_logger.trace, "updated metadata"); });
+                });
           })
           .handle_exception_type(
-            [this](const broker_error&) { return connect(); });
+            [this](const broker_error&) { return connect(); })
+          .finally([this]() { vlog(_logger.trace, "updated metadata"); });
     });
 }
 
 ss::future<> client::apply(metadata_response res) {
     try {
         co_await _brokers.apply(std::move(res.data.brokers));
-        co_await _topic_cache.apply(std::move(res.data.topics));
+        _topic_cache.apply(std::move(res.data.topics));
         _controller = res.data.controller_id;
     } catch (const std::exception& ex) {
         vlog(_logger.debug, "Failed to apply metadata request: {}", ex);
         throw;
     }
+}
+
+void client::set_credentials(std::optional<sasl_configuration> creds) {
+    vlog(_logger.debug, "Setting credentials: {}", creds);
+    _config.connection_cfg.sasl_cfg = std::move(creds);
 }
 
 ss::future<> client::external_mitigate_error(std::exception_ptr ex) const {
@@ -258,7 +279,8 @@ ss::future<produce_response> client::produce_records(
         auto p_id = record.partition_id;
         if (!p_id) {
             p_id = co_await gated_retry_with_mitigation([&, this]() {
-                       return _topic_cache.partition_for(topic, record);
+                       return ss::make_ready_future<model::partition_id>(
+                         _topic_cache.partition_for(topic, record));
                    }).handle_exception([](std::exception_ptr) {
                 // Assume auto topic creation is on and assign to first
                 // partition
@@ -312,11 +334,8 @@ ss::future<produce_response> client::produce_records(
 
 ss::future<metadata_response> client::fetch_metadata(metadata_request req) {
     co_return co_await gated_retry_with_mitigation(
-      [this, req{std::move(req)}]() {
-          return _brokers.any().then(
-            [req{req.copy()}](shared_broker_t broker) mutable {
-                return broker->dispatch(std::move(req));
-            });
+      [this, req = std::move(req)]() {
+          return _brokers.any()->dispatch(req.copy());
       });
 }
 
@@ -324,15 +343,13 @@ ss::future<create_topics_response>
 client::create_topic(kafka::creatable_topic req) {
     return gated_retry_with_mitigation([this, req{std::move(req)}]() {
         auto controller = _controller;
-        return _brokers.find(controller)
-          .then([req](auto broker) mutable {
-              chunked_vector<kafka::creatable_topic> cv;
-              cv.push_back(std::move(req));
-              return broker->dispatch(kafka::create_topics_request{
+        auto broker = _brokers.find(controller);
+        chunked_vector<kafka::creatable_topic> cv;
+        cv.push_back(std::move(req));
+        return broker->dispatch(kafka::create_topics_request{
                 .data = {
                   .topics = std::move(cv),
-                }});
-          })
+                }})
           .then([controller](auto res) {
               auto ec = res.data.topics[0].error_code;
               switch (ec) {
@@ -415,7 +432,7 @@ client::do_list_offsets(const list_offsets_request& unsharded_req) {
     for (const auto& topic : unsharded_req.data.topics) {
         for (const auto& partition : topic.partitions) {
             model::topic_partition tp{topic.name, partition.partition_index};
-            auto node_id = co_await _topic_cache.leader(tp);
+            auto node_id = _topic_cache.leader(tp);
 
             auto& topics
               = reqs.try_emplace(node_id, kafka::list_offsets_request{})
@@ -431,10 +448,7 @@ client::do_list_offsets(const list_offsets_request& unsharded_req) {
 
     auto mapper = [this](auto kv) {
         auto node_id = kv.first;
-        return _brokers.find(node_id).then(
-          [req = std::move(kv.second)](shared_broker_t broker) mutable {
-              return broker->dispatch(std::move(req));
-          });
+        return _brokers.find(node_id)->dispatch(std::move(kv.second));
     };
 
     auto reducer = [](list_offsets_response result, list_offsets_response val) {
@@ -497,29 +511,28 @@ ss::future<fetch_response> maybe_throw_exception(
 ss::future<fetch_response> client::fetch_partition(
   model::topic_partition tp,
   model::offset offset,
-  int32_t max_bytes,
-  std::chrono::milliseconds timeout) {
-    const auto min_bytes = _config.consumer_request_min_bytes();
-    auto build_request =
-      [offset, min_bytes, max_bytes, timeout](model::topic_partition& tp) {
-          return make_fetch_request(tp, offset, min_bytes, max_bytes, timeout);
-      };
+  std::chrono::milliseconds timeout,
+  std::optional<int32_t> max_bytes) {
+    const auto min_bytes = _config.consumer_cfg.fetch_min_bytes;
+    const int32_t max_bytes_value = max_bytes.value_or(
+      _config.consumer_cfg.fetch_max_bytes);
+    auto build_request = [offset, min_bytes, max_bytes_value, timeout](
+                           model::topic_partition& tp) {
+        return make_fetch_request(
+          tp, offset, min_bytes, max_bytes_value, timeout);
+    };
 
     return ss::do_with(
       std::move(build_request),
       std::move(tp),
       [this](auto& build_request, model::topic_partition& tp) {
           return gated_retry_with_mitigation([this, &tp, &build_request]() {
-                     return _topic_cache.leader(tp)
-                       .then([this](model::node_id leader) {
-                           return _brokers.find(leader);
-                       })
-                       .then([&tp, &build_request](shared_broker_t&& b) {
-                           return b->dispatch(build_request(tp))
-                             .then([b, &tp](fetch_response res) {
-                                 return maybe_throw_exception(
-                                   b, tp, std::move(res));
-                             });
+                     auto leader = _topic_cache.leader(tp);
+                     auto broker = _brokers.find(leader);
+                     return broker->dispatch(build_request(tp))
+                       .then([broker, &tp](fetch_response res) {
+                           return maybe_throw_exception(
+                             broker, tp, std::move(res));
                        });
                  })
             .handle_exception([&tp](std::exception_ptr ex) {
@@ -532,18 +545,19 @@ ss::future<member_id>
 client::create_consumer(const group_id& group_id, member_id name) {
     return find_coordinator_with_retry_and_mitigation(
              _gate,
-             _config,
+             _config.retries_cfg.max_retries,
+             _config.retries_cfg.retry_base_backoff,
              _brokers,
              group_id,
              name,
-             _logger,
              [this](std::exception_ptr ex) { return mitigate_error(ex); })
       .then([this, group_id, name](shared_broker_t coordinator) mutable {
           auto on_stopped = [this, group_id](const member_id& name) {
               _consumers[group_id].erase(name);
           };
           return make_consumer(
-            _config,
+            _config.consumer_cfg,
+            _config.retries_cfg,
             _topic_cache,
             _brokers,
             std::move(coordinator),
@@ -640,7 +654,7 @@ ss::future<kafka::fetch_response> client::consumer_fetch(
   const member_id& name,
   std::optional<std::chrono::milliseconds> timeout,
   std::optional<int32_t> max_bytes) {
-    const auto config_timout = _config.consumer_request_timeout.value();
+    const auto config_timout = _config.consumer_cfg.request_timeout;
     const auto end = model::timeout_clock::now()
                      + std::min(config_timout, timeout.value_or(config_timout));
     return gated_retry_with_mitigation([this, g_id, name, end, max_bytes]() {
@@ -689,8 +703,6 @@ ss::future<kafka::describe_configs_response> client::describe_topics(
 ss::future<kafka::describe_configs_response> client::do_describe_topics(
   chunked_vector<model::topic> topics,
   std::optional<chunked_vector<ss::sstring>> configuration_keys) {
-    auto broker = co_await _brokers.any();
-
     chunked_vector<describe_configs_resource> dcr;
     dcr.reserve(topics.size());
     for (const auto& topic : topics) {
@@ -702,7 +714,7 @@ ss::future<kafka::describe_configs_response> client::do_describe_topics(
         });
     }
 
-    co_return co_await broker->dispatch(
+    co_return co_await _brokers.any()->dispatch(
       describe_configs_request{.data = {.resources = std::move(dcr)}});
 }
 

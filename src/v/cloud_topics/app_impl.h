@@ -10,10 +10,10 @@
  */
 #pragma once
 
-#include "base/outcome.h"
 #include "cloud_topics/api.h"
 #include "model/fundamental.h"
 
+#include <seastar/core/distributed.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 

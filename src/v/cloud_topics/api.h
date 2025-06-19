@@ -11,8 +11,10 @@
 #pragma once
 
 #include "base/outcome.h"
+#include "container/chunked_circular_buffer.h"
+#include "container/fragmented_vector.h"
 #include "model/fundamental.h"
-#include "model/record_batch_reader.h"
+#include "model/record.h"
 
 #include <seastar/core/circular_buffer.hh>
 #include <seastar/core/future.hh>
@@ -38,7 +40,7 @@ public:
     virtual ss::future<result<chunked_circular_buffer<model::record_batch>>>
     write_and_debounce(
       model::ntp ntp,
-      model::record_batch_reader r,
+      chunked_vector<model::record_batch> batches,
       std::chrono::milliseconds timeout)
       = 0;
 

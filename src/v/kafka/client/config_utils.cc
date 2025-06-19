@@ -26,20 +26,33 @@
 #include <exception>
 
 namespace kafka::client {
-
-ss::future<std::unique_ptr<kafka::client::configuration>>
+namespace {
+std::optional<sasl_configuration> create_sasl_configuration_from_client_cfg(
+  const kafka::client::configuration& client_cfg) {
+    if (
+      client_cfg.scram_password.is_overriden()
+      || client_cfg.scram_username.is_overriden()
+      || client_cfg.sasl_mechanism.is_overriden()) {
+        return sasl_configuration{
+          .mechanism = client_cfg.sasl_mechanism(),
+          .username = client_cfg.scram_username(),
+          .password = client_cfg.scram_password(),
+        };
+    }
+    return std::nullopt;
+}
+} // namespace
+ss::future<std::optional<kafka::client::sasl_configuration>>
 create_client_credentials(
   cluster::controller& controller,
   const config::configuration& cluster_cfg,
   const kafka::client::configuration& client_cfg,
   security::acl_principal principal) {
-    auto new_cfg = std::make_unique<kafka::client::configuration>(
-      to_yaml(client_cfg, config::redact_secrets::no));
-
+    auto sasl_cfg = create_sasl_configuration_from_client_cfg(client_cfg);
     // If AuthZ is not enabled, don't create credentials.
     if (!cluster_cfg.kafka_enable_authorization().value_or(
           cluster_cfg.enable_sasl())) {
-        co_return new_cfg;
+        co_return sasl_cfg;
     }
 
     // If the configuration is overriden, use it.
@@ -47,7 +60,7 @@ create_client_credentials(
       client_cfg.scram_password.is_overriden()
       || client_cfg.scram_username.is_overriden()
       || client_cfg.sasl_mechanism.is_overriden()) {
-        co_return new_cfg;
+        co_return sasl_cfg;
     }
 
     // Get the internal secret for user
@@ -60,39 +73,10 @@ create_client_credentials(
             "Failed to fetch credential for principal: {}", principal)));
     }
 
-    new_cfg->sasl_mechanism.set_value(pw.credential.mechanism());
-    new_cfg->scram_username.set_value(pw.credential.user()());
-    new_cfg->scram_password.set_value(pw.credential.password()());
-
-    co_return new_cfg;
-}
-
-void set_client_credentials(
-  const kafka::client::configuration& client_cfg,
-  kafka::client::client& client) {
-    client.config().sasl_mechanism.set_value(client_cfg.sasl_mechanism());
-    client.config().scram_username.set_value(client_cfg.scram_username());
-    client.config().scram_password.set_value(client_cfg.scram_password());
-}
-
-ss::future<> set_client_credentials(
-  const kafka::client::configuration& client_cfg,
-  ss::sharded<kafka::client::client>& client) {
-    co_await client.invoke_on_all([&client_cfg](kafka::client::client& client) {
-        client.config().sasl_mechanism.set_value(client_cfg.sasl_mechanism());
-        client.config().scram_username.set_value(client_cfg.scram_username());
-        client.config().scram_password.set_value(client_cfg.scram_password());
-    });
-}
-
-model::compression compression_from_str(std::string_view v) {
-    return string_switch<model::compression>(v)
-      .match("none", model::compression::none)
-      .match("gzip", model::compression::gzip)
-      .match("snappy", model::compression::snappy)
-      .match("lz4", model::compression::lz4)
-      .match("zstd", model::compression::zstd)
-      .default_match(model::compression::none);
+    co_return sasl_configuration{
+      .mechanism = pw.credential.mechanism(),
+      .username = pw.credential.user()(),
+      .password = pw.credential.password()()};
 }
 
 } // namespace kafka::client

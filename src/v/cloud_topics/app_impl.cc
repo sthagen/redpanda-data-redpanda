@@ -78,7 +78,7 @@ public:
     ss::future<result<chunked_circular_buffer<model::record_batch>>>
     write_and_debounce(
       model::ntp ntp,
-      model::record_batch_reader r,
+      chunked_vector<model::record_batch> r,
       std::chrono::milliseconds timeout) override {
         return _write_pipeline->write_and_debounce(
           std::move(ntp), std::move(r), timeout);

@@ -102,12 +102,14 @@ server::routes_t get_proxy_routes(ss::gate& gate, one_shot& es) {
 
 proxy::proxy(
   const YAML::Node& config,
+  const YAML::Node& client_cfg,
   ss::smp_service_group smp_sg,
   size_t max_memory,
   ss::sharded<kafka::client::client>& client,
   ss::sharded<kafka_client_cache>& client_cache,
   cluster::controller* controller)
   : _config(config)
+  , _client_cfg(client_cfg)
   , _mem_sem(max_memory, "pproxy/mem")
   , _inflight_sem(config::shard_local_cfg().max_in_flight_pandaproxy_requests_per_shard(), "pproxy/inflight")
   , _inflight_config_binding(config::shard_local_cfg().max_in_flight_pandaproxy_requests_per_shard.bind())
@@ -150,10 +152,6 @@ ss::future<> proxy::stop() {
 
 configuration& proxy::config() { return _config; }
 
-kafka::client::configuration& proxy::client_config() {
-    return _client.local().config();
-}
-
 ss::future<> proxy::do_start() {
     if (_is_started) {
         co_return;
@@ -174,12 +172,12 @@ ss::future<> proxy::do_start() {
 }
 
 ss::future<> proxy::configure() {
-    auto config = co_await kafka::client::create_client_credentials(
-      *_controller,
-      config::shard_local_cfg(),
-      _client.local().config(),
-      principal);
-    co_await kafka::client::set_client_credentials(*config, _client);
+    auto sasl_config = co_await kafka::client::create_client_credentials(
+      *_controller, config::shard_local_cfg(), _client_cfg, principal);
+    co_await _client.invoke_on_all(
+      [sasl_config = std::move(sasl_config)](kafka::client::client& c) {
+          c.set_credentials(sasl_config);
+      });
 
     const auto& store = _controller->get_ephemeral_credential_store().local();
     bool has_ephemeral_credentials = store.has(store.find(principal));

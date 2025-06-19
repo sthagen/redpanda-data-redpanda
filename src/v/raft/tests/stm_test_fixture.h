@@ -123,7 +123,7 @@ public:
       : simple_kv_base<>(rn) {}
 
     ss::future<iobuf>
-    take_snapshot(model::offset last_included_offset) override {
+    take_raft_snapshot(model::offset last_included_offset) override {
         state_t inc_state;
         // build incremental snapshot
         auto snap = co_await raft_node.raft()->open_snapshot();

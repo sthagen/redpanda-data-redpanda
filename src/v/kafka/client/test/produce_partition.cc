@@ -39,7 +39,8 @@ SEASTAR_THREAD_TEST_CASE(test_produce_partition_record_count) {
     // configuration under test
     cfg.produce_batch_record_count.set_value(3);
 
-    kc::produce_partition producer(cfg, consumer);
+    kc::produce_partition producer(
+      kc::producer_configuration::from_config_store(cfg), consumer);
 
     auto c_res0_fut = producer.produce(make_batch(model::offset(0), 2));
     auto c_res1_fut = producer.produce(make_batch(model::offset(2), 1));

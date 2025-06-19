@@ -15,12 +15,12 @@
 
 #include <gtest/gtest.h>
 
+#include <iterator>
+
 namespace cloud_topics = experimental::cloud_topics;
 
 TEST(SerializerTest, EmptyReader) {
-    auto res = cloud_topics::core::serialize_in_memory_record_batch_reader(
-                 model::make_empty_record_batch_reader())
-                 .get();
+    auto res = cloud_topics::core::serialize_batches({}).get();
     ASSERT_TRUE(res.payload.empty());
     ASSERT_TRUE(res.batches.empty());
 }
@@ -31,13 +31,12 @@ class SerializerFixture
 TEST_P(SerializerFixture, Consume) {
     auto num_batches = std::get<0>(GetParam());
     auto num_records = std::get<1>(GetParam());
-    auto test_data = model::make_memory_record_batch_reader(
-      model::test::make_random_batches(
-        {.count = num_batches, .records = num_records})
-        .get());
-    auto res = cloud_topics::core::serialize_in_memory_record_batch_reader(
-                 std::move(test_data))
-                 .get();
+    auto test_data = model::test::make_random_batches(
+                       {.count = num_batches, .records = num_records})
+                       .get();
+    chunked_vector<model::record_batch> batches;
+    std::ranges::move(std::move(test_data), std::back_inserter(batches));
+    auto res = cloud_topics::core::serialize_batches(std::move(batches)).get();
     ASSERT_GT(res.payload.size_bytes(), 0);
     ASSERT_EQ(res.batches.size(), num_batches);
     ASSERT_TRUE(

@@ -244,7 +244,7 @@ public:
     };
 
     ss::future<iobuf>
-    take_snapshot(model::offset last_included_offset) override {
+    take_raft_snapshot(model::offset last_included_offset) override {
         kv_state inc_state;
         // build incremental snapshot
         auto snap = co_await raft_node.raft()->open_snapshot();
@@ -497,7 +497,7 @@ public:
 
     ss::future<> apply_raft_snapshot(const iobuf&) override { co_return; };
 
-    ss::future<iobuf> take_snapshot(model::offset) override {
+    ss::future<iobuf> take_raft_snapshot(model::offset) override {
         co_return iobuf{};
     }
 

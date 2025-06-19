@@ -104,7 +104,7 @@ public:
       take_local_snapshot(ssx::semaphore_units) override;
 
     ss::future<> apply_raft_snapshot(const iobuf&) final;
-    ss::future<iobuf> take_snapshot(model::offset) final;
+    ss::future<iobuf> take_raft_snapshot(model::offset) final;
 
     ss::future<> handle_raft_data(model::record_batch);
     ss::future<> handle_tx_offsets(

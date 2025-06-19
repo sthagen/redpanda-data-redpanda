@@ -63,6 +63,7 @@ ss::future<> api::start() {
       _node_id, _sg, std::ref(_client), std::ref(*_store));
     co_await _service.start(
       config::to_yaml(_cfg, config::redact_secrets::no),
+      config::to_yaml(_client_cfg, config::redact_secrets::no),
       _sg,
       _max_memory,
       std::ref(_client),

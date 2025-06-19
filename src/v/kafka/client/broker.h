@@ -121,11 +121,22 @@ private:
 
 using shared_broker_t = ss::lw_shared_ptr<broker>;
 
-ss::future<shared_broker_t> make_broker(
-  model::node_id node_id,
-  net::unresolved_address addr,
-  const configuration& config,
-  prefix_logger& logger);
+/**
+ * Simple class used to create broker objects. Created broker objects use
+ * configuration provided when creating the factory.
+ */
+struct broker_factory {
+    broker_factory(
+      const connection_configuration& config, prefix_logger& logger);
+
+    ss::future<shared_broker_t>
+    create_broker(model::node_id, net::unresolved_address addr);
+
+private:
+    const connection_configuration& _config;
+    prefix_logger* _logger;
+    ss::sstring _client_id;
+};
 
 struct broker_hash {
     using is_transparent = void;

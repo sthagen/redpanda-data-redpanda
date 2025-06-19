@@ -60,14 +60,12 @@ TEST_CORO(write_pipeline_test, single_write_request) {
     cloud_topics::core::write_pipeline_accessor accessor{
       .pipeline = &pipeline,
     };
-    auto reader = model::make_empty_record_batch_reader();
     // Expect single upload to be made
 
     auto stage = pipeline.register_write_pipeline_stage();
 
     const auto timeout = 1s;
-    auto fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), timeout);
+    auto fut = pipeline.write_and_debounce(model::controller_ntp, {}, timeout);
 
     // Make sure the write request is in the _pending list
     co_await sleep_until(
@@ -96,7 +94,7 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     const auto timeout = 1s;
     auto expect_fail_fut = pipeline.write_and_debounce(
-      model::controller_ntp, model::make_empty_record_batch_reader(), timeout);
+      model::controller_ntp, {}, timeout);
 
     // Expire first request
     co_await sleep_until(
@@ -104,7 +102,7 @@ TEST_CORO(batcher_test, expired_write_request) {
     ss::manual_clock::advance(timeout);
 
     auto expect_pass_fut = pipeline.write_and_debounce(
-      model::controller_ntp, model::make_empty_record_batch_reader(), timeout);
+      model::controller_ntp, {}, timeout);
 
     // Make sure that both write requests are pending
     co_await sleep_until(

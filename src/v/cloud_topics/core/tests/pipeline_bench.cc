@@ -107,12 +107,11 @@ struct write_pipeline_bench {};
 PERF_TEST_C(write_pipeline_bench, propagation_latency) {
     ct::core::write_pipeline<> pipeline;
     write_pipeline_sink sink(pipeline);
-    auto reader = model::make_empty_record_batch_reader();
     sink.start();
 
     perf_tests::start_measuring_time();
     perf_tests::do_not_optimize(co_await pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), std::chrono::milliseconds(10)));
+      model::controller_ntp, {}, std::chrono::milliseconds(10)));
     perf_tests::stop_measuring_time();
 
     co_await sink.stop();
