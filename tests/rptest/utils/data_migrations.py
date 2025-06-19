@@ -230,10 +230,16 @@ class DataMigrationTestMixin:
                for state in states):
             self.assure_not_deletable(id, redpanda=redpanda)
 
-    def migrate_between_clusters(self, topics: list[NamespacedTopic],
-                                 source: RedpandaService,
-                                 dest: RedpandaService) -> None:
+    def migrate_between_clusters(
+            self,
+            topics: list[NamespacedTopic],
+            source: RedpandaService,
+            dest: RedpandaService,
+            aliases: list[NamespacedTopic] | None = None) -> None:
         assert source != dest
+
+        if aliases is not None:
+            assert len(aliases) == len(topics)
 
         out_migration = OutboundDataMigration(topics=topics,
                                               consumer_groups=[])
@@ -242,23 +248,23 @@ class DataMigrationTestMixin:
         source.logger.info(
             f"created outbound migration, id {out_migration_id}")
 
-        # TODO: Outbound migrations should provide a better way of determining
-        # location hints for migrated topic instances. Currently if we don't know the
-        # originating cluster UUID, we can't determine the location hint at all.
-        # Here we assume that the topic was first created on self.redpanda.
-        # Getting the remote revision by calling an unrelated API is inefficient
-        # and awkward as well.
-        orig_cluster_uuid = self.redpanda._admin.get_cluster_uuid()
-        in_topics = []
-        for topic in topics:
-            anomalies = source._admin.get_cloud_storage_anomalies(
-                namespace="kafka", topic=topic.topic, partition=0)
-            remote_revision_id = anomalies["revision_id"]
+        out_migration = source._admin.get_data_migration(
+            out_migration_id).json()
+        assert len(out_migration["migration"]["topics"]) == len(topics)
 
+        in_topics = []
+        for i, out_topic_json in enumerate(
+                out_migration["migration"]["topics"]):
+            out_topic = NamespacedTopic(topic=out_topic_json["topic"],
+                                        namespace=out_topic_json.get("ns"))
+            in_topic = NamespacedTopic(topic=out_topic_json["remote_location"],
+                                       namespace=out_topic.ns)
+            alias = out_topic if aliases is None else aliases[i]
             in_topics.append(
-                InboundTopic(topic,
-                             cluster_uuid=orig_cluster_uuid,
-                             remote_revision=remote_revision_id))
+                InboundTopic(source_topic_reference=in_topic, alias=alias))
+
+            self.logger.debug(
+                f"topic for inbound migration: {in_topics[-1].as_dict()}")
 
         in_migration = InboundDataMigration(topics=in_topics,
                                             consumer_groups=[])

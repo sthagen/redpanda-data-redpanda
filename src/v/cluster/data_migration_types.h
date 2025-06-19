@@ -139,6 +139,9 @@ struct cloud_storage_location
     operator==(const cloud_storage_location&, const cloud_storage_location&)
       = default;
 
+    friend std::ostream&
+    operator<<(std::ostream&, const cloud_storage_location&);
+
     auto serde_fields() { return std::tie(hint); }
 };
 
@@ -223,6 +226,25 @@ struct copy_target
     friend std::ostream& operator<<(std::ostream&, const copy_target&);
 };
 
+// A struct with information needed to unambiguously find topic data in cloud
+// storage.
+struct topic_location
+  : serde::
+      envelope<topic_location, serde::version<0>, serde::compat_version<0>> {
+    // Topic name when its data was first written to cloud storage.
+    model::topic_namespace remote_topic;
+    // Location hint used to disambiguate between different topic instances.
+    // Empty for topics still using legacy (pre v24.2) cloud storage paths.
+    std::optional<cloud_storage_location> location;
+
+    auto serde_fields() { return std::tie(remote_topic, location); }
+
+    friend bool operator==(const topic_location&, const topic_location&)
+      = default;
+
+    friend std::ostream& operator<<(std::ostream&, const topic_location&);
+};
+
 /**
  * Outbound migration object representing topics and consumer groups that
  * ownership should be released.
@@ -230,7 +252,7 @@ struct copy_target
 struct outbound_migration
   : serde::envelope<
       outbound_migration,
-      serde::version<1>,
+      serde::version<2>,
       serde::compat_version<0>> {
     // topics which ownership should be released
     chunked_vector<model::topic_namespace> topics;
@@ -241,11 +263,13 @@ struct outbound_migration
     std::optional<copy_target> copy_to;
     // run the migration through stages without explicit user action
     bool auto_advance = false;
+    // Topic locations. If not empty, must have the same size as topics.
+    chunked_vector<topic_location> topic_locations;
 
     outbound_migration copy() const;
 
     auto serde_fields() {
-        return std::tie(topics, groups, copy_to, auto_advance);
+        return std::tie(topics, groups, copy_to, auto_advance, topic_locations);
     }
 
     friend bool operator==(const outbound_migration&, const outbound_migration&)
@@ -357,13 +381,17 @@ struct data_migration_ntp_state
 struct create_migration_cmd_data
   : serde::envelope<
       create_migration_cmd_data,
-      serde::version<1>,
+      serde::version<2>,
       serde::compat_version<0>> {
     id id;
     data_migration migration;
     model::timestamp op_timestamp{};
+    bool fill_outbound_topic_locations = false;
 
-    auto serde_fields() { return std::tie(id, migration, op_timestamp); }
+    auto serde_fields() {
+        return std::tie(
+          id, migration, op_timestamp, fill_outbound_topic_locations);
+    }
     friend bool operator==(
       const create_migration_cmd_data&, const create_migration_cmd_data&)
       = default;

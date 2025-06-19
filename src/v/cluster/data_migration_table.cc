@@ -198,6 +198,12 @@ migrations_table::apply(create_data_migration_cmd cmd) {
         co_return err->ec();
     }
 
+    if (auto* odm = std::get_if<outbound_migration>(&migration)) {
+        if (cmd.value.fill_outbound_topic_locations) {
+            fill_topic_locations(*odm);
+        }
+    }
+
     auto [it, success] = _migrations.try_emplace(
       id,
       migration_metadata{
@@ -320,6 +326,27 @@ migrations_table::validate_migrated_resources(
     }
 
     return std::nullopt;
+}
+
+void migrations_table::fill_topic_locations(outbound_migration& odm) const {
+    odm.topic_locations.reserve(odm.topics.size());
+    for (const auto& t : odm.topics) {
+        auto maybe_topic_md = _topics.local().get_topic_metadata_ref(t);
+        // Validated by validate_migrated_resources earlier.
+        vassert(
+          maybe_topic_md, "expecting topic {} to be present in topic table", t);
+        const auto& topic_md = maybe_topic_md->get();
+
+        auto location = topic_md.get_remote_location_hint().transform(
+          [](ss::sstring hint) {
+              return cloud_storage_location{.hint = std::move(hint)};
+          });
+
+        odm.topic_locations.push_back(topic_location{
+          .remote_topic = topic_md.get_configuration().remote_tp_ns(),
+          .location = std::move(location),
+        });
+    }
 }
 
 ss::future<std::error_code>

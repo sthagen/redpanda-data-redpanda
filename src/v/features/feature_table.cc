@@ -110,6 +110,8 @@ std::string_view to_string_view(feature f) {
         return "kafka_data_rpc";
     case feature::panda_linking_dr:
         return "panda_linking_dr";
+    case feature::topic_locations_in_outbound_migrations:
+        return "topic_locations_in_outbound_migrations";
 
     /*
      * testing features

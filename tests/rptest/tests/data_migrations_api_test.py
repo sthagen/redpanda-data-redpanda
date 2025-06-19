@@ -516,7 +516,8 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
                 self.toggle_license(on=False)
             self.check_migrations(in_migration_id, len(inbound_topics), 2)
 
-            self.log_topics(t.topic_name.topic for t in inbound_topics)
+            self.log_topics(t.source_topic_reference.topic
+                            for t in inbound_topics)
 
             self.execute_data_migration_action_flaky(in_migration_id,
                                                      MigrationAction.prepare)
@@ -583,9 +584,10 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
         # mount and consume from them in random order
         cluster_uuid = self.admin.get_cluster_uuid(self.redpanda.nodes[0])
         for i in sorted(range(3), key=lambda element: random.random()):
-            in_topic = InboundTopic(ns_topic,
-                                    cluster_uuid=cluster_uuid,
-                                    remote_revision=revisions[i])
+            # TODO: the proper way to get the source_topic_reference is to use the info
+            # provided by outbound migration json.
+            source_topic_ref = f"{ns_topic.topic}/{cluster_uuid}/{revisions[i]}"
+            in_topic = InboundTopic(make_namespaced_topic(source_topic_ref))
             in_migr_id = self.admin.mount_topics([in_topic]).json()["id"]
             self.wait_partitions_appear([topic])
             self.wait_migration_disappear(in_migr_id)
@@ -635,7 +637,7 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             for i, t in enumerate(topics[:3])
         ]
         inbound_topics_spec = [
-            TopicSpec(name=(it.alias or it.topic_name).topic,
+            TopicSpec(name=(it.alias or it.source_topic_reference).topic,
                       partition_count=3) for it in inbound_topics
         ]
         reply = self.admin.mount_topics(inbound_topics).json()
@@ -996,10 +998,9 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             remounted = False
             # two cycles max: to cancel halfway and to complete + check e2e
             while not remounted:
-                in_migration = InboundDataMigration(topics=[
-                    InboundTopic(topic_name=workload_ns_topic, alias=alias)
-                ],
-                                                    consumer_groups=[])
+                in_migration = InboundDataMigration(
+                    topics=[InboundTopic(workload_ns_topic, alias=alias)],
+                    consumer_groups=[])
                 in_migration_id = self.create_and_wait(in_migration)
 
                 # check if topic that is being migrated can not be created even if
@@ -1253,9 +1254,25 @@ class DataMigrationsMultiClusterTest(RedpandaTest, DataMigrationTestMixin):
         Test that basic functionality like producing and consuming works when we
         migrate topics between different clusters.
         """
+
+        # After-test cloud storage integrity checker gets confused by topic aliases,
+        # so disable it. TODO: support it properly in the checker.
+        self.redpanda.si_settings.set_expected_damage(
+            {"ntr_no_topic_manifest", "missing_segments"})
+
         n_partitions = 10
-        workload_topic = TopicSpec(name="foo", partition_count=n_partitions)
-        workload_ns_topic = make_namespaced_topic(workload_topic.name)
+        topic_name = "foo"
+        workload_topic = TopicSpec(name=topic_name,
+                                   partition_count=n_partitions)
+        workload_ns_topic = make_namespaced_topic(topic_name)
+
+        alias_name = topic_name + "-alias"
+        alias_ns_topic = make_namespaced_topic(alias_name)
+
+        # To test various combinations of remote location and topic name being
+        # same/different from local cluster uuid and topic name, we test the
+        # following scenario:
+        # foo (cluster 1) -> foo-alias (cluster 2) -> foo-alias (cluster 3)
 
         dest_redpanda = self.start_extra_cluster()
 
@@ -1263,18 +1280,21 @@ class DataMigrationsMultiClusterTest(RedpandaTest, DataMigrationTestMixin):
         self.logger.info(f"created topic {workload_topic}")
 
         self.start_producer(workload_topic.name, self.redpanda)
-        self.migrate_between_clusters([workload_ns_topic], self.redpanda,
-                                      dest_redpanda)
+        self.migrate_between_clusters([workload_ns_topic],
+                                      self.redpanda,
+                                      dest_redpanda,
+                                      aliases=[alias_ns_topic])
         total_acked = self.stop_producer()
 
-        def wait_for_offsets(redpanda, expected):
+        def wait_for_offsets(redpanda, topic_name, expected):
             def predicate():
                 rpk = RpkTool(redpanda)
-                partitions = list(rpk.describe_topic(workload_topic.name))
+                partitions = list(rpk.describe_topic(topic_name))
                 if len(partitions) != n_partitions:
                     return False
                 total = sum(p.high_watermark for p in partitions)
-                self.logger.info(f"offsets: {total=}, {expected=}")
+                self.logger.info(
+                    f"topic {topic_name} offsets: {total=}, {expected=}")
                 return total == expected
 
             wait_until(
@@ -1283,27 +1303,27 @@ class DataMigrationsMultiClusterTest(RedpandaTest, DataMigrationTestMixin):
                 backoff_sec=1,
                 err_msg="timed out waiting for offsets of migrated topic")
 
-        wait_for_offsets(dest_redpanda, total_acked)
+        wait_for_offsets(dest_redpanda, alias_name, total_acked)
 
         self.logger.info("producing more to the second cluster")
-        self.start_producer(workload_topic.name, dest_redpanda)
+        self.start_producer(alias_name, dest_redpanda)
 
-        self.consume(workload_topic.name,
+        self.consume(alias_name,
                      redpanda=dest_redpanda,
                      msg_count=total_acked +
                      self.producer.produce_status.acked)
 
         another_redpanda = self.start_extra_cluster()
-        self.migrate_between_clusters([workload_ns_topic], dest_redpanda,
+        self.migrate_between_clusters([alias_ns_topic], dest_redpanda,
                                       another_redpanda)
 
         total_acked += self.stop_producer()
-        wait_for_offsets(another_redpanda, total_acked)
+        wait_for_offsets(another_redpanda, alias_name, total_acked)
 
         self.logger.info("producing more to the third cluster")
-        self.start_producer(workload_topic.name, another_redpanda)
+        self.start_producer(alias_name, another_redpanda)
         total_acked += self.stop_producer()
 
-        self.consume(workload_topic.name,
+        self.consume(alias_name,
                      redpanda=another_redpanda,
                      msg_count=total_acked)

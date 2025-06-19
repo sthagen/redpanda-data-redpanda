@@ -48,7 +48,9 @@ outbound_migration outbound_migration::copy() const {
       .topics = topics.copy(),
       .groups = groups.copy(),
       .copy_to = copy_to,
-      .auto_advance = auto_advance};
+      .auto_advance = auto_advance,
+      .topic_locations = topic_locations.copy(),
+    };
 }
 
 std::ostream& operator<<(std::ostream& o, state state) {
@@ -118,8 +120,15 @@ std::ostream& operator<<(std::ostream& o, const cloud_storage_location& l) {
     fmt::print(o, "{{hint: {}}}", l.hint);
     return o;
 }
+
 std::ostream& operator<<(std::ostream& o, const copy_target& t) {
     fmt::print(o, "{{bucket: {}}}", t.bucket);
+    return o;
+}
+
+std::ostream& operator<<(std::ostream& o, const topic_location& tl) {
+    fmt::print(
+      o, "{{remote_topic: {}, location: {}}}", tl.remote_topic, tl.location);
     return o;
 }
 
@@ -136,11 +145,13 @@ std::ostream& operator<<(std::ostream& o, const inbound_migration& dm) {
 std::ostream& operator<<(std::ostream& o, const outbound_migration& dm) {
     fmt::print(
       o,
-      "{{topics: {}, consumer_groups: {}, copy_to: {}, auto_advance: {}}}",
+      "{{topics: {}, consumer_groups: {}, copy_to: {}, auto_advance: {}, "
+      "topic_locations: {}}}",
       fmt::join(dm.topics, ", "),
       fmt::join(dm.groups, ", "),
       dm.copy_to,
-      dm.auto_advance);
+      dm.auto_advance,
+      fmt::join(dm.topic_locations, ", "));
     return o;
 }
 
@@ -190,10 +201,12 @@ std::ostream& operator<<(std::ostream& o, const data_migration_ntp_state& r) {
 std::ostream& operator<<(std::ostream& o, const create_migration_cmd_data& d) {
     fmt::print(
       o,
-      "{{id: {}, migration: {}, op_timestamp: {}}}",
+      "{{id: {}, migration: {}, op_timestamp: {}, "
+      "fill_outbound_topic_locations: {}}}",
       d.id,
       print_migration(d.migration),
-      d.op_timestamp);
+      d.op_timestamp,
+      d.fill_outbound_topic_locations);
     return o;
 }
 

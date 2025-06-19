@@ -26,7 +26,11 @@ inline bytes_span<> char_span_to_bytes_span(std::span<char> v) {
     return {reinterpret_cast<bytes_span<>::value_type*>(v.data()), v.size()};
 }
 
+// These functions create use an internal cache to speed up lookups.
 EVP_MD* get_md(digest_type type);
 EVP_MAC* get_mac();
+// The internal cache needs to be cleared when openssl is teared-down.
+void clear_evp_cache();
+
 bool fips_enabled();
 } // namespace crypto::internal

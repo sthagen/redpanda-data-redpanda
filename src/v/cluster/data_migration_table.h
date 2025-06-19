@@ -139,6 +139,9 @@ private:
     std::optional<validation_error>
     validate_migrated_resources(const data_migration&) const;
 
+    // Assumes that migration topics have already been validated.
+    void fill_topic_locations(outbound_migration&) const;
+
 private:
     id _next_id{0};
     id _last_applied{};

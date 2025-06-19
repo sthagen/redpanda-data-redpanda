@@ -530,6 +530,17 @@ topic_metadata::get_remote_revision() const {
     return _fields.remote_revision;
 }
 
+std::optional<ss::sstring> topic_metadata::get_remote_location_hint() const {
+    const auto& remote_label = get_configuration().properties.remote_label;
+    if (!remote_label) {
+        return std::nullopt;
+    }
+
+    model::initial_revision_id remote_rev = get_remote_revision().value_or(
+      model::initial_revision_id{get_revision()});
+    return fmt::format("{}/{}", remote_label->cluster_uuid, remote_rev);
+}
+
 const topic_configuration& topic_metadata::get_configuration() const {
     return _fields.configuration;
 }

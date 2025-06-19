@@ -322,41 +322,24 @@ class OutboundDataMigration:
 
 class InboundTopic:
     def __init__(self,
-                 topic_name: NamespacedTopic,
-                 alias: NamespacedTopic | None = None,
-                 cluster_uuid: str | None = None,
-                 remote_revision: int | None = None):
-        if remote_revision is not None:
-            assert cluster_uuid
+                 source_topic_reference: NamespacedTopic,
+                 alias: NamespacedTopic | None = None):
+        """
+        source_topic_reference is the topic location in cloud storage.
+        source_topic_reference.topic can be just a topic name (if there is just one instance
+        of topic data in cloud storage), or a full location of the form
+        "<original topic name>/<original cluster uuid>/<original revision>".
 
-        self.topic_name = topic_name
+        alias is the name of the topic that will be created in the cluster
+        (if None, name from source_topic_reference is used).
+        """
+
+        self.source_topic_reference = source_topic_reference
         self.alias = alias
-        self.cluster_uuid = cluster_uuid
-        self.remote_revision = remote_revision
-
-    def location_hint(self):
-        """
-        A hint allowing to disambiguate different instances of topic data
-        in cloud storage when mounting a topic.
-        """
-
-        if self.remote_revision is not None:
-            return f"{self.cluster_uuid}/{self.remote_revision}"
-        elif self.cluster_uuid is not None:
-            return self.cluster_uuid
-        else:
-            return ""
-
-    def source_topic_reference(self):
-        ret = copy.copy(self.topic_name)
-        location_hint = self.location_hint()
-        if location_hint:
-            ret.topic += "/" + location_hint
-        return ret
 
     def as_dict(self):
         d = {
-            'source_topic_reference': self.source_topic_reference().as_dict(),
+            'source_topic_reference': self.source_topic_reference.as_dict(),
         }
         if self.alias:
             d['alias'] = self.alias.as_dict()

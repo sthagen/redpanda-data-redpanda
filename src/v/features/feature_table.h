@@ -39,6 +39,7 @@ struct feature_table_snapshot;
 /// has been made available by another feature being retired.
 enum class feature : std::uint64_t {
     panda_linking_dr = 1ULL << 1U,
+    topic_locations_in_outbound_migrations = 1ULL << 2U,
     cloud_retention = 1ULL << 11U,
     node_isolation = 1ULL << 19U,
     group_offset_retention = 1ULL << 20U,
@@ -457,6 +458,12 @@ inline constexpr std::array feature_schema{
     "panda_linking_dr",
     feature::panda_linking_dr,
     feature_spec::available_policy::explicit_only,
+    feature_spec::prepare_policy::always},
+  feature_spec{
+    release_version::v25_2_1,
+    "topic_locations_in_outbound_migrations",
+    feature::topic_locations_in_outbound_migrations,
+    feature_spec::available_policy::always,
     feature_spec::prepare_policy::always},
 };
 

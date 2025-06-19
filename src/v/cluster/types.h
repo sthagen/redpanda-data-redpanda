@@ -2613,6 +2613,11 @@ public:
 
     model::revision_id get_revision() const;
     std::optional<model::initial_revision_id> get_remote_revision() const;
+    // Returns location hint that can be passed to topic_manifest_downloader to
+    // disambiguate topic instances in cloud storage. Has the following form:
+    // "<remote label>/<remote revision id>".
+    // Nullopt will be returned for legacy topics without a remote label.
+    std::optional<ss::sstring> get_remote_location_hint() const;
 
     const topic_metadata_fields& get_fields() const { return _fields; }
     topic_metadata_fields& get_fields() { return _fields; }

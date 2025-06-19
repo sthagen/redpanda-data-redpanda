@@ -285,7 +285,10 @@ ss::future<result<id>> frontend::do_create_migration(data_migration migration) {
         create_migration_cmd_data{
           .id = id,
           .migration = std::move(migration),
-          .op_timestamp = model::timestamp::now()}),
+          .op_timestamp = model::timestamp::now(),
+          .fill_outbound_topic_locations = _features.is_active(
+            features::feature::topic_locations_in_outbound_migrations),
+        }),
       _operation_timeout + model::timeout_clock::now());
     if (ec) {
         co_return ec;

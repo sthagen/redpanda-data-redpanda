@@ -14,6 +14,7 @@
 #include "base/outcome.h"
 #include "base/vassert.h"
 #include "base/vlog.h"
+#include "internal.h"
 #include "ssl_utils.h"
 #include "ssx/thread_worker.h"
 #include "thirdparty/openssl/crypto.h"
@@ -252,6 +253,7 @@ public:
     }
 
     ss::future<> stop() {
+        internal::clear_evp_cache();
         vlog(lg.trace, "Stopping service...");
         _base_provider.reset();
         _default_provider.reset();

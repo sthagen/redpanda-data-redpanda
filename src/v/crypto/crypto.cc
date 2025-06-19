@@ -20,6 +20,23 @@
 #include <absl/container/node_hash_map.h>
 
 #include <sstream>
+
+namespace {
+namespace evp_cache {
+auto& get_md_map() {
+    static thread_local absl::
+      node_hash_map<crypto::digest_type, crypto::internal::EVP_MD_ptr>
+        md_map;
+    return md_map;
+}
+
+auto& get_mac() {
+    static thread_local crypto::internal::EVP_MAC_ptr mac;
+    return mac;
+}
+} // namespace evp_cache
+} // namespace
+
 namespace crypto {
 std::ostream& operator<<(std::ostream& os, digest_type type) {
     switch (type) {
@@ -129,7 +146,8 @@ EVP_MD* get_md(digest_type type) {
     // Map of pre-fetched MD pointers.  This replaces the older way of getting
     // a digest pointer via something like `EVP_sha256()`.  The old way is
     // slower compared to pre-fetching the algorithm.
-    static thread_local absl::node_hash_map<digest_type, EVP_MD_ptr> md_map;
+    absl::node_hash_map<digest_type, EVP_MD_ptr>& md_map
+      = ::evp_cache::get_md_map();
     auto it = md_map.find(type);
     if (it == md_map.end()) {
         auto alg = fmt::to_string(type);
@@ -149,7 +167,7 @@ EVP_MD* get_md(digest_type type) {
 }
 
 EVP_MAC* get_mac() {
-    static thread_local EVP_MAC_ptr mac;
+    EVP_MAC_ptr& mac = ::evp_cache::get_mac();
     if (!mac) {
         mac = EVP_MAC_ptr(EVP_MAC_fetch(nullptr, "HMAC", "?provider=fips"));
         if (!mac) {
@@ -157,6 +175,11 @@ EVP_MAC* get_mac() {
         }
     }
     return mac.get();
+}
+
+void clear_evp_cache() {
+    ::evp_cache::get_md_map().clear();
+    ::evp_cache::get_mac().reset();
 }
 
 bool fips_enabled() { return 1 == OSSL_PROVIDER_available(nullptr, "fips"); }
