@@ -14,11 +14,8 @@
 #include "kafka/protocol/exceptions.h"
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 
 #include <fmt/core.h>
-
-#include <exception>
 
 namespace kafka::client {
 

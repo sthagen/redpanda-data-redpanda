@@ -11,11 +11,8 @@
 
 #pragma once
 
-#include "kafka/client/config_utils.h"
 #include "kafka/client/configuration.h"
-#include "kafka/client/exceptions.h"
 #include "kafka/client/produce_batcher.h"
-#include "model/fundamental.h"
 
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer.hh>

@@ -25,9 +25,6 @@
 
 namespace kafka::client {
 
-/// \brief during connection, the node_id isn't known.
-inline const model::node_id unknown_node_id{-1};
-
 class brokers {
     using brokers_t
       = absl::flat_hash_set<shared_broker_t, broker_hash, broker_eq>;

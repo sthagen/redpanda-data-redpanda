@@ -10,11 +10,8 @@
 #include "kafka/client/broker.h"
 
 #include "base/seastarx.h"
-#include "kafka/client/logger.h"
 #include "kafka/client/sasl_client.h"
 #include "net/connection.h"
-#include "net/dns.h"
-#include "rpc/rpc_utils.h"
 #include "thirdparty/c-ares/ares.h"
 #include "utils/unresolved_address.h"
 

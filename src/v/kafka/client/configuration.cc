@@ -12,7 +12,6 @@
 #include "base/units.h"
 #include "config/configuration.h"
 #include "kafka/client/logger.h"
-#include "rpc/rpc_utils.h"
 #include "security/oidc_authenticator.h"
 #include "security/scram_authenticator.h"
 
@@ -376,8 +375,23 @@ tls_configuration::build_credentials() const {
       [](
         const std::unordered_set<ss::sstring>& updated,
         const std::exception_ptr& eptr) {
-          rpc::log_certificate_reload_event(
-            kclog, "kafka-client", updated, eptr);
+          if (eptr) {
+              try {
+                  std::rethrow_exception(eptr);
+              } catch (...) {
+                  vlog(
+                    kclog.error,
+                    "kafka-client credentials reload error {}",
+                    std::current_exception());
+              }
+          } else {
+              for (const auto& name : updated) {
+                  vlog(
+                    kclog.info,
+                    "kafka-client key or certificate file updated - {}",
+                    name);
+              }
+          }
       });
 }
 

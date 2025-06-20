@@ -17,7 +17,6 @@
 #include "kafka/client/types.h"
 #include "kafka/protocol/metadata.h"
 #include "model/fundamental.h"
-#include "model/metadata.h"
 
 #include <seastar/core/future.hh>
 

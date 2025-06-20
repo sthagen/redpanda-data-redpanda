@@ -12,7 +12,6 @@
 #pragma once
 
 #include "bytes/iobuf.h"
-#include "model/metadata.h"
 #include "model/record.h"
 
 #include <optional>
@@ -27,5 +26,8 @@ struct record_essence {
 };
 
 inline constexpr model::node_id consumer_replica_id{-1};
+
+/// \brief during connection, the node_id isn't known.
+inline constexpr model::node_id unknown_node_id{-1};
 
 } // namespace kafka::client

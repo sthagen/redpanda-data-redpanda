@@ -11,6 +11,7 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/redpanda/tests:fixture",
     ],
 )
@@ -40,7 +41,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/bytes:iobuf_parser",
         "//src/v/hashing:murmur",
-        "//src/v/kafka/client",
+        "//src/v/kafka/client:partitioners",
         "//src/v/model",
         "@boost//:test",
         "@seastar//:testing",
@@ -56,6 +57,7 @@ redpanda_cc_btest(
     deps = [
         ":utils",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:fetch",
         "//src/v/model",
@@ -75,6 +77,7 @@ redpanda_cc_btest(
         ":utils",
         "//src/v/cluster",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:produce",
         "//src/v/model",
@@ -95,6 +98,8 @@ redpanda_cc_btest(
     deps = [
         ":utils",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:brokers",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:produce",
         "//src/v/model",
@@ -112,6 +117,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/kafka/client",
+        "//src/v/kafka/client:utils",
         "//src/v/test_utils:seastar_boost",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@boost//:test",
@@ -130,6 +136,7 @@ redpanda_cc_btest(
         "//src/v/base",
         "//src/v/bytes",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",
@@ -169,6 +176,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",
@@ -191,6 +199,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",
@@ -214,6 +223,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/http",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",
@@ -239,6 +249,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/cluster",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",
@@ -260,6 +271,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/container:fragmented_vector",
         "//src/v/kafka/client",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",
@@ -308,7 +320,8 @@ redpanda_cc_btest(
         "//src/v/config",
         "//src/v/json",
         "//src/v/kafka/client",
-        "//src/v/kafka/client/test:fixture",
+        "//src/v/kafka/client:config_utils",
+        "//src/v/kafka/client:configuration",
         "//src/v/kafka/protocol",
         "//src/v/model",
         "//src/v/redpanda/tests:fixture",
@@ -329,7 +342,8 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/container:fragmented_vector",
-        "//src/v/kafka/client",
+        "//src/v/kafka/client:brokers",
+        "//src/v/kafka/client:utils",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:offset_commit",
         "//src/v/model",
