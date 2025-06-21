@@ -99,11 +99,11 @@ enum class errc : int16_t {
     resource_is_being_migrated,
     invalid_target_node_id,
     topic_id_already_exists,
-    panda_link_does_not_exist,
-    panda_link_invalid_create,
-    panda_link_invalid_update,
-    panda_link_limit_exceeded,
-    panda_link_service_error,
+    cluster_link_does_not_exist,
+    cluster_link_invalid_create,
+    cluster_link_invalid_update,
+    cluster_link_limit_exceeded,
+    cluster_link_service_error,
 };
 
 std::ostream& operator<<(std::ostream& o, errc err);
@@ -296,16 +296,16 @@ struct errc_category final : public std::error_category {
             return "Request was intended for the node with different node id";
         case errc::topic_id_already_exists:
             return "A topic with the given id already exists";
-        case errc::panda_link_does_not_exist:
-            return "Panda link does not exist";
-        case errc::panda_link_invalid_create:
-            return "Invalid panda link configuration for create";
-        case errc::panda_link_invalid_update:
-            return "Invalid panda link configuration for update";
-        case errc::panda_link_limit_exceeded:
-            return "Panda link limit exceeded";
-        case errc::panda_link_service_error:
-            return "Service error with panda link in controller table";
+        case errc::cluster_link_does_not_exist:
+            return "Cluster link does not exist";
+        case errc::cluster_link_invalid_create:
+            return "Invalid cluster link configuration for create";
+        case errc::cluster_link_invalid_update:
+            return "Invalid cluster link configuration for update";
+        case errc::cluster_link_limit_exceeded:
+            return "Cluster link limit exceeded";
+        case errc::cluster_link_service_error:
+            return "Service error with cluster link in controller table";
         }
         return "cluster::errc::unknown";
     }

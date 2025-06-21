@@ -36,7 +36,9 @@ class CompactionGapsTest(RedpandaTest):
                 "iceberg_catalog_commit_interval_ms": 5000,
                 "datalake_coordinator_snapshot_max_delay_secs": 10,
                 "log_compaction_interval_ms": 10000,
-                "min_cleanable_dirty_ratio": 0.0
+                "min_cleanable_dirty_ratio": 0.0,
+                "log_compaction_merge_max_ranges": 1,
+                "log_compaction_merge_max_segments_per_range": 2
             },
             *args,
             **kwargs)

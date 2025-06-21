@@ -173,14 +173,14 @@
             "output_type": "client_quota::alter_quotas_response"
         },
         {
-            "name": "upsert_panda_link",
-            "input_type": "upsert_panda_link_request",
-            "output_type": "upsert_panda_link_response"
+            "name": "upsert_cluster_link",
+            "input_type": "upsert_cluster_link_request",
+            "output_type": "upsert_cluster_link_response"
         },
         {
-            "name": "remove_panda_link",
-            "input_type": "remove_panda_link_request",
-            "output_type": "remove_panda_link_response"
+            "name": "remove_cluster_link",
+            "input_type": "remove_cluster_link_request",
+            "output_type": "remove_cluster_link_response"
         }
     ]
 }

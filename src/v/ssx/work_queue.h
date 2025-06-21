@@ -30,11 +30,16 @@ namespace ssx {
  */
 class work_queue {
 public:
+    using is_paused_t = ss::bool_class<struct is_paused_Tag>;
     using error_reporter_fn
       = ss::noncopyable_function<void(const std::exception_ptr&)>;
 
-    explicit work_queue(error_reporter_fn);
-    work_queue(ss::scheduling_group, error_reporter_fn);
+    explicit work_queue(
+      error_reporter_fn, is_paused_t is_paused = is_paused_t::no);
+    work_queue(
+      ss::scheduling_group,
+      error_reporter_fn,
+      is_paused_t is_paused = is_paused_t::no);
     // Add a task to the queue to be processed.
     void submit(ss::noncopyable_function<ss::future<>()>);
     // Add a task to the queue to be processed after some timeout.
@@ -44,6 +49,12 @@ public:
     // Shutdown the queue, waiting for the currently executing task to finish.
     ss::future<> shutdown();
 
+    // Used to start the queue processing
+    void resume();
+
+    // Stops queue processing
+    void pause();
+
 private:
     void submit_after(ss::future<>, ss::noncopyable_function<ss::future<>()>);
 
@@ -52,6 +63,7 @@ private:
     error_reporter_fn _error_reporter;
     ss::condition_variable _cond_var;
     ss::chunked_fifo<ss::noncopyable_function<ss::future<>()>> _tasks;
+    is_paused_t _is_paused{is_paused_t::no};
     ss::abort_source _as;
     ss::gate _gate;
 };

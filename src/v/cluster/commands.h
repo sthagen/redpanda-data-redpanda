@@ -15,11 +15,11 @@
 #include "cluster/data_migration_types.h"
 #include "cluster/simple_batch_builder.h"
 #include "cluster/types.h"
+#include "cluster_link/model/types.h"
 #include "model/metadata.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "model/transform.h"
-#include "panda_link/model/types.h"
 #include "reflection/adl.h"
 #include "reflection/async_adl.h"
 #include "security/role.h"
@@ -151,8 +151,8 @@ inline constexpr int8_t update_data_migration_state_cmd_type = 1;
 inline constexpr int8_t remove_data_migration_cmd_type = 2;
 
 // panda link commands
-inline constexpr int8_t panda_link_upsert_cmd_type = 0;
-inline constexpr int8_t panda_link_remove_cmd_type = 1;
+inline constexpr int8_t cluster_link_upsert_cmd_type = 0;
+inline constexpr int8_t cluster_link_remove_cmd_type = 1;
 
 using create_topic_cmd = controller_command<
   model::topic_namespace,
@@ -446,18 +446,18 @@ using remove_data_migration_cmd = controller_command<
   remove_data_migration_cmd_type,
   model::record_batch_type::data_migration_cmd>;
 
-using panda_link_upsert_cmd = controller_command<
+using cluster_link_upsert_cmd = controller_command<
   int8_t, // unused
-  ::panda_link::model::metadata,
-  panda_link_upsert_cmd_type,
-  model::record_batch_type::panda_link,
+  ::cluster_link::model::metadata,
+  cluster_link_upsert_cmd_type,
+  model::record_batch_type::cluster_link,
   serde_opts::serde_only>;
 
-using panda_link_remove_cmd = controller_command<
-  ::panda_link::model::name_t,
+using cluster_link_remove_cmd = controller_command<
+  ::cluster_link::model::name_t,
   int8_t, // unused,
-  panda_link_remove_cmd_type,
-  model::record_batch_type::panda_link,
+  cluster_link_remove_cmd_type,
+  model::record_batch_type::cluster_link,
   serde_opts::serde_only>;
 
 // typelist utils

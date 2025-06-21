@@ -184,16 +184,16 @@ std::ostream& operator<<(std::ostream& o, cluster::errc err) {
         return o << "cluster::errc::invalid_target_node_id";
     case errc::topic_id_already_exists:
         return o << "cluster::errc::topic_id_already_exists";
-    case errc::panda_link_does_not_exist:
-        return o << "cluster::errc::panda_link_does_not_exist";
-    case errc::panda_link_invalid_create:
-        return o << "cluster::errc::panda_link_invalid_create";
-    case errc::panda_link_invalid_update:
-        return o << "cluster::errc::panda_link_invalid_update";
-    case errc::panda_link_limit_exceeded:
-        return o << "cluster::errc::panda_link_limit_exceeded";
-    case errc::panda_link_service_error:
-        return o << "cluster::errc::panda_link_service_error";
+    case errc::cluster_link_does_not_exist:
+        return o << "cluster::errc::cluster_link_does_not_exist";
+    case errc::cluster_link_invalid_create:
+        return o << "cluster::errc::cluster_link_invalid_create";
+    case errc::cluster_link_invalid_update:
+        return o << "cluster::errc::cluster_link_invalid_update";
+    case errc::cluster_link_limit_exceeded:
+        return o << "cluster::errc::cluster_link_limit_exceeded";
+    case errc::cluster_link_service_error:
+        return o << "cluster::errc::cluster_link_service_error";
     }
 }
 } // namespace cluster

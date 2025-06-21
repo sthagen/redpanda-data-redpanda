@@ -12,6 +12,7 @@
 #include "base/vlog.h"
 #include "cluster/client_quota_frontend.h"
 #include "cluster/client_quota_serde.h"
+#include "cluster/cluster_link/frontend.h"
 #include "cluster/config_frontend.h"
 #include "cluster/controller.h"
 #include "cluster/controller_api.h"
@@ -25,7 +26,6 @@
 #include "cluster/members_manager.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/node_status_backend.h"
-#include "cluster/panda_link/frontend.h"
 #include "cluster/partition_manager.h"
 #include "cluster/plugin_frontend.h"
 #include "cluster/security_frontend.h"
@@ -63,7 +63,7 @@ service::service(
   ss::sharded<partition_manager>& partition_manager,
   ss::sharded<node_status_backend>& node_status_backend,
   ss::sharded<client_quota::frontend>& quotas_frontend,
-  ss::sharded<panda_link::frontend>& panda_link_frontend)
+  ss::sharded<cluster_link::frontend>& cluster_link_frontend)
   : controller_service(sg, ssg)
   , _controller(controller)
   , _topics_frontend(tf)
@@ -82,7 +82,7 @@ service::service(
   , _plugin_frontend(pf)
   , _node_status_backend(node_status_backend)
   , _quotas_frontend(quotas_frontend)
-  , _panda_link_frontend(panda_link_frontend) {}
+  , _cluster_link_frontend(cluster_link_frontend) {}
 
 ss::future<join_node_reply>
 service::join_node(join_node_request req, rpc::streaming_context&) {
@@ -857,22 +857,22 @@ ss::future<client_quota::alter_quotas_response> service::alter_client_quotas(
     co_return client_quota::alter_quotas_response{.ec = ec};
 }
 
-ss::future<upsert_panda_link_response> service::upsert_panda_link(
-  upsert_panda_link_request req, rpc::streaming_context&) {
+ss::future<upsert_cluster_link_response> service::upsert_cluster_link(
+  upsert_cluster_link_request req, rpc::streaming_context&) {
     auto meta = std::move(req.metadata);
     auto deadline = model::timeout_clock::now() + req.timeout;
-    auto result = co_await _panda_link_frontend.local().upsert_panda_link(
+    auto result = co_await _cluster_link_frontend.local().upsert_cluster_link(
       std::move(meta), deadline);
-    co_return upsert_panda_link_response{.ec = result.ec};
+    co_return upsert_cluster_link_response{.ec = result.ec};
 }
 
-ss::future<remove_panda_link_response> service::remove_panda_link(
-  remove_panda_link_request req, rpc::streaming_context&) {
+ss::future<remove_cluster_link_response> service::remove_cluster_link(
+  remove_cluster_link_request req, rpc::streaming_context&) {
     auto name = std::move(req.name);
     auto deadline = model::timeout_clock::now() + req.timeout;
-    auto result = co_await _panda_link_frontend.local().remove_panda_link(
+    auto result = co_await _cluster_link_frontend.local().remove_cluster_link(
       std::move(name), deadline);
-    co_return remove_panda_link_response{.ec = result.ec};
+    co_return remove_cluster_link_response{.ec = result.ec};
 }
 
 } // namespace cluster

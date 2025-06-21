@@ -10,9 +10,9 @@
  */
 
 #pragma once
+#include "cluster/cluster_link/fwd.h"
 #include "cluster/controller_service.h"
 #include "cluster/fwd.h"
-#include "cluster/panda_link/fwd.h"
 #include "cluster/types.h"
 #include "features/fwd.h"
 #include "rpc/fwd.h"
@@ -45,7 +45,7 @@ public:
       ss::sharded<partition_manager>&,
       ss::sharded<node_status_backend>&,
       ss::sharded<client_quota::frontend>&,
-      ss::sharded<panda_link::frontend>&);
+      ss::sharded<cluster_link::frontend>&);
 
     virtual ss::future<join_node_reply>
     join_node(join_node_request, rpc::streaming_context&) override;
@@ -145,10 +145,10 @@ public:
     ss::future<client_quota::alter_quotas_response> alter_client_quotas(
       client_quota::alter_quotas_request, rpc::streaming_context&) final;
 
-    ss::future<upsert_panda_link_response>
-    upsert_panda_link(upsert_panda_link_request, rpc::streaming_context&) final;
-    ss::future<remove_panda_link_response>
-    remove_panda_link(remove_panda_link_request, rpc::streaming_context&) final;
+    ss::future<upsert_cluster_link_response> upsert_cluster_link(
+      upsert_cluster_link_request, rpc::streaming_context&) final;
+    ss::future<remove_cluster_link_response> remove_cluster_link(
+      remove_cluster_link_request, rpc::streaming_context&) final;
 
 private:
     static constexpr auto default_move_interruption_timeout = 10s;
@@ -206,6 +206,6 @@ private:
     ss::sharded<plugin_frontend>& _plugin_frontend;
     ss::sharded<node_status_backend>& _node_status_backend;
     ss::sharded<client_quota::frontend>& _quotas_frontend;
-    ss::sharded<panda_link::frontend>& _panda_link_frontend;
+    ss::sharded<cluster_link::frontend>& _cluster_link_frontend;
 };
 } // namespace cluster

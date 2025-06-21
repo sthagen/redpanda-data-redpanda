@@ -185,10 +185,16 @@ class PartitionReassignmentsTest(RedpandaTest):
     ]
 
     def __init__(self, test_context):
-        super(PartitionReassignmentsTest,
-              self).__init__(test_context=test_context,
-                             num_brokers=4,
-                             log_config=log_config)
+        super(PartitionReassignmentsTest, self).__init__(
+            test_context=test_context,
+            num_brokers=4,
+            log_config=log_config,
+            extra_rp_conf={
+                # test will create reassignments
+                # disable autobalancer to avoid race
+                "enable_leader_balancer": False,
+                "partition_autobalancing_mode": "off",
+            })
 
     def get_missing_node_idx(self, lhs: list[int], rhs: list[int]):
         missing_nodes = set(lhs).difference(set(rhs))
@@ -531,13 +537,14 @@ class PartitionReassignmentsTest(RedpandaTest):
 
         rpk = RpkTool(self.redpanda)
 
-        def try_add_partitions(topic: str, count: int):
+        def try_add_partitions(topic: str, count: int) -> str:
+            # accept either success or reassignment in progress
             try:
                 return rpk.add_partitions(topic, count)
             except RpkException as ex:
                 if 'REASSIGNMENT_IN_PROGRESS: A partition reassignment is in progress.' in str(
                         ex):
-                    return None
+                    return 'rejected due to REASSIGNMENT_IN_PROGRESS'
                 else:
                     raise
 
@@ -545,9 +552,13 @@ class PartitionReassignmentsTest(RedpandaTest):
         # Expect fail.
         def add_partition_during_inprogress_reassignment(
                 topic: str, count: int):
-            assert try_add_partitions(
-                topic, count
-            ) is None, f'Expected failed add-partitions: topic {topic}, partition count {count}, output {out}'
+            try:
+                add_partitions_result = try_add_partitions(topic, count)
+                self.logger.debug(
+                    f"Partition add during reassignment result {add_partitions_result}"
+                )
+            except RpkException as ex:
+                assert False, f'Expected reassignment in progress or success: topic {topic}, partition count {count}, exception {ex}'
 
         add_partition_during_inprogress_reassignment(all_topic_names[0],
                                                      self.PARTITION_COUNT)

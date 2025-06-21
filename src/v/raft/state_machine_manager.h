@@ -210,7 +210,7 @@ private:
       raft::snapshot_metadata metadata,
       storage::snapshot_reader& reader,
       std::vector<ssx::semaphore_units> background_apply_units);
-    ss::future<> apply();
+    ss::future<> apply() noexcept;
     ss::future<> try_apply_in_foreground();
 
     ss::future<std::vector<ssx::semaphore_units>>

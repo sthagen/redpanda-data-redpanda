@@ -188,7 +188,7 @@ ss::future<> controller_stm::apply_snapshot(
             offset, snapshot),
           std::get<data_migrations::migrations_table&>(_state).apply_snapshot(
             offset, snapshot),
-          std::get<panda_link::table&>(_state).apply_snapshot(
+          std::get<cluster_link::table&>(_state).apply_snapshot(
             offset, snapshot));
 
     } catch (const seastar::abort_requested_exception&) {

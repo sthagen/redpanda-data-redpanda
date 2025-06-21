@@ -19,11 +19,13 @@
 
 namespace ssx {
 
-work_queue::work_queue(error_reporter_fn fn)
-  : work_queue(ss::current_scheduling_group(), std::move(fn)) {}
+work_queue::work_queue(error_reporter_fn fn, is_paused_t is_paused)
+  : work_queue(ss::current_scheduling_group(), std::move(fn), is_paused) {}
 
-work_queue::work_queue(ss::scheduling_group sg, error_reporter_fn fn)
-  : _error_reporter(std::move(fn)) {
+work_queue::work_queue(
+  ss::scheduling_group sg, error_reporter_fn fn, is_paused_t is_paused)
+  : _error_reporter(std::move(fn))
+  , _is_paused(is_paused) {
     ssx::background = ss::with_gate(_gate, [this, sg] {
         return ss::with_scheduling_group(sg, [this] { return process(); });
     });
@@ -43,6 +45,13 @@ ss::future<> work_queue::shutdown() {
     co_await _gate.close();
 }
 
+void work_queue::resume() {
+    _is_paused = is_paused_t::no;
+    _cond_var.signal();
+}
+
+void work_queue::pause() { _is_paused = is_paused_t::yes; }
+
 void work_queue::submit_after(
   ss::future<> fut, ss::noncopyable_function<ss::future<>()> fn) {
     auto holder = _gate.hold();
@@ -55,8 +64,9 @@ void work_queue::submit_after(
 
 ss::future<> work_queue::process() {
     while (true) {
-        co_await _cond_var.wait(
-          [this] { return !_tasks.empty() || _as.abort_requested(); });
+        co_await _cond_var.wait([this] {
+            return _as.abort_requested() || (!_is_paused && !_tasks.empty());
+        });
         if (_as.abort_requested()) {
             co_return;
         }

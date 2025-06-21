@@ -30,5 +30,7 @@ CheckOptions:
     value:           KiB;MiB;GiB;TiB
   - key:             hicpp-uppercase-literal-suffix.NewSuffixes
     value:           KiB;MiB;GiB;TiB
+  - key:             performance-unnecessary-value-param.AllowedTypes
+    value:           seastar::shared_ptr;seastar::lw_shared_ptr;
 ...
 

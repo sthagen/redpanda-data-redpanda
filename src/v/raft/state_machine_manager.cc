@@ -569,7 +569,7 @@ ss::future<> state_machine_manager::try_apply_in_foreground() {
     }
 }
 
-ss::future<> state_machine_manager::apply() {
+ss::future<> state_machine_manager::apply() noexcept {
     /**
      * If any of the state machine is behind, dispatch background apply fibers
      */
@@ -653,7 +653,9 @@ ss::future<> state_machine_manager::background_apply_fiber(
             if (fut.failed()) {
                 const auto e = fut.get_exception();
                 // do not log known shutdown exceptions as errors
-                if (!ssx::is_shutdown_exception(e)) {
+                if (ssx::is_shutdown_exception(e)) {
+                    std::rethrow_exception(e);
+                } else {
                     vlog(_log.error, "error applying raft snapshot - {}", e);
                     co_await ss::sleep_abortable(100ms, _as);
                 }
