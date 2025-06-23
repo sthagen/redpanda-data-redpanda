@@ -16,6 +16,7 @@ class QueryEngineType(str, Enum):
     SPARK = 'spark'
     TRINO = 'trino'
     DATABRICKS_SQL = 'databricks_sql'
+    DUCKDB_PY = 'duckdb_py'
 
 
 class QueryEngineBase(ABC):

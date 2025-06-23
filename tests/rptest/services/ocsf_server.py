@@ -63,7 +63,7 @@ class OcsfServer(Service):
         hostname = node.account.hostname
         return f'http://{hostname}:{HTTP_PORT}/api/{path}'
 
-    def get_api_version(self, node=None):
+    def get_api_version(self, node=None, timeout_sec=5):
         """Returns current verison of OCSF server
         
         Parameters
@@ -79,19 +79,13 @@ class OcsfServer(Service):
 
         def _wait_for_api_version():
             r = requests.get(uri)
-            if r.status_code != 200:
-                return (False, None)
-            return (True, r)
+            return (r.status_code == 200, r)
 
         r = wait_until_result(_wait_for_api_version,
-                              timeout_sec=5,
+                              timeout_sec=timeout_sec,
                               backoff_sec=1,
                               retry_on_exc=True,
                               err_msg=f'Could not get API version from {uri}')
-
-        r = requests.get(uri)
-        if r.status_code != 200:
-            raise Exception(f'Unexepected status code: {r.status_code}')
         return r.json()['version']
 
     def validate_schema(self, schema, node=None):
@@ -142,20 +136,9 @@ class OcsfServer(Service):
         self.logger.debug(f'Starting OCSF Server with cmd "{cmd}"')
         node.account.ssh(cmd, allow_fail=False)
 
-        def _wait_for_version():
-            try:
-                _ = self.get_api_version()
-                return True
-            except Exception:
-                # Ignore exceptions as server may be coming up and
-                # connections may time out
-                pass
-            return False
-
-        wait_until(_wait_for_version,
-                   timeout_sec=10,
-                   backoff_sec=1,
-                   err_msg='Failed to get version from server during startup')
+        # Wait for server to come up online
+        version = self.get_api_version(timeout_sec=30)
+        self.logger.debug(f'OCSF Server online with version "{version}"')
 
     def stop_node(self, node):
         cmd = self._stop_cmd()

@@ -8,11 +8,12 @@
 # by the Apache License, Version 2.0
 
 from rptest.services.datalake.query_engine.databricks_sql import DatabricksSQL
+from rptest.services.datalake.query_engine.duckdb_py import DuckDBPy
 from rptest.services.spark_service import SparkService
 from rptest.services.trino_service import TrinoService
 from rptest.tests.datalake.query_engine_base import QueryEngineType
 
-SUPPORTED_QUERY_ENGINES = [SparkService, TrinoService, DatabricksSQL]
+SUPPORTED_QUERY_ENGINES = [SparkService, TrinoService, DatabricksSQL, DuckDBPy]
 
 
 def get_query_engine_by_type(type: QueryEngineType):

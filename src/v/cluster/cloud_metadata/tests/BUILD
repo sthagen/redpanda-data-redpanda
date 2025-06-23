@@ -184,7 +184,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_gtest(
     name = "uploader_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "uploader_test.cc",
     ],

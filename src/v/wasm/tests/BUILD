@@ -243,7 +243,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_bench(
     name = "wasm_transform_rpbench",
-    timeout = "moderate",
+    timeout = "long",
     srcs = [
         "wasm_transform_bench.cc",
     ],

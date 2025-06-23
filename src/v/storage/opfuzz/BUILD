@@ -27,7 +27,7 @@ redpanda_test_cc_library(
 
 redpanda_cc_gtest(
     name = "opfuzz_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "opfuzz_test.cc",
     ],

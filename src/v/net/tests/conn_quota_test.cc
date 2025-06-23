@@ -249,6 +249,12 @@ void conn_quota_fixture::test_borrows(
     // a reclaim.
     vlog(logger.debug, "Trigger a reclaim");
     scq.invoke_on(1, [this](conn_quota&) { shard_units.erase(1); }).get();
+    // Reclaiming happens through a shard 1->0 background fiber fired through
+    // ~units(), which is not covered by waiting on the invoked task.
+    // The following invoke_on starts a task that includes a shard 2->0 request.
+    // Add a barier to protect against race condition between shard {1|2} ->
+    // shard 0 requests
+    tests::flush_tasks();
     scq
       .invoke_on(
         2,

@@ -6,7 +6,7 @@
 #
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
-from ducktape.mark import ignore, matrix
+from ducktape.mark import matrix
 from ducktape.tests.test import TestContext
 from ducktape.utils.util import wait_until
 from rptest.clients.rpk import RpkTool
@@ -256,11 +256,37 @@ class DatalakeClusterRestoreTest(RedpandaTest):
         self.logger.info(f"Translated offsets: {offsets}")
         return offsets
 
+    def counts_per_table(self, dl: DatalakeServices,
+                         tables: list[str]) -> dict[str, int]:
+        """
+        Returns a map from table name to count.
+        """
+        offsets = dict()
+        for t in tables:
+            offsets[t] = int(dl.spark().count_table("redpanda", t))
+        self.logger.info(f"Num records: {offsets}")
+        return offsets
+
     def tables_translated_more(self, dl: DatalakeServices,
-                               offsets_before: dict[str,
-                                                    int], at_least_n: int):
+                               counts_before: dict[str, int], at_least_n: int):
         """
         Return true if every table has translated at_least_n records more than
+        counts_before.
+        """
+        topics = list(counts_before.keys())
+        offsets_now = self.counts_per_table(dl, topics)
+        for t, o_before in counts_before.items():
+            if t not in offsets_now:
+                return False
+            if offsets_now[t] <= o_before + at_least_n:
+                return False
+        return True
+
+    def tables_translated_higher(self, dl: DatalakeServices,
+                                 offsets_before: dict[str,
+                                                      int], at_least_n: int):
+        """
+        Return true if every table has translated at_least_n offsets higher than
         offsets_before.
         """
         topics = list(offsets_before.keys())
@@ -322,7 +348,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             # Our tables should continue to be ingested to.
             offsets_snap = self.offsets_per_table(dl, all_topics)
             wait_until(
-                lambda: self.tables_translated_more(dl, offsets_snap, 50),
+                lambda: self.tables_translated_higher(dl, offsets_snap, 50),
                 timeout_sec=60,
                 backoff_sec=1,
                 err_msg="Translation not progressing after restore")
@@ -384,7 +410,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                                          create_schemas=False,
                                          create_topics=False)
             wait_until(
-                lambda: self.tables_translated_more(dl, offsets_snap, 50),
+                lambda: self.tables_translated_higher(dl, offsets_snap, 50),
                 timeout_sec=60,
                 backoff_sec=1,
                 err_msg="Translation not progressing after restore")
@@ -395,7 +421,6 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                 all_topics
             ), "Expected one table per topic (i.e. no DLQ tables)"
 
-    @ignore
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())
@@ -432,7 +457,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             # push more data to Iceberg.
             for t in all_topics:
                 rpk.alter_topic_config(t, "redpanda.remote.write", "false")
-            offsets_snap = self.offsets_per_table(dl, all_topics)
+            offsets_snap = self.counts_per_table(dl, all_topics)
             wait_until(
                 lambda: self.tables_translated_more(dl, offsets_snap, 50),
                 timeout_sec=60,
@@ -451,18 +476,18 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             # explicitly.
             structured_tables, structured_streams = self.start_structured_topic_streams(
                 dl, create_topics=False, create_schemas=False)
-            structured_offsets_snap = self.offsets_per_table(
+            structured_counts_snap = self.counts_per_table(
                 dl, structured_tables)
 
             unstructured_tables, _ = self.start_unstructured_topic_streams(
                 dl, create_topics=False)
-            unstructured_offsets_snap = self.offsets_per_table(
+            unstructured_counts_snap = self.counts_per_table(
                 dl, unstructured_tables)
 
             # Key-value topics should continue to write with no issues since
             # they don't depend on restored schemas.
             wait_until(lambda: self.tables_translated_more(
-                dl, unstructured_offsets_snap, 50),
+                dl, unstructured_counts_snap, 50),
                        timeout_sec=60,
                        backoff_sec=1,
                        err_msg="Translation not progressing after restore")
@@ -472,9 +497,9 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             for t in structured_tables:
                 dl.wait_for_translation_until_offset(f"{t}~dlq", 50)
 
-            structured_offsets_snap_after = self.offsets_per_table(
+            structured_counts_snap_after = self.counts_per_table(
                 dl, structured_tables)
-            assert structured_offsets_snap == structured_offsets_snap_after, \
+            assert structured_counts_snap == structured_counts_snap_after, \
                 f"Expected no translation in structured main tables:\n" \
                  "{structured_offsets_snap}\nvs\n{structured_offsets_snap_after}"
 
@@ -491,7 +516,7 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                                                 create_schemas=True)
 
             wait_until(lambda: self.tables_translated_more(
-                dl, structured_offsets_snap, 50),
+                dl, structured_counts_snap, 50),
                        timeout_sec=60,
                        backoff_sec=1,
                        err_msg="Translation not progressing after restore")
@@ -502,7 +527,6 @@ class DatalakeClusterRestoreTest(RedpandaTest):
                 rpk.alter_topic_config(t, "redpanda.remote.write", "true")
             rpk.alter_topic_config("_schemas", "redpanda.remote.write", "true")
 
-    @ignore
     @cluster(num_nodes=6)
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=supported_catalog_types())
@@ -539,9 +563,9 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             # push more data to Iceberg.
             for t in all_topics:
                 rpk.alter_topic_config(t, "redpanda.remote.write", "false")
-            offsets_snap = self.offsets_per_table(dl, all_topics)
+            counts_snap = self.counts_per_table(dl, all_topics)
             wait_until(
-                lambda: self.tables_translated_more(dl, offsets_snap, 50),
+                lambda: self.tables_translated_more(dl, counts_snap, 50),
                 timeout_sec=60,
                 backoff_sec=1,
                 err_msg="Translation not progressing after disabling uploads")
@@ -558,12 +582,12 @@ class DatalakeClusterRestoreTest(RedpandaTest):
             # Recreate the our streams and their necessary schemas.
             all_topics, all_streams = self.start_all_topic_streams(
                 dl, create_topics=False, create_schemas=True)
-            offsets_snap = self.offsets_per_table(dl, all_topics)
+            counts_snap = self.counts_per_table(dl, all_topics)
 
             # All of our topics should continue to write with no issues since
             # we have recreated our schemas.
             wait_until(
-                lambda: self.tables_translated_more(dl, offsets_snap, 50),
+                lambda: self.tables_translated_more(dl, counts_snap, 50),
                 timeout_sec=60,
                 backoff_sec=1,
                 err_msg="Translation not progressing after restore")
