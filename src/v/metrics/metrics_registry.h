@@ -39,6 +39,19 @@ public:
     using metric_name_t = ss::sstring;
     static metrics_registry& local() { return _local_instance; }
 
+    struct group_info {
+        bool has_topic_label{false};
+        bool partition_label_aggregated{false};
+        bool topic_label_initially_aggregated{false};
+
+        // aggregation labels when aggregate_metrics=false
+        std::vector<ss::metrics::label> non_aggregated_labels;
+        // aggregation labels when aggregate_metrics=true
+        std::vector<ss::metrics::label> aggregated_labels;
+
+        bool should_aggregate_topic_label() const;
+    };
+
     /*!
      * @brief Register a metric with the metrics registry.
      * @param group_name The name of the metric group.
@@ -48,26 +61,23 @@ public:
      * @param aggregated_labels The labels to be used for aggregation when
      * aggregate_metrics=true
      */
-    void register_metric(
+    const group_info& register_metric(
       const group_name_t& group_name,
       const metric_name_t& metric_name,
       const std::vector<ss::metrics::label>& non_aggregated_labels,
-      const std::vector<ss::metrics::label>& aggregated_labels);
+      const std::vector<ss::metrics::label>& aggregated_labels,
+      bool has_topic_label);
 
     // For all registered metrics, update the labels to be used for aggregation
     // depending on the new state of whether aggregation is turned on
     void update_aggregation_labels(bool aggregate_metrics);
 
+    void enable_topic_label_aggregation();
+    void disable_topic_label_aggregation();
+
 private:
     static thread_local metrics_registry
       _local_instance; // NOLINT(cppcoreguidelines-avoid-non-const-global-variables)
-
-    struct group_info {
-        // aggregation labels when aggregate_metrics=false
-        std::vector<ss::metrics::label> non_aggregated_labels;
-        // aggregation labels when aggregate_metrics=true
-        std::vector<ss::metrics::label> aggregated_labels;
-    };
 
     // We store the aggregation labels for a metric:
     // group_name -> metric_name -> aggregation_labels
@@ -75,4 +85,6 @@ private:
       group_name_t,
       absl::flat_hash_map<metric_name_t, group_info>>
       _registry;
+
+    bool _aggregated_topic_label{false};
 };

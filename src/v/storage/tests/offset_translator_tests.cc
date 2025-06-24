@@ -27,6 +27,7 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <ranges>
 #include <utility>
 
 using namespace std::chrono_literals; // NOLINT
@@ -189,7 +190,7 @@ TEST_F(offset_translator_fixture, random_translation_test) {
     }
 
     // go over whole offset space
-    for (auto o : boost::irange(0, 11000)) {
+    for (auto o : std::views::iota(0, 11000)) {
         model::offset log_offset(o);
 
         if (batch_offsets.contains(log_offset)) {
@@ -218,7 +219,7 @@ TEST_F(offset_translator_fixture, random_translation_test_with_hint) {
 
     // go over whole offset space
     model::offset prev_log_offset;
-    for (auto o : boost::irange(0, 11000)) {
+    for (auto o : std::views::iota(0, 11000)) {
         model::offset log_offset(o);
 
         if (batch_offsets.contains(log_offset)) {
@@ -255,7 +256,7 @@ TEST_F(offset_translator_fixture, immutability_test) {
     std::unordered_map<model::offset, model::offset> offsets_mapping;
 
     // go over whole offset space
-    for (auto o : boost::irange(0, end_offset)) {
+    for (auto o : std::views::iota(0, end_offset)) {
         model::offset log_offset(o);
 
         if (batch_offsets.contains(log_offset)) {
@@ -269,7 +270,7 @@ TEST_F(offset_translator_fixture, immutability_test) {
     }
 
     auto validate_offsets_immutable = [&](int64_t start) {
-        for (auto o : boost::irange<int64_t>(start, end_offset)) {
+        for (auto o : std::views::iota(start, end_offset)) {
             model::offset log_offset(o);
             if (batch_offsets.contains(log_offset)) {
                 continue;

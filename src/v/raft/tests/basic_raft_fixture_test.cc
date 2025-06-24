@@ -943,7 +943,7 @@ TEST_F_CORO(raft_fixture, test_redelivery_of_matching_logs) {
       [&, term_1_match_offset](reply_variant reply, model::node_id) {
           return ss::visit(
             std::move(reply),
-            [&, term_1_match_offset](append_entries_reply& a_r) {
+            [&, term_1_match_offset](append_entries_reply a_r) {
                 if (
                   a_r.last_dirty_log_index
                   == model::next_offset(term_1_match_offset)) {
@@ -953,7 +953,7 @@ TEST_F_CORO(raft_fixture, test_redelivery_of_matching_logs) {
                 }
                 return ss::make_ready_future<reply_variant>(a_r);
             },
-            [](auto& r) {
+            [](auto r) {
                 return ss::make_ready_future<reply_variant>(std::move(r));
             });
       });

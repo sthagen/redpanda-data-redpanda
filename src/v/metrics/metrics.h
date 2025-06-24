@@ -24,6 +24,11 @@
 
 namespace metrics {
 
+// Common labels used for metrics;
+extern const ss::metrics::label namespace_label;
+extern const ss::metrics::label topic_label;
+extern const ss::metrics::label partition_label;
+
 // The seastar metrics handle to be used for the '/public_metrics' prometheus
 // endpoint.
 const auto public_metrics_handle = ss::metrics::default_handle() + 1;

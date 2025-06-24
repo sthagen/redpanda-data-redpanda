@@ -67,16 +67,16 @@ private:
       const schema_element* element, traversal_levels levels, value val) {
         return ss::visit(
           std::move(val),
-          [this, element, levels](repeated_value& list) {
+          [this, element, levels](repeated_value list) {
               return process_repeated_leaf_value(
                 element, std::move(list), levels);
           },
-          [element](group_value&) {
+          [element](group_value) {
               return ss::make_exception_future(std::runtime_error(fmt::format(
                 "unexpected struct value for leaf schema element {}",
                 element->name())));
           },
-          [this, element, levels](null_value& v) {
+          [this, element, levels](null_value v) {
               // If this is the level in the tree that is turning NULL that is
               // invalid, this is a required node, however parent nodes could be
               // propagating a null value, which is valid.
@@ -93,7 +93,7 @@ private:
                 .def_level = levels.definition_level,
               });
           },
-          [this, element, levels](auto& v) {
+          [this, element, levels](auto v) {
               traversal_levels leaf_levels = levels;
               if (element->repetition_type != field_repetition_type::required) {
                   ++leaf_levels.definition_level;
@@ -149,11 +149,11 @@ private:
       const schema_element* element, traversal_levels levels, value val) {
         return ss::visit(
           std::move(val),
-          [this, element, levels](group_value& groups) -> ss::future<> {
+          [this, element, levels](group_value groups) -> ss::future<> {
               return process_required_group_value(
                 element, levels, std::move(groups));
           },
-          [this, element, levels](null_value&) -> ss::future<> {
+          [this, element, levels](null_value) -> ss::future<> {
               // If this is the level in the tree that is turning NULL that is
               // invalid, this is a required node, however parent nodes could be
               // propagating a null value, which is valid.
@@ -163,12 +163,12 @@ private:
               }
               return process_optional_null_group(element, levels);
           },
-          [element](repeated_value&) -> ss::future<> {
+          [element](repeated_value) -> ss::future<> {
               return ss::make_exception_future(std::runtime_error(fmt::format(
                 "unexpected list value for non-repeated schema element {}",
                 element->name())));
           },
-          [element](auto& v) -> ss::future<> {
+          [element](auto v) -> ss::future<> {
               return ss::make_exception_future(std::runtime_error(fmt::format(
                 "unexpected leaf value for required schema element {}: {}",
                 element->name(),
@@ -180,18 +180,18 @@ private:
       const schema_element* element, traversal_levels levels, value val) {
         return ss::visit(
           std::move(val),
-          [this, element, levels](null_value&) {
+          [this, element, levels](null_value) {
               return process_optional_null_group(element, levels);
           },
-          [this, element, levels](repeated_value& list) {
+          [this, element, levels](repeated_value list) {
               return process_repeated_value(element, levels, std::move(list));
           },
-          [element](group_value&) {
+          [element](group_value) {
               return ss::make_exception_future(std::runtime_error(fmt::format(
                 "unexpected struct value for repeated schema element {}",
                 element->name())));
           },
-          [element](auto& v) {
+          [element](auto v) {
               return ss::make_exception_future(std::runtime_error(fmt::format(
                 "unexpected leaf value for repeated schema element {}: {}",
                 element->name(),
@@ -203,19 +203,19 @@ private:
       const schema_element* element, traversal_levels levels, value val) {
         return ss::visit(
           std::move(val),
-          [this, element, levels](group_value& group) -> ss::future<> {
+          [this, element, levels](group_value group) -> ss::future<> {
               return process_optional_group_value(
                 element, levels, std::move(group));
           },
-          [this, element, levels](null_value&) -> ss::future<> {
+          [this, element, levels](null_value) -> ss::future<> {
               return process_optional_null_group(element, levels);
           },
-          [element](repeated_value&) -> ss::future<> {
+          [element](repeated_value) -> ss::future<> {
               return ss::make_exception_future(std::runtime_error(fmt::format(
                 "unexpected list value for non-repeated schema element {}",
                 element->name())));
           },
-          [element](auto& v) -> ss::future<> {
+          [element](auto v) -> ss::future<> {
               return ss::make_exception_future(std::runtime_error(fmt::format(
                 "unexpected leaf value for optional schema element {}: {}",
                 element->name(),

@@ -10,6 +10,7 @@
 #include "raft/probe.h"
 
 #include "config/configuration.h"
+#include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
 #include "model/fundamental.h"
 
@@ -19,14 +20,10 @@ namespace raft {
 
 std::vector<ss::metrics::label_instance>
 probe::create_metric_labels(const model::ntp& ntp) {
-    namespace sm = ss::metrics;
-    auto ns_label = sm::label("namespace");
-    auto topic_label = sm::label("topic");
-    auto partition_label = sm::label("partition");
     return {
-      ns_label(ntp.ns()),
-      topic_label(ntp.tp.topic()),
-      partition_label(ntp.tp.partition()),
+      metrics::namespace_label(ntp.ns()),
+      metrics::topic_label(ntp.tp.topic()),
+      metrics::partition_label(ntp.tp.partition()),
     };
 }
 

@@ -15,6 +15,10 @@
 
 namespace metrics {
 
+const ss::metrics::label namespace_label{"namespace"};
+const ss::metrics::label topic_label{"topic"};
+const ss::metrics::label partition_label{"partition"};
+
 internal_metric_groups& internal_metric_groups::add_group(
   const ss::metrics::group_name_type& name,
   std::vector<ss::metrics::impl::metric_definition_impl> metrics,
@@ -43,14 +47,24 @@ internal_metric_groups& internal_metric_groups::add_group(
           "Must not use individual aggregation labels when using the "
           "aggregation label per group overload");
 
+        const auto& group_info = metrics_registry::local().register_metric(
+          name,
+          metric.name,
+          non_aggregated_labels,
+          aggregated_labels,
+          std::find_if(
+            metric.labels.cbegin(),
+            metric.labels.cend(),
+            [](const auto& v) { return std::get<0>(v) == topic_label.name(); })
+            != metric.labels.cend());
+
+        // The registy may have added aggregation labels, so the sets retuned by
+        // `register_metric` are used here.
         metric.aggregate(
           config::shard_local_cfg().aggregate_metrics()
-            ? aggregated_labels
-            : non_aggregated_labels);
+            ? group_info.aggregated_labels
+            : group_info.non_aggregated_labels);
         transformed.emplace_back(metric);
-
-        metrics_registry::local().register_metric(
-          name, metric.name, non_aggregated_labels, aggregated_labels);
     }
     _underlying.add_group(name, transformed);
     return *this;

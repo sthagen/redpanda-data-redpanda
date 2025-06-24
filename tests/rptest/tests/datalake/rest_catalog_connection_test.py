@@ -25,7 +25,9 @@ class RestCatalogConnectionTest(RedpandaTest):
                                    cloud_storage_enable_remote_write=False),
             extra_rp_conf={
                 "iceberg_enabled": True,
-                "iceberg_catalog_commit_interval_ms": 10000
+                "iceberg_catalog_commit_interval_ms": 10000,
+                # Leader balancing can delay the first translation.
+                "enable_leader_balancer": False,
             })
         self.catalog_service = IcebergRESTCatalog(
             test_context,

@@ -93,12 +93,10 @@ private:
         }
 
         auto group_label = sm::label("group");
-        auto topic_label = sm::label("topic");
-        auto partition_label = sm::label("partition");
         std::vector<sm::label_instance> labels{
           group_label(group_id()),
-          topic_label(tp.topic()),
-          partition_label(tp.partition())};
+          metrics::topic_label(tp.topic()),
+          metrics::partition_label(tp.partition())};
         _internal_metrics.value().add_group(
           prometheus_sanitize::metrics_name("kafka:group"),
           {sm::make_gauge(

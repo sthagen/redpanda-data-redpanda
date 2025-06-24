@@ -1,0 +1,146 @@
+---
+name: Close Backport Issues
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g., v24.1.x)'
+        required: true
+        type: string
+
+jobs:
+  close-backport-issues:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Close backport issues and PRs
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const version = '${{ github.event.inputs.version }}';
+            const titlePrefix = `[${version}]`;
+
+            console.log(`Searching for issues and PRs with label 'kind/backport' and title prefix '${titlePrefix}'`);
+
+            // Collect all matching issues across all pages
+            const allMatchingIssues = [];
+            let page = 1;
+            let hasMore = true;
+
+            while (hasMore) {
+              console.log(`Fetching page ${page} of issues...`);
+
+              const issues = await github.rest.issues.listForRepo({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: 'kind/backport',
+                state: 'open',
+                per_page: 100,
+                page: page
+              });
+
+              console.log(`Found ${issues.data.length} issues on page ${page}`);
+
+              const matchingIssues = issues.data.filter(issue =>
+                issue.title.startsWith(titlePrefix)
+              );
+
+              allMatchingIssues.push(...matchingIssues);
+              console.log(`Found ${matchingIssues.length} matching issues on page ${page}`);
+
+              // Check if we have more pages
+              hasMore = issues.data.length === 100;
+              page++;
+            }
+
+            console.log(`Total matching issues found: ${allMatchingIssues.length}`);
+
+            if (allMatchingIssues.length === 0) {
+              console.log('No matching issues found to close');
+              return;
+            }
+
+            // Close each matching issue
+            for (const issue of allMatchingIssues) {
+              console.log(`Closing issue #${issue.number}: ${issue.title}`);
+
+              // Add a comment explaining why it will be closed
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `This backport issue is being closed as version ${version} is no longer supported.`
+              });
+
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed'
+              });
+            }
+
+            console.log(`Successfully closed ${allMatchingIssues.length} backport issues for ${version}`);
+
+            // Now handle PRs with the same logic
+            console.log('Searching for PRs with kind/backport label...');
+            const allMatchingPRs = [];
+            page = 1;
+            hasMore = true;
+
+            while (hasMore) {
+              console.log(`Fetching page ${page} of PRs...`);
+
+              const prs = await github.rest.pulls.list({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                state: 'open',
+                per_page: 100,
+                page: page
+              });
+
+              console.log(`Found ${prs.data.length} PRs on page ${page}`);
+
+              // Filter PRs with kind/backport label and matching title prefix
+              const matchingPRs = prs.data.filter(pr =>
+                pr.labels.some(label => label.name === 'kind/backport') &&
+                pr.title.startsWith(titlePrefix)
+              );
+
+              allMatchingPRs.push(...matchingPRs);
+              console.log(`Found ${matchingPRs.length} matching PRs on page ${page}`);
+
+              hasMore = prs.data.length === 100;
+              page++;
+            }
+
+            console.log(`Total matching PRs found: ${allMatchingPRs.length}`);
+
+            if (allMatchingPRs.length === 0) {
+              console.log('No matching PRs found to close');
+            } else {
+              // Close each matching PR
+              for (const pr of allMatchingPRs) {
+                console.log(`Closing PR #${pr.number}: ${pr.title}`);
+
+                // Add a comment explaining why it will be closed
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: pr.number,
+                  body: `This backport PR is being closed as version ${version} is no longer supported.`
+                });
+
+                await github.rest.pulls.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  pull_number: pr.number,
+                  state: 'closed'
+                });
+              }
+
+              console.log(`Successfully closed ${allMatchingPRs.length} backport PRs for ${version}`);
+            }

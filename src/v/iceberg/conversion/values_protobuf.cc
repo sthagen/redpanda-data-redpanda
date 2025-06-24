@@ -128,7 +128,7 @@ ss::future<optional_value_outcome> convert_repeated(
 
     return ss::visit(
              std::move(list_variant),
-             [&field_descriptor, &stack](auto& list) {
+             [&field_descriptor, &stack](auto list) {
                  return convert_repeated_elements(
                    std::move(list), field_descriptor, stack);
              })
@@ -169,7 +169,7 @@ ss::future<optional_value_outcome> convert_map(
                 *field_descriptor.message_type()->map_key(),
                 stack);
           },
-          [&field_descriptor, &stack](auto& value) {
+          [&field_descriptor, &stack](auto value) {
               return single_field_to_value(
                 std::move(value),
                 *field_descriptor.message_type()->map_key(),
@@ -191,7 +191,7 @@ ss::future<optional_value_outcome> convert_map(
           [](std::monostate) {
               return ssx::now<optional_value_outcome>(std::nullopt);
           },
-          [&field_descriptor, &stack](auto& value) {
+          [&field_descriptor, &stack](auto value) {
               return single_field_to_value(
                 std::move(value),
                 *field_descriptor.message_type()->map_value(),

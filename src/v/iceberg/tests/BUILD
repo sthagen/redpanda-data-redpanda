@@ -210,7 +210,7 @@ redpanda_cc_gtest(
 
 redpanda_cc_gtest(
     name = "merge_append_action_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "merge_append_action_test.cc",
     ],

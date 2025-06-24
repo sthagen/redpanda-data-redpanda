@@ -12,6 +12,7 @@
 
 #include "cluster/archival/archival_metadata_stm.h"
 #include "config/configuration.h"
+#include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
 #include "ssx/rate_limited_function.h"
 
@@ -42,17 +43,14 @@ void ntp_level_probe::setup_ntp_metrics(const model::ntp& ntp) {
         return;
     }
 
-    auto ns_label = sm::label("namespace");
-    auto topic_label = sm::label("topic");
-    auto partition_label = sm::label("partition");
     const std::vector<sm::label_instance> labels = {
-      ns_label(ntp.ns()),
-      topic_label(ntp.tp.topic()),
-      partition_label(ntp.tp.partition()),
+      metrics::namespace_label(ntp.ns()),
+      metrics::topic_label(ntp.tp.topic()),
+      metrics::partition_label(ntp.tp.partition()),
     };
 
     auto aggregate_labels = std::vector<sm::label>{
-      sm::shard_label, partition_label};
+      sm::shard_label, metrics::partition_label};
 
     _metrics.add_group(
       prometheus_sanitize::metrics_name("ntp_archiver"),

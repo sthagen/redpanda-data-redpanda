@@ -65,14 +65,10 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
         return;
     }
 
-    auto ns_label = sm::label("namespace");
-    auto topic_label = sm::label("topic");
-    auto partition_label = sm::label("partition");
-
     const std::vector<sm::label_instance> labels = {
-      ns_label(ntp.ns()),
-      topic_label(ntp.tp.topic()),
-      partition_label(ntp.tp.partition()),
+      metrics::namespace_label(ntp.ns()),
+      metrics::topic_label(ntp.tp.topic()),
+      metrics::partition_label(ntp.tp.partition()),
     };
 
     // The following few metrics uses a separate add_group call which doesn't
@@ -182,7 +178,7 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
           labels),
       },
       {},
-      {sm::shard_label, partition_label});
+      {sm::shard_label, metrics::partition_label});
 
     if (model::is_user_topic(_partition.ntp())) {
         // Metrics are reported as follows
@@ -222,7 +218,7 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
               labels),
           },
           {},
-          {sm::shard_label, partition_label});
+          {sm::shard_label, metrics::partition_label});
     }
 
     if (
@@ -237,7 +233,7 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
               sm::description(
                 "Number of records that failed schema ID validation"),
               labels)
-              .aggregate({sm::shard_label, partition_label}),
+              .aggregate({sm::shard_label, metrics::partition_label}),
           });
     }
 }

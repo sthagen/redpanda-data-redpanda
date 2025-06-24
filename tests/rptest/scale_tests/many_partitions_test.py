@@ -42,10 +42,10 @@ DEFAULT_MIB_PER_PARTITION = ScaleParameters.DEFAULT_MIB_PER_PARTITION
 DEFAULT_PARTITIONS_PER_SHARD = 3000
 
 # How much memory is reserved for partitions for this test.
-# We use the 1.5x the default order to test higher than default density
+# We use the 2x the default order to test higher than default density
 # (in a memory sense) and also to hit the per-shard max of 3,000 partitions
 DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT = int(
-    ScaleParameters.DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT * 1.5)
+    ScaleParameters.DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT * 2)
 
 # Large volume of data to write. If tiered storage is enabled this is the
 # amount of data to retain total. Otherwise, this can be used as a large volume
@@ -770,7 +770,7 @@ class ManyPartitionsTest(PreallocNodesTest):
             'topic_partitions_per_shard':
             DEFAULT_PARTITIONS_PER_SHARD,
             'topic_memory_per_partition':
-            DEFAULT_MIB_PER_PARTITION * 1024 * 1024,
+            int(DEFAULT_MIB_PER_PARTITION * 1024 * 1024),
             'topic_partitions_memory_allocation_percent':
             DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
         })
@@ -860,7 +860,7 @@ class ManyPartitionsTest(PreallocNodesTest):
             'topic_partitions_per_shard':
             topic_partitions_per_shard,
             'topic_memory_per_partition':
-            mib_per_partition * 1024 * 1024,
+            int(mib_per_partition * 1024 * 1024),
             'topic_partitions_memory_allocation_percent':
             DEFAULT_PARTITIONS_MEMORY_ALLOCATION_PERCENT,
         })

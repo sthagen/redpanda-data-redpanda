@@ -18,6 +18,7 @@
 #include "cluster/fwd.h"
 #include "cluster/node_status_table.h"
 #include "cluster/scheduling/leader_balancer.h"
+#include "cluster/topic_metrics_watcher.h"
 #include "cluster/types.h"
 #include "crash_reporter.h"
 #include "model/fundamental.h"
@@ -348,6 +349,7 @@ private:
     ss::sharded<cluster::metadata_cache>& _metadata_cache;
     controller_probe _probe;
     ss::sharded<bootstrap_backend> _bootstrap_backend; // single instance
+    ss::sharded<topic_metrics_watcher> _topic_metrics_watcher;
 
     ss::sharded<plugin_frontend> _plugin_frontend; // instance per core
     ss::sharded<plugin_table> _plugin_table;       // instance per core

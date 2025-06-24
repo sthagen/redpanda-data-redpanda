@@ -82,7 +82,7 @@ public:
 
         ss::visit(
           std::move(val),
-          [this, &value_memory_usage](value_type& v) {
+          [this, &value_memory_usage](value_type v) {
               if constexpr (!std::is_trivially_copyable_v<value_type>) {
                   value_memory_usage = v.val.size_bytes();
               } else {
@@ -91,12 +91,12 @@ public:
               _current_page_stats.record_value(v);
               _value_buffer.add_value(std::move(v));
           },
-          [this](null_value&) {
+          [this](null_value) {
               // null values are valid, but are not encoded in the actual data,
               // they are encoded in the defintion levels.
               _current_page_stats.record_null();
           },
-          [](auto& v) {
+          [](auto v) {
               throw std::runtime_error(fmt::format(
                 "invalid value for column: {:.32}", value(std::move(v))));
           });

@@ -2197,15 +2197,12 @@ void rm_stm::setup_metrics() {
         return;
     }
     namespace sm = ss::metrics;
-    auto ns_label = sm::label("namespace");
-    auto topic_label = sm::label("topic");
-    auto partition_label = sm::label("partition");
 
     const auto& ntp = _raft->ntp();
     const std::vector<sm::label_instance> labels = {
-      ns_label(ntp.ns()),
-      topic_label(ntp.tp.topic()),
-      partition_label(ntp.tp.partition()),
+      metrics::namespace_label(ntp.ns()),
+      metrics::topic_label(ntp.tp.topic()),
+      metrics::partition_label(ntp.tp.partition()),
     };
 
     _metrics.add_group(
@@ -2224,7 +2221,7 @@ void rm_stm::setup_metrics() {
           labels),
       },
       {},
-      {sm::shard_label, partition_label});
+      {sm::shard_label, metrics::partition_label});
 }
 
 rm_stm_factory::rm_stm_factory(

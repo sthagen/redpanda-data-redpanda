@@ -836,6 +836,12 @@ ss::future<> controller::start(
       &data_migrations::backend::start);
     co_await _data_migration_irpc_frontend.start(
       std::ref(_feature_table), std::ref(_data_migration_backend));
+
+    co_await _topic_metrics_watcher.start(
+      ss::sharded_parameter([this] { return std::ref(_tp_state.local()); }),
+      ss::sharded_parameter([] {
+          return config::shard_local_cfg().topic_label_aggregation_limit.bind();
+      }));
 }
 
 ss::future<> controller::set_ready() {
@@ -888,6 +894,7 @@ ss::future<> controller::stop() {
     if (_recovery_backend) {
         co_await _recovery_backend->stop_and_wait();
     }
+    co_await _topic_metrics_watcher.stop();
     co_await _recovery_manager.stop();
     co_await _recovery_table.stop();
     co_await _partition_balancer.stop();

@@ -370,6 +370,14 @@ configuration::configuration()
       "progress.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       30s)
+  , topic_label_aggregation_limit(
+      *this,
+      "topic_label_aggregation_limit",
+      "When the number of topics exceeds this limit, the topic label in "
+      "generated metrics will be aggregated. If `nullopt`, then there is no "
+      "limit.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      std::nullopt)
   , admin_api_require_auth(
       *this,
       "admin_api_require_auth",
@@ -4214,6 +4222,15 @@ configuration::configuration()
        .visibility = visibility::tunable},
       50_MiB,
       {.min = 1_MiB})
+  , consumer_offsets_topic_batch_cache_enabled(
+      *this,
+      "consumer_offsets_topic_batch_cache_enabled",
+      "This property lets you enable the batch cache for the consumer offsets "
+      "topic. By default, the cache for consumer offsets topic is disabled. "
+      "Changing this property is not recommended in production systems, as it "
+      "may affect performance. The change is applied only after the restart.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
+      false)
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",
