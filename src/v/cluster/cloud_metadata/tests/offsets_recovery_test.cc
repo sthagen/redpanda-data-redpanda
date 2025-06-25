@@ -7,6 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
+#include "absl/container/flat_hash_map.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/remote_file.h"
 #include "cloud_storage/remote_segment.h"
@@ -46,7 +47,6 @@
 
 #include <seastar/util/later.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/test/tools/old/interface.hpp>
 
 namespace {

@@ -10,6 +10,8 @@
  */
 
 #pragma once
+#include "absl/container/node_hash_map.h"
+#include "absl/hash/hash.h"
 #include "bytes/bytes.h"
 #include "hashing/crc32c.h"
 #include "hashing/xx.h"
@@ -25,9 +27,6 @@
 
 #include <seastar/core/file.hh>
 #include <seastar/core/future.hh>
-
-#include <absl/container/node_hash_map.h>
-#include <absl/hash/hash.h>
 namespace storage::internal {
 using namespace storage; // NOLINT
 class spill_key_index final : public compacted_index_writer {
@@ -81,6 +80,7 @@ public:
     ss::future<> close() final;
     void print(std::ostream&) const final;
     void set_flag(compacted_index::footer_flags) final;
+    size_t size_bytes() const final;
 
 private:
     /**

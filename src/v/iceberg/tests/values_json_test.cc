@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/numeric/int128.h"
 #include "gmock/gmock.h"
 #include "iceberg/tests/test_schemas.h"
 #include "iceberg/values.h"
@@ -16,7 +17,6 @@
 #include "json/json.h"
 #include "test_utils/random_bytes.h"
 
-#include <absl/numeric/int128.h>
 #include <gtest/gtest.h>
 
 #include <ranges>

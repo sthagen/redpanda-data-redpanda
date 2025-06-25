@@ -10,6 +10,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/node_hash_map.h"
 #include "cluster/fwd.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/node/local_monitor.h"
@@ -23,8 +24,6 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <chrono>
 #include <vector>

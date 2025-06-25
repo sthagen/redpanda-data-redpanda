@@ -9,13 +9,13 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/node_hash_map.h"
 #include "bytes/bytes.h"
 #include "security/scram_credential.h"
 #include "security/types.h"
 
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/container/node_hash_map.h>
 #include <boost/range/adaptor/filtered.hpp>
 
 namespace security {

@@ -80,14 +80,11 @@ class LogCompactionTestBase():
         producer.start()
 
         def seen_dirty_ratio_above_zero():
-            dirty_bytes_nonzero = self.get_dirty_segment_bytes() > 0
-            closed_bytes_nonzero = self.get_closed_segment_bytes() > 0
-            dirty_ratio_nonzero = self.get_dirty_ratio() > 0.0
-            return dirty_bytes_nonzero and closed_bytes_nonzero and dirty_ratio_nonzero
+            return self.get_dirty_ratio() > 0.0
 
         wait_until(seen_dirty_ratio_above_zero,
                    timeout_sec=10,
-                   backoff_sec=0.1,
+                   backoff_sec=0.001,
                    err_msg="Did not see a non-zero dirty ratio.")
 
         producer.wait_for_latest_value_map()

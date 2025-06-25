@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/cluster_link/table.h"
 #include "cluster/cluster_link/tests/utils.h"
 #include "cluster_link/link.h"
@@ -17,7 +18,6 @@
 
 #include <seastar/util/defer.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <gtest/gtest.h>
 
 using namespace std::chrono_literals;

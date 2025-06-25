@@ -11,6 +11,9 @@
 
 #include "pandaproxy/schema_registry/json.h"
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/inlined_vector.h"
 #include "json/chunked_buffer.h"
 #include "json/chunked_input_stream.h"
 #include "json/document.h"
@@ -22,6 +25,7 @@
 #include "pandaproxy/schema_registry/errors.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/types.h"
+#include "re2/re2.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/shared_ptr.hh>
@@ -30,9 +34,6 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/inlined_vector.h>
 #include <boost/graph/adjacency_list.hpp>
 #include <boost/graph/max_cardinality_matching.hpp>
 #include <boost/math/special_functions/ulp.hpp>
@@ -47,7 +48,6 @@
 #include <jsoncons_ext/jsonschema/json_schema_factory.hpp>
 #include <jsoncons_ext/jsonschema/jsonschema.hpp>
 #include <rapidjson/error/en.h>
-#include <re2/re2.h>
 
 #include <exception>
 #include <filesystem>

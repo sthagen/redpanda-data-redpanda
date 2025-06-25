@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/algorithm/container.h"
 #include "base/type_traits.h"
 #include "base/units.h"
 #include "gmock/gmock.h"
@@ -19,7 +20,6 @@
 #include <seastar/core/metrics_api.hh>
 #include <seastar/core/smp.hh>
 
-#include <absl/algorithm/container.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <wasm/engine_probe.h>

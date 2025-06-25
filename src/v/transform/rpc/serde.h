@@ -10,6 +10,9 @@
  */
 #pragma once
 
+#include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "base/outcome.h"
 #include "cluster/errc.h"
 #include "container/fragmented_vector.h"
@@ -21,10 +24,6 @@
 #include "utils/uuid.h"
 
 #include <seastar/core/chunked_fifo.hh>
-
-#include <absl/container/btree_set.h>
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
 
 namespace transform::rpc {
 

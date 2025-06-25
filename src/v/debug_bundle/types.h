@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_set.h"
 #include "base/seastarx.h"
 #include "container/fragmented_vector.h"
 #include "model/metadata.h"
@@ -22,7 +23,6 @@
 #include <seastar/core/shard_id.hh>
 #include <seastar/core/sstring.hh>
 
-#include <absl/container/btree_set.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 

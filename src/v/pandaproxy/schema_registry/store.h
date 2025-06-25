@@ -11,6 +11,10 @@
 
 #pragma once
 
+#include "absl/algorithm/container.h"
+#include "absl/container/btree_map.h"
+#include "absl/container/btree_set.h"
+#include "absl/container/node_hash_map.h"
 #include "config/configuration.h"
 #include "container/fragmented_vector.h"
 #include "metrics/metrics.h"
@@ -20,11 +24,6 @@
 #include "pandaproxy/schema_registry/types.h"
 
 #include <seastar/core/metrics.hh>
-
-#include <absl/algorithm/container.h>
-#include <absl/container/btree_map.h>
-#include <absl/container/btree_set.h>
-#include <absl/container/node_hash_map.h>
 
 #include <optional>
 #include <ranges>

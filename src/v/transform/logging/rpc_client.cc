@@ -11,6 +11,7 @@
 
 #include "transform/logging/rpc_client.h"
 
+#include "absl/algorithm/container.h"
 #include "cluster/metadata_cache.h"
 #include "hashing/murmur.h"
 #include "kafka/data/record_batcher.h"
@@ -20,8 +21,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-
-#include <absl/algorithm/container.h>
 
 namespace transform::logging {
 

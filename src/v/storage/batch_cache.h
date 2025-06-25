@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/btree_map.h"
 #include "base/units.h"
 #include "base/vassert.h"
 #include "container/chunked_circular_buffer.h"
@@ -25,8 +26,6 @@
 #include <seastar/core/memory.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/weak_ptr.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <limits>
 #include <type_traits>

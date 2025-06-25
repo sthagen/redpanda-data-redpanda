@@ -10,6 +10,7 @@
  */
 #include "io/tests/common.h"
 
+#include "absl/strings/escaping.h"
 #include "base/units.h"
 
 #include <seastar/core/align.hh>
@@ -17,8 +18,6 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/core/thread.hh>
 #include <seastar/util/later.hh>
-
-#include <absl/strings/escaping.h>
 
 #include <random>
 #include <span>

@@ -9,6 +9,7 @@
 
 #include "cluster/partition_leaders_table.h"
 
+#include "absl/container/btree_map.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/logger.h"
 #include "cluster/topic_table.h"
@@ -21,8 +22,6 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <optional>
 

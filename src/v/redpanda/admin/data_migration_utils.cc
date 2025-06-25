@@ -10,9 +10,8 @@
  */
 #include "redpanda/admin/data_migration_utils.h"
 
+#include "absl/strings/str_split.h"
 #include "model/namespace.h"
-
-#include <absl/strings/str_split.h>
 
 #include <string_view>
 

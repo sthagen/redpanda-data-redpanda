@@ -9,6 +9,7 @@
 
 #include "cloud_storage/topic_manifest_downloader.h"
 
+#include "absl/container/btree_set.h"
 #include "base/outcome.h"
 #include "base/vlog.h"
 #include "cloud_storage/logger.h"
@@ -22,8 +23,6 @@
 
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
-
-#include <absl/container/btree_set.h>
 
 namespace cloud_storage {
 

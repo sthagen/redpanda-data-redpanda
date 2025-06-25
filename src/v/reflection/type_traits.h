@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_set.h"
 #include "base/seastarx.h"
 #include "base/type_traits.h"
 #include "container/fragmented_vector.h"
@@ -20,8 +21,6 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/circular_buffer.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/btree_set.h>
 
 #include <array>
 #include <optional>

@@ -11,6 +11,7 @@
 
 #include "config_manager.h"
 
+#include "absl/container/flat_hash_map.h"
 #include "base/vlog.h"
 #include "cluster/config_frontend.h"
 #include "cluster/controller_service.h"
@@ -28,8 +29,6 @@
 #include "utils/file_io.h"
 
 #include <seastar/core/coroutine.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <algorithm>
 

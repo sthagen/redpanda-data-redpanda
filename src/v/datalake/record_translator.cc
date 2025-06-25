@@ -9,6 +9,7 @@
  */
 #include "datalake/record_translator.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "base/vlog.h"
 #include "datalake/logger.h"
 #include "datalake/record_schema_resolver.h"
@@ -22,7 +23,6 @@
 #include "iceberg/values.h"
 #include "model/fundamental.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <avro/Generic.hh>
 #include <avro/GenericDatum.hh>
 

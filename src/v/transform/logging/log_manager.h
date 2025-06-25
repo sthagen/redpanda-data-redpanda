@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "config/property.h"
 #include "model/transform.h"
 #include "ssx/semaphore.h"
@@ -19,8 +20,6 @@
 #include "utils/absl_sstring_hash.h"
 
 #include <seastar/core/lowres_clock.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace transform::logging {
 

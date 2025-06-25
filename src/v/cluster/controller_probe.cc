@@ -11,6 +11,8 @@
 
 #include "cluster/controller_probe.h"
 
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_set.h"
 #include "cluster/cloud_metadata/uploader.h"
 #include "cluster/controller.h"
 #include "cluster/members_table.h"
@@ -21,9 +23,6 @@
 #include "model/fips_config.h"
 
 #include <seastar/core/metrics.hh>
-
-#include <absl/algorithm/container.h>
-#include <absl/container/flat_hash_set.h>
 
 namespace cluster {
 

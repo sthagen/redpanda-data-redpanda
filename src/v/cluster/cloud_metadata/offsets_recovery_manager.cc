@@ -10,6 +10,7 @@
 
 #include "cluster/cloud_metadata/offsets_recovery_manager.h"
 
+#include "absl/container/node_hash_set.h"
 #include "base/vlog.h"
 #include "cloud_storage/remote_file.h"
 #include "cloud_storage/types.h"
@@ -27,8 +28,6 @@
 
 #include <seastar/core/smp.hh>
 #include <seastar/util/later.hh>
-
-#include <absl/container/node_hash_set.h>
 
 namespace cluster::cloud_metadata {
 

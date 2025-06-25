@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "cloud_storage_clients/client.h"
 #include "config/configuration.h"
 #include "http/tests/registered_urls.h"
@@ -19,8 +20,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/http/httpd.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 #include <chrono>
 #include <exception>

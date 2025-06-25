@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "bytes/bytes.h"
 #include "cluster/errc.h"
 #include "cluster/types.h"
@@ -56,7 +57,6 @@
 #include <seastar/net/socket_defs.hh>
 #include <seastar/util/noncopyable_function.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

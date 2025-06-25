@@ -12,6 +12,8 @@
 #include "config/throughput_control_group.h"
 
 #include "config/convert.h"
+#include "re2/re2.h"
+#include "re2/stringpiece.h"
 #include "ssx/sformat.h"
 #include "strings/utf8.h"
 #include "utils/functional.h"
@@ -20,8 +22,6 @@
 #include <seastar/core/sstring.hh>
 
 #include <fmt/core.h>
-#include <re2/re2.h>
-#include <re2/stringpiece.h>
 #include <yaml-cpp/node/node.h>
 
 #include <algorithm>

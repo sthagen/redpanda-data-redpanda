@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/units.h"
 #include "bytes/bytes.h"
 #include "container/fragmented_vector.h"
@@ -28,7 +29,6 @@
 #include <seastar/core/loop.hh>
 #include <seastar/util/noncopyable_function.hh>
 
-#include <absl/container/btree_map.h>
 #include <fmt/core.h>
 #include <roaring/roaring.hh>
 

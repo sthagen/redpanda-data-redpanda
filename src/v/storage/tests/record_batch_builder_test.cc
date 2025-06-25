@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/btree_map.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "model/record.h"
@@ -16,7 +17,6 @@
 #include "reflection/adl.h"
 #include "storage/record_batch_builder.h"
 
-#include <absl/container/btree_map.h>
 #include <gtest/gtest.h>
 
 namespace detail {

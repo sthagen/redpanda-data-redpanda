@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "cluster/types.h"
 #include "container/chunked_hash_map.h"
@@ -19,8 +20,6 @@
 #include "utils/rwlock.h"
 
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/node_hash_map.h>
 
 namespace cluster {
 

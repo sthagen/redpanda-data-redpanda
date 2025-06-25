@@ -10,6 +10,8 @@
  */
 #include "wasmtime.h"
 
+#include "absl/algorithm/container.h"
+#include "absl/strings/escaping.h"
 #include "allocator.h"
 #include "base/type_traits.h"
 #include "base/vassert.h"
@@ -49,8 +51,6 @@
 #include <seastar/util/noncopyable_function.hh>
 #include <seastar/util/optimized_optional.hh>
 
-#include <absl/algorithm/container.h>
-#include <absl/strings/escaping.h>
 #include <fmt/ostream.h>
 
 #include <alloca.h>

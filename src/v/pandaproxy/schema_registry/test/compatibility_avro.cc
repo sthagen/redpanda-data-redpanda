@@ -9,6 +9,7 @@
 
 #include "pandaproxy/schema_registry/test/compatibility_avro.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "pandaproxy/schema_registry/avro.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
 #include "pandaproxy/schema_registry/test/compatibility_common.h"
@@ -16,7 +17,6 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <avro/Compiler.hh>
 #include <boost/test/tools/old/interface.hpp>
 

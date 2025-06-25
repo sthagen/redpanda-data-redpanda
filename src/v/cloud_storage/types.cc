@@ -10,13 +10,12 @@
 
 #include "cloud_storage/types.h"
 
+#include "absl/container/node_hash_set.h"
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
 #include "cloud_storage/logger.h"
 #include "config/node_config.h"
 #include "config/types.h"
-
-#include <absl/container/node_hash_set.h>
 
 namespace {
 cloud_storage_clients::default_overrides get_default_overrides() {

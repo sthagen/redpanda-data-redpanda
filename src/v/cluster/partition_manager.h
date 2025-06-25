@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cluster/archival/fwd.h"
@@ -28,8 +29,6 @@
 #include "model/metadata.h"
 #include "raft/group_manager.h"
 #include "storage/api.h"
-
-#include <absl/container/flat_hash_map.h>
 
 #include <chrono>
 

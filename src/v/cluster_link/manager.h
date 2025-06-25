@@ -11,13 +11,12 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster_link/link.h"
 #include "cluster_link/model/types.h"
 #include "container/fragmented_vector.h"
 #include "model/fundamental.h"
 #include "ssx/work_queue.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster_link {
 

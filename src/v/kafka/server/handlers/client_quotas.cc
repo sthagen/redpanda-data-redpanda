@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/algorithm/container.h"
 #include "cluster/client_quota_frontend.h"
 #include "cluster/client_quota_serde.h"
 #include "cluster/client_quota_store.h"
@@ -25,7 +26,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/algorithm/container.h>
 #include <boost/outcome/success_failure.hpp>
 #include <boost/range/combine.hpp>
 

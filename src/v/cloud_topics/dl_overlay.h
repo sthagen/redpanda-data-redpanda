@@ -9,12 +9,12 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 #include "serde/envelope.h"
 
-#include <absl/container/btree_map.h>
 #include <fmt/core.h>
 
 namespace experimental::cloud_topics {

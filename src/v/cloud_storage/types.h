@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/node_hash_set.h"
 #include "base/seastarx.h"
 #include "cloud_io/io_result.h"
 #include "cloud_io/transfer_details.h"
@@ -26,8 +27,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/node_hash_set.h>
 
 #include <chrono>
 #include <filesystem>

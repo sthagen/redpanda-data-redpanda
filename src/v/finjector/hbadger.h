@@ -11,12 +11,11 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/node_hash_map.h>
 
 namespace finjector {
 

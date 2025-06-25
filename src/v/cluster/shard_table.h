@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "cluster/logger.h"
 #include "cluster/notification.h"
@@ -21,8 +22,6 @@
 #include "utils/notification_list.h"
 
 #include <seastar/core/reactor.hh> // shard_id
-
-#include <absl/container/node_hash_map.h>
 
 namespace cluster {
 /// \brief this is populated by consensus::controller

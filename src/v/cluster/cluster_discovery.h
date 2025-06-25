@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -15,8 +16,6 @@
 #include "random/simple_time_jitter.h"
 
 #include <seastar/core/future.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <optional>
 #include <vector>

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/hash/hash.h"
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "model/fundamental.h"
@@ -26,7 +27,6 @@
 
 #include <seastar/core/sstring.hh>
 
-#include <absl/hash/hash.h>
 #include <bits/stdint-intn.h>
 #include <boost/functional/hash.hpp>
 

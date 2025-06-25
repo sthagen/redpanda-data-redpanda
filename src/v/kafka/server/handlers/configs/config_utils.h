@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include "absl/container/node_hash_set.h"
 #include "base/outcome.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
@@ -33,8 +34,6 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
-
-#include <absl/container/node_hash_set.h>
 
 #include <algorithm>
 #include <optional>

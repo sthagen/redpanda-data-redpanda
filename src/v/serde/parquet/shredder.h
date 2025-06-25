@@ -9,13 +9,12 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/functional/function_ref.h"
 #include "base/seastarx.h"
 #include "serde/parquet/schema.h"
 #include "serde/parquet/value.h"
 
 #include <seastar/core/future.hh>
-
-#include <absl/functional/function_ref.h>
 
 namespace serde::parquet {
 

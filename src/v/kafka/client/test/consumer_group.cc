@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "base/vassert.h"
 #include "bytes/bytes.h"
 #include "kafka/client/client.h"
@@ -47,7 +48,6 @@
 #include <seastar/util/log.hh>
 #include <seastar/util/noncopyable_function.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/test/tools/old/interface.hpp>
 
 #include <algorithm>

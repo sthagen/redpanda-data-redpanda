@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
 #include "container/chunked_circular_buffer.h"
 #include "model/metadata.h"
 #include "model/record.h"
@@ -32,7 +33,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <gtest/gtest.h>
 
 using namespace raft;

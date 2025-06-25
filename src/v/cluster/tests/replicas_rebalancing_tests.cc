@@ -1,4 +1,5 @@
 
+#include "absl/container/node_hash_map.h"
 #include "cluster/controller_api.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/tests/rebalancing_tests_fixture.h"
@@ -7,7 +8,6 @@
 #include "ssx/future-util.h"
 #include "test_utils/async.h"
 
-#include <absl/container/node_hash_map.h>
 #include <boost/test/tools/old/interface.hpp>
 
 #include <algorithm>

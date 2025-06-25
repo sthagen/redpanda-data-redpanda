@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "kafka/client/logger.h"
 #include "kafka/client/produce_batcher.h"
 #include "kafka/client/produce_partition.h"
@@ -18,8 +19,6 @@
 #include "model/fundamental.h"
 #include "ssx/future-util.h"
 #include "utils/prefix_logger.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace kafka::client {
 

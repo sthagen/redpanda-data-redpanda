@@ -11,10 +11,10 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "config/configuration.h"
 #include "config/property.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/range/iterator_range.hpp>
 
 #include <iosfwd>

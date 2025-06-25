@@ -11,14 +11,13 @@
 
 #include "serde/parquet/writer.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
 #include "container/contiguous_range_map.h"
 #include "serde/parquet/column_writer.h"
 #include "serde/parquet/metadata.h"
 #include "serde/parquet/shredder.h"
-
-#include <absl/container/flat_hash_set.h>
 
 #include <algorithm>
 

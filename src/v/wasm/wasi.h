@@ -28,6 +28,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "model/timestamp.h"
 #include "utils/named_type.h"
 #include "wasm/ffi.h"
@@ -35,8 +36,6 @@
 
 #include <seastar/core/sstring.hh>
 #include <seastar/util/noncopyable_function.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <chrono>
 #include <string_view>

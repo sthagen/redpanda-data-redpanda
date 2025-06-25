@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"
 #include "config/property.h"
@@ -28,8 +29,6 @@
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <memory>
 #include <type_traits>

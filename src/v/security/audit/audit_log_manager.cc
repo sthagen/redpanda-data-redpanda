@@ -10,6 +10,7 @@
 
 #include "security/audit/audit_log_manager.h"
 
+#include "absl/algorithm/container.h"
 #include "base/outcome.h"
 #include "cluster/controller.h"
 #include "cluster/ephemeral_credential_frontend.h"
@@ -38,8 +39,6 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/coroutine/maybe_yield.hh>
-
-#include <absl/algorithm/container.h>
 
 #include <memory>
 #include <optional>

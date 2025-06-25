@@ -9,6 +9,7 @@
 
 #include "cluster/scheduling/partition_allocator.h"
 
+#include "absl/container/node_hash_set.h"
 #include "base/units.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/controller_snapshot.h"
@@ -33,7 +34,6 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/later.hh>
 
-#include <absl/container/node_hash_set.h>
 #include <sys/resource.h>
 
 #include <algorithm>

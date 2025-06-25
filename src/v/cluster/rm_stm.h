@@ -11,6 +11,10 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
+#include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "bytes/iobuf.h"
 #include "cluster/fwd.h"
 #include "cluster/producer_state.h"
@@ -33,11 +37,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/btree_map.h>
-#include <absl/container/btree_set.h>
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 
 #include <string_view>
 #include <system_error>

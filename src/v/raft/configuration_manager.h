@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/units.h"
 #include "group_configuration.h"
 #include "model/fundamental.h"
@@ -26,8 +27,6 @@
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <utility>
 #include <vector>

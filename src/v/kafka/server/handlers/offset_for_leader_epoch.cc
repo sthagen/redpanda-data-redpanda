@@ -9,6 +9,7 @@
 
 #include "kafka/server/handlers/offset_for_leader_epoch.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/shard_table.h"
 #include "container/fragmented_vector.h"
@@ -23,8 +24,6 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/smp.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 #include <algorithm>
 #include <iterator>

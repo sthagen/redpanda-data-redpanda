@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "base/outcome.h"
 #include "base/vassert.h"
 #include "model/fundamental.h"
@@ -30,9 +32,6 @@
 #include <seastar/core/timed_out_error.hh>
 #include <seastar/util/bool_class.hh>
 #include <seastar/util/log.hh>
-
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_map.h>
 
 #include <optional>
 #include <system_error>

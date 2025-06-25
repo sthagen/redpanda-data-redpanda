@@ -11,14 +11,13 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "kafka/client/configuration.h"
 #include "kafka/client/produce_batcher.h"
 
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/util/noncopyable_function.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace kafka::client {
 

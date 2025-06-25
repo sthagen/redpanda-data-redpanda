@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_set.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_roles/types.h"
 #include "cloud_storage/configuration.h"
@@ -70,7 +71,6 @@
 #include <seastar/core/timed_out_error.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <fmt/format.h>
 
 #include <chrono>

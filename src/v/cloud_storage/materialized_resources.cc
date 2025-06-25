@@ -10,6 +10,7 @@
 
 #include "cloud_storage/materialized_resources.h"
 
+#include "absl/container/btree_map.h"
 #include "base/vlog.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/materialized_manifest_cache.h"
@@ -25,8 +26,6 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/core/temporary_buffer.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <algorithm>
 #include <chrono>

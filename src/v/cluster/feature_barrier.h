@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "cluster/fwd.h"
 #include "cluster/types.h"
 #include "rpc/types.h"
@@ -19,9 +21,6 @@
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sleep.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 
 namespace cluster {
 

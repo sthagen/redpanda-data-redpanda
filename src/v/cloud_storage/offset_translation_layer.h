@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/types.h"
 #include "model/record_batch_types.h"
@@ -19,8 +20,6 @@
 
 #include <seastar/core/iostream.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace cloud_storage {
 

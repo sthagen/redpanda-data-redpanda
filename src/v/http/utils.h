@@ -11,13 +11,12 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 
 #include <seastar/core/sstring.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace http {
 

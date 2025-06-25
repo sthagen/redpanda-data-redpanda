@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
 #include "base/vlog.h"
 #include "config/property.h"
@@ -21,8 +22,6 @@
 
 #include <seastar/core/sstring.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 #include <iosfwd>
 

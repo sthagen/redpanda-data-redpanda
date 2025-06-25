@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "base/vassert.h"
 #include "model/fundamental.h"
@@ -20,8 +21,6 @@
 #include <seastar/core/future-util.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/timer.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace raft {
 

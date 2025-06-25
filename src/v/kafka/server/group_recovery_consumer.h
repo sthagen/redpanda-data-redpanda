@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "kafka/server/group_data_parser.h"
 #include "kafka/server/group_metadata.h"
 #include "kafka/server/group_stm.h"
@@ -17,8 +18,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
-
-#include <absl/container/node_hash_map.h>
 
 namespace kafka {
 

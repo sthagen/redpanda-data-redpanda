@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "container/fragmented_vector.h"
 #include "hashing/secure.h"
 #include "model/fundamental.h"
@@ -15,8 +16,6 @@
 #include "utils/tracking_allocator.h"
 
 #include <seastar/core/future.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace storage {
 

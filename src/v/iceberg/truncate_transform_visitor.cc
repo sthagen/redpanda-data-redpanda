@@ -10,10 +10,9 @@
 
 #include "iceberg/truncate_transform_visitor.h"
 
+#include "absl/numeric/int128.h"
 #include "bytes/iobuf.h"
 #include "iceberg/values.h"
-
-#include <absl/numeric/int128.h>
 
 #include <cstdint>
 #include <limits>

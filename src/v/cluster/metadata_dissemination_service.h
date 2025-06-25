@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/fwd.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/metadata_dissemination_types.h"
@@ -27,8 +28,6 @@
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 

@@ -11,6 +11,7 @@
 
 #include "wasm/tests/wasm_fixture.h"
 
+#include "absl/strings/ascii.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
@@ -33,7 +34,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/util/file.hh>
 
-#include <absl/strings/ascii.h>
 #include <fmt/chrono.h>
 
 #include <chrono>

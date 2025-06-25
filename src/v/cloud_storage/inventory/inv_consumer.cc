@@ -15,6 +15,7 @@
 #include "cloud_storage/inventory/utils.h"
 #include "cloud_storage/logger.h"
 #include "hashing/xx.h"
+#include "re2/re2.h"
 #include "serde/rw/rw.h"
 #include "serde/rw/scalar.h"
 #include "serde/rw/vector.h"
@@ -24,8 +25,6 @@
 #include <seastar/core/fstream.hh>
 #include <seastar/core/seastar.hh>
 #include <seastar/coroutine/as_future.hh>
-
-#include <re2/re2.h>
 
 #include <exception>
 #include <ranges>

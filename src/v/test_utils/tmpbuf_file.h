@@ -1,4 +1,5 @@
 #pragma once
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "base/vassert.h"
@@ -11,7 +12,6 @@
 #include <seastar/util/later.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/container/btree_map.h>
 #include <sys/stat.h>
 
 #include <numeric>

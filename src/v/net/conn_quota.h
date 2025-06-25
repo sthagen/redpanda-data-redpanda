@@ -9,6 +9,8 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/hash/hash.h"
 #include "base/oncore.h"
 #include "base/seastarx.h"
 #include "base/vassert.h"
@@ -18,9 +20,6 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/net/inet_address.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/hash/hash.h>
 
 namespace net {
 

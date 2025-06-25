@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
 #include "config/configuration.h"
 #include "features/enterprise_feature_messages.h"
 #include "kafka/protocol/errors.h"
@@ -19,7 +20,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/defer.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/test/tools/context.hpp>
 
 using namespace std::chrono_literals; // NOLINT

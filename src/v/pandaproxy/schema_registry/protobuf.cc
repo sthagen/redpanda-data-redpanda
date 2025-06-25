@@ -11,6 +11,9 @@
 
 #include "pandaproxy/schema_registry/protobuf.h"
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/strings/ascii.h"
+#include "absl/strings/escaping.h"
 #include "base/vlog.h"
 #include "bytes/streambuf.h"
 #include "kafka/protocol/errors.h"
@@ -26,9 +29,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/container/flat_hash_set.h>
-#include <absl/strings/ascii.h>
-#include <absl/strings/escaping.h>
 #include <boost/algorithm/string/trim.hpp>
 #include <boost/range/combine.hpp>
 #include <confluent/meta.pb.h>

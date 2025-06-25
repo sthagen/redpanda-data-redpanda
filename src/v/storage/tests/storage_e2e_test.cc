@@ -4960,6 +4960,10 @@ public:
         return std::ranges::max(diffs);
     }
 
+    static std::optional<size_t> disk_usage_size(segment_index& index) {
+        return index._disk_usage_size;
+    }
+
 private:
     segment_index& _index;
     size_t _size;
@@ -6250,6 +6254,91 @@ TEST_F(storage_test_fixture, find_sliding_ranges) {
             }
         } else {
             ASSERT_TRUE(!adjacent_ranges.has_value());
+        }
+    }
+}
+
+TEST_F(storage_test_fixture, segment_cached_disk_usage_set_after_compaction) {
+    storage::log_manager mgr = make_log_manager();
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp = model::ntp("kafka", "a", 0);
+    using overrides_t = storage::ntp_config::default_overrides;
+    overrides_t ov;
+    ov.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+
+    auto log
+      = mgr
+          .manage(storage::ntp_config(
+            ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov)))
+          .get();
+
+    auto add_segment = [log](size_t size, model::term_id term) {
+        do {
+            append_single_record_batch(log, 1, term, 16_KiB, true);
+        } while (log->segments().back()->size_bytes() < size);
+    };
+
+    auto add_segment_func = [&]() {
+        auto size = random_generators::get_int(4_KiB, 10_MiB);
+        add_segment(size, model::term_id(0));
+        log->force_roll().get();
+    };
+
+    add_segment_func();
+    add_segment_func();
+
+    ss::abort_source as;
+    storage::compaction_config cfg(model::offset::max(), std::nullopt, as);
+    auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
+
+    auto check_cached_sizes = [](auto& seg) {
+        auto disk
+          = storage::testing_details::segment_accessor::data_disk_usage_size(
+            *seg);
+        auto cidx
+          = storage::testing_details::segment_accessor::compaction_index_size(
+            *seg);
+        auto sidx = storage::segment_index_observer::disk_usage_size(
+          seg->index());
+        ASSERT_TRUE(disk.has_value());
+        ASSERT_TRUE(cidx.has_value());
+        ASSERT_TRUE(sidx.has_value());
+
+        ASSERT_EQ(disk.value(), ss::file_size(seg->path().string()).get());
+        ASSERT_EQ(
+          cidx.value(),
+          ss::file_size(seg->path().to_compacted_index().string()).get());
+        ASSERT_EQ(
+          sidx.value(), ss::file_size(seg->path().to_index().string()).get());
+    };
+
+    auto& segs = log->segments();
+
+    // Test self-compaction
+    {
+        auto& s = segs[0];
+        disk_log.segment_self_compact(cfg, s).get();
+        check_cached_sizes(s);
+    }
+
+    // Test adjacent compaction
+    {
+        disk_log.adjacent_merge_compact(segs, cfg).get();
+        for (auto& s : segs) {
+            if (s->finished_self_compaction()) {
+                check_cached_sizes(s);
+            }
+        }
+    }
+
+    // Test sliding window compaction
+    {
+        disk_log.sliding_window_compact(cfg).get();
+        for (auto& s : segs) {
+            if (s->finished_self_compaction()) {
+                ASSERT_TRUE(s->has_clean_compact_timestamp());
+                check_cached_sizes(s);
+            }
         }
     }
 }

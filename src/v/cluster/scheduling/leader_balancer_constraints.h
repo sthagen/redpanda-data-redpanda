@@ -10,6 +10,8 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "cluster/scheduling/leader_balancer_types.h"
 #include "container/chunked_hash_map.h"
 #include "model/metadata.h"
@@ -18,8 +20,6 @@
 #include <seastar/core/metrics.hh>
 #include <seastar/core/sstring.hh>
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
 #include <boost/range/adaptor/reversed.hpp>
 
 #include <functional>

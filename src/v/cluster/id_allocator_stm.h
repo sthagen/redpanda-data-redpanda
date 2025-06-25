@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/fwd.h"
 #include "cluster/state_machine_registry.h"
 #include "model/fundamental.h"
@@ -19,8 +20,6 @@
 #include "raft/persisted_stm.h"
 #include "raft/state_machine.h"
 #include "utils/mutex.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace config {
 struct configuration;

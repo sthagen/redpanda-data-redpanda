@@ -11,6 +11,7 @@
 
 #include "pandaproxy/schema_registry/avro.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "bytes/streambuf.h"
 #include "json/allocator.h"
 #include "json/chunked_input_stream.h"
@@ -29,7 +30,6 @@
 #include <seastar/coroutine/exception.hh>
 #include <seastar/util/defer.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <avro/Compiler.hh>
 #include <avro/Exception.hh>
 #include <avro/GenericDatum.hh>

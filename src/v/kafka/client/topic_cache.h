@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "container/fragmented_vector.h"
 #include "kafka/client/partitioners.h"
@@ -19,9 +21,6 @@
 #include "model/fundamental.h"
 
 #include <seastar/core/future.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 
 namespace kafka::client {
 

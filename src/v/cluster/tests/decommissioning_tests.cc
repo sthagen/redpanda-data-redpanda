@@ -1,10 +1,10 @@
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/tests/rebalancing_tests_fixture.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/test/tools/old/interface.hpp>
 
 FIXTURE_TEST(test_single_node_decomissioning, rebalancing_tests_fixture) {

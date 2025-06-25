@@ -7,10 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_set.h"
 #include "pandaproxy/schema_registry/compatibility.h"
 #include "pandaproxy/schema_registry/types.h"
-
-#include <absl/container/flat_hash_set.h>
 
 namespace pps = pandaproxy::schema_registry;
 

@@ -11,12 +11,11 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "cluster/scheduling/types.h"
 #include "cluster/types.h"
 #include "config/property.h"
 #include "model/fundamental.h"
-
-#include <absl/container/node_hash_map.h>
 
 namespace cluster {
 

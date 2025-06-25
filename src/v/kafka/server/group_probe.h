@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "config/configuration.h"
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
@@ -21,8 +22,6 @@
 #include "model/namespace.h"
 
 #include <seastar/core/metrics.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <algorithm>
 

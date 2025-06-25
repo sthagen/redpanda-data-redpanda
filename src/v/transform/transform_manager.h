@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/transform.h"
@@ -23,8 +24,6 @@
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 namespace transform {
 

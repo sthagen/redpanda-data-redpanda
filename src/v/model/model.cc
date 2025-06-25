@@ -7,6 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/strings/str_split.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
 #include "model/compression.h"
@@ -27,8 +29,6 @@
 #include <seastar/net/inet_address.hh>
 #include <seastar/net/ip.hh>
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/strings/str_split.h>
 #include <fmt/ostream.h>
 
 #include <iostream>

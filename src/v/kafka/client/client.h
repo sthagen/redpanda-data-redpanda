@@ -11,6 +11,9 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "container/fragmented_vector.h"
 #include "kafka/client/assignment_plans.h"
 #include "kafka/client/broker.h"
@@ -34,10 +37,6 @@
 #include "utils/unresolved_address.h"
 
 #include <seastar/core/condition-variable.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_map.h>
 
 namespace kafka::client {
 

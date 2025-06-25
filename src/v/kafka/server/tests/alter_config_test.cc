@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
 #include "config/configuration.h"
 #include "config/leaders_preference.h"
 #include "container/fragmented_vector.h"
@@ -29,7 +30,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/defer.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/test/tools/context.hpp>
 
 #include <optional>

@@ -10,6 +10,8 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "base/outcome_future_utils.h"
 #include "model/metadata.h"
 #include "rpc/backoff_policy.h"
@@ -22,9 +24,6 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
 
 #include <unordered_map>
 

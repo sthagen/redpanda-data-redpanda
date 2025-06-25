@@ -10,6 +10,8 @@
 
 #include "cloud_storage/access_time_tracker.h"
 
+#include "absl/container/btree_map.h"
+#include "absl/container/btree_set.h"
 #include "base/units.h"
 #include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
@@ -24,9 +26,6 @@
 #include <seastar/core/smp.hh>
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
-
-#include <absl/container/btree_map.h>
-#include <absl/container/btree_set.h>
 
 #include <exception>
 #include <ranges>

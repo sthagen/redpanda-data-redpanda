@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 
 #pragma once
+#include "absl/container/node_hash_set.h"
 #include "kafka/server/group.h"
 #include "kafka/server/group_metadata.h"
 #include "model/fundamental.h"
@@ -17,8 +18,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/log.hh>
-
-#include <absl/container/node_hash_set.h>
 
 #include <memory>
 

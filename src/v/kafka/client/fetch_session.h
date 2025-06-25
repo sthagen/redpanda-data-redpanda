@@ -11,10 +11,9 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "kafka/protocol/schemata/offset_commit_request.h"
 #include "model/fundamental.h"
-
-#include <absl/container/node_hash_map.h>
 
 #include <iosfwd>
 

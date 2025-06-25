@@ -11,10 +11,9 @@
 
 #include "serde/parquet/column_stats_collector.h"
 
+#include "absl/numeric/int128.h"
 #include "bytes/iobuf_parser.h"
 #include "serde/parquet/value.h"
-
-#include <absl/numeric/int128.h>
 
 #include <cassert>
 #include <cmath>

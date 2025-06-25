@@ -10,6 +10,10 @@
  */
 #pragma once
 
+#include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
 #include "random/generators.h"
@@ -19,10 +23,6 @@
 #include <seastar/net/inet_address.hh>
 #include <seastar/net/ip.hh>
 
-#include <absl/container/btree_set.h>
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
-#include <absl/container/node_hash_set.h>
 #include <bits/stdint-uintn.h>
 
 #include <iterator>

@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/controller_snapshot.h"
 #include "cluster/tests/topic_table_fixture.h"
 #include "cluster/topic_table.h"
@@ -17,8 +18,6 @@
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/testing/thread_test_case.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 using namespace std::chrono_literals;
 

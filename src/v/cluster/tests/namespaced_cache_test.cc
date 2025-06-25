@@ -6,6 +6,7 @@
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
+#include "absl/container/flat_hash_map.h"
 #include "cluster/namespaced_cache.h"
 #include "config/config_store.h"
 #include "config/property.h"
@@ -16,7 +17,6 @@
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/sstring.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <gtest/gtest.h>
 
 struct fixture : public seastar_test {};

@@ -9,12 +9,11 @@
  */
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "iceberg/manifest_entry.h"
 #include "iceberg/schema.h"
 #include "iceberg/uri.h"
 #include "model/timestamp.h"
-
-#include <absl/container/btree_map.h>
 
 namespace iceberg {
 

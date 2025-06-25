@@ -10,13 +10,12 @@
 
 #include "iceberg/schema_json.h"
 
+#include "absl/container/btree_set.h"
 #include "iceberg/datatypes.h"
 #include "iceberg/datatypes_json.h"
 #include "iceberg/json_utils.h"
 #include "iceberg/schema.h"
 #include "json/document.h"
-
-#include <absl/container/btree_set.h>
 
 namespace iceberg {
 

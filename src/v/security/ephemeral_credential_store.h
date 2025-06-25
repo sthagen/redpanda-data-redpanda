@@ -10,9 +10,8 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "security/ephemeral_credential.h"
-
-#include <absl/container/flat_hash_set.h>
 
 #include <functional>
 #include <iosfwd>

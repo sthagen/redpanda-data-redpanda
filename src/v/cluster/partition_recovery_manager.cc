@@ -10,6 +10,7 @@
 
 #include "cluster/partition_recovery_manager.h"
 
+#include "absl/container/btree_map.h"
 #include "bytes/streambuf.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/partition_manifest_downloader.h"
@@ -40,7 +41,6 @@
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/container/btree_map.h>
 #include <boost/algorithm/string/detail/sequence.hpp>
 
 #include <chrono>

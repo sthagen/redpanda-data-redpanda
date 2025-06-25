@@ -9,6 +9,7 @@
 
 #include "kafka/server/group.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "base/likely.h"
 #include "base/vassert.h"
 #include "bytes/bytes.h"
@@ -44,7 +45,6 @@
 
 #include <seastar/core/coroutine.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/uuid/random_generator.hpp>
 #include <boost/uuid/uuid.hpp>
 #include <boost/uuid/uuid_io.hpp>

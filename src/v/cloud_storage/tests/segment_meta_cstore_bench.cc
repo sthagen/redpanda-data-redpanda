@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "cloud_storage/segment_meta_cstore.h"
 #include "model/fundamental.h"
@@ -16,8 +17,6 @@
 
 #include <seastar/testing/perf_tests.hh>
 #include <seastar/util/defer.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <ranges>
 #include <vector>

@@ -10,11 +10,10 @@
  */
 #pragma once
 
+#include "absl/hash/hash.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "serde/rw/envelope.h"
-
-#include <absl/hash/hash.h>
 
 namespace cluster {
 

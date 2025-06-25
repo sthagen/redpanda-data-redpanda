@@ -11,13 +11,13 @@
 
 #include "cluster/self_test/netcheck.h"
 
+#include "absl/container/flat_hash_map.h"
 #include "base/vassert.h"
 #include "base/vlog.h"
 #include "cluster/logger.h"
 
 #include <seastar/core/coroutine.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/range/irange.hpp>
 
 namespace cluster::self_test {

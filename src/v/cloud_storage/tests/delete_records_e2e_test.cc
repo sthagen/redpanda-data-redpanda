@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/container/flat_hash_set.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/tests/produce_utils.h"
@@ -25,7 +26,6 @@
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/test/tools/old/interface.hpp>
 

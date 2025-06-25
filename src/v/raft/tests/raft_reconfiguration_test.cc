@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_set.h"
 #include "base/outcome.h"
 #include "bytes/bytes.h"
 #include "gtest/gtest.h"
@@ -22,6 +23,7 @@
 #include "random/generators.h"
 #include "serde/rw/rw.h"
 #include "ssx/future-util.h"
+#include "ssx/watchdog.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/async.h"
 #include "test_utils/randoms.h"
@@ -33,7 +35,6 @@
 #include <seastar/coroutine/parallel_for_each.hh>
 #include <seastar/util/bool_class.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <fmt/core.h>
 #include <fmt/ranges.h>
 #include <gmock/gmock-matchers.h>
@@ -476,33 +477,51 @@ TEST_F_CORO(raft_fixture, test_force_reconfiguration) {
 
     bool stop = false;
 
-    auto replicate_fiber = ss::do_until(
-      [&stop] { return stop; },
-      [this] {
-          ss::lw_shared_ptr<consensus> raft;
-          for (auto& n : nodes()) {
-              if (n.second->raft()->is_leader()) {
-                  raft = n.second->raft();
-                  break;
-              }
-          }
+    // Slightly under 15min test timeout.
+    static constexpr auto wd_timeout = 12min;
 
-          if (!raft) {
-              return ss::sleep(100ms);
-          }
-          return raft
-            ->replicate(
-              make_batches(10, 10, 128),
-              replicate_options(raft::consistency_level::quorum_ack))
-            .then([this](result<replicate_result> result) {
-                if (result.has_error()) {
-                    vlog(
-                      logger().info,
-                      "error(replicating): {}",
-                      result.error().message());
-                }
-            });
-      });
+    auto make_watchdog = [](ss::sstring name) {
+        return std::make_unique<ssx::watchdog>(
+          wd_timeout, [name = std::move(name)] {
+              vlog(test_log.warn, "{} fiber did not stop in time", name);
+          });
+    };
+
+    auto replicate_fiber
+      = ss::do_until(
+          [&stop] { return stop; },
+          [this] {
+              ss::lw_shared_ptr<consensus> raft;
+              for (auto& n : nodes()) {
+                  if (n.second->raft()->is_leader()) {
+                      raft = n.second->raft();
+                      break;
+                  }
+              }
+
+              if (!raft) {
+                  return ss::sleep(100ms);
+              }
+              auto replicate_f
+                = raft
+                    ->replicate(
+                      make_batches(10, 10, 128),
+                      replicate_options(raft::consistency_level::quorum_ack))
+                    .then([this](result<replicate_result> result) {
+                        if (result.has_error()) {
+                            vlog(
+                              logger().info,
+                              "error(replicating): {}",
+                              result.error().message());
+                        }
+                    });
+              return ss::with_timeout(
+                       ss::lowres_clock::now() + 10s, std::move(replicate_f))
+                .handle_exception_type([this](const ss::timed_out_error&) {
+                    vlog(logger().info, "error(replicating): timedout");
+                });
+          })
+          .finally([wd = make_watchdog("replicate")] {});
 
     std::vector<vnode> base_replica_set = all_vnodes();
     size_t reconfiguration_count = 0;
@@ -588,56 +607,64 @@ TEST_F_CORO(raft_fixture, test_force_reconfiguration) {
         return reconfigure_until_success(revision, to_skip);
     };
 
-    auto reconfigure_fiber = ss::do_until(
-      [&] { return stop; },
-      [&] {
-          return reconfigure_all()
-            .then([&]() {
-                reconfiguration_count++;
+    auto reconfigure_fiber
+      = ss::do_until(
+          [&] { return stop; },
+          [&] {
+              return reconfigure_all()
+                .then([&]() {
+                    reconfiguration_count++;
 
-                if (reconfiguration_count >= 50) {
-                    stop = true;
-                }
-                return ss::now();
-            })
-            .handle_exception([](const std::exception_ptr&) {
-                // ignore exception
-            });
-      });
+                    if (reconfiguration_count >= 50) {
+                        stop = true;
+                        vlog(
+                          logger().info,
+                          "Stopping fibers after {} reconfigurations",
+                          reconfiguration_count);
+                    }
+                    return ss::now();
+                })
+                .handle_exception([](const std::exception_ptr&) {
+                    // ignore exception
+                });
+          })
+          .finally([wd = make_watchdog("reconfiguration")] {});
 
-    auto l_transfer_fiber = ss::do_until(
-      [&stop] { return stop; },
-      [&, this] {
-          std::vector<raft::vnode> not_leaders;
-          ss::lw_shared_ptr<consensus> raft;
-          for (auto& n : current_replicas) {
-              if (node(n.id()).raft()->is_leader()) {
-                  raft = node(n.id()).raft();
-              } else {
-                  not_leaders.push_back(n);
+    auto l_transfer_fiber
+      = ss::do_until(
+          [&stop] { return stop; },
+          [&, this] {
+              std::vector<raft::vnode> not_leaders;
+              ss::lw_shared_ptr<consensus> raft;
+              for (auto& n : current_replicas) {
+                  if (node(n.id()).raft()->is_leader()) {
+                      raft = node(n.id()).raft();
+                  } else {
+                      not_leaders.push_back(n);
+                  }
               }
-          }
 
-          if (!raft) {
-              return ss::sleep(100ms);
-          }
-          auto target = random_generators::random_choice(not_leaders);
-          return raft
-            ->transfer_leadership(transfer_leadership_request{
-              .group = raft->group(),
-              .target = target.id(),
-              .timeout = 25ms,
-            })
-            .then([this](transfer_leadership_reply r) {
-                if (r.result != raft::errc::success) {
-                    vlog(logger().info, "error(transferring): {}", r);
-                }
-            })
-            .then([] { return ss::sleep(200ms); })
-            .handle_exception([](const std::exception_ptr&) {
-                // ignore exception
-            });
-      });
+              if (!raft) {
+                  return ss::sleep(100ms);
+              }
+              auto target = random_generators::random_choice(not_leaders);
+              return raft
+                ->transfer_leadership(transfer_leadership_request{
+                  .group = raft->group(),
+                  .target = target.id(),
+                  .timeout = 25ms,
+                })
+                .then([this](transfer_leadership_reply r) {
+                    if (r.result != raft::errc::success) {
+                        vlog(logger().info, "error(transferring): {}", r);
+                    }
+                })
+                .then([] { return ss::sleep(200ms); })
+                .handle_exception([](const std::exception_ptr&) {
+                    // ignore exception
+                });
+          })
+          .finally([wd = make_watchdog("leadership transfer")] {});
 
     co_await ss::when_all(
       std::move(replicate_fiber),

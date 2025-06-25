@@ -7,6 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/node_hash_map.h"
+#include "absl/strings/str_split.h"
 #include "container/chunked_circular_buffer.h"
 #include "container/chunked_hash_map.h"
 #include "kafka/protocol/types.h"
@@ -25,8 +27,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/sstring.hh>
 
-#include <absl/container/node_hash_map.h>
-#include <absl/strings/str_split.h>
 #include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 

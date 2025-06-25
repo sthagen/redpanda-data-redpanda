@@ -8,6 +8,7 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
+#include "absl/container/flat_hash_set.h"
 #include "cluster/controller.h"
 #include "cluster/security_frontend.h"
 #include "features/enterprise_feature_messages.h"
@@ -32,8 +33,6 @@
 #include <seastar/http/request.hh>
 #include <seastar/http/url.hh>
 #include <seastar/json/json_elements.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 #include <optional>
 #include <sstream>

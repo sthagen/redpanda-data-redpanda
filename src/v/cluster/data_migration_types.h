@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "cluster/errc.h"
 #include "container/fragmented_vector.h"
 #include "model/metadata.h"
@@ -24,8 +25,6 @@
 #include "utils/named_type.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 #include <ranges>
 

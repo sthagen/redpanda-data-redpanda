@@ -11,7 +11,9 @@
 
 #include "transform/logging/log_manager.h"
 
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/escaping.h"
 #include "base/vassert.h"
 #include "event.h"
 #include "logger.h"
@@ -24,9 +26,6 @@
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/smp.hh>
 #include <seastar/coroutine/as_future.hh>
-
-#include <absl/algorithm/container.h>
-#include <absl/strings/escaping.h>
 
 namespace transform::logging {
 namespace {

@@ -10,13 +10,12 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_map.h"
 #include "cluster/members_table.h"
 #include "cluster/partition_balancer_types.h"
 #include "cluster/scheduling/allocation_node.h"
 #include "cluster/scheduling/types.h"
 #include "model/metadata.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 

@@ -11,12 +11,11 @@
 
 #pragma once
 
+#include "absl/container/node_hash_set.h"
 #include "hashing/murmur.h"
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
 #include "reflection/adl.h"
-
-#include <absl/container/node_hash_set.h>
 
 #include <algorithm>
 #include <cstdint>

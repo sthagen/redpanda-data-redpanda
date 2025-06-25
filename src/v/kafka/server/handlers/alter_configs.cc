@@ -9,6 +9,7 @@
 
 #include "kafka/server/handlers/alter_configs.h"
 
+#include "absl/container/node_hash_set.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
@@ -32,7 +33,6 @@
 #include <seastar/core/smp.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/container/node_hash_set.h>
 #include <fmt/ostream.h>
 
 #include <string_view>

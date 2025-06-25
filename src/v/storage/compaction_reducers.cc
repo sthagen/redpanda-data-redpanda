@@ -9,6 +9,7 @@
 
 #include "storage/compaction_reducers.h"
 
+#include "absl/algorithm/container.h"
 #include "base/vlog.h"
 #include "compression/compression.h"
 #include "model/record.h"
@@ -26,7 +27,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 
-#include <absl/algorithm/container.h>
 #include <boost/range/irange.hpp>
 
 #include <algorithm>

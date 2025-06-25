@@ -10,12 +10,11 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/metrics.hh>
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 /*
  * Class which allows tracking all our registered metrics and their

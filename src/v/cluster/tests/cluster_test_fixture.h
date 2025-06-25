@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_map.h"
 #include "cluster/fwd.h"
 #include "cluster/tests/utils.h"
 #include "cluster/types.h"
@@ -26,8 +27,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/defer.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <utility>
 

@@ -9,11 +9,11 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "debug_bundle/types.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/lexical_cast.hpp>
 #include <gtest/gtest.h>
 

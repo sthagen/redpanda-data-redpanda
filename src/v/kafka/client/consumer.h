@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
+#include "absl/hash/hash.h"
 #include "container/fragmented_vector.h"
 #include "kafka/client/assignment_plans.h"
 #include "kafka/client/brokers.h"
@@ -24,9 +26,6 @@
 #include "kafka/protocol/offset_fetch.h"
 
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/node_hash_map.h>
-#include <absl/hash/hash.h>
 
 #include <chrono>
 #include <iterator>

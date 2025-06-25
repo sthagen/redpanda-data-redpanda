@@ -13,11 +13,10 @@
 /**
  * Transpartent hash & eq functors for ss::sstring
  */
+#include "absl/hash/hash.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <absl/hash/hash.h>
 
 #include <string_view>
 #include <type_traits>

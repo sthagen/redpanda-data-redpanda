@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
+#include "absl/container/node_hash_map.h"
 #include "base/outcome.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"
@@ -29,9 +31,6 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/btree_map.h>
-#include <absl/container/node_hash_map.h>
 
 #include <cstdint>
 #include <iosfwd>

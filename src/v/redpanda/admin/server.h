@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 #include "base/type_traits.h"
 #include "cloud_storage/fwd.h"
@@ -47,8 +48,6 @@
 #include <seastar/json/json_elements.hh>
 #include <seastar/util/bool_class.hh>
 #include <seastar/util/log.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 struct admin_server_cfg {
     std::vector<model::broker_endpoint> endpoints;

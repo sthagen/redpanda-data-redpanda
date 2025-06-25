@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_map.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "metrics/metrics.h"
@@ -29,8 +31,6 @@
 #include <seastar/net/api.hh>
 #include <seastar/net/tls.hh>
 
-#include <absl/container/btree_map.h>
-#include <absl/container/flat_hash_map.h>
 #include <bits/stdint-uintn.h>
 
 #include <concepts>

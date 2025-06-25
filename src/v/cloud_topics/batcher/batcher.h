@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "base/units.h"
@@ -28,8 +29,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/lowres_clock.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <chrono>
 

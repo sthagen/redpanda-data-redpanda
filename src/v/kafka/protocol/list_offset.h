@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/btree_set.h"
 #include "bytes/iobuf.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/list_offset_request.h"
@@ -19,8 +20,6 @@
 #include "model/timestamp.h"
 
 #include <seastar/core/future.hh>
-
-#include <absl/container/btree_set.h>
 
 namespace kafka {
 

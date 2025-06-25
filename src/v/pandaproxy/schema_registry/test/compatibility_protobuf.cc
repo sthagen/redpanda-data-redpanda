@@ -9,6 +9,7 @@
 
 #include "pandaproxy/schema_registry/test/compatibility_protobuf.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "bytes/iobuf_parser.h"
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/exceptions.h"
@@ -19,7 +20,6 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/test/unit_test.hpp>
 #include <fmt/core.h>
 

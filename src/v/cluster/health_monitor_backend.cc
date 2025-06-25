@@ -10,6 +10,8 @@
  */
 #include "cluster/health_monitor_backend.h"
 
+#include "absl/container/node_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "cluster/cloud_storage_size_reducer.h"
 #include "cluster/controller_service.h"
 #include "cluster/errc.h"
@@ -42,8 +44,6 @@
 #include <seastar/core/with_timeout.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/container/node_hash_map.h>
-#include <absl/container/node_hash_set.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>
 

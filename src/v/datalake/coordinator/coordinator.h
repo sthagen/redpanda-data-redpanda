@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "absl/hash/hash.h"
 #include "cluster/fwd.h"
 #include "config/property.h"
 #include "container/fragmented_vector.h"
@@ -17,8 +18,6 @@
 #include "datalake/coordinator/state_machine.h"
 #include "datalake/fwd.h"
 #include "model/fundamental.h"
-
-#include <absl/hash/hash.h>
 
 namespace datalake::coordinator {
 

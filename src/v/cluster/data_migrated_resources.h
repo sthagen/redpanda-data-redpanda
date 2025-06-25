@@ -9,12 +9,11 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/flat_hash_set.h"
 #include "cluster/data_migration_types.h"
 #include "cluster/fwd.h"
 #include "container/chunked_hash_map.h"
 #include "model/metadata.h"
-
-#include <absl/container/flat_hash_set.h>
 
 namespace cluster::data_migrations {
 /**

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/outcome.h"
 #include "container/fragmented_vector.h"
 #include "raft/types.h"
@@ -18,8 +19,6 @@
 #include "utils/mutex.h"
 
 #include <seastar/core/gate.hh>
-
-#include <absl/container/flat_hash_map.h>
 namespace raft {
 class consensus;
 

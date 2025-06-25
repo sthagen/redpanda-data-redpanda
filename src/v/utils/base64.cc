@@ -10,13 +10,12 @@
  */
 #include "utils/base64.h"
 
+#include "absl/strings/escaping.h"
 #include "base/units.h"
 #include "base/vassert.h"
 #include "thirdparty/base64/libbase64.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <absl/strings/escaping.h>
 
 #include <ranges>
 

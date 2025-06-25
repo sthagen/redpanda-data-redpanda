@@ -9,12 +9,11 @@
  */
 #pragma once
 
+#include "absl/numeric/int128.h"
 #include "bytes/iobuf.h"
 #include "container/fragmented_vector.h"
 #include "iceberg/datatypes.h"
 #include "utils/uuid.h"
-
-#include <absl/numeric/int128.h>
 
 #include <optional>
 #include <variant>

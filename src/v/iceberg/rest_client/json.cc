@@ -10,9 +10,8 @@
 
 #include "iceberg/rest_client/json.h"
 
+#include "absl/strings/ascii.h"
 #include "iceberg/json_utils.h"
-
-#include <absl/strings/ascii.h>
 
 namespace iceberg::rest_client {
 oauth_token parse_oauth_token(const json::Document& doc) {

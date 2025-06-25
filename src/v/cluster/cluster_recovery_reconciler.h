@@ -10,13 +10,12 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/cluster_recovery_table.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "features/feature_table.h"
 #include "security/credential_store.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 struct user_credential {

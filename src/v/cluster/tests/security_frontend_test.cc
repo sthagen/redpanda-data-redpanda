@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/algorithm/container.h"
 #include "cluster/commands.h"
 #include "cluster/feature_manager.h"
 #include "cluster/fwd.h"
@@ -21,7 +22,6 @@
 #include "test_utils/async.h"
 #include "test_utils/fixture.h"
 
-#include <absl/algorithm/container.h>
 #include <boost/range/irange.hpp>
 
 #include <algorithm>

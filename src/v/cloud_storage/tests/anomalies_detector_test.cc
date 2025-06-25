@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/container/flat_hash_set.h"
 #include "bytes/iostream.h"
 #include "cloud_storage/anomalies_detector.h"
 #include "cloud_storage/base_manifest.h"
@@ -26,7 +27,6 @@
 
 #include <seastar/util/short_streams.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 

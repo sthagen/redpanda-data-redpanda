@@ -10,14 +10,13 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/fwd.h"
 #include "cluster/health_monitor_types.h"
 #include "cluster/partition_balancer_types.h"
 #include "cluster/scheduling/types.h"
 #include "cluster/types.h"
 #include "model/metadata.h"
-
-#include <absl/container/flat_hash_map.h>
 
 #include <chrono>
 

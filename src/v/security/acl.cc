@@ -10,6 +10,8 @@
  */
 #include "security/acl.h"
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "security/acl_store.h"
 #include "security/logger.h"
 #include "serde/envelope.h"
@@ -19,8 +21,6 @@
 
 #include <seastar/coroutine/maybe_yield.hh>
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 #include <container/fragmented_vector.h>
 #include <fmt/format.h>
 

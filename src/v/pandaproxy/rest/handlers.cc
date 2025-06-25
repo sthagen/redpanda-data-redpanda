@@ -9,6 +9,7 @@
 
 #include "handlers.h"
 
+#include "absl/container/flat_hash_map.h"
 #include "base/vlog.h"
 #include "kafka/client/exceptions.h"
 #include "kafka/protocol/fetch.h"
@@ -33,7 +34,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/http/reply.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 

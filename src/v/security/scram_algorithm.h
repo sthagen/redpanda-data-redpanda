@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/node_hash_map.h"
 #include "bytes/bytes.h"
 #include "bytes/random.h"
 #include "hashing/secure.h"
@@ -16,8 +17,6 @@
 #include "security/scram_credential.h"
 #include "ssx/sformat.h"
 #include "utils/base64.h"
-
-#include <absl/container/node_hash_map.h>
 
 /**
  * scram algorthm - https://tools.ietf.org/html/rfc5802

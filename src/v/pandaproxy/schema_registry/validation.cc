@@ -10,6 +10,7 @@
 
 #include "pandaproxy/schema_registry/validation.h"
 
+#include "absl/algorithm/container.h"
 #include "bytes/iobuf_parser.h"
 #include "cluster/partition_probe.h"
 #include "cluster/types.h"
@@ -36,8 +37,6 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/coroutine/exception.hh>
-
-#include <absl/algorithm/container.h>
 
 #include <iterator>
 #include <optional>

@@ -11,6 +11,7 @@
 
 #include "wasi.h"
 
+#include "absl/strings/str_join.h"
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "base/vassert.h"
@@ -25,8 +26,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/later.hh>
 #include <seastar/util/log.hh>
-
-#include <absl/strings/str_join.h>
 
 #include <chrono>
 #include <cstdint>

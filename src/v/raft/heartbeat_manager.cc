@@ -9,6 +9,8 @@
 
 #include "raft/heartbeat_manager.h"
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "base/likely.h"
 #include "base/outcome_future_utils.h"
 #include "base/vlog.h"
@@ -33,8 +35,6 @@
 #include <seastar/core/timed_out_error.hh>
 #include <seastar/core/with_timeout.hh>
 
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_map.h>
 #include <bits/stdint-uintn.h>
 #include <boost/range/iterator_range.hpp>
 

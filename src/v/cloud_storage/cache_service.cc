@@ -15,6 +15,7 @@
 #include "cloud_storage/logger.h"
 #include "cloud_storage/recursive_directory_walker.h"
 #include "config/configuration.h"
+#include "re2/re2.h"
 #include "seastar/util/file.hh"
 #include "ssx/future-util.h"
 #include "ssx/sformat.h"
@@ -30,7 +31,6 @@
 #include <seastar/util/defer.hh>
 
 #include <cloud_storage/cache_service.h>
-#include <re2/re2.h>
 
 #include <algorithm>
 #include <exception>

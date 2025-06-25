@@ -9,6 +9,8 @@
 
 #include "ssx/thread_worker.h"
 
+#include "absl/algorithm/container.h"
+
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/manual_clock.hh>
@@ -16,7 +18,6 @@
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/later.hh>
 
-#include <absl/algorithm/container.h>
 #include <boost/test/unit_test_log.hpp>
 
 struct move_only {

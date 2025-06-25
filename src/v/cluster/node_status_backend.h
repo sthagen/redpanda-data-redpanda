@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
 #include "cluster/fwd.h"
 #include "cluster/node_status_rpc_types.h"
@@ -26,8 +27,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timer.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 namespace cluster {
 

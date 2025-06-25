@@ -10,12 +10,11 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "config/configuration.h"
 #include "config/property.h"
 #include "model/metadata.h"
 #include "rpc/types.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 

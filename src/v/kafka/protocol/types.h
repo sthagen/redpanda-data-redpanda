@@ -10,13 +10,13 @@
  */
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "bytes/bytes.h"
 #include "model/fundamental.h"
 #include "utils/named_type.h"
 
 #include <seastar/core/sstring.hh>
 
-#include <absl/container/btree_map.h>
 #include <boost/numeric/conversion/cast.hpp>
 
 #include <concepts>

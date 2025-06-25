@@ -10,6 +10,7 @@
 
 #include "kafka/server/handlers/alter_partition_reassignments.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "cluster/errc.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/topics_frontend.h"
@@ -24,7 +25,6 @@
 #include "model/namespace.h"
 #include "model/timeout_clock.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <fmt/format.h>
 
 #include <algorithm>

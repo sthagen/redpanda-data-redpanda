@@ -11,6 +11,8 @@
 
 #include "transform/rpc/client.h"
 
+#include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_map.h"
 #include "base/type_traits.h"
 #include "cluster/errc.h"
 #include "cluster/types.h"
@@ -46,8 +48,6 @@
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/noncopyable_function.hh>
 
-#include <absl/container/btree_map.h>
-#include <absl/container/flat_hash_map.h>
 #include <boost/fusion/sequence/intrinsic/back.hpp>
 #include <boost/outcome/basic_result.hpp>
 #include <boost/range/irange.hpp>

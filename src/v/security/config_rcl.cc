@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "re2/re2.h"
 #include "security/config.h"
 #include "security/gssapi_rule.h"
 #include "security/mtls_rule.h"
@@ -17,7 +18,6 @@
 #include "ssx/sformat.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
-#include <re2/re2.h>
 
 #include <ada.h>
 #include <charconv>

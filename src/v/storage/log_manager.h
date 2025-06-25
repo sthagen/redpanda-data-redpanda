@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "config/property.h"
@@ -38,9 +40,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
 
 #include <array>
 #include <chrono>

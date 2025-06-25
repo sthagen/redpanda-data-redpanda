@@ -8,11 +8,11 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "absl/hash/hash.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/sstring.hh>
 
-#include <absl/hash/hash.h>
 #include <boost/uuid/uuid.hpp>
 
 #include <string>

@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
 #include "compression/stream_zstd.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -28,7 +29,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test_log.hpp>
 

@@ -9,6 +9,11 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/btree_map.h"
+#include "absl/container/btree_set.h"
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/str_split.h"
 #include "cluster/errc.h"
 #include "config/property.h"
 #include "model/fundamental.h"
@@ -23,11 +28,6 @@
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/print.hh>
 
-#include <absl/container/btree_map.h>
-#include <absl/container/btree_set.h>
-#include <absl/strings/numbers.h>
-#include <absl/strings/str_cat.h>
-#include <absl/strings/str_split.h>
 #include <fmt/ostream.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

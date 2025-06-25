@@ -7,11 +7,11 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_replace.h"
+#include "absl/time/time.h"
 #include "thirdparty/libxml2/xmlwriter.h"
 
-#include <absl/strings/str_format.h>
-#include <absl/strings/str_replace.h>
-#include <absl/time/time.h>
 #include <boost/test/results_collector.hpp>
 #include <boost/test/tree/traverse.hpp>
 #include <boost/test/unit_test.hpp>

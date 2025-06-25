@@ -12,6 +12,8 @@
 #include "compression/internal/snappy_java_compressor.h"
 #include "compression/snappy_standard_compressor.h"
 #include "random/generators.h"
+#include "snappy-sinksource.h"
+#include "snappy.h"
 #include "utils/file_io.h"
 
 #include <seastar/core/byteorder.hh>
@@ -22,8 +24,6 @@
 #include <gtest/gtest.h>
 
 #include <cstdlib>
-#include <snappy-sinksource.h>
-#include <snappy.h>
 
 TEST(SnappyTest, CompressAndDecompressSnappyStandardTest) {
     const auto data = random_generators::gen_alphanum_string(512);

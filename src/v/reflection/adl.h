@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_set.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
@@ -20,8 +21,6 @@
 
 #include <seastar/core/byteorder.hh>
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/btree_set.h>
 
 #include <optional>
 #include <type_traits>

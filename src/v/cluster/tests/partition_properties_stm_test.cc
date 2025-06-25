@@ -8,6 +8,7 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
+#include "absl/container/flat_hash_set.h"
 #include "bytes/iobuf.h"
 #include "cluster/logger.h"
 #include "cluster/partition_properties_stm.h"
@@ -28,7 +29,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/file.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <gtest/gtest.h>
 
 #include <filesystem>

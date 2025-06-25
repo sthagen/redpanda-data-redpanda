@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_set.h"
 #include "bytes/iobuf_parser.h"
 #include "pandaproxy/schema_registry/protobuf.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
@@ -15,7 +16,6 @@
 #include "test_utils/runfiles.h"
 #include "utils/file_io.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <fmt/core.h>
 #include <gtest/gtest.h>
 

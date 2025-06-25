@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -30,9 +32,6 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/btree_map.h>
-#include <absl/container/flat_hash_map.h>
 
 #include <cstdint>
 #include <memory>

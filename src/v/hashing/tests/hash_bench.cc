@@ -7,6 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/hash/hash.h"
+#include "absl/strings/string_view.h"
 #include "bytes/bytes.h"
 #include "hashing/crc32c.h"
 #include "hashing/murmur.h"
@@ -22,8 +24,6 @@
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/testing/perf_tests.hh>
 
-#include <absl/hash/hash.h>
-#include <absl/strings/string_view.h>
 #include <boost/crc.hpp>
 
 #include <cstdint>

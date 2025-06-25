@@ -9,12 +9,12 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/node_hash_map.h"
 #include "config/property.h"
 #include "container/intrusive_list_helpers.h"
 
 #include <seastar/core/lowres_clock.hh>
 
-#include <absl/container/node_hash_map.h>
 #include <boost/intrusive/list_hook.hpp>
 
 #include <algorithm>

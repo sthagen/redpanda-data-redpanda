@@ -9,6 +9,8 @@
 
 #include "server.h"
 
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_map.h"
 #include "base/vlog.h"
 #include "cluster/id_allocator_frontend.h"
 #include "cluster/security_frontend.h"
@@ -86,8 +88,6 @@
 #include <seastar/net/tls.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/algorithm/container.h>
-#include <absl/container/flat_hash_map.h>
 #include <fmt/format.h>
 
 #include <chrono>

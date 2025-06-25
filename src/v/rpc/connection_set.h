@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/outcome.h"
 #include "base/outcome_future_utils.h"
 #include "config/tls_config.h"
@@ -22,8 +23,6 @@
 
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <chrono>
 #include <unordered_map>

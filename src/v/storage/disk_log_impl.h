@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "storage/disk_log_appender.h"
@@ -28,8 +29,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 struct storage_e2e_fixture;
 struct reupload_fixture;

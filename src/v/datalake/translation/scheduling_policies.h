@@ -10,10 +10,9 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "config/property.h"
 #include "datalake/translation/scheduling.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace datalake::translation::scheduling {
 

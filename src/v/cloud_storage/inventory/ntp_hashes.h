@@ -11,14 +11,13 @@
 
 #pragma once
 
+#include "absl/container/node_hash_set.h"
 #include "model/fundamental.h"
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/iostream.hh>
-
-#include <absl/container/node_hash_set.h>
 
 namespace cloud_storage::inventory {
 

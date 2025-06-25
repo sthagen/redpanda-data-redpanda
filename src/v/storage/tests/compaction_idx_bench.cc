@@ -7,6 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "model/fundamental.h"
 #include "random/generators.h"
 #include "storage/compacted_index.h"
@@ -16,9 +18,6 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/testing/perf_tests.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 
 #include <unordered_map>
 

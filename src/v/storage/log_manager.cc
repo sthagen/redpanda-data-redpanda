@@ -9,6 +9,7 @@
 
 #include "storage/log_manager.h"
 
+#include "absl/container/btree_map.h"
 #include "base/likely.h"
 #include "base/vlog.h"
 #include "config/configuration.h"
@@ -60,7 +61,6 @@
 #include <seastar/util/file.hh>
 #include <seastar/util/later.hh>
 
-#include <absl/container/btree_map.h>
 #include <boost/algorithm/string/predicate.hpp>
 #include <fmt/format.h>
 

@@ -11,11 +11,10 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/notification.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 

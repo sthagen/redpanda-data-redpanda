@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/node_hash_map.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "cluster/controller_backend.h"
@@ -22,8 +23,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <system_error>
 

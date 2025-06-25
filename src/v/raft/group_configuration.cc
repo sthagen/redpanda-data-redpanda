@@ -9,6 +9,7 @@
 
 #include "raft/group_configuration.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "config/config_store.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
@@ -18,7 +19,6 @@
 #include "raft/consensus_utils.h"
 #include "serde/rw/rw.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <bits/stdint-uintn.h>
 #include <boost/range/join.hpp>
 

@@ -11,6 +11,7 @@
 
 #include "wasm/parser/parser.h"
 
+#include "absl/algorithm/container.h"
 #include "base/units.h"
 #include "bytes/iobuf_parser.h"
 #include "strings/utf8.h"
@@ -20,7 +21,6 @@
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/algorithm/container.h>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <sys/types.h>

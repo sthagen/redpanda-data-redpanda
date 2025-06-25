@@ -10,6 +10,7 @@
 
 #include "kafka/server/handlers/create_partitions.h"
 
+#include "absl/container/node_hash_map.h"
 #include "cluster/metadata_cache.h"
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
@@ -26,8 +27,6 @@
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <algorithm>
 #include <chrono>

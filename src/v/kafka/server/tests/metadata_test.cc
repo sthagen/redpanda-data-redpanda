@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/algorithm/container.h"
 #include "cluster/security_frontend.h"
 #include "kafka/client/transport.h"
 #include "kafka/protocol/create_topics.h"
@@ -21,7 +22,6 @@
 #include "security/types.h"
 #include "test_utils/random_bytes.h"
 
-#include <absl/algorithm/container.h>
 #include <boost/test/tools/old/interface.hpp>
 
 static const int32_t not_provided_authz_return = -2147483648;

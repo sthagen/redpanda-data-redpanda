@@ -7,6 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "base/type_traits.h"
 #include "bytes/hash.h"
 #include "bytes/iobuf.h"
@@ -21,9 +24,6 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/btree_map.h>
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 #include <boost/test/tools/old/interface.hpp>
 #include <boost/test/unit_test.hpp>
 

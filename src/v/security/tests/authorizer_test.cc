@@ -6,6 +6,7 @@
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
+#include "absl/container/flat_hash_set.h"
 #include "config/mock_property.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "random/generators.h"
@@ -17,7 +18,6 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/test/unit_test.hpp>
 #include <fmt/ostream.h>

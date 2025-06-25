@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/numeric/int128.h"
 #include "bytes/iobuf.h"
 #include "iceberg/bucket_transform_hashing_visitor.h"
 #include "iceberg/transform.h"
@@ -17,7 +18,6 @@
 #include "random/generators.h"
 #include "test_utils/random_bytes.h"
 
-#include <absl/numeric/int128.h>
 #include <fmt/chrono.h>
 #include <gtest/gtest.h>
 

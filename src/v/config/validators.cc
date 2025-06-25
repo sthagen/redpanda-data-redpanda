@@ -11,6 +11,9 @@
 
 #include "config/validators.h"
 
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_set.h"
 #include "config/configuration.h"
 #include "config/types.h"
 #include "datalake/partition_spec_parser.h"
@@ -20,9 +23,6 @@
 #include "ssx/sformat.h"
 #include "utils/inet_address_wrapper.h"
 
-#include <absl/algorithm/container.h>
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_set.h>
 #include <fmt/format.h>
 
 #include <array>

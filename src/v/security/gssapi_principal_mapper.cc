@@ -12,12 +12,12 @@
 
 #include "base/vassert.h"
 #include "base/vlog.h"
+#include "re2/re2.h"
 #include "security/logger.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-#include <re2/re2.h>
 
 #include <charconv>
 

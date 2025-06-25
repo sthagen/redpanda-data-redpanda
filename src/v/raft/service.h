@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/likely.h"
 #include "base/seastarx.h"
 #include "model/metadata.h"
@@ -26,8 +27,6 @@
 #include <seastar/core/with_timeout.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/coroutine/switch_to.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <vector>
 

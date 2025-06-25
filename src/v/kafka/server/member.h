@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_set.h"
 #include "bytes/bytes.h"
 #include "bytes/iobuf.h"
 #include "container/fragmented_vector.h"
@@ -20,8 +21,6 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 #include <chrono>
 #include <iosfwd>

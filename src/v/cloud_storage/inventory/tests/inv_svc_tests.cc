@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/node_hash_set.h"
 #include "cloud_storage/inventory/inv_ops.h"
 #include "cloud_storage/inventory/tests/common.h"
 #include "cloud_storage/inventory/types.h"
@@ -30,7 +31,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sleep.hh>
 
-#include <absl/container/node_hash_set.h>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/algorithm/string/replace.hpp>
 #include <gmock/gmock.h>

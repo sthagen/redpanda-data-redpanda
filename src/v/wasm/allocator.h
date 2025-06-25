@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/btree_set.h"
 #include "base/seastarx.h"
 
 #include <seastar/core/aligned_buffer.hh>
@@ -17,8 +18,6 @@
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
-
-#include <absl/container/btree_set.h>
 
 namespace wasm {
 

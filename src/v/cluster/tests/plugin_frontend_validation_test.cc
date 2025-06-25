@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/commands.h"
 #include "cluster/data_migrated_resources.h"
 #include "cluster/fwd.h"
@@ -25,7 +26,6 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sstring.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/range/irange.hpp>
 #include <gtest/gtest.h>
 

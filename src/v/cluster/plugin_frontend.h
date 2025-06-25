@@ -8,6 +8,7 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
+#include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
 #include "cluster/commands.h"
 #include "cluster/fwd.h"
@@ -17,8 +18,6 @@
 #include "model/timeout_clock.h"
 #include "rpc/connection_cache.h"
 #include "utils/mutex.h"
-
-#include <absl/container/flat_hash_set.h>
 
 #include <variant>
 

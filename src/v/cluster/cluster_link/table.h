@@ -10,14 +10,13 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/controller_snapshot.h"
 #include "cluster_link/model/types.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster::cluster_link {
 /**

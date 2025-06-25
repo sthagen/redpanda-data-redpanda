@@ -18,6 +18,7 @@
  * ../src/v/bytes/iobuf.cc > cov.html
  */
 
+#include "absl/container/btree_map.h"
 #include "bytes/iobuf.h"
 #include "cloud_storage/segment_meta_cstore.h"
 #include "cloud_storage/types.h"
@@ -25,7 +26,6 @@
 #include "reflection/to_tuple.h"
 #include "serde/type_str.h"
 
-#include <absl/container/btree_map.h>
 #include <fmt/core.h>
 #include <fmt/format.h>
 #include <fmt/ranges.h>

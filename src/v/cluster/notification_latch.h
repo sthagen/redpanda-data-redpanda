@@ -11,12 +11,11 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/errc.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 #include "utils/expiring_promise.h"
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 /// Cache notifications

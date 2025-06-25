@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/btree_map.h"
 #include "base/vlog.h"
 #include "cluster/feature_manager.h"
 #include "cluster/feature_update_action.h"
@@ -34,8 +35,6 @@
 #include "utils/directory_walker.h"
 
 #include <seastar/core/sleep.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <chrono>
 #include <numeric>

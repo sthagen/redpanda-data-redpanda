@@ -9,6 +9,7 @@
 // by the Apache License, Version 2.0
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
 #include "cluster/errc.h"
 #include "model/timeout_clock.h"
@@ -16,8 +17,6 @@
 #include "serde/envelope.h"
 #include "serde/rw/variant.h"
 #include "strings/string_switch.h"
-
-#include <absl/container/flat_hash_set.h>
 
 #include <concepts>
 #include <cstdint>

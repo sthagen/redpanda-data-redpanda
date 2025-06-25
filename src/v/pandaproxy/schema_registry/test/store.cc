@@ -9,12 +9,12 @@
 
 #include "pandaproxy/schema_registry/store.h"
 
+#include "absl/algorithm/container.h"
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/test/compatibility_avro.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/schema_registry/util.h"
 
-#include <absl/algorithm/container.h>
 #include <boost/test/unit_test.hpp>
 
 namespace pps = pandaproxy::schema_registry;

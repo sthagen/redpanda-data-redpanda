@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cloud_storage/fwd.h"
 #include "cluster/errc.h"
 #include "cluster/fwd.h"
@@ -29,8 +30,6 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <chrono>
 #include <system_error>

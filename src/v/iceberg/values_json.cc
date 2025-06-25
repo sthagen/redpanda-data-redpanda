@@ -10,11 +10,11 @@
 
 #include "iceberg/values_json.h"
 
+#include "absl/strings/numbers.h"
+#include "absl/strings/str_split.h"
+#include "absl/time/time.h"
 #include "iceberg/json_utils.h"
 
-#include <absl/strings/numbers.h>
-#include <absl/strings/str_split.h>
-#include <absl/time/time.h>
 #include <boost/iostreams/device/array.hpp>
 #include <boost/iostreams/stream.hpp>
 #include <boost/range/irange.hpp>

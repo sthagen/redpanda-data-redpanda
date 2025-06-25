@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/strings/str_split.h"
 #include "bytes/iobuf_parser.h"
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
@@ -20,7 +21,6 @@
 
 #include <seastar/core/sleep.hh>
 
-#include <absl/strings/str_split.h>
 #include <boost/range/irange.hpp>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>

@@ -9,6 +9,8 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/node_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "bytes/iobuf_parser.h"
 #include "cluster/drain_manager.h"
 #include "cluster/errc.h"
@@ -27,9 +29,6 @@
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/node_hash_map.h>
-#include <absl/container/node_hash_set.h>
 
 namespace cluster {
 

@@ -11,6 +11,10 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "cluster/client_quota_serde.h"
 #include "cluster/cluster_recovery_state.h"
 #include "cluster/data_migration_types.h"
@@ -22,11 +26,6 @@
 #include "security/role.h"
 #include "security/types.h"
 #include "serde/envelope.h"
-
-#include <absl/container/btree_map.h>
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_map.h>
 
 namespace cluster {
 

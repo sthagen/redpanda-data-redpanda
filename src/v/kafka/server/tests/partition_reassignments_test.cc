@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
 #include "config/configuration.h"
 #include "container/fragmented_vector.h"
 #include "kafka/protocol/alter_partition_reassignments.h"
@@ -21,8 +22,6 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/defer.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <optional>
 

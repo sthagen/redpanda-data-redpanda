@@ -11,11 +11,10 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "json/document.h"
 #include "model/fundamental.h"
 #include "model/record_batch_types.h"
-
-#include <absl/container/flat_hash_map.h>
 
 #include <optional>
 #include <string_view>

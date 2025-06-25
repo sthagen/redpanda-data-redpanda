@@ -9,6 +9,7 @@
 
 #include "cluster/topic_updates_dispatcher.h"
 
+#include "absl/container/node_hash_map.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
 #include "cluster/controller_snapshot.h"
@@ -23,7 +24,6 @@
 
 #include <seastar/coroutine/maybe_yield.hh>
 
-#include <absl/container/node_hash_map.h>
 #include <fmt/ranges.h>
 
 #include <iterator>

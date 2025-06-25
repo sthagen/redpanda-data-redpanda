@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "base/oncore.h"
 #include "base/vassert.h"
 #include "cluster/types.h"
@@ -21,9 +23,6 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/weak_ptr.hh>
 #include <seastar/util/noncopyable_function.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_set.h>
 
 #include <optional>
 

@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "cloud_io/remote.h"
 #include "cloud_topics/reconciler/range_batch_consumer.h"
@@ -21,8 +22,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <optional>
 

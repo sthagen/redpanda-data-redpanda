@@ -9,6 +9,7 @@
 
 #include "kafka/client/client.h"
 
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
@@ -39,8 +40,6 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/coroutine/exception.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <algorithm>
 #include <cstdlib>

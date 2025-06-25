@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "cluster/errc.h"
 #include "cluster/partition_balancer_types.h"
 #include "cluster/types.h"
@@ -23,8 +24,6 @@
 #include "utils/uuid.h"
 
 #include <seastar/net/inet_address.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <type_traits>
 

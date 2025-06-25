@@ -9,6 +9,7 @@
 
 #include "redpanda/application.h"
 
+#include "absl/log/globals.h"
 #include "base/vlog.h"
 #include "cli_parser.h"
 #include "cloud_io/remote.h"
@@ -171,7 +172,6 @@
 #include <seastar/util/defer.hh>
 #include <seastar/util/log.hh>
 
-#include <absl/log/globals.h>
 #include <fmt/format.h>
 #if __has_include(<google/protobuf/runtime_version.h>)
 #include <google/protobuf/runtime_version.h>

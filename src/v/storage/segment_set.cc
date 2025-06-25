@@ -9,6 +9,7 @@
 
 #include "storage/segment_set.h"
 
+#include "absl/container/btree_set.h"
 #include "base/vassert.h"
 #include "base/vlog.h"
 #include "storage/fs_utils.h"
@@ -23,7 +24,6 @@
 #include <seastar/core/seastar.hh>
 #include <seastar/core/thread.hh>
 
-#include <absl/container/btree_set.h>
 #include <fmt/format.h>
 
 #include <exception>
@@ -281,8 +281,8 @@ static ss::future<segment_set> unsafe_do_recover(
           to_recover.begin(),
           to_recover.end(),
           [](ss::lw_shared_ptr<segment>& segment) {
-              auto stat = segment->reader().stat().get();
-              if (stat.st_size != 0) {
+              auto size = segment->reader().fsize().get();
+              if (size != 0) {
                   return true;
               }
               vlog(stlog.info, "Removing empty segment: {}", segment);

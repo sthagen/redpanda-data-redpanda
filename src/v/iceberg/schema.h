@@ -9,12 +9,11 @@
  */
 #pragma once
 
+#include "absl/container/btree_set.h"
 #include "base/outcome.h"
 #include "container/chunked_hash_map.h"
 #include "iceberg/datatypes.h"
 #include "utils/named_type.h"
-
-#include <absl/container/btree_set.h>
 
 namespace iceberg {
 

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 #include "io.h"
 #include "model/fundamental.h"
@@ -25,8 +26,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/queue.hh>
 #include <seastar/util/noncopyable_function.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <memory>
 #include <variant>

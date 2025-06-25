@@ -8,6 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/container/btree_map.h"
 #include "datalake/partition_spec_parser.h"
 #include "iceberg/compatibility.h"
 #include "iceberg/compatibility_types.h"
@@ -16,7 +17,6 @@
 #include "iceberg/partition.h"
 #include "random/generators.h"
 
-#include <absl/container/btree_map.h>
 #include <boost/range/irange.hpp>
 #include <fmt/format.h>
 #include <gtest/gtest.h>

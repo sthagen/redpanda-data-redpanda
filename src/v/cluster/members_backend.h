@@ -1,5 +1,7 @@
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "cluster/fwd.h"
 #include "cluster/members_manager.h"
 #include "cluster/scheduling/types.h"
@@ -8,9 +10,6 @@
 #include "model/metadata.h"
 
 #include <seastar/core/condition-variable.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_set.h>
 
 #include <chrono>
 #include <iosfwd>

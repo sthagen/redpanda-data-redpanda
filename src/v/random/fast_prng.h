@@ -11,8 +11,8 @@
 
 #pragma once
 
-#include <absl/random/internal/pcg_engine.h>
-#include <absl/random/seed_sequences.h>
+#include "absl/random/internal/pcg_engine.h"
+#include "absl/random/seed_sequences.h"
 
 // dumb wrapper around pcg32
 class fast_prng {

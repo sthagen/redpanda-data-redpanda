@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
 #include "container/intrusive_list_helpers.h"
@@ -18,8 +19,6 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/gate.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace datalake::translation::scheduling {
 

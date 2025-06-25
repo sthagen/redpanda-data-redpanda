@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_map.h"
 #include "absl/container/node_hash_set.h"
@@ -20,7 +21,6 @@
 
 #include <seastar/util/noncopyable_function.hh>
 
-#include <absl/algorithm/container.h>
 #include <boost/range/iterator_range.hpp>
 
 #include <ranges>

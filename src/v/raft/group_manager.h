@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_map.h"
 #include "config/property.h"
 #include "metrics/metrics.h"
 #include "model/metadata.h"
@@ -25,8 +26,6 @@
 
 #include <seastar/core/metrics_registration.hh>
 #include <seastar/core/scheduling.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace raft {
 

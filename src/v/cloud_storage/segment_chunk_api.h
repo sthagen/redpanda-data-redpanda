@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "cloud_storage/segment_chunk.h"
 #include "container/fragmented_vector.h"
 #include "model/metadata.h"
@@ -18,8 +19,6 @@
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/gate.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace cloud_storage {
 

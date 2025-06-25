@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "cluster/cloud_metadata/offsets_lookup.h"
 #include "cluster/cloud_metadata/offsets_lookup_rpc_types.h"
@@ -18,8 +19,6 @@
 #include "model/metadata.h"
 #include "rpc/connection_cache.h"
 #include "utils/retry_chain_node.h"
-
-#include <absl/container/btree_map.h>
 
 namespace cluster::cloud_metadata {
 

@@ -9,6 +9,7 @@
 
 #include "cluster/metadata_dissemination_service.h"
 
+#include "absl/container/flat_hash_set.h"
 #include "base/likely.h"
 #include "base/vassert.h"
 #include "base/vlog.h"
@@ -39,8 +40,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/sleep.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 #include <chrono>
 #include <exception>

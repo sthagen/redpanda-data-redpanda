@@ -9,6 +9,7 @@
  */
 #include "iceberg/conversion/values_protobuf.h"
 
+#include "absl/time/time.h"
 #include "bytes/iobuf.h"
 #include "container/fragmented_vector.h"
 #include "iceberg/conversion/conversion_outcome.h"
@@ -20,7 +21,6 @@
 #include <seastar/util/log.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/time/time.h>
 #include <fmt/core.h>
 
 namespace iceberg {

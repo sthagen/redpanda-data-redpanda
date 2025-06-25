@@ -11,6 +11,8 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "base/vassert.h"
 #include "config/validators.h"
@@ -28,9 +30,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/net/net.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 
 #include <chrono>
 

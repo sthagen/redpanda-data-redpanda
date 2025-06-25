@@ -9,13 +9,13 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_set.h"
 #include "cloud_storage/inventory/inv_consumer.h"
 #include "cloud_storage/inventory/ntp_hashes.h"
 #include "cloud_storage/inventory/tests/common.h"
 #include "test_utils/tmp_dir.h"
 #include "utils/base64.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

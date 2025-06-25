@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/strings/escaping.h"
 #include "base/vassert.h"
 #include "http/client.h"
 #include "pandaproxy/schema_registry/sharded_store.h"
@@ -17,8 +18,6 @@
 #include "pandaproxy/test/pandaproxy_fixture.h"
 
 #include <seastar/testing/perf_tests.hh>
-
-#include <absl/strings/escaping.h>
 
 namespace pps = pandaproxy::schema_registry;
 

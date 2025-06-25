@@ -1,3 +1,4 @@
+#include "absl/strings/escaping.h"
 #include "base/outcome.h"
 #include "base/units.h"
 #include "config/mock_property.h"
@@ -14,7 +15,6 @@
 #include <seastar/core/manual_clock.hh>
 #include <seastar/core/shared_ptr.hh>
 
-#include <absl/strings/escaping.h>
 #include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 

@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
@@ -19,8 +20,6 @@
 #include "model/record.h"
 
 #include <seastar/core/weak_ptr.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace experimental::cloud_topics {
 

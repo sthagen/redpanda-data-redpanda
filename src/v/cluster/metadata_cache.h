@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 #include "cluster/fwd.h"
 #include "cluster/members_table.h"
@@ -24,8 +25,6 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 

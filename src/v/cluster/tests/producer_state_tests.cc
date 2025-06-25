@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/producer_state.h"
 #include "cluster/producer_state_manager.h"
 #include "cluster/types.h"
@@ -22,7 +23,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/test/tools/old/interface.hpp>
 
 #include <cstdint>

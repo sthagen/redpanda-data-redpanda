@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "hashing/xx.h"
@@ -19,8 +20,6 @@
 #include "utils/mutex.h"
 
 #include <seastar/core/future.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <chrono>
 #include <string_view>

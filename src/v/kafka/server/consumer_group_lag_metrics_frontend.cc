@@ -11,6 +11,7 @@
 
 #include "consumer_group_lag_metrics_frontend.h"
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/metadata_cache.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/server/consumer_group_lag_metrics_rpc_service.h"
@@ -22,8 +23,6 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/shard_id.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <algorithm>
 

@@ -9,14 +9,13 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cluster/types.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 

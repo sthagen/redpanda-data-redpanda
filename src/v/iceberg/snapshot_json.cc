@@ -9,13 +9,12 @@
  */
 #include "iceberg/snapshot_json.h"
 
+#include "absl/container/btree_map.h"
 #include "iceberg/json_utils.h"
 #include "iceberg/snapshot.h"
 #include "json/document.h"
 #include "model/timestamp.h"
 #include "strings/string_switch.h"
-
-#include <absl/container/btree_map.h>
 
 namespace iceberg {
 

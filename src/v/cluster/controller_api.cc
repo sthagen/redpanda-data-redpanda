@@ -10,6 +10,7 @@
  */
 #include "cluster/controller_api.h"
 
+#include "absl/container/node_hash_map.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/controller_backend.h"
 #include "cluster/controller_service.h"
@@ -36,8 +37,6 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/variant_utils.hh>
-
-#include <absl/container/node_hash_map.h>
 
 namespace cluster {
 

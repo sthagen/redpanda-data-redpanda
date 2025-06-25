@@ -8,14 +8,14 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "cloud_roles/signature.h"
 #include "http/client.h"
 
 #include <seastar/core/temporary_buffer.hh>
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/strings/str_join.h>
-#include <absl/strings/str_split.h>
 #include <boost/test/unit_test.hpp>
 
 #include <chrono>

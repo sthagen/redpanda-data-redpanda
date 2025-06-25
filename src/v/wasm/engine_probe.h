@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "metrics/metrics.h"
 
@@ -18,8 +19,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/core/weak_ptr.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace wasm {
 

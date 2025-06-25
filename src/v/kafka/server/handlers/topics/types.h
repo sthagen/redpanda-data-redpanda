@@ -10,6 +10,7 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_map.h"
 #include "cluster/types.h"
 #include "container/fragmented_vector.h"
 #include "kafka/protocol/schemata/create_topics_request.h"
@@ -21,7 +22,6 @@
 #include "model/namespace.h"
 #include "utils/absl_sstring_hash.h"
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/algorithm/string.hpp>
 #include <boost/lexical_cast.hpp>
 

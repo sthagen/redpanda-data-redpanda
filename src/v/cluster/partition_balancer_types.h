@@ -10,6 +10,8 @@
 
 #pragma once
 
+#include "absl/container/btree_set.h"
+#include "absl/container/flat_hash_map.h"
 #include "cluster/errc.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
@@ -21,9 +23,6 @@
 #include "serde/rw/optional.h"
 #include "serde/rw/set.h"
 #include "serde/rw/vector.h"
-
-#include <absl/container/btree_set.h>
-#include <absl/container/flat_hash_map.h>
 
 namespace cluster {
 

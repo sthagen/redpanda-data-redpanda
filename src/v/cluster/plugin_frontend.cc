@@ -10,6 +10,9 @@
  */
 #include "plugin_frontend.h"
 
+#include "absl/container/flat_hash_set.h"
+#include "absl/strings/escaping.h"
+#include "absl/strings/str_join.h"
 #include "cluster/controller_service.h"
 #include "cluster/controller_stm.h"
 #include "cluster/logger.h"
@@ -20,10 +23,6 @@
 #include "model/namespace.h"
 #include "model/transform.h"
 #include "strings/utf8.h"
-
-#include <absl/container/flat_hash_set.h>
-#include <absl/strings/escaping.h>
-#include <absl/strings/str_join.h>
 
 #include <utility>
 

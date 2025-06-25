@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_map.h"
 #include "serde/rw/envelope.h"
 #include "serde/rw/map.h"
 #include "serde/rw/optional.h"
@@ -18,7 +19,6 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/container_hash/hash.hpp>
 #include <boost/test/unit_test.hpp>
 

@@ -9,6 +9,8 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
@@ -34,9 +36,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/net/socket_defs.hh>
-
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
 
 #include <functional>
 #include <memory>

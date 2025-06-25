@@ -11,12 +11,11 @@
 
 #pragma once
 
+#include "absl/container/inlined_vector.h"
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/inlined_vector.h>
 
 #include <algorithm>
 #include <cstdint>

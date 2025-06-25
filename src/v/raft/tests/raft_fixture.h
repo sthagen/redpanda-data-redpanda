@@ -11,6 +11,7 @@
  */
 
 #pragma once
+#include "absl/container/node_hash_map.h"
 #include "config/mock_property.h"
 #include "config/property.h"
 #include "features/feature_table.h"
@@ -37,7 +38,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/bool_class.hh>
 
-#include <absl/container/node_hash_map.h>
 #include <boost/range/irange.hpp>
 
 #include <ranges>

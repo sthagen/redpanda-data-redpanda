@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "config/property.h"
 
@@ -22,8 +23,6 @@
 #include <seastar/core/smp.hh>
 #include <seastar/core/timer.hh>
 #include <seastar/util/backtrace.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <chrono>
 #include <cstdint>

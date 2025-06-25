@@ -9,6 +9,9 @@
 
 #include "cluster/controller_backend.h"
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "base/outcome.h"
 #include "base/vassert.h"
 #include "cloud_storage/remote_path_provider.h"
@@ -51,9 +54,6 @@
 #include <seastar/util/later.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_map.h>
 #include <fmt/ranges.h>
 
 #include <algorithm>

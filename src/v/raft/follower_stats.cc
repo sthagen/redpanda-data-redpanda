@@ -9,9 +9,8 @@
 
 #include "raft/follower_stats.h"
 
+#include "absl/container/node_hash_map.h"
 #include "raft/group_configuration.h"
-
-#include <absl/container/node_hash_map.h>
 
 namespace raft {
 void follower_stats::update_with_configuration(const group_configuration& cfg) {

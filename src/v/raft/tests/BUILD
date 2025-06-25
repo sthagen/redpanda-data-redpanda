@@ -554,6 +554,7 @@ redpanda_cc_gtest(
         "//src/v/random:generators",
         "//src/v/serde",
         "//src/v/ssx:future_util",
+        "//src/v/ssx:watchdog",
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:fixture",
         "//src/v/test_utils:gtest",

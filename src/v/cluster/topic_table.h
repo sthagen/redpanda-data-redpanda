@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "cluster/commands.h"
 #include "cluster/fwd.h"
 #include "cluster/notification.h"
@@ -21,8 +22,6 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "utils/stable_iterator_adaptor.h"
-
-#include <absl/container/node_hash_map.h>
 
 #include <type_traits>
 

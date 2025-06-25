@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/container/flat_hash_set.h"
 #include "pandaproxy/schema_registry/compatibility.h"
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/errors.h"
@@ -20,7 +21,6 @@
 #include <seastar/testing/thread_test_case.hh>
 #include <seastar/util/defer.hh>
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/test/tools/context.hpp>
 #include <fmt/core.h>
 #include <jsoncons/json.hpp>

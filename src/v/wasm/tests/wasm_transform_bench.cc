@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/strings/ascii.h"
 #include "base/units.h"
 #include "model/tests/random_batch.h"
 #include "model/tests/randoms.h"
@@ -28,8 +29,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/testing/perf_tests.hh>
 #include <seastar/util/file.hh>
-
-#include <absl/strings/ascii.h>
 
 #include <cstdlib>
 #include <memory>

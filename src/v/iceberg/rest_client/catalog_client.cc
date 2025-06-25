@@ -10,6 +10,8 @@
 
 #include "iceberg/rest_client/catalog_client.h"
 
+#include "absl/strings/str_join.h"
+#include "absl/strings/strip.h"
 #include "bytes/streambuf.h"
 #include "config/types.h"
 #include "http/request_builder.h"
@@ -27,8 +29,6 @@
 #include <seastar/core/sleep.hh>
 #include <seastar/coroutine/as_future.hh>
 
-#include <absl/strings/str_join.h>
-#include <absl/strings/strip.h>
 #include <rapidjson/error/en.h>
 
 namespace {

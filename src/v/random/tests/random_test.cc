@@ -8,10 +8,10 @@
 // by the Apache License, Version 2.0
 
 #define BOOST_TEST_MODULE random
+#include "absl/container/flat_hash_set.h"
 #include "random/fast_prng.h"
 #include "random/generators.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/test/unit_test.hpp>
 
 #include <set>

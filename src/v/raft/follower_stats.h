@@ -11,10 +11,9 @@
 
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "base/vassert.h"
 #include "raft/types.h"
-
-#include <absl/container/node_hash_map.h>
 
 namespace raft {
 

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/outcome.h"
 #include "model/fundamental.h"
 #include "raft/fwd.h"
@@ -21,8 +22,6 @@
 
 #include <seastar/core/gate.hh>
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace raft {
 using is_prevote = ss::bool_class<struct is_prevote_tag>;

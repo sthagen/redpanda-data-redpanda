@@ -9,6 +9,7 @@
 
 #pragma once
 
+#include "absl/algorithm/container.h"
 #include "http/client.h"
 #include "json/document.h"
 #include "pandaproxy/json/exceptions.h"
@@ -17,7 +18,6 @@
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/test/utils.h"
 
-#include <absl/algorithm/container.h>
 #include <boost/beast/http/status.hpp>
 #include <boost/beast/http/verb.hpp>
 

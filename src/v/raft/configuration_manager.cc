@@ -9,6 +9,7 @@
 
 #include "raft/configuration_manager.h"
 
+#include "absl/container/btree_map.h"
 #include "base/vlog.h"
 #include "bytes/iobuf_parser.h"
 #include "features/feature_table.h"
@@ -23,7 +24,6 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/util/defer.hh>
 
-#include <absl/container/btree_map.h>
 #include <boost/range/irange.hpp>
 #include <fmt/ostream.h>
 

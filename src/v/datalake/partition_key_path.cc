@@ -10,6 +10,7 @@
 
 #include "datalake/partition_key_path.h"
 
+#include "absl/strings/str_replace.h"
 #include "base/vlog.h"
 #include "bytes/iobuf_parser.h"
 #include "datalake/logger.h"
@@ -17,7 +18,6 @@
 #include "ssx/sformat.h"
 #include "utils/base64.h"
 
-#include <absl/strings/str_replace.h>
 #include <fmt/chrono.h>
 namespace datalake {
 namespace {

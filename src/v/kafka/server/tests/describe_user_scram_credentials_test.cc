@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "absl/algorithm/container.h"
 #include "cluster/security_frontend.h"
 #include "kafka/protocol/describe_user_scram_credentials.h"
 #include "kafka/protocol/types.h"
@@ -19,8 +20,6 @@
 #include "security/types.h"
 
 #include <seastar/core/sstring.hh>
-
-#include <absl/algorithm/container.h>
 
 class describe_user_scram_credentials_fixture : public redpanda_thread_fixture {
 protected:

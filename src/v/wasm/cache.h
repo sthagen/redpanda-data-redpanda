@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "model/transform.h"
 #include "utils/mutex.h"
 #include "wasm/engine.h"
@@ -18,8 +19,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/weak_ptr.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace wasm {
 

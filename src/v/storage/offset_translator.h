@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/units.h"
 #include "model/fundamental.h"
 #include "raft/fundamental.h"
@@ -23,8 +24,6 @@
 #include "utils/prefix_logger.h"
 
 #include <seastar/util/bool_class.hh>
-
-#include <absl/container/btree_map.h>
 
 namespace storage {
 

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
 #include "raft/fwd.h"
@@ -27,8 +28,6 @@
 #include <seastar/core/scheduling.hh>
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/sstring.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 #include <concepts>
 #include <string_view>

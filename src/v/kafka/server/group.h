@@ -10,6 +10,8 @@
  */
 
 #pragma once
+#include "absl/container/node_hash_map.h"
+#include "absl/container/node_hash_set.h"
 #include "base/seastarx.h"
 #include "cluster/fwd.h"
 #include "cluster/simple_batch_builder.h"
@@ -38,9 +40,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/bool_class.hh>
 #include <seastar/util/log.hh>
-
-#include <absl/container/node_hash_map.h>
-#include <absl/container/node_hash_set.h>
 
 #include <iosfwd>
 #include <optional>

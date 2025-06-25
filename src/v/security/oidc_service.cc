@@ -9,6 +9,8 @@
  */
 #include "security/oidc_service.h"
 
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_map.h"
 #include "config/configuration.h"
 #include "config/tls_config.h"
 #include "http/client.h"
@@ -29,8 +31,6 @@
 #include <seastar/coroutine/exception.hh>
 #include <seastar/util/defer.hh>
 
-#include <absl/algorithm/container.h>
-#include <absl/container/flat_hash_map.h>
 #include <boost/outcome/success_failure.hpp>
 
 #include <chrono>

@@ -10,6 +10,8 @@
  */
 
 #pragma once
+#include "absl/container/flat_hash_set.h"
+#include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "cluster/cloud_metadata/offsets_snapshot.h"
 #include "cluster/notification.h"
@@ -42,9 +44,6 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
 #include <seastar/core/sharded.hh>
-
-#include <absl/container/flat_hash_set.h>
-#include <absl/container/node_hash_map.h>
 
 #include <system_error>
 

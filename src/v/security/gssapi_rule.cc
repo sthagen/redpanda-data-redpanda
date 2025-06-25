@@ -11,10 +11,10 @@
 
 #include "base/vassert.h"
 #include "base/vlog.h"
+#include "re2/re2.h"
 #include "security/logger.h"
 
 #include <boost/algorithm/string/case_conv.hpp>
-#include <re2/re2.h>
 
 #include <charconv>
 #include <optional>

@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "bytes/iobuf.h"
@@ -20,8 +21,6 @@
 #include "utils/delta_for.h"
 
 #include <seastar/util/log.hh>
-
-#include <absl/container/btree_map.h>
 
 #include <variant>
 

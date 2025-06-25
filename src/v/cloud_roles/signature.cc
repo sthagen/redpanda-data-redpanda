@@ -10,6 +10,8 @@
 
 #include "signature.h"
 
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "base/vlog.h"
 #include "bytes/bytes.h"
 #include "cloud_roles/logger.h"
@@ -23,8 +25,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sstring.hh>
 
-#include <absl/strings/str_join.h>
-#include <absl/strings/str_split.h>
 #include <boost/algorithm/string/compare.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <boost/algorithm/string/trim.hpp>

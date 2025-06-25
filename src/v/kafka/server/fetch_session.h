@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "absl/container/flat_hash_map.h"
 #include "container/chunked_hash_map.h"
 #include "container/intrusive_list_helpers.h"
 #include "kafka/protocol/errors.h"
@@ -17,7 +18,6 @@
 #include "model/ktp.h"
 #include "model/timeout_clock.h"
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/iterator/iterator_adaptor.hpp>
 #include <boost/iterator/transform_iterator.hpp>
 #include <boost/iterator_adaptors.hpp>

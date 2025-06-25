@@ -11,9 +11,9 @@
 
 #include "serde/parquet/value.h"
 
-#include <seastar/util/variant_utils.hh>
+#include "absl/strings/escaping.h"
 
-#include <absl/strings/escaping.h>
+#include <seastar/util/variant_utils.hh>
 
 namespace serde::parquet {
 

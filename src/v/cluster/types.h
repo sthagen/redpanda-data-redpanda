@@ -11,6 +11,9 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/node_hash_map.h"
+#include "absl/hash/hash.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
 #include "cluster/errc.h"
 #include "cluster/feature_update_action.h"
@@ -58,9 +61,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/node_hash_map.h>
-#include <absl/hash/hash.h>
 #include <fmt/format.h>
 
 #include <chrono>

@@ -11,6 +11,7 @@
 
 #include "pandaproxy/schema_registry/sharded_store.h"
 
+#include "absl/algorithm/container.h"
 #include "base/vlog.h"
 #include "config/configuration.h"
 #include "container/fragmented_vector.h"
@@ -33,7 +34,6 @@
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/exception.hh>
 
-#include <absl/algorithm/container.h>
 #include <fmt/core.h>
 
 #include <functional>

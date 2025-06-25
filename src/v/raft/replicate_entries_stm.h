@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "model/fundamental.h"
@@ -24,8 +25,6 @@
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/flat_hash_map.h>
 
 namespace raft {
 

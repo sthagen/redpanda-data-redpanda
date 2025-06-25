@@ -10,12 +10,11 @@
  */
 #pragma once
 
+#include "absl/container/node_hash_map.h"
 #include "model/fundamental.h"
 #include "model/ktp.h"
 
 #include <seastar/core/lowres_clock.hh>
-
-#include <absl/container/node_hash_map.h>
 
 #include <optional>
 

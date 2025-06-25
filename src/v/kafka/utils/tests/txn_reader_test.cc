@@ -9,6 +9,9 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/algorithm/container.h"
+#include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_map.h"
 #include "bytes/iobuf.h"
 #include "container/chunked_circular_buffer.h"
 #include "gmock/gmock.h"
@@ -28,9 +31,6 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/algorithm/container.h>
-#include <absl/container/btree_map.h>
-#include <absl/container/flat_hash_map.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 

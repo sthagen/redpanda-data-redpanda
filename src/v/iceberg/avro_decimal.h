@@ -9,10 +9,9 @@
  */
 #pragma once
 
+#include "absl/numeric/int128.h"
 #include "bytes/bytes.h"
 #include "bytes/iobuf.h"
-
-#include <absl/numeric/int128.h>
 
 #include <array>
 namespace iceberg {

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/container/flat_hash_set.h"
 #include "kafka/client/configuration.h"
 #include "kafka/client/exceptions.h"
 #include "kafka/client/logger.h"
@@ -22,8 +23,6 @@
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
-
-#include <absl/container/flat_hash_set.h>
 
 namespace kafka::client {
 

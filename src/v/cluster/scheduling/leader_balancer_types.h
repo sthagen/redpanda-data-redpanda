@@ -10,13 +10,13 @@
  */
 #pragma once
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "config/leaders_preference.h"
 #include "container/chunked_hash_map.h"
 #include "model/metadata.h"
 #include "raft/fundamental.h"
 
-#include <absl/container/flat_hash_map.h>
-#include <absl/container/flat_hash_set.h>
 #include <roaring/roaring64map.hh>
 
 namespace cluster::leader_balancer_types {

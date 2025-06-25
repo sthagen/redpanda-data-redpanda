@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/commands.h"
 #include "cluster/data_migrated_resources.h"
 #include "cluster/logger.h"
@@ -30,7 +31,6 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/sharded.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <fmt/core.h>
 #include <gtest/gtest.h>
 

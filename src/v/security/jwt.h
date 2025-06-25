@@ -9,6 +9,8 @@
  */
 #pragma once
 
+#include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_map.h"
 #include "base/oncore.h"
 #include "base/outcome.h"
 #include "crypto/crypto.h"
@@ -24,8 +26,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/algorithm/container.h>
-#include <absl/container/flat_hash_map.h>
 #include <boost/algorithm/string/split.hpp>
 
 #include <iosfwd>

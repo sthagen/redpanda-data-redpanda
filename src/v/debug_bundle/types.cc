@@ -11,17 +11,17 @@
 
 #include "types.h"
 
+#include "absl/strings/str_split.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
+#include "re2/re2.h"
+#include "re2/stringpiece.h"
 #include "strings/string_switch.h"
 
 #include <seastar/util/variant_utils.hh>
 
-#include <absl/strings/str_split.h>
 #include <fmt/chrono.h>
 #include <fmt/core.h>
-#include <re2/re2.h>
-#include <re2/stringpiece.h>
 
 #include <charconv>
 #include <system_error>

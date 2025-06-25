@@ -11,6 +11,7 @@
 
 #include "transform/api.h"
 
+#include "absl/container/flat_hash_map.h"
 #include "cluster/errc.h"
 #include "cluster/partition_manager.h"
 #include "cluster/plugin_frontend.h"
@@ -53,7 +54,6 @@
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/util/optimized_optional.hh>
 
-#include <absl/container/flat_hash_map.h>
 #include <boost/range/irange.hpp>
 
 #include <optional>

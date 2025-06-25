@@ -14,12 +14,12 @@
 #define BOOST_TEST_MODULE leader_balancer
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "cluster/scheduling/leader_balancer_random.h"
 #include "leader_balancer_test_utils.h"
 #include "model/metadata.h"
 #include "utils/to_string.h"
 
-#include <absl/container/flat_hash_set.h>
 #include <boost/test/unit_test.hpp>
 
 #include <algorithm>
