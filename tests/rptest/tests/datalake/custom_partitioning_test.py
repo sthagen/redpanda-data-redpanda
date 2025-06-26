@@ -301,6 +301,11 @@ class DatalakeCustomPartitioningTest(RedpandaTest):
             assert len(metric2samples) == len(metric_patterns)
             metric2value_sum = dict()
             for metric, samples in metric2samples.items():
+                # Log raw samples from all nodes to investigate missing metrics.
+                self.logger.debug(
+                    f"Raw samples for {metric}: {[(s.node.name, s.labels, s.value) for s in samples.samples]}"
+                )
+
                 value_sum = sum(
                     s.value
                     for s in samples.label_filter({

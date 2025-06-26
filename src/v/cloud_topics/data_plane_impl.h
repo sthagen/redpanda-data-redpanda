@@ -10,7 +10,7 @@
  */
 #pragma once
 
-#include "cloud_topics/api.h"
+#include "cloud_topics/data_plane_api.h"
 #include "model/fundamental.h"
 
 #include <seastar/core/distributed.hh>
@@ -31,7 +31,7 @@ class cache;
 
 namespace experimental::cloud_topics {
 
-ss::shared_ptr<api> make_app(
+ss::shared_ptr<data_plane_api> make_data_plane(
   seastar::sharded<cluster::partition_manager>*,
   seastar::sharded<cloud_io::remote>*,
   seastar::sharded<cloud_storage::cache>*,

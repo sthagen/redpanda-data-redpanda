@@ -27,6 +27,8 @@
 #include <seastar/core/smp.hh>
 #include <seastar/net/socket_defs.hh>
 
+#include <memory>
+
 namespace cluster {
 class controller;
 }
@@ -59,6 +61,8 @@ public:
     security::audit::audit_log_manager& audit_mgr() {
         return _audit_mgr.local();
     }
+
+    std::unique_ptr<cluster::controller>& controller() { return _controller; }
 
 private:
     ss::future<> do_start();

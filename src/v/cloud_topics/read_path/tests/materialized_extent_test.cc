@@ -8,8 +8,8 @@
 // by the Apache License, Version 2.0
 
 #include "cloud_topics/errc.h"
-#include "cloud_topics/read_path/placeholder_extent.h"
-#include "cloud_topics/read_path/tests/placeholder_extent_fixture.h"
+#include "cloud_topics/read_path/materialized_extent.h"
+#include "cloud_topics/read_path/tests/materialized_extent_fixture.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/abort_source.hh>
@@ -19,9 +19,9 @@
 #include <queue>
 
 namespace cloud_topics = experimental::cloud_topics;
-ss::logger test_log("placeholder_extent_test_log");
+ss::logger test_log("materialized_extent_test_log");
 
-TEST_F_CORO(placeholder_extent_fixture, materialize_from_cache) {
+TEST_F_CORO(materialized_extent_fixture, materialize_from_cache) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(true, 1);
@@ -29,8 +29,7 @@ TEST_F_CORO(placeholder_extent_fixture, materialize_from_cache) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -40,14 +39,14 @@ TEST_F_CORO(placeholder_extent_fixture, materialize_from_cache) {
 
     ASSERT_FALSE_CORO(res.has_error());
 
-    chunked_circular_buffer<model::record_batch> actual;
+    chunked_vector<model::record_batch> actual;
     actual.emplace_back(make_raft_data_batch(std::move(extent)));
 
     ASSERT_EQ_CORO(actual.size(), expected.size());
     ASSERT_TRUE_CORO(actual == expected);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cache_get_fails) {
+TEST_F_CORO(materialized_extent_fixture, cache_get_fails) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -59,8 +58,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_get_fails) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -72,7 +70,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_get_fails) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cache_get_throws) {
+TEST_F_CORO(materialized_extent_fixture, cache_get_throws) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -84,8 +82,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_get_throws) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -97,7 +94,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_get_throws) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cache_get_shutdown) {
+TEST_F_CORO(materialized_extent_fixture, cache_get_shutdown) {
     // Test situation when the
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
@@ -110,8 +107,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_get_shutdown) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
 
     auto res = co_await cloud_topics::materialize(
       &extent,
@@ -124,7 +120,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_get_shutdown) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, is_cached_throws) {
+TEST_F_CORO(materialized_extent_fixture, is_cached_throws) {
     // Test situation when the
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
@@ -137,8 +133,7 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_throws) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
 
     auto res = co_await cloud_topics::materialize(
       &extent,
@@ -151,7 +146,7 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_throws) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::cache_read_error);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, is_cached_throws_shutdown) {
+TEST_F_CORO(materialized_extent_fixture, is_cached_throws_shutdown) {
     // Test situation when the
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
@@ -164,8 +159,7 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_throws_shutdown) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
 
     auto res = co_await cloud_topics::materialize(
       &extent,
@@ -178,7 +172,7 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_throws_shutdown) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, is_cached_stall_then_success) {
+TEST_F_CORO(materialized_extent_fixture, is_cached_stall_then_success) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -190,8 +184,7 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_stall_then_success) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -201,14 +194,14 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_stall_then_success) {
 
     ASSERT_FALSE_CORO(res.has_error());
 
-    chunked_circular_buffer<model::record_batch> actual;
+    chunked_vector<model::record_batch> actual;
     actual.emplace_back(cloud_topics::make_raft_data_batch(std::move(extent)));
 
     ASSERT_EQ_CORO(actual.size(), expected.size());
     ASSERT_TRUE_CORO(actual == expected);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, is_cached_stall_then_timeout) {
+TEST_F_CORO(materialized_extent_fixture, is_cached_stall_then_timeout) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -220,8 +213,7 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_stall_then_timeout) {
     ss::abort_source as;
     retry_chain_node rtc(as, 100ms, 1ms, retry_strategy::backoff);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
 
     co_await ss::sleep(100ms);
     auto res = co_await cloud_topics::materialize(
@@ -235,7 +227,7 @@ TEST_F_CORO(placeholder_extent_fixture, is_cached_stall_then_timeout) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::timeout);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, materialize_from_cloud) {
+TEST_F_CORO(materialized_extent_fixture, materialize_from_cloud) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(false, 1);
@@ -243,8 +235,7 @@ TEST_F_CORO(placeholder_extent_fixture, materialize_from_cloud) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -254,14 +245,14 @@ TEST_F_CORO(placeholder_extent_fixture, materialize_from_cloud) {
 
     ASSERT_FALSE_CORO(res.has_error());
 
-    chunked_circular_buffer<model::record_batch> actual;
+    chunked_vector<model::record_batch> actual;
     actual.emplace_back(cloud_topics::make_raft_data_batch(std::move(extent)));
 
     ASSERT_EQ_CORO(actual.size(), expected.size());
     ASSERT_TRUE_CORO(actual == expected);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_failure) {
+TEST_F_CORO(materialized_extent_fixture, cloud_get_return_failure) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -273,8 +264,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_failure) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -286,7 +276,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_failure) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::download_failure);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cloud_get_throw_shutdown) {
+TEST_F_CORO(materialized_extent_fixture, cloud_get_throw_shutdown) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -298,8 +288,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_throw_shutdown) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -311,7 +300,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_throw_shutdown) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_notfound) {
+TEST_F_CORO(materialized_extent_fixture, cloud_get_return_notfound) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -323,8 +312,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_notfound) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -336,7 +324,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_notfound) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::download_not_found);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_timeout) {
+TEST_F_CORO(materialized_extent_fixture, cloud_get_return_timeout) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -348,8 +336,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_timeout) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -361,7 +348,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_return_timeout) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::timeout);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cloud_get_throw_error) {
+TEST_F_CORO(materialized_extent_fixture, cloud_get_throw_error) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(
@@ -373,8 +360,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_throw_error) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -386,7 +372,7 @@ TEST_F_CORO(placeholder_extent_fixture, cloud_get_throw_error) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::unexpected_failure);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cache_reserve_space_throws) {
+TEST_F_CORO(materialized_extent_fixture, cache_reserve_space_throws) {
     // If we fail to reserve space the request should still succeed
     // but 'cache.put' can't be invoked.
     const int num_batches = 1;
@@ -400,8 +386,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_reserve_space_throws) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -411,14 +396,14 @@ TEST_F_CORO(placeholder_extent_fixture, cache_reserve_space_throws) {
 
     ASSERT_FALSE_CORO(res.has_error());
 
-    chunked_circular_buffer<model::record_batch> actual;
-    actual.emplace_back(cloud_topics::make_raft_data_batch(extent));
+    chunked_vector<model::record_batch> actual;
+    actual.emplace_back(cloud_topics::make_raft_data_batch(std::move(extent)));
 
     ASSERT_EQ_CORO(actual.size(), expected.size());
     ASSERT_TRUE_CORO(actual == expected);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cache_reserve_space_throws_shutdown) {
+TEST_F_CORO(materialized_extent_fixture, cache_reserve_space_throws_shutdown) {
     // If we fail to reserve space because of the shutdown the result
     // should be an errc::shutdown code.
     const int num_batches = 1;
@@ -432,8 +417,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_reserve_space_throws_shutdown) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -445,7 +429,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_reserve_space_throws_shutdown) {
     ASSERT_EQ_CORO(res.error(), cloud_topics::errc::shutting_down);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cache_put_throws) {
+TEST_F_CORO(materialized_extent_fixture, cache_put_throws) {
     // If we fail to put element into the cache the request should still succeed
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
@@ -458,8 +442,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_put_throws) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),
@@ -469,14 +452,14 @@ TEST_F_CORO(placeholder_extent_fixture, cache_put_throws) {
 
     ASSERT_FALSE_CORO(res.has_error());
 
-    chunked_circular_buffer<model::record_batch> actual;
-    actual.emplace_back(cloud_topics::make_raft_data_batch(extent));
+    chunked_vector<model::record_batch> actual;
+    actual.emplace_back(cloud_topics::make_raft_data_batch(std::move(extent)));
 
     ASSERT_EQ_CORO(actual.size(), expected.size());
     ASSERT_TRUE_CORO(actual == expected);
 }
 
-TEST_F_CORO(placeholder_extent_fixture, cache_put_throws_shutdown) {
+TEST_F_CORO(materialized_extent_fixture, cache_put_throws_shutdown) {
     // If we fail to put because of the shutdown the result
     // should be an errc::shutdown code.
     const int num_batches = 1;
@@ -490,8 +473,7 @@ TEST_F_CORO(placeholder_extent_fixture, cache_put_throws_shutdown) {
     ss::abort_source as;
     retry_chain_node rtc(as, 10s, 200ms, retry_strategy::disallow);
 
-    auto extent = cloud_topics::make_placeholder_extent(
-      partition.front().copy());
+    auto extent = make_materialized_extent(partition.front().copy());
     auto res = co_await cloud_topics::materialize(
       &extent,
       cloud_storage_clients::bucket_name("foo"),

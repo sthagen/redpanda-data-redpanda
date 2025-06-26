@@ -1752,7 +1752,8 @@ class RedpandaServiceBase(RedpandaServiceABC, Service):
                     f"{RedpandaServiceBase.STDOUT_STDERR_CAPTURE} not found on {node.account.hostname}. Skipping log scan."
                 )
                 continue
-            _searchable_nodes.append(node)
+            _searchable_nodes.append(
+                (self.get_version_if_not_head(node), node))
 
         lsearcher = LogSearchLocal(self._context, allow_list, self.logger,
                                    RedpandaServiceBase.STDOUT_STDERR_CAPTURE)
@@ -2494,7 +2495,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
                                    self.logger,
                                    self.kubectl,
                                    test_start_time=test_start_time)
-        lsearcher.search_logs(self.pods)
+        lsearcher.search_logs([(None, pod) for pod in self.pods])
 
     def copy_cloud_logs(self, test_start_time):
         """Method makes sure that agent and cloud logs is copied after the test
@@ -4099,6 +4100,16 @@ class RedpandaService(RedpandaServiceBase):
     def get_version_int_tuple(self, node):
         version_str = self.get_version(node)
         return ri_int_tuple(RI_VERSION_RE.findall(version_str)[0])
+
+    def get_version_if_not_head(self, node):
+        """
+        Returns the redpanda binary version as a string if it differs from HEAD.
+        I.e., if this node is running a previous version of redpanda.
+        """
+        cur_ver = self._installer.installed_version(node)
+        if cur_ver != RedpandaInstaller.HEAD:
+            return self.get_version(node)
+        return None
 
     def stop(self, **kwargs):
         """

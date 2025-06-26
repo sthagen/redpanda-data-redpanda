@@ -10,14 +10,11 @@
  */
 #pragma once
 
-#include "cloud_topics/api.h"
-#include "model/fundamental.h"
+#include "cloud_topics/data_plane_api.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sharded.hh>
-
-#include <memory>
 
 namespace experimental::cloud_topics {
 
@@ -25,20 +22,23 @@ namespace experimental::cloud_topics {
 // The seastar::sharded wants to know the size of the object at compile time.
 class app {
 public:
-    explicit app(ss::shared_ptr<api>);
+    explicit app(ss::shared_ptr<data_plane_api>);
 
     app(const app&) = delete;
     app& operator=(const app&) = delete;
     app(app&&) noexcept = delete;
     app& operator=(app&&) noexcept = delete;
+    ~app() = default;
 
     seastar::future<> start();
     seastar::future<> stop();
 
-    ss::shared_ptr<api> get_api();
+    ss::shared_ptr<data_plane_api> get_data_plane_api();
+
+    // TODO: add 'get_control_plane_api' etc
 
 private:
-    ss::shared_ptr<api> _impl;
+    ss::shared_ptr<data_plane_api> _impl;
 };
 
 } // namespace experimental::cloud_topics

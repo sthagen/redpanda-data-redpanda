@@ -38,7 +38,7 @@ template<class Clock>
 write_pipeline<Clock>::~write_pipeline() = default;
 
 template<class Clock>
-ss::future<result<chunked_circular_buffer<model::record_batch>>>
+ss::future<result<chunked_vector<extent_meta>>>
 write_pipeline<Clock>::write_and_debounce(
   model::ntp ntp,
   chunked_vector<model::record_batch> batches,

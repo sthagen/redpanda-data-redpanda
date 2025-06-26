@@ -14,7 +14,8 @@
 #include "base/seastarx.h"
 #include "cloud_topics/core/pipeline_stage.h"
 #include "cloud_topics/errc.h"
-#include "container/chunked_circular_buffer.h"
+#include "cloud_topics/extent_meta.h"
+#include "container/fragmented_vector.h"
 #include "container/intrusive_list_helpers.h"
 #include "model/record.h"
 #include "utils/retry_chain_node.h"
@@ -28,14 +29,14 @@ namespace experimental::cloud_topics::core {
 /// The result of the read request processing.
 /// Contains raft_data batches.
 struct dataplane_query_result {
-    chunked_circular_buffer<model::record_batch> results;
+    chunked_vector<model::record_batch> results;
 };
 
 /// The query for the data-plane.
 /// The meta field contains a bunch of dl_placeholder and dl_overlay batches.
 struct dataplane_query {
     size_t output_size_estimate{0};
-    ss::circular_buffer<model::record_batch> meta;
+    chunked_vector<extent_meta> meta;
 };
 
 // This object is created for every fetch request.

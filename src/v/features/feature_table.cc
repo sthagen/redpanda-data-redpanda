@@ -112,6 +112,8 @@ std::string_view to_string_view(feature f) {
         return "cluster_linking_dr";
     case feature::topic_locations_in_outbound_migrations:
         return "topic_locations_in_outbound_migrations";
+    case feature::schema_registry_authz:
+        return "schema_registry_authz";
 
     /*
      * testing features

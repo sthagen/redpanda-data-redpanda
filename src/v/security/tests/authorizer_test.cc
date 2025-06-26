@@ -106,8 +106,8 @@ BOOST_AUTO_TEST_CASE(authz_resource_type_auto) {
       get_resource_type<pandaproxy::schema_registry::subject>()
       == security::resource_type::sr_subject);
     BOOST_REQUIRE(
-      get_resource_type<pandaproxy::schema_registry::global_resource>()
-      == security::resource_type::sr_global);
+      get_resource_type<pandaproxy::schema_registry::registry_resource>()
+      == security::resource_type::sr_registry);
 
     BOOST_REQUIRE(
       get_resource_type<model::topic>() == get_resource_type<model::topic>());
@@ -1629,14 +1629,14 @@ BOOST_AUTO_TEST_CASE(authz_filter_out_non_kafka_resources) {
     std::vector<acl_binding> bindings;
     resource_pattern subject_resource(
       resource_type::sr_subject, "model-", pattern_type::prefixed);
-    resource_pattern global_resource(
-      resource_type::sr_global,
+    resource_pattern registry_resource(
+      resource_type::sr_registry,
       resource_pattern::wildcard,
       pattern_type::literal);
     resource_pattern topic_resource(
       resource_type::topic, "model", pattern_type::literal);
     bindings.emplace_back(subject_resource, allow_read);
-    bindings.emplace_back(global_resource, allow_describe);
+    bindings.emplace_back(registry_resource, allow_describe);
     bindings.emplace_back(topic_resource, allow_all);
     auth.add_bindings(bindings);
 
@@ -1670,12 +1670,12 @@ BOOST_AUTO_TEST_CASE(authz_filter_out_non_kafka_resources) {
 
     // Check global resource
     result = auth.authorized(
-      ppsr::global_resource(), acl_operation::describe, user, host);
+      ppsr::registry_resource(), acl_operation::describe, user, host);
     BOOST_REQUIRE(result.is_authorized());
 
     // Check that describe does not imply read
     result = auth.authorized(
-      ppsr::global_resource(), acl_operation::read, user, host);
+      ppsr::registry_resource(), acl_operation::read, user, host);
     BOOST_REQUIRE(!result.is_authorized());
 }
 

@@ -10,6 +10,8 @@
 #include "handlers.h"
 
 #include "bytes/iobuf_parser.h"
+#include "cluster/controller.h"
+#include "cluster/security_frontend.h"
 #include "container/json.h"
 #include "pandaproxy/json/rjson_util.h"
 #include "pandaproxy/json/types.h"
@@ -17,6 +19,7 @@
 #include "pandaproxy/parsing/httpd.h"
 #include "pandaproxy/schema_registry/error.h"
 #include "pandaproxy/schema_registry/errors.h"
+#include "pandaproxy/schema_registry/requests/acls.h"
 #include "pandaproxy/schema_registry/requests/compatibility.h"
 #include "pandaproxy/schema_registry/requests/config.h"
 #include "pandaproxy/schema_registry/requests/get_schemas_ids_id.h"
@@ -26,11 +29,17 @@
 #include "pandaproxy/schema_registry/requests/post_subject_versions.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/server.h"
+#include "security/acl.h"
+#include "security/acl_store.h"
+#include "security/authorizer.h"
+#include "security/fwd.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
 
+#include <algorithm>
+#include <iterator>
 #include <limits>
 
 namespace ppj = pandaproxy::json;
@@ -779,6 +788,157 @@ ss::future<server::reply_t>
 status_ready(server::request_t rq, server::reply_t rp) {
     co_await rq.service().writer().read_sync();
     rp.rep->set_status(ss::http::reply::status_type::ok);
+    co_return rp;
+}
+
+namespace {
+void check_feature_ready(const server::request_t& rq) {
+    constexpr auto feature = features::feature::schema_registry_authz;
+    const auto& ft = rq.service().controller()->get_feature_table().local();
+    if (!ft.is_active(feature)) {
+        throw exception(
+          error_code::internal_server_error,
+          fmt::format("Feature '{}' is not yet available", feature));
+    }
+}
+} // namespace
+
+ss::future<server::reply_t>
+get_security_acls(server::request_t rq, server::reply_t rp) {
+    auto& acl_store
+      = rq.service().controller()->get_authorizer().local().store();
+
+    auto parse_and_convert = [&](
+                               const std::string& param_name, auto converter) {
+        auto str_value = parse::query_param<std::optional<ss::sstring>>(
+          *rq.req, param_name);
+        return str_value ? std::make_optional(converter(*str_value))
+                         : std::nullopt;
+    };
+
+    auto resource = parse::query_param<std::optional<ss::sstring>>(
+      *rq.req, "resource");
+
+    auto principal = parse_and_convert("principal", to_acl_principal);
+    auto resource_type = parse_and_convert("resource_type", to_resource_type);
+    auto pattern_type = parse_and_convert("pattern_type", to_pattern_type);
+    auto operation = parse_and_convert("operation", to_acl_operation);
+    auto permission = parse_and_convert("permission", to_acl_permission);
+    auto host = parse_and_convert("host", to_acl_host);
+
+    auto filter = security::acl_binding_filter{
+      security::resource_pattern_filter{
+        resource_type,
+        resource,
+        pattern_type,
+        security::resource_pattern_filter::resource_subsystem::schema_registry},
+      security::acl_entry_filter{principal, host, operation, permission}};
+
+    auto sr_acls = std::ranges::to<std::vector>(
+      acl_store.acls(filter)
+      | std::views::transform(
+        [](const security::acl_binding& binding) { return acl(binding); }));
+
+    auto resp = ppj::rjson_serialize_iobuf(std::move(sr_acls));
+
+    rp.rep->write_body("json", json::as_body_writer(std::move(resp)));
+    co_return rp;
+}
+
+ss::future<server::reply_t>
+post_security_acls(server::request_t rq, server::reply_t rp) {
+    auto& security_frontend
+      = rq.service().controller()->get_security_frontend().local();
+
+    auto raw_acls = co_await rjson_parse(
+      *rq.req, acl_handler<>{acl_handler<>::require_fields::yes});
+
+    std::vector<security::acl_binding> bindings;
+    bindings.reserve(raw_acls.size());
+
+    for (const auto& acl : raw_acls) {
+        if (
+          acl.pattern_type == security::pattern_type::prefixed
+          && acl.resource_type != security::resource_type::sr_subject) {
+            throw exception(
+              error_code::acl_invalid,
+              "Pattern type 'prefixed' can only be used with resource type "
+              "'subject'");
+        }
+
+        bindings.emplace_back(
+          security::resource_pattern{
+            *acl.resource_type, *acl.resource, *acl.pattern_type},
+          security::acl_entry{
+            *acl.principal, *acl.host, *acl.operation, *acl.permission});
+    }
+
+    check_feature_ready(rq);
+
+    auto err_vec = co_await security_frontend.create_acls(bindings, 5s);
+
+    auto it = std::find_if(err_vec.begin(), err_vec.end(), [](const auto& err) {
+        return err != cluster::errc::success;
+    });
+
+    if (it != err_vec.end()) {
+        throw exception(
+          error_code::internal_server_error,
+          fmt::format(
+            "Failed to create ACLs: {}",
+            cluster::make_error_code(*it).message()));
+    }
+
+    rp.rep->set_status(ss::http::reply::status_type::created);
+    co_return rp;
+}
+
+ss::future<server::reply_t>
+delete_security_acls(server::request_t rq, server::reply_t rp) {
+    auto& security_frontend
+      = rq.service().controller()->get_security_frontend().local();
+
+    auto raw_acls = co_await rjson_parse(
+      *rq.req, acl_handler<>{acl_handler<>::require_fields::no});
+
+    std::vector<security::acl_binding_filter> filters;
+    filters.reserve(raw_acls.size());
+
+    for (const auto& acl : raw_acls) {
+        filters.emplace_back(
+          security::resource_pattern_filter{
+            acl.resource_type,
+            acl.resource,
+            acl.pattern_type,
+            security::resource_pattern_filter::resource_subsystem::
+              schema_registry},
+          security::acl_entry_filter{
+            acl.principal, acl.host, acl.operation, acl.permission});
+    }
+
+    check_feature_ready(rq);
+
+    auto deleted = co_await security_frontend.delete_acls(
+      std::move(filters), 5s);
+
+    auto res = std::vector<acl>{};
+    std::ranges::for_each(deleted, [&res](cluster::delete_acls_result r) {
+        if (r.error != cluster::errc::success) {
+            throw exception(
+              error_code::internal_server_error,
+              fmt::format(
+                "Failed to delete ACLs: {}",
+                cluster::make_error_code(r.error).message()));
+        }
+        std::ranges::transform(
+          r.bindings, std::back_inserter(res), [](const auto& b) {
+              return acl(b);
+          });
+    });
+
+    auto resp = ppj::rjson_serialize_iobuf(std::move(res));
+
+    rp.rep->write_body("json", json::as_body_writer(std::move(resp)));
     co_return rp;
 }
 

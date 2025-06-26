@@ -15,20 +15,18 @@
 #include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/types.h"
-#include "container/chunked_circular_buffer.h"
 #include "container/fragmented_vector.h"
-#include "model/record.h"
 
 #include <seastar/core/weak_ptr.hh>
 
 namespace experimental::cloud_topics {
 
-/// List of placeholder batches that has to be propagated
+/// List of extent_meta values that has to be propagated
 /// to the particular write request.
 template<class Clock>
-struct batches_for_req {
+struct extents_for_req {
     /// Generated placeholder batches
-    chunked_circular_buffer<model::record_batch> placeholders;
+    chunked_vector<extent_meta> extents;
     /// Source write request
     ss::weak_ptr<core::write_request<Clock>> ref;
 };
@@ -68,7 +66,7 @@ public:
 private:
     /// Generate placeholders.
     /// This method should be invoked before 'get_result'
-    chunked_vector<std::unique_ptr<batches_for_req<Clock>>> get_placeholders();
+    chunked_vector<std::unique_ptr<extents_for_req<Clock>>> get_extents();
 
     /// Produce L0 object payload.
     /// The method messes up the state so it can only
@@ -80,7 +78,7 @@ private:
     /// Source data for the aggregator
     absl::btree_map<model::ntp, core::write_request_list<Clock>> _staging;
     /// Prepared placeholders
-    chunked_vector<std::unique_ptr<batches_for_req<Clock>>> _aggregated;
+    chunked_vector<std::unique_ptr<extents_for_req<Clock>>> _aggregated;
     size_t _size_bytes{0};
 };
 

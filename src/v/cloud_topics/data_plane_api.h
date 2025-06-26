@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/outcome.h"
+#include "cloud_topics/extent_meta.h"
 #include "container/chunked_circular_buffer.h"
 #include "container/fragmented_vector.h"
 #include "model/fundamental.h"
@@ -23,32 +24,30 @@
 namespace experimental::cloud_topics {
 
 /// Dataplane API
-class api {
+class data_plane_api {
 public:
-    api() = default;
+    data_plane_api() = default;
 
-    api(const api&) = delete;
-    api& operator=(const api&) = delete;
-    api(api&&) noexcept = delete;
-    api& operator=(api&&) noexcept = delete;
-    virtual ~api() = default;
+    data_plane_api(const data_plane_api&) = delete;
+    data_plane_api& operator=(const data_plane_api&) = delete;
+    data_plane_api(data_plane_api&&) noexcept = delete;
+    data_plane_api& operator=(data_plane_api&&) noexcept = delete;
+    virtual ~data_plane_api() = default;
 
     virtual ss::future<> start() = 0;
     virtual ss::future<> stop() = 0;
 
     /// Write data batches and get back placeholder batches
-    virtual ss::future<result<chunked_circular_buffer<model::record_batch>>>
-    write_and_debounce(
+    virtual ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
       chunked_vector<model::record_batch> batches,
       std::chrono::milliseconds timeout)
       = 0;
 
-    virtual ss::future<result<chunked_circular_buffer<model::record_batch>>>
-    materialize(
+    virtual ss::future<result<chunked_vector<model::record_batch>>> materialize(
       model::ntp ntp,
       size_t output_size_estimate,
-      ss::circular_buffer<model::record_batch> metadata,
+      chunked_vector<extent_meta> metadata,
       std::chrono::milliseconds timeout)
       = 0;
 };

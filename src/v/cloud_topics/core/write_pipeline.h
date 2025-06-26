@@ -51,8 +51,7 @@ public:
     ss::sstring pipeline_name() const { return "write_pipeline"; }
 
     /// Add write request to the pipeline
-    ss::future<result<chunked_circular_buffer<model::record_batch>>>
-    write_and_debounce(
+    ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
       chunked_vector<model::record_batch> batches,
       std::chrono::milliseconds timeout);

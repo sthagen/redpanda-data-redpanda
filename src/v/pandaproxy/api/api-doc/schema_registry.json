@@ -1240,14 +1240,7 @@
             "name": "principal",
             "in": "query",
             "type": "string",
-            "description": "The name of the principal (e.g., user or role). Use \"*\" to represent wildcard."
-          },
-          {
-            "name": "principal_type",
-            "in": "query",
-            "type": "string",
-            "enum": ["USER", "ROLE"],
-            "description": "The type of the principal."
+            "description": "The name of the principal (e.g., User:alice or RedpandaRole:bob). Use \"*\" to represent wildcard."
           },
           {
             "name": "resource",
@@ -1259,14 +1252,14 @@
             "name": "resource_type",
             "in": "query",
             "type": "string",
-            "enum": ["GLOBAL", "SUBJECT"],
+            "enum": ["REGISTRY", "SUBJECT"],
             "description": "Type of the resource being secured."
           },
           {
             "name": "pattern_type",
             "in": "query",
             "type": "string",
-            "enum": ["LITERAL", "PREFIX"],
+            "enum": ["LITERAL", "PREFIXED"],
             "description": "Pattern match type for the resource. Only applies when resource_type is SUBJECT."
           },
           {
@@ -1302,11 +1295,10 @@
             "examples": {
               "application/json": [
                 {
-                  "principal": "alice",
-                  "principal_type": "USER",
+                  "principal": "User:alice",
                   "resource": "model-",
                   "resource_type": "SUBJECT",
-                  "pattern_type": "PREFIX",
+                  "pattern_type": "PREFIXED",
                   "operation": "READ",
                   "permission": "ALLOW",
                   "host": "*"
@@ -1405,8 +1397,14 @@
           }
         ],
         "responses": {
-          "201": {
-            "description": "ACLs deleted"
+          "200": {
+            "description": "ACLs deleted",
+            "schema": {
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/security_acl"
+              }
+            }
           },
           "400": {
             "description": "Bad request",

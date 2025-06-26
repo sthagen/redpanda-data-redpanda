@@ -8,7 +8,7 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#include "cloud_topics/app_impl.h"
+#include "cloud_topics/data_plane_impl.h"
 
 #include "base/outcome.h"
 #include "cloud_storage/cache_service.h"
@@ -30,7 +30,7 @@
 namespace experimental::cloud_topics {
 
 class impl
-  : public api
+  : public data_plane_api
   , public ss::enable_shared_from_this<impl> {
 public:
     impl(
@@ -75,8 +75,7 @@ public:
         co_await _reconciler->stop();
     }
 
-    ss::future<result<chunked_circular_buffer<model::record_batch>>>
-    write_and_debounce(
+    ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
       chunked_vector<model::record_batch> r,
       std::chrono::milliseconds timeout) override {
@@ -84,11 +83,10 @@ public:
           std::move(ntp), std::move(r), timeout);
     }
 
-    ss::future<result<chunked_circular_buffer<model::record_batch>>>
-    materialize(
+    ss::future<result<chunked_vector<model::record_batch>>> materialize(
       model::ntp ntp,
       size_t output_size_estimate,
-      ss::circular_buffer<model::record_batch> metadata,
+      chunked_vector<extent_meta> metadata,
       std::chrono::milliseconds timeout) override {
         auto res = co_await _read_pipeline->make_reader(
           ntp,
@@ -112,7 +110,7 @@ private:
     std::unique_ptr<fetch_handler> _l0_resolver;
 };
 
-ss::shared_ptr<api> make_app(
+ss::shared_ptr<data_plane_api> make_data_plane(
   ss::sharded<cluster::partition_manager>* partition_manager,
   ss::sharded<cloud_io::remote>* remote,
   ss::sharded<cloud_storage::cache>* cache,

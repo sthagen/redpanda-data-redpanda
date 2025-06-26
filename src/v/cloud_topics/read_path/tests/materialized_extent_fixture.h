@@ -11,13 +11,14 @@
 #include "bytes/bytes.h"
 #include "bytes/iostream.h"
 #include "cloud_io/basic_cache_service_api.h"
+#include "cloud_topics/dl_placeholder.h"
+#include "cloud_topics/extent_meta.h"
+#include "cloud_topics/read_path/materialized_extent.h"
 #include "container/fragmented_vector.h"
 #include "mocks.h"
 #include "model/fundamental.h"
-#include "model/record_batch_reader.h"
 #include "test_utils/test.h"
 
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/manual_clock.hh>
 
 #include <chrono>
@@ -78,7 +79,7 @@ struct injected_failure {
     injected_cloud_get_failure cloud_get{injected_cloud_get_failure::none};
 };
 
-class placeholder_extent_fixture : public seastar_test {
+class materialized_extent_fixture : public seastar_test {
 public:
     // Generate random batches.
     // This is a source of truth for the test. The goal is to consume
@@ -100,10 +101,31 @@ public:
     model::offset get_expected_committed_offset();
 
     /// Create a list of batches that contain placeholders
-    ss::circular_buffer<model::record_batch> make_underlying();
+    chunked_vector<model::record_batch> make_underlying();
 
-    ss::circular_buffer<model::record_batch> partition;
-    chunked_circular_buffer<model::record_batch> expected;
+    static experimental::cloud_topics::materialized_extent
+    make_materialized_extent(model::record_batch batch) {
+        experimental::cloud_topics::extent_meta e{
+          .base_offset = model::offset_cast(batch.base_offset()),
+          .last_offset = model::offset_cast(batch.last_offset()),
+        };
+        iobuf payload = std::move(batch).release_data();
+        iobuf_parser parser(std::move(payload));
+        auto record = model::parse_one_record_from_buffer(parser);
+        iobuf value = std::move(record).release_value();
+        auto placeholder
+          = serde::from_iobuf<experimental::cloud_topics::dl_placeholder>(
+            std::move(value));
+        e.id = placeholder.id;
+        e.first_byte_offset = placeholder.offset;
+        e.byte_range_size = placeholder.size_bytes;
+        return experimental::cloud_topics::materialized_extent{
+          .meta = e,
+        };
+    }
+
+    chunked_vector<model::record_batch> partition;
+    chunked_vector<model::record_batch> expected;
     remote_mock remote;
     cache_mock cache;
 };

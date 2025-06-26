@@ -80,7 +80,7 @@ struct write_pipeline_accessor {
             auto list0 = pipeline->get_write_requests(
               std::numeric_limits<size_t>::max(), stage);
             for (auto& r : list0.requests) {
-                r.set_value(chunked_circular_buffer<model::record_batch>());
+                r.set_value(chunked_vector<extent_meta>());
             }
         }
     }
@@ -187,7 +187,7 @@ TEST_CORO(throttler_test, no_throttling) {
     co_await throttler.stop();
     co_await pipeline.stop();
 }
-/*
+
 TEST_CORO(throttler_test, tput_limit_reached) {
     // The first and only write request uses the tput limit and
     // should be throttled.
@@ -197,9 +197,9 @@ TEST_CORO(throttler_test, tput_limit_reached) {
       .count = 100,
       .records = 10,
     };
-    auto batches = co_await model::test::make_random_batches(spec);
+    auto batches = chunked_vector<model::record_batch>(
+      co_await model::test::make_random_batches(spec));
     size_t reader_size_bytes = get_serialized_size(batches);
-    auto reader = model::make_memory_record_batch_reader(std::move(batches));
 
     cloud_topics::core::write_pipeline<ss::manual_clock> pipeline;
 
@@ -231,7 +231,7 @@ TEST_CORO(throttler_test, tput_limit_reached) {
     // is greater than tput
     vlog(test_log.info, "Writing first request");
     auto write_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), 10s);
+      model::controller_ntp, std::move(batches), 10s);
 
     //  This should move the write request out of the pipeline
     auto throttle_res = co_await std::move(throttle_fut);
@@ -269,9 +269,9 @@ TEST_CORO(throttler_test, tput_limit_reached_req_timed_out) {
       .count = 100,
       .records = 10,
     };
-    auto batches = co_await model::test::make_random_batches(spec);
+    auto batches = chunked_vector<model::record_batch>(
+      co_await model::test::make_random_batches(spec));
     size_t reader_size_bytes = get_serialized_size(batches);
-    auto reader = model::make_memory_record_batch_reader(std::move(batches));
 
     cloud_topics::core::write_pipeline<ss::manual_clock> pipeline;
 
@@ -303,7 +303,7 @@ TEST_CORO(throttler_test, tput_limit_reached_req_timed_out) {
     // is greater than tput. The timeout is lower than the throttling
     // that will be applied.
     auto write_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), 200ms);
+      model::controller_ntp, std::move(batches), 200ms);
 
     // This should move the write request out of the pipeline.
     // It should stay there up until it times out.
@@ -365,4 +365,3 @@ TEST_CORO(throttler_test, graceful_shutdown) {
 
     co_await pipeline.stop();
 }
-*/

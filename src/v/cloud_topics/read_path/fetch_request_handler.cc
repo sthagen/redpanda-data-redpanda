@@ -15,7 +15,7 @@
 #include "cloud_topics/core/read_request.h"
 #include "cloud_topics/dl_placeholder.h"
 #include "cloud_topics/logger.h"
-#include "cloud_topics/read_path/placeholder_extent_reader.h"
+#include "cloud_topics/read_path/materialized_extent_reader.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/timeout_clock.h"

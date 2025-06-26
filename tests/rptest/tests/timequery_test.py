@@ -694,6 +694,11 @@ class TimeQueryKafkaTest(Test, BaseTimeQuery):
     """
     log_segment_size = 1024 * 1024
 
+    # apply retention more frequently. as of writing, the default is 30 seconds
+    # and then every 5 minutes. this is problematic if a test expects more
+    # frequent operation, but misses that initial round at 30 seconds.
+    log_retention_check_interval_ms = 30 * 1000
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -701,11 +706,17 @@ class TimeQueryKafkaTest(Test, BaseTimeQuery):
                                    num_nodes=1,
                                    version=V_3_0_0)
 
+        server_prop_overrides = [[
+            "log.retention.check.interval.ms",
+            self.log_retention_check_interval_ms
+        ]]
+
         self.kafka = KafkaServiceAdapter(
             self.test_context,
             KafkaService(self.test_context,
                          num_nodes=3,
                          zk=self.zk,
+                         server_prop_overrides=server_prop_overrides,
                          version=V_3_0_0))
 
         self._client = DefaultClient(self.kafka)

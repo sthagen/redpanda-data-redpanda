@@ -321,7 +321,7 @@ template auth_result authorizer::authorized(
   const acl_host&) const;
 
 template auth_result authorizer::authorized(
-  const pandaproxy::schema_registry::global_resource&,
+  const pandaproxy::schema_registry::registry_resource&,
   acl_operation,
   const acl_principal&,
   const acl_host&) const;

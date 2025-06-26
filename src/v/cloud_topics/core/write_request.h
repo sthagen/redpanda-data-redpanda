@@ -15,9 +15,9 @@
 #include "cloud_topics/core/pipeline_stage.h"
 #include "cloud_topics/core/serializer.h"
 #include "cloud_topics/errc.h"
-#include "container/chunked_circular_buffer.h"
+#include "cloud_topics/extent_meta.h"
+#include "container/fragmented_vector.h"
 #include "container/intrusive_list_helpers.h"
-#include "model/record.h"
 
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/semaphore.hh>
@@ -44,8 +44,7 @@ struct write_request : ss::weakly_referencable<write_request<Clock>> {
     /// List of all write requests
     intrusive_list_hook _hook;
 
-    using response_t
-      = checked<chunked_circular_buffer<model::record_batch>, errc>;
+    using response_t = checked<chunked_vector<extent_meta>, errc>;
     /// The promise is used to signal to the caller
     /// after the upload is completed
     ss::promise<response_t> response;
@@ -68,8 +67,7 @@ struct write_request : ss::weakly_referencable<write_request<Clock>> {
 
     void set_value(errc e) noexcept;
 
-    void set_value(
-      chunked_circular_buffer<model::record_batch> placeholders) noexcept;
+    void set_value(chunked_vector<extent_meta> placeholders) noexcept;
 
     bool has_expired() const noexcept;
 };

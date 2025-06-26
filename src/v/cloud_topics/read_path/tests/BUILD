@@ -1,13 +1,13 @@
 load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
 redpanda_test_cc_library(
-    name = "placeholder_extent_fixture",
+    name = "materialized_extent_fixture",
     srcs = [
-        "placeholder_extent_fixture.cc",
+        "materialized_extent_fixture.cc",
     ],
     hdrs = [
+        "materialized_extent_fixture.h",
         "mocks.h",
-        "placeholder_extent_fixture.h",
     ],
     include_prefix = "cloud_topics/read_path/tests",
     visibility = ["//visibility:public"],
@@ -20,7 +20,9 @@ redpanda_test_cc_library(
         "//src/v/cloud_io:io_result",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage_clients",
+        "//src/v/cloud_topics:extent_meta",
         "//src/v/cloud_topics:placeholder",
+        "//src/v/cloud_topics/read_path:materialized_extent",
         "//src/v/container:fragmented_vector",
         "//src/v/model",
         "//src/v/model/tests:random",
@@ -36,15 +38,18 @@ redpanda_test_cc_library(
 )
 
 redpanda_cc_gtest(
-    name = "placeholder_extent_test",
+    name = "materialized_extent_test",
     timeout = "short",
     srcs = [
-        "placeholder_extent_test.cc",
+        "materialized_extent_test.cc",
     ],
     deps = [
+        "//src/v/cloud_topics:extent_meta",
+        "//src/v/cloud_topics:placeholder",
         "//src/v/cloud_topics:types",
-        "//src/v/cloud_topics/read_path:placeholder_extent",
-        "//src/v/cloud_topics/read_path/tests:placeholder_extent_fixture",
+        "//src/v/cloud_topics/read_path:materialized_extent",
+        "//src/v/cloud_topics/read_path/tests:materialized_extent_fixture",
+        "//src/v/container:fragmented_vector",
         "//src/v/model",
         "//src/v/ssx:sformat",
         "//src/v/test_utils:gtest",
@@ -55,16 +60,17 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
-    name = "placeholder_extent_reader_test",
+    name = "materialized_extent_reader_test",
     timeout = "short",
     srcs = [
-        "placeholder_extent_reader_test.cc",
+        "materialized_extent_reader_test.cc",
     ],
     deps = [
         "//src/v/base",
         "//src/v/cloud_topics:types",
-        "//src/v/cloud_topics/read_path:placeholder_extent_reader",
-        "//src/v/cloud_topics/read_path/tests:placeholder_extent_fixture",
+        "//src/v/cloud_topics/read_path:materialized_extent_reader",
+        "//src/v/cloud_topics/read_path/tests:materialized_extent_fixture",
+        "//src/v/container:fragmented_vector",
         "//src/v/model",
         "//src/v/ssx:sformat",
         "//src/v/test_utils:gtest",
@@ -85,7 +91,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/core:read_pipeline",
         "//src/v/cloud_topics/read_path:fetch_handler",
-        "//src/v/cloud_topics/read_path/tests:placeholder_extent_fixture",
+        "//src/v/cloud_topics/read_path/tests:materialized_extent_fixture",
         "//src/v/container:fragmented_vector",
         "//src/v/model",
         "//src/v/ssx:sformat",

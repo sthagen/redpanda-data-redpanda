@@ -398,6 +398,18 @@ server::routes_t get_schema_registry_routes(ss::gate& gate, one_shot& es) {
       ss::httpd::schema_registry_json::schema_registry_status_ready,
       wrap(gate, es, auth_level::publik, status_ready)});
 
+    routes.routes.emplace_back(server::route_t{
+      ss::httpd::schema_registry_json::get_security_acls,
+      wrap(gate, es, auth_level::superuser, get_security_acls)});
+
+    routes.routes.emplace_back(server::route_t{
+      ss::httpd::schema_registry_json::post_security_acls,
+      wrap(gate, es, auth_level::superuser, post_security_acls)});
+
+    routes.routes.emplace_back(server::route_t{
+      ss::httpd::schema_registry_json::delete_security_acls,
+      wrap(gate, es, auth_level::superuser, delete_security_acls)});
+
     return routes;
 }
 

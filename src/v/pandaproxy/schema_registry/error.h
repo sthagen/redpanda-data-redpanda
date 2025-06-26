@@ -41,6 +41,8 @@ enum class error_code {
     mode_invalid,
     version_exhausted,
     format_not_supported,
+    acl_invalid,
+    internal_server_error,
 };
 
 std::error_code make_error_code(error_code);

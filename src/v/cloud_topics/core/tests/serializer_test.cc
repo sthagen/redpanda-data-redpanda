@@ -22,7 +22,7 @@ namespace cloud_topics = experimental::cloud_topics;
 TEST(SerializerTest, EmptyReader) {
     auto res = cloud_topics::core::serialize_batches({}).get();
     ASSERT_TRUE(res.payload.empty());
-    ASSERT_TRUE(res.batches.empty());
+    ASSERT_TRUE(res.extents.empty());
 }
 
 class SerializerFixture
@@ -38,9 +38,10 @@ TEST_P(SerializerFixture, Consume) {
     std::ranges::move(std::move(test_data), std::back_inserter(batches));
     auto res = cloud_topics::core::serialize_batches(std::move(batches)).get();
     ASSERT_GT(res.payload.size_bytes(), 0);
-    ASSERT_EQ(res.batches.size(), num_batches);
+    ASSERT_EQ(res.extents.size(), num_batches);
     ASSERT_TRUE(
-      res.batches.back().physical_offset + res.batches.back().size_bytes
+      res.extents.back().first_byte_offset()
+        + res.extents.back().byte_range_size()
       == res.payload.size_bytes());
 }
 

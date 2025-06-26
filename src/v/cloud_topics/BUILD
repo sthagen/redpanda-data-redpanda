@@ -109,12 +109,31 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "data_plane_api",
+    hdrs = [
+        "data_plane_api.h",
+    ],
+    include_prefix = "cloud_topics",
+    visibility = [
+        "//src/v/kafka/data:__pkg__",
+        "//src/v/redpanda:__pkg__",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/cloud_topics:extent_meta",
+        "//src/v/container:fragmented_vector",
+        "//src/v/model",
+        "//src/v/storage",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "app",
     srcs = [
         "app.cc",
     ],
     hdrs = [
-        "api.h",
         "app.h",
     ],
     include_prefix = "cloud_topics",
@@ -125,6 +144,8 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/base",
+        "//src/v/cloud_topics:data_plane_api",
+        "//src/v/cloud_topics:extent_meta",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/container:fragmented_vector",
         "//src/v/model",
@@ -134,18 +155,18 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "app_impl",
+    name = "data_plane_impl",
     srcs = [
-        "app_impl.cc",
+        "data_plane_impl.cc",
     ],
     hdrs = [
-        "app_impl.h",
+        "data_plane_impl.h",
     ],
     implementation_deps = [
         "//src/v/base",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage",
-        "//src/v/cloud_topics:app",
+        "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/batcher",
         "//src/v/cloud_topics/core:read_pipeline",
         "//src/v/cloud_topics/core:write_pipeline",
@@ -159,5 +180,18 @@ redpanda_cc_library(
     visibility = ["//src/v/redpanda:__pkg__"],
     deps = [
         "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "extent_meta",
+    hdrs = [
+        "extent_meta.h",
+    ],
+    include_prefix = "cloud_topics",
+    deps = [
+        ":types",
+        "//src/v/model",
+        "@fmt",
     ],
 )

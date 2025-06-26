@@ -10,7 +10,7 @@
 #include "cloud_topics/core/read_pipeline.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/read_path/fetch_request_handler.h"
-#include "cloud_topics/read_path/tests/placeholder_extent_fixture.h"
+#include "cloud_topics/read_path/tests/materialized_extent_fixture.h"
 #include "container/fragmented_vector.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -35,14 +35,25 @@ namespace cloud_topics = experimental::cloud_topics;
 
 ss::logger test_log("L0_fetch_handler_test");
 
-TEST_F_CORO(placeholder_extent_fixture, l0_fetch_handler_test) {
+static chunked_vector<cloud_topics::extent_meta>
+convert_placeholders(const chunked_vector<model::record_batch>& batches) {
+    chunked_vector<cloud_topics::extent_meta> res;
+    for (const auto& b : batches) {
+        auto mext = materialized_extent_fixture::make_materialized_extent(
+          b.copy());
+        res.push_back(mext.meta);
+    }
+    return res;
+}
+
+TEST_F_CORO(materialized_extent_fixture, l0_fetch_handler_test) {
     const int num_batches = 1;
     co_await add_random_batches(num_batches);
     produce_placeholders(true, 1);
 
     auto ntp = model::controller_ntp;
 
-    auto underlying = make_underlying();
+    auto underlying = convert_placeholders(make_underlying());
 
     cloud_topics::core::read_pipeline<> pipeline;
 

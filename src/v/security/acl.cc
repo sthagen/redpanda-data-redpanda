@@ -286,88 +286,127 @@ acl_store::reset_bindings(const fragmented_vector<acl_binding>& bindings) {
       });
 }
 
-std::ostream& operator<<(std::ostream& os, acl_operation op) {
-    switch (op) {
-    case acl_operation::all:
-        return os << "all";
-    case acl_operation::read:
-        return os << "read";
-    case acl_operation::write:
-        return os << "write";
-    case acl_operation::create:
-        return os << "create";
-    case acl_operation::remove:
-        return os << "remove";
-    case acl_operation::alter:
-        return os << "alter";
-    case acl_operation::describe:
-        return os << "describe";
-    case acl_operation::cluster_action:
-        return os << "cluster_action";
-    case acl_operation::describe_configs:
-        return os << "describe_configs";
-    case acl_operation::alter_configs:
-        return os << "alter_configs";
-    case acl_operation::idempotent_write:
-        return os << "idempotent_write";
+acl_principal acl_principal::from_string(std::string_view principal) {
+    constexpr std::string_view user_prefix{"User:"};
+    constexpr std::string_view role_prefix{"RedpandaRole:"};
+    auto usr = principal.starts_with(user_prefix);
+    auto rol = !usr && principal.starts_with(role_prefix);
+
+    if (unlikely(!usr && !rol)) {
+        throw acl_conversion_error(
+          fmt::format("Invalid principal name: {{{}}}", principal));
     }
-    __builtin_unreachable();
+
+    auto name = principal.substr(usr ? user_prefix.size() : role_prefix.size());
+    if (unlikely(name.empty())) {
+        throw acl_conversion_error(
+          fmt::format("Principal name cannot be empty"));
+    }
+    if (name == "*" && !usr) {
+        throw acl_conversion_error(
+          fmt::format("Illegal wildcard role: {{{}}}", principal));
+    }
+    return {
+      usr ? security::principal_type::user : security::principal_type::role,
+      ss::sstring{name}};
+}
+
+template<>
+std::optional<resource_type>
+from_string_view<resource_type>(std::string_view str) {
+    return string_switch<std::optional<resource_type>>(str)
+      .match(to_string_view(resource_type::topic), resource_type::topic)
+      .match(to_string_view(resource_type::group), resource_type::group)
+      .match(to_string_view(resource_type::cluster), resource_type::cluster)
+      .match(
+        to_string_view(resource_type::transactional_id),
+        resource_type::transactional_id)
+      .match(
+        to_string_view(resource_type::sr_subject), resource_type::sr_subject)
+      .match(
+        to_string_view(resource_type::sr_registry), resource_type::sr_registry)
+      .default_match(std::nullopt);
+}
+
+template<>
+std::optional<pattern_type>
+from_string_view<pattern_type>(std::string_view str) {
+    return string_switch<std::optional<pattern_type>>(str)
+      .match(to_string_view(pattern_type::literal), pattern_type::literal)
+      .match(to_string_view(pattern_type::prefixed), pattern_type::prefixed)
+      .default_match(std::nullopt);
+}
+
+template<>
+std::optional<acl_operation>
+from_string_view<acl_operation>(std::string_view str) {
+    return string_switch<std::optional<acl_operation>>(str)
+      .match(to_string_view(acl_operation::all), acl_operation::all)
+      .match(to_string_view(acl_operation::read), acl_operation::read)
+      .match(to_string_view(acl_operation::write), acl_operation::write)
+      .match(to_string_view(acl_operation::create), acl_operation::create)
+      .match(to_string_view(acl_operation::remove), acl_operation::remove)
+      .match(to_string_view(acl_operation::alter), acl_operation::alter)
+      .match(to_string_view(acl_operation::describe), acl_operation::describe)
+      .match(
+        to_string_view(acl_operation::cluster_action),
+        acl_operation::cluster_action)
+      .match(
+        to_string_view(acl_operation::describe_configs),
+        acl_operation::describe_configs)
+      .match(
+        to_string_view(acl_operation::alter_configs),
+        acl_operation::alter_configs)
+      .match(
+        to_string_view(acl_operation::idempotent_write),
+        acl_operation::idempotent_write)
+      .default_match(std::nullopt);
+}
+
+template<>
+std::optional<acl_permission>
+from_string_view<acl_permission>(std::string_view str) {
+    return string_switch<std::optional<acl_permission>>(str)
+      .match(to_string_view(acl_permission::deny), acl_permission::deny)
+      .match(to_string_view(acl_permission::allow), acl_permission::allow)
+      .default_match(std::nullopt);
+}
+
+template<>
+std::optional<principal_type>
+from_string_view<principal_type>(std::string_view str) {
+    return string_switch<std::optional<principal_type>>(str)
+      .match(to_string_view(principal_type::user), principal_type::user)
+      .match(
+        to_string_view(principal_type::ephemeral_user),
+        principal_type::ephemeral_user)
+      .match(to_string_view(principal_type::role), principal_type::role)
+      .default_match(std::nullopt);
+}
+
+std::ostream& operator<<(std::ostream& os, acl_operation op) {
+    return os << to_string_view(op);
 }
 
 std::ostream& operator<<(std::ostream& os, acl_permission perm) {
-    switch (perm) {
-    case acl_permission::deny:
-        return os << "deny";
-    case acl_permission::allow:
-        return os << "allow";
-    }
-    __builtin_unreachable();
+    return os << to_string_view(perm);
 }
 
 std::ostream& operator<<(std::ostream& os, resource_type type) {
-    switch (type) {
-    case resource_type::topic:
-        return os << "topic";
-    case resource_type::group:
-        return os << "group";
-    case resource_type::cluster:
-        return os << "cluster";
-    case resource_type::transactional_id:
-        return os << "transactional_id";
-    case resource_type::sr_subject:
-        return os << "schema_registry_subject";
-    case resource_type::sr_global:
-        return os << "schema_registry_global";
-    }
-    __builtin_unreachable();
+    return os << to_string_view(type);
 }
 
 std::ostream& operator<<(std::ostream& os, pattern_type type) {
-    switch (type) {
-    case pattern_type::literal:
-        return os << "literal";
-    case pattern_type::prefixed:
-        return os << "prefixed";
-    }
-    __builtin_unreachable();
+    return os << to_string_view(type);
 }
 
 std::ostream& operator<<(std::ostream& os, principal_type type) {
-    switch (type) {
-    case principal_type::user:
-        return os << "user";
-    case principal_type::ephemeral_user:
-        return os << "ephemeral user";
-    case principal_type::role:
-        return os << "role";
-    }
-    __builtin_unreachable();
+    return os << to_string_view(type);
 }
 
 std::ostream&
 operator<<(std::ostream& os, const acl_principal_base& principal) {
-    fmt::print(
-      os, "type {{{}}} name {{{}}}", principal.type(), principal.name_view());
+    fmt::print(os, "{:l}", principal);
     return os;
 }
 

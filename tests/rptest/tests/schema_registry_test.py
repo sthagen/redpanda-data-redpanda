@@ -918,6 +918,12 @@ class SchemaRegistryEndpoints(RedpandaTest):
         http.client.HTTPConnection.debuglevel = 1
         http.client.print = lambda *args: self.logger.debug(" ".join(args))
 
+    def assert_equal(self, first, second, msg=None):
+        assert first == second, msg or f"{first} != {second}"
+
+    def assert_in(self, member, container, msg=None):
+        assert member in container, msg or f"{member!r} not found in {container!r}"
+
     def _request(self,
                  verb,
                  path,
@@ -5661,3 +5667,425 @@ class SchemaRegistryCompatibilityModes(SchemaRegistryEndpoints):
 
             self.logger.debug(f"register schema={s} with {mode} compatibility")
             self._register_schema(schema=s, type=schema_type, mode=mode)
+
+
+class SchemaRegistryACLTest(SchemaRegistryEndpoints):
+    """
+    Test schema registry ACL CRUD endpoints.
+    """
+
+    VALID_OPERATIONS = [
+        "READ", "WRITE", "CREATE", "REMOVE", "ALTER", "DESCRIBE",
+        "CLUSTER_ACTION", "DESCRIBE_CONFIGS", "ALTER_CONFIGS",
+        "IDEMPOTENT_WRITE", "ALL"
+    ]
+
+    VALID_PATTERN_TYPES = ["LITERAL", "PREFIXED"]
+
+    def __init__(self, context, **kwargs):
+        super(SchemaRegistryACLTest, self).__init__(context, **kwargs)
+
+    def _get_security_acls(self, **kwargs):
+        resp = self._request("GET", "security/acls", **kwargs)
+        self.logger.debug(f"Response content: {resp.content}")
+        return resp
+
+    def _post_security_acls(self, data, **kwargs):
+        resp = self._request("POST",
+                             "security/acls",
+                             json=data,
+                             headers={"Content-Type": "application/json"},
+                             **kwargs)
+        self.logger.debug(f"Response content: {resp.content}")
+        return resp
+
+    def _delete_security_acls(self, data, **kwargs):
+        resp = self._request("DELETE",
+                             "security/acls",
+                             json=data,
+                             headers={"Content-Type": "application/json"},
+                             **kwargs)
+        self.logger.debug(f"Response content: {resp.content}")
+        return resp
+
+    def _create_test_acl(self,
+                         principal="User:alice",
+                         resource="test-subject",
+                         resource_type="SUBJECT",
+                         pattern_type="LITERAL",
+                         host="*",
+                         operation="READ",
+                         permission="ALLOW"):
+        """Helper method to create a test ACL with (overridable) default values."""
+        return {
+            "principal": principal,
+            "resource": resource,
+            "resource_type": resource_type,
+            "pattern_type": pattern_type,
+            "host": host,
+            "operation": operation,
+            "permission": permission
+        }
+
+    def await_acl_count(self, count):
+        """Wait for all nodes to see the expected ACL count. Useful as a linearizable barrier after post/delete requests."""
+        def all_nodes_see_acls():
+            for node in self.redpanda.nodes:
+                response = self._get_security_acls(
+                    hostname=node.account.hostname)
+                self.assert_equal(response.status_code, 200)
+                self.assert_equal(len(response.json()), count)
+            return True
+
+        wait_until(
+            all_nodes_see_acls,
+            timeout_sec=15,
+            backoff_sec=1,
+            retry_on_exc=True,
+            err_msg=
+            f"Timeout waiting for ACLs count to reach {count} on all nodes")
+
+    def _check_filtered_acls(self, filters, expected_acls):
+        """Helper to check if listing ACLs with the given `filters` leads to a response of `expected_acls`"""
+        response = self._get_security_acls(params=filters)
+        self.assert_equal(response.status_code, 200)
+
+        # Sort both lists for consistent comparison
+        sorted_response = sorted(response.json(), key=str)
+        sorted_expected = sorted(expected_acls, key=str)
+
+        self.assert_equal(
+            sorted_response, sorted_expected,
+            f"Expected {sorted_expected} ACLs for filters {filters}, got {sorted_response}"
+        )
+        return sorted_response
+
+    @cluster(num_nodes=3)
+    def test_basic_acl_operations(self):
+        """Test basic CRUD operations for ACLs"""
+        # Define the ACLs
+        acls = [
+            self._create_test_acl(principal="User:alice",
+                                  resource="test-subject",
+                                  resource_type="SUBJECT",
+                                  operation="READ"),
+            self._create_test_acl(principal="User:bob",
+                                  resource="*",
+                                  resource_type="REGISTRY",
+                                  operation="WRITE",
+                                  permission="DENY")
+        ]
+
+        # Create ACLs and verify 201 status
+        resp = self._post_security_acls(acls)
+        self.assert_equal(resp.status_code, 201)
+
+        # Get ACLs and verify they exist
+        def acls_exist():
+            resp = self._get_security_acls()
+            self.assert_equal(resp.status_code, 200)
+            created_acls = resp.json()
+            self.assert_equal(len(created_acls), 2)
+            return True
+
+        wait_until(acls_exist,
+                   timeout_sec=15,
+                   backoff_sec=1,
+                   retry_on_exc=True,
+                   err_msg="Timeout waiting for ACLs to be created")
+
+        # Delete ACLs
+        resp = self._delete_security_acls(acls)
+        self.assert_equal(resp.status_code, 200)
+        deleted_acls = resp.json()
+        self.assert_equal(len(deleted_acls), 2)
+
+        # Verify ACLs are gone
+        def acls_removed():
+            resp = self._get_security_acls()
+            self.assert_equal(resp.status_code, 200)
+            self.assert_equal(len(resp.json()), 0)
+            return True
+
+        wait_until(acls_removed,
+                   timeout_sec=15,
+                   backoff_sec=1,
+                   retry_on_exc=True,
+                   err_msg="Timeout waiting for ACLs to be removed")
+
+    @cluster(num_nodes=3)
+    def test_acl_validation(self):
+        """Test comprehensive ACL validation including control characters, invalid input values and invalid value combinations."""
+
+        # Test control characters in ACL fields
+        control_chars = ['\n', '\t', '\r']
+        for control_char in control_chars:
+            # Test in POST request body
+            acl_with_control = self._create_test_acl(
+                principal=f"User:user{control_char}1",
+                resource=f"test{control_char}subject")
+            resp = self._post_security_acls([acl_with_control])
+            self.assert_equal(resp.status_code, 400)
+            self.assert_in("Control characters not allowed", resp.text)
+
+            # Test in DELETE request body
+            resp = self._delete_security_acls([acl_with_control])
+            self.assert_equal(resp.status_code, 400)
+            self.assert_in("Control characters not allowed", resp.text)
+
+            # Test in GET query parameters
+            resp = self._get_security_acls(
+                params={"principal": f"User:user{control_char}1"})
+            self.assert_equal(resp.status_code, 400)
+            self.assert_in("Invalid parameter", resp.text)
+
+        # Test invalid resource types
+        invalid_resource_acl = [self._create_test_acl(resource_type="TOPIC")]
+        resp = self._post_security_acls(invalid_resource_acl)
+        self.assert_equal(resp.status_code, 400)
+
+        # Test missing required fields
+        missing_field_acl = [self._create_test_acl()]
+        del missing_field_acl[0]["operation"]
+        resp = self._post_security_acls(missing_field_acl)
+        self.assert_equal(resp.status_code, 400)
+
+        # Test invalid host format
+        invalid_host_acl = [self._create_test_acl(host="invalid:host:format")]
+        resp = self._post_security_acls(invalid_host_acl)
+        self.assert_equal(resp.status_code, 400)
+
+        # Test PREFIXED pattern type not allowed for REGISTRY resource
+        invalid_registry_acl = [
+            self._create_test_acl(resource="*",
+                                  resource_type="REGISTRY",
+                                  pattern_type="PREFIXED")
+        ]
+        resp = self._post_security_acls(invalid_registry_acl)
+        self.assert_equal(resp.status_code, 400)
+
+        # Wildcard is only valid for users, not roles
+        invalid_wildcard_role = [
+            self._create_test_acl(principal="RedpandaRole:*")
+        ]
+        resp = self._post_security_acls(invalid_wildcard_role)
+        self.assert_equal(resp.status_code, 400)
+
+    @cluster(num_nodes=3)
+    def test_field_variations(self):
+        """Test the range of field values for pattern types and operations."""
+
+        # Test valid pattern types
+        for pattern_type in self.VALID_PATTERN_TYPES:
+            acl = [self._create_test_acl(pattern_type=pattern_type)]
+            resp = self._post_security_acls(acl)
+            self.assert_equal(resp.status_code, 201)
+
+        # Test valid operations
+        for operation in self.VALID_OPERATIONS:
+            acl = [
+                self._create_test_acl(resource=f"test-{operation.lower()}",
+                                      operation=operation)
+            ]
+            resp = self._post_security_acls(acl)
+            self.assert_equal(resp.status_code, 201)
+
+        # Test invalid values
+        invalid_pattern_acl = [self._create_test_acl(pattern_type="INVALID")]
+        resp = self._post_security_acls(invalid_pattern_acl)
+        self.assert_equal(resp.status_code, 400)
+
+        invalid_operation_acl = [self._create_test_acl(operation="INVALID_OP")]
+        resp = self._post_security_acls(invalid_operation_acl)
+        self.assert_equal(resp.status_code, 400)
+
+    @cluster(num_nodes=3)
+    def test_case_handling(self):
+        """Test case insensitive inputs and case sensitivity in operations."""
+
+        # Test lowercase inputs are accepted and normalized to uppercase
+        acl = [
+            self._create_test_acl(operation="ReAd",
+                                  resource_type="subject",
+                                  pattern_type="LITERAL")
+        ]
+
+        resp = self._post_security_acls(acl)
+        self.assert_equal(resp.status_code, 201)
+
+        # Wait for ACLs to propagate
+        self.await_acl_count(1)
+
+        # Verify normalization to uppercase in response
+        resp = self._get_security_acls()
+        self.assert_equal(resp.status_code, 200)
+        created_acls = resp.json()
+        self.assert_equal(len(created_acls), 1)
+        self.assert_equal(created_acls[0]["resource_type"], "SUBJECT")
+        self.assert_equal(created_acls[0]["pattern_type"], "LITERAL")
+
+        # Test case-insensitive filtering
+        resp = self._get_security_acls(params={
+            "resource_type": "subject",
+            "permission": "ALLOW"
+        })
+        self.assert_equal(resp.status_code, 200)
+        self.assert_equal(len(resp.json()), 1)
+
+        # Test case-insensitive deletion
+        acl_lower = [{
+            k:
+            v.lower() if k in ["resource_type", "pattern_type"] else v
+            for k, v in acl[0].items()
+        }]
+        resp = self._delete_security_acls(acl_lower)
+        self.assert_equal(resp.status_code, 200)
+        self.assert_equal(len(resp.json()), 1)
+
+    @cluster(num_nodes=3)
+    def test_acl_delete_filters(self):
+        """
+        Test ACL deletion with similar ACLs
+        """
+        # Create some ACLs
+        first = self._create_test_acl(principal="User:alice", operation="READ")
+        second = self._create_test_acl(principal="User:bob", operation="WRITE")
+        acls = [first, second]
+
+        resp = self._post_security_acls(acls)
+        self.assert_equal(resp.status_code, 201)
+
+        # Test deletion
+        resp = self._delete_security_acls([first])
+        self.assert_equal(resp.status_code, 200)
+        deleted_acls = resp.json()
+        self.assert_equal(len(deleted_acls), 1)
+
+        # Verify first ACL is gone, only the second remains
+        def only_first_acl_deleted():
+            resp = self._get_security_acls()
+            self.assert_equal(resp.status_code, 200)
+            remaining_acls = resp.json()
+            self.assert_equal(len(remaining_acls), 1)
+            self.assert_equal(remaining_acls[0]["principal"], "User:bob")
+            return True
+
+        wait_until(
+            only_first_acl_deleted,
+            timeout_sec=15,
+            backoff_sec=1,
+            retry_on_exc=True,
+            err_msg="Timeout waiting for only the first ACL to be deleted")
+
+    @cluster(num_nodes=3)
+    def test_acl_get_filters(self):
+        """Test filtering ACLs using query parameters on GET /security/acls endpoint."""
+        # Define test ACLs with clear names for verification
+        subject_read_acl = self._create_test_acl(principal="User:user1",
+                                                 resource="test-subject-1",
+                                                 operation="READ")
+        subject_write_acl = self._create_test_acl(principal="User:user2",
+                                                  resource="test-subject-2",
+                                                  pattern_type="PREFIXED",
+                                                  host="192.168.1.1",
+                                                  operation="WRITE",
+                                                  permission="DENY")
+        registry_admin_acl = self._create_test_acl(
+            principal="RedpandaRole:admin",
+            resource="*",
+            resource_type="REGISTRY",
+            operation="ALL")
+
+        test_acls = [subject_read_acl, subject_write_acl, registry_admin_acl]
+        resp = self._post_security_acls(test_acls)
+        self.assert_equal(resp.status_code, 201)
+
+        # Wait until ACLs propagate to all nodes
+        self.await_acl_count(3)
+
+        # Test individual field filters
+        self._check_filtered_acls({}, test_acls)
+        self._check_filtered_acls({"principal": "User:user1"},
+                                  [subject_read_acl])
+        self._check_filtered_acls({"principal": "RedpandaRole:admin"},
+                                  [registry_admin_acl])
+        self._check_filtered_acls({"resource": "test-subject-1"},
+                                  [subject_read_acl])
+        self._check_filtered_acls({"resource_type": "REGISTRY"},
+                                  [registry_admin_acl])
+        self._check_filtered_acls({"pattern_type": "PREFIXED"},
+                                  [subject_write_acl])
+        self._check_filtered_acls({"host": "192.168.1.1"}, [subject_write_acl])
+        self._check_filtered_acls({"operation": "ALL"}, [registry_admin_acl])
+        self._check_filtered_acls({"permission": "DENY"}, [subject_write_acl])
+
+        # Test wildcard matches
+        self._check_filtered_acls({"host": "*"},
+                                  [subject_read_acl, registry_admin_acl])
+        self._check_filtered_acls({"resource": "*"}, [registry_admin_acl])
+
+        # Test combination of filters
+        self._check_filtered_acls(
+            {
+                "resource_type": "SUBJECT",
+                "pattern_type": "LITERAL",
+                "permission": "ALLOW"
+            }, [subject_read_acl])
+
+        self._check_filtered_acls(
+            {
+                "principal": "User:user1",
+                "resource_type": "SUBJECT"
+            }, [subject_read_acl])
+
+        # Test filters that should return empty results
+        self._check_filtered_acls({
+            "principal": "User:nonexistent",
+        }, [])
+        self._check_filtered_acls(
+            {
+                "principal": "User:user1",
+                "permission": "DENY"
+            }, [])
+
+        # Test case sensitivity
+        response_upper = self._check_filtered_acls(
+            {"permission": "ALLOW"}, [subject_read_acl, registry_admin_acl])
+        response_lower = self._check_filtered_acls(
+            {"permission": "allow"}, [subject_read_acl, registry_admin_acl])
+        self.assert_equal(
+            response_upper, response_lower,
+            f"Case-insensitive filtering should return same results. {response_upper} != {response_lower}"
+        )
+
+    @cluster(num_nodes=3)
+    def test_acl_idempotency(self):
+        """Test idempotency of ACL operations and partial deletions."""
+        test_acl = self._create_test_acl()
+
+        # Create initial ACL
+        resp = self._post_security_acls([test_acl])
+        self.assert_equal(resp.status_code, 201)
+
+        # Wait until ACLs propagate to all nodes
+        self.await_acl_count(1)
+
+        # Create same ACL again - should be idempotent
+        resp = self._post_security_acls([test_acl])
+        self.assert_equal(resp.status_code, 201)
+
+        # Verify only one exists
+        resp = self._get_security_acls(params={"principal": "User:alice"})
+        self.assert_equal(resp.status_code, 200)
+        self.assert_equal(len(resp.json()), 1)
+
+        # Test partial deletion
+        non_existent_acl = self._create_test_acl(resource="non-existent")
+        resp = self._delete_security_acls([test_acl, non_existent_acl])
+        self.assert_equal(resp.status_code, 200)
+        deleted_acls = resp.json()
+        self.assert_equal(len(deleted_acls), 1)
+        self.assert_equal(deleted_acls[0]["resource"], "test-subject")
+
+        # Verify ACL no longer exists eventually
+        self.await_acl_count(0)

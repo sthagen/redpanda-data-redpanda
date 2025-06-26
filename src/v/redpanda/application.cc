@@ -20,7 +20,7 @@
 #include "cloud_storage/remote.h"
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/configuration.h"
-#include "cloud_topics/app_impl.h"
+#include "cloud_topics/data_plane_impl.h"
 #include "cloud_topics/dl_stm/dl_stm_factory.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/archiver_manager.h"
@@ -2069,7 +2069,7 @@ void application::wire_up_redpanda_services(
 
         construct_service(
           cloud_topics_api, ss::sharded_parameter([this, bucket] {
-              return experimental::cloud_topics::make_app(
+              return experimental::cloud_topics::make_data_plane(
                 &partition_manager, &cloud_io, &shadow_index_cache, bucket);
           }))
           .get();

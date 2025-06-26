@@ -84,6 +84,10 @@ struct error_category final : std::error_category {
             return "Versions exhausted, maximum 2147483647 reached";
         case error_code::format_not_supported:
             return "Format parameter not supported";
+        case error_code::acl_invalid:
+            return "Invalid ACL";
+        case error_code::internal_server_error:
+            return "Internal server error";
         }
         return "(unrecognized error)";
     }
@@ -141,6 +145,10 @@ struct error_category final : std::error_category {
             return reply_error_code::internal_server_error; // 500
         case error_code::format_not_supported:
             return reply_error_code::not_implemented; // 501
+        case error_code::acl_invalid:
+            return reply_error_code::bad_request; // 400
+        case error_code::internal_server_error:
+            return reply_error_code::internal_server_error; // 500
         }
         return {};
     }

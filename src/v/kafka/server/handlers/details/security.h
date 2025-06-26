@@ -18,48 +18,10 @@
 #include "security/scram_credential.h"
 namespace kafka::details {
 
-/*
- * Conversions throw acl_conversion_error and the exception message via (what())
- * is generally what should be returned as the error message in kafka responses.
- *
- * Using an exception here eliminates the need to write c/go-style error
- * handling for the large number of fields that need to be converted.
- */
-struct acl_conversion_error : std::exception {
-    explicit acl_conversion_error(ss::sstring msg)
-      : msg{std::move(msg)} {}
-    const char* what() const noexcept final { return msg.c_str(); }
-    ss::sstring msg;
-};
+using acl_conversion_error = security::acl_conversion_error;
 
 inline security::acl_principal to_acl_principal(const ss::sstring& principal) {
-    std::string_view view(principal);
-    constexpr std::string_view user_prefix{"User:"};
-    constexpr std::string_view role_prefix{"RedpandaRole:"};
-    auto usr = view.starts_with(user_prefix);
-    auto rol = !usr && view.starts_with(role_prefix);
-
-    if (unlikely(!usr && !rol)) {
-        throw acl_conversion_error(
-          fmt::format("Invalid principal name: {{{}}}", principal));
-    }
-
-    auto name = principal.substr(usr ? user_prefix.size() : role_prefix.size());
-    if (unlikely(name.empty())) {
-        throw acl_conversion_error(
-          fmt::format("Principal name cannot be empty"));
-    }
-    if (name == "*") {
-        if (usr) {
-            return security::acl_wildcard_user;
-        } else {
-            throw acl_conversion_error(
-              fmt::format("Illegal wildcard role: {{{}}}", principal));
-        }
-    }
-    return security::acl_principal(
-      usr ? security::principal_type::user : security::principal_type::role,
-      std::move(name));
+    return security::acl_principal::from_string(principal);
 }
 
 inline security::acl_host to_acl_host(const ss::sstring& host) {
@@ -271,7 +233,7 @@ inline int8_t to_kafka_resource_type(security::resource_type type) {
     case security::resource_type::transactional_id:
         return 5;
     case security::resource_type::sr_subject:
-    case security::resource_type::sr_global:
+    case security::resource_type::sr_registry:
         vassert(
           false, "Schema Registry resources are not supported in kafka ACLs");
     }
@@ -327,15 +289,7 @@ inline int8_t to_kafka_permission(security::acl_permission perm) {
 }
 
 inline ss::sstring to_kafka_principal(const security::acl_principal& p) {
-    switch (p.type()) {
-    case security::principal_type::user:
-        return fmt::format("User:{}", p.name());
-    case security::principal_type::ephemeral_user:
-        return fmt::format("Ephemeral user:{}", p.name());
-    case security::principal_type::role:
-        return fmt::format("RedpandaRole:{}", p.name());
-    }
-    __builtin_unreachable();
+    return fmt::format("{:a}", p);
 }
 
 inline ss::sstring to_kafka_host(security::acl_host host) {
@@ -421,7 +375,7 @@ const std::vector<security::acl_operation>& get_allowed_operations() {
       security::acl_operation::describe_configs,
     };
 
-    static const std::vector<security::acl_operation> sr_global_resource_ops{
+    static const std::vector<security::acl_operation> sr_registry_resource_ops{
       security::acl_operation::read,
       security::acl_operation::describe,
       security::acl_operation::alter_configs,
@@ -441,8 +395,8 @@ const std::vector<security::acl_operation>& get_allowed_operations() {
         return transactional_id_resource_ops;
     case security::resource_type::sr_subject:
         return sr_subject_resource_ops;
-    case security::resource_type::sr_global:
-        return sr_global_resource_ops;
+    case security::resource_type::sr_registry:
+        return sr_registry_resource_ops;
     };
 
     __builtin_unreachable();

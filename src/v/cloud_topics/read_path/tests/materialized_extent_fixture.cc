@@ -1,4 +1,4 @@
-#include "placeholder_extent_fixture.h"
+#include "materialized_extent_fixture.h"
 
 #include "cloud_storage_clients/types.h"
 #include "cloud_topics/dl_placeholder.h"
@@ -11,7 +11,6 @@
 #include "storage/record_batch_utils.h"
 
 #include <seastar/core/abort_source.hh>
-#include <seastar/core/circular_buffer.hh>
 #include <seastar/core/gate.hh>
 
 #include <exception>
@@ -19,9 +18,9 @@
 #include <stdexcept>
 
 namespace cloud_topics = experimental::cloud_topics;
-static ss::logger test_log("placeholder_extent_fixture");
+static ss::logger test_log("materialized_extent_fixture");
 
-ss::future<> placeholder_extent_fixture::add_random_batches(int record_count) {
+ss::future<> materialized_extent_fixture::add_random_batches(int record_count) {
     vassert(expected.empty(), "Already initialized");
     auto res = co_await model::test::make_random_batches(
       model::offset(0), record_count, false);
@@ -34,7 +33,7 @@ ss::future<> placeholder_extent_fixture::add_random_batches(int record_count) {
     }
 }
 
-void placeholder_extent_fixture::produce_placeholders(
+void materialized_extent_fixture::produce_placeholders(
   bool use_cache,
   int group_by,
   std::queue<injected_failure> injected_failures,
@@ -83,7 +82,7 @@ void placeholder_extent_fixture::produce_placeholders(
     // that has to be added to the cloud storage mock and (optionally) cache
     // mock
     struct placeholders_and_uploads {
-        ss::circular_buffer<model::record_batch> placeholders;
+        chunked_vector<model::record_batch> placeholders;
         std::map<std::filesystem::path, iobuf> uploads;
     };
     // Produce data for the partition and the cloud/cache. Group data
@@ -92,7 +91,7 @@ void placeholder_extent_fixture::produce_placeholders(
       [&](
         std::queue<model::record_batch> sources,
         std::queue<iobuf> serialized_batches) -> placeholders_and_uploads {
-        ss::circular_buffer<model::record_batch> placeholders;
+        chunked_vector<model::record_batch> placeholders;
         std::map<std::filesystem::path, iobuf> uploads;
         while (!sources.empty()) {
             iobuf current;
@@ -300,15 +299,15 @@ void placeholder_extent_fixture::produce_placeholders(
     }
 }
 
-model::offset placeholder_extent_fixture::get_expected_committed_offset() {
+model::offset materialized_extent_fixture::get_expected_committed_offset() {
     if (expected.empty()) {
         return model::offset{};
     }
     return expected.back().last_offset();
 }
 
-ss::circular_buffer<model::record_batch>
-placeholder_extent_fixture::make_underlying() {
+chunked_vector<model::record_batch>
+materialized_extent_fixture::make_underlying() {
     vlog(
       test_log.info,
       "make_log_reader called, partition's size: {}, expected size: {}",
@@ -319,8 +318,8 @@ placeholder_extent_fixture::make_underlying() {
 }
 
 bool operator==(
-  const ss::circular_buffer<model::record_batch>& lhs,
-  const ss::circular_buffer<model::record_batch>& rhs) {
+  const chunked_vector<model::record_batch>& lhs,
+  const chunked_vector<model::record_batch>& rhs) {
     if (lhs.size() != rhs.size()) {
         return false;
     }

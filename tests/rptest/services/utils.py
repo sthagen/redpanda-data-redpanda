@@ -61,12 +61,14 @@ class BadLogLines(Exception):
         # in the string output so that for single line failures, it isn't necessary
         # for folks to search back in the log to find the culprit.
         example_lines = next(iter(self.node_to_lines.items()))[1]
-        example = next(iter(example_lines))
+        example = next(iter(example_lines['lines']))
 
-        summary = ','.join([
-            f'{i[0].account.hostname}({len(i[1])})'
-            for i in self.node_to_lines.items()
-        ])
+        summary_list = []
+        for i in self.node_to_lines.items():
+            version_or_none = i[1]["version"]
+            node_info = f'<{i[0].account.hostname}:{version_or_none}>' if version_or_none is not None else f'{i[0].account.hostname}'
+            summary_list.append(f'{node_info}({len(i[1])})')
+        summary = ','.join(summary_list)
         return f"<BadLogLines nodes={summary} example=\"{example}\">"
 
     def __repr__(self):
@@ -168,11 +170,14 @@ class LogSearch(ABC):
             return True
         return False
 
-    def _search(self, nodes):
-        bad_lines = collections.defaultdict(list)
+    def _search(self, versioned_nodes):
+        bad_lines = collections.defaultdict(lambda: {
+            'version': None,
+            'lines': []
+        })
         test_name = self._context.function_name
         sw = Stopwatch()
-        for node in nodes:
+        for (version, node) in versioned_nodes:
             sw.start()
             hostname = self._get_hostname(node)
             self.logger.info(f"Scanning node {hostname} log for errors...")
@@ -190,7 +195,8 @@ class LogSearch(ABC):
                     allowed = self._check_oversized_allocations(line)
                 # If detected bad lines, log it and add to the list
                 if not allowed:
-                    bad_lines[node].append(line)
+                    bad_lines[node]['version'] = version
+                    bad_lines[node]['lines'].append(line)
                     self.logger.warn(f"[{test_name}] Unexpected log line on "
                                      f"{hostname}: {line}")
             self.logger.info(
@@ -198,9 +204,12 @@ class LogSearch(ABC):
                     f"##### Time spent to scan bad logs on '{hostname}'"))
         return bad_lines
 
-    def search_logs(self, nodes):
+    def search_logs(self, versioned_nodes):
+        """
+        versioned_nodes is a list of Tuple[version, node]
+        """
         # Do log search
-        bad_loglines = self._search(nodes)
+        bad_loglines = self._search(versioned_nodes)
         # If anything, raise exception
         if bad_loglines:
             # Call class overriden method to get proper Exception class

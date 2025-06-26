@@ -121,7 +121,6 @@
       "type": "object",
       "required": [
         "principal",
-        "principal_type",
         "resource",
         "resource_type",
         "pattern_type",
@@ -132,15 +131,7 @@
       "properties": {
         "principal": {
           "type": "string",
-          "description": "The name of the principal (e.g., User or RedpandaRole). Use \"*\" to represent wildcard."
-        },
-        "principal_type": {
-          "type": "string",
-          "enum": [
-            "USER",
-            "REDPANDA_ROLE"
-          ],
-          "description": "The type of the principal."
+          "description": "The name of the principal (e.g., User:alice or RedpandaRole:admin). Use \"*\" to represent wildcard."
         },
         "resource": {
           "type": "string",
@@ -149,7 +140,7 @@
         "resource_type": {
           "type": "string",
           "enum": [
-            "GLOBAL",
+            "REGISTRY",
             "SUBJECT"
           ],
           "description": "Type of the resource being secured."
@@ -158,7 +149,7 @@
           "type": "string",
           "enum": [
             "LITERAL",
-            "PREFIX"
+            "PREFIXED"
           ],
           "description": "Pattern match type for the resource. Only applies when resource_type is SUBJECT."
         },
