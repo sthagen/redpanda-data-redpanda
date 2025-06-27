@@ -35,7 +35,7 @@ def cleanup_on_early_exit(caller):
 
 
 def is_debug_mode():
-    return os.environ.get('BUILD_TYPE', None) == 'debug'
+    return os.environ.get('BUILD_TYPE', None) in ['debug', 'sanitizer']
 
 
 def skip_debug_mode(*args, **kwargs):

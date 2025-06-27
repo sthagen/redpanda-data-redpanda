@@ -33,6 +33,7 @@ from rptest.services.verifiable_producer import VerifiableProducer, is_int_with_
 from rptest.archival.s3_client import S3Client
 from rptest.clients.rpk import RpkTool
 from rptest.clients.rpk import RpkException
+from rptest.utils.mode_checks import is_debug_mode
 
 TopicPartition = namedtuple('TopicPartition', ['topic', 'partition'])
 
@@ -159,7 +160,7 @@ class EndToEndTest(Test):
         the much slower debug builds of redpanda, which generally cannot
         keep up with significant quantities of data or partition counts.
         """
-        return os.environ.get('BUILD_TYPE', None) == 'debug'
+        return is_debug_mode()
 
     def start_consumer(self,
                        num_nodes=1,

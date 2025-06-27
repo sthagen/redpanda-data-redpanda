@@ -736,6 +736,13 @@ public:
          * Everything there is to translate was translated
          */
         if (last_translated == max_offset_for_translation) {
+            vlog(
+              datalake_log.trace,
+              "[{}] translation up-to-date: last_translated={}, "
+              "max_translatable={}",
+              _partition->ntp(),
+              last_translated,
+              max_offset_for_translation.value_or(kafka::offset{-1}));
             return no_lag;
         }
         const auto last_ts = _stm->cached_last_translated_timestamp();
@@ -745,6 +752,13 @@ public:
         if (!last_ts.has_value()) {
             // no target is set and we do not have any translated offsets, it
             // means that the lag is 0
+            vlog(
+              datalake_log.trace,
+              "[{}] lag calculation - no last_ts: last_translated={}, "
+              "max_translatable={}",
+              _partition->ntp(),
+              last_translated,
+              max_offset_for_translation.value_or(kafka::offset{-1}));
             if (!_translation_target.has_value()) {
                 return no_lag;
             }
@@ -752,6 +766,14 @@ public:
               std::max<int64_t>(0, (now - _translation_target->ts).value())};
         }
 
+        vlog(
+          datalake_log.trace,
+          "[{}] lag calculation - using last_ts: "
+          "last_translated={}, max_translatable={}, last_ts={}",
+          _partition->ntp(),
+          last_translated,
+          max_offset_for_translation.value_or(kafka::offset{-1}),
+          last_ts.value());
         return std::chrono::milliseconds{
           std::max<int64_t>(0, (now - last_ts.value()).value())};
     }

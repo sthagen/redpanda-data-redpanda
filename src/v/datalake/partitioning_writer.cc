@@ -134,6 +134,12 @@ partitioning_writer::finish() && {
             continue;
         }
 
+        vlog(
+          datalake_log.trace,
+          "writer finished: file_bytes={}, file_path={}",
+          file_res.value().size_bytes,
+          file_res.value().path());
+
         files.push_back(partitioned_file{
           .local_file = std::move(file_res.value()),
           .data_location = remote_prefix_,
@@ -142,6 +148,13 @@ partitioning_writer::finish() && {
           .partition_key = std::move(pk),
           .partition_key_path = std::move(partition_key_path_res.value())});
     }
+
+    vlog(
+      datalake_log.trace,
+      "partitioning writer finish complete: schema_id={}, files_created={}",
+      schema_id_,
+      files.size());
+
     if (first_error != writer_error::ok) {
         co_return first_error;
     }

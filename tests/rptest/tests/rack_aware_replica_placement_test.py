@@ -159,7 +159,7 @@ class RackAwarePlacementTest(RedpandaTest):
 
     def _partition_count(self):
         # use smaller number of partitions for debug builds
-        if os.environ.get('BUILD_TYPE', None) == 'debug':
+        if self.debug_mode:
             return random.randint(20, 40)
 
         return random.randint(200, 300)

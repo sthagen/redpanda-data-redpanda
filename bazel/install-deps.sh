@@ -29,6 +29,7 @@ deb_deps=(
   automake
   autopoint
   bison
+  elfutils
   git
   libtool
   make
@@ -41,6 +42,7 @@ fedora_deps=(
   autoconf
   automake
   bison
+  elfutils
   gettext-devel
   git
   libtool

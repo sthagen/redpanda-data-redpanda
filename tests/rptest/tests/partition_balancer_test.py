@@ -639,6 +639,7 @@ class PartitionBalancerTest(PartitionBalancerService):
             self.run_validation(consumer_timeout_sec=CONSUMER_TIMEOUT)
 
     @cluster(num_nodes=6, log_allow_list=CHAOS_LOG_ALLOW_LIST)
+    @skip_debug_mode
     def test_full_nodes(self):
         """
         Test partition balancer full disk node handling with the following scenario:
@@ -653,8 +654,6 @@ class PartitionBalancerTest(PartitionBalancerService):
         skip_reason = None
         if not self.test_context.globals.get('use_xfs_partitions', False):
             skip_reason = "looks like we are not using separate partitions for each node"
-        elif os.environ.get('BUILD_TYPE', None) == 'debug':
-            skip_reason = "debug builds are too slow"
 
         if skip_reason:
             self.logger.warn("skipping test: " + skip_reason)
@@ -763,6 +762,7 @@ class PartitionBalancerTest(PartitionBalancerService):
             assert used_ratio < 0.81
 
     @cluster(num_nodes=6, log_allow_list=CHAOS_LOG_ALLOW_LIST)
+    @skip_debug_mode
     def test_nodes_with_reclaimable_space(self):
         """
         Test partition balancer cooperation with space management policy
@@ -771,8 +771,6 @@ class PartitionBalancerTest(PartitionBalancerService):
         skip_reason = None
         if not self.test_context.globals.get('use_xfs_partitions', False):
             skip_reason = "looks like we are not using separate partitions for each node"
-        elif os.environ.get('BUILD_TYPE', None) == 'debug':
-            skip_reason = "debug builds are too slow"
 
         if skip_reason:
             self.logger.warn("skipping test: " + skip_reason)

@@ -115,6 +115,16 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
     const auto decompressed_size_bytes = batch.size_bytes();
     _translation_probe.increment_decompressed_bytes_processed(
       decompressed_size_bytes);
+    vlog(
+      _log.trace,
+      "processing batch: offset_range=[{},{}], records={}, "
+      "raw_bytes={}, decompressed_bytes={}",
+      batch.base_offset(),
+      batch.last_offset(),
+      batch.record_count(),
+      raw_size_bytes,
+      decompressed_size_bytes);
+
     auto first_timestamp = batch.header().first_timestamp.value();
     auto it = model::record_batch_iterator::create(batch);
     while (it.has_next()) {
@@ -331,6 +341,13 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
         }
         _result.value().last_offset = offset;
     }
+
+    vlog(
+      _log.trace,
+      "batch processing complete: last_offset={}, writers_active={}",
+      _result.has_value() ? _result.value().last_offset : kafka::offset{-1},
+      _writers.size());
+
     co_return ss::stop_iteration::no;
 }
 
@@ -350,15 +367,24 @@ ss::future<writer_error> record_multiplexer::flush_writers() {
 
 ss::future<result<record_multiplexer::write_result, writer_error>>
 record_multiplexer::finish() && {
+    vlog(
+      _log.trace,
+      "starting multiplexer finish: writers={}, kafka_bytes_processed={}",
+      _writers.size(),
+      _reader_bytes_processed);
+
     auto writers = std::move(_writers);
     for (auto& [id, writer] : writers) {
         auto res = co_await std::move(*writer).finish();
         if (res.has_error()) {
+            vlog(_log.trace, "writer finish error: {}", res.error());
             _error = res.error();
             continue;
         }
         if (_result) {
             auto& files = res.value();
+            vlog(
+              _log.trace, "writer finished: files_created={})", files.size());
             std::move(
               files.begin(),
               files.end(),
@@ -372,6 +398,10 @@ record_multiplexer::finish() && {
             _error = res.error();
         } else if (_result) {
             auto& files = res.value();
+            vlog(
+              _log.trace,
+              "invalid record writer finished: dlq_files_created={}",
+              files.size());
             std::move(
               files.begin(),
               files.end(),
@@ -386,6 +416,16 @@ record_multiplexer::finish() && {
         co_return writer_error::no_data;
     }
     _result->kafka_bytes_processed = _reader_bytes_processed;
+
+    vlog(
+      _log.trace,
+      "multiplexer finish complete: offset_range=[{},{}], "
+      "total_records={}, kafka_bytes={}",
+      _result->start_offset,
+      _result->last_offset,
+      _result->last_offset() - _result->start_offset() + 1,
+      _result->kafka_bytes_processed);
+
     co_return std::move(*_result);
 }
 
