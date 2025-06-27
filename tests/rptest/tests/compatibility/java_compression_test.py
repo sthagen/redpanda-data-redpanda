@@ -169,8 +169,11 @@ class JavaCompressionTest(EndToEndTest):
         self.consume()
 
         # Install the latest version of `redpanda` and restart nodes
-        self.redpanda._installer.install(self.redpanda.nodes,
-                                         RedpandaInstaller.HEAD)
+        for version in self.redpanda._installer.upgrade_path_to_head(
+                pre_big_endian_snappy_fix_version):
+            self.redpanda._installer.install(self.redpanda.nodes, version)
+            self.redpanda.stop_node(self.redpanda.nodes[0])
+            self.redpanda.start_node(self.redpanda.nodes[0])
         self.redpanda.stop_node(self.redpanda.nodes[0])
 
         # Delete all the compaction indices to force self compaction of segments.

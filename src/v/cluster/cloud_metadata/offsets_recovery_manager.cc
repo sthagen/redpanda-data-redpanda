@@ -41,19 +41,11 @@ ss::future<error_outcome> offsets_recovery_manager::recover(
       "Requested recovery for {} partitions of the offsets topic",
       snapshot_paths_per_pid.size());
 
-    if (!_mapper.local().topic_exists()) {
-        vlog(clusterlog.info, "Consumer group topic is missing, creating...");
-        auto success = co_await kafka::try_create_consumer_group_topic(
-          _mapper.local(),
-          _topics_frontend.local(),
-          _members.local().node_count());
-        if (!success) {
-            vlog(clusterlog.error, "Failed to create consumer group topic");
-            co_return error_outcome::ntp_not_found;
-        }
-        co_await _controller_api.local().wait_for_topic(
-          model::kafka_consumer_offsets_nt, parent_retry.get_deadline());
-    }
+    if (!co_await _group_initializer.assure_topic_exists(
+          true, parent_retry.get_deadline())) {
+        vlog(clusterlog.error, "Failed to create consumer group topic");
+    };
+
     for (size_t i = 0; i < snapshot_paths_per_pid.size(); i++) {
         auto pid = model::partition_id(i);
         auto ntp = model::ntp{

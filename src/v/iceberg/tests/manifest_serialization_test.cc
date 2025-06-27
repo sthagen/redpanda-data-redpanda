@@ -312,11 +312,7 @@ TEST(ManifestSerializationTest, TestSerializeManifestData) {
     ss::engine().set_strict_dma(false);
     auto manifest_path = test_utils::get_runfile_path(
       "src/v/iceberg/tests/testdata/nested_manifest.avro");
-    if (!manifest_path.has_value()) {
-        manifest_path = "nested_manifest.avro";
-    }
-    auto orig_buf = iobuf{
-      ss::util::read_entire_file(manifest_path.value()).get()};
+    auto orig_buf = iobuf{ss::util::read_entire_file(manifest_path).get()};
     auto m = parse_manifest(orig_buf.copy());
     ASSERT_EQ(100, m.entries.size());
     ASSERT_EQ(m.metadata.manifest_content_type, manifest_content_type::data);

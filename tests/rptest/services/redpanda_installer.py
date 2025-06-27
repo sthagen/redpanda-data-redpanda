@@ -554,6 +554,37 @@ class RedpandaInstaller:
         )
         return result
 
+    def upgrade_path_to_head(
+            self, version: RedpandaVersion) -> list[RedpandaVersionTriple]:
+        """
+        For a given version, return the upgrade path that is supported, which is currently the policy of
+        latest minor in each feature release.
+        """
+        if version == RedpandaInstaller.HEAD:
+            version = self.head_version()
+        versions = self.released_versions  # in descending order
+        # find the first version
+        if len(version) == 2:
+            start_idx = next(i for i, v in enumerate(versions)
+                             if v[:2] == version)
+        else:
+            start_idx = versions.index(version)
+        next_versions = versions[:start_idx]
+        latest_version_by_line: dict[RedpandaVersionLine,
+                                     RedpandaVersionTriple] = {}
+        for v in next_versions:
+            line = v[:2]
+            if line not in latest_version_by_line or v > latest_version_by_line[
+                    line]:
+                latest_version_by_line[line] = v
+        latest_versions = list(latest_version_by_line.values())
+        latest_versions.sort()
+        if self.head_version() not in latest_versions:
+            latest_versions.append(self.head_version())
+        self._redpanda.logger.debug(
+            f"upgrade path to head from {version} is {latest_versions}")
+        return latest_versions
+
     def latest_for_line(
         self, release_line: RedpandaVersionLine
     ) -> tuple[RedpandaVersionTriple, bool]:

@@ -1,21 +1,16 @@
 #include "test_utils/runfiles.h"
 
-#include <cstdlib>
-#include <filesystem>
-
-#ifdef BAZEL_TEST
 #include "tools/cpp/runfiles/runfiles.h"
-#endif
 
 #include <fmt/format.h>
 
+#include <cstdlib>
+#include <filesystem>
 #include <memory>
 
 namespace test_utils {
 
-std::optional<std::string>
-get_runfile_path([[maybe_unused]] std::string_view path) {
-#ifdef BAZEL_TEST
+std::string get_runfile_path(std::string_view path) {
     using bazel::tools::cpp::runfiles::Runfiles;
     std::string error;
     std::unique_ptr<Runfiles> runfiles;
@@ -31,9 +26,6 @@ get_runfile_path([[maybe_unused]] std::string_view path) {
         throw std::runtime_error(error);
     }
     return runfiles->Rlocation(fmt::format("_main/{}", path));
-#else
-    return std::nullopt;
-#endif
 }
 
 } // namespace test_utils

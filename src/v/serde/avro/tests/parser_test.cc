@@ -114,9 +114,7 @@ void parsed_to_avro(
 struct AvroParserTest : ::testing::TestWithParam<std::tuple<std::string_view>> {
     ::avro::ValidSchema load_json_schema(std::string_view schema_file) {
         auto desc_path = test_utils::get_runfile_path(
-                           fmt::format(
-                             "src/v/serde/avro/tests/testdata/{}", schema_file))
-                           .value_or(std::string(schema_file));
+          fmt::format("src/v/serde/avro/tests/testdata/{}", schema_file));
 
         auto schema = read_fully_to_string(desc_path).get();
 

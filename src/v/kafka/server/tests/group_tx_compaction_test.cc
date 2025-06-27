@@ -37,10 +37,7 @@ struct group_manager_fixture
   , public seastar_test {
     ss::future<> SetUpAsync() override {
         test_cfg.get("group_topic_partitions").set_value(1);
-        co_await kafka::try_create_consumer_group_topic(
-          app.coordinator_ntp_mapper.local(),
-          app.controller->get_topics_frontend().local(),
-          1);
+        co_await app.group_initializer.local().assure_topic_exists();
         co_await wait_for_leader(offsets_ntp);
         // Wait until the partitions are registered.
         RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [this] {

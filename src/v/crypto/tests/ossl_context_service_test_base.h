@@ -23,13 +23,13 @@
 
 #include <memory>
 
+// XXX
 inline std::string get_config_file_path() {
     char* var = std::getenv("OPENSSL_CONF");
     if (var != nullptr) {
         return var;
     }
-    return test_utils::get_runfile_path("src/v/crypto/tests/openssl_conf.cnf")
-      .value_or("");
+    return test_utils::get_runfile_path("src/v/crypto/tests/openssl_conf.cnf");
 }
 
 class ossl_context_base_test_framework : public seastar_test {
@@ -65,14 +65,11 @@ protected:
         if (char* override = ::getenv("MODULE_DIR"); override != nullptr) {
             module_dir = override;
         }
-        if (!module_dir.has_value()) {
-            co_return false;
-        }
-        auto dir_type = co_await ss::file_type(module_dir.value());
+        auto dir_type = co_await ss::file_type(module_dir);
         if (!dir_type || *dir_type != ss::directory_entry_type::directory) {
             co_return false;
         } else {
-            auto fips_file = module_dir.value() + "/fips.so";
+            auto fips_file = module_dir + "/fips.so";
             co_return co_await ss::file_exists(fips_file);
         }
     }

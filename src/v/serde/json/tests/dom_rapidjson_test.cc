@@ -130,9 +130,8 @@ constexpr auto golden = R"(json_value(array(
 TEST_CORO(dom_rapidjson_test, json_checker_pass1) {
     auto test_case_path = test_utils::get_runfile_path(
       "src/v/serde/json/tests/testdata/jsonchecker/pass1.json");
-    vassert(test_case_path.has_value(), "Failed to get test case path");
 
-    auto contents = co_await read_fully(test_case_path.value());
+    auto contents = co_await read_fully(test_case_path);
 
     auto v = co_await test::dom::parse_document_rapidjson(std::move(contents));
     std::stringstream ss;

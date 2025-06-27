@@ -57,7 +57,6 @@ cc_proto_library(
 redpanda_test_cc_library(
     name = "proto_definitions_wrapper",
     hdrs = ["proto_definitions.h"],
-    defines = ["BAZEL_TEST=1"],
     include_prefix = "iceberg/conversion/tests",
     deps = [
         ":complex_cc_proto",

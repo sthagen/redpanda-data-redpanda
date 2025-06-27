@@ -16,16 +16,12 @@
 #include "cluster/rm_group_proxy.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/server/fwd.h"
+#include "kafka/server/group_initializer.h"
 #include "rpc/fwd.h"
 
 #include <seastar/core/sharded.hh>
 
 namespace kafka {
-
-ss::future<bool> try_create_consumer_group_topic(
-  kafka::coordinator_ntp_mapper& mapper,
-  cluster::topics_frontend& topics_frontend,
-  int16_t node_count);
 
 class rm_group_frontend {
 public:
@@ -34,7 +30,8 @@ public:
       ss::sharded<rpc::connection_cache>&,
       ss::sharded<cluster::partition_leaders_table>&,
       cluster::controller*,
-      ss::sharded<kafka::group_router>&);
+      ss::sharded<kafka::group_router>&,
+      group_initializer&);
 
     ss::future<cluster::begin_group_tx_reply> begin_group_tx(
       kafka::group_id,
@@ -67,6 +64,7 @@ private:
     ss::sharded<cluster::partition_leaders_table>& _leaders;
     cluster::controller* _controller;
     ss::sharded<kafka::group_router>& _group_router;
+    group_initializer& _group_initializer;
     int16_t _metadata_dissemination_retries;
     std::chrono::milliseconds _metadata_dissemination_retry_delay_ms;
 

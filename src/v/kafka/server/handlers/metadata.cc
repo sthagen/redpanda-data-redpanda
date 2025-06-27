@@ -43,10 +43,9 @@
 namespace {
 using is_node_isolated_or_decommissioned
   = ss::bool_class<struct is_node_isolated_or_decommissioned_tag>;
-}
+} // namespace
 namespace kafka {
 
-static constexpr model::node_id no_leader(-1);
 /**
  * We use simple heuristic to tolerate isolation of a node hosting both
  * partition leader and follower.
@@ -120,6 +119,7 @@ metadata_response::topic make_topic_response_from_topic_metadata(
   const cluster::topic_metadata& tp_md,
   const is_node_isolated_or_decommissioned is_node_isolated,
   bool recovery_mode_enabled) {
+    static constexpr model::node_id no_leader(-1);
     metadata_response::topic tp;
     tp.error_code = error_code::none;
     model::topic_namespace_view tp_ns = tp_md.get_configuration().tp_ns;

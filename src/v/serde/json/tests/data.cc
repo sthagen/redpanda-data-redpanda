@@ -23,8 +23,7 @@ ss::future<iobuf> json_test_suite_sample() {
 
     auto test_case_path = test_utils::get_runfile_path(
       "src/v/serde/json/tests/testdata/json-test-suite/sample.json");
-    vassert(test_case_path.has_value(), "Failed to get test case path");
-    sample_buf = co_await read_fully(test_case_path.value());
+    sample_buf = co_await read_fully(test_case_path);
 
     co_return sample_buf->copy();
 }

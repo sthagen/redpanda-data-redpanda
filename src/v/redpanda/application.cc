@@ -2124,6 +2124,13 @@ void application::wire_up_redpanda_services(
       std::ref(metadata_cache),
       model::kafka_consumer_offsets_nt)
       .get();
+    construct_service(
+      group_initializer,
+      ref_to_local(coordinator_ntp_mapper),
+      std::ref(controller->get_topics_frontend()),
+      std::ref(controller->get_members_table()),
+      std::ref(controller->get_api()))
+      .get();
 
     offsets_recovery_manager
       = ss::make_shared<cluster::cloud_metadata::offsets_recovery_manager>(
@@ -2131,7 +2138,9 @@ void application::wire_up_redpanda_services(
         std::ref(coordinator_ntp_mapper),
         controller->get_members_table(),
         controller->get_api(),
-        std::ref(controller->get_topics_frontend()));
+        std::ref(controller->get_topics_frontend()),
+        group_initializer.local());
+
     syschecks::systemd_message("Creating kafka group router").get();
     construct_service(
       group_router,
@@ -2139,7 +2148,8 @@ void application::wire_up_redpanda_services(
       smp_service_groups.kafka_smp_sg(),
       std::ref(_group_manager),
       std::ref(shard_table),
-      std::ref(coordinator_ntp_mapper))
+      std::ref(coordinator_ntp_mapper),
+      ref_to_local(group_initializer))
       .get();
 
     syschecks::systemd_message("Creating tx coordinator mapper").get();
@@ -2167,13 +2177,15 @@ void application::wire_up_redpanda_services(
 
     syschecks::systemd_message("Creating group resource manager frontend")
       .get();
+
     construct_service(
       rm_group_frontend,
       std::ref(metadata_cache),
       std::ref(_connection_cache),
       std::ref(controller->get_partition_leaders()),
       controller.get(),
-      std::ref(group_router))
+      std::ref(group_router),
+      ref_to_local(group_initializer))
       .get();
 
     _rm_group_proxy = std::make_unique<kafka::rm_group_proxy_impl>(

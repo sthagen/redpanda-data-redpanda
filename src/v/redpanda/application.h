@@ -39,6 +39,7 @@
 #include "kafka/data/rpc/service.h"
 #include "kafka/server/app.h"
 #include "kafka/server/fwd.h"
+#include "kafka/server/group_initializer.h"
 #include "kafka/server/snc_quota_manager.h"
 #include "metrics/aggregate_metrics_watcher.h"
 #include "metrics/host_metrics_watcher.h"
@@ -174,6 +175,7 @@ public:
     kafka::snc_quota_manager::buckets_t snc_node_quota;
     ss::sharded<kafka::snc_quota_manager> snc_quota_mgr;
     ss::sharded<kafka::rm_group_frontend> rm_group_frontend;
+    ss::sharded<kafka::group_initializer> group_initializer;
     ss::sharded<kafka::usage_manager> usage_manager;
 
     ss::sharded<security::audit::audit_log_manager> audit_mgr;
@@ -357,6 +359,12 @@ private:
           });
         _last_constructed_service_name = name;
         return f;
+    }
+
+    template<typename ShardedComponent>
+    auto ref_to_local(ss::sharded<ShardedComponent>& component) {
+        return ss::sharded_parameter(
+          [&component] { return std::ref(component.local()); });
     }
 
     void setup_metrics();

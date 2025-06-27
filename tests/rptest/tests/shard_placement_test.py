@@ -269,7 +269,7 @@ class ShardPlacementTest(PreallocNodesTest):
 
         # Upgrade the cluster and wait for the feature activation.
 
-        installer.install(seed_nodes, (24, 3))
+        installer.install([*seed_nodes, *joiner_nodes], (24, 3))
         self.redpanda.restart_nodes(seed_nodes)
         self.redpanda.wait_for_membership(first_start=False)
 

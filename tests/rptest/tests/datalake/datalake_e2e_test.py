@@ -1079,6 +1079,7 @@ class DatalakeMetricsTest(RedpandaTest):
 
 class DatalakeDelayedEnablementTest(RedpandaTest):
     def __init__(self, test_ctx, *args, **kwargs):
+        self.target_reply_bytes = 5 * 1024 * 1024  # 5 MiB
         super(DatalakeDelayedEnablementTest, self).__init__(
             test_ctx,
             num_brokers=3,
@@ -1086,7 +1087,7 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
             extra_rp_conf={
                 "iceberg_catalog_commit_interval_ms": 5000,
                 "log_compaction_interval_ms": 2000,
-                "storage_target_replay_bytes": 5 * 1024 * 1024
+                "storage_target_replay_bytes": self.target_reply_bytes
             },
             schema_registry_config=SchemaRegistryConfig(),
             pandaproxy_config=PandaproxyConfig(),
@@ -1120,6 +1121,54 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
 
         return True
 
+    def estimate_total_disk_bytes_read(self):
+        max_samples = 30
+        current_value = 0
+        stable_values = 0
+        expected_stable_values = 5
+        for s in range(max_samples):
+            total = self.do_estimate_total_disk_bytes_read()
+            if total is not None:
+                self.logger.debug(
+                    f"Estimated total disk bytes read: {total} bytes sample {s}"
+                )
+                if total == current_value:
+                    stable_values += 1
+                    if stable_values >= expected_stable_values:
+                        self.logger.debug(
+                            f"Stable value reached: {current_value} bytes after {s} samples"
+                        )
+                        break
+                else:
+                    stable_values = 0
+                    current_value = total
+
+            time.sleep(0.5)
+
+        return current_value
+
+    def do_estimate_total_disk_bytes_read(self):
+        try:
+            samples = self.redpanda.metrics_sample(
+                "vectorized_io_queue_total_read_bytes_total",
+                nodes=self.redpanda.started_nodes())
+        except Exception as e:
+            self.logger.warn(
+                f"Cannot check metrics, did a test finish with all nodes down? ({e})"
+            )
+            return None
+        total = 0
+        if samples is not None and samples.samples:
+            for s in samples.samples:
+                self.logger.debug(
+                    f"{s.family} on node {s.node.account.hostname} with labels: {s.labels} has value {s.value}"
+                )
+                total += s.value
+        else:
+            return None
+
+        return total
+
     @cluster(num_nodes=6)
     # this test doesn't have to run with different catalog types
     @matrix(cloud_storage_type=supported_storage_types(),
@@ -1149,7 +1198,6 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
             dl.produce_to_topic(topic_name, 1024, 120 * 1024)
             # wait for a while for the local snapshot to be taken
             time.sleep(5)
-            dl.redpanda.restart_nodes(dl.redpanda.nodes)
 
             def wait_for_topic(topic_name: str):
                 wait_until(lambda: self.is_topic_fully_caught_up(topic_name),
@@ -1159,7 +1207,10 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
                         state machines to catch up")
 
             wait_for_topic(topic_name)
-            bytes_read_before = self.redpanda.estimate_total_disk_bytes_read()
+            dl.redpanda.restart_nodes(dl.redpanda.nodes)
+
+            wait_for_topic(topic_name)
+            bytes_read_before = self.estimate_total_disk_bytes_read()
             assert bytes_read_before, "Bytes read before enabling Iceberg should not be zero/none"
 
             # enable iceberg, this will restart the cluster
@@ -1167,7 +1218,7 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
                                            expect_restart=True)
 
             wait_for_topic(topic_name)
-            bytes_read_after = self.redpanda.estimate_total_disk_bytes_read()
+            bytes_read_after = self.estimate_total_disk_bytes_read()
             assert bytes_read_after, "Bytes read after enabling Iceberg should not be zero/none"
 
             self.logger.info(
@@ -1175,6 +1226,7 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
             )
             # we introduce a small tolerance here, since the read bytes may
             # increase slightly due to term changes and leader elections.
-            assert bytes_read_after <= bytes_read_before * 1.01,\
-                "Enabling Iceberg in the cluster should not cause a major read increase," \
-                " expected ({bytes_read_after=}) <= ({bytes_read_before * 1.01=})"
+            max_read_bytes = bytes_read_before + self.target_reply_bytes
+            assert bytes_read_after <= max_read_bytes,\
+                f"Enabling Iceberg in the cluster should not cause a major read increase," \
+                f" expected ({bytes_read_after=}) <= ({max_read_bytes=})"

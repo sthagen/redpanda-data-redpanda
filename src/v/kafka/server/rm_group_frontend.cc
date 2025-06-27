@@ -35,75 +35,19 @@
 namespace kafka {
 using namespace std::chrono_literals;
 
-/*
- * create the internal metadata topic for group membership
- */
-ss::future<bool> try_create_consumer_group_topic(
-  kafka::coordinator_ntp_mapper& mapper,
-  cluster::topics_frontend& topics_frontend,
-  int16_t node_count) {
-    // Attempt to use internal topic replication factor, if enough nodes found.
-    auto replication_factor
-      = (int16_t)config::shard_local_cfg().internal_topic_replication_factor();
-    if (replication_factor > node_count) {
-        replication_factor = 1;
-    }
-
-    // the new internal metadata topic for group membership
-    cluster::topic_configuration topic{
-      mapper.ns(),
-      mapper.topic(),
-      config::shard_local_cfg().group_topic_partitions(),
-      replication_factor};
-
-    topic.properties.cleanup_policy_bitflags
-      = model::cleanup_policy_bitflags::compaction;
-
-    return topics_frontend
-      .autocreate_topics(
-        {std::move(topic)}, config::shard_local_cfg().create_topic_timeout_ms())
-      .then([&mapper](std::vector<cluster::topic_result> res) {
-          /*
-           * kindly ask client to retry on error
-           */
-          vassert(res.size() == 1, "expected exactly one result");
-          if (
-            res[0].ec != cluster::errc::success
-            && res[0].ec != cluster::errc::topic_already_exists) {
-              vlog(
-                klog.warn,
-                "can not create {}/{} topic - error: {}",
-                mapper.ns()(),
-                mapper.topic()(),
-                cluster::make_error_code(res[0].ec).message());
-              return false;
-          }
-          return true;
-      })
-      .handle_exception([&mapper](const std::exception_ptr& e) {
-          vlog(
-            klog.warn,
-            "can not create {}/{} topic - exception: {}",
-            mapper.ns()(),
-            mapper.topic()(),
-            e);
-          // various errors may returned such as a timeout, or if the
-          // controller group doesn't have a leader. client will retry.
-          return false;
-      });
-}
-
 rm_group_frontend::rm_group_frontend(
   ss::sharded<cluster::metadata_cache>& metadata_cache,
   ss::sharded<rpc::connection_cache>& connection_cache,
   ss::sharded<cluster::partition_leaders_table>& leaders,
   cluster::controller* controller,
-  ss::sharded<kafka::group_router>& group_router)
+  ss::sharded<kafka::group_router>& group_router,
+  group_initializer& group_initializer)
   : _metadata_cache(metadata_cache)
   , _connection_cache(connection_cache)
   , _leaders(leaders)
   , _controller(controller)
   , _group_router(group_router)
+  , _group_initializer(group_initializer)
   , _metadata_dissemination_retries(
       config::shard_local_cfg().metadata_dissemination_retries.value())
   , _metadata_dissemination_retry_delay_ms(
@@ -116,34 +60,18 @@ ss::future<cluster::begin_group_tx_reply> rm_group_frontend::begin_group_tx(
   model::tx_seq tx_seq,
   model::timeout_clock::duration timeout,
   model::partition_id tm) {
-    auto ntp_opt = _group_router.local().coordinator_mapper().local().ntp_for(
-      group_id);
-    if (!ntp_opt) {
-        vlog(
-          cluster::txlog.trace,
-          "can't find ntp for {}, creating a consumer group topic",
-          group_id);
-        auto has_created = co_await try_create_consumer_group_topic(
-          _group_router.local().coordinator_mapper().local(),
-          _controller->get_topics_frontend().local(),
-          (int16_t)_controller->get_members_table().local().node_count());
-        if (!has_created) {
-            vlog(
-              cluster::txlog.warn,
-              "can't create consumer group topic",
-              group_id);
-            co_return cluster::begin_group_tx_reply{
-              cluster::tx::errc::partition_not_exists};
-        }
-    }
+    if (!co_await _group_initializer.assure_topic_exists()) {
+        vlog(cluster::txlog.warn, "can't create consumer group topic");
+    };
 
     auto retries = _metadata_dissemination_retries;
     auto delay_ms = _metadata_dissemination_retry_delay_ms;
     std::optional<model::node_id> leader_opt;
     cluster::tx::errc ec;
     while (!leader_opt && 0 < retries--) {
-        ntp_opt = _group_router.local().coordinator_mapper().local().ntp_for(
-          group_id);
+        auto ntp_opt
+          = _group_router.local().coordinator_mapper().local().ntp_for(
+            group_id);
         if (!ntp_opt) {
             vlog(
               cluster::txlog.trace,

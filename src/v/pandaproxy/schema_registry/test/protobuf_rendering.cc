@@ -61,9 +61,8 @@ struct simple_sharded_store {
 };
 
 std::filesystem::path test_dir() {
-    auto test_path = test_utils::get_runfile_path(
+    return test_utils::get_runfile_path(
       "src/v/pandaproxy/schema_registry/test/testdata/protobuf");
-    return {test_path.value_or(".")};
 }
 
 enum class SchemaType { input, sanitized, normalized };

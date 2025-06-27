@@ -29,9 +29,8 @@ TEST_P_CORO(json_checker_test, all) {
 
     auto test_case_path = test_utils::get_runfile_path(
       fmt::format("src/v/serde/json/tests/testdata/jsonchecker/{}", test_case));
-    vassert(test_case_path.has_value(), "Failed to get test case path");
 
-    auto contents = co_await read_fully(test_case_path.value());
+    auto contents = co_await read_fully(test_case_path);
     // Use depth limit of 19 to properly fail fail18.json (20 levels) while
     // allowing pass2.json (19 levels, "Not too deep") to succeed
     auto config = parser_config{.max_depth = 19};
@@ -65,9 +64,8 @@ std::vector<std::string> collect_test_cases() {
 
     auto test_case_path = test_utils::get_runfile_path(
       "src/v/serde/json/tests/testdata/jsonchecker");
-    vassert(test_case_path.has_value(), "Failed to get test case path");
 
-    std::filesystem::path dir_path(test_case_path.value());
+    std::filesystem::path dir_path(test_case_path);
     vassert(
       std::filesystem::exists(dir_path),
       "Directory does not exist: {}",

@@ -36,12 +36,7 @@ public:
 
     ss::sstring module_dir() const {
         auto module_dir = test_utils::get_runfile_path("src/v/crypto/tests");
-        if (!module_dir.has_value()) {
-            char* var = std::getenv("MODULE_DIR");
-            vassert(var != nullptr, "MODULE_DIR is not set");
-            module_dir = var;
-        }
-        return ss::sstring{module_dir.value()};
+        return ss::sstring{module_dir};
     }
 
 protected:

@@ -144,11 +144,6 @@ redpanda_test_cc_library(
         "@fmt",
     ],
     include_prefix = "test_utils",
-    # TODO(bazel) when cmake build is removed then this can be removed, and its
-    # associated used in runfiles.cc.
-    local_defines = [
-        "BAZEL_TEST=1",
-    ],
     visibility = ["//visibility:public"],
 )
 

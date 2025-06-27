@@ -24,6 +24,7 @@
 #include "kafka/protocol/schemata/delete_groups_response.h"
 #include "kafka/protocol/sync_group.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
+#include "kafka/server/group_initializer.h"
 #include "kafka/server/group_manager.h"
 
 #include <seastar/core/reactor.hh>
@@ -48,12 +49,14 @@ public:
       ss::smp_service_group smp_group,
       ss::sharded<group_manager>& gr_manager,
       ss::sharded<cluster::shard_table>& shards,
-      ss::sharded<coordinator_ntp_mapper>& coordinators)
+      ss::sharded<coordinator_ntp_mapper>& coordinators,
+      group_initializer& group_initializer)
       : _sg(sched_group)
       , _ssg(smp_group)
       , _group_manager(gr_manager)
       , _shards(shards)
-      , _coordinators(coordinators) {}
+      , _coordinators(coordinators)
+      , _group_initializer(group_initializer) {}
 
     group::join_group_stages join_group(join_group_request&& request);
 
@@ -96,6 +99,8 @@ public:
         return _coordinators;
     }
 
+    group_initializer& group_initializer() { return _group_initializer; }
+
     ss::sharded<group_manager>& get_group_manager() { return _group_manager; }
 
 private:
@@ -132,6 +137,7 @@ private:
     ss::sharded<group_manager>& _group_manager;
     ss::sharded<cluster::shard_table>& _shards;
     ss::sharded<coordinator_ntp_mapper>& _coordinators;
+    kafka::group_initializer& _group_initializer;
 };
 
 } // namespace kafka

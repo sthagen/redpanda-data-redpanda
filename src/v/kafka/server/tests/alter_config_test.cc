@@ -32,6 +32,7 @@
 
 #include <boost/test/tools/context.hpp>
 
+#include <functional>
 #include <optional>
 
 using namespace std::chrono_literals; // NOLINT
@@ -1354,11 +1355,9 @@ FIXTURE_TEST(test_iceberg_property, alter_config_test_fixture) {
     {
         // Altering iceberg configuration on an internal topic should fail
         // create an internal topic
-        BOOST_REQUIRE(kafka::try_create_consumer_group_topic(
-                        app.coordinator_ntp_mapper.local(),
-                        app.controller->get_topics_frontend().local(),
-                        1)
-                        .get());
+        BOOST_REQUIRE(
+          app.group_initializer.local().assure_topic_exists().get());
+
         // enable authorization on it, to be able to make alter requests.
         config.get("kafka_nodelete_topics")
           .set_value(std::vector<ss::sstring>{});

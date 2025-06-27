@@ -49,16 +49,11 @@ public:
 #endif
         _thread_worker->start({.name = "worker"}).get();
         auto module_dir = test_utils::get_runfile_path("src/v/crypto/tests");
-        if (!module_dir.has_value()) {
-            char* var = std::getenv("MODULE_DIR");
-            vassert(var != nullptr, "MODULE_DIR is not set");
-            module_dir = var;
-        }
         _svc
           .start(
             std::ref(*_thread_worker),
             get_config_file_path(),
-            module_dir.value(),
+            module_dir,
             fips_mode)
           .get();
         _svc.invoke_on_all(&crypto::ossl_context_service::start).get();
@@ -74,14 +69,8 @@ private:
     ss::sharded<crypto::ossl_context_service> _svc;
 
     static std::string get_config_file_path() {
-        auto conf_file = test_utils::get_runfile_path(
+        return test_utils::get_runfile_path(
           "src/v/crypto/tests/openssl_conf.cnf");
-        if (!conf_file.has_value()) {
-            char* var = std::getenv("OPENSSL_CONF");
-            vassert(var != nullptr, "OPENSSL_CONF is not set");
-            conf_file = var;
-        }
-        return conf_file.value();
     }
 };
 
