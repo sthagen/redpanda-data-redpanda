@@ -19,8 +19,7 @@ group_tx_tracker_stm::group_tx_tracker_stm(
   ss::sharded<features::feature_table>& feature_table)
   : raft::persisted_stm<>("group_tx_tracker_stm.snapshot", logger, raft)
   , group_data_parser<group_tx_tracker_stm>()
-  , _feature_table(feature_table)
-  , _serializer(make_consumer_offsets_serializer()) {
+  , _feature_table(feature_table) {
     _stale_tx_fence_gc_timer.set_callback([this] {
         ssx::spawn_with_gate(
           _gate, [this] { return gc_expired_tx_fence_transactions(); });
@@ -138,6 +137,8 @@ group_tx_tracker_stm::apply_local_snapshot(
     iobuf_parser parser(std::move(snap_buf));
     auto snap = co_await serde::read_async<snapshot>(parser);
     _all_txs = std::move(snap.transactions);
+    _blocked_groups.insert(
+      snap.blocked_groups.cbegin(), snap.blocked_groups.cend());
     co_return raft::local_snapshot_applied::yes;
 }
 
@@ -146,11 +147,13 @@ group_tx_tracker_stm::take_local_snapshot(ssx::semaphore_units apply_units) {
     auto holder = _gate.hold();
     // Copy over the snapshot state for a consistent view.
     auto offset = last_applied_offset();
-    snapshot snap;
-    snap.transactions = _all_txs;
-    iobuf snap_buf;
+    snapshot snap{
+      .transactions{_all_txs},
+      .blocked_groups{std::from_range, _blocked_groups},
+    };
     apply_units.return_all();
-    co_await serde::write_async(snap_buf, snap);
+    iobuf snap_buf;
+    co_await serde::write_async(snap_buf, std::move(snap));
     co_return raft::stm_snapshot::create(
       supported_local_snapshot_version, offset, std::move(snap_buf));
 }
@@ -168,14 +171,15 @@ ss::future<iobuf> group_tx_tracker_stm::take_raft_snapshot(model::offset) {
 
 ss::future<> group_tx_tracker_stm::handle_raft_data(model::record_batch batch) {
     co_await model::for_each_record(batch, [this](model::record& r) {
-        auto record_type = _serializer.get_metadata_type(r.key().copy());
+        auto record_type = group_metadata_serializer::get_metadata_type(
+          r.key().copy());
         switch (record_type) {
         case offset_commit:
         case noop:
             return;
         case group_metadata:
             handle_group_metadata(
-              _serializer.decode_group_metadata(std::move(r)));
+              group_metadata_serializer::decode_group_metadata(std::move(r)));
             return;
         }
         __builtin_unreachable();
@@ -183,6 +187,9 @@ ss::future<> group_tx_tracker_stm::handle_raft_data(model::record_batch batch) {
 }
 
 void group_tx_tracker_stm::handle_group_metadata(group_metadata_kv md) {
+    if (is_group_blocked_verbose(md.key.group_id, "group metadata")) {
+        return;
+    }
     if (md.value) {
         vlog(cg_klog.trace, "[group: {}] update", md.key.group_id);
         // A group may checkpoint periodically as the member's state changes,
@@ -266,6 +273,20 @@ ss::future<> group_tx_tracker_stm::handle_version_fence(
   features::feature_table::version_fence) {
     // ignore
     return ss::now();
+}
+
+void group_tx_tracker_stm::handle_group_block(kafka::group_block gb) {
+    if (gb.is_blocked) {
+        _blocked_groups.insert(gb.group_id);
+        // there shouldn't be any transactions in progress, doing just in case
+        _all_txs.erase(gb.group_id);
+    } else {
+        _blocked_groups.erase(gb.group_id);
+    }
+}
+
+bool group_tx_tracker_stm::is_group_blocked(kafka::group_id group_id) const {
+    return _blocked_groups.contains(group_id);
 }
 
 bool group_tx_tracker_stm_factory::is_applicable_for(

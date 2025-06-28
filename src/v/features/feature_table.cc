@@ -36,6 +36,8 @@ namespace features {
 
 std::string_view to_string_view(feature f) {
     switch (f) {
+    case feature::consumer_groups_migrations:
+        return "consumer_groups_migrations";
     case feature::cloud_retention:
         return "cloud_retention";
     case feature::node_isolation:

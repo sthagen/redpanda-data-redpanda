@@ -177,53 +177,29 @@ inline group_metadata_version read_metadata_version(protocol::decoder& reader) {
     return group_metadata_version{reader.read_int16()};
 }
 
-class group_metadata_serializer {
-public:
-    struct key_value {
-        iobuf key;
-        std::optional<iobuf> value;
-    };
-    struct impl {
-        virtual group_metadata_type get_metadata_type(iobuf) = 0;
-        virtual key_value to_kv(group_metadata_kv) = 0;
-        virtual key_value to_kv(offset_metadata_kv) = 0;
+struct group_block {
+    kafka::group_id group_id;
+    bool is_blocked;
+    friend std::ostream& operator<<(std::ostream&, const group_block&);
 
-        virtual group_metadata_kv decode_group_metadata(model::record) = 0;
-        virtual offset_metadata_kv decode_offset_metadata(model::record) = 0;
-        virtual ~impl() = default;
-    };
-
-    explicit group_metadata_serializer(std::unique_ptr<impl> impl)
-      : _impl(std::move(impl)) {}
-
-    group_metadata_type get_metadata_type(iobuf buf) {
-        return _impl->get_metadata_type(std::move(buf));
-    };
-
-    key_value to_kv(group_metadata_kv md) {
-        return _impl->to_kv(std::move(md));
-    }
-    key_value to_kv(offset_metadata_kv md) {
-        return _impl->to_kv(std::move(md));
-    }
-
-    group_metadata_kv decode_group_metadata(model::record record) {
-        return _impl->decode_group_metadata(std::move(record));
-    }
-
-    offset_metadata_kv decode_offset_metadata(model::record record) {
-        return _impl->decode_offset_metadata(std::move(record));
-    }
-
-private:
-    std::unique_ptr<impl> _impl;
+    group_block(kafka::group_id group_id, bool is_blocked);
+    explicit group_block(model::record record);
+    void add_to_batch_builder(storage::record_batch_builder&) const;
 };
+namespace group_metadata_serializer {
+struct key_value {
+    iobuf key;
+    std::optional<iobuf> value;
+};
+group_metadata_type get_metadata_type(iobuf buf);
+key_value to_kv(group_metadata_kv md);
+key_value to_kv(offset_metadata_kv md);
+group_metadata_kv decode_group_metadata(model::record record);
+offset_metadata_kv decode_offset_metadata(model::record record);
+}; // namespace group_metadata_serializer
 
-group_metadata_serializer make_consumer_offsets_serializer();
-
-using group_metadata_serializer_factory
-  = ss::noncopyable_function<group_metadata_serializer()>;
 namespace group_tx {
+
 struct fence_metadata_v0 {
     kafka::group_id group_id;
     friend std::ostream& operator<<(std::ostream&, const fence_metadata_v0&);

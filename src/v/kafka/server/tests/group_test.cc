@@ -63,8 +63,7 @@ static group get() {
       nullptr,
       model::term_id(),
       fr,
-      feature_table,
-      make_consumer_offsets_serializer());
+      feature_table);
 }
 
 static const std::vector<member_protocol> test_group_protos = {

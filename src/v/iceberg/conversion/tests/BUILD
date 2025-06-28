@@ -134,3 +134,23 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "iceberg_json_tests",
+    timeout = "short",
+    srcs = [
+        "iceberg_json_tests.cc",
+    ],
+    deps = [
+        "//src/v/iceberg:datatypes",
+        "//src/v/iceberg/conversion:conversion_outcome",
+        "//src/v/iceberg/conversion:schema_json",
+        "//src/v/iceberg/conversion/json_schema:frontend",
+        "//src/v/iceberg/conversion/json_schema:ir",
+        "//src/v/json",
+        "//src/v/test_utils:gtest",
+        "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

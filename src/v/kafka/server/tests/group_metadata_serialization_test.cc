@@ -159,8 +159,6 @@ model::record to_record(T t) {
 }
 
 FIXTURE_TEST(test_consumer_offsets_serializer, fixture) {
-    auto serializer = kafka::make_consumer_offsets_serializer();
-
     kafka::group_metadata_key group_md_key;
     group_md_key.group_id = random_named_string<kafka::group_id>();
 
@@ -175,12 +173,13 @@ FIXTURE_TEST(test_consumer_offsets_serializer, fixture) {
          boost::irange(0, random_generators::get_int(0, 10))) {
         group_md.members.push_back(random_member_state());
     }
-    auto group_kv = serializer.to_kv(kafka::group_metadata_kv{
-      .key = group_md_key,
-      .value = group_md.copy(),
-    });
+    auto group_kv = kafka::group_metadata_serializer::to_kv(
+      kafka::group_metadata_kv{
+        .key = group_md_key,
+        .value = group_md.copy(),
+      });
 
-    auto group_md_kv = serializer.decode_group_metadata(
+    auto group_md_kv = kafka::group_metadata_serializer::decode_group_metadata(
       to_record(std::move(group_kv)));
 
     BOOST_REQUIRE_EQUAL(group_md_key, group_md_kv.key);
@@ -198,13 +197,15 @@ FIXTURE_TEST(test_consumer_offsets_serializer, fixture) {
     offset_md.metadata = random_named_string<ss::sstring>();
     offset_md.commit_timestamp = model::timestamp::now();
 
-    auto offset_kv = serializer.to_kv(kafka::offset_metadata_kv{
-      .key = offset_key,
-      .value = offset_md,
-    });
+    auto offset_kv = kafka::group_metadata_serializer::to_kv(
+      kafka::offset_metadata_kv{
+        .key = offset_key,
+        .value = offset_md,
+      });
 
-    auto offset_md_kv = serializer.decode_offset_metadata(
-      to_record(std::move(offset_kv)));
+    auto offset_md_kv
+      = kafka::group_metadata_serializer::decode_offset_metadata(
+        to_record(std::move(offset_kv)));
 
     BOOST_REQUIRE_EQUAL(offset_key, offset_md_kv.key);
     BOOST_REQUIRE_EQUAL(offset_md, offset_md_kv.value);
@@ -220,46 +221,46 @@ model::record build_tombstone_record(iobuf buffer) {
 }
 
 FIXTURE_TEST(test_unwrapping_tombstones_from_iobuf, fixture) {
-    std::vector<kafka::group_metadata_serializer> serializers;
-    serializers.reserve(1);
-    serializers.push_back(kafka::make_consumer_offsets_serializer());
+    kafka::group_metadata_key group_md_key;
+    group_md_key.group_id = random_named_string<kafka::group_id>();
 
-    for (auto& serializer : serializers) {
-        kafka::group_metadata_key group_md_key;
-        group_md_key.group_id = random_named_string<kafka::group_id>();
+    auto group_kv = kafka::group_metadata_serializer::to_kv(
+      kafka::group_metadata_kv{
+        .key = group_md_key,
+      });
+    auto group_tombstone = build_tombstone_record(group_kv.key.copy());
+    // not wrapped in iobuf
+    auto decoded_group_md_kv
+      = kafka::group_metadata_serializer::decode_group_metadata(
+        std::move(group_tombstone));
 
-        auto group_kv = serializer.to_kv(kafka::group_metadata_kv{
-          .key = group_md_key,
-        });
-        auto group_tombstone = build_tombstone_record(group_kv.key.copy());
-        // not wrapped in iobuf
-        auto decoded_group_md_kv = serializer.decode_group_metadata(
-          std::move(group_tombstone));
+    auto iobuf_decoded_group_md_kv
+      = kafka::group_metadata_serializer::decode_group_metadata(
+        build_tombstone_record(reflection::to_iobuf(group_kv.key.copy())));
 
-        auto iobuf_decoded_group_md_kv = serializer.decode_group_metadata(
-          build_tombstone_record(reflection::to_iobuf(group_kv.key.copy())));
+    BOOST_REQUIRE_EQUAL(group_md_key, decoded_group_md_kv.key);
+    BOOST_REQUIRE_EQUAL(group_md_key, iobuf_decoded_group_md_kv.key);
 
-        BOOST_REQUIRE_EQUAL(group_md_key, decoded_group_md_kv.key);
-        BOOST_REQUIRE_EQUAL(group_md_key, iobuf_decoded_group_md_kv.key);
+    kafka::offset_metadata_key offset_key;
+    offset_key.group_id = random_named_string<kafka::group_id>();
+    ;
+    offset_key.topic = random_named_string<model::topic>();
+    offset_key.partition = random_named_int<model::partition_id>();
 
-        kafka::offset_metadata_key offset_key;
-        offset_key.group_id = random_named_string<kafka::group_id>();
-        ;
-        offset_key.topic = random_named_string<model::topic>();
-        offset_key.partition = random_named_int<model::partition_id>();
+    auto offset_kv = kafka::group_metadata_serializer::to_kv(
+      kafka::offset_metadata_kv{
+        .key = offset_key,
+      });
 
-        auto offset_kv = serializer.to_kv(kafka::offset_metadata_kv{
-          .key = offset_key,
-        });
+    // not wrapped in iobuf
+    auto offset_md_kv
+      = kafka::group_metadata_serializer::decode_offset_metadata(
+        build_tombstone_record(offset_kv.key.copy()));
 
-        // not wrapped in iobuf
-        auto offset_md_kv = serializer.decode_offset_metadata(
-          build_tombstone_record(offset_kv.key.copy()));
+    auto iobuf_offset_md_kv
+      = kafka::group_metadata_serializer::decode_offset_metadata(
+        build_tombstone_record(reflection::to_iobuf(offset_kv.key.copy())));
 
-        auto iobuf_offset_md_kv = serializer.decode_offset_metadata(
-          build_tombstone_record(reflection::to_iobuf(offset_kv.key.copy())));
-
-        BOOST_REQUIRE_EQUAL(offset_key, offset_md_kv.key);
-        BOOST_REQUIRE_EQUAL(offset_key, iobuf_offset_md_kv.key);
-    }
+    BOOST_REQUIRE_EQUAL(offset_key, offset_md_kv.key);
+    BOOST_REQUIRE_EQUAL(offset_key, iobuf_offset_md_kv.key);
 }

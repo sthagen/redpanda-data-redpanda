@@ -11,7 +11,9 @@
 
 #include "partition_proxy.h"
 
+#include "cloud_topics/app.h"
 #include "cluster/partition_manager.h"
+#include "kafka/data/cloud_topic_partition.h"
 #include "kafka/data/replicated_partition.h"
 
 namespace kafka {
@@ -23,6 +25,18 @@ partition_proxy make_with_impl(Args&&... args) {
 
 partition_proxy
 make_partition_proxy(const ss::lw_shared_ptr<cluster::partition>& partition) {
+    if (partition->get_ntp_config().cloud_topic_enabled()) {
+        auto ct_data_plane = partition->get_cloud_topics_data_api();
+        if (
+          ct_data_plane.has_value()
+          && !ct_data_plane->get().local_is_initialized()) {
+            throw std::runtime_error(
+              "Cloud topic partition can't be created because the cloud-topics "
+              "subsystem is not initialized");
+        }
+        auto api = ct_data_plane->get().local().get_data_plane_api();
+        return make_with_impl<cloud_topic_partition>(partition, api);
+    }
     return make_with_impl<replicated_partition>(partition);
 }
 

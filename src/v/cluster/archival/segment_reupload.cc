@@ -161,6 +161,7 @@ operator<<(std::ostream& os, const skip_offset_range& skip_range) {
 }
 
 segment_collector::segment_collector(
+  segment_collector_mode mode,
   model::offset begin_inclusive,
   const cloud_storage::partition_manifest& manifest,
   const storage::log& log,
@@ -175,15 +176,18 @@ segment_collector::segment_collector(
   , _target_end_inclusive(end_inclusive)
   , _collected_size(0)
   , _end_exclusive(end_exclusive)
-  , _flush_offset(flush_offset) {}
+  , _flush_offset(flush_offset)
+  , _mode(mode) {}
 
 segment_collector::segment_collector(
+  segment_collector_mode mode,
   model::offset begin_inclusive,
   const cloud_storage::partition_manifest& manifest,
   const storage::log& log,
   size_t max_uploaded_segment_size,
   std::optional<model::offset> end_inclusive)
   : segment_collector(
+      mode,
       begin_inclusive,
       manifest,
       log,
@@ -199,8 +203,8 @@ static bool is_reupload_mode(segment_collector_mode mode) {
 }
 } // namespace
 
-void segment_collector::collect_segments(segment_collector_mode mode) {
-    if (_manifest.size() == 0 && is_reupload_mode(mode)) {
+void segment_collector::collect_segments() {
+    if (_manifest.size() == 0 && is_reupload_mode(_mode)) {
         vlog(
           archival_log.debug,
           "No segments to collect for ntp {}, manifest empty",
@@ -211,7 +215,7 @@ void segment_collector::collect_segments(segment_collector_mode mode) {
     // start_offset < log start due to eviction of segments before
     // they could be uploaded, skip forward to log start.
     if (_begin_inclusive < _log.offsets().start_offset) {
-        switch (mode) {
+        switch (_mode) {
         case segment_collector_mode::new_upload:
         case segment_collector_mode::compacted_reupload:
             vlog(
@@ -240,7 +244,7 @@ void segment_collector::collect_segments(segment_collector_mode mode) {
 
     // Handle begin offset alignment to manifest segment boundary (if
     // required).
-    switch (mode) {
+    switch (_mode) {
     case segment_collector_mode::compacted_reupload:
         align_begin_offset_to_manifest();
         break;
@@ -270,7 +274,7 @@ void segment_collector::collect_segments(segment_collector_mode mode) {
     }
 
     if (
-      is_reupload_mode(mode)
+      is_reupload_mode(_mode)
       && _begin_inclusive >= _manifest.get_last_offset()) {
         vlog(
           archival_log.warn,
@@ -295,7 +299,7 @@ void segment_collector::collect_segments(segment_collector_mode mode) {
             return;
         }
         if (
-          is_reupload_mode(mode)
+          is_reupload_mode(_mode)
           && _target_end_inclusive.value() > _manifest.get_last_offset()) {
             vlog(
               archival_log.debug,
@@ -308,18 +312,18 @@ void segment_collector::collect_segments(segment_collector_mode mode) {
         }
     }
 
-    do_collect(mode);
+    do_collect();
 }
 
 segment_collector::segment_seq segment_collector::segments() {
     return _segments;
 }
 
-void segment_collector::do_collect(segment_collector_mode mode) {
+void segment_collector::do_collect() {
     auto projected_end_inclusive = _target_end_inclusive.value_or(
       model::offset{});
     if (projected_end_inclusive == model::offset{}) {
-        projected_end_inclusive = find_replacement_boundary(mode);
+        projected_end_inclusive = find_replacement_boundary(_mode);
     }
     // In case of the new upload:
     // - _target_end_inclusive is not set means that the upload is not forced
@@ -351,7 +355,7 @@ void segment_collector::do_collect(segment_collector_mode mode) {
           = _segments.empty()
               ? model::offset{}
               : _segments.back()->offsets().get_committed_offset();
-        switch (mode) {
+        switch (_mode) {
         case segment_collector_mode::compacted_reupload:
         case segment_collector_mode::non_compacted_reupload:
             return last_collected <= _manifest.get_last_offset();
@@ -364,7 +368,7 @@ void segment_collector::do_collect(segment_collector_mode mode) {
         // which is above the _manifest.get_last_offset().
         // Otherwise, we need to find the next segment which is below the
         // _manifest.get_last_offset().
-        auto result = find_next_segment(start, mode);
+        auto result = find_next_segment(start, _mode);
         if (result.segment.get() == nullptr) {
             break;
         }
@@ -414,7 +418,7 @@ void segment_collector::do_collect(segment_collector_mode mode) {
         // re-aligned if it falls inside manifest segment.
         if (
           _segments.empty()
-          && mode == segment_collector_mode::compacted_reupload) {
+          && _mode == segment_collector_mode::compacted_reupload) {
             // We may have found our first segment, but we can't always use
             // its base offset:
             // - it's possible the log has been prefix truncated within a
@@ -463,7 +467,7 @@ void segment_collector::do_collect(segment_collector_mode mode) {
         _can_replace_manifest_segment = true;
     }
 
-    if (is_reupload_mode(mode)) {
+    if (is_reupload_mode(_mode)) {
         align_end_offset_to_manifest(
           _target_end_inclusive.value_or(last_collected));
     } else {
@@ -949,10 +953,15 @@ ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
           _end_inclusive,
           tail_seek.offset_inside_batch,
           tail_seek.offset);
-        co_return skip_offset_range{
-          .begin_offset = _begin_inclusive,
-          .end_offset = _end_inclusive,
-          .reason = candidate_creation_error::offset_inside_batch};
+        if (is_reupload_mode(_mode)) {
+            co_return skip_offset_range{
+              .begin_offset = _begin_inclusive,
+              .end_offset = _end_inclusive,
+              .reason = candidate_creation_error::offset_inside_batch};
+        } else {
+            // This should never occur, but return an error here just in case.
+            co_return candidate_creation_error::offset_inside_batch;
+        }
     }
 
     vlog(
@@ -996,9 +1005,11 @@ ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
     // is smaller than that of the replaced one. Skip the upload if that's
     // not the case.
     if (auto to_replace = _manifest.find(starting_offset);
-        to_replace != _manifest.end()
-        && to_replace->committed_offset == final_offset) {
-        if (to_replace->size_bytes <= content_length) {
+        to_replace != _manifest.end()) {
+        if (
+          is_reupload_mode(_mode)
+          && to_replace->committed_offset == final_offset
+          && to_replace->size_bytes <= content_length) {
             vlog(
               archival_log.debug,
               "Skipping re-upload of compacted segment as its size has "
@@ -1009,6 +1020,13 @@ ss::future<candidate_creation_result> segment_collector::make_upload_candidate(
               .begin_offset = _begin_inclusive,
               .end_offset = _end_inclusive,
               .reason = candidate_creation_error::upload_size_unchanged};
+        }
+        if (!is_reupload_mode(_mode)) {
+            vlog(
+              archival_log.debug,
+              "New segment upload already appears in manifest: {}",
+              _segments.front());
+            co_return candidate_creation_error::concurrency_error;
         }
     }
 

@@ -138,6 +138,7 @@ public:
     using sizes_seq = std::vector<uint64_t>;
 
     segment_collector(
+      segment_collector_mode mode,
       model::offset begin_inclusive,
       const cloud_storage::partition_manifest& manifest,
       const storage::log& log,
@@ -158,6 +159,7 @@ public:
     /// \param flush_offset offset specified by a flush operation upstream,
     ///        has no effect in reupload mode
     segment_collector(
+      segment_collector_mode mode,
       model::offset begin_inclusive,
       const cloud_storage::partition_manifest& manifest,
       const storage::log& log,
@@ -170,8 +172,7 @@ public:
     ///
     /// \param mode defines what segments should be collected
     ///        compacted or normal.
-    void collect_segments(
-      segment_collector_mode mode = segment_collector_mode::compacted_reupload);
+    void collect_segments();
 
     segment_seq segments();
 
@@ -217,7 +218,7 @@ private:
 
     /// Collects segments until the end of the manifest, or until the
     /// end of compacted segments in log.
-    void do_collect(segment_collector_mode mode);
+    void do_collect();
 
     lookup_result
     find_next_segment(model::offset start_offset, segment_collector_mode mode);
@@ -257,6 +258,7 @@ private:
     size_t _collected_size;
     std::optional<model::offset> _end_exclusive;
     std::optional<model::offset> _flush_offset;
+    segment_collector_mode _mode;
 };
 
 } // namespace archival

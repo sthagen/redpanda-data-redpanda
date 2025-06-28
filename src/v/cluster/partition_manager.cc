@@ -59,7 +59,10 @@ partition_manager::partition_manager(
   ss::lw_shared_ptr<const archival::configuration> archival_conf,
   ss::sharded<features::feature_table>& feature_table,
   ss::sharded<archival::upload_housekeeping_service>& upload_hks,
-  config::binding<std::chrono::milliseconds> partition_shutdown_timeout)
+  config::binding<std::chrono::milliseconds> partition_shutdown_timeout,
+  std::optional<
+    std::reference_wrapper<ss::sharded<experimental::cloud_topics::app>>>
+    dp_api)
   : _storage(storage.local())
   , _raft_manager(raft)
   , _partition_recovery_mgr(recovery_mgr)
@@ -68,7 +71,8 @@ partition_manager::partition_manager(
   , _archival_conf(std::move(archival_conf))
   , _feature_table(feature_table)
   , _upload_hks(upload_hks)
-  , _partition_shutdown_timeout(std::move(partition_shutdown_timeout)) {
+  , _partition_shutdown_timeout(std::move(partition_shutdown_timeout))
+  , _data_plane_api(dp_api) {
     _leader_notify_handle
       = _raft_manager.local().register_leadership_notification(
         [this](
@@ -299,7 +303,8 @@ ss::future<consensus_ptr> partition_manager::manage(
       _archival_conf,
       _feature_table,
       _upload_hks,
-      read_replica_bucket);
+      read_replica_bucket,
+      _data_plane_api);
 
     _ntp_table.emplace(log->config().ntp(), p);
     _raft_table.emplace(group, p);

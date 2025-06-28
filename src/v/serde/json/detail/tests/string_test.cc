@@ -50,8 +50,9 @@ struct test_case {
 };
 
 std::ostream& operator<<(std::ostream& os, const test_case& tc) {
-    os << "input: " << tc.input
-       << ", expected_err: " << static_cast<int>(tc.expected_err)
+    // Don't print the input string as it's generally not valid UTF-8
+    // and it breaks test reports.
+    os << ", expected_err: " << static_cast<int>(tc.expected_err)
        << ", expected_pos: " << tc.expected_pos;
 
     if (!tc.expected_output.empty()) {

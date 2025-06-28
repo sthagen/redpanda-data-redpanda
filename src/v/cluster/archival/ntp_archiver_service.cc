@@ -3303,13 +3303,13 @@ ntp_archiver::find_reupload_candidate(manifest_scanner_t scanner) {
         auto log_generic = _parent.log();
         auto& log = *log_generic;
         segment_collector collector(
+          segment_collector_mode::non_compacted_reupload,
           run->meta.base_offset,
           manifest(),
           log,
           run->meta.size_bytes,
           run->meta.committed_offset);
-        collector.collect_segments(
-          segment_collector_mode::non_compacted_reupload);
+        collector.collect_segments();
         auto candidate = co_await collector.make_upload_candidate_stream(
           _conf->segment_upload_timeout());
 

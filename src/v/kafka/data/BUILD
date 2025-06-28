@@ -14,10 +14,12 @@ redpanda_cc_library(
 redpanda_cc_library(
     name = "partition_proxy",
     srcs = [
+        "cloud_topic_partition.cc",
         "partition_proxy.cc",
         "replicated_partition.cc",
     ],
     hdrs = [
+        "cloud_topic_partition.h",
         "partition_proxy.h",
         "replicated_partition.h",
     ],
@@ -31,11 +33,16 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/cloud_storage",
+        "//src/v/cloud_topics:app",
+        "//src/v/cloud_topics:data_plane_api",
+        "//src/v/cloud_topics:extent_meta",
+        "//src/v/cloud_topics:placeholder",
         "//src/v/kafka/protocol",
         "//src/v/kafka/server:errors",
         "//src/v/model",
         "//src/v/raft",
         "//src/v/storage",
+        "//src/v/storage:record_batch_builder",
         "//src/v/utils:truncating_logger",
         "@boost//:outcome",
         "@seastar",

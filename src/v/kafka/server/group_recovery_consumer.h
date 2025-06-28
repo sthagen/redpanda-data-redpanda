@@ -11,6 +11,7 @@
 #pragma once
 
 #include "absl/container/node_hash_map.h"
+#include "container/chunked_hash_map.h"
 #include "kafka/server/group_data_parser.h"
 #include "kafka/server/group_metadata.h"
 #include "kafka/server/group_stm.h"
@@ -23,6 +24,7 @@ namespace kafka {
 
 struct group_recovery_consumer_state {
     absl::node_hash_map<kafka::group_id, group_stm> groups;
+    chunked_hash_set<kafka::group_id> blocked_groups;
     /*
      * recovered committed offsets are by default non-reclaimable, and marked as
      * reclaimable if this flag is set to true. the flag is set to true if and
@@ -44,10 +46,8 @@ public:
      * deduplicate both group and commit metadata snapshots.
      */
 
-    explicit group_recovery_consumer(
-      group_metadata_serializer serializer, ss::abort_source& as)
-      : _serializer(std::move(serializer))
-      , _as(as) {}
+    explicit group_recovery_consumer(ss::abort_source& as)
+      : _as(as) {}
 
     ss::future<ss::stop_iteration> operator()(model::record_batch batch);
 
@@ -67,6 +67,8 @@ public:
     ss::future<> handle_commit(
       model::record_batch_header, kafka::group_tx::commit_metadata);
     ss::future<> handle_version_fence(features::feature_table::version_fence);
+    void handle_group_block(kafka::group_block);
+    bool is_group_blocked(kafka::group_id) const;
 
 private:
     void handle_record(model::record);
@@ -74,7 +76,6 @@ private:
     void handle_offset_metadata(offset_metadata_kv);
     group_recovery_consumer_state _state;
     model::offset _batch_base_offset;
-    group_metadata_serializer _serializer;
     ss::abort_source& _as;
 };
 } // namespace kafka

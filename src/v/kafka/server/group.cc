@@ -116,8 +116,7 @@ group::group(
   ss::lw_shared_ptr<cluster::partition> partition,
   model::term_id term,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
-  ss::sharded<features::feature_table>& feature_table,
-  group_metadata_serializer serializer)
+  ss::sharded<features::feature_table>& feature_table)
   : _id(std::move(id))
   , _state(s)
   , _state_timestamp(model::timestamp::now())
@@ -130,7 +129,6 @@ group::group(
   , _probe(_members, _static_members, _offsets, _lag_metrics)
   , _ctxlog(cg_klog, *this)
   , _ctx_txlog(cluster::txlog, *this)
-  , _md_serializer(std::move(serializer))
   , _term(term)
   , _enable_group_metrics(conf.enable_consumer_group_metrics.bind(
       std::function{enabled_metrics::from_vector}))
@@ -151,8 +149,7 @@ group::group(
   ss::lw_shared_ptr<cluster::partition> partition,
   model::term_id term,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
-  ss::sharded<features::feature_table>& feature_table,
-  group_metadata_serializer serializer)
+  ss::sharded<features::feature_table>& feature_table)
   : _id(std::move(id))
   , _state(md.members.empty() ? group_state::empty : group_state::stable)
   , _state_timestamp(
@@ -171,7 +168,6 @@ group::group(
   , _probe(_members, _static_members, _offsets, _lag_metrics)
   , _ctxlog(cg_klog, *this)
   , _ctx_txlog(cluster::txlog, *this)
-  , _md_serializer(std::move(serializer))
   , _term(term)
   , _enable_group_metrics(conf.enable_consumer_group_metrics.bind(
       std::function{enabled_metrics::from_vector}))
@@ -2171,7 +2167,7 @@ void group::update_store_offset_builder(
         value.expiry_timestamp = expiry_timestamp.value();
     }
 
-    auto kv = _md_serializer.to_kv(
+    auto kv = group_metadata_serializer::to_kv(
       offset_metadata_kv{.key = std::move(key), .value = std::move(value)});
     builder.add_raw_kv(std::move(kv.key), std::move(kv.value));
 }
@@ -2606,7 +2602,8 @@ void group::add_offset_tombstone_record(
       .topic = tp.topic,
       .partition = tp.partition,
     };
-    auto kv = _md_serializer.to_kv(offset_metadata_kv{.key = std::move(key)});
+    auto kv = group_metadata_serializer::to_kv(
+      offset_metadata_kv{.key = std::move(key)});
     builder.add_raw_kv(std::move(kv.key), std::nullopt);
 }
 
@@ -2615,7 +2612,8 @@ void group::add_group_tombstone_record(
     group_metadata_key key{
       .group_id = group,
     };
-    auto kv = _md_serializer.to_kv(group_metadata_kv{.key = std::move(key)});
+    auto kv = group_metadata_serializer::to_kv(
+      group_metadata_kv{.key = std::move(key)});
     builder.add_raw_kv(std::move(kv.key), std::nullopt);
 }
 
@@ -3243,36 +3241,42 @@ void group::maybe_rearm_timer() {
 }
 
 ss::future<> group::do_abort_old_txes() {
-    auto unit = _catchup_lock->attempt_read_lock();
-    if (!unit) {
-        co_return;
-    }
-
-    absl::btree_set<model::producer_identity> expired;
-
-    for (auto& [pid, producer] : _producers) {
-        if (
-          producer.transaction == nullptr
-          || !producer.transaction->is_expired()) {
-            continue;
-        }
-
-        expired.insert(model::producer_identity{pid, producer.epoch});
-    }
-    bool has_error = false;
-    for (auto pid : expired) {
-        auto ec = co_await try_abort_old_tx(pid);
-        if (ec != cluster::tx::errc::none) {
-            has_error = true;
-        }
-    }
-
-    if (!has_error) {
+    if (co_await abort_txes(true) == cluster::tx::errc::none) {
         // if no error was triggered during abort of transaction we may try to
         // schedule a next expiration earlier if there are transactions pending
         // to be expired
         maybe_rearm_timer();
     }
+}
+
+ss::future<cluster::tx::errc> group::abort_txes(bool expired_only) {
+    auto unit = _catchup_lock->attempt_read_lock();
+    if (!unit) {
+        vlog(
+          _ctx_txlog.trace, "can't abort txes: coordinator_load_in_progress");
+        co_return cluster::tx::errc::stale;
+    }
+
+    absl::btree_set<model::producer_identity> to_abort;
+
+    for (auto& [pid, producer] : _producers) {
+        if (
+          producer.transaction == nullptr
+          || (expired_only && !producer.transaction->is_expired())) {
+            continue;
+        }
+
+        to_abort.insert(model::producer_identity{pid, producer.epoch});
+    }
+    auto last_error = cluster::tx::errc::none;
+    for (auto pid : to_abort) {
+        auto ec = co_await try_abort_old_tx(pid);
+        if (ec != cluster::tx::errc::none) {
+            last_error = ec;
+        }
+    }
+
+    co_return last_error;
 }
 
 ss::future<cluster::tx::errc>

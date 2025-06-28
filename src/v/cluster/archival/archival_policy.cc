@@ -74,6 +74,7 @@ ss::future<segment_collector_stream_result> archival_policy::get_next_segment(
       force_upload);
 
     segment_collector segment_collector{
+      segment_collector_mode::new_upload,
       begin_inclusive,
       manifest,
       *log,
@@ -83,7 +84,7 @@ ss::future<segment_collector_stream_result> archival_policy::get_next_segment(
       end_exclusive,
       flush_offset};
 
-    segment_collector.collect_segments(segment_collector_mode::new_upload);
+    segment_collector.collect_segments();
     if (!segment_collector.segment_ready_for_upload()) {
         co_return candidate_creation_error::no_segments_collected;
     }
@@ -109,6 +110,7 @@ archival_policy::get_next_compacted_segment(
         co_return candidate_creation_error::no_segments_collected;
     }
     segment_collector compacted_segment_collector{
+      segment_collector_mode::compacted_reupload,
       begin_inclusive,
       manifest,
       *log,

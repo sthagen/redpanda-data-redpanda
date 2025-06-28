@@ -30,6 +30,7 @@
 #include <gmock/gmock-matchers.h>
 #include <gtest/gtest.h>
 
+#include <cstddef>
 #include <tuple>
 
 using namespace std::chrono_literals;
@@ -39,8 +40,7 @@ using namespace std::chrono_literals;
 struct cg_recovery_test_fixture : seastar_test {
     ss::future<group_recovery_consumer_state>
     recover_from_batches(chunked_circular_buffer<model::record_batch> batches) {
-        group_recovery_consumer consumer(
-          make_consumer_offsets_serializer(), as);
+        group_recovery_consumer consumer(as);
 
         return model::make_memory_record_batch_reader(std::move(batches))
           .consume(std::move(consumer), model::no_timeout);
@@ -50,7 +50,7 @@ struct cg_recovery_test_fixture : seastar_test {
         storage::record_batch_builder buider(
           model::record_batch_type::raft_data, offset++);
 
-        auto kv = serializer.to_kv(std::move(metadata));
+        auto kv = group_metadata_serializer::to_kv(std::move(metadata));
         buider.add_raw_kv(std::move(kv.key), std::move(kv.value));
 
         return std::move(buider).build();
@@ -61,7 +61,7 @@ struct cg_recovery_test_fixture : seastar_test {
         storage::record_batch_builder buider(
           model::record_batch_type::raft_data, offset++);
         for (auto& m : metadata) {
-            auto kv = serializer.to_kv(std::move(m));
+            auto kv = group_metadata_serializer::to_kv(std::move(m));
             buider.add_raw_kv(std::move(kv.key), std::move(kv.value));
         }
 
@@ -134,7 +134,6 @@ struct cg_recovery_test_fixture : seastar_test {
             .metadata = std::move(metadata)}};
     }
 
-    group_metadata_serializer serializer = make_consumer_offsets_serializer();
     ss::abort_source as;
     model::offset offset{0};
 
@@ -268,6 +267,16 @@ struct cg_recovery_test_fixture : seastar_test {
           serialize_metadata(
             g_1_metadata.copy(),
             std::vector<offset_metadata_kv>{o_md, o_md_2}));
+    }
+
+    void add_block_batch(
+      chunked_circular_buffer<model::record_batch>& batches,
+      kafka::group_id group_id,
+      bool blocked) {
+        storage::record_batch_builder block_builder(
+          model::record_batch_type::group_block, model::offset{0});
+        group_block{group_id, blocked}.add_to_batch_builder(block_builder);
+        batches.push_back(std::move(block_builder).build());
     }
 };
 
@@ -497,4 +506,32 @@ TEST_F_CORO(cg_recovery_test_fixture, test_tx_abort) {
 
     expect_committed_offsets(
       gr_1_state.offsets(), "test-1/0@1024", "test-2/10@256");
+}
+
+TEST_F_CORO(cg_recovery_test_fixture, recover_blocked) {
+    auto [meta, batches] = serialize_single_group();
+    const auto gr_1 = meta.key.group_id;
+    model::producer_identity pid(100, 0);
+    model::tx_seq tx_seq(3);
+    batches.push_back(make_tx_fence_batch(
+      pid,
+      group_tx::fence_metadata{
+        .group_id = gr_1,
+        .tx_seq = tx_seq,
+        .transaction_timeout_ms = 10s,
+        .tm_partition = model::partition_id(10),
+      }));
+
+    auto state = co_await recover_from_batches(copy_batches(batches));
+    EXPECT_FALSE(state.blocked_groups.contains(gr_1));
+
+    // block
+    add_block_batch(batches, gr_1, true);
+    state = co_await recover_from_batches(copy_batches(batches));
+    EXPECT_TRUE(state.blocked_groups.contains(gr_1));
+
+    // unblock
+    add_block_batch(batches, gr_1, false);
+    state = co_await recover_from_batches(copy_batches(batches));
+    EXPECT_FALSE(state.blocked_groups.contains(gr_1));
 }

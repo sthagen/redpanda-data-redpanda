@@ -166,6 +166,18 @@ ss::future<> group_recovery_consumer::handle_version_fence(
     co_return;
 }
 
+void group_recovery_consumer::handle_group_block(kafka::group_block gb) {
+    if (gb.is_blocked) {
+        _state.blocked_groups.insert(gb.group_id);
+    } else {
+        _state.blocked_groups.erase(gb.group_id);
+    }
+}
+
+bool group_recovery_consumer::is_group_blocked(kafka::group_id group_id) const {
+    return _state.blocked_groups.contains(group_id);
+}
+
 ss::future<ss::stop_iteration>
 group_recovery_consumer::operator()(model::record_batch batch) {
     if (_as.abort_requested()) {
@@ -178,15 +190,16 @@ group_recovery_consumer::operator()(model::record_batch batch) {
 
 void group_recovery_consumer::handle_record(model::record r) {
     try {
-        auto record_type = _serializer.get_metadata_type(r.key().copy());
+        auto record_type = group_metadata_serializer::get_metadata_type(
+          r.key().copy());
         switch (record_type) {
         case offset_commit:
             handle_offset_metadata(
-              _serializer.decode_offset_metadata(std::move(r)));
+              group_metadata_serializer::decode_offset_metadata(std::move(r)));
             return;
         case group_metadata:
             handle_group_metadata(
-              _serializer.decode_group_metadata(std::move(r)));
+              group_metadata_serializer::decode_group_metadata(std::move(r)));
             return;
         case noop:
             // ignore noops, they are handled for backward compatibility
@@ -202,6 +215,9 @@ void group_recovery_consumer::handle_record(model::record r) {
 }
 
 void group_recovery_consumer::handle_group_metadata(group_metadata_kv md) {
+    if (is_group_blocked_verbose(md.key.group_id, "group metadata")) {
+        return;
+    }
     if (md.value) {
         // until we switch over to a compacted topic or use raft snapshots,
         // always take the latest entry in the log.
@@ -221,6 +237,9 @@ void group_recovery_consumer::handle_group_metadata(group_metadata_kv md) {
 }
 
 void group_recovery_consumer::handle_offset_metadata(offset_metadata_kv md) {
+    if (is_group_blocked_verbose(md.key.group_id, "offsets")) {
+        return;
+    }
     model::topic_partition tp(md.key.topic, md.key.partition);
     if (md.value) {
         vlog(

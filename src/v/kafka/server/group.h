@@ -266,8 +266,7 @@ public:
       ss::lw_shared_ptr<cluster::partition> partition,
       model::term_id,
       ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
-      ss::sharded<features::feature_table>&,
-      group_metadata_serializer);
+      ss::sharded<features::feature_table>&);
 
     // constructor used when loading state from log
     group(
@@ -278,8 +277,7 @@ public:
       ss::lw_shared_ptr<cluster::partition> partition,
       model::term_id,
       ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
-      ss::sharded<features::feature_table>&,
-      group_metadata_serializer);
+      ss::sharded<features::feature_table>&);
 
     ~group() noexcept;
 
@@ -721,6 +719,12 @@ public:
 
     void set_lag_metrics(consumer_lag_metrics lag_metrics);
 
+    /*
+     *  If expired_only is false aborts all TXes.
+     *  If expired_only is true aborts only expired TXes.
+     */
+    ss::future<cluster::tx::errc> abort_txes(bool expired_only);
+
 private:
     using member_map = absl::node_hash_map<kafka::member_id, member_ptr>;
     using protocol_support = absl::node_hash_map<kafka::protocol_name, int>;
@@ -836,7 +840,7 @@ private:
         cluster::simple_batch_builder builder(
           model::record_batch_type::raft_data, model::offset(0));
 
-        auto kv = _md_serializer.to_kv(group_metadata_kv{
+        auto kv = group_metadata_serializer::to_kv(group_metadata_kv{
           .key = std::move(key), .value = std::move(metadata)});
         builder.add_raw_kv(std::move(kv.key), std::move(kv.value));
 
@@ -956,7 +960,6 @@ private:
       _probe;
     ctx_log _ctxlog;
     ctx_log _ctx_txlog;
-    group_metadata_serializer _md_serializer;
     /**
      * flag indicating that the group rebalance is a result of initial join i.e.
      * the group was in Empty state before it went into PreparingRebalance

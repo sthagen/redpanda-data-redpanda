@@ -145,3 +145,42 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "ir_json",
+    srcs = [
+        "ir_json.cc",
+    ],
+    hdrs = [
+        "ir_json.h",
+    ],
+    implementation_deps = [
+        "//src/v/iceberg:datatypes",
+        "//src/v/iceberg/conversion/json_schema:frontend",
+        "@fmt",
+        "@seastar",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        "//src/v/iceberg/conversion/json_schema:ir",
+    ],
+)
+
+redpanda_cc_library(
+    name = "schema_json",
+    srcs = [
+        "schema_json.cc",
+    ],
+    hdrs = [
+        "schema_json.h",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        ":ir_json",
+        "//src/v/iceberg:datatypes",
+    ],
+)

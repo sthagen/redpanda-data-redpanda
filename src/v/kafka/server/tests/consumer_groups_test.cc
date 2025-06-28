@@ -15,7 +15,9 @@
 #include "kafka/protocol/join_group.h"
 #include "kafka/protocol/offset_commit.h"
 #include "kafka/protocol/schemata/join_group_request.h"
+#include "kafka/server/coordinator_ntp_mapper.h"
 #include "kafka/server/group.h"
+#include "kafka/server/group_manager.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/timeout_clock.h"
@@ -138,6 +140,88 @@ FIXTURE_TEST(empty_offset_commit_request, consumer_offsets_fixture) {
         auto resp = client.dispatch(std::move(req)).get();
         BOOST_REQUIRE(!resp.data.errored());
     }
+}
+
+FIXTURE_TEST(block_test, consumer_offsets_fixture) {
+    scoped_config cfg;
+    cfg.get("group_topic_partitions").set_value(1);
+
+    model::topic t{"topic"};
+    kafka::group_id g{"group"};
+    kafka::group_instance_id gi("group-instance");
+
+    add_topic(model::topic_namespace_view{model::kafka_namespace, t}).get();
+    wait_for_consumer_offsets_topic(gi);
+
+    auto client = make_kafka_client().get();
+    auto client_stop = [&client] {
+        client.stop().then([&client] { client.shutdown(); }).get();
+    };
+    auto deferred = ss::defer(decltype(client_stop)(client_stop));
+    client.connect().get();
+
+    auto gntp = app.coordinator_ntp_mapper.local().ntp_for(g);
+    BOOST_REQUIRE(gntp);
+
+    auto can_commit_offset = [&] {
+        for (int _ : std::views::iota(0, 5)) {
+            auto req = offset_commit_request{.data{
+              .group_id = g,
+              .group_instance_id = gi,
+              .topics = chunked_vector<offset_commit_request_topic>::single(
+                offset_commit_request_topic{
+                  .name = t,
+                  .partitions
+                  = chunked_vector<offset_commit_request_partition>::single(
+                    offset_commit_request_partition{
+                      .partition_index = model::partition_id{0},
+                      .committed_offset = model::offset{0}})})}};
+            auto res = client.dispatch(std::move(req)).get();
+            if (!res.data.errored()) {
+                return true;
+            }
+            if (
+              res.data.topics[0].partitions[0].error_code
+              != kafka::error_code::not_coordinator) {
+                return false;
+            }
+        }
+        return false;
+    };
+
+    auto set_blocked = [&](bool blocked) {
+        auto res = app._group_manager.local()
+                     .set_blocked_for_groups(*gntp, {g}, blocked)
+                     .get();
+        BOOST_REQUIRE(res.has_value());
+    };
+
+    auto restart = [&] {
+        client_stop();
+        consumer_offsets_fixture::restart(should_wipe::no);
+        wait_for_consumer_offsets_topic(gi);
+        wait_for_leader(*gntp).get();
+        client = make_kafka_client().get();
+        client.connect().get();
+    };
+
+    BOOST_REQUIRE(can_commit_offset());
+
+    // block
+    set_blocked(true);
+    BOOST_REQUIRE(!can_commit_offset());
+
+    // make sure retart keeps it blocked
+    restart();
+    BOOST_REQUIRE(!can_commit_offset());
+
+    // unblock
+    set_blocked(false);
+    BOOST_REQUIRE(can_commit_offset());
+
+    // make sure retart keeps it unblocked
+    restart();
+    BOOST_REQUIRE(can_commit_offset());
 }
 
 FIXTURE_TEST(conditional_retention_test, consumer_offsets_fixture) {

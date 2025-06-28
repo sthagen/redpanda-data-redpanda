@@ -60,7 +60,8 @@ enum class record_batch_type : int8_t {
     dl_stm_command = 37,       // dl_stm command batch
     datalake_translation_state = 38, // maintains state for translation progress
     cluster_link = 39,               // cluster link update batches
-    MAX = cluster_link,
+    group_block = 40, // (un)blocks group names in a consumer offsets partition
+    MAX = group_block,
 };
 
 std::ostream& operator<<(std::ostream& o, record_batch_type bt);
@@ -78,7 +79,8 @@ inline std::vector<model::record_batch_type> offset_translator_batch_types() {
       model::record_batch_type::version_fence,
       model::record_batch_type::prefix_truncate,
       model::record_batch_type::partition_properties_update,
-      model::record_batch_type::datalake_translation_state};
+      model::record_batch_type::datalake_translation_state,
+      model::record_batch_type::group_block};
 }
 
 } // namespace model

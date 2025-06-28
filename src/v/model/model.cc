@@ -404,6 +404,8 @@ std::ostream& operator<<(std::ostream& o, record_batch_type bt) {
         return o << "datalake_translation_state";
     case record_batch_type::cluster_link:
         return o << "cluster_link";
+    case record_batch_type::group_block:
+        return o << "group_block";
     }
 
     return o << "batch_type::unknown{" << static_cast<int>(bt) << "}";

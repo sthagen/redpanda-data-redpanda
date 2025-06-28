@@ -32,7 +32,8 @@
 
 namespace experimental::cloud_topics {
 class dl_stm_api;
-};
+class app;
+}; // namespace experimental::cloud_topics
 
 namespace cluster {
 class partition_manager;
@@ -57,6 +58,9 @@ public:
       ss::sharded<features::feature_table>&,
       ss::sharded<archival::upload_housekeeping_service>&,
       std::optional<cloud_storage_clients::bucket_name> read_replica_bucket
+      = std::nullopt,
+      std::optional<
+        std::reference_wrapper<ss::sharded<experimental::cloud_topics::app>>> dp
       = std::nullopt);
 
     ~partition() = default;
@@ -400,6 +404,12 @@ public:
     // Acquire a shared lock for producing to the partition.
     ss::future<result<ssx::rwlock_unit>> hold_writes_enabled();
 
+    // Returns a pointer to the data plane api if cloud topics is enabled for
+    // this partition. Otherwise, nullopt is returned
+    std::optional<
+      std::reference_wrapper<ss::sharded<experimental::cloud_topics::app>>>
+    get_cloud_topics_data_api() noexcept;
+
 private:
     ss::future<>
     replicate_unsafe_reset(cloud_storage::partition_manifest manifest);
@@ -426,6 +436,9 @@ private:
     ss::shared_ptr<archival_metadata_stm> _archival_meta_stm;
     ss::shared_ptr<partition_properties_stm> _partition_properties_stm;
     ss::shared_ptr<experimental::cloud_topics::dl_stm_api> _dl_stm_api;
+    std::optional<
+      std::reference_wrapper<ss::sharded<experimental::cloud_topics::app>>>
+      _data_plane_api;
     ss::abort_source _as;
     partition_probe _probe;
     ss::sharded<features::feature_table>& _feature_table;

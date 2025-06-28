@@ -13,6 +13,7 @@
 
 #include "cluster/state_machine_registry.h"
 #include "container/chunked_hash_map.h"
+#include "container/fragmented_vector.h"
 #include "kafka/server/group_data_parser.h"
 #include "raft/persisted_stm.h"
 #include "serde/rw/envelope.h"
@@ -120,6 +121,8 @@ public:
     ss::future<> handle_commit(
       model::record_batch_header, kafka::group_tx::commit_metadata);
     ss::future<> handle_version_fence(features::feature_table::version_fence);
+    void handle_group_block(kafka::group_block);
+    bool is_group_blocked(kafka::group_id) const;
 
     ss::future<> stop() final;
 
@@ -133,10 +136,12 @@ public:
 private:
     static constexpr int8_t supported_local_snapshot_version = 1;
     struct snapshot
-      : serde::envelope<snapshot, serde::version<0>, serde::compat_version<0>> {
+      : serde::envelope<snapshot, serde::version<1>, serde::compat_version<0>> {
         all_txs_t transactions;
+        chunked_vector<kafka::group_id> blocked_groups;
 
-        auto serde_fields() { return std::tie(transactions); }
+        auto serde_fields() { return std::tie(transactions, blocked_groups); }
+        friend bool operator==(const snapshot&, const snapshot&) = default;
     };
 
     void handle_group_metadata(group_metadata_kv);
@@ -154,9 +159,9 @@ private:
     void maybe_end_tx(kafka::group_id, model::producer_identity, model::offset);
 
     all_txs_t _all_txs;
+    chunked_hash_set<kafka::group_id> _blocked_groups;
 
     ss::sharded<features::feature_table>& _feature_table;
-    group_metadata_serializer _serializer;
     ss::abort_source _as;
     static constexpr ss::lowres_clock::duration tx_fence_gc_frequency{1h};
     ss::timer<ss::lowres_clock> _stale_tx_fence_gc_timer;

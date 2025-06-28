@@ -1692,7 +1692,8 @@ void application::wire_up_redpanda_services(
       ss::sharded_parameter([] {
           return config::shard_local_cfg()
             .partition_manager_shutdown_watchdog_timeout.bind();
-      }))
+      }),
+      std::ref(cloud_topics_api))
       .get();
     vlog(_log.info, "Partition manager started");
     construct_service(
@@ -2095,8 +2096,7 @@ void application::wire_up_redpanda_services(
       std::ref(controller->get_topics_state()),
       std::ref(tx_gateway_frontend),
       std::ref(controller->get_feature_table()),
-      std::ref(_consumer_group_lag_metrics_frontend),
-      &kafka::make_consumer_offsets_serializer)
+      std::ref(_consumer_group_lag_metrics_frontend))
       .get();
     construct_service(
       offsets_recoverer,
