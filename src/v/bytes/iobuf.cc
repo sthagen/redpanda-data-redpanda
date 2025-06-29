@@ -83,6 +83,22 @@ iobuf iobuf::share(size_t pos, size_t len) {
     return ret;
 }
 
+iobuf iobuf::tail(size_t size) {
+    if (size > _size) [[unlikely]] {
+        throw std::out_of_range(fmt::format(
+          "iobuf::tail requested size {} larger than iobuf size {}",
+          size,
+          _size));
+    }
+    iobuf out;
+    for (auto it = rbegin(); it != rend() && size > 0; ++it) {
+        size_t amt = std::min(size, it->size());
+        size -= amt;
+        out.prepend(it->share(it->size() - amt, amt));
+    }
+    return out;
+}
+
 bool iobuf::operator==(const iobuf& o) const {
     if (_size != o._size) {
         return false;

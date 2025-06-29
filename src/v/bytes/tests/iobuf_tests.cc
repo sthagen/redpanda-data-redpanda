@@ -799,3 +799,13 @@ SEASTAR_THREAD_TEST_CASE(iobuf_hexdump) {
   00000000 | 41 65 6e 65 61 6e 20 73  65 64 20 6c 65 6f 20 70  | Aenean sed leo p
   00000010 | 6f 72 74 74 69 74 6f 72  2e                       | orttitor.)");
 }
+SEASTAR_THREAD_TEST_CASE(iobuf_tail) {
+    iobuf buf = iobuf::from("hello");
+    buf.append_fragments(iobuf::from("world"));
+    BOOST_CHECK_EQUAL(buf.tail(3), "rld");
+    BOOST_CHECK_EQUAL(buf.tail(5), "world");
+    BOOST_CHECK_EQUAL(buf.tail(6), "oworld");
+    BOOST_CHECK_EQUAL(buf.tail(10), "helloworld");
+    BOOST_CHECK_EQUAL(buf.tail(0), "");
+    BOOST_CHECK_THROW(buf.tail(11), std::out_of_range);
+}

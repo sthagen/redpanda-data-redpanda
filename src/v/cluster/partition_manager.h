@@ -43,9 +43,6 @@ public:
     using ntp_table_container
       = model::ntp_map_type<ss::lw_shared_ptr<partition>>;
 
-    using sharded_data_plane_ref
-      = std::reference_wrapper<ss::sharded<experimental::cloud_topics::app>>;
-
     partition_manager(
       ss::sharded<storage::api>&,
       ss::sharded<raft::group_manager>&,

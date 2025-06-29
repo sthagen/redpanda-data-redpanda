@@ -81,11 +81,7 @@ public:
         return i;
     }
 
-    // NOLINTNEXTLINE
-    iobuf() noexcept {
-        // nothing allocates memory, but boost intrusive list is not marked as
-        // noexcept
-    }
+    iobuf() noexcept = default;
     ~iobuf() noexcept;
     iobuf(iobuf&& x) noexcept
       : _frags(std::move(x._frags))
@@ -228,6 +224,14 @@ public:
      * and is a zero-copy operation.
      */
     void append(std::unique_ptr<fragment>);
+
+    /**
+     * Share the last `size` bytes from the iobuf to create a new iobuf.
+     *
+     * This is an optimized version of:
+     * `iobuf::share(iobuf.size_bytes() - size, size)`
+     */
+    iobuf tail(size_t size);
 
     /// prepends the _the buffer_ as iobuf::details::io_fragment::full{}
     void prepend(ss::temporary_buffer<char>);
