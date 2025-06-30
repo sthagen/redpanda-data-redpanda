@@ -18,4 +18,15 @@ namespace cluster::cluster_link::testing {
 model::record_batch
   create_upsert_command(model::offset, ::cluster_link::model::metadata);
 model::record_batch create_remove_command(::cluster_link::model::name_t);
+model::record_batch create_add_mirror_topic_command(
+  ::cluster_link::model::id_t, ::cluster_link::model::add_mirror_topic_cmd);
+model::record_batch create_update_mirror_topic_state_command(
+  ::cluster_link::model::id_t,
+  ::cluster_link::model::update_mirror_topic_state_cmd);
+
+::cluster_link::model::mirror_topic_metadata create_mirror_topic_metadata(
+  ::cluster_link::model::mirror_topic_state,
+  ::model::topic source_topic_name,
+  std::optional<::model::topic_id> source_topic_id = std::nullopt,
+  std::optional<::model::topic_id> destination_topoic_id = std::nullopt);
 } // namespace cluster::cluster_link::testing

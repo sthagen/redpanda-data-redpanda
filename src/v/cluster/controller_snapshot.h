@@ -299,7 +299,7 @@ struct data_migrations_t
 struct cluster_link_t
   : public serde::
       envelope<cluster_link_t, serde::version<0>, serde::compat_version<0>> {
-    absl::flat_hash_map<
+    chunked_hash_map<
       ::cluster_link::model::id_t,
       ::cluster_link::model::metadata>
       links;

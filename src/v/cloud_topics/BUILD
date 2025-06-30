@@ -26,6 +26,7 @@ redpanda_cc_library(
         "logger.h",
     ],
     include_prefix = "cloud_topics",
+    visibility = ["//visibility:public"],
     deps = [
         "@seastar",
     ],
@@ -41,6 +42,7 @@ redpanda_cc_library(
         "types.h",
     ],
     include_prefix = "cloud_topics",
+    visibility = [":__subpackages__"],
     deps = [
         "//src/v/utils:named_type",
         "//src/v/utils:uuid",

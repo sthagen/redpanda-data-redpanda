@@ -321,7 +321,7 @@ class KeycloakService(Service):
         with node.account.monitor_log(KC_LOG_FILE) as monitor:
             node.account.ssh(f"{KC} build", allow_fail=False)
             node.account.ssh_capture(self._start_cmd(), allow_fail=False)
-            monitor.wait_until("Running the server in", timeout_sec=120)
+            monitor.wait_until("Running the server in", timeout_sec=300)
 
         self.logger.debug(f"Keycloak PIDs: {self.pids(node)}")
 

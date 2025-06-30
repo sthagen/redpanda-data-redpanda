@@ -15,6 +15,7 @@
 #include "absl/container/node_hash_map.h"
 #include "absl/hash/hash.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
+#include "cluster/cluster_link/errc.h"
 #include "cluster/errc.h"
 #include "cluster/feature_update_action.h"
 #include "cluster/fwd.h"
@@ -3551,7 +3552,7 @@ struct upsert_cluster_link_response
       serde::version<0>,
       serde::compat_version<0>> {
     using rpc_adl_exempt = std::true_type;
-    errc ec{errc::success};
+    cluster::cluster_link::errc ec;
 
     friend bool operator==(
       const upsert_cluster_link_response&, const upsert_cluster_link_response&)
@@ -3581,10 +3582,80 @@ struct remove_cluster_link_response
       serde::version<0>,
       serde::compat_version<0>> {
     using rpc_adl_exempt = std::true_type;
-    errc ec{errc::success};
+    cluster::cluster_link::errc ec;
 
     friend bool operator==(
       const remove_cluster_link_response&, const remove_cluster_link_response&)
+      = default;
+
+    auto serde_fields() { return std::tie(ec); }
+};
+
+struct add_mirror_topic_request
+  : serde::envelope<
+      add_mirror_topic_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using rpc_adl_exempt = std::true_type;
+
+    ::cluster_link::model::id_t link_id;
+    ::cluster_link::model::add_mirror_topic_cmd cmd;
+    model::timeout_clock::duration timeout{};
+
+    friend bool
+    operator==(const add_mirror_topic_request&, const add_mirror_topic_request&)
+      = default;
+
+    auto serde_fields() { return std::tie(link_id, cmd, timeout); }
+};
+
+struct add_mirror_topic_response
+  : serde::envelope<
+      add_mirror_topic_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using rpc_adl_exempt = std::true_type;
+
+    cluster_link::errc ec{cluster_link::errc::success};
+
+    friend bool operator==(
+      const add_mirror_topic_response&, const add_mirror_topic_response&)
+      = default;
+
+    auto serde_fields() { return std::tie(ec); }
+};
+
+struct update_mirror_topic_state_request
+  : serde::envelope<
+      update_mirror_topic_state_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using rpc_adl_exempt = std::true_type;
+
+    ::cluster_link::model::id_t link_id;
+    ::cluster_link::model::update_mirror_topic_state_cmd cmd;
+    model::timeout_clock::duration timeout{};
+
+    friend bool operator==(
+      const update_mirror_topic_state_request&,
+      const update_mirror_topic_state_request&)
+      = default;
+
+    auto serde_fields() { return std::tie(link_id, cmd, timeout); }
+};
+
+struct update_mirror_topic_state_response
+  : serde::envelope<
+      update_mirror_topic_state_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using rpc_adl_exempt = std::true_type;
+
+    cluster_link::errc ec{cluster_link::errc::success};
+
+    friend bool operator==(
+      const update_mirror_topic_state_response&,
+      const update_mirror_topic_state_response&)
       = default;
 
     auto serde_fields() { return std::tie(ec); }

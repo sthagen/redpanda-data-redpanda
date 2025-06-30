@@ -11,11 +11,14 @@ redpanda_cc_library(
     include_prefix = "cluster_link/model",
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/container:chunked_hash_map",
+        "//src/v/model",
         "//src/v/serde",
         "//src/v/serde:variant",
         "//src/v/utils:named_type",
         "//src/v/utils:unresolved_address",
         "//src/v/utils:uuid",
+        "@fmt",
         "@seastar",
     ],
 )

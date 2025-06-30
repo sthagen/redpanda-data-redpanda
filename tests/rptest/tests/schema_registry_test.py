@@ -7,10 +7,10 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from enum import Enum
+from enum import Enum, auto, unique
 import http.client
 import json
-from typing import Literal, NamedTuple, Optional
+from typing import Literal, NamedTuple, Optional, Dict, Callable, Any
 import uuid
 import re
 import urllib.parse
@@ -1345,6 +1345,33 @@ class SchemaRegistryEndpoints(RedpandaTest):
             headers=headers,
             data=data,
             **kwargs)
+
+    def _get_status_ready(self,
+                          headers=HTTP_GET_HEADERS,
+                          tls_enabled: bool = False,
+                          **kwargs):
+        return self._request("GET",
+                             f"status/ready",
+                             headers=headers,
+                             tls_enabled=tls_enabled,
+                             **kwargs)
+
+    def _get_security_acls(self, **kwargs):
+        return self._request("GET", "security/acls", **kwargs)
+
+    def _post_security_acls(self, data, **kwargs):
+        return self._request("POST",
+                             "security/acls",
+                             json=data,
+                             headers={"Content-Type": "application/json"},
+                             **kwargs)
+
+    def _delete_security_acls(self, data, **kwargs):
+        return self._request("DELETE",
+                             "security/acls",
+                             json=data,
+                             headers={"Content-Type": "application/json"},
+                             **kwargs)
 
 
 class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
@@ -5685,29 +5712,6 @@ class SchemaRegistryACLTest(SchemaRegistryEndpoints):
     def __init__(self, context, **kwargs):
         super(SchemaRegistryACLTest, self).__init__(context, **kwargs)
 
-    def _get_security_acls(self, **kwargs):
-        resp = self._request("GET", "security/acls", **kwargs)
-        self.logger.debug(f"Response content: {resp.content}")
-        return resp
-
-    def _post_security_acls(self, data, **kwargs):
-        resp = self._request("POST",
-                             "security/acls",
-                             json=data,
-                             headers={"Content-Type": "application/json"},
-                             **kwargs)
-        self.logger.debug(f"Response content: {resp.content}")
-        return resp
-
-    def _delete_security_acls(self, data, **kwargs):
-        resp = self._request("DELETE",
-                             "security/acls",
-                             json=data,
-                             headers={"Content-Type": "application/json"},
-                             **kwargs)
-        self.logger.debug(f"Response content: {resp.content}")
-        return resp
-
     def _create_test_acl(self,
                          principal="User:alice",
                          resource="test-subject",
@@ -6089,3 +6093,600 @@ class SchemaRegistryACLTest(SchemaRegistryEndpoints):
 
         # Verify ACL no longer exists eventually
         self.await_acl_count(0)
+
+
+class ACLTestEndpoint:
+    """Base class for ACL-protected endpoints"""
+    def __init__(self, test_instance: 'SchemaRegistryAclAuthzTest'):
+        self.test = test_instance
+
+    @property
+    def name(self) -> str:
+        """Endpoint identifier"""
+        raise NotImplementedError
+
+    def setup(self) -> None:
+        """Any pre-test setup"""
+        pass
+
+    def make_request(self, auth) -> requests.Response:
+        """Execute the actual HTTP request"""
+        raise NotImplementedError
+
+    def create_acl(self) -> dict:
+        """Create the ACL required for this endpoint"""
+        raise NotImplementedError
+
+
+class GetConfigEndpoint(ACLTestEndpoint):
+    name = "GET_CONFIG"
+
+    def make_request(self, auth):
+        return self.test._get_config(auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource="*",
+                                     resource_type="REGISTRY",
+                                     pattern_type="LITERAL",
+                                     operation="DESCRIBE_CONFIGS")
+
+
+class PutConfigEndpoint(ACLTestEndpoint):
+    name = "PUT_CONFIG"
+
+    def make_request(self, auth):
+        return self.test._set_config(data=json.dumps({"compatibility":
+                                                      "FULL"}),
+                                     auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource="*",
+                                     resource_type="REGISTRY",
+                                     pattern_type="LITERAL",
+                                     operation="ALTER_CONFIGS")
+
+
+class GetConfigSubjectEndpoint(ACLTestEndpoint):
+    name = "GET_CONFIG_SUBJECT"
+
+    def setup(self) -> None:
+        res = self.test._set_config_subject(self.test.subject,
+                                            data=json.dumps(
+                                                {"compatibility": "FULL"}),
+                                            auth=self.test.super_auth)
+        self.test.assert_equal(res.status_code, 200)
+
+    def make_request(self, auth):
+        return self.test._get_config_subject(self.test.subject, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource=self.test.subject,
+                                     resource_type="SUBJECT",
+                                     pattern_type="LITERAL",
+                                     operation="DESCRIBE_CONFIGS")
+
+
+class PutConfigSubjectEndpoint(ACLTestEndpoint):
+    name = "PUT_CONFIG_SUBJECT"
+
+    def make_request(self, auth):
+        return self.test._set_config_subject(self.test.subject,
+                                             data=json.dumps(
+                                                 {"compatibility": "FULL"}),
+                                             auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource=self.test.subject,
+                                     resource_type="SUBJECT",
+                                     pattern_type="LITERAL",
+                                     operation="ALTER_CONFIGS")
+
+
+class DeleteConfigSubject(ACLTestEndpoint):
+    name = "DELETE_CONFIG_SUBJECT"
+
+    def setup(self) -> None:
+        res = self.test._set_config_subject(self.test.subject,
+                                            data=json.dumps(
+                                                {"compatibility": "FULL"}),
+                                            auth=self.test.super_auth)
+        self.test.assert_equal(res.status_code, 200)
+
+    def make_request(self, auth):
+        return self.test._delete_config_subject(self.test.subject, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource=self.test.subject,
+                                     resource_type="SUBJECT",
+                                     pattern_type="LITERAL",
+                                     operation="ALTER_CONFIGS")
+
+
+class GetMode(ACLTestEndpoint):
+    name = "GET_MODE"
+
+    def make_request(self, auth):
+        return self.test._get_mode(auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource="*",
+                                     resource_type="REGISTRY",
+                                     pattern_type="LITERAL",
+                                     operation="DESCRIBE_CONFIGS")
+
+
+class PutMode(ACLTestEndpoint):
+    name = "PUT_MODE"
+
+    def make_request(self, auth):
+        return self.test._set_mode(data=json.dumps({"mode": "READWRITE"}),
+                                   auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource="*",
+                                     resource_type="REGISTRY",
+                                     pattern_type="LITERAL",
+                                     operation="ALTER_CONFIGS")
+
+
+class GetModeSubject(ACLTestEndpoint):
+    name = "GET_MODE_SUBJECT"
+
+    def setup(self) -> None:
+        res = self.test._set_mode_subject(self.test.subject,
+                                          data=json.dumps(
+                                              {"mode": "READWRITE"}),
+                                          auth=self.test.super_auth)
+        self.test.assert_equal(res.status_code, 200)
+
+    def make_request(self, auth):
+        return self.test._get_mode_subject(self.test.subject, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource=self.test.subject,
+                                     resource_type="SUBJECT",
+                                     pattern_type="LITERAL",
+                                     operation="DESCRIBE_CONFIGS")
+
+
+class PutModeSubject(ACLTestEndpoint):
+    name = "PUT_MODE_SUBJECT"
+
+    def make_request(self, auth):
+        return self.test._set_mode_subject(self.test.subject,
+                                           data=json.dumps(
+                                               {"mode": "READWRITE"}),
+                                           auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource=self.test.subject,
+                                     resource_type="SUBJECT",
+                                     pattern_type="LITERAL",
+                                     operation="ALTER_CONFIGS")
+
+
+class DeleteModeSubject(ACLTestEndpoint):
+    name = "DELETE_MODE_SUBJECT"
+
+    def setup(self) -> None:
+        res = self.test._set_mode_subject(self.test.subject,
+                                          data=json.dumps(
+                                              {"mode": "READWRITE"}),
+                                          auth=self.test.super_auth)
+        self.test.assert_equal(res.status_code, 200)
+
+    def make_request(self, auth):
+        return self.test._delete_mode_subject(self.test.subject, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource=self.test.subject,
+                                     resource_type="SUBJECT",
+                                     pattern_type="LITERAL",
+                                     operation="ALTER_CONFIGS")
+
+
+class PostSubjectVersions(ACLTestEndpoint):
+    name = "POST_SUBJECT_VERSIONS"
+
+    def make_request(self, auth):
+        return self.test._post_subjects_subject_versions(
+            self.test.subject, data=self.test.schema_data_1, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(resource=self.test.subject,
+                                     resource_type="SUBJECT",
+                                     pattern_type="LITERAL",
+                                     operation="WRITE")
+
+
+class GetSchemasIdsIdVersions(ACLTestEndpoint):
+    name = "GET_SCHEMAS_IDS_ID_VERSIONS"
+
+    def setup(self) -> None:
+        self.schema_id = self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._get_schemas_ids_id_versions(self.schema_id,
+                                                      auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl("*", "REGISTRY", "LITERAL", "DESCRIBE")
+
+
+class GetSchemasIdsIdSubjects(ACLTestEndpoint):
+    name = "GET_SCHEMAS_IDS_ID_SUBJECTS"
+
+    def setup(self) -> None:
+        self.schema_id = self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._get_schemas_ids_id_subjects(self.schema_id,
+                                                      auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl("*", "REGISTRY", "LITERAL", "DESCRIBE")
+
+
+class GetSubjectVersions(ACLTestEndpoint):
+    name = "GET_SUBJECT_VERSIONS"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._get_subjects_subject_versions(self.test.subject,
+                                                        auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
+                                     "DESCRIBE")
+
+
+class PostSubject(ACLTestEndpoint):
+    name = "POST_SUBJECT"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._post_subjects_subject(self.test.subject,
+                                                data=self.test.schema_data_1,
+                                                auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
+                                     "READ")
+
+
+class GetSubjectVersionsVersion(ACLTestEndpoint):
+    name = "GET_SUBJECT_VERSIONS_VERSION"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._get_subjects_subject_versions_version(
+            self.test.subject, version=1, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
+                                     "READ")
+
+
+class GetSubjectVersionsVersionSchema(ACLTestEndpoint):
+    name = "GET_SUBJECT_VERSIONS_VERSION_SCHEMA"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._get_subjects_subject_versions_version_schema(
+            self.test.subject, version=1, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
+                                     "READ")
+
+
+class GetSubjectVersionsVersionReferencedBy(ACLTestEndpoint):
+    name = "GET_SUBJECT_VERSIONS_VERSION_REFERENCED_BY"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._get_subjects_subject_versions_version_referenced_by(
+            self.test.subject, version=1, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl("*", "REGISTRY", "LITERAL", "DESCRIBE")
+
+
+class DeleteSubject(ACLTestEndpoint):
+    name = "DELETE_SUBJECT"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._delete_subject(self.test.subject, auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
+                                     "REMOVE")
+
+
+class DeleteSubjectVersion(ACLTestEndpoint):
+    name = "DELETE_SUBJECT_VERSION"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._delete_subject_version(self.test.subject,
+                                                 version=1,
+                                                 auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
+                                     "REMOVE")
+
+
+class CompatibilitySubjectVersion(ACLTestEndpoint):
+    name = "COMPATIBILITY_SUBJECT_VERSION"
+
+    def setup(self) -> None:
+        self.test._create_schema(self.test.subject)
+
+    def make_request(self, auth):
+        return self.test._post_compatibility_subject_version(
+            self.test.subject,
+            version=1,
+            data=self.test.schema_data_1,
+            auth=auth)
+
+    def create_acl(self):
+        return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
+                                     "READ")
+
+
+class SchemaRegistryAclAuthzTest(SchemaRegistryEndpoints):
+    """
+    Verify that schema registry endpoints are protected by the correct ACL resource and operation.
+    """
+    ENDPOINTS = [
+        GetConfigEndpoint,
+        PutConfigEndpoint,
+        GetConfigSubjectEndpoint,
+        PutConfigSubjectEndpoint,
+        DeleteConfigSubject,
+        GetMode,
+        PutMode,
+        GetModeSubject,
+        PutModeSubject,
+        DeleteModeSubject,
+        PostSubjectVersions,
+        GetSchemasIdsIdVersions,
+        GetSchemasIdsIdSubjects,
+        GetSubjectVersions,
+        PostSubject,
+        GetSubjectVersionsVersion,
+        GetSubjectVersionsVersionSchema,
+        GetSubjectVersionsVersionReferencedBy,
+        DeleteSubject,
+        DeleteSubjectVersion,
+        CompatibilitySubjectVersion,
+
+        # Tested separately:
+        # GET_SCHEMAS_TYPES             - no ACLs required
+        # SCHEMA_REGISTRY_STATUS_READY  - no ACLs required
+        # GET_SCHEMAS_IDS_ID            - custom ACL handling
+        # GET_SUBJECTS                  - custom ACL handling
+        # GET_SECURITY_ACLS             - kafka cluster ACL required
+        # POST_SECURITY_ACLS            - kafka cluster ACL required
+        # DELETE_SECURITY_ACLS          - kafka cluster ACL required
+    ]
+
+    def __init__(self, context):
+        security = SecurityConfig()
+        security.enable_sasl = True
+        security.endpoint_authn_method = 'sasl'
+
+        schema_registry_config = SchemaRegistryConfig()
+        schema_registry_config.authn_method = 'http_basic'
+        schema_registry_config.mode_mutability = True
+
+        super(SchemaRegistryAclAuthzTest,
+              self).__init__(context,
+                             security=security,
+                             num_brokers=1,
+                             schema_registry_config=schema_registry_config)
+
+        superuser = self.redpanda.SUPERUSER_CREDENTIALS
+        self.user = SaslCredentials('user', 'panda', superuser.mechanism)
+
+        self.super_auth = (superuser.username, superuser.password)
+        self.user_auth = (self.user.username, self.user.password)
+
+        self.subject = "test-subject"
+        self.schema_data_1 = json.dumps({"schema": schema1_def})
+        self.schema_data_2 = json.dumps({"schema": schema2_def})
+
+        self.rpk = RpkTool(self.redpanda,
+                           username=superuser.username,
+                           password=superuser.password,
+                           sasl_mechanism=superuser.algorithm)
+
+    def _init_users(self):
+        admin = Admin(self.redpanda)
+        admin.create_user(username=self.user.username,
+                          password=self.user.password,
+                          algorithm=self.user.mechanism)
+
+    def _create_acl(self,
+                    resource,
+                    resource_type,
+                    pattern_type,
+                    operation,
+                    permission="ALLOW"):
+        return {
+            "principal": f"User:{self.user.username}",
+            "resource": resource,
+            "resource_type": resource_type,
+            "pattern_type": pattern_type,
+            "host": "*",
+            "operation": operation,
+            "permission": permission
+        }
+
+    def _post_acl(self, acl):
+        """Grant an ACL to the regular user."""
+        resp = self._post_security_acls([acl], auth=self.super_auth)
+        self.assert_equal(resp.status_code, 201,
+                          f"Failed to create ACL: {acl=}")
+
+    def _create_schema(self, subject: str) -> int:
+        response = self._post_subjects_subject_versions(
+            subject, data=self.schema_data_1, auth=self.super_auth)
+        self.assert_equal(response.status_code, 200, "Failed to create schema")
+        return response.json()["id"]
+
+    def setUp(self):
+        super().setUp()
+        self._init_users()
+        self.redpanda.set_cluster_config(
+            {"schema_registry_enable_authorization": "True"})
+
+    def _get_endpoint_by_name(self, name: str) -> ACLTestEndpoint:
+        for endpoint in self.ENDPOINTS:
+            if endpoint.name == name:
+                return endpoint(self)
+        raise ValueError(f"Endpoint {name} not found")
+
+    @cluster(num_nodes=1)
+    @matrix(endpoint_name=[e.name for e in ENDPOINTS])
+    def test_acl_protection(self, endpoint_name: str):
+        """
+        Verify that schema registry endpoints are protected by the correct ACL resource and operation.
+        """
+        endpoint = self._get_endpoint_by_name(endpoint_name)
+
+        # Setup any prerequisites
+        endpoint.setup()
+
+        # No ACL — should be denied
+        result = endpoint.make_request(self.user_auth)
+        self.assert_equal(result.status_code, 403)
+
+        # Grant correct ACL
+        acl = endpoint.create_acl()
+        self._post_acl(acl)
+
+        # Try again — should now succeed
+        result = endpoint.make_request(self.user_auth)
+        self.assert_equal(result.status_code, 200)
+
+    @cluster(num_nodes=1)
+    def test_public_endpoints(self):
+        """Test the endpoints that don't require any ACLs for access"""
+
+        # GET_SCHEMAS_TYPES
+        result = self._get_schemas_types()
+        self.assert_equal(result.status_code, 200)
+
+        # SCHEMA_REGISTRY_STATUS_READY
+        result = self._get_status_ready()
+        self.assert_equal(result.status_code, 200)
+
+    @cluster(num_nodes=1)
+    def test_acl_endpoints(self):
+        """Test the ACL GET/POST/DELETE endpoints which are protected by the kafka cluster resource"""
+        def check_acl_endpoints(expected_success):
+            acl = self._create_acl("*", "SUBJECT", "LITERAL", "WRITE")
+
+            result = self._get_security_acls(auth=self.user_auth)
+            self.assert_equal(result.status_code,
+                              200 if expected_success else 403)
+
+            result = self._post_security_acls([acl], auth=self.user_auth)
+            self.assert_equal(result.status_code,
+                              201 if expected_success else 403)
+
+            result = self._delete_security_acls([acl], auth=self.user_auth)
+            self.assert_equal(result.status_code,
+                              200 if expected_success else 403)
+
+        def grant_cluster_acl():
+            def try_create_acl():
+                self.rpk.acl_create_allow_cluster(self.user.username, "all")
+
+                def present(acl):
+                    return all(
+                        part in acl
+                        for part in [self.user.username, "CLUSTER", "ALL"])
+
+                return all(
+                    any(
+                        present(acl)
+                        for acl in self.rpk.acl_list(node=node).splitlines())
+                    for node in self.redpanda.nodes)
+
+            # Retry to handle NOT_CONTROLLER errors
+            wait_until(try_create_acl,
+                       timeout_sec=20,
+                       backoff_sec=1,
+                       retry_on_exc=True,
+                       err_msg="ACL not created")
+
+        check_acl_endpoints(expected_success=False)
+
+        grant_cluster_acl()
+
+        check_acl_endpoints(expected_success=True)
+
+    @cluster(num_nodes=1)
+    def test_superuser_access(self):
+        """Test that superusers have access to all ACL-protected endpoints"""
+        # Check a global endpoint
+        result = self._set_config(data=json.dumps({"compatibility": "FULL"}),
+                                  auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+
+        # Check a subject-level endpoint
+        subject = "test-subject"
+        result = self._post_subjects_subject_versions(subject,
+                                                      data=self.schema_data_1,
+                                                      auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+
+    @cluster(num_nodes=1)
+    def test_resource_patterns(self):
+        """Test that prefixed and global pattern matching of resources works"""
+        def check_post_schemas(can_post_1, can_post_2):
+            result = self._post_subjects_subject_versions(
+                "test-subject-1", data=self.schema_data_1, auth=self.user_auth)
+            self.assert_equal(result.status_code, 200 if can_post_1 else 403)
+
+            result = self._post_subjects_subject_versions(
+                "test-subject-2", data=self.schema_data_2, auth=self.user_auth)
+            self.assert_equal(result.status_code, 200 if can_post_2 else 403)
+
+        # Check prefix matching works
+        acl_1 = self._create_acl("test-subject-", "SUBJECT", "PREFIXED",
+                                 "WRITE")
+        self._post_acl(acl_1)
+
+        check_post_schemas(can_post_1=True, can_post_2=True)
+
+        # Check denying overwrites a prefixed allow
+        acl_2 = self._create_acl("test-subject-2", "SUBJECT", "LITERAL",
+                                 "WRITE", "DENY")
+        self._post_acl(acl_2)
+
+        check_post_schemas(can_post_1=True, can_post_2=False)
+
+        # Check * matching works
+        acl_3 = self._create_acl("*", "SUBJECT", "LITERAL", "WRITE", "DENY")
+        self._post_acl(acl_3)
+
+        check_post_schemas(can_post_1=False, can_post_2=False)

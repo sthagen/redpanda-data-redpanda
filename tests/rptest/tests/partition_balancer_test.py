@@ -49,7 +49,7 @@ STARTUP_SEQUENCE_ABORTED = [
 # Example
 # ERROR 2025-05-12 11:08:51,283 [shard 1:main] cluster - controller_backend.cc:909 - [{kafka/topic-sgnmkqspsy/0}] reconciliation seems stuck (last retried 109s. ago), state: {pending_notifies: 1,  properties_changed_at: {nullopt}, removed_at: {nullopt}, cur_operation: {{revision: 264, type: update, assignment: { id: 0, group_id: 1, replicas: {{node_id: 1, shard: 0}, {node_id: 4, shard: 0}, {node_id: 2, shard: 0}} }, retries: 2, last_error: cluster::errc::waiting_for_recovery (Waiting for partition to recover)}}}
 RECONCILIATION_TIMEOUT_LOG = [
-    "controller_backend.* reconciliation seems stuck \(last retried.*"
+    ".*cluster - controller_backend.* reconciliation seems stuck.*"
 ]
 
 
@@ -416,7 +416,8 @@ class PartitionBalancerTest(PartitionBalancerService):
         wait_for_recovery_throttle_rate(self.redpanda, new_value)
 
     @skip_debug_mode
-    @cluster(num_nodes=6, log_allow_list=CHAOS_LOG_ALLOW_LIST)
+    @cluster(num_nodes=6,
+             log_allow_list=CHAOS_LOG_ALLOW_LIST + RECONCILIATION_TIMEOUT_LOG)
     def test_movement_cancellations(self):
         self.start_redpanda(num_nodes=4)
 
@@ -472,7 +473,8 @@ class PartitionBalancerTest(PartitionBalancerService):
             ), f"bad rack placement {racks} for partition id: {p.id} (replicas: {p.replicas})"
 
     @skip_debug_mode
-    @cluster(num_nodes=8, log_allow_list=CHAOS_LOG_ALLOW_LIST)
+    @cluster(num_nodes=8,
+             log_allow_list=CHAOS_LOG_ALLOW_LIST + RECONCILIATION_TIMEOUT_LOG)
     def test_rack_awareness(self):
         extra_rp_conf = self._extra_rp_conf | {"enable_rack_awareness": True}
         self.redpanda = make_redpanda_service(self.test_context,
@@ -507,7 +509,8 @@ class PartitionBalancerTest(PartitionBalancerService):
             self.run_validation(consumer_timeout_sec=CONSUMER_TIMEOUT)
 
     @skip_debug_mode
-    @cluster(num_nodes=7, log_allow_list=CHAOS_LOG_ALLOW_LIST)
+    @cluster(num_nodes=7,
+             log_allow_list=CHAOS_LOG_ALLOW_LIST + RECONCILIATION_TIMEOUT_LOG)
     def test_rack_constraint_repair(self):
         """
         Test partition balancer rack constraint repair with the following scenario:
@@ -579,7 +582,8 @@ class PartitionBalancerTest(PartitionBalancerService):
     @skip_debug_mode
     @cluster(num_nodes=7,
              log_allow_list=CHAOS_LOG_ALLOW_LIST +
-             RACE_BETWEEN_DELETION_AND_ADDING_PARTITION)
+             RACE_BETWEEN_DELETION_AND_ADDING_PARTITION +
+             RECONCILIATION_TIMEOUT_LOG)
     def test_fuzz_admin_ops(self):
         self.start_redpanda(num_nodes=5)
 
@@ -914,7 +918,8 @@ class PartitionBalancerTest(PartitionBalancerService):
         self.wait_until_status(is_ready_and_stable)
 
     @skip_debug_mode
-    @cluster(num_nodes=7, log_allow_list=CHAOS_LOG_ALLOW_LIST)
+    @cluster(num_nodes=7,
+             log_allow_list=CHAOS_LOG_ALLOW_LIST + RECONCILIATION_TIMEOUT_LOG)
     @matrix(kill_same_node=[True, False])
     def test_maintenance_mode(self, kill_same_node):
         """

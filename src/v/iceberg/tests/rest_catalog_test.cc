@@ -13,6 +13,7 @@
 #include "cloud_io/tests/s3_imposter.h"
 #include "cloud_io/tests/scoped_remote.h"
 #include "config/types.h"
+#include "datalake/credential_manager.h"
 #include "iceberg/json_writer.h"
 #include "iceberg/rest_catalog.h"
 #include "iceberg/rest_client/catalog_client.h"
@@ -54,7 +55,8 @@ struct RestCatalogTest
   , s3_imposter_fixture {
     RestCatalogTest()
       : sr(cloud_io::scoped_remote::create(10, conf))
-      , io(remote(), bucket_name) {
+      , io(remote(), bucket_name)
+      , mock_credential_manager() {
         set_expectations_and_listen({});
     }
 
@@ -67,16 +69,19 @@ struct RestCatalogTest
         return std::make_unique<iceberg::rest_client::catalog_client>(
           std::move(http_client),
           endpoint,
+          mock_credential_manager,
           get_credentials(),
           iceberg::rest_client::base_path{"/catalog"},
           iceberg::rest_client::warehouse{"x"},
           iceberg::rest_client::api_version("v1"),
           std::nullopt,
           nullptr,
-          config::datalake_catalog_auth_mode::oauth2);
+          config::datalake_catalog_auth_mode::oauth2,
+          nullptr);
     }
     std::unique_ptr<cloud_io::scoped_remote> sr;
     iceberg::manifest_io io;
+    datalake::credential_manager mock_credential_manager;
 };
 AssertionResult query_params_equal(
   absl::flat_hash_map<ss::sstring, ss::sstring> expected,
@@ -326,7 +331,9 @@ TEST_F(RestCatalogTest, CheckLoadTableHappyPath) {
     }});
 
     iceberg::rest_catalog catalog(
-      std::move(client), config::mock_binding<std::chrono::milliseconds>(10s));
+      std::move(client),
+      config::mock_binding<std::chrono::milliseconds>(10s),
+      mock_credential_manager);
 
     auto metadata = catalog
                       .load_table(iceberg::table_identifier{
@@ -367,7 +374,9 @@ TEST_F(RestCatalogTest, CheckCreateTableHappyPath) {
     }});
 
     iceberg::rest_catalog catalog(
-      std::move(client), config::mock_binding<std::chrono::milliseconds>(10s));
+      std::move(client),
+      config::mock_binding<std::chrono::milliseconds>(10s),
+      mock_credential_manager);
 
     auto metadata = catalog
                       .create_table(
@@ -467,7 +476,9 @@ TEST_F(RestCatalogTest, CommitTxnHappyPath) {
     }});
 
     iceberg::rest_catalog catalog(
-      std::move(client), config::mock_binding<std::chrono::milliseconds>(10s));
+      std::move(client),
+      config::mock_binding<std::chrono::milliseconds>(10s),
+      mock_credential_manager);
     auto table_md = create_empty_table_metadata(bucket_name);
     iceberg::transaction txn(std::move(table_md));
 
@@ -502,7 +513,9 @@ TEST_F(RestCatalogTest, CommitEmptyTransaction) {
     auto client = make_catalog_client({[](client_mock&) {}});
 
     iceberg::rest_catalog catalog(
-      std::move(client), config::mock_binding<std::chrono::milliseconds>(10s));
+      std::move(client),
+      config::mock_binding<std::chrono::milliseconds>(10s),
+      mock_credential_manager);
     auto table_md = create_empty_table_metadata(bucket_name);
 
     iceberg::transaction txn(std::move(table_md));
@@ -557,7 +570,9 @@ TEST_F(RestCatalogTest, TestConcurrentAccesses) {
     }});
 
     iceberg::rest_catalog catalog(
-      std::move(client), config::mock_binding<std::chrono::milliseconds>(10s));
+      std::move(client),
+      config::mock_binding<std::chrono::milliseconds>(10s),
+      mock_credential_manager);
     auto t_id = iceberg::table_identifier{
       .ns = {"foo", "bar", "baz"}, .table = "panda_table"};
     ss::parallel_for_each(boost::irange(20), [&](int) {

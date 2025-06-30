@@ -93,7 +93,7 @@ public:
     ss::future<> upsert_link(model::id_t id, model::metadata metadata) {
         co_await _table.local().apply_update(
           ::cluster::cluster_link::testing::create_upsert_command(
-            ::model::offset{id()}, metadata));
+            ::model::offset{id()}, std::move(metadata)));
         _manager->on_link_change(id);
     }
 
@@ -185,7 +185,7 @@ TEST_F_CORO(link_test, start_with_table_entries) {
     auto remove_callback = ss::defer(
       [this, callback_id] { unregister_callback(callback_id); });
 
-    co_await upsert_link(link_id, link);
+    co_await upsert_link(link_id, link.copy());
     co_await _manager->start();
     ASSERT_NO_THROW_CORO(co_await cv.wait(5s))
       << "Timed out waiting for link creation";
@@ -209,7 +209,7 @@ TEST_F_CORO(link_test_manager_started, test_create_link_and_update) {
     auto remove_callback = ss::defer(
       [this, callback_id] { unregister_callback(callback_id); });
 
-    co_await upsert_link(link_id, link);
+    co_await upsert_link(link_id, link.copy());
     ASSERT_NO_THROW_CORO(co_await cv.wait(5s))
       << "Timed out waiting for link creation";
     auto it = _links.find(link_uuid);
@@ -222,7 +222,7 @@ TEST_F_CORO(link_test_manager_started, test_create_link_and_update) {
       .uuid = link_uuid,
       .connection = model::connection_config{
         .bootstrap_servers{net::unresolved_address{"localhost", 9092}}}};
-    co_await upsert_link(link_id, updated_link);
+    co_await upsert_link(link_id, updated_link.copy());
 
     it = _links.find(link_uuid);
     ASSERT_NE_CORO(it, _links.end())
@@ -250,7 +250,7 @@ TEST_F_CORO(link_test_manager_started, test_remove_link) {
     auto remove_callback = ss::defer(
       [this, callback_id] { unregister_callback(callback_id); });
 
-    co_await upsert_link(link_id, link);
+    co_await upsert_link(link_id, link.copy());
     ASSERT_NO_THROW_CORO(co_await cv.wait(5s))
       << "Timed out waiting for link creation";
     auto it = _links.find(link_uuid);

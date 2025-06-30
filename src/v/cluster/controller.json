@@ -181,6 +181,16 @@
             "name": "remove_cluster_link",
             "input_type": "remove_cluster_link_request",
             "output_type": "remove_cluster_link_response"
+        },
+        {
+            "name": "add_mirror_topic",
+            "input_type": "add_mirror_topic_request",
+            "output_type": "add_mirror_topic_response"
+        },
+        {
+            "name": "update_mirror_topic_state",
+            "input_type": "update_mirror_topic_state_request",
+            "output_type": "update_mirror_topic_state_response"
         }
     ]
 }

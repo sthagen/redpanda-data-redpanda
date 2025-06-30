@@ -28,6 +28,7 @@ inline ss::logger test_log("test"); // NOLINT
 namespace ba = boost::algorithm;
 
 static const cloud_roles::aws_region_name region{""};
+static const cloud_roles::aws_service_name service{"s3"};
 
 class fixture : public http_imposter_fixture {
 public:
@@ -42,7 +43,7 @@ FIXTURE_TEST(test_simple_token_request, fixture) {
     listen();
     ss::abort_source as;
 
-    auto cl = cloud_roles::gcp_refresh_impl{address(), region, as};
+    auto cl = cloud_roles::gcp_refresh_impl{address(), service, region, as};
     auto resp = cl.fetch_credentials().get();
     BOOST_REQUIRE(std::holds_alternative<iobuf>(resp));
     BOOST_REQUIRE_EQUAL(
@@ -55,7 +56,7 @@ FIXTURE_TEST(test_bad_response_handling, fixture) {
     listen();
     ss::abort_source as;
 
-    auto cl = cloud_roles::gcp_refresh_impl{address(), region, as};
+    auto cl = cloud_roles::gcp_refresh_impl{address(), service, region, as};
     auto resp = cl.fetch_credentials().get();
     BOOST_REQUIRE(std::holds_alternative<cloud_roles::api_request_error>(resp));
     auto error = std::get<cloud_roles::api_request_error>(resp);
@@ -71,7 +72,7 @@ FIXTURE_TEST(test_gateway_down, fixture) {
     listen();
     ss::abort_source as;
 
-    auto cl = cloud_roles::gcp_refresh_impl{address(), region, as};
+    auto cl = cloud_roles::gcp_refresh_impl{address(), service, region, as};
     auto resp = cl.fetch_credentials().get();
     BOOST_REQUIRE(std::holds_alternative<cloud_roles::api_request_error>(resp));
     auto error = std::get<cloud_roles::api_request_error>(resp);
@@ -90,7 +91,7 @@ FIXTURE_TEST(test_aws_role_fetch_on_startup, fixture) {
     listen();
     ss::abort_source as;
 
-    auto cl = cloud_roles::aws_refresh_impl{address(), region, as};
+    auto cl = cloud_roles::aws_refresh_impl{address(), service, region, as};
     auto resp = cl.fetch_credentials().get();
     // assert that calls are made in order:
     // 1. to find the role
@@ -118,7 +119,7 @@ FIXTURE_TEST(test_sts_credentials_fetch, fixture) {
 
     write_fully(cloud_role_tests::token_file, iobuf::from("token")).get();
 
-    auto cl = cloud_roles::aws_sts_refresh_impl{address(), region, as};
+    auto cl = cloud_roles::aws_sts_refresh_impl{address(), service, region, as};
     auto resp = cl.fetch_credentials().get();
 
     ss::remove_file(cloud_role_tests::token_file).get();
@@ -152,6 +153,7 @@ SEASTAR_THREAD_TEST_CASE(aks_authority_host_read_test) {
         setenv("AZURE_AUTHORITY_HOST", "simple.com", 1);
         auto aks = cloud_roles::azure_aks_refresh_impl{
           net::unresolved_address{},
+          service,
           cloud_roles::aws_region_name{},
           dummy_as,
           cloud_roles::retry_params{}};
@@ -164,6 +166,7 @@ SEASTAR_THREAD_TEST_CASE(aks_authority_host_read_test) {
         setenv("AZURE_AUTHORITY_HOST", "http://simple.com/", 1);
         auto aks = cloud_roles::azure_aks_refresh_impl{
           net::unresolved_address{},
+          service,
           cloud_roles::aws_region_name{},
           dummy_as,
           cloud_roles::retry_params{}};
@@ -176,6 +179,7 @@ SEASTAR_THREAD_TEST_CASE(aks_authority_host_read_test) {
         setenv("AZURE_AUTHORITY_HOST", "https://simple.com/", 1);
         auto aks = cloud_roles::azure_aks_refresh_impl{
           net::unresolved_address{},
+          service,
           cloud_roles::aws_region_name{},
           dummy_as,
           cloud_roles::retry_params{}};
@@ -188,6 +192,7 @@ SEASTAR_THREAD_TEST_CASE(aks_authority_host_read_test) {
         setenv("AZURE_AUTHORITY_HOST", "https://simple.com:9999/", 1);
         auto aks = cloud_roles::azure_aks_refresh_impl{
           net::unresolved_address{},
+          service,
           cloud_roles::aws_region_name{},
           dummy_as,
           cloud_roles::retry_params{}};
@@ -202,6 +207,7 @@ SEASTAR_THREAD_TEST_CASE(aks_authority_host_read_test) {
           "this is not actually a valid host", 1234};
         auto aks = cloud_roles::azure_aks_refresh_impl{
           external_override,
+          service,
           cloud_roles::aws_region_name{},
           dummy_as,
           cloud_roles::retry_params{}};

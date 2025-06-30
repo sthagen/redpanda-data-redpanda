@@ -18,6 +18,7 @@
 #include "serde/rw/rw.h"
 #include "serde/rw/scalar.h"
 #include "serde/rw/sstring.h"
+#include "serde/rw/uuid.h"
 #include "ssx/sformat.h"
 #include "utils/named_type.h"
 #include "utils/uuid.h"
@@ -526,6 +527,42 @@ std::istream& operator>>(std::istream& is, fips_mode_flag& f);
 using topic_id = named_type<uuid_t, struct topic_id_type>;
 
 inline topic_id create_topic_id() { return topic_id{uuid_t::create()}; }
+
+struct topic_id_partition {
+    topic_id_partition() = default;
+    topic_id_partition(model::topic_id t, model::partition_id p)
+      : topic_id(t)
+      , partition(p) {}
+
+    static topic_id_partition from(std::string_view);
+
+    model::topic_id topic_id;
+    model::partition_id partition;
+
+    bool operator==(const topic_id_partition& other) const = default;
+    auto operator<=>(const topic_id_partition& other) const noexcept = default;
+
+    friend std::ostream& operator<<(std::ostream&, const topic_id_partition&);
+
+    friend void read_nested(
+      iobuf_parser& in, topic_id_partition& tp, const size_t bytes_left_limit) {
+        using serde::read_nested;
+
+        read_nested(in, tp.topic_id, bytes_left_limit);
+        read_nested(in, tp.partition, bytes_left_limit);
+    }
+
+    friend void write(iobuf& out, topic_id_partition tp) {
+        using serde::write;
+
+        write(out, tp.topic_id);
+        write(out, tp.partition);
+    }
+    template<typename H>
+    friend H AbslHashValue(H h, const topic_id_partition& tp) {
+        return H::combine(std::move(h), tp.topic_id, tp.partition);
+    }
+};
 
 } // namespace model
 

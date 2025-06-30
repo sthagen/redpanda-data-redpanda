@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
@@ -54,6 +55,11 @@ void write(iobuf& out, timestamp ts) { serde::write(out, ts._v); }
 
 std::ostream& operator<<(std::ostream& os, const topic_partition& tp) {
     fmt::print(os, "{{{}/{}}}", tp.topic(), tp.partition());
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const topic_id_partition& tp) {
+    fmt::print(os, "{{{}/{}}}", tp.topic_id(), tp.partition());
     return os;
 }
 
@@ -768,6 +774,22 @@ std::istream& operator>>(std::istream& is, fips_mode_flag& f) {
             to_string_view(fips_mode_flag::permissive),
             fips_mode_flag::permissive);
     return is;
+}
+
+topic_id_partition topic_id_partition::from(std::string_view s) {
+    std::vector<ss::sstring> ss = absl::StrSplit(s, "/");
+    if (ss.size() != 2) {
+        throw std::runtime_error(
+          fmt::format("Invalid topic_id_partition: {}", s));
+    }
+    auto tid = uuid_t::from_string(ss[0]);
+    int p{0};
+    if (!absl::SimpleAtoi(ss[1].data(), &p)) {
+        throw std::runtime_error(
+          fmt::format("Invalid topic_id_partition: {}", s));
+    }
+    return model::topic_id_partition(
+      model::topic_id(tid), model::partition_id(p));
 }
 
 } // namespace model

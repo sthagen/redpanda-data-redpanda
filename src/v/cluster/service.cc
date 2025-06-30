@@ -863,7 +863,7 @@ ss::future<upsert_cluster_link_response> service::upsert_cluster_link(
     auto deadline = model::timeout_clock::now() + req.timeout;
     auto result = co_await _cluster_link_frontend.local().upsert_cluster_link(
       std::move(meta), deadline);
-    co_return upsert_cluster_link_response{.ec = result.ec};
+    co_return upsert_cluster_link_response{.ec = result};
 }
 
 ss::future<remove_cluster_link_response> service::remove_cluster_link(
@@ -872,7 +872,25 @@ ss::future<remove_cluster_link_response> service::remove_cluster_link(
     auto deadline = model::timeout_clock::now() + req.timeout;
     auto result = co_await _cluster_link_frontend.local().remove_cluster_link(
       std::move(name), deadline);
-    co_return remove_cluster_link_response{.ec = result.ec};
+    co_return remove_cluster_link_response{.ec = result};
+}
+
+ss::future<add_mirror_topic_response> service::add_mirror_topic(
+  add_mirror_topic_request req, rpc::streaming_context&) {
+    auto deadline = model::timeout_clock::now() + req.timeout;
+    auto result = co_await _cluster_link_frontend.local().add_mirror_topic(
+      req.link_id, std::move(req.cmd), deadline);
+    co_return add_mirror_topic_response{.ec = result};
+}
+
+ss::future<update_mirror_topic_state_response>
+service::update_mirror_topic_state(
+  update_mirror_topic_state_request req, rpc::streaming_context&) {
+    auto deadline = model::timeout_clock::now() + req.timeout;
+    auto result
+      = co_await _cluster_link_frontend.local().update_mirror_topic_state(
+        req.link_id, std::move(req.cmd), deadline);
+    co_return update_mirror_topic_state_response{.ec = result};
 }
 
 } // namespace cluster

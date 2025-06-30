@@ -12,26 +12,44 @@
 
 #include "base/vassert.h"
 #include "cluster/commands.h"
+#include "cluster/errc.h"
 #include "cluster/logger.h"
+#include "cluster_link/model/types.h"
 
 namespace cluster::cluster_link {
 
+using ::cluster_link::model::add_mirror_topic_cmd;
 using ::cluster_link::model::id_t;
 using ::cluster_link::model::metadata;
+using ::cluster_link::model::mirror_topic_state;
 using ::cluster_link::model::name_t;
+using ::cluster_link::model::update_mirror_topic_state_cmd;
 
 namespace {
 static constexpr auto accepted_commands = cluster::make_commands_list<
   cluster::cluster_link_upsert_cmd,
-  cluster::cluster_link_remove_cmd>();
-}
+  cluster::cluster_link_remove_cmd,
+  cluster::cluster_link_add_mirror_topic_cmd,
+  cluster::cluster_link_update_mirror_topic_state_cmd>();
 
-table::map_t table::all_links() const { return _link_metadata; }
+table::map_t copy_links(const table::map_t& links) {
+    table::map_t copy;
+    copy.reserve(links.size());
+    for (const auto& [id, metadata] : links) {
+        copy.emplace(id, metadata.copy());
+    }
+    return copy;
+}
+} // namespace
+
+table::map_t table::all_links() const { return copy_links(_link_metadata); }
 
 size_t table::size() const { return _link_metadata.size(); }
 
 void table::reset_links(map_t links) {
     name_index_t snap_name_index;
+    topic_name_index_t snap_topic_name_index;
+
     chunked_vector<id_t> all_deletes;
     chunked_vector<id_t> all_inserts;
     chunked_vector<id_t> all_changes;
@@ -58,10 +76,22 @@ void table::reset_links(map_t links) {
               metadata.name,
               it.first->second));
         }
+        for (const auto& t : metadata.state.mirror_topics) {
+            auto topic_it = snap_topic_name_index.emplace(t.first, id);
+            if (!topic_it.second) {
+                throw std::logic_error(fmt::format(
+                  "panda link id={} is attempting to use a topic {} which is "
+                  "already registered to {}",
+                  id,
+                  t.first,
+                  topic_it.first->second));
+            }
+        }
     }
 
     _link_metadata = std::move(links);
     _name_index = std::move(snap_name_index);
+    _topic_name_index = std::move(snap_topic_name_index);
 
     for (const auto& deleted : all_deletes) {
         run_callbacks(deleted);
@@ -106,6 +136,36 @@ std::optional<id_t> table::find_id_by_name(const name_t& name) const {
     return it->second;
 }
 
+std::optional<id_t> table::find_id_by_topic(model::topic_view tp) const {
+    auto it = _topic_name_index.find(tp);
+    if (it == _topic_name_index.end()) {
+        return std::nullopt;
+    }
+    return it->second;
+}
+
+std::optional<mirror_topic_state>
+table::find_mirror_topic_state(model::topic_view tp) const {
+    auto id = find_id_by_topic(tp);
+    if (!id) {
+        return std::nullopt;
+    }
+    auto meta = find_link_by_id(id.value());
+    vassert(
+      meta.has_value(),
+      "Inconsistent topic index for {} expected id {}",
+      tp,
+      id.value());
+
+    auto it = meta->get().state.mirror_topics.find(tp);
+    vassert(
+      it != meta->get().state.mirror_topics.end(),
+      "Inconsistent topic index for {} expected to exist in metadata id {}",
+      tp,
+      id.value());
+    return it->second.state;
+}
+
 chunked_vector<id_t> table::get_all_link_ids() const {
     auto keys = _link_metadata | std::views::transform([](const auto& pair) {
                     return pair.first;
@@ -121,21 +181,31 @@ bool table::is_batch_applicable(const model::record_batch& b) const {
 ss::future<std::error_code> table::apply_update(model::record_batch b) {
     auto offset = b.base_offset();
     auto cmd = co_await deserialize(std::move(b), accepted_commands);
-    auto results = co_await container().map([cmd, offset](table& table) {
+    auto results = co_await container().map([cmd = std::move(cmd),
+                                             offset](table& table) mutable {
         return ss::visit(
-          cmd,
+          std::move(cmd),
           [&table, offset](const cluster::cluster_link_upsert_cmd& upsert) {
               auto existing_id = table.find_id_by_name(upsert.value.name);
               return table.upsert_link(
-                existing_id.value_or(id_t{offset}), std::move(upsert.value));
+                existing_id.value_or(id_t{offset}), upsert.value.copy());
           },
           [&table](const cluster::cluster_link_remove_cmd& remove) {
               return table.remove_link(remove.key);
+          },
+          [&table](const cluster::cluster_link_add_mirror_topic_cmd& add) {
+              return table.add_mirror_topic(add.key, add.value);
+          },
+          [&table](
+            const cluster::cluster_link_update_mirror_topic_state_cmd& state) {
+              return table.update_mirror_topic_state(state.key, state.value);
           });
     });
     auto first_res = results.front();
     auto state_consistent = std::ranges::all_of(
-      results, [first_res](cluster::errc res) { return first_res == res; });
+      results, [first_res](cluster::cluster_link::errc res) {
+          return first_res == res;
+      });
 
     vassert(
       state_consistent,
@@ -154,8 +224,9 @@ ss::future<> table::fill_snapshot(cluster::controller_snapshot& snap) const {
 
 ss::future<>
 table::apply_snapshot(model::offset, const cluster::controller_snapshot& snap) {
-    return container().invoke_on_all(
-      [&snap](table& table) { table.reset_links(snap.cluster_links.links); });
+    return container().invoke_on_all([&snap](table& table) {
+        table.reset_links(copy_links(snap.cluster_links.links));
+    });
 }
 
 table::notification_id table::register_for_updates(notification_callback cb) {
@@ -172,7 +243,22 @@ void table::run_callbacks(id_t id) {
     }
 }
 
-cluster::errc table::upsert_link(id_t id, metadata meta) {
+cluster::cluster_link::errc table::upsert_link(id_t id, metadata meta) {
+    for (const auto& t : meta.state.mirror_topics) {
+        auto link_id = find_id_by_topic(t.first);
+        if (link_id && link_id.value() != id) {
+            vlog(
+              cluster::clusterlog.info,
+              "Unable to upsert link {} ({}) as topic {} is already registered "
+              "to link {}",
+              meta.name,
+              id,
+              t.first,
+              link_id.value());
+            return errc::topic_being_mirrored_by_other_link;
+        }
+        _topic_name_index.emplace(t.first, id);
+    }
     auto name_it = _name_index.find(meta.name);
     if (name_it != _name_index.end()) {
         if (name_it->second != id) {
@@ -183,24 +269,33 @@ cluster::errc table::upsert_link(id_t id, metadata meta) {
               id,
               meta.name,
               name_it->second);
-            return cluster::errc::cluster_link_service_error;
+            return cluster::cluster_link::errc::service_error;
         }
     } else {
         _name_index.emplace(meta.name, id);
     }
 
+    // Reconcile if topics have been removed
+    std::erase_if(_topic_name_index, [id, &meta](const auto& it) {
+        return it.second == id && !meta.state.mirror_topics.contains(it.first);
+    });
+
     _link_metadata.insert_or_assign(id, std::move(meta));
     run_callbacks(id);
-    return cluster::errc::success;
+    return cluster::cluster_link::errc::success;
 }
 
-cluster::errc table::remove_link(const name_t& name) {
+cluster::cluster_link::errc table::remove_link(const name_t& name) {
     auto name_it = _name_index.find(name);
     if (name_it == _name_index.end()) {
-        return cluster::errc::success;
+        return cluster::cluster_link::errc::success;
     }
 
     auto id = name_it->second;
+
+    std::erase_if(
+      _topic_name_index, [id](const auto& it) { return it.second == id; });
+
     auto it = _link_metadata.find(id);
     vassert(
       it != _link_metadata.end(),
@@ -211,6 +306,71 @@ cluster::errc table::remove_link(const name_t& name) {
     _link_metadata.erase(it);
 
     run_callbacks(id);
-    return cluster::errc::success;
+    return cluster::cluster_link::errc::success;
+}
+
+cluster::cluster_link::errc
+table::add_mirror_topic(id_t id, const add_mirror_topic_cmd& cmd) {
+    auto link_id = find_id_by_topic(cmd.topic);
+    if (link_id) {
+        if (link_id.value() != id) {
+            vlog(
+              cluster::clusterlog.info,
+              "Unable to add mirror topic {} to link {} as it is already "
+              "registered to link {}",
+              cmd.topic,
+              id,
+              link_id.value());
+            return errc::topic_being_mirrored_by_other_link;
+        }
+        vlog(
+          cluster::clusterlog.info,
+          "Link {} is already mirroring topic {}",
+          id,
+          cmd.topic);
+        return errc::topic_already_being_mirrored;
+    }
+
+    if (!find_link_by_id(id).has_value()) {
+        vlog(cluster::clusterlog.info, "Link {} not found", id);
+        return errc::does_not_exist;
+    }
+
+    _link_metadata[id].state.mirror_topics.insert({cmd.topic, cmd.metadata});
+    _topic_name_index.emplace(cmd.topic, id);
+    run_callbacks(id);
+    return errc::success;
+}
+
+cluster::cluster_link::errc table::update_mirror_topic_state(
+  id_t id, const update_mirror_topic_state_cmd& cmd) {
+    auto link_id = find_id_by_topic(cmd.topic);
+    if (!link_id) {
+        vlog(
+          cluster::clusterlog.info,
+          "Unable to update mirror topic {} state as it is not registered",
+          cmd.topic);
+        return errc::topic_not_being_mirrored;
+    } else if (link_id.value() != id) {
+        vlog(
+          cluster::clusterlog.info,
+          "Unable to update mirror topic {} state as it is registered to "
+          "link {}",
+          cmd.topic,
+          link_id.value());
+        return errc::topic_being_mirrored_by_other_link;
+    }
+
+    auto& link_meta = _link_metadata[link_id.value()];
+    auto it = link_meta.state.mirror_topics.find(cmd.topic);
+    vassert(
+      it != link_meta.state.mirror_topics.end(),
+      "Inconsistent topic index for {} expected to exist in metadata id {}",
+      cmd.topic,
+      id);
+
+    it->second.state = cmd.state;
+    run_callbacks(id);
+    return errc::success;
 }
 } // namespace cluster::cluster_link

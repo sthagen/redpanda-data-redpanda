@@ -153,6 +153,8 @@ inline constexpr int8_t remove_data_migration_cmd_type = 2;
 // panda link commands
 inline constexpr int8_t cluster_link_upsert_cmd_type = 0;
 inline constexpr int8_t cluster_link_remove_cmd_type = 1;
+inline constexpr int8_t cluster_link_add_mirror_topic_cmd_type = 2;
+inline constexpr int8_t cluster_link_update_mirror_topic_state_cmd_type = 3;
 
 using create_topic_cmd = controller_command<
   model::topic_namespace,
@@ -457,6 +459,20 @@ using cluster_link_remove_cmd = controller_command<
   ::cluster_link::model::name_t,
   int8_t, // unused,
   cluster_link_remove_cmd_type,
+  model::record_batch_type::cluster_link,
+  serde_opts::serde_only>;
+
+using cluster_link_add_mirror_topic_cmd = controller_command<
+  ::cluster_link::model::id_t,
+  ::cluster_link::model::add_mirror_topic_cmd,
+  cluster_link_add_mirror_topic_cmd_type,
+  model::record_batch_type::cluster_link,
+  serde_opts::serde_only>;
+
+using cluster_link_update_mirror_topic_state_cmd = controller_command<
+  ::cluster_link::model::id_t,
+  ::cluster_link::model::update_mirror_topic_state_cmd,
+  cluster_link_update_mirror_topic_state_cmd_type,
   model::record_batch_type::cluster_link,
   serde_opts::serde_only>;
 

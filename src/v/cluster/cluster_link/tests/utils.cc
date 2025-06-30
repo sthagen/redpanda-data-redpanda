@@ -11,11 +11,17 @@
 #include "cluster/cluster_link/tests/utils.h"
 
 #include "cluster/commands.h"
+#include "cluster_link/model/types.h"
 
 namespace cluster::cluster_link::testing {
 
+using ::cluster_link::model::add_mirror_topic_cmd;
+using ::cluster_link::model::id_t;
 using ::cluster_link::model::metadata;
+using ::cluster_link::model::mirror_topic_metadata;
+using ::cluster_link::model::mirror_topic_state;
 using ::cluster_link::model::name_t;
+using ::cluster_link::model::update_mirror_topic_state_cmd;
 
 model::record_batch create_upsert_command(model::offset offset, metadata link) {
     cluster::cluster_link_upsert_cmd cmd(0, std::move(link));
@@ -27,5 +33,32 @@ model::record_batch create_upsert_command(model::offset offset, metadata link) {
 model::record_batch create_remove_command(name_t name) {
     cluster::cluster_link_remove_cmd cmd(std::move(name), 0);
     return cluster::serde_serialize_cmd(std::move(cmd));
+}
+
+model::record_batch
+create_add_mirror_topic_command(id_t id, add_mirror_topic_cmd cmd) {
+    cluster::cluster_link_add_mirror_topic_cmd add_cmd(id, std::move(cmd));
+    return cluster::serde_serialize_cmd(std::move(add_cmd));
+}
+
+model::record_batch create_update_mirror_topic_state_command(
+  id_t id, update_mirror_topic_state_cmd cmd) {
+    cluster::cluster_link_update_mirror_topic_state_cmd update_cmd(
+      id, std::move(cmd));
+    return cluster::serde_serialize_cmd(std::move(update_cmd));
+}
+
+mirror_topic_metadata create_mirror_topic_metadata(
+  mirror_topic_state state,
+  ::model::topic source_topic_name,
+  std::optional<::model::topic_id> source_topic_id,
+  std::optional<::model::topic_id> destination_topic_id) {
+    return {
+      .state = state,
+      .source_topic_id = source_topic_id,
+      .source_topic_name = std::move(source_topic_name),
+      .destination_topic_id = destination_topic_id.value_or(
+        ::model::topic_id{uuid_t::create()}),
+    };
 }
 } // namespace cluster::cluster_link::testing

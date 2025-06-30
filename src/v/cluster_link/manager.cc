@@ -96,7 +96,7 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
           "Updating panda link id={} with new config: {}",
           id,
           link_metadata);
-        it->second->update_config(link_metadata);
+        it->second->update_config(link_metadata.copy());
     } else {
         // Create a new link
         vlog(
@@ -105,7 +105,7 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
           id,
           link_metadata);
         try {
-            auto new_link = _link_factory->create_link(link_metadata);
+            auto new_link = _link_factory->create_link(link_metadata.copy());
             vassert(
               new_link, "Link factory returned a null link for id={}", id);
             co_await new_link->start();

@@ -11,6 +11,9 @@
 
 #pragma once
 
+#include "container/chunked_hash_map.h"
+#include "model/fundamental.h"
+#include "model/metadata.h"
 #include "serde/envelope.h"
 #include "serde/rw/variant.h"
 #include "utils/named_type.h"
@@ -26,6 +29,31 @@ using id_t = named_type<int64_t, struct id_tag>;
 using uuid_t = named_type<uuid_t, struct uuid_tag>;
 /// Name of the panda link
 using name_t = named_type<ss::sstring, struct name_tag>;
+
+enum class mirror_topic_state : uint8_t {
+    /// Mirroring is active on the topic
+    active,
+    /// Mirroring has failed for the topic
+    failed,
+    /// Mirroring has been paused
+    paused,
+    /// Mirror topic has been promoted
+    promoted
+};
+
+static constexpr std::string_view to_string_view(mirror_topic_state s) {
+    switch (s) {
+    case mirror_topic_state::active:
+        return "active";
+    case mirror_topic_state::failed:
+        return "failed";
+    case mirror_topic_state::paused:
+        return "paused";
+    case mirror_topic_state::promoted:
+        return "promoted";
+    }
+    return "unknown";
+}
 
 /**
  * @brief SCRAM credentials to use for authentication
@@ -78,6 +106,59 @@ struct connection_config
     }
 };
 
+struct mirror_topic_metadata
+  : serde::envelope<
+      mirror_topic_metadata,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    /// Current mirroring state
+    mirror_topic_state state{mirror_topic_state::active};
+    /// The topic ID of the source topic
+    /// Made optional to allow for cases where we will migrate from clusters
+    /// that don't yet support topic ids
+    std::optional<::model::topic_id> source_topic_id;
+    /// The name of the source topic
+    ::model::topic source_topic_name;
+    /// The topic ID of the destination topic
+    ::model::topic_id destination_topic_id;
+
+    friend bool
+    operator==(const mirror_topic_metadata&, const mirror_topic_metadata&)
+      = default;
+
+    auto serde_fields() {
+        return std::tie(
+          state, source_topic_id, source_topic_name, destination_topic_id);
+    }
+};
+
+struct link_state
+  : serde::envelope<link_state, serde::version<0>, serde::compat_version<0>> {
+    /// The set of topics that are being mirrored by this link and their state
+    link_state() noexcept = default;
+    link_state(link_state&&) noexcept = default;
+    link_state(const link_state&) = delete;
+    link_state& operator=(link_state&&) noexcept = default;
+    link_state& operator=(const link_state&) = delete;
+    ~link_state() noexcept = default;
+
+    /// Type to indicate if the panda link is paused
+    using paused_t = ss::bool_class<struct paused_tag>;
+    /// Flag indicating if the panda link has been paused
+    paused_t paused{paused_t::no};
+    using mirror_topics_t
+      = chunked_hash_map<::model::topic, mirror_topic_metadata>;
+    /// Map of topics that this link is mirroring and their state
+    chunked_hash_map<::model::topic, mirror_topic_metadata> mirror_topics;
+
+    void set_mirror_topics(const mirror_topics_t& topics);
+
+    friend bool operator==(const link_state&, const link_state&) = default;
+
+    auto serde_fields() { return std::tie(paused, mirror_topics); }
+
+    link_state copy() const;
+};
 struct metadata
   : serde::envelope<metadata, serde::version<0>, serde::compat_version<0>> {
     /// Name of the panda link
@@ -86,16 +167,66 @@ struct metadata
     uuid_t uuid;
     /// Connection settings for the panda link
     connection_config connection;
-    /// Type to indicate if the panda link is paused
-    using paused_t = ss::bool_class<struct paused_tag>;
-    /// Flag indicating if the panda link has been paused
-    paused_t paused{paused_t::no};
+    /// The state of the link
+    link_state state;
 
     friend bool operator==(const metadata&, const metadata&) = default;
 
-    auto serde_fields() { return std::tie(name, uuid, connection, paused); }
+    auto serde_fields() { return std::tie(name, uuid, connection, state); }
+
+    metadata copy() const;
+};
+
+/// \brief Command used to add a mirror topic to a cluster link
+///
+/// This command will be used either via the auto topic creation task via a user
+/// action when a new topic is to be created and used as a mirror topic
+struct add_mirror_topic_cmd
+  : serde::envelope<
+      add_mirror_topic_cmd,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    /// Name of the topic
+    ::model::topic topic;
+    /// Initial state of the topic
+    mirror_topic_metadata metadata;
+
+    friend bool
+    operator==(const add_mirror_topic_cmd&, const add_mirror_topic_cmd&)
+      = default;
+
+    auto serde_fields() { return std::tie(topic, metadata); }
+};
+
+/// \brief Command used to update the state of a mirror topic
+///
+/// Will be used by the cluster linking mirroring task to change the state of
+/// mirroring for the topic
+struct update_mirror_topic_state_cmd
+  : serde::envelope<
+      update_mirror_topic_state_cmd,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    /// Name of the topic
+    ::model::topic topic;
+    /// New state of the topic
+    mirror_topic_state state{mirror_topic_state::active};
+
+    friend bool operator==(
+      const update_mirror_topic_state_cmd&,
+      const update_mirror_topic_state_cmd&)
+      = default;
+
+    auto serde_fields() { return std::tie(topic, state); }
 };
 } // namespace cluster_link::model
+
+template<>
+struct fmt::formatter<cluster_link::model::mirror_topic_state>
+  : fmt::formatter<string_view> {
+    auto format(cluster_link::model::mirror_topic_state s, format_context& ctx)
+      -> decltype(ctx.out());
+};
 
 template<>
 struct fmt::formatter<cluster_link::model::scram_credentials>
@@ -124,8 +255,57 @@ struct fmt::formatter<cluster_link::model::connection_config>
 };
 
 template<>
+struct fmt::formatter<std::optional<model::topic_id>>
+  : fmt::formatter<string_view> {
+    auto format(const std::optional<model::topic_id>& m, format_context& ctx)
+      -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::mirror_topic_metadata>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::mirror_topic_metadata& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<
+  decltype(cluster_link::model::link_state::mirror_topics)::value_type>
+  : fmt::formatter<string_view> {
+    auto format(
+      const decltype(cluster_link::model::link_state::mirror_topics)::
+        value_type& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::link_state>
+  : fmt::formatter<string_view> {
+    auto
+    format(const cluster_link::model::link_state& s, format_context& ctx) const
+      -> decltype(ctx.out());
+};
+
+template<>
 struct fmt::formatter<cluster_link::model::metadata>
   : fmt::formatter<string_view> {
     auto format(const cluster_link::model::metadata& m, format_context& ctx)
       -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::add_mirror_topic_cmd>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::add_mirror_topic_cmd& m, format_context& ctx)
+      -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::update_mirror_topic_state_cmd>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::update_mirror_topic_state_cmd& m,
+      format_context& ctx) -> decltype(ctx.out());
 };

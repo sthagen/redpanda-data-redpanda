@@ -361,13 +361,13 @@ def get_cloud_storage_type_and_url_style(
 ) -> List[CloudStorageTypeAndUrlStyle]:
     """
     Returns a list of compatible cloud storage types and url styles.
-    I.e, Returns [(CloudStorageType.S3, 'virtual_host'),
-                  (CloudStorageType.S3, 'path'),
-                  (CloudStorageType.ABS, 'virtual_host')]
+    I.e, Returns [[CloudStorageType.S3, 'virtual_host'],
+                  [CloudStorageType.S3, 'path'],
+                  [CloudStorageType.ABS, 'virtual_host']]
     """
     return [
         tus for tus_list in map(
-            lambda t: [(t, us) for us in get_cloud_storage_url_style(t)],
+            lambda t: [[t, us] for us in get_cloud_storage_url_style(t)],
             get_cloud_storage_type()) for tus in tus_list
     ]
 
@@ -3438,6 +3438,42 @@ class RedpandaService(RedpandaServiceBase):
                 actual_config = yaml.full_load(f.read())
                 self._node_configs[node] = actual_config
 
+    def _log_node_shutdown_analysis(self, node):
+        """
+        Analyze a node's failure to shutdown within the allocated time to try
+        to diagnose the reason for shutdown hang.
+        """
+        self.logger.debug(f"Gathering logs to analyze from {node.name}...")
+        expr = "\"application.*Stopping\""
+        cmd = f"grep {expr} {RedpandaServiceBase.STDOUT_STDERR_CAPTURE} || true"
+
+        other_stopping = []
+        last_next_to_shutdown = None
+        for line in node.account.ssh_capture(cmd):
+            if "next to shutdown" in line:
+                last_next_to_shutdown = line
+            else:
+                other_stopping.append(line)
+
+        if last_next_to_shutdown is None:
+            self.logger.debug(
+                "No structured shutdown messages found. Hang may have occurred in early shutdown"
+            )
+            return
+
+        self.logger.debug(
+            f"Last structured shutdown line: {last_next_to_shutdown}")
+        next_service = last_next_to_shutdown.split()[-1]
+
+        for line in other_stopping:
+            if f"Stopping {next_service}" in line:
+                self.logger.debug(
+                    f"Found stopping message for last service {line}")
+                return
+
+        self.logger.debug(
+            f"Did not find stopping message for service {next_service}")
+
     def _log_node_process_state(self, node):
         """
         For debugging issues around starting and stopping processes: log
@@ -4223,6 +4259,7 @@ class RedpandaService(RedpandaServiceBase):
             self._set_trace_loggers_and_sleep(node, time_sec=sleep_sec)
             self.logger.warn(f"Node {node.name} status:")
             self._log_node_process_state(node)
+            self._log_node_shutdown_analysis(node)
             # Kill the process if it's still running. If redpanda still runs we
             # might fail to collect logs as the file will be modified while we
             # (ducktape) are reading/compressing it.

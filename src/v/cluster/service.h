@@ -149,6 +149,10 @@ public:
       upsert_cluster_link_request, rpc::streaming_context&) final;
     ss::future<remove_cluster_link_response> remove_cluster_link(
       remove_cluster_link_request, rpc::streaming_context&) final;
+    ss::future<add_mirror_topic_response>
+    add_mirror_topic(add_mirror_topic_request, rpc::streaming_context&) final;
+    ss::future<update_mirror_topic_state_response> update_mirror_topic_state(
+      update_mirror_topic_state_request, rpc::streaming_context&) final;
 
 private:
     static constexpr auto default_move_interruption_timeout = 10s;

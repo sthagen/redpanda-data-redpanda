@@ -39,6 +39,11 @@ public:
       , _port(port)
       , _family(family) {}
 
+    explicit unresolved_address(const ss::socket_address& sa)
+      : _host{fmt::format("{}", sa.addr())}
+      , _port{sa.port()}
+      , _family{sa.addr().in_family()} {}
+
     const ss::sstring& host() const { return _host; }
     uint16_t port() const { return _port; }
     inet_family family() const { return _family; }

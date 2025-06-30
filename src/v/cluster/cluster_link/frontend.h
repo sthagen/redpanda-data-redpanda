@@ -28,7 +28,9 @@ namespace cluster::cluster_link {
 class frontend : public ss::peering_sharded_service<frontend> {
     using cluster_link_cmd = std::variant<
       cluster::cluster_link_upsert_cmd,
-      cluster::cluster_link_remove_cmd>;
+      cluster::cluster_link_remove_cmd,
+      cluster::cluster_link_add_mirror_topic_cmd,
+      cluster::cluster_link_update_mirror_topic_state_cmd>;
 
 public:
     frontend(
@@ -43,14 +45,18 @@ public:
     using notification_id = table::notification_id;
     using notification_callback = table::notification_callback;
 
-    struct mutation_result {
-        cluster::errc ec;
-    };
-
-    ss::future<mutation_result> upsert_cluster_link(
+    ss::future<errc> upsert_cluster_link(
       ::cluster_link::model::metadata, model::timeout_clock::time_point);
-    ss::future<mutation_result> remove_cluster_link(
+    ss::future<errc> remove_cluster_link(
       ::cluster_link::model::name_t, model::timeout_clock::time_point);
+    ss::future<errc> add_mirror_topic(
+      ::cluster_link::model::id_t,
+      ::cluster_link::model::add_mirror_topic_cmd,
+      model::timeout_clock::time_point);
+    ss::future<errc> update_mirror_topic_state(
+      ::cluster_link::model::id_t,
+      ::cluster_link::model::update_mirror_topic_state_cmd,
+      model::timeout_clock::time_point);
 
     bool cluster_link_active(bool check_license) const;
 
@@ -66,14 +72,15 @@ public:
     chunked_vector<::cluster_link::model::id_t> get_all_link_ids() const;
 
 private:
-    ss::future<mutation_result>
+    ss::future<errc>
       do_mutation(cluster_link_cmd, model::timeout_clock::time_point);
-    ss::future<mutation_result> dispatch_mutation_to_remote(
+    ss::future<errc> dispatch_mutation_to_remote(
       model::node_id, cluster_link_cmd, model::timeout_clock::duration);
-    ss::future<mutation_result>
+    ss::future<errc>
       do_local_mutation(cluster_link_cmd, model::timeout_clock::time_point);
 
-    cluster::errc validate_mutation(const cluster_link_cmd&) const;
+    cluster::cluster_link::errc
+    validate_mutation(const cluster_link_cmd&) const;
 
 public:
     /// Class used to validate the incoming mutation request
@@ -82,7 +89,8 @@ public:
     public:
         explicit validator(table*, size_t max_links);
 
-        cluster::errc validate_mutation(const cluster_link_cmd&) const;
+        cluster::cluster_link::errc
+        validate_mutation(const cluster_link_cmd&) const;
 
     private:
         table* _table;

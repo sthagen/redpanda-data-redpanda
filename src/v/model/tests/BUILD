@@ -94,6 +94,19 @@ redpanda_cc_btest(
     ],
 )
 
+redpanda_cc_gtest(
+    name = "topic_id_partition_test",
+    timeout = "short",
+    srcs = [
+        "topic_id_partition_test.cc",
+    ],
+    deps = [
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
 redpanda_cc_btest(
     name = "topic_view_test",
     timeout = "short",

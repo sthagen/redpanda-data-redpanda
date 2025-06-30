@@ -1362,7 +1362,9 @@ class RpkTool:
         flags += self._tls_settings()
         return flags
 
-    def acl_list(self, flags: list[str] = []):
+    def acl_list(self,
+                 flags: list[str] = [],
+                 node: Optional[ClusterNode] = None):
         """
         Run `rpk acl list` and return the results.
 
@@ -1377,7 +1379,7 @@ class RpkTool:
             self._rpk_binary(),
             "acl",
             "list",
-        ] + flags + self._kafka_conn_settings()
+        ] + flags + self._kafka_conn_settings(node)
 
         output = self._execute(cmd)
 

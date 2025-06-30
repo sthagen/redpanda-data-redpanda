@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "absl/container/flat_hash_map.h"
+#include "cluster/cluster_link/errc.h"
 #include "cluster/controller_snapshot.h"
 #include "cluster_link/model/types.h"
 #include "model/fundamental.h"
@@ -24,7 +24,7 @@ namespace cluster::cluster_link {
  */
 class table : public ss::peering_sharded_service<table> {
 public:
-    using map_t = absl::flat_hash_map<
+    using map_t = chunked_hash_map<
       ::cluster_link::model::id_t,
       ::cluster_link::model::metadata>;
     table() = default;
@@ -51,6 +51,13 @@ public:
     /// Finds link ID by name
     std::optional<::cluster_link::model::id_t>
     find_id_by_name(const ::cluster_link::model::name_t& name) const;
+    /// Finds a link ID by the mirror topic name
+    std::optional<::cluster_link::model::id_t>
+    find_id_by_topic(model::topic_view tp) const;
+    /// Find the state of a mirror topic by its name, otherwise returns
+    /// std::nullopt
+    std::optional<::cluster_link::model::mirror_topic_state>
+    find_mirror_topic_state(model::topic_view tp) const;
 
     /// Returns a list of all link IDs in the table
     chunked_vector<::cluster_link::model::id_t> get_all_link_ids() const;
@@ -72,21 +79,35 @@ private:
     void reset_links(map_t);
 
     /// Upserts a link, if the ID classes, throws a std::logic_error
-    cluster::errc
+    cluster::cluster_link::errc
       upsert_link(::cluster_link::model::id_t, ::cluster_link::model::metadata);
     /// Removes a link by ID
-    cluster::errc remove_link(const ::cluster_link::model::name_t&);
+    cluster::cluster_link::errc
+    remove_link(const ::cluster_link::model::name_t&);
+
+    cluster::cluster_link::errc add_mirror_topic(
+      ::cluster_link::model::id_t,
+      const ::cluster_link::model::add_mirror_topic_cmd& cmd);
+
+    cluster::cluster_link::errc update_mirror_topic_state(
+      ::cluster_link::model::id_t,
+      const ::cluster_link::model::update_mirror_topic_state_cmd& cmd);
 
     void run_callbacks(::cluster_link::model::id_t);
 
 private:
-    using name_index_t = absl::
-      flat_hash_map<::cluster_link::model::name_t, ::cluster_link::model::id_t>;
+    using name_index_t = chunked_hash_map<
+      ::cluster_link::model::name_t,
+      ::cluster_link::model::id_t>;
+
+    using topic_name_index_t
+      = chunked_hash_map<model::topic, ::cluster_link::model::id_t>;
 
     map_t _link_metadata;
     name_index_t _name_index;
+    topic_name_index_t _topic_name_index;
 
-    absl::flat_hash_map<notification_id, notification_callback> _callbacks;
+    chunked_hash_map<notification_id, notification_callback> _callbacks;
     notification_id _latest_id{0};
 };
 } // namespace cluster::cluster_link
