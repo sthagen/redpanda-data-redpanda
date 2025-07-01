@@ -108,6 +108,12 @@ struct connection_configuration {
     std::optional<tls_configuration> broker_tls;
     std::optional<sasl_configuration> sasl_cfg;
     std::optional<ss::sstring> client_id;
+    std::chrono::milliseconds max_metadata_age{10000};
+    std::chrono::milliseconds connection_timeout{1000};
+
+    ss::sstring get_client_id() const {
+        return client_id.value_or("kafka-client");
+    }
     static connection_configuration from_config_store(const configuration& cfg);
 };
 

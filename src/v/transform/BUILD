@@ -32,9 +32,9 @@ redpanda_cc_library(
         "//src/v/cluster",
         "//src/v/config",
         "//src/v/model",
-        "//src/v/rpc",
         "//src/v/ssx:semaphore",
         "//src/v/ssx:sleep_abortable",
+        "//src/v/utils:backoff_policy",
         "@seastar",
     ],
 )
@@ -101,6 +101,7 @@ redpanda_cc_library(
         "//src/v/ssx:future_util",
         "//src/v/ssx:sformat",
         "//src/v/storage:parser_utils",
+        "//src/v/utils:backoff_policy",
         "//src/v/utils:human",
         "@abseil-cpp//absl/algorithm:container",
         "@boost//:range",

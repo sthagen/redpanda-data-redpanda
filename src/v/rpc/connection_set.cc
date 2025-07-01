@@ -19,7 +19,7 @@ ss::future<> connection_set::try_add_or_update(
   model::node_id node,
   net::unresolved_address rpc_address,
   config::tls_config tls_config,
-  rpc::backoff_policy backoff) {
+  backoff_policy backoff) {
     auto connection = _connections.find(node);
     if (connection != _connections.end()) {
         // client is already there, check if configuration changed

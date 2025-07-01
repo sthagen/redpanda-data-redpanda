@@ -20,8 +20,6 @@
 #include <chrono>
 #include <memory>
 
-namespace rpc {
-
 class backoff_policy final {
 public:
     struct impl {
@@ -106,5 +104,3 @@ backoff_policy make_exponential_backoff_policy(
 
     return make_backoff_policy<policy>(backoff_base, max_backoff);
 }
-
-} // namespace rpc

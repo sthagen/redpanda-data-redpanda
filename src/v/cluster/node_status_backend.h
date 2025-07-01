@@ -97,9 +97,9 @@ private:
         return target % ss::smp::count;
     }
 
-    rpc::backoff_policy create_backoff_policy() const {
+    backoff_policy create_backoff_policy() const {
         static constexpr auto default_backoff_base = 1000ms;
-        return rpc::make_exponential_backoff_policy<rpc::backoff_policy>(
+        return make_exponential_backoff_policy<backoff_policy>(
           std::min(default_backoff_base, _max_reconnect_backoff()),
           _max_reconnect_backoff());
     }

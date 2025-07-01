@@ -21,7 +21,6 @@
 #include "partition_properties_stm.h"
 #include "raft/consensus_utils.h"
 #include "raft/errc.h"
-#include "rpc/backoff_policy.h"
 #include "rpc/types.h"
 #include "storage/disk_log_impl.h"
 

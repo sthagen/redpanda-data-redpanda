@@ -1692,7 +1692,9 @@ ss::future<> rm_stm::do_apply(const model::record_batch& b) {
           "Ignored prepare batch at offset: {} from producer: {}",
           b.base_offset(),
           b.header().producer_id);
-    } else if (hdr.type == model::record_batch_type::raft_data) {
+    } else if (
+      hdr.type == model::record_batch_type::raft_data
+      || hdr.type == model::record_batch_type::dl_placeholder) {
         if (hdr.attrs.is_control()) {
             apply_control(bid.pid, parse_control_batch(b));
         } else {

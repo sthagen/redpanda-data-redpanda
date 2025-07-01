@@ -82,3 +82,30 @@ redpanda_cc_library(
         "@abseil-cpp//absl/container:btree",
     ],
 )
+
+redpanda_cc_library(
+    name = "object",
+    srcs = [
+        "object.cc",
+    ],
+    hdrs = [
+        "object.h",
+    ],
+    implementation_deps = [
+        "//src/v/bytes:iobuf",
+        "//src/v/bytes:iostream",
+        "//src/v/reflection:type_traits",
+        "//src/v/serde:vector",
+        "//src/v/storage:record_batch_builder",
+    ],
+    include_prefix = "cloud_topics/level_one",
+    deps = [
+        "//src/v/base",
+        "//src/v/container:fragmented_vector",
+        "//src/v/model",
+        "//src/v/serde",
+        "@abseil-cpp//absl/container:btree",
+        "@fmt",
+        "@seastar",
+    ],
+)

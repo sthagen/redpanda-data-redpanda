@@ -216,11 +216,13 @@ class ShadowIndexingLocalRetentionTest(RedpandaTest):
         self.rpk = RpkTool(self.redpanda)
         self.s3_bucket_name = si_settings.cloud_storage_bucket
 
-    def segments_removed(self, limit: int):
-        segs = self.redpanda.node_storage(self.redpanda.nodes[0]).segments(
+    def query_segments(self):
+        return self.redpanda.node_storage(self.redpanda.nodes[0]).segments(
             "kafka", self.topic_name, 0)
-        self.logger.debug(f"Current segments: {segs}")
 
+    def segments_removed(self, limit: int):
+        segs = self.query_segments()
+        self.logger.debug(f"Current segments: {segs}")
         return len(segs) <= limit
 
     @cluster(num_nodes=1)
@@ -353,10 +355,31 @@ class ShadowIndexingLocalRetentionTest(RedpandaTest):
                             bytes_to_produce=self.total_segments *
                             self.segment_size)
 
-        wait_until(lambda: self.segments_removed(1),
-                   timeout_sec=30,
-                   backoff_sec=1,
-                   err_msg=f"Segments were not removed")
+        # initial number of segments
+        num_segs = len(self.query_segments())
+        assert num_segs > 1
+
+        # we have seen long delays before the first removal occurs. so we break
+        # that out and give it a bit of an extra wiggle room
+        wait_until(lambda: self.segments_removed(num_segs - 1),
+                   timeout_sec=60,
+                   backoff_sec=2,
+                   err_msg=f"Initial segments were not removed")
+
+        # the expectation of retention is to remove up to the active segment.
+        # we allow 0 to also succeed because I guess technically it would still
+        # be valid since this test is all about time-based retention.
+        while num_segs > 1:
+            # we don't do a single wait for all but one segment to be removed.
+            # instead we let the test reset the timeout if at least one segment
+            # removal is observed
+            wait_until(lambda: self.segments_removed(num_segs - 1),
+                       timeout_sec=30,
+                       backoff_sec=5,
+                       err_msg=f"Segments were not removed")
+            tmp = len(self.query_segments())
+            assert tmp < num_segs
+            num_segs = tmp
 
 
 class ShadowIndexingCloudRetentionTest(RedpandaTest):

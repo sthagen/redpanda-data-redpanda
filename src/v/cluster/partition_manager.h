@@ -53,8 +53,7 @@ public:
       ss::sharded<features::feature_table>&,
       ss::sharded<archival::upload_housekeeping_service>&,
       config::binding<std::chrono::milliseconds>,
-      std::optional<
-        std::reference_wrapper<ss::sharded<experimental::cloud_topics::app>>>);
+      ss::sharded<experimental::cloud_topics::app>&);
 
     ~partition_manager();
 
@@ -308,10 +307,8 @@ private:
 
     state_machine_registry _stm_registry;
 
-    // The value is set only if cloud topics are enabled
-    std::optional<
-      std::reference_wrapper<ss::sharded<experimental::cloud_topics::app>>>
-      _data_plane_api;
+    // The sharded app may not be initialized if cloud topics isn't enabled.
+    ss::sharded<experimental::cloud_topics::app>& _cloud_topics_app;
 
     friend std::ostream& operator<<(std::ostream&, const partition_manager&);
     friend std::ostream& operator<<(

@@ -352,7 +352,7 @@ partition_produce_stages produce_topic_partition(
              timeout,
              source_shard = ss::this_shard_id()](
               cluster::partition_manager& mgr) mutable {
-                auto partition = mgr.get(ntp);
+                auto partition = kafka::make_partition_proxy(ntp, mgr);
                 if (!partition) {
                     return finalize_request_with_error_code(
                       error_code::not_leader_for_partition,
@@ -389,7 +389,7 @@ partition_produce_stages produce_topic_partition(
 
                 return std::move(f).then(
                   [ntp{std::move(ntp)},
-                   partition{std::move(partition)},
+                   partition{std::move(*partition)},
                    dispatch = std::move(dispatch),
                    bid,
                    acks,
@@ -402,10 +402,9 @@ partition_produce_stages produce_topic_partition(
                           return finalize_request_with_error_code(
                             err, std::move(dispatch), ntp, source_shard);
                       }
-                      auto proxy = kafka::make_partition_proxy(partition);
                       auto stages = partition_append(
                         ntp.tp.partition,
-                        std::move(proxy),
+                        std::move(partition),
                         bid,
                         std::move(batch),
                         acks,

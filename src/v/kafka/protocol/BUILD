@@ -10,6 +10,7 @@ redpanda_cc_library(
         "messages.h",
     ],
     include_prefix = "kafka/protocol",
+    visibility = ["//src/v/kafka:__subpackages__"],
     deps = MESSAGE_TYPES,
 )
 

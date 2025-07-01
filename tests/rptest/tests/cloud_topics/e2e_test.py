@@ -21,6 +21,7 @@ from rptest.services.cluster import cluster
 from rptest.services.redpanda import SISettings, get_cloud_storage_type, make_redpanda_service
 from rptest.tests.end_to_end import EndToEndTest
 from rptest.util import Scale
+from rptest.services.kgo_verifier_services import KgoVerifierProducer, KgoVerifierSeqConsumer
 
 
 class EndToEndCloudTopicsBase(EndToEndTest):
@@ -104,3 +105,55 @@ class EndToEndCloudTopicsTest(EndToEndCloudTopicsBase):
 
         self.start_consumer()
         self.run_validation()
+
+
+class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
+    """Cloud topics end-to-end test with transactions used."""
+    def __init__(self, test_context, extra_rp_conf=None, env=None):
+        super(EndToEndCloudTopicsTxTest,
+              self).__init__(test_context, extra_rp_conf, env)
+        self.producer = None
+        self.consumer = None
+        self.msg_size = 4096
+        self.msg_count = 10000
+        self.per_transaction = 10
+
+    def start_producer_with_tx(self):
+        self.producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            self.topic,
+            msg_size=self.msg_size,
+            msg_count=self.msg_count,
+            use_transactions=False,
+            transaction_abort_rate=0.1,
+            msgs_per_transaction=self.per_transaction,
+            debug_logs=True)
+        self.producer.start()
+        self.producer.wait()
+
+    def start_consumer_with_tx(self):
+        traffic_node = self.producer.nodes[0]
+        self.consumer = KgoVerifierSeqConsumer(self.test_context,
+                                               self.redpanda,
+                                               self.topic,
+                                               self.msg_size,
+                                               loop=False,
+                                               nodes=[traffic_node],
+                                               use_transactions=True)
+        self.consumer.start(clean=False)
+        self.consumer.wait()
+
+    @cluster(num_nodes=4)
+    def test_write(self):
+        self.start_producer_with_tx()
+        self.start_consumer_with_tx()
+        # Validate by checking stats
+        pstatus = self.producer.produce_status
+        cstatus = self.consumer.consumer_status
+        committed_messages = pstatus.acked - pstatus.aborted_transaction_messages
+        assert pstatus.acked == self.msg_count
+        assert 0 < committed_messages <= self.msg_count
+        assert cstatus.validator.valid_reads == committed_messages
+        assert cstatus.validator.invalid_reads == 0
+        assert cstatus.validator.out_of_scope_invalid_reads == 0

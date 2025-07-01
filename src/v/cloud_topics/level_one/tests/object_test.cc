@@ -10,7 +10,7 @@
  */
 
 #include "bytes/iostream.h"
-#include "cloud_topics/objects/level_one_object.h"
+#include "cloud_topics/level_one/object.h"
 #include "model/tests/random_batch.h"
 
 #include <seastar/util/backtrace.hh>

@@ -418,7 +418,7 @@ ss::future<fetch_response>
 consumer::dispatch_fetch(broker_reqs_t::value_type br) {
     auto& [broker, req] = br;
     vlog(_logger->trace, "Consumer: {}, fetch_req: {}", *this, req);
-    auto res = co_await broker->dispatch(std::move(req));
+    auto res = co_await broker->dispatch(std::move(req), _as);
     vlog(_logger->trace, "Consumer: {}, fetch_res: {}", *this, res);
 
     if (res.data.error_code != error_code::none) {

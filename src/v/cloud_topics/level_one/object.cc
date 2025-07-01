@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/objects/level_one_object.h"
+#include "cloud_topics/level_one/object.h"
 
 #include "base/vassert.h"
 #include "bytes/iostream.h"
@@ -129,6 +129,7 @@ constinit const static size_t batch_header_size = compute_batch_header_size();
 footer::partition footer::partition::copy() const {
     return {
       .file_position = file_position,
+      .length = length,
       .indexes = indexes.copy(),
       .first_offset = first_offset,
       .last_offset = last_offset,
@@ -139,6 +140,7 @@ ss::future<>
 footer::partition::serde_async_read(iobuf_parser& p, serde::header h) {
     using serde::read_nested;
     file_position = read_nested<size_t>(p, h._bytes_left_limit);
+    length = read_nested<size_t>(p, h._bytes_left_limit);
     first_offset = read_nested<kafka::offset>(p, h._bytes_left_limit);
     last_offset = read_nested<kafka::offset>(p, h._bytes_left_limit);
     max_timestamp = read_nested<model::timestamp>(p, h._bytes_left_limit);
@@ -153,6 +155,7 @@ footer::partition::serde_async_read(iobuf_parser& p, serde::header h) {
 ss::future<> footer::partition::serde_async_write(iobuf& buf) const {
     using serde::write;
     write(buf, file_position);
+    write(buf, length);
     write(buf, first_offset);
     write(buf, last_offset);
     write(buf, max_timestamp.value());
@@ -307,6 +310,7 @@ public:
         _current_ntp = ntp;
         _current_partition = {
           .file_position = _offset,
+          .length = 0, // will be set when the partition is finished
           .indexes = {},
           .first_offset = {},
           .last_offset = {},
@@ -373,6 +377,7 @@ private:
         if (_current_ntp == model::ntp{}) {
             return;
         }
+        _current_partition.length = _offset - _current_partition.file_position;
         _index.partitions.emplace(
           std::exchange(_current_ntp, {}),
           std::exchange(_current_partition, {}));

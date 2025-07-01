@@ -77,6 +77,9 @@ struct footer
         // The offset in the file where this partition's data starts (after the
         // partition marker).
         size_t file_position = 0;
+        // The size of the partition data in bytes, starting from
+        // `file_position`.
+        size_t length = 0;
 
         struct index_entry
           : serde::envelope<index_entry, serde::version<0>, serde::version<0>> {
@@ -359,9 +362,10 @@ struct fmt::formatter<experimental::cloud_topics::l1::footer::partition> {
       FormatContext& ctx) const {
         return fmt::format_to(
           ctx.out(),
-          "{{file_position: {}, first_offset: {}, last_offset: {}, "
+          "{{file_position: {}, length: {}, first_offset: {}, last_offset: {}, "
           "max_timestamp: {}, indexes: [{}]}}",
           partition.file_position,
+          partition.length,
           partition.first_offset,
           partition.last_offset,
           partition.max_timestamp,

@@ -80,7 +80,8 @@ inline std::vector<model::record_batch_type> offset_translator_batch_types() {
       model::record_batch_type::prefix_truncate,
       model::record_batch_type::partition_properties_update,
       model::record_batch_type::datalake_translation_state,
-      model::record_batch_type::group_block};
+      model::record_batch_type::group_block,
+      model::record_batch_type::dl_stm_command};
 }
 
 } // namespace model

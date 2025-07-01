@@ -56,6 +56,40 @@ struct placeholder_batches_with_size {
 static constexpr auto L0_upload_default_timeout = 1s;
 static constexpr auto L0_replicate_default_timeout = 1s;
 
+/// Get raft_data batch returned by the 'materialize' method
+/// of the data layer and enrich it with the information from the
+/// L0 metadata batch.
+static void fill_record_batch_header(
+  const model::record_batch_header& placeholder,
+  model::record_batch& raft_data_batch) {
+    auto& data_hdr = raft_data_batch.header();
+    auto size = data_hdr.size_bytes;
+    auto crc = data_hdr.crc;
+    data_hdr = placeholder;
+    data_hdr.type = model::record_batch_type::raft_data;
+    data_hdr.size_bytes = size;
+    data_hdr.crc = crc;
+    // Recalculate the header crc
+    data_hdr.header_crc = model::internal_header_only_crc(data_hdr);
+}
+
+/// Get list of raft_data batches and the list of placeholder headers and
+/// propagate metadata from headers into the raft_data batch headers.
+/// The data contained in L0 objects doesn't have proper term and offset.
+/// This information should be propagated from the placeholder header.
+static void fill_level_zero_headers(
+  chunked_vector<model::record_batch>& data_batches,
+  const chunked_vector<model::record_batch_header>& placeholder_headers) {
+    vassert(
+      data_batches.size() == placeholder_headers.size(),
+      "Output size mismatch, {} batches vs {} headers",
+      data_batches.size(),
+      placeholder_headers.size());
+    for (size_t ix = 0; ix < data_batches.size(); ix++) {
+        fill_record_batch_header(placeholder_headers[ix], data_batches[ix]);
+    }
+}
+
 // Create a placeholder batch using the original header and the extent.
 // The caller is supposed to use the correct batch header
 // that matches the extent.
@@ -74,6 +108,12 @@ static model::record_batch make_placeholder_batch(
       model::record_batch_type::dl_placeholder, hdr.base_offset);
 
     builder.set_producer_identity(hdr.producer_id, hdr.producer_epoch);
+    if (hdr.attrs.is_control()) {
+        builder.set_control_type();
+    }
+    if (hdr.attrs.is_transactional()) {
+        builder.set_transactional_type();
+    }
 
     auto first_key = serde::to_iobuf(
       experimental::cloud_topics::dl_placeholder_record_key::payload);
@@ -265,10 +305,11 @@ ss::future<storage::translating_reader> cloud_topic_partition::make_reader(
     auto placeholders = co_await model::consume_reader_to_chunked_vector(
       std::move(underlying), model::no_timeout);
 
-    // TODO: convert to a extent_meta
-    auto extents = [ph = std::move(placeholders)]() mutable {
+    auto [extents, headers] = [ph = std::move(placeholders)]() mutable {
         chunked_vector<experimental::cloud_topics::extent_meta> res;
+        chunked_vector<model::record_batch_header> hdr;
         for (auto&& batch : ph) {
+            hdr.push_back(batch.header());
             experimental::cloud_topics::extent_meta e{
               .base_offset = model::offset_cast(batch.base_offset()),
               .last_offset = model::offset_cast(batch.last_offset()),
@@ -285,7 +326,7 @@ ss::future<storage::translating_reader> cloud_topic_partition::make_reader(
             e.byte_range_size = placeholder.size_bytes;
             res.push_back(e);
         }
-        return res;
+        return std::make_pair(std::move(res), std::move(hdr));
     }();
 
     // This part comprises the data plane query. The 'cloud_topics::api' is
@@ -302,6 +343,8 @@ ss::future<storage::translating_reader> cloud_topic_partition::make_reader(
     if (!data_batches) {
         throw std::system_error(data_batches.error());
     }
+
+    fill_level_zero_headers(data_batches.value(), headers);
 
     co_return storage::translating_reader(
       model::make_fragmented_memory_record_batch_reader(
