@@ -13,6 +13,7 @@
 #include "bytes/iobuf_parser.h"
 #include "cloud_topics/dl_stm/dl_stm_commands.h"
 #include "cloud_topics/dl_stm/dl_stm_state.h"
+#include "cloud_topics/types.h"
 #include "serde/rw/map.h"
 #include "serde/rw/uuid.h"
 #include "serde/rw/vector.h"
@@ -52,12 +53,6 @@ ss::future<> dl_stm::do_apply(const model::record_batch& batch) {
     batch.for_each_record([new_dl_version, this](model::record&& r) {
         auto key = serde::from_iobuf<dl_stm_key>(r.release_key());
         switch (key) {
-        case dl_stm_key::push_overlay: {
-            auto cmd = serde::from_iobuf<push_overlay_cmd>(r.release_value());
-            // Noexcept
-            _state.push_overlay(new_dl_version, std::move(cmd.overlay));
-            break;
-        }
         case dl_stm_key::start_snapshot: {
             std::ignore = serde::from_iobuf<start_snapshot_cmd>(
               r.release_value());

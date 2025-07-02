@@ -12,6 +12,7 @@
 #include "base/outcome.h"
 #include "cloud_topics/dl_stm/dl_stm.h"
 #include "cloud_topics/dl_stm/dl_stm_commands.h"
+#include "cloud_topics/types.h"
 #include "model/fundamental.h"
 #include "raft/consensus.h"
 #include "serde/rw/uuid.h"
@@ -35,33 +36,6 @@ dl_stm_api::dl_stm_api(ss::logger& logger, ss::shared_ptr<dl_stm> stm)
   , _stm(std::move(stm)) {}
 
 ss::future<> dl_stm_api::stop() { co_await _gate.close(); }
-
-ss::future<checked<bool, dl_stm_api_errc>>
-dl_stm_api::push_overlay(dl_overlay overlay) {
-    vlog(_logger.debug, "Replicating dl_stm_cmd::push_overlay_cmd");
-    auto h = _gate.hold();
-
-    // TODO: Sync state and consider whether we need to encode invariants in the
-    // command.
-
-    storage::record_batch_builder builder(
-      model::record_batch_type::dl_stm_command, model::offset(0));
-    builder.add_raw_kv(
-      serde::to_iobuf(dl_stm_key::push_overlay),
-      serde::to_iobuf(push_overlay_cmd(std::move(overlay))));
-
-    auto batch = std::move(builder).build();
-    auto apply_result = co_await replicated_apply(std::move(batch));
-    if (apply_result.has_failure()) {
-        co_return apply_result.error();
-    }
-
-    co_return outcome::success(true);
-}
-
-std::optional<dl_overlay> dl_stm_api::lower_bound(kafka::offset offset) const {
-    return _stm->_state.lower_bound(offset);
-}
 
 ss::future<checked<dl_snapshot_id, dl_stm_api_errc>>
 dl_stm_api::start_snapshot() {

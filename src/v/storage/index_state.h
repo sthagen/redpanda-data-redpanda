@@ -131,12 +131,13 @@ private:
    1 byte  - non_data_timestamps
  */
 struct index_state
-  : serde::envelope<index_state, serde::version<9>, serde::compat_version<4>> {
+  : serde::envelope<index_state, serde::version<10>, serde::compat_version<4>> {
     static constexpr auto monotonic_timestamps_version = 5;
     static constexpr auto broker_timestamp_version = 6;
     static constexpr auto num_compactible_records_version = 7;
     static constexpr auto clean_compact_timestamp_version = 8;
     static constexpr auto may_have_tombstone_records_version = 9;
+    static constexpr auto self_compact_timestamp_version = 10;
 
     static index_state
     make_empty_index(model::offset base_offset, offset_delta_time with_offset);
@@ -216,6 +217,15 @@ struct index_state
     // deduplication/segment data copying is performed and it is proven that
     // the segment does not contain any tombstone records.
     bool may_have_tombstone_records{true};
+
+    // If set, the timestamp at which this segment was first self compacted.
+    // Like `clean_compact_timestamp`, this can only be set once per segment and
+    // is preserved across segment concatenations (that is, the maximum
+    // self_compact_timestamp of all segments being concatenated is assigned to
+    // the replacement segment.)
+    // This preserveration is important for transactional batch removal, as its
+    // delete horizon is set by `self_compact_timestamp + delete.retention.ms`.
+    std::optional<model::timestamp> self_compact_timestamp{std::nullopt};
 
     size_t size() const;
 

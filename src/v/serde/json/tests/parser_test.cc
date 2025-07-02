@@ -31,3 +31,45 @@ TEST_CORO(json_test_suite, parse) {
     EXPECT_EQ(parser.token(), token::eof) << "Expected to reach EOF but got: "
                                           << std::to_underlying(parser.token());
 }
+
+struct token_seq_test_case {
+    std::string_view input;
+    std::vector<token> expected_tokens;
+};
+
+ss::future<> run_test_case(const token_seq_test_case& tc) {
+    auto parser = experimental::serde::json::parser(iobuf::from(tc.input));
+    for (const auto& expected : tc.expected_tokens) {
+        ASSERT_TRUE_CORO(co_await parser.next())
+          << "Expected next() to return true for input: " << tc.input;
+        ASSERT_EQ_CORO(parser.token(), expected)
+          << "Unexpected token for input: " << tc.input;
+    }
+    ASSERT_FALSE_CORO(co_await parser.next())
+      << "Expected next() to return false after all tokens for input: "
+      << tc.input;
+}
+
+TEST_CORO(json_parser, parse_empty) {
+    constexpr auto empty_documents = std::to_array<std::string_view>(
+      {"", " ", "\n", "\t", "\r\n"});
+
+    for (const auto& doc : empty_documents) {
+        SCOPED_TRACE(fmt::format("Testing empty document: {}", doc));
+        ASSERT_NO_FATAL_FAILURE_CORO(co_await run_test_case({
+          .input = doc,
+          .expected_tokens = {token::error},
+        }));
+    }
+};
+
+TEST_CORO(json_parser, leading_trailing_whitespace) {
+    ASSERT_NO_FATAL_FAILURE_CORO(co_await run_test_case({
+        .input = "   [   ]   ",
+        .expected_tokens = {
+            token::start_array,
+            token::end_array,
+            token::eof,
+        },
+    }));
+}

@@ -6,7 +6,6 @@ redpanda_cc_library(
     include_prefix = "cloud_topics/dl_stm",
     visibility = [":__subpackages__"],
     deps = [
-        "//src/v/cloud_topics:dl_overlay",
         "//src/v/cloud_topics:dl_version",
         "//src/v/serde",
     ],
@@ -32,7 +31,6 @@ redpanda_cc_library(
     visibility = [":__subpackages__"],
     deps = [
         ":dl_stm_offsets",
-        "//src/v/cloud_topics:dl_overlay",
         "//src/v/cloud_topics:dl_snapshot",
         "//src/v/cloud_topics:dl_version",
         "//src/v/container:fragmented_vector",
@@ -49,6 +47,7 @@ redpanda_cc_library(
         ":dl_stm_commands",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
+        "//src/v/cloud_topics:types",
         "//src/v/serde:map",
         "//src/v/serde:uuid",
         "//src/v/serde:vector",
@@ -68,6 +67,7 @@ redpanda_cc_library(
     implementation_deps = [
         ":dl_stm",
         ":dl_stm_commands",
+        "//src/v/cloud_topics:types",
         "//src/v/raft",
         "//src/v/serde:uuid",
         "//src/v/storage:record_batch_builder",
@@ -76,7 +76,6 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/cloud_topics:dl_overlay",
         "//src/v/cloud_topics:dl_snapshot",
         "//src/v/cloud_topics:dl_version",
         "//src/v/model",

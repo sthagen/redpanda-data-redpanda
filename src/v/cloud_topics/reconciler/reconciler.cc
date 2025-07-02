@@ -12,7 +12,6 @@
 
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
-#include "cloud_topics/dl_overlay.h"
 #include "cloud_topics/dl_stm/dl_stm_api.h"
 #include "cloud_topics/types.h"
 #include "cluster/partition.h"
@@ -223,35 +222,10 @@ ss::future<cloud_io::upload_result> reconciler::upload_object(iobuf payload) {
 
 ss::future<> reconciler::commit_object(const object_range_info& range) {
     /*
-     * TODO: we aren't actually replicating an overlay batch here yet. This will
-     * come at the time of integration with the data layout STM.
+     * TODO register the L1 object with L1 metastore.
      */
     const auto& part = range.partition->partition;
     object_id id = object_id{uuid_t::create()};
-    dl_overlay_object overlay_obj(
-      id,
-      first_byte_offset_t{range.physical_offset_start},
-      byte_range_size_t{
-        range.physical_offset_end - range.physical_offset_start},
-      dl_stm_object_ownership::shared);
-
-    dl_overlay overlay{
-      range.info.base_offset,
-      range.info.last_offset,
-      range.info.base_timestamp,
-      range.info.last_timestamp,
-      range.info.terms,
-      overlay_obj};
-
-    auto push_result = co_await part->dl_stm_api()->push_overlay(overlay);
-    if (push_result.has_error()) {
-        vlog(
-          lg.error,
-          "Failed to replicate dl_overlay batch to {}, error: {}",
-          part->ntp(),
-          push_result.error());
-        co_return;
-    }
 
     range.partition->lro = range.info.last_offset + kafka::offset(1);
 

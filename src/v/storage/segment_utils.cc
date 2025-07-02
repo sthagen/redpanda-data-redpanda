@@ -373,6 +373,7 @@ ss::future<storage::index_state> do_copy_segment_data(
     // the segment's index
     auto old_base_offset = seg->index().base_offset();
     auto old_broker_timestamp = seg->index().broker_timestamp();
+    auto old_self_compact_timestamp = seg->index().self_compact_timestamp();
     auto old_clean_compact_timestamp = seg->index().clean_compact_timestamp();
 
     // find out which offsets will survive compaction
@@ -486,6 +487,7 @@ ss::future<storage::index_state> do_copy_segment_data(
 
     // restore broker timestamp and clean compact timestamp
     new_index.broker_timestamp = old_broker_timestamp;
+    new_index.self_compact_timestamp = old_self_compact_timestamp;
     new_index.clean_compact_timestamp = old_clean_compact_timestamp;
 
     // Set may_have_tombstone_records
@@ -766,16 +768,22 @@ ss::future<compaction_result> self_compact_segment(
   storage::probe& pb,
   storage::readers_cache& readers_cache,
   storage_resources& resources,
-  ss::sharded<features::feature_table>& feature_table) {
+  ss::sharded<features::feature_table>& feature_table,
+  bool force_compaction) {
     if (s->has_appender()) {
         throw std::runtime_error(fmt::format(
           "Cannot compact an active segment. cfg:{} - segment:{}", cfg, s));
     }
 
     const bool may_remove_tombstones = may_have_removable_tombstones(s, cfg);
-    if (
-      !s->is_compactible(cfg)
-      || (s->finished_self_compaction() && !may_remove_tombstones)) {
+
+    auto should_force_compaction = force_compaction || may_remove_tombstones;
+
+    // force_compaction will not invalidate max_removable_local_log_offset.
+    auto segment_needs_compaction
+      = s->is_compactible(cfg)
+        && (!s->has_self_compact_timestamp() || should_force_compaction);
+    if (!segment_needs_compaction) {
         co_return compaction_result{s->size_bytes()};
     }
 
@@ -785,15 +793,14 @@ ss::future<compaction_result> self_compact_segment(
         s, stm_manager, cfg, read_holder, resources, pb);
 
     const bool segment_already_compacted
-      = (state == compacted_index::recovery_state::already_compacted)
-        && !may_remove_tombstones;
+      = (state == compacted_index::recovery_state::already_compacted);
 
-    if (segment_already_compacted) {
+    if (segment_already_compacted && !should_force_compaction) {
         vlog(
           gclog.debug,
           "detected {} is already compacted",
           s->path().to_compacted_index());
-        s->mark_as_finished_self_compaction();
+        co_await internal::mark_segment_as_finished_self_compaction(s, pb);
         co_return compaction_result{s->size_bytes()};
     }
 
@@ -814,10 +821,9 @@ ss::future<compaction_result> self_compact_segment(
       feature_table);
 
     if (res.did_compact()) {
-        pb.segment_compacted();
         pb.add_compaction_removed_bytes(
           ssize_t(res.size_before) - ssize_t(res.size_after));
-        s->mark_as_finished_self_compaction();
+        co_await internal::mark_segment_as_finished_self_compaction(s, pb);
     }
 
     co_return res;
@@ -947,6 +953,19 @@ make_concatenated_segment(
       segments,
       [](const auto& s) { return s->index().may_have_tombstone_records(); });
 
+    // Every segment should have been self compacted at this point.
+    // Take the maximum self compact timestamp.
+    auto new_self_compact_timestamp
+      = (*std::ranges::max_element(
+           segments,
+           std::less<>{},
+           [](const auto& s) {
+               return s->index().self_compact_timestamp().value();
+           }))
+          ->index()
+          .self_compact_timestamp()
+          .value();
+
     segment_index index(
       index_path,
       offsets.get_base_offset(),
@@ -955,7 +974,8 @@ make_concatenated_segment(
       cfg.sanitizer_config,
       new_broker_timestamp,
       new_clean_compact_timestamp,
-      new_may_have_tombstone_records);
+      new_may_have_tombstone_records,
+      new_self_compact_timestamp);
 
     co_return std::make_tuple(
       ss::make_lw_shared<segment>(
@@ -1156,6 +1176,8 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
     }
     pb.add_initial_segment(*replacement.get());
 
+    // Force self compaction of the replacement segment to rebuild in-memory
+    // index state.
     compaction_result ret = co_await self_compact_segment(
       replacement,
       stm_manager,
@@ -1163,7 +1185,8 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
       pb,
       readers_cache,
       resources,
-      feature_table);
+      feature_table,
+      true);
     vlog(gclog.debug, "Final compacted segment {}", replacement);
 
     /*
@@ -1317,6 +1340,18 @@ bool may_have_removable_tombstones(
   ss::lw_shared_ptr<segment> seg, const compaction_config& cfg) {
     return seg->index().may_have_tombstone_records()
            && is_past_tombstone_delete_horizon(seg, cfg);
+}
+
+ss::future<bool> mark_segment_as_finished_self_compaction(
+  ss::lw_shared_ptr<segment> seg, probe& pb) {
+    bool did_set = seg->index().maybe_set_self_compact_timestamp(
+      model::timestamp::now());
+    if (did_set) {
+        pb.segment_compacted();
+        return seg->index().flush().then([] { return true; });
+    }
+
+    return ss::make_ready_future<bool>(false);
 }
 
 } // namespace storage::internal

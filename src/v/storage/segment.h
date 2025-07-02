@@ -119,10 +119,9 @@ public:
     enum class bitflags : uint32_t {
         none = 0,
         is_compacted_segment = 1,
-        finished_self_compaction = 1U << 1U,
-        mark_tombstone = 1U << 2U,
-        closed = 1U << 3U,
-        finished_windowed_compaction = 1U << 4U,
+        mark_tombstone = 1U << 1U,
+        closed = 1U << 2U,
+        finished_windowed_compaction = 1U << 3U,
     };
 
 public:
@@ -191,10 +190,9 @@ public:
     void mark_as_compacted_segment();
     void unmark_as_compacted_segment();
     bool is_compacted_segment() const;
-    void mark_as_finished_self_compaction();
-    bool finished_self_compaction() const;
     void mark_as_finished_windowed_compaction();
     bool finished_windowed_compaction() const;
+    bool has_self_compact_timestamp() const;
     bool has_clean_compact_timestamp() const;
     /// \brief used for compaction, to reset the tracker from index
     void force_set_commit_offset_from_index();
@@ -480,19 +478,15 @@ inline bool segment::is_compacted_segment() const {
     return (_flags & bitflags::is_compacted_segment)
            == bitflags::is_compacted_segment;
 }
-inline void segment::mark_as_finished_self_compaction() {
-    _flags |= bitflags::finished_self_compaction;
-}
-inline bool segment::finished_self_compaction() const {
-    return (_flags & bitflags::finished_self_compaction)
-           == bitflags::finished_self_compaction;
-}
 inline void segment::mark_as_finished_windowed_compaction() {
     _flags |= bitflags::finished_windowed_compaction;
 }
 inline bool segment::finished_windowed_compaction() const {
     return (_flags & bitflags::finished_windowed_compaction)
            == bitflags::finished_windowed_compaction;
+}
+inline bool segment::has_self_compact_timestamp() const {
+    return index().has_self_compact_timestamp();
 }
 inline bool segment::has_clean_compact_timestamp() const {
     return index().has_clean_compact_timestamp();

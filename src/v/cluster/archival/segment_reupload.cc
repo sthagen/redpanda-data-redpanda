@@ -44,7 +44,7 @@ bool eligible_for_compacted_reupload(const storage::segment& s) {
     if (config::shard_local_cfg().log_compaction_use_sliding_window) {
         return s.finished_windowed_compaction();
     }
-    return s.finished_self_compaction();
+    return s.has_self_compact_timestamp();
 }
 
 std::ostream& operator<<(std::ostream& s, const upload_candidate& c) {

@@ -14,11 +14,9 @@
 
 namespace experimental::cloud_topics {
 
-// Avoid leaking the api class details to the header.
 class dl_stm_api;
 
 class dl_stm final : public raft::persisted_stm<> {
-    // Allow the api class to access the private state of the stm.
     friend class dl_stm_api;
 
 public:

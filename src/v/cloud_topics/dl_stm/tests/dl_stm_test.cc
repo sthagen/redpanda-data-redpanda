@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_topics/dl_overlay.h"
 #include "cloud_topics/dl_stm/dl_stm.h"
 #include "cloud_topics/dl_stm/dl_stm_api.h"
 #include "cloud_topics/dl_stm/dl_stm_factory.h"
@@ -73,39 +72,11 @@ TEST_F_CORO(dl_stm_fixture, test_basic) {
 
     co_await wait_for_leader(raft::default_timeout());
 
-    ASSERT_FALSE_CORO(
-      api(node(*get_leader())).lower_bound(kafka::offset(0)).has_value());
-
-    auto res = co_await retry_with_leader(
-      raft::default_timeout(), [&](raft::raft_node_instance& node) {
-          return api(node).push_overlay(ct::dl_overlay(
-            kafka::offset(0),
-            kafka::offset(1),
-            model::timestamp::now(),
-            model::timestamp::now(),
-            {},
-            ct::dl_overlay_object(
-              ct::object_id(uuid_t::create()),
-              ct::first_byte_offset_t(0),
-              ct::byte_range_size_t(10),
-              ct::dl_stm_object_ownership::exclusive)));
-      });
-
-    ASSERT_FALSE_CORO(res.has_error());
-
-    ASSERT_TRUE_CORO(
-      api(node(*get_leader())).lower_bound(kafka::offset(0)).has_value());
-
     auto snapshot_res = co_await api(node(*get_leader())).start_snapshot();
-    ASSERT_FALSE_CORO(res.has_error());
+    ASSERT_FALSE_CORO(snapshot_res.has_error());
 
     ASSERT_TRUE_CORO(
       api(node(*get_leader())).read_snapshot(snapshot_res.value()).has_value());
-    ASSERT_EQ_CORO(
-      api(node(*get_leader()))
-        .read_snapshot(snapshot_res.value())
-        ->overlays.size(),
-      1);
 
     auto snapshot_res2 = co_await api(node(*get_leader())).start_snapshot();
 

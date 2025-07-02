@@ -51,24 +51,6 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "dl_overlay",
-    srcs = [
-        "dl_overlay.cc",
-    ],
-    hdrs = [
-        "dl_overlay.h",
-    ],
-    include_prefix = "cloud_topics",
-    deps = [
-        ":types",
-        "//src/v/model",
-        "//src/v/serde",
-        "@abseil-cpp//absl/container:btree",
-        "@fmt",
-    ],
-)
-
-redpanda_cc_library(
     name = "placeholder",
     hdrs = [
         "dl_placeholder.h",
@@ -104,7 +86,6 @@ redpanda_cc_library(
     ],
     include_prefix = "cloud_topics",
     deps = [
-        ":dl_overlay",
         ":dl_version",
         "//src/v/container:fragmented_vector",
         "//src/v/serde",

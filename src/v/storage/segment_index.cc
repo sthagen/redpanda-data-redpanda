@@ -37,7 +37,8 @@ segment_index::segment_index(
   std::optional<ntp_sanitizer_config> sanitizer_config,
   std::optional<model::timestamp> broker_timestamp,
   std::optional<model::timestamp> clean_compact_timestamp,
-  bool may_have_tombstone_records)
+  bool may_have_tombstone_records,
+  std::optional<model::timestamp> self_compact_timestamp)
   : _path(std::move(path))
   , _step(step)
   , _feature_table(std::ref(feature_table))
@@ -47,6 +48,7 @@ segment_index::segment_index(
     _state.broker_timestamp = broker_timestamp;
     _state.clean_compact_timestamp = clean_compact_timestamp;
     _state.may_have_tombstone_records = may_have_tombstone_records;
+    _state.self_compact_timestamp = self_compact_timestamp;
 }
 
 segment_index::segment_index(
@@ -79,12 +81,14 @@ void segment_index::reset() {
     // Persist the base offset, clean compaction timestamp, and tombstones
     // identifier through a reset.
     auto base = _state.base_offset;
+    auto self_compact_timestamp = _state.self_compact_timestamp;
     auto clean_compact_timestamp = _state.clean_compact_timestamp;
     auto may_have_tombstone_records = _state.may_have_tombstone_records;
 
     _state = index_state::make_empty_index(
       base, storage::internal::should_apply_delta_time_offset(_feature_table));
 
+    _state.self_compact_timestamp = self_compact_timestamp;
     _state.clean_compact_timestamp = clean_compact_timestamp;
     _state.may_have_tombstone_records = may_have_tombstone_records;
 

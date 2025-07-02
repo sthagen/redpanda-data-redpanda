@@ -9,7 +9,6 @@
 
 #pragma once
 
-#include "cloud_topics/dl_overlay.h"
 #include "cloud_topics/dl_version.h"
 #include "container/fragmented_vector.h"
 #include "serde/envelope.h"
@@ -34,14 +33,11 @@ struct dl_snapshot_id
 
 struct dl_snapshot_payload
   : serde::checksum_envelope<
-      dl_snapshot_id,
+      dl_snapshot_payload,
       serde::version<0>,
       serde::compat_version<0>> {
     /// Version for which the snapshot is created.
     dl_snapshot_id id;
-
-    /// Overlays visible at the snapshot version.
-    fragmented_vector<dl_overlay> overlays;
 };
 
 }; // namespace experimental::cloud_topics

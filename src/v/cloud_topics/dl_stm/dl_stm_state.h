@@ -9,24 +9,12 @@
 
 #pragma once
 
-#include "cloud_topics/dl_overlay.h"
 #include "cloud_topics/dl_snapshot.h"
 #include "cloud_topics/dl_stm/dl_stm_offsets.h"
 #include "cloud_topics/dl_version.h"
 #include "serde/envelope.h"
 
 namespace experimental::cloud_topics {
-
-struct dl_overlay_entry
-  : serde::
-      envelope<dl_overlay_entry, serde::version<0>, serde::compat_version<0>> {
-    dl_overlay overlay;
-
-    dl_version added_at;
-    dl_version removed_at;
-
-    auto serde_fields() { return std::tie(overlay, added_at, removed_at); }
-};
 
 class dl_version_monotonic_invariant
   : public serde::envelope<
@@ -79,15 +67,6 @@ class dl_stm_state
     friend class dl_stm_state_accessor;
 
 public:
-    /// Add a new overlay to the state. The overlay becomes visible
-    /// starting with the current version.
-    void push_overlay(dl_version version, dl_overlay overlay) noexcept;
-
-    /// Find an overlay that contains the given offset. If no overlay
-    /// contains the offset, find the overlay covering the next closest
-    /// available offset.
-    std::optional<dl_overlay> lower_bound(kafka::offset offset) const;
-
     /// Create a handle to a snapshot of the state at the current version.
     /// The snapshot id can be used later to read snapshot contents.
     dl_snapshot_id start_snapshot(dl_version version) noexcept;
@@ -105,7 +84,7 @@ public:
     const dl_stm_offsets& get_offsets() const noexcept;
 
     auto serde_fields() {
-        return std::tie(_overlays, _snapshots, _version_invariant, _offsets);
+        return std::tie(_snapshots, _version_invariant, _offsets);
     }
 
     /// Create snapshot of the dl_stm_state for Raft snapshotting mechanism.
@@ -122,10 +101,6 @@ public:
     dl_stm_state get_state_at(model::offset snapshot_at) const noexcept;
 
 private:
-    // A list of overlays that are stored in the cloud storage.
-    // The order of elements is undefined.
-    std::deque<dl_overlay_entry> _overlays;
-
     // A list of snapshot handles that are currently open.
     // The list is ordered by version in ascending order to efficiently find the
     // oldest snapshot when running state garbage collection and to remove

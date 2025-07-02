@@ -211,6 +211,11 @@ public:
     ss::future<token> parse_json_document() {
         TRACE("parse_json_document\n");
 
+        if (_buf.empty()) {
+            TRACE("parse_json_document: empty buffer\n");
+            co_return fuse_with_failure();
+        }
+
         switch (_buf.peek()) {
         case '{':
             co_return parse_object();
@@ -223,6 +228,11 @@ public:
 
     ss::future<token> parse_json_value() {
         TRACE("parse_json_value, peek: {}\n", _buf.peek());
+
+        if (_buf.empty()) {
+            TRACE("parse_json_value: empty buffer\n");
+            co_return fuse_with_failure();
+        }
 
         switch (_buf.peek()) {
         case '{':

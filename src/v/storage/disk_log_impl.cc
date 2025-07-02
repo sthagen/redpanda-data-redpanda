@@ -496,7 +496,9 @@ disk_log_impl::request_eviction_until_offset(model::offset max_offset) {
 }
 
 ss::future<compaction_result> disk_log_impl::segment_self_compact(
-  compaction_config cfg, ss::lw_shared_ptr<segment> seg) {
+  compaction_config cfg,
+  ss::lw_shared_ptr<segment> seg,
+  bool force_compaction) {
     co_return co_await storage::internal::self_compact_segment(
       seg,
       _stm_manager,
@@ -504,7 +506,8 @@ ss::future<compaction_result> disk_log_impl::segment_self_compact(
       *_probe,
       *_readers_cache,
       _manager.resources(),
-      _feature_table);
+      _feature_table,
+      force_compaction);
 }
 
 ss::future<> disk_log_impl::adjacent_merge_compact(
@@ -897,7 +900,7 @@ disk_log_impl::find_adjacent_compaction_ranges(
           && seg->offsets().get_base_offset() < new_start_offset.value()) {
             return true;
         }
-        return !seg->finished_self_compaction() || seg->has_appender()
+        return !seg->has_self_compact_timestamp() || seg->has_appender()
                || !seg->is_compactible(cfg);
     };
 
@@ -1056,7 +1059,7 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
     }
 
     const bool all_segments_self_compacted = std::ranges::all_of(
-      segments, &segment::finished_self_compaction);
+      segments, &segment::has_self_compact_timestamp);
 
     const bool all_segments_cleanly_compacted = std::ranges::all_of(
       segments, &segment::has_clean_compact_timestamp);
@@ -3515,8 +3518,8 @@ int64_t compaction_backlog_term(
 
     for (size_t n = 1; n <= segment_count; ++n) {
         auto& s = segs[n - 1];
-        auto sz = s->finished_self_compaction() ? s->size_bytes()
-                                                : s->size_bytes() * cf;
+        auto sz = s->has_self_compact_timestamp() ? s->size_bytes()
+                                                  : s->size_bytes() * cf;
         for (size_t k = 0; k <= segment_count - n && k < limit_lookahead; ++k) {
             if (k == segment_count - 1) {
                 continue;
@@ -3611,7 +3614,7 @@ int64_t disk_log_impl::compaction_backlog() const {
     static constexpr size_t limit_segments_this_term = 1024;
 
     for (auto& s : _segs) {
-        if (!s->finished_self_compaction()) {
+        if (!s->has_self_compact_timestamp()) {
             backlog += static_cast<int64_t>(s->size_bytes());
         }
         // if has appender do not include into adjacent segments calculation

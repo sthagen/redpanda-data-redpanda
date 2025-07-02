@@ -10,7 +10,6 @@
 #pragma once
 
 #include "base/outcome.h"
-#include "cloud_topics/dl_overlay.h"
 #include "cloud_topics/dl_snapshot.h"
 #include "cloud_topics/dl_version.h"
 #include "model/record.h"
@@ -44,14 +43,6 @@ public:
     ss::future<> stop();
 
 public:
-    /// Attempt to add a new overlay.
-    ss::future<checked<bool, dl_stm_api_errc>> push_overlay(dl_overlay overlay);
-
-    /// Find an overlay that contains the given offset. If no overlay
-    /// contains the offset, find the overlay covering the next closest
-    /// available offset.
-    std::optional<dl_overlay> lower_bound(kafka::offset offset) const;
-
     /// Request a new snapshot to be created.
     ss::future<checked<dl_snapshot_id, dl_stm_api_errc>> start_snapshot();
 

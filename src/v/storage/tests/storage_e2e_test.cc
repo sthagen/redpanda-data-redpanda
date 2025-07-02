@@ -1955,7 +1955,8 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_range_u32_bounds) {
     // adjacent segment compaction.
     for (auto& seg : segs) {
         if (!seg->has_appender()) {
-            seg->mark_as_finished_self_compaction();
+            seg->index().maybe_set_self_compact_timestamp(
+              model::timestamp::now());
         }
     }
 
@@ -6212,7 +6213,8 @@ TEST_F(storage_test_fixture, find_sliding_ranges) {
             if (segment_fields[i].mark_as_stable) {
                 // We need to self compact segments before they are
                 // considered in the adjacent compaction ranges
-                seg->mark_as_finished_self_compaction();
+                seg->index().maybe_set_self_compact_timestamp(
+                  model::timestamp::now());
             }
 
             auto& ot = const_cast<storage::segment::offset_tracker&>(
@@ -6327,7 +6329,7 @@ TEST_F(storage_test_fixture, segment_cached_disk_usage_set_after_compaction) {
     {
         disk_log.adjacent_merge_compact(segs, cfg).get();
         for (auto& s : segs) {
-            if (s->finished_self_compaction()) {
+            if (s->has_self_compact_timestamp()) {
                 check_cached_sizes(s);
             }
         }
@@ -6337,7 +6339,7 @@ TEST_F(storage_test_fixture, segment_cached_disk_usage_set_after_compaction) {
     {
         disk_log.sliding_window_compact(cfg).get();
         for (auto& s : segs) {
-            if (s->finished_self_compaction()) {
+            if (s->has_self_compact_timestamp()) {
                 ASSERT_TRUE(s->has_clean_compact_timestamp());
                 check_cached_sizes(s);
             }

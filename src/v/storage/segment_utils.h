@@ -57,7 +57,8 @@ ss::future<compaction_result> self_compact_segment(
   storage::probe&,
   storage::readers_cache&,
   storage::storage_resources&,
-  ss::sharded<features::feature_table>& feature_table);
+  ss::sharded<features::feature_table>& feature_table,
+  bool force_compaction = false);
 
 /// \brief, rebuilds a given segment's compacted index. This method acquires
 /// locks on the segment.
@@ -323,6 +324,9 @@ bool may_have_removable_tombstones(
 // for the first time and assigned a cleanly compacted timestamp.
 ss::future<bool> mark_segment_as_finished_window_compaction(
   ss::lw_shared_ptr<segment> seg, bool set_clean_compact_timestamp, probe& pb);
+
+ss::future<bool> mark_segment_as_finished_self_compaction(
+  ss::lw_shared_ptr<segment> seg, probe& pb);
 
 template<typename Func>
 auto with_segment_reader_handle(segment_reader_handle handle, Func func) {

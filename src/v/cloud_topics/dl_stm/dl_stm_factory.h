@@ -15,8 +15,6 @@ namespace experimental::cloud_topics {
 
 class dl_stm_factory : public cluster::state_machine_factory {
 public:
-    dl_stm_factory() = default;
-
     bool is_applicable_for(const storage::ntp_config& ntp_cfg) const final;
 
     void create(

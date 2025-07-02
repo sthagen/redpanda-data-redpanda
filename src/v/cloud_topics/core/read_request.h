@@ -33,7 +33,7 @@ struct dataplane_query_result {
 };
 
 /// The query for the data-plane.
-/// The meta field contains a bunch of dl_placeholder and dl_overlay batches.
+/// The meta field contains a bunch of dl_placeholder batches.
 struct dataplane_query {
     size_t output_size_estimate{0};
     chunked_vector<extent_meta> meta;
@@ -42,8 +42,6 @@ struct dataplane_query {
 // This object is created for every fetch request.
 // The main processing steps are:
 // - materialize placeholder batches
-// or
-// - materialize dl_overlay batches
 //
 // The input is a series of placeholder batches.
 template<class Clock = ss::lowres_clock>
