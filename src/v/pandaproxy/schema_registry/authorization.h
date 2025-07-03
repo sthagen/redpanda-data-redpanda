@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "container/fragmented_vector.h"
 #include "pandaproxy/schema_registry/auth.h"
 #include "pandaproxy/schema_registry/fwd.h"
 #include "pandaproxy/server.h"
@@ -23,5 +24,15 @@ void handle_authz(
   const server::request_t& rq,
   const auth& auth,
   request_auth_result& auth_result);
+
+void handle_get_schemas_ids_id_authz(
+  const server::request_t& rq,
+  std::optional<request_auth_result>& auth_result,
+  const chunked_vector<subject>& subjects);
+
+void handle_get_subjects_authz(
+  const server::request_t& rq,
+  std::optional<request_auth_result>& auth_result,
+  chunked_vector<subject>& subjects);
 
 } // namespace pandaproxy::schema_registry::enterprise

@@ -31,7 +31,7 @@
 #include <seastar/core/shared_ptr.hh>
 
 namespace experimental::cloud_topics {
-class dl_stm_api;
+class ctp_stm_api;
 class app;
 }; // namespace experimental::cloud_topics
 
@@ -216,7 +216,7 @@ public:
 
     ss::shared_ptr<cluster::rm_stm> rm_stm();
 
-    ss::shared_ptr<experimental::cloud_topics::dl_stm_api> dl_stm_api();
+    ss::shared_ptr<experimental::cloud_topics::ctp_stm_api> ctp_stm_api();
 
     size_t size_bytes() const;
 
@@ -431,7 +431,7 @@ private:
     ss::shared_ptr<cluster::rm_stm> _rm_stm;
     ss::shared_ptr<archival_metadata_stm> _archival_meta_stm;
     ss::shared_ptr<partition_properties_stm> _partition_properties_stm;
-    ss::shared_ptr<experimental::cloud_topics::dl_stm_api> _dl_stm_api;
+    ss::shared_ptr<experimental::cloud_topics::ctp_stm_api> _ctp_stm_api;
     ss::sharded<experimental::cloud_topics::app>& _cloud_topics_app;
     ss::abort_source _as;
     partition_probe _probe;

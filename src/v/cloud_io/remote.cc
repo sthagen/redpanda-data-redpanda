@@ -194,7 +194,7 @@ ss::future<> remote::stop() {
     co_await _resources->stop();
     co_await _gate.close();
     co_await _auth_refresh_bg_op.stop();
-    vlog(log.debug, "Stopeed remote...");
+    vlog(log.debug, "Stopped remote...");
 }
 
 size_t remote::concurrency() const { return _pool.local().max_size(); }

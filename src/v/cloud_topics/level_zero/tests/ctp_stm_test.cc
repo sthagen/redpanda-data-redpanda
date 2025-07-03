@@ -7,9 +7,9 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_topics/dl_stm/dl_stm.h"
-#include "cloud_topics/dl_stm/dl_stm_api.h"
-#include "cloud_topics/dl_stm/dl_stm_factory.h"
+#include "cloud_topics/level_zero/ctp_stm.h"
+#include "cloud_topics/level_zero/ctp_stm_api.h"
+#include "cloud_topics/level_zero/ctp_stm_factory.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/types.h"
 #include "cluster/state_machine_registry.h"
@@ -20,11 +20,11 @@
 
 namespace ct = experimental::cloud_topics;
 
-class dl_stm_fixture : public raft::raft_fixture {
+class ctp_stm_fixture : public raft::raft_fixture {
 public:
     static constexpr auto node_count = 3;
 
-    ~dl_stm_fixture() override {
+    ~ctp_stm_fixture() override {
         for (auto& entry : api_by_vnode) {
             entry.second->stop().get();
         }
@@ -40,7 +40,7 @@ public:
 
             raft::state_machine_manager_builder builder;
 
-            experimental::cloud_topics::dl_stm_factory stm_factory;
+            experimental::cloud_topics::ctp_stm_factory stm_factory;
             stm_factory.create(
               builder, &*node->raft(), cluster::stm_instance_config{nullptr});
 
@@ -49,25 +49,25 @@ public:
             co_await node->start(std::move(builder));
 
             stm_by_vnode[node->get_vnode()]
-              = node->raft()->stm_manager()->get<ct::dl_stm>();
+              = node->raft()->stm_manager()->get<ct::ctp_stm>();
 
             api_by_vnode.emplace(
               node->get_vnode(),
-              ss::make_shared<ct::dl_stm_api>(
-                ct::cd_log, node->raft()->stm_manager()->get<ct::dl_stm>()));
+              ss::make_shared<ct::ctp_stm_api>(
+                ct::cd_log, node->raft()->stm_manager()->get<ct::ctp_stm>()));
         }
     }
 
-    ct::dl_stm_api& api(raft::raft_node_instance& node) {
+    ct::ctp_stm_api& api(raft::raft_node_instance& node) {
         return *api_by_vnode[node.get_vnode()];
     }
 
-    absl::flat_hash_map<raft::vnode, ss::shared_ptr<ct::dl_stm>> stm_by_vnode;
-    absl::flat_hash_map<raft::vnode, ss::shared_ptr<ct::dl_stm_api>>
+    absl::flat_hash_map<raft::vnode, ss::shared_ptr<ct::ctp_stm>> stm_by_vnode;
+    absl::flat_hash_map<raft::vnode, ss::shared_ptr<ct::ctp_stm_api>>
       api_by_vnode;
 };
 
-TEST_F_CORO(dl_stm_fixture, test_basic) {
+TEST_F_CORO(ctp_stm_fixture, test_basic) {
     co_await start();
 
     co_await wait_for_leader(raft::default_timeout());

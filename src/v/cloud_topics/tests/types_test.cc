@@ -13,6 +13,6 @@
 
 TEST(DlStmKey, Formatting) {
     ASSERT_EQ(
-      fmt::format("{}", experimental::cloud_topics::dl_stm_key(999)),
-      "unknown dl_stm_key(999)");
+      fmt::format("{}", experimental::cloud_topics::ctp_stm_key(999)),
+      "unknown ctp_stm_key(999)");
 }

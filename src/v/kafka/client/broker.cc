@@ -10,9 +10,13 @@
 #include "kafka/client/broker.h"
 
 #include "base/seastarx.h"
-#include "kafka/client/sasl_client.h"
 #include "kafka/protocol/messages.h"
+#include "kafka/protocol/sasl_authenticate.h"
+#include "kafka/protocol/sasl_handshake.h"
 #include "net/connection.h"
+#include "random/generators.h"
+#include "security/oidc_authenticator.h"
+#include "security/scram_authenticator.h"
 #include "thirdparty/c-ares/ares.h"
 #include "utils/backoff_policy.h"
 #include "utils/unresolved_address.h"
@@ -41,7 +45,7 @@ bool is_dns_failure_error(const std::system_error& e) {
 
 namespace kafka::client {
 
-broker::broker(
+remote_broker::remote_broker(
   model::node_id node_id,
   const connection_configuration& config,
   std::unique_ptr<transport> transport)
@@ -57,7 +61,7 @@ broker::broker(
         _transport->server_address().host(),
         _transport->server_address().port())) {}
 
-ss::future<> broker::connect(model::timeout_clock::time_point deadline) {
+ss::future<> remote_broker::connect(model::timeout_clock::time_point deadline) {
     try {
         vlog(_logger.debug, "Connecting");
         co_await _transport->connect(deadline);
@@ -70,7 +74,7 @@ ss::future<> broker::connect(model::timeout_clock::time_point deadline) {
     }
 }
 
-ss::future<> broker::maybe_initialize_connection(
+ss::future<> remote_broker::maybe_initialize_connection(
   std::optional<std::reference_wrapper<ss::abort_source>> as) {
     if (_transport->is_valid() && !needs_authentication()) {
         co_return;
@@ -89,7 +93,7 @@ ss::future<> broker::maybe_initialize_connection(
     co_await maybe_authenticate();
 }
 
-ss::future<> broker::connect_with_retries(
+ss::future<> remote_broker::connect_with_retries(
   std::optional<std::reference_wrapper<ss::abort_source>> as) {
     if (_transport->is_valid()) {
         co_return;
@@ -139,15 +143,14 @@ ss::future<> broker::connect_with_retries(
     }
 }
 
-ss::future<> broker::maybe_authenticate() {
+ss::future<> remote_broker::maybe_authenticate() {
     if (!needs_authentication()) {
         co_return;
     }
     _authentication_state = auth_state::in_progress;
     try {
         vlog(_logger.debug, "Authenticating broker");
-        co_await do_authenticate(
-          shared_from_this(), _config->sasl_cfg.value(), _logger);
+        co_await do_authenticate();
         _authentication_state = auth_state::authenticated;
     } catch (...) {
         vlog(
@@ -155,8 +158,32 @@ ss::future<> broker::maybe_authenticate() {
         throw;
     }
 }
+ss::future<response_t> remote_broker::dispatch(
+  request_t r, std::optional<std::reference_wrapper<ss::abort_source>> as) {
+    auto holder = _gate.hold();
+    try {
+        co_await maybe_initialize_connection(as);
+        auto response = co_await ss::visit(std::move(r), [this](auto req) {
+            return do_dispatch<>(std::move(req)).then([](auto resp) {
+                return response_t(std::move(resp));
+            });
+        });
+        co_return response;
+    } catch (const kafka_request_disconnected_exception&) {
+        vlog(
+          _logger.warn,
+          "request dispatch error - {}",
+          std::current_exception());
+        throw broker_error(_node_id, error_code::broker_not_available);
+    } catch (const std::system_error& e) {
+        if (net::is_reconnect_error(e)) {
+            throw broker_error(_node_id, error_code::broker_not_available);
+        }
+        throw;
+    }
+}
 
-api_version broker::api_version_for(api_key key) const {
+api_version remote_broker::api_version_for(api_key key) const {
     switch (key) {
     case offset_fetch_api::key:
         return api_version(4);
@@ -202,13 +229,13 @@ api_version broker::api_version_for(api_key key) const {
     }
 }
 
-broker_factory::broker_factory(
+remote_broker_factory::remote_broker_factory(
   const connection_configuration& config, prefix_logger& logger)
   : _config(config)
   , _logger(&logger)
-  , _client_id(_config.client_id.value_or("redpanda-client")) {}
+  , _client_id(config.client_id.value_or("redpanda-client")) {}
 
-ss::future<shared_broker_t> broker_factory::create_broker(
+ss::future<shared_broker_t> remote_broker_factory::create_broker(
   model::node_id node_id, net::unresolved_address addr) {
     net::base_transport::configuration transport_cfg{
       .server_addr = addr,
@@ -226,8 +253,200 @@ ss::future<shared_broker_t> broker_factory::create_broker(
     auto broker_transport = std::make_unique<transport>(
       std::move(transport_cfg), _config.client_id);
 
-    co_return ss::make_lw_shared<broker>(
+    co_return ss::make_shared<remote_broker>(
       node_id, _config, std::move(broker_transport));
+}
+
+ss::future<> remote_broker::do_authenticate() {
+    if (!_config->sasl_cfg.has_value()) {
+        co_return;
+    }
+    const auto& mechanism = _config->sasl_cfg->mechanism;
+
+    if (
+      mechanism != security::scram_sha256_authenticator::name
+      && mechanism != security::scram_sha512_authenticator::name
+      && mechanism != security::oidc::sasl_authenticator::name) {
+        throw broker_error{
+          _node_id,
+          error_code::sasl_authentication_failed,
+          fmt_with_ctx(ssx::sformat, "Unknown mechanism: {}", mechanism)};
+    }
+
+    const auto& username = _config->sasl_cfg->username;
+    const auto& password = _config->sasl_cfg->password;
+
+    vlog(
+      _logger.debug,
+      "Connecting to broker {} with authentication: {}:{}",
+      _node_id,
+      mechanism,
+      username);
+
+    if (username.empty() || password.empty()) {
+        throw broker_error{
+          _node_id,
+          error_code::sasl_authentication_failed,
+          "Username or password is empty"};
+    }
+    // perform handshake
+    co_await do_sasl_handshake(mechanism);
+
+    if (mechanism == security::scram_sha256_authenticator::name) {
+        co_await do_authenticate_scram256(username, password);
+
+    } else if (mechanism == security::scram_sha512_authenticator::name) {
+        co_await do_authenticate_scram512(username, password);
+    } else if (mechanism == security::oidc::sasl_authenticator::name) {
+        co_await do_authenticate_oauthbearer(password);
+    }
+}
+
+ss::future<> remote_broker::do_sasl_handshake(ss::sstring mechanism) {
+    sasl_handshake_request req;
+    req.data.mechanism = std::move(mechanism);
+
+    auto resp = co_await do_dispatch(req);
+    if (resp.data.error_code != error_code::none) {
+        throw broker_error{_node_id, resp.data.error_code};
+    }
+}
+
+ss::future<security::server_first_message>
+remote_broker::send_scram_client_first(
+  const security::client_first_message& client_first) {
+    sasl_authenticate_request client_first_req;
+    {
+        auto msg = client_first.message();
+        client_first_req.data.auth_bytes = bytes(msg.cbegin(), msg.cend());
+    }
+    auto client_first_resp = co_await do_dispatch(client_first_req);
+    if (client_first_resp.data.error_code != error_code::none) {
+        throw broker_error{
+          _node_id,
+          client_first_resp.data.error_code,
+          client_first_resp.data.error_message.value_or("<no error message>")};
+    }
+    co_return security::server_first_message(client_first_resp.data.auth_bytes);
+}
+
+ss::future<security::server_final_message>
+remote_broker::send_scram_client_final(
+  const security::client_final_message& client_final) {
+    sasl_authenticate_request client_last_req;
+    {
+        auto msg = client_final.message();
+        client_last_req.data.auth_bytes = bytes(msg.cbegin(), msg.cend());
+    }
+
+    auto client_last_resp = co_await do_dispatch(client_last_req);
+
+    if (client_last_resp.data.error_code != error_code::none) {
+        throw broker_error{
+          _node_id,
+          client_last_resp.data.error_code,
+          client_last_resp.data.error_message.value_or("<no error message>")};
+    }
+
+    co_return security::server_final_message(
+      std::move(client_last_resp.data.auth_bytes));
+}
+
+template<typename ScramAlgo>
+ss::future<> remote_broker::do_authenticate_scram(
+  ss::sstring username, ss::sstring password) {
+    /*
+     * send client first message
+     */
+    const auto nonce = random_generators::gen_alphanum_string(130);
+    const security::client_first_message client_first(
+      std::move(username), nonce);
+
+    /*
+     * handle server first response
+     */
+    const auto server_first = co_await send_scram_client_first(client_first);
+
+    if (!std::string_view(server_first.nonce())
+           .starts_with(std::string_view(nonce))) {
+        throw broker_error{
+          _node_id,
+          error_code::sasl_authentication_failed,
+          "Server nonce doesn't match client nonce"};
+    }
+
+    if (server_first.iterations() < ScramAlgo::min_iterations) {
+        throw broker_error{
+          _node_id,
+          error_code::sasl_authentication_failed,
+          fmt_with_ctx(
+            ssx::sformat,
+            "Server minimum iterations {} < required {}",
+            server_first.iterations(),
+            ScramAlgo::min_iterations)};
+    }
+
+    /*
+     * send client final message
+     */
+    security::client_final_message client_final(
+      bytes::from_string("n,,"), server_first.nonce());
+
+    auto salted_password = ScramAlgo::hi(
+      bytes(password.cbegin(), password.cend()),
+      server_first.salt(),
+      server_first.iterations());
+
+    client_final.set_proof(ScramAlgo::client_proof(
+      salted_password, client_first, server_first, client_final));
+
+    const auto server_final = co_await send_scram_client_final(client_final);
+
+    /*
+     * handle server final response
+     */
+    if (server_final.error()) {
+        throw broker_error{
+          _node_id,
+          error_code::sasl_authentication_failed,
+          server_final.error().value()};
+    }
+
+    auto server_key = ScramAlgo::server_key(salted_password);
+    auto server_sig = ScramAlgo::server_signature(
+      server_key, client_first, server_first, client_final);
+
+    if (server_final.signature() != server_sig) {
+        throw broker_error{
+          _node_id,
+          error_code::sasl_authentication_failed,
+          "Server signature does not match calculated signature"};
+    }
+}
+
+ss::future<> remote_broker::do_authenticate_scram256(
+  ss::sstring username, ss::sstring password) {
+    return do_authenticate_scram<security::scram_sha256>(
+      std::move(username), std::move(password));
+}
+
+ss::future<> remote_broker::do_authenticate_scram512(
+  ss::sstring username, ss::sstring password) {
+    return do_authenticate_scram<security::scram_sha512>(
+      std::move(username), std::move(password));
+}
+
+ss::future<> remote_broker::do_authenticate_oauthbearer(ss::sstring token) {
+    sasl_authenticate_request req;
+    req.data.auth_bytes = bytes::from_string(
+      fmt::format("n,,\1auth={}\1\1", token));
+    auto res = co_await do_dispatch(std::move(req));
+    if (res.data.errored()) {
+        throw broker_error{
+          _node_id,
+          res.data.error_code,
+          res.data.error_message.value_or("<no error message>")};
+    }
 }
 
 } // namespace kafka::client

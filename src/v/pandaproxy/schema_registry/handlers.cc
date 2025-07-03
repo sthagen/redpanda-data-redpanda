@@ -347,22 +347,15 @@ get_schemas_types(server::request_t rq, server::reply_t rp) {
 ss::future<server::reply_t> get_schemas_ids_id(
   server::request_t rq,
   server::reply_t rp,
-  auth auth,
   std::optional<request_auth_result> auth_result) {
     parse_accept_header(rq, rp);
     auto id = parse::request_param<schema_id>(*rq.req, "id");
     const auto format = parse_output_format(*rq.req);
 
-    // Check if we need to validate the auth result
-    // Note: we may not need to if ACLs or authentication are disabled
-    if (auth_result.has_value()) {
-        // TODO(CORE-12276): Authorization check
-        // if auth::op::read for any subject that references this is satisfied
-        //    create an auth with the resource, pass it below
-        // else
-        //    fail
-        enterprise::handle_authz(rq, auth, *auth_result);
-    }
+    auto subjects = co_await rq.service().schema_store().get_schema_subjects(
+      id, include_deleted::yes);
+
+    enterprise::handle_get_schemas_ids_id_authz(rq, auth_result, subjects);
 
     // With deferred schema validation, there might be a schema that
     // had invalid references. These might have already been posted, so
@@ -425,7 +418,6 @@ ss::future<ctx_server<service>::reply_t> get_schemas_ids_id_subjects(
 ss::future<server::reply_t> get_subjects(
   server::request_t rq,
   server::reply_t rp,
-  auth auth,
   std::optional<request_auth_result> auth_result) {
     parse_accept_header(rq, rp);
     auto inc_del{
@@ -434,19 +426,16 @@ ss::future<server::reply_t> get_subjects(
     auto subject_prefix{
       parse::query_param<std::optional<ss::sstring>>(*rq.req, "subjectPrefix")};
 
-    // Check if we need to validate the auth result
-    // Note: we may not need to if ACLs or authentication are disabled
-    if (auth_result.has_value()) {
-        // TODO(CORE-12277): Authorization check
-        enterprise::handle_authz(rq, auth, *auth_result);
-    }
-
     // List-type request: must ensure we see latest writes
     co_await rq.service().writer().read_sync();
 
-    auto resp = ppj::rjson_serialize_iobuf(
-      co_await rq.service().schema_store().get_subjects(
-        inc_del, subject_prefix));
+    auto res = co_await rq.service().schema_store().get_subjects(
+      inc_del, subject_prefix);
+
+    // Handle AuthZ - Filters res for the subjects the user is allowed to see
+    enterprise::handle_get_subjects_authz(rq, auth_result, res);
+
+    auto resp = ppj::rjson_serialize_iobuf(std::move(res));
     log_response(*rq.req, resp);
     rp.rep->write_body("json", ppj::as_body_writer(std::move(resp)));
     co_return rp;

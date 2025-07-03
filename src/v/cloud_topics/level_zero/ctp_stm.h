@@ -9,20 +9,20 @@
 
 #pragma once
 
-#include "cloud_topics/dl_stm/dl_stm_state.h"
+#include "cloud_topics/level_zero/ctp_stm_state.h"
 #include "raft/persisted_stm.h"
 
 namespace experimental::cloud_topics {
 
-class dl_stm_api;
+class ctp_stm_api;
 
-class dl_stm final : public raft::persisted_stm<> {
-    friend class dl_stm_api;
+class ctp_stm final : public raft::persisted_stm<> {
+    friend class ctp_stm_api;
 
 public:
-    static constexpr const char* name = "dl_stm";
+    static constexpr const char* name = "ctp_stm";
 
-    dl_stm(ss::logger&, raft::consensus*);
+    ctp_stm(ss::logger&, raft::consensus*);
 
     raft::stm_initial_recovery_policy
     get_initial_recovery_policy() const final {
@@ -41,7 +41,7 @@ private:
     ss::future<iobuf> take_raft_snapshot(model::offset) override;
 
 private:
-    dl_stm_state _state;
+    ctp_stm_state _state;
 };
 
 } // namespace experimental::cloud_topics

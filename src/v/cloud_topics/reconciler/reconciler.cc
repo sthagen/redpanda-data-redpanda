@@ -12,7 +12,7 @@
 
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
-#include "cloud_topics/dl_stm/dl_stm_api.h"
+#include "cloud_topics/level_zero/ctp_stm_api.h"
 #include "cloud_topics/types.h"
 #include "cluster/partition.h"
 #include "kafka/data/partition_proxy.h"

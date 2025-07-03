@@ -347,12 +347,18 @@ ss::future<client_pool::client_lease> client_pool::acquire(
                     client = make_client();
                 } else {
                     vlog(pool_log.debug, "can't borrow connection, waiting");
-                    co_await ssx::with_timeout_abortable(
-                      _cvar.wait(), model::no_timeout, as);
-                    vlog(
-                      pool_log.debug,
-                      "cvar triggered, pool size: {}",
-                      _pool.size());
+                    // In-between failing to borrow from local pool and failing
+                    // to borrow from a remote pool (co_await/async-operation),
+                    // local pool may have gotten a client back. There is no
+                    // need to wait in such case.
+                    if (_pool.empty()) {
+                        co_await ssx::with_timeout_abortable(
+                          _cvar.wait(), model::no_timeout, as);
+                        vlog(
+                          pool_log.debug,
+                          "cvar triggered, pool size: {}",
+                          _pool.size());
+                    }
                 }
             }
         }
@@ -498,10 +504,10 @@ bool client_pool::borrow_one(unsigned other) {
       other,
       _pool.size(),
       _capacity);
-    // TODO: do not use the topmost element. Find the one
+    // TODO: do not use the bottommost (oldest) element. Find the one
     // with expired connection.
-    auto c = _pool.back();
-    _pool.pop_back();
+    auto c = _pool.front();
+    _pool.pop_front();
     update_usage_stats();
     c->shutdown();
     ssx::spawn_with_gate(_bg_gate, [c] { return c->stop().finally([c] {}); });
@@ -534,7 +540,13 @@ void client_pool::populate_client_pool() {
         _pool.emplace_back(make_client());
     }
 
-    _cvar.signal();
+    // Be defensive in checking that we properly synchronized access to `_pool`
+    // and `_cvar`. Before populate_client_pool() is called, we do not expect
+    // anyone to check the size of the pool or wait on the condition variable.
+    vassert(
+      !_cvar.has_waiters(),
+      "This is a bug: _cvar is not expected to have waiters at this point. "
+      "Missing synchronization?");
 }
 
 client_pool::http_client_ptr client_pool::make_client() const noexcept {

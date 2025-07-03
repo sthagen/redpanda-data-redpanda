@@ -465,7 +465,7 @@ private:
     ss::future<ss::json::json_return_type>
     oidc_revoke_handler(std::unique_ptr<ss::http::request> req);
     ss::future<ss::json::json_return_type> list_user_roles_handler(
-      std::unique_ptr<ss::http::request>, request_auth_result);
+      std::unique_ptr<ss::http::request>, const request_auth_result&);
 
     ss::future<std::unique_ptr<ss::http::reply>> create_role_handler(
       std::unique_ptr<ss::http::request> req,

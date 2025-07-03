@@ -15,10 +15,10 @@
 
 namespace experimental::cloud_topics {
 
-/// Set of offsets tracked by dl_stm_state.
-class dl_stm_offsets
+/// Set of offsets tracked by ctp_stm_state.
+class ctp_stm_offsets
   : public serde::
-      envelope<dl_stm_offsets, serde::version<0>, serde::compat_version<0>> {
+      envelope<ctp_stm_offsets, serde::version<0>, serde::compat_version<0>> {
 public:
     kafka::offset get_last_reconciled_offset() const noexcept {
         return _last_reconciled_offset;
@@ -30,7 +30,7 @@ public:
 
     model::offset get_insync_offset() const noexcept { return _insync_offset; }
 
-    /// Advance insync offset of the dl_stm.
+    /// Advance insync offset of the ctp_stm.
     void advance_insync_offset(model::offset new_offset) noexcept {
         _insync_offset = std::max(_insync_offset, new_offset);
     }
@@ -58,12 +58,12 @@ public:
 
     bool check_invariant() { return _insync_offset >= _applied_offset; }
 
-    /// This method gates all command batch applications for the dl_stm.
+    /// This method gates all command batch applications for the ctp_stm.
     /// If this method returned 'true' for the 'version' then the command
     /// could be safely applied.
     bool can_apply(dl_version version) const noexcept {
         // Invariant: the version can only be applied if it's equal to
-        // insync_offset. If this is not the case the dl_stm batch
+        // insync_offset. If this is not the case the ctp_stm batch
         // is applied out of order and should be rejected. If the version
         // is equal to applied_offset then the batch was already applied
         // and should be rejected. This is necessary because we're always

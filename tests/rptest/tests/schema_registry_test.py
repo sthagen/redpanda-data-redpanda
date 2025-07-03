@@ -6587,16 +6587,32 @@ class SchemaRegistryAclAuthzTest(SchemaRegistryEndpoints):
         self.assert_equal(result.status_code, 200)
 
     @cluster(num_nodes=1)
-    def test_public_endpoints(self):
-        """Test the endpoints that don't require any ACLs for access"""
+    def test_unauthenticated(self):
+        """Test the behaviour of endpoints when they are requested unauthenticated"""
 
-        # GET_SCHEMAS_TYPES
+        # Test public endpoints - GET_SCHEMAS_TYPES and SCHEMA_REGISTRY_STATUS_READY
         result = self._get_schemas_types()
         self.assert_equal(result.status_code, 200)
 
-        # SCHEMA_REGISTRY_STATUS_READY
         result = self._get_status_ready()
         self.assert_equal(result.status_code, 200)
+
+        # Test non-public endpoints - should return 401
+        result = self._get_config()
+        self.assert_equal(result.status_code, 401)
+
+        result = self._post_subjects_subject_versions("test-subject",
+                                                      data=self.schema_data_1)
+        self.assert_equal(result.status_code, 401)
+
+        result = self._get_security_acls()
+        self.assert_equal(result.status_code, 401)
+
+        result = self._get_schemas_ids_id(1)
+        self.assert_equal(result.status_code, 401)
+
+        result = self._get_subjects()
+        self.assert_equal(result.status_code, 401)
 
     @cluster(num_nodes=1)
     def test_acl_endpoints(self):
@@ -6659,6 +6675,15 @@ class SchemaRegistryAclAuthzTest(SchemaRegistryEndpoints):
                                                       auth=self.super_auth)
         self.assert_equal(result.status_code, 200)
 
+        # Check deferred endpoints
+        schema_id = result.json()['id']
+        result = self._get_schemas_ids_id(schema_id, auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+
+        result = self._get_subjects(auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_equal(result.json(), [subject])
+
     @cluster(num_nodes=1)
     def test_resource_patterns(self):
         """Test that prefixed and global pattern matching of resources works"""
@@ -6690,3 +6715,139 @@ class SchemaRegistryAclAuthzTest(SchemaRegistryEndpoints):
         self._post_acl(acl_3)
 
         check_post_schemas(can_post_1=False, can_post_2=False)
+
+    @cluster(num_nodes=1)
+    def test_get_schemas_ids_id_authorization(self):
+        """
+        Test GET /schemas/ids/{id} endpoint authorization logic.
+        This endpoint allows access if the user has READ permission on ANY subject
+        that references the schema.
+        """
+
+        # Create test subjects referencing the same schema
+        subject_1 = "test-subject-1"
+        subject_2 = "test-subject-2"
+        subject_3 = "test-subject-3"
+
+        schema_id = self._create_schema(subject_1)
+
+        response = self._post_subjects_subject_versions(
+            subject_2, data=self.schema_data_1, auth=self.super_auth)
+        self.assert_equal(response.status_code, 200)
+        self.assert_equal(response.json()["id"], schema_id)
+
+        response = self._post_subjects_subject_versions(
+            subject_3, data=self.schema_data_1, auth=self.super_auth)
+        self.assert_equal(response.status_code, 200)
+        self.assert_equal(response.json()["id"], schema_id)
+
+        # Unknown schema id - should be 403 (don't leak presence info)
+        result = self._get_schemas_ids_id(99999, auth=self.user_auth)
+        self.assert_equal(result.status_code, 403)
+
+        # No ACLs - should be denied
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 403)
+
+        # Grant READ to subject_1 - should succeed
+        self._post_acl(
+            self._create_acl(subject_1, "SUBJECT", "LITERAL", "READ"))
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+
+        # Switch access to subject_2 - should still work (any subject access sufficient)
+        self._post_acl(
+            self._create_acl(subject_1, "SUBJECT", "LITERAL", "READ", "DENY"))
+        self._post_acl(
+            self._create_acl(subject_2, "SUBJECT", "LITERAL", "READ"))
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+
+        # Remove all access - should be denied
+        self._post_acl(
+            self._create_acl(subject_2, "SUBJECT", "LITERAL", "READ", "DENY"))
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 403)
+
+        # Grant access to subject 3 using a prefixed ACL - should succeed
+        self._post_acl(
+            self._create_acl("test-subject-", "SUBJECT", "PREFIXED", "READ"))
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+
+        # Delete the only subject that granted access to the endpoint
+        # Should still succeed since soft-deleted subjects also count
+        result = self._delete_subject(subject_3, auth=self.super_auth)
+        self.assert_equal(result.status_code, 200)
+
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+
+        # Remove access to all subjects - should be denied
+        self._post_acl(
+            self._create_acl("*", "SUBJECT", "LITERAL", "READ", "DENY"))
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 403)
+
+    @cluster(num_nodes=1)
+    def test_get_schemas_ids_no_match(self):
+        """
+        Test that access is denied when no subject referencing the schema allows access.
+
+        Even with a wildcard (*) ALLOW rule, if all specific subjects that reference
+        the schema are explicitly denied, the endpoint should return 403.
+        """
+        subject_1 = "test-subject-1"
+        schema_id = self._create_schema(subject_1)
+
+        # Verify wildcard (*) ALLOW grants access
+        self._post_acl(self._create_acl("*", "SUBJECT", "LITERAL", "READ"))
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+
+        # Add specific DENY to override wildcard ALLOW - should be denied (no subject grants access)
+        self._post_acl(
+            self._create_acl(subject_1, "SUBJECT", "LITERAL", "READ", "DENY"))
+        result = self._get_schemas_ids_id(schema_id, auth=self.user_auth)
+        self.assert_equal(result.status_code, 403)
+
+    @cluster(num_nodes=1)
+    def test_get_subjects_authorization(self):
+        """
+        Test GET /subjects endpoint authorization logic.
+        This endpoint filters subjects based on individual READ permissions,
+        only returning subjects the user is authorized to access.
+        """
+
+        # Create multiple test subjects with different schemas
+        subject_1 = "test-subject-1"
+        subject_2 = "test-subject-2"
+
+        # Create subjects with schemas (using superuser)
+        self._create_schema(subject_1)
+        self._create_schema(subject_2)
+
+        # No ACLs - should return empty list
+        result = self._get_subjects(auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_equal(result.json(), [])
+
+        # Grant READ to subject_1 only - should only return subject_1
+        self._post_acl(
+            self._create_acl(subject_1, "SUBJECT", "LITERAL", "READ"))
+        result = self._get_subjects(auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_equal(result.json(), [subject_1])
+
+        # Grant wildcard (*) access - should return all subjects
+        self._post_acl(self._create_acl("*", "SUBJECT", "LITERAL", "READ"))
+        result = self._get_subjects(auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_equal(set(result.json()), {subject_1, subject_2})
+
+        # Deny all access - should return no subjects
+        self._post_acl(
+            self._create_acl("*", "SUBJECT", "LITERAL", "READ", "DENY"))
+        result = self._get_subjects(auth=self.user_auth)
+        self.assert_equal(result.status_code, 200)
+        self.assert_equal(result.json(), [])

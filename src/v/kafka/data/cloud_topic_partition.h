@@ -58,7 +58,7 @@ namespace kafka {
 /// - 'dl_placeholder' batches are 'materialized' using the data plane.
 ///
 /// Currently, the data plane is explicitly a sharded service. The control
-/// plane includes 'cluster::partition' and 'dl_stm', with no explicit API
+/// plane includes 'cluster::partition' and 'ctp_stm', with no explicit API
 /// boundary. However, component use is limited to allow future
 /// introduction of such an API.
 ///

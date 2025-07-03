@@ -7,12 +7,12 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_topics/dl_stm/dl_stm.h"
+#include "cloud_topics/level_zero/ctp_stm.h"
 
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
-#include "cloud_topics/dl_stm/dl_stm_commands.h"
-#include "cloud_topics/dl_stm/dl_stm_state.h"
+#include "cloud_topics/level_zero/ctp_stm_commands.h"
+#include "cloud_topics/level_zero/ctp_stm_state.h"
 #include "cloud_topics/types.h"
 #include "serde/rw/map.h"
 #include "serde/rw/uuid.h"
@@ -22,12 +22,12 @@
 
 namespace experimental::cloud_topics {
 
-dl_stm::dl_stm(ss::logger& logger, raft::consensus* raft)
+ctp_stm::ctp_stm(ss::logger& logger, raft::consensus* raft)
   : raft::persisted_stm<>(name, logger, raft) {}
 
-ss::future<> dl_stm::do_apply(const model::record_batch& batch) {
+ss::future<> ctp_stm::do_apply(const model::record_batch& batch) {
     _state.get_offsets().advance_insync_offset(batch.base_offset());
-    if (batch.header().type != model::record_batch_type::dl_stm_command) {
+    if (batch.header().type != model::record_batch_type::ctp_stm_command) {
         co_return;
     }
     vlog(_log.debug, "Applying record batch: {}", batch.header());
@@ -51,16 +51,16 @@ ss::future<> dl_stm::do_apply(const model::record_batch& batch) {
     }
 
     batch.for_each_record([new_dl_version, this](model::record&& r) {
-        auto key = serde::from_iobuf<dl_stm_key>(r.release_key());
+        auto key = serde::from_iobuf<ctp_stm_key>(r.release_key());
         switch (key) {
-        case dl_stm_key::start_snapshot: {
+        case ctp_stm_key::start_snapshot: {
             std::ignore = serde::from_iobuf<start_snapshot_cmd>(
               r.release_value());
             // Noexcept
             _state.start_snapshot(new_dl_version);
             break;
         }
-        case dl_stm_key::remove_snapshots_before_version:
+        case ctp_stm_key::remove_snapshots_before_version:
             auto cmd = serde::from_iobuf<remove_snapshots_before_version_cmd>(
               r.release_value());
             try {
@@ -93,24 +93,24 @@ ss::future<> dl_stm::do_apply(const model::record_batch& batch) {
 }
 
 ss::future<raft::local_snapshot_applied>
-dl_stm::apply_local_snapshot(raft::stm_snapshot_header, iobuf&& buf) {
-    _state = serde::from_iobuf<dl_stm_state>(std::move(buf));
+ctp_stm::apply_local_snapshot(raft::stm_snapshot_header, iobuf&& buf) {
+    _state = serde::from_iobuf<ctp_stm_state>(std::move(buf));
     co_return raft::local_snapshot_applied::yes;
 }
 
 ss::future<raft::stm_snapshot>
-dl_stm::take_local_snapshot(ssx::semaphore_units) {
+ctp_stm::take_local_snapshot(ssx::semaphore_units) {
     auto buf = serde::to_iobuf(_state);
     co_return raft::stm_snapshot::create(
       0, _state.get_offsets().get_insync_offset(), std::move(buf));
 }
 
-ss::future<> dl_stm::apply_raft_snapshot(const iobuf& buf) {
-    _state = serde::from_iobuf<dl_stm_state>(buf.copy());
+ss::future<> ctp_stm::apply_raft_snapshot(const iobuf& buf) {
+    _state = serde::from_iobuf<ctp_stm_state>(buf.copy());
     co_return;
 }
 
-ss::future<iobuf> dl_stm::take_raft_snapshot(model::offset snapshot_at) {
+ss::future<iobuf> ctp_stm::take_raft_snapshot(model::offset snapshot_at) {
     auto st = _state.get_state_at(snapshot_at);
     co_return serde::to_iobuf(std::move(st));
 }

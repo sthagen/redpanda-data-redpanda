@@ -7,8 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_topics/dl_stm/dl_stm_state.h"
 #include "cloud_topics/dl_version.h"
+#include "cloud_topics/level_zero/ctp_stm_state.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "random/generators.h"
@@ -21,14 +21,14 @@
 
 namespace ct = experimental::cloud_topics;
 
-class ct::dl_stm_state_accessor {
+class ct::ctp_stm_state_accessor {
 public:
 };
 
-using q = ct::dl_stm_state_accessor;
+using q = ct::ctp_stm_state_accessor;
 
-TEST(dl_stm_state_death, start_snapshot) {
-    ct::dl_stm_state state;
+TEST(ctp_stm_state_death, start_snapshot) {
+    ct::ctp_stm_state state;
 
     auto snapshot_id1 = state.start_snapshot(ct::dl_version(1));
     ASSERT_EQ(snapshot_id1.version, ct::dl_version(1));
@@ -55,8 +55,8 @@ TEST(dl_stm_state_death, start_snapshot) {
       "snapshot version: 1");
 }
 
-TEST(dl_stm_state, start_snapshot) {
-    ct::dl_stm_state state;
+TEST(ctp_stm_state, start_snapshot) {
+    ct::ctp_stm_state state;
 
     auto snapshot_id0 = state.start_snapshot(ct::dl_version(1));
 
@@ -83,8 +83,8 @@ TEST(dl_stm_state, start_snapshot) {
     ASSERT_EQ(snapshot3->id, snapshot_id3);
 }
 
-TEST(dl_stm_state, remove_snapshots_before) {
-    ct::dl_stm_state state;
+TEST(ctp_stm_state, remove_snapshots_before) {
+    ct::ctp_stm_state state;
 
     EXPECT_THAT(
       [&]() { state.remove_snapshots_before(ct::dl_version(42)); },

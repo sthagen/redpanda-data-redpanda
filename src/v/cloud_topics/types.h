@@ -19,7 +19,7 @@
 
 namespace experimental::cloud_topics {
 
-enum class dl_stm_key {
+enum class ctp_stm_key {
     start_snapshot = 1,
     remove_snapshots_before_version = 2,
 };
@@ -34,7 +34,7 @@ using byte_range_size_t = named_type<uint64_t, struct byte_range_size_tag>;
 using object_id = named_type<uuid_t, struct object_id_tag>;
 
 /// Type of ownership
-enum class dl_stm_object_ownership {
+enum class ctp_stm_object_ownership {
     exclusive = 0,
     shared = 1,
 };
@@ -42,10 +42,10 @@ enum class dl_stm_object_ownership {
 } // namespace experimental::cloud_topics
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::dl_stm_key>
+struct fmt::formatter<experimental::cloud_topics::ctp_stm_key>
   : fmt::formatter<std::string_view> {
     auto format(
-      experimental::cloud_topics::dl_stm_key, fmt::format_context& ctx) const
+      experimental::cloud_topics::ctp_stm_key, fmt::format_context& ctx) const
       -> decltype(ctx.out());
 };
 
@@ -58,9 +58,9 @@ struct fmt::formatter<experimental::cloud_topics::object_id>
 };
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::dl_stm_object_ownership>
+struct fmt::formatter<experimental::cloud_topics::ctp_stm_object_ownership>
   : fmt::formatter<std::string_view> {
     auto format(
-      experimental::cloud_topics::dl_stm_object_ownership,
+      experimental::cloud_topics::ctp_stm_object_ownership,
       fmt::format_context& ctx) const -> decltype(ctx.out());
 };

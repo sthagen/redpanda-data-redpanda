@@ -21,21 +21,21 @@
 
 namespace experimental::cloud_topics {
 
-class dl_stm;
+class ctp_stm;
 
-enum class dl_stm_api_errc {
+enum class ctp_stm_api_errc {
     timeout,
     not_leader,
 };
 
-std::ostream& operator<<(std::ostream& o, dl_stm_api_errc errc);
+std::ostream& operator<<(std::ostream& o, ctp_stm_api_errc errc);
 
-class dl_stm_api {
+class ctp_stm_api {
 public:
-    dl_stm_api(ss::logger& logger, ss::shared_ptr<dl_stm> stm);
-    dl_stm_api(dl_stm_api&&) noexcept = default;
+    ctp_stm_api(ss::logger& logger, ss::shared_ptr<ctp_stm> stm);
+    ctp_stm_api(ctp_stm_api&&) noexcept = default;
 
-    ~dl_stm_api() {
+    ~ctp_stm_api() {
         vassert(_gate.is_closed(), "object destroyed before calling stop()");
     }
 
@@ -44,7 +44,7 @@ public:
 
 public:
     /// Request a new snapshot to be created.
-    ss::future<checked<dl_snapshot_id, dl_stm_api_errc>> start_snapshot();
+    ss::future<checked<dl_snapshot_id, ctp_stm_api_errc>> start_snapshot();
 
     /// Read the payload of a snapshot.
     std::optional<dl_snapshot_payload> read_snapshot(dl_snapshot_id id);
@@ -52,13 +52,13 @@ public:
     /// Remove all snapshots with version less than the given version.
     /// This must be called periodically as new snapshots are being created
     /// to avoid the state growing indefinitely.
-    ss::future<checked<void, dl_stm_api_errc>>
+    ss::future<checked<void, ctp_stm_api_errc>>
     remove_snapshots_before(dl_version last_version_to_keep);
 
 private:
-    /// Replicate a record batch and wait for it to be applied to the dl_stm.
+    /// Replicate a record batch and wait for it to be applied to the ctp_stm.
     /// Returns the offset at which the batch was applied.
-    ss::future<checked<model::offset, dl_stm_api_errc>>
+    ss::future<checked<model::offset, ctp_stm_api_errc>>
     replicated_apply(model::record_batch&& batch);
 
 private:
@@ -70,7 +70,7 @@ private:
 
     /// The API can only read the state of the stm. The state can be mutated
     /// only via \ref consensus::replicate calls.
-    ss::shared_ptr<const dl_stm> _stm;
+    ss::shared_ptr<const ctp_stm> _stm;
 };
 
 } // namespace experimental::cloud_topics

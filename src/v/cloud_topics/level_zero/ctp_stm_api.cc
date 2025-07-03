@@ -7,11 +7,11 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_topics/dl_stm/dl_stm_api.h"
+#include "cloud_topics/level_zero/ctp_stm_api.h"
 
 #include "base/outcome.h"
-#include "cloud_topics/dl_stm/dl_stm.h"
-#include "cloud_topics/dl_stm/dl_stm_commands.h"
+#include "cloud_topics/level_zero/ctp_stm.h"
+#include "cloud_topics/level_zero/ctp_stm_commands.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
 #include "raft/consensus.h"
@@ -22,30 +22,30 @@
 
 namespace experimental::cloud_topics {
 
-std::ostream& operator<<(std::ostream& o, dl_stm_api_errc errc) {
+std::ostream& operator<<(std::ostream& o, ctp_stm_api_errc errc) {
     switch (errc) {
-    case dl_stm_api_errc::timeout:
+    case ctp_stm_api_errc::timeout:
         return o << "timeout";
-    case dl_stm_api_errc::not_leader:
+    case ctp_stm_api_errc::not_leader:
         return o << "not_leader";
     }
 }
 
-dl_stm_api::dl_stm_api(ss::logger& logger, ss::shared_ptr<dl_stm> stm)
+ctp_stm_api::ctp_stm_api(ss::logger& logger, ss::shared_ptr<ctp_stm> stm)
   : _logger(logger)
   , _stm(std::move(stm)) {}
 
-ss::future<> dl_stm_api::stop() { co_await _gate.close(); }
+ss::future<> ctp_stm_api::stop() { co_await _gate.close(); }
 
-ss::future<checked<dl_snapshot_id, dl_stm_api_errc>>
-dl_stm_api::start_snapshot() {
-    vlog(_logger.debug, "Replicating dl_stm_cmd::start_snapshot_cmd");
+ss::future<checked<dl_snapshot_id, ctp_stm_api_errc>>
+ctp_stm_api::start_snapshot() {
+    vlog(_logger.debug, "Replicating ctp_stm_cmd::start_snapshot_cmd");
     auto h = _gate.hold();
 
     storage::record_batch_builder builder(
-      model::record_batch_type::dl_stm_command, model::offset(0));
+      model::record_batch_type::ctp_stm_command, model::offset(0));
     builder.add_raw_kv(
-      serde::to_iobuf(dl_stm_key::start_snapshot),
+      serde::to_iobuf(ctp_stm_key::start_snapshot),
       serde::to_iobuf(start_snapshot_cmd()));
 
     auto batch = std::move(builder).build();
@@ -72,19 +72,19 @@ dl_stm_api::start_snapshot() {
 }
 
 std::optional<dl_snapshot_payload>
-dl_stm_api::read_snapshot(dl_snapshot_id id) {
+ctp_stm_api::read_snapshot(dl_snapshot_id id) {
     return _stm->_state.read_snapshot(id);
 }
 
-ss::future<checked<void, dl_stm_api_errc>>
-dl_stm_api::remove_snapshots_before(dl_version last_version_to_keep) {
-    vlog(_logger.debug, "Replicating dl_stm_cmd::remove_snapshots_cmd");
+ss::future<checked<void, ctp_stm_api_errc>>
+ctp_stm_api::remove_snapshots_before(dl_version last_version_to_keep) {
+    vlog(_logger.debug, "Replicating ctp_stm_cmd::remove_snapshots_cmd");
     auto h = _gate.hold();
 
     storage::record_batch_builder builder(
-      model::record_batch_type::dl_stm_command, model::offset(0));
+      model::record_batch_type::ctp_stm_command, model::offset(0));
     builder.add_raw_kv(
-      serde::to_iobuf(dl_stm_key::remove_snapshots_before_version),
+      serde::to_iobuf(ctp_stm_key::remove_snapshots_before_version),
       serde::to_iobuf(
         remove_snapshots_before_version_cmd(last_version_to_keep)));
 
@@ -97,8 +97,8 @@ dl_stm_api::remove_snapshots_before(dl_version last_version_to_keep) {
     co_return outcome::success();
 }
 
-ss::future<checked<model::offset, dl_stm_api_errc>>
-dl_stm_api::replicated_apply(model::record_batch&& batch) {
+ss::future<checked<model::offset, ctp_stm_api_errc>>
+ctp_stm_api::replicated_apply(model::record_batch&& batch) {
     model::term_id term = _stm->_raft->term();
 
     auto opts = raft::replicate_options(raft::consistency_level::quorum_ack);

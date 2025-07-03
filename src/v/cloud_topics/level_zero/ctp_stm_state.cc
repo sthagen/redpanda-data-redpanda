@@ -7,7 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "cloud_topics/dl_stm/dl_stm_state.h"
+#include "cloud_topics/level_zero/ctp_stm_state.h"
 
 #include "cloud_topics/dl_snapshot.h"
 #include "model/fundamental.h"
@@ -17,7 +17,7 @@
 
 namespace experimental::cloud_topics {
 
-dl_snapshot_id dl_stm_state::start_snapshot(dl_version version) noexcept {
+dl_snapshot_id ctp_stm_state::start_snapshot(dl_version version) noexcept {
     _version_invariant.set_last_snapshot_version(version);
 
     auto id = dl_snapshot_id(version);
@@ -26,7 +26,7 @@ dl_snapshot_id dl_stm_state::start_snapshot(dl_version version) noexcept {
     return id;
 }
 
-bool dl_stm_state::snapshot_exists(dl_snapshot_id id) const noexcept {
+bool ctp_stm_state::snapshot_exists(dl_snapshot_id id) const noexcept {
     return std::binary_search(
       _snapshots.begin(),
       _snapshots.end(),
@@ -37,7 +37,7 @@ bool dl_stm_state::snapshot_exists(dl_snapshot_id id) const noexcept {
 }
 
 std::optional<dl_snapshot_payload>
-dl_stm_state::read_snapshot(dl_snapshot_id id) const {
+ctp_stm_state::read_snapshot(dl_snapshot_id id) const {
     auto it = std::find_if(
       _snapshots.begin(), _snapshots.end(), [&id](const dl_snapshot_id& s) {
           return s.version == id.version;
@@ -53,7 +53,7 @@ dl_stm_state::read_snapshot(dl_snapshot_id id) const {
     };
 }
 
-void dl_stm_state::remove_snapshots_before(dl_version last_version_to_keep) {
+void ctp_stm_state::remove_snapshots_before(dl_version last_version_to_keep) {
     if (_snapshots.empty()) {
         throw std::runtime_error(fmt::format(
           "Attempt to remove snapshots before version {} but no snapshots "
@@ -81,15 +81,15 @@ void dl_stm_state::remove_snapshots_before(dl_version last_version_to_keep) {
     }
 }
 
-dl_stm_offsets& dl_stm_state::get_offsets() noexcept { return _offsets; }
+ctp_stm_offsets& ctp_stm_state::get_offsets() noexcept { return _offsets; }
 
-const dl_stm_offsets& dl_stm_state::get_offsets() const noexcept {
+const ctp_stm_offsets& ctp_stm_state::get_offsets() const noexcept {
     return _offsets;
 }
 
-dl_stm_state
-dl_stm_state::get_state_at(model::offset snapshot_at) const noexcept {
-    dl_stm_state result;
+ctp_stm_state
+ctp_stm_state::get_state_at(model::offset snapshot_at) const noexcept {
+    ctp_stm_state result;
 
     // Copy snapshots
     std::copy_if(

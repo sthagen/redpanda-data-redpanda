@@ -32,6 +32,25 @@ redpanda_test_cc_library(
     ],
 )
 
+redpanda_test_cc_library(
+    name = "cluster_mock",
+    srcs = [
+        "cluster_mock.cc",
+    ],
+    hdrs = [
+        "cluster_mock.h",
+    ],
+    implementation_deps = [
+        "//src/v/random:generators",
+    ],
+    include_prefix = "kafka/client/test",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/kafka/client:brokers",
+        "//src/v/kafka/client:logger",
+    ],
+)
+
 redpanda_cc_btest(
     name = "partitioners_test",
     timeout = "short",
@@ -387,8 +406,24 @@ redpanda_cc_gtest(
         "//src/v/kafka/client:utils",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:offset_commit",
+        "//src/v/kafka/protocol:produce",
         "//src/v/model",
         "//src/v/redpanda/tests:fixture",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "cluster_test_with_mock",
+    timeout = "short",
+    srcs = [
+        "cluster_test_with_mock.cc",
+    ],
+    deps = [
+        ":cluster_mock",
+        "//src/v/kafka/client:brokers",
+        "//src/v/kafka/client:cluster",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
     ],

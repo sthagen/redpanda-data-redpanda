@@ -10,8 +10,8 @@
 #pragma once
 
 #include "cloud_topics/dl_snapshot.h"
-#include "cloud_topics/dl_stm/dl_stm_offsets.h"
 #include "cloud_topics/dl_version.h"
+#include "cloud_topics/level_zero/ctp_stm_offsets.h"
 #include "serde/envelope.h"
 
 namespace experimental::cloud_topics {
@@ -57,14 +57,14 @@ private:
     dl_version _last_snapshot_version;
 };
 
-/// In-memory state of the data layout state machine (dl_stm).
+/// In-memory state of the data layout state machine (ctp_stm).
 ///
 /// Separating the state from the state machine allows the state to be
 /// checkpointed and restored independently of the state machine.
-class dl_stm_state
+class ctp_stm_state
   : public serde::
-      envelope<dl_stm_state, serde::version<0>, serde::compat_version<0>> {
-    friend class dl_stm_state_accessor;
+      envelope<ctp_stm_state, serde::version<0>, serde::compat_version<0>> {
+    friend class ctp_stm_state_accessor;
 
 public:
     /// Create a handle to a snapshot of the state at the current version.
@@ -80,25 +80,25 @@ public:
     void remove_snapshots_before(dl_version last_version_to_keep);
 
     /// Get collection of offsets maintained by the STM
-    dl_stm_offsets& get_offsets() noexcept;
-    const dl_stm_offsets& get_offsets() const noexcept;
+    ctp_stm_offsets& get_offsets() noexcept;
+    const ctp_stm_offsets& get_offsets() const noexcept;
 
     auto serde_fields() {
         return std::tie(_snapshots, _version_invariant, _offsets);
     }
 
-    /// Create snapshot of the dl_stm_state for Raft snapshotting mechanism.
-    /// The snapshot is just a copy of the dl_stm_state that contains all
+    /// Create snapshot of the ctp_stm_state for Raft snapshotting mechanism.
+    /// The snapshot is just a copy of the ctp_stm_state that contains all
     /// changes introduced at offset 'snapshot_at' and earlier.
     ///
     /// This 'snapshot' shouldn't be confused with the snapshot returned by
     /// the 'read_snapshot' method. The 'dl_snapshot_payload' returned by it
     /// is supposed to be uploaded to the cloud storage and consumed by the
-    /// recovery process. The 'dl_stm_state' instance returned by this method
+    /// recovery process. The 'ctp_stm_state' instance returned by this method
     /// is supposed to be used to implement 'take_snapshot' method of the
-    /// 'dl_stm' which returns Raft snapshot and is used during partition
+    /// 'ctp_stm' which returns Raft snapshot and is used during partition
     /// movement.
-    dl_stm_state get_state_at(model::offset snapshot_at) const noexcept;
+    ctp_stm_state get_state_at(model::offset snapshot_at) const noexcept;
 
 private:
     // A list of snapshot handles that are currently open.
@@ -108,7 +108,7 @@ private:
     std::deque<dl_snapshot_id> _snapshots;
 
     dl_version_monotonic_invariant _version_invariant;
-    dl_stm_offsets _offsets;
+    ctp_stm_offsets _offsets;
 };
 
 }; // namespace experimental::cloud_topics

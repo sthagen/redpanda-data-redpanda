@@ -19,6 +19,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <stdexcept>
 #include <utility>
 #include <variant>
 
@@ -208,6 +209,102 @@ public:
         std::unreachable();
     }
 
+    // NOLINTNEXTLINE(misc-no-recursion): At most one level of recursion
+    // is used in this function.
+    ss::future<> skip_value() {
+        if (!_current_token) {
+            // Nothing was parsed yet. Skip the entire document.
+            TRACE("skip_value: no current token, skipping entire document\n");
+            co_await next_token();
+
+            dassert(
+              _current_token.has_value(), "expected a token to be parsed");
+
+            if (
+              _current_token == token::error || _current_token == token::eof) {
+                // If we are at the end of the document or an error occurred,
+                // we have nothing to skip.
+                TRACE("skip_value: no value to skip\n");
+                co_return;
+            }
+        }
+
+        switch (*_current_token) {
+        case token::start_object:
+        case token::start_array: {
+            auto stack_size = _suspension_stack.size();
+            TRACE(
+              "skip_value: start_object/array, stack size: {}\n", stack_size);
+            while (_suspension_stack.size() >= stack_size) {
+                TRACE(
+                  "skip_value: stack value: {}\n",
+                  std::to_underlying(_suspension_stack.back()));
+
+                // Skip the values until the stack size decreases meaning that
+                // we are past the end of the object or array.
+                co_await next_token();
+
+                if (
+                  _current_token == token::error
+                  || _current_token == token::eof) {
+                    // If we are at the end of the document or an error
+                    // occurred, we have nothing to skip.
+                    TRACE("skip_value: no value to skip\n");
+                    co_return;
+                }
+            }
+
+            TRACE(
+              "skip_value: end_object/array, stack size: {}\n",
+              _suspension_stack.size());
+
+            dassert(
+              *_current_token == token::end_object
+                || *_current_token == token::end_array,
+              "expected end of object or array but got {}",
+              *_current_token);
+
+            co_return;
+        }
+
+        case token::value_null:
+        case token::value_true:
+        case token::value_false:
+        case token::value_double:
+        case token::value_int:
+        case token::value_string:
+            co_return;
+
+        case token::key:
+            // The caller just inspected the key and intends to skip the
+            // value so we skip both the key and the value.
+            co_await next_token(); // skip the key
+            if (
+              _current_token == token::error || _current_token == token::eof) {
+                // If we are at the end of the document or an error occurred,
+                // we have nothing to skip.
+                TRACE("skip_value: no value to skip after key\n");
+                co_return;
+            }
+            // Skip the value of the key. Maximum recursion depth is 1 by
+            // construction as the current token at this point can't be a key
+            // anymore.
+            TRACE("skip_value: skipping value of key\n");
+            co_await skip_value();
+            co_return;
+
+        case token::eof:
+        case token::error:
+        case token::end_object:
+        case token::end_array:
+            throw std::runtime_error(fmt::format(
+              "skip_value called with unexpected token: {}", *_current_token));
+        }
+
+        dassert(false, "Unreachable. All cases should be handled.");
+        std::unreachable();
+    }
+
     ss::future<token> parse_json_document() {
         TRACE("parse_json_document\n");
 
@@ -373,6 +470,11 @@ public:
           = detail::string_parser::result::need_more_data;
         while (string_parse_result
                == detail::string_parser::result::need_more_data) {
+            if (_buf.empty()) {
+                TRACE("parse_string: empty buffer, need more data\n");
+                co_return fuse_with_failure();
+            }
+
             auto tmpbuf = _buf.peek_buf();
             auto pos = string_parser.advance(tmpbuf, string_parse_result);
             switch (string_parse_result) {
@@ -384,14 +486,16 @@ public:
             case detail::string_parser::result::done:
                 _buf.skip(pos);
 
+                TRACE("parse_string: done, moving value\n");
+
+                _current_value = std::move(string_parser).value();
+
                 // We have a complete string.
                 TRACE(
                   "parse_string: done, is_key {}, buf.peek() {}, val: {}\n",
                   is_key,
                   _buf.empty() ? 'z' : _buf.peek(),
-                  std::move(_string_parser).value().hexdump(1024));
-
-                _current_value = std::move(string_parser).value();
+                  std::get<iobuf>(_current_value).hexdump(1024));
 
                 if (is_key) {
                     _suspension_stack.push_back(suspension_point::object_value);
@@ -417,6 +521,11 @@ public:
           = detail::numeric_parser::result::need_more_data;
         while (numeric_parse_result
                == detail::numeric_parser::result::need_more_data) {
+            if (_buf.empty()) {
+                TRACE("parse_number: empty buffer, need more data\n");
+                co_return fuse_with_failure();
+            }
+
             auto tmpbuf = _buf.peek_buf();
             auto pos = numeric_parser.advance(tmpbuf, numeric_parse_result);
             switch (numeric_parse_result) {
@@ -546,6 +655,8 @@ ss::future<bool> parser::next() {
 
     return _impl->next_token().then([](auto&&) { return true; });
 }
+
+ss::future<> parser::skip_value() { co_await _impl->skip_value(); }
 
 token parser::token() const { return _impl->current_token().value(); }
 

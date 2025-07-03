@@ -21,7 +21,7 @@
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_topics/data_plane_impl.h"
-#include "cloud_topics/dl_stm/dl_stm_factory.h"
+#include "cloud_topics/level_zero/ctp_stm_factory.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/archiver_manager.h"
 #include "cluster/archival/ntp_archiver_service.h"
@@ -3039,7 +3039,8 @@ void application::start_runtime_services(
           pm.register_factory<datalake::translation::stm_factory>(
             config::shard_local_cfg().iceberg_enabled());
           if (config::shard_local_cfg().development_enable_cloud_topics()) {
-              pm.register_factory<experimental::cloud_topics::dl_stm_factory>();
+              pm.register_factory<
+                experimental::cloud_topics::ctp_stm_factory>();
           }
       })
       .get();

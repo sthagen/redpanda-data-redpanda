@@ -63,6 +63,7 @@ protected:
         }};
 
         auto client = make_kafka_client().get();
+        auto deferred_close = ss::defer([&client] { client.stop().get(); });
         client.connect().get();
         auto resp
           = client.dispatch(std::move(req), kafka::api_version(2)).get();
@@ -88,6 +89,7 @@ FIXTURE_TEST(metadata_v9_no_topics, metadata_fixture) {
       .include_cluster_authorized_operations = false,
       .include_topic_authorized_operations = false}};
     auto client = make_kafka_client().get();
+    auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     auto resp
       = client.dispatch(std::move(req_no_cluster), kafka::api_version(8)).get();
@@ -122,6 +124,7 @@ FIXTURE_TEST(metadata_v9_topics, metadata_fixture) {
       .include_cluster_authorized_operations = false,
       .include_topic_authorized_operations = false}};
     auto client = make_kafka_client().get();
+    auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     auto resp = client.dispatch(std::move(req), kafka::api_version(8)).get();
     BOOST_REQUIRE(!resp.data.errored());
@@ -190,6 +193,7 @@ FIXTURE_TEST(metadata_v9_authz_acl, metadata_fixture) {
     BOOST_REQUIRE(!errors_in_acl_results(acl_result));
 
     auto client = make_kafka_client().get();
+    auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     authn_kafka_client(client, test_username, test_password);
 
@@ -255,6 +259,7 @@ FIXTURE_TEST(metadata_empty_topic_name, metadata_fixture) {
     }
 
     auto client = make_kafka_client().get();
+    auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
 
     constexpr auto make_request = []() {
@@ -296,6 +301,7 @@ FIXTURE_TEST(metadata_non_empty_topic_id, metadata_fixture) {
     create_topic(test_topic_name, 1, 1);
 
     auto client = make_kafka_client().get();
+    auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
 
     const auto make_request = [&]() {
@@ -330,6 +336,7 @@ FIXTURE_TEST(metadata_cluster_auth, metadata_fixture) {
     constexpr auto max_supported = kafka::metadata_handler::max_supported;
 
     auto client = make_kafka_client().get();
+    auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
 
     const auto make_request = [&]() {
