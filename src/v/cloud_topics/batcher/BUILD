@@ -44,6 +44,7 @@ redpanda_cc_library(
         "//src/v/cloud_io:remote",
         "//src/v/cloud_topics:extent_meta",
         "//src/v/cloud_topics:logger",
+        "//src/v/cloud_topics:object_utils",
         "//src/v/cloud_topics/batcher:aggregator",
         "//src/v/cloud_topics/core:serializer",
         "//src/v/ssx:sformat",

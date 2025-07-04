@@ -13,6 +13,7 @@
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
 #include "cloud_topics/level_zero/ctp_stm_api.h"
+#include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
 #include "cluster/partition.h"
 #include "kafka/data/partition_proxy.h"
@@ -201,9 +202,6 @@ ss::future<std::optional<reconciler::object>> reconciler::build_object() {
 }
 
 ss::future<cloud_io::upload_result> reconciler::upload_object(iobuf payload) {
-    const cloud_storage_clients::object_key key(
-      fmt::format("l1_{}", uuid_t::create()));
-
     retry_chain_node rtc(
       _as,
       ss::lowres_clock::now() + std::chrono::seconds(20),
@@ -212,7 +210,7 @@ ss::future<cloud_io::upload_result> reconciler::upload_object(iobuf payload) {
     co_return co_await _cloud_io->local().upload_object({
       .transfer_details = {
         .bucket = _bucket,
-        .key = key,
+        .key = object_path_factory::level_one_path(),
         .parent_rtc = rtc,
       },
       .display_str = "l1_object",

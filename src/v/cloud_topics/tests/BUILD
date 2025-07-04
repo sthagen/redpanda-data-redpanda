@@ -40,3 +40,16 @@ redpanda_cc_gtest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "object_utils_test",
+    timeout = "short",
+    srcs = [
+        "object_utils_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics:object_utils",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

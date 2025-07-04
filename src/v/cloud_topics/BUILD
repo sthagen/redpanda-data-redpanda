@@ -179,3 +179,21 @@ redpanda_cc_library(
         "@fmt",
     ],
 )
+
+redpanda_cc_library(
+    name = "object_utils",
+    srcs = [
+        "object_utils.cc",
+    ],
+    hdrs = [
+        "object_utils.h",
+    ],
+    include_prefix = "cloud_topics",
+    deps = [
+        ":types",
+        "//src/v/cloud_storage_clients",
+        "//src/v/ssx:sformat",
+        "//src/v/utils:uuid",
+        "@fmt",
+    ],
+)

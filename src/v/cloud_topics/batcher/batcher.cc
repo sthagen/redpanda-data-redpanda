@@ -18,6 +18,7 @@
 #include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/logger.h"
+#include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
 #include "config/configuration.h"
 #include "ssx/sformat.h"
@@ -72,9 +73,6 @@ batcher<Clock>::upload_object(object_id id, iobuf payload) {
       "upload_object is called, upload size: {}",
       human::bytes(content_length));
 
-    // TODO: this should be replaced with the proper name
-    auto name = ssx::sformat("{}", id);
-
     auto err = errc::success;
     try {
         // Clock type is not parametrized further down the call chain.
@@ -85,7 +83,7 @@ batcher<Clock>::upload_object(object_id id, iobuf payload) {
           retry_strategy::disallow,
           &_rtc);
 
-        auto path = cloud_storage_clients::object_key(name);
+        auto path = object_path_factory::level_zero_path(id);
 
         cloud_io::basic_transfer_details<Clock> td{
           .bucket = _bucket,

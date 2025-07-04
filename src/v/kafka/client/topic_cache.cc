@@ -11,60 +11,47 @@
 
 #include "container/fragmented_vector.h"
 #include "kafka/client/exceptions.h"
-#include "kafka/client/partitioners.h"
 #include "kafka/client/types.h"
 #include "kafka/protocol/metadata.h"
-#include "random/generators.h"
 
 #include <seastar/core/future.hh>
 
 namespace kafka::client {
 
 void topic_cache::apply(
-  small_fragment_vector<metadata_response::topic>&& topics) {
-    topics_t cache;
-    cache.reserve(topics.size());
+  const small_fragment_vector<metadata_response::topic>& topics) {
+    topics_t new_cache;
+    new_cache.reserve(topics.size());
     for (const auto& t : topics) {
-        const auto initial_partition_id = model::partition_id{
-          random_generators::get_int<model::partition_id::type>(
-            t.partitions.size())};
-        topic_data topic_data{
-          .partitioner_func = default_partitioner(initial_partition_id)};
-        auto& cache_t
-          = cache.emplace(t.name, std::move(topic_data)).first->second;
+        auto& cache_t = new_cache.emplace(t.name, topic_data{}).first->second;
         cache_t.partitions.reserve(t.partitions.size());
         for (const auto& p : t.partitions) {
             cache_t.partitions.emplace(
               p.partition_index, partition_data{.leader = p.leader_id});
         }
-        cache_t.partitions.rehash(0);
     }
-    cache.rehash(0);
-    std::exchange(_topics, std::move(cache));
+
+    std::exchange(_topics, std::move(new_cache));
 }
 
-model::node_id topic_cache::leader(model::topic_partition tp) const {
-    if (auto topic_it = _topics.find(tp.topic); topic_it != _topics.end()) {
-        const auto& parts = topic_it->second.partitions;
-        if (auto part_it = parts.find(tp.partition); part_it != parts.end()) {
-            const auto& part = part_it->second;
-            if (part.leader == unknown_node_id) {
-                throw partition_error(tp, error_code::leader_not_available);
-            }
-            return part.leader;
-        }
+std::optional<model::node_id>
+topic_cache::leader(const model::topic_partition& tp) const {
+    auto topic_it = _topics.find(tp.topic);
+    if (topic_it == _topics.end()) {
+        return std::nullopt;
     }
-    throw partition_error(
-      std::move(tp), error_code::unknown_topic_or_partition);
-}
 
-model::partition_id
-topic_cache::partition_for(model::topic_view tv, const record_essence& rec) {
-    if (auto topic_it = _topics.find(tv); topic_it != _topics.end()) {
-        auto& pd = topic_it->second;
-        return *pd.partitioner_func(rec, pd.partitions.size());
+    const auto& topic_partitions = topic_it->second.partitions;
+    auto part_it = topic_partitions.find(tp.partition);
+    if (part_it == topic_partitions.end()) {
+        return std::nullopt;
     }
-    throw topic_error(tv, error_code::unknown_topic_or_partition);
+    const auto& p_data = part_it->second;
+    if (p_data.leader == unknown_node_id) {
+        return std::nullopt;
+    }
+
+    return p_data.leader;
 }
 
 } // namespace kafka::client
