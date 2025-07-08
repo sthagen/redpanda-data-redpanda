@@ -391,10 +391,15 @@ coordinator::do_ensure_table_exists(
     // TODO: verify stm state after replication
 
     auto table_id = schema_provider.get_table_id(topic);
-
     auto record_type = co_await schema_provider.get_record_type(
       std::move(comps));
     if (!record_type.has_value()) {
+        vlog(
+          datalake_log.warn,
+          "{} failed, couldn't resolve record type for {} rev {}",
+          method_name,
+          topic,
+          topic_revision);
         co_return errc::failed;
     }
 

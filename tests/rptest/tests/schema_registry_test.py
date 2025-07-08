@@ -5702,7 +5702,7 @@ class SchemaRegistryACLTest(SchemaRegistryEndpoints):
     """
 
     VALID_OPERATIONS = [
-        "READ", "WRITE", "CREATE", "REMOVE", "ALTER", "DESCRIBE",
+        "READ", "WRITE", "CREATE", "DELETE", "ALTER", "DESCRIBE",
         "CLUSTER_ACTION", "DESCRIBE_CONFIGS", "ALTER_CONFIGS",
         "IDEMPOTENT_WRITE", "ALL"
     ]
@@ -6413,7 +6413,7 @@ class DeleteSubject(ACLTestEndpoint):
 
     def create_acl(self):
         return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
-                                     "REMOVE")
+                                     "DELETE")
 
 
 class DeleteSubjectVersion(ACLTestEndpoint):
@@ -6429,7 +6429,7 @@ class DeleteSubjectVersion(ACLTestEndpoint):
 
     def create_acl(self):
         return self.test._create_acl(self.test.subject, "SUBJECT", "LITERAL",
-                                     "REMOVE")
+                                     "DELETE")
 
 
 class CompatibilitySubjectVersion(ACLTestEndpoint):

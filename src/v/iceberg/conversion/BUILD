@@ -184,3 +184,48 @@ redpanda_cc_library(
         "//src/v/iceberg:datatypes",
     ],
 )
+
+redpanda_cc_library(
+    name = "values_json",
+    srcs = [
+        "values_json.cc",
+    ],
+    hdrs = [
+        "values_json.h",
+    ],
+    implementation_deps = [
+        ":time_rfc3339",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/serde/json:parser",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        ":ir_json",
+        "//src/v/bytes:iobuf",
+        "//src/v/iceberg:values",
+        "@fmt",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "time_rfc3339",
+    srcs = [
+        "time_rfc3339.cc",
+    ],
+    hdrs = [
+        "time_rfc3339.h",
+    ],
+    implementation_deps = [
+        "@abseil-cpp//absl/time",
+    ],
+    include_prefix = "iceberg/conversion",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":conversion_outcome",
+        "//src/v/iceberg:values",
+        "@seastar",
+    ],
+)

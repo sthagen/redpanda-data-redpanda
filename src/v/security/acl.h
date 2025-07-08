@@ -174,7 +174,7 @@ constexpr std::string_view to_string_view(acl_operation op) {
     case acl_operation::create:
         return "create";
     case acl_operation::remove:
-        return "remove";
+        return "delete";
     case acl_operation::alter:
         return "alter";
     case acl_operation::describe:

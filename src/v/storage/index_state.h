@@ -137,7 +137,9 @@ struct index_state
     static constexpr auto num_compactible_records_version = 7;
     static constexpr auto clean_compact_timestamp_version = 8;
     static constexpr auto may_have_tombstone_records_version = 9;
+    // Added in the same version.
     static constexpr auto self_compact_timestamp_version = 10;
+    static constexpr auto has_transaction_batches_version = 10;
 
     static index_state
     make_empty_index(model::offset base_offset, offset_delta_time with_offset);
@@ -198,10 +200,11 @@ struct index_state
     // the index.
     std::optional<model::timestamp> broker_timestamp{std::nullopt};
 
-    // The number of compactible records appended to the segment. This may not
-    // necessarily indicate the exact number of compactible records, e.g. if
-    // the segment was truncated, the count will remain the same. As such, this
-    // value may be an overestimate of the exact number of compactible records.
+    // The number of records appended to the segment that could be considered
+    // for removal via compaction. This may not necessarily indicate the exact
+    // number of compactible records, e.g. if the segment was truncated, the
+    // count will remain the same. As such, this value may be an overestimate of
+    // the exact number of compactible records.
     //
     // Returns std::nullopt if this index was written in a version that didn't
     // support this field, and we can't conclude anything.
@@ -226,6 +229,12 @@ struct index_state
     // This preserveration is important for transactional batch removal, as its
     // delete horizon is set by `self_compact_timestamp + delete.retention.ms`.
     std::optional<model::timestamp> self_compact_timestamp{std::nullopt};
+
+    // has_transaction_batches is `false` by default, but set in
+    // segment::append() when transactional batches are added. It remains `true`
+    // until compaction deduplication/segment data copying is performed and all
+    // transaction batches are removed.
+    bool has_transaction_batches{false};
 
     size_t size() const;
 

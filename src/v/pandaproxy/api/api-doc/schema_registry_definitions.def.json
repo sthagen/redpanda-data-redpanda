@@ -163,7 +163,7 @@
             "ALL",
             "READ",
             "WRITE",
-            "REMOVE",
+            "DELETE",
             "DESCRIBE",
             "DESCRIBE_CONFIGS",
             "ALTER",

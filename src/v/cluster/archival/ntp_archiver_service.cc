@@ -263,9 +263,7 @@ namespace {
 std::unique_ptr<adjacent_segment_merger> maybe_make_adjacent_segment_merger(
   ntp_archiver& self, const storage::ntp_config& cfg) {
     std::unique_ptr<adjacent_segment_merger> result = nullptr;
-    if (
-      cfg.is_archival_enabled() && !cfg.is_compacted()
-      && !cfg.is_read_replica_mode_enabled()) {
+    if (cfg.is_archival_enabled() && !cfg.is_read_replica_mode_enabled()) {
         result = std::make_unique<adjacent_segment_merger>(
           self,
           true,
@@ -557,11 +555,15 @@ ss::future<> ntp_archiver::upload_until_abort() {
         }
 
         if (_local_segment_merger) {
-            vlog(
-              _rtclog.debug,
-              "Enable adjacent segment merger in term {}",
-              _start_term);
-            _local_segment_merger->set_enabled(true);
+            auto is_compacted = _parent.log()->config().is_compacted();
+            if (!is_compacted) {
+                vlog(
+                  _rtclog.debug,
+                  "Enable adjacent segment merger in term {}, log config: {}",
+                  _start_term,
+                  _parent.log()->config());
+                _local_segment_merger->set_enabled(true);
+            }
         }
         if (_scrubber) {
             vlog(_rtclog.debug, "Enable scrubber in term {}", _start_term);
@@ -1486,6 +1488,22 @@ ntp_archiver::maybe_upload_aborted_tx(
     co_return std::nullopt;
 }
 
+ss::future<> ntp_archiver::upload_index(
+  ss::sstring path, cloud_storage::offset_index index) {
+    retry_chain_node rtc{
+      _conf->segment_upload_timeout(),
+      100ms,
+      retry_strategy::disallow,
+      &_rtcnode};
+    retry_chain_logger ctxlog(archival_log, rtc, _ntp.path());
+    auto fut = co_await ss::coroutine::as_future(_remote.upload_index(
+      _conf->bucket_name, cloud_storage_clients::object_key{path}, index, rtc));
+
+    if (fut.failed()) {
+        vlog(ctxlog.warn, "Index upload failed: {}", fut.get_exception());
+    }
+}
+
 ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
   segment_collector_stream strm,
   const cloud_storage::segment_meta& meta,
@@ -1643,16 +1661,11 @@ ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
     // segment, so it is okay to ignore the index upload failure, we still
     // want to advance the offsets because the segment did get uploaded.
 
-    // Note: this operation can be started in the background.
-    // In order to do this the context should be associated with the
-    // background operation. We can't background it as is because the
-    // 'upload_index' call is taking 'rtc' as a reference. So there should be
-    // some wrapper for this call.
-    std::ignore = co_await _remote.upload_index(
-      _conf->bucket_name,
-      cloud_storage_clients::object_key{index_path},
-      index,
-      rtc);
+    ssx::spawn_with_gate(
+      _gate,
+      [this, path = std::move(index_path), index = std::move(index)]() mutable {
+          return upload_index(std::move(path), std::move(index));
+      });
 
     co_return ntp_archiver_upload_result(index_stats);
 
@@ -1836,7 +1849,8 @@ ntp_archiver::schedule_uploads(model::offset max_offset_exclusive) {
 
     if (
       config::shard_local_cfg().cloud_storage_enable_compacted_topic_reupload()
-      && _parent.get_ntp_config().is_compacted()) {
+      && _parent.get_ntp_config().is_compacted()
+      && compacted_segments_upload_start < start_upload_offset) {
         params.push_back({
           .upload_kind = segment_upload_kind::compacted,
           .start_offset = compacted_segments_upload_start,

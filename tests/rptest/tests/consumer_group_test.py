@@ -1559,6 +1559,7 @@ class OffsetCommitter:
                 'auto.offset.reset': 'earliest',
                 'enable.auto.offset.store': True,
                 'enable.auto.commit': False,
+                'fetch.wait.max.ms': 50,
             },
             logger=self.logger)
 
@@ -1598,7 +1599,7 @@ class ConsumerGroupOffsetResetTest(RedpandaTest):
                                  "group_topic_partitions": 1,
                                  "compacted_log_segment_size": 1024 * 1024,
                                  "log_compaction_interval_ms": 1000,
-                                 "group_offset_retention_sec": 20,
+                                 "group_offset_retention_sec": None
                              },
                              log_config=LoggingConfig(
                                  'info', {
@@ -1698,7 +1699,7 @@ class ConsumerGroupOffsetResetTest(RedpandaTest):
             self.logger.info(
                 f"Partition {tp.topic}/{tp.partition} committed offset={tp.offset}"
             )
-            assert tp.offset == expected, f"Offset mismatch for partition {tp.topic}{tp.partition}, expected: {expected} got: {tp.offset}"
+            assert tp.offset == expected, f"Offset mismatch for partition {tp.topic}/{tp.partition}, expected: {expected} got: {tp.offset}"
 
         olv = OfflineLogViewer(self.redpanda)
 

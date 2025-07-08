@@ -2,6 +2,16 @@ load("@protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@rules_proto//proto:defs.bzl", "proto_library")
 load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 
+redpanda_test_cc_library(
+    name = "gmock_iceberg_matchers",
+    hdrs = ["gmock_iceberg_matchers.h"],
+    include_prefix = "iceberg/conversion/tests",
+    deps = [
+        "//src/v/iceberg:values",
+        "@googletest//:gtest",
+    ],
+)
+
 proto_library(
     name = "person_proto",
     srcs = ["testdata/person.proto"],
@@ -116,6 +126,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         ":complex_cc_proto",
+        ":gmock_iceberg_matchers",
         ":person_cc_proto",
         ":proto2_cc_proto",
         ":proto_definitions_wrapper",
@@ -142,15 +153,35 @@ redpanda_cc_gtest(
         "iceberg_json_tests.cc",
     ],
     deps = [
+        ":gmock_iceberg_matchers",
         "//src/v/iceberg:datatypes",
+        "//src/v/iceberg:values",
         "//src/v/iceberg/conversion:conversion_outcome",
+        "//src/v/iceberg/conversion:ir_json",
         "//src/v/iceberg/conversion:schema_json",
+        "//src/v/iceberg/conversion:values_json",
         "//src/v/iceberg/conversion/json_schema:frontend",
         "//src/v/iceberg/conversion/json_schema:ir",
         "//src/v/json",
         "//src/v/test_utils:gtest",
         "@fmt",
         "@googletest//:gtest",
+        "@rapidjson",
         "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "time_rfc3339_tests",
+    timeout = "short",
+    srcs = [
+        "time_rfc3339_tests.cc",
+    ],
+    deps = [
+        "//src/v/iceberg:values",
+        "//src/v/iceberg/conversion:conversion_outcome",
+        "//src/v/iceberg/conversion:time_rfc3339",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
     ],
 )

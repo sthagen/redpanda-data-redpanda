@@ -173,6 +173,15 @@ adjacent_segment_merger::run(run_quota_t quota) {
         co_return result;
     }
 
+    if (_archiver.ntp_config().is_compacted()) {
+        // This should never happen because we should not have been constructed
+        // for a compacted topic: this is a double-check for safety.
+        vlog(
+          _ctxlog.error,
+          "Adjacent segment merging refusing to run on compacted topic");
+        co_return result;
+    }
+
     if (_archiver.ntp_config().is_read_replica_mode_enabled()) {
         // This should never happen because we should not have been constructed
         // for a read replica topic: this is a double-check for safety.

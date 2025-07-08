@@ -489,7 +489,7 @@ func Test_encodeProtoRecordWithReferences(t *testing.T) {
 			require.NoError(t, err)
 
 			tt.schema.Type = sr.TypeProtobuf
-			serde, err := NewSerde(context.Background(), cl, tt.schema, tt.schemaID, tt.msgType)
+			serde, err := NewSerde(context.Background(), cl.Client, tt.schema, tt.schemaID, tt.msgType)
 			require.NoError(t, err)
 
 			got, err := serde.EncodeRecord([]byte(tt.record))
