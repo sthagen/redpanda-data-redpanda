@@ -173,7 +173,7 @@ public:
         switch (_suspension_stack.back()) {
         case suspension_point::json_document:
             _suspension_stack.pop_back();
-            co_return co_await parse_json_document();
+            co_return co_await parse_json_value();
 
         case suspension_point::first_array_member:
             // Replace the top of the stack to allow for subsequent array
@@ -305,24 +305,6 @@ public:
         std::unreachable();
     }
 
-    ss::future<token> parse_json_document() {
-        TRACE("parse_json_document\n");
-
-        if (_buf.empty()) {
-            TRACE("parse_json_document: empty buffer\n");
-            co_return fuse_with_failure();
-        }
-
-        switch (_buf.peek()) {
-        case '{':
-            co_return parse_object();
-        case '[':
-            co_return parse_array();
-        default:
-            co_return fuse_with_failure();
-        }
-    }
-
     ss::future<token> parse_json_value() {
         TRACE("parse_json_value, peek: {}\n", _buf.peek());
 
@@ -380,6 +362,8 @@ public:
             ++_buf;                       // consume ']'
             _suspension_stack.pop_back(); // pop the array member state
             co_return suspend_with_token(token::end_array);
+        } else if (expect_separator) {
+            co_return fuse_with_failure();
         }
 
         co_return co_await parse_json_value();
@@ -416,6 +400,8 @@ public:
             ++_buf;                       // consume '}'
             _suspension_stack.pop_back(); // pop the object key state
             co_return suspend_with_token(token::end_object);
+        } else if (expect_separator) {
+            co_return fuse_with_failure();
         }
 
         co_return co_await parse_string(true);
@@ -522,7 +508,31 @@ public:
         while (numeric_parse_result
                == detail::numeric_parser::result::need_more_data) {
             if (_buf.empty()) {
-                TRACE("parse_number: empty buffer, need more data\n");
+                if (_suspension_stack.empty()) {
+                    // If we reach the end of the input parsing a number, and
+                    // we're at the top-level, it's valid if the number literal
+                    // is valid. To force the number parser to finalize the
+                    // number, feed it a space. Bit of a hack :).
+                    TRACE(
+                      "parse_number: EOF at top level, trying to finalize\n");
+                    numeric_parser.finalize(numeric_parse_result);
+                    // If the number is done produce it, else fall through
+                    // to the incomplete case.
+                    if (
+                      numeric_parse_result
+                      == detail::numeric_parser::result::done) {
+                        if (numeric_parser.is_int()) {
+                            _current_value
+                              = std::move(numeric_parser).value_int64();
+                            co_return suspend_with_token(token::value_int);
+                        } else {
+                            _current_value
+                              = std::move(numeric_parser).value_double();
+                            co_return suspend_with_token(token::value_double);
+                        }
+                    }
+                }
+                TRACE("parse_number: empty buffer mid-number\n");
                 co_return fuse_with_failure();
             }
 
@@ -604,9 +614,8 @@ private:
     // The parser will suspend upon parsing a token that must be signaled to
     // the caller.
     enum class suspension_point {
-        // The initial state of the parser, expecting start of document.
-        // I.e.
-        // object `{` or array `[`.
+        // The initial state of the parser, expecting a number, string,
+        // boolean, null, or the start of an object or array.
         json_document,
 
         // The parser is expecting the first element of an array.

@@ -58,7 +58,7 @@ public:
       ::cluster_link::model::update_mirror_topic_state_cmd,
       model::timeout_clock::time_point);
 
-    bool cluster_link_active(bool check_license) const;
+    bool cluster_link_active() const;
 
     notification_id register_for_updates(notification_callback);
     void unregister_for_updates(notification_id);

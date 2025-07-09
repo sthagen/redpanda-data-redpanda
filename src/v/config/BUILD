@@ -13,6 +13,7 @@ redpanda_cc_library(
         "rjson_serialization.cc",
         "throughput_control_group.cc",
         "tls_config.cc",
+        "types.cc",
         "validators.cc",
     ],
     hdrs = [

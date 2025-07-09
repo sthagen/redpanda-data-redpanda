@@ -16,12 +16,15 @@
 #include "pandaproxy/server.h"
 #include "security/request_auth.h"
 
+#include <string_view>
+
 namespace pandaproxy::schema_registry::enterprise {
 
 using server = ctx_server<service>;
 
 void handle_authz(
   const server::request_t& rq,
+  std::string_view operation_name,
   const auth& auth,
   request_auth_result& auth_result);
 

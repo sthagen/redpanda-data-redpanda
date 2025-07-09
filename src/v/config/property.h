@@ -699,6 +699,8 @@ consteval std::string_view property_type_name() {
         return "string";
     } else if constexpr (std::is_same_v<type, config::tls_name_format>) {
         return "string";
+    } else if constexpr (std::is_same_v<type, config::audit_failure_policy>) {
+        return "string";
     } else {
         static_assert(
           base::unsupported_type<T>::value, "Type name not defined");

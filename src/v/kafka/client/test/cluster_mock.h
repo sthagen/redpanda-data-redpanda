@@ -15,6 +15,7 @@
 #include "kafka/client/logger.h"
 namespace kafka::client {
 class cluster_mock;
+using supported_versions = absl::flat_hash_map<api_key, api_version_range>;
 
 struct broker_mock : public kafka::client::broker {
     explicit broker_mock(
@@ -23,13 +24,18 @@ struct broker_mock : public kafka::client::broker {
       net::unresolved_address addr);
     ss::future<response_t> dispatch(
       request_t,
-      std::optional<std::reference_wrapper<ss::abort_source>> as) override;
+      api_version version = api_version{0},
+      std::optional<std::reference_wrapper<ss::abort_source>>
+      = std::nullopt) override;
 
     model::node_id id() const override { return _id; }
 
     ss::future<> stop() override { return ss::now(); }
 
-    api_version api_version_for(api_key key) const override;
+    ss::future<std::optional<api_version_range>> get_supported_versions(
+      api_key key,
+      std::optional<std::reference_wrapper<ss::abort_source>>
+      = std::nullopt) override;
 
     const net::unresolved_address& get_address() const override {
         return _addr;
@@ -37,6 +43,7 @@ struct broker_mock : public kafka::client::broker {
 
 private:
     cluster_mock* _cluster_mock;
+    supported_versions _supported_versions;
     model::node_id _id;
     net::unresolved_address _addr;
 };
@@ -55,8 +62,8 @@ private:
     cluster_mock* _cluster_mock;
 };
 
-using mock_handler
-  = std::function<ss::future<response_t>(model::node_id, request_t)>;
+using mock_handler = std::function<ss::future<response_t>(
+  model::node_id, request_t, api_version)>;
 
 class cluster_mock {
 public:
@@ -76,15 +83,27 @@ public:
             .id = id, .address = std::move(addr), .rack = std::move(rack)});
     }
     void remove_broker(model::node_id id) { _brokers.erase(id); }
-    ss::future<response_t>
-    handle_metadata_request(model::node_id node_id, request_t req);
+    ss::future<response_t> handle_metadata_request(
+      model::node_id node_id, request_t req, api_version version);
+
+    ss::future<response_t> handle_api_versions_request(
+      model::node_id node_id, request_t req, api_version version);
+
+    void set_supported_versions(
+      model::node_id id, api_key key, api_version_range range) {
+        _broker_api_versions[id].insert_or_assign(key, range);
+    }
+
+    supported_versions default_supported_versions;
 
 private:
     friend broker_mock;
+    friend broker_mock_factory;
 
     ss::future<response_t> handle(
       model::node_id,
       request_t,
+      api_version version,
       std::optional<std::reference_wrapper<ss::abort_source>>);
 
     struct handlers {
@@ -106,9 +125,13 @@ private:
     ss::future<Ret> do_handle(
       model::node_id,
       request_t,
+      api_version version,
       std::optional<std::reference_wrapper<ss::abort_source>>);
 
     absl::flat_hash_map<model::node_id, broker_info> _brokers;
+    absl::flat_hash_map<model::node_id, supported_versions>
+      _broker_api_versions;
+
     prefix_logger _logger;
 };
 

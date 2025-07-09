@@ -22,6 +22,8 @@ namespace pandaproxy::schema_registry {
 
 using server = ctx_server<service>;
 
+constexpr auto audit_svc_name = "Redpanda Schema Registry Service";
+
 class auth {
 public:
     enum class level {
@@ -69,7 +71,8 @@ public:
     // The presence of a returned authentication result indicates that the
     // authorization check was deferred and has to be done inside the method
     // handler
-    std::optional<request_auth_result> handle_auth(server::request_t& rq) const;
+    std::optional<request_auth_result>
+    handle_auth(server::request_t& rq, std::string_view operation_name) const;
 
 private:
     level _lvl;

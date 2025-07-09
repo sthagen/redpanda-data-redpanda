@@ -1148,6 +1148,10 @@ ss::future<chunked_vector<ss::rwlock::holder>> transfer_segment(
     // clean up replacement segment
     co_await from->remove_persistent_state();
 
+    // Clear the target segment's batch cache to ensure no stale data is present
+    // in the cache after the transfer.
+    co_await to->reset_batch_cache_index();
+
     co_return std::move(locks);
 }
 

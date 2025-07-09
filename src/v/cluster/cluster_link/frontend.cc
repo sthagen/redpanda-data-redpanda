@@ -17,6 +17,7 @@
 #include "cluster/partition_leaders_table.h"
 #include "cluster/types.h"
 #include "cluster_link/model/types.h"
+#include "config/configuration.h"
 #include "model/validation.h"
 #include "rpc/connection_cache.h"
 
@@ -89,7 +90,7 @@ frontend::frontend(
 ss::future<errc> frontend::upsert_cluster_link(
   ::cluster_link::model::metadata meta,
   model::timeout_clock::time_point timeout) {
-    if (!cluster_link_active(true)) {
+    if (!cluster_link_active()) {
         co_return errc::feature_disabled;
     }
     cluster_link_cmd c{cluster::cluster_link_upsert_cmd{0, std::move(meta)}};
@@ -99,7 +100,7 @@ ss::future<errc> frontend::upsert_cluster_link(
 ss::future<errc> frontend::remove_cluster_link(
   ::cluster_link::model::name_t name,
   model::timeout_clock::time_point timeout) {
-    if (!cluster_link_active(false)) {
+    if (!cluster_link_active()) {
         co_return errc::feature_disabled;
     }
     cluster_link_cmd c{cluster::cluster_link_remove_cmd(std::move(name), 0)};
@@ -108,7 +109,7 @@ ss::future<errc> frontend::remove_cluster_link(
 
 ss::future<errc> frontend::add_mirror_topic(
   id_t id, add_mirror_topic_cmd cmd, model::timeout_clock::time_point timeout) {
-    if (!cluster_link_active(false)) {
+    if (!cluster_link_active()) {
         co_return errc::feature_disabled;
     }
     cluster_link_cmd c{
@@ -120,7 +121,7 @@ ss::future<errc> frontend::update_mirror_topic_state(
   id_t id,
   update_mirror_topic_state_cmd cmd,
   model::timeout_clock::time_point timeout) {
-    if (!cluster_link_active(false)) {
+    if (!cluster_link_active()) {
         co_return errc::feature_disabled;
     }
     cluster_link_cmd c{
@@ -128,9 +129,8 @@ ss::future<errc> frontend::update_mirror_topic_state(
     co_return co_await do_mutation(std::move(c), timeout);
 }
 
-bool frontend::cluster_link_active(bool check_license) const {
-    return _features->is_active(features::feature::cluster_linking_dr)
-           && !(check_license && _features->should_sanction());
+bool frontend::cluster_link_active() const {
+    return config::shard_local_cfg().development_enable_cluster_link();
 }
 
 frontend::notification_id

@@ -54,6 +54,15 @@ public:
     /// can be called to get the result.
     size_t advance(ss::temporary_buffer<char>& buf, result& err);
 
+    /// Signal to the parser that there will be no more input.
+    /// After this method returns the parser will be done or in an error state.
+    /// Equivalent to calling advance with input a single space character.
+    size_t finalize(result& err) {
+        const char space = ' ';
+        ss::temporary_buffer<char> space_buf(&space, 1);
+        return advance(space_buf, err);
+    }
+
     bool is_int() const {
         if (_state == state::finished_with_int) {
             return true;

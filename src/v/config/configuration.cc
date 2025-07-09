@@ -1964,6 +1964,16 @@ configuration::configuration()
         .visibility = visibility::user,
       },
       {})
+  , audit_failure_policy(
+      *this,
+      "audit_failure_policy",
+      "Defines the policy for rejecting audit log messages when the audit log "
+      "queue is full. If set to 'permit', then new audit messages are dropped "
+      "and the operation is permitted.  If set to 'reject', then the operation "
+      "is rejected.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      audit_failure_policy::reject,
+      {audit_failure_policy::reject, audit_failure_policy::permit})
   , cloud_storage_enabled(
       *this,
       true,
@@ -4319,6 +4329,12 @@ configuration::configuration()
       *this,
       "development_enable_cloud_topics",
       "Enable cloud topics.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      false)
+  , development_enable_cluster_link(
+      *this,
+      "development_enable_cluster_link",
+      "Enable cluster linking.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
   , development_feature_property_testing_only(

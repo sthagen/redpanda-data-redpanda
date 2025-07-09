@@ -733,7 +733,10 @@ class RecreateTopicMetadataTest(RedpandaTest):
             extra_rp_conf={
                 # Test does explicit leadership movements
                 # that the balancer would interfere with.
-                'enable_leader_balancer': False
+                'enable_leader_balancer': False,
+                # Test does not depend on balancing actions and
+                # requires consistent replica assignment.
+                'partition_autobalancing_mode': "off",
             })
 
     @cluster(num_nodes=6, log_allow_list=RECREATE_LOG_ALLOW_LIST)

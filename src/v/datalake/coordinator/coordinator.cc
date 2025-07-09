@@ -861,8 +861,7 @@ ss::sstring coordinator::get_effective_default_partition_spec(
                      == config::datalake_catalog_type::rest
                    && cfg.iceberg_rest_catalog_authentication_mode()
                         == config::datalake_catalog_auth_mode::aws_sigv4
-                   && cfg.iceberg_rest_catalog_aws_service_name().value_or("")
-                        == "glue";
+                   && cfg.iceberg_rest_catalog_aws_service_name() == "glue";
     if (
       is_glue
       && current_spec == cfg.iceberg_default_partition_spec.default_value()) {

@@ -96,8 +96,10 @@ public:
     }
     ss::future<typename std::invoke_result_t<Func>::api_type::response_type>
     dispatch(Func func) {
+        using api_type = std::invoke_result_t<Func>::api_type;
         return gated_retry_with_mitigation([this, func{std::move(func)}]() {
-            return _cluster.dispatch_to_any(func());
+            return _cluster.dispatch_to_any(
+              func(), api_version_for(api_type::key));
         });
     }
 

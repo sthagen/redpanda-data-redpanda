@@ -25,6 +25,19 @@
 #include <seastar/core/shared_ptr.hh>
 
 namespace kafka::client {
+struct api_version_range {
+    api_version min{0};
+    api_version max{0};
+
+    bool is_supported(api_version v) const { return v >= min && v <= max; }
+
+    friend std::ostream&
+    operator<<(std::ostream& os, const api_version_range& r);
+
+    friend bool
+    operator==(const api_version_range& lhs, const api_version_range& rhs)
+      = default;
+};
 /**
  * Broker interface that defines the methods required for a Kafka broker
  * implementation. This interface is used to abstract the communication with
@@ -36,6 +49,7 @@ public:
     virtual ~broker() = default;
     virtual ss::future<response_t> dispatch(
       request_t,
+      api_version version,
       std::optional<std::reference_wrapper<ss::abort_source>> as = std::nullopt)
       = 0;
 
@@ -43,7 +57,14 @@ public:
 
     virtual ss::future<> stop() = 0;
 
-    virtual api_version api_version_for(api_key key) const = 0;
+    /**
+     * Returns the supported versions for the given API key. May connect to the
+     * broker if necessary.
+     */
+    virtual ss::future<std::optional<api_version_range>> get_supported_versions(
+      api_key key,
+      std::optional<std::reference_wrapper<ss::abort_source>> = std::nullopt)
+      = 0;
 
     virtual const net::unresolved_address& get_address() const = 0;
 };
@@ -61,6 +82,7 @@ public:
 
     ss::future<response_t> dispatch(
       request_t r,
+      api_version version,
       std::optional<std::reference_wrapper<ss::abort_source>> as
       = std::nullopt) final;
 
@@ -77,13 +99,10 @@ public:
         return _transport->server_address();
     }
 
-    template<typename ReqT>
-    requires(KafkaApi<typename ReqT::api_type>)
-    api_version api_version_for() const {
-        return api_version_for(ReqT::api_type::key);
-    }
-
-    api_version api_version_for(api_key key) const final;
+    ss::future<std::optional<api_version_range>> get_supported_versions(
+      api_key key,
+      std::optional<std::reference_wrapper<ss::abort_source>>
+      = std::nullopt) final;
 
 private:
     enum class auth_state : int8_t {
@@ -93,17 +112,18 @@ private:
     };
 
     template<typename ReqT>
-    void log_request(const ReqT& request) {
+    void log_request(const ReqT& request, api_version version) {
         using api_t = typename ReqT::api_type;
         vlog(
           kcwire.trace,
-          "{} - node_id: {} @ {}:{} Sending request {{ api_type: {}, request: "
-          "{} }}",
+          "{} - node_id: {} @ {}:{} Sending request {{ api_type: {}, version: "
+          "{}, request: {} }}",
           _config->get_client_id(),
           _node_id,
           _transport->server_address().host(),
           _transport->server_address().port(),
           api_t::name,
+          version,
           request);
     }
 
@@ -126,10 +146,9 @@ private:
       typename ReqT,
       typename RespT = typename ReqT::api_type::response_type>
     requires(KafkaApi<typename ReqT::api_type>)
-    ss::future<RespT> do_dispatch(ReqT r) {
-        log_request(r);
-        auto response = co_await _transport->dispatch(
-          std::move(r), api_version_for<ReqT>());
+    ss::future<RespT> do_dispatch(ReqT r, api_version version) {
+        log_request(r, version);
+        auto response = co_await _transport->dispatch(std::move(r), version);
         log_response(r);
         co_return response;
     }
@@ -138,10 +157,13 @@ private:
      */
     ss::future<> maybe_initialize_connection(
       std::optional<std::reference_wrapper<ss::abort_source>> as);
+    ss::future<>
+    maybe_reconnect(std::optional<std::reference_wrapper<ss::abort_source>> as);
 
     ss::future<> connect(model::timeout_clock::time_point);
 
     ss::future<> maybe_authenticate();
+    ss::future<> initialize_versions();
 
     ss::future<> connect_with_retries(
       std::optional<std::reference_wrapper<ss::abort_source>>);
@@ -150,6 +172,9 @@ private:
         return _config->sasl_cfg.has_value()
                && _authentication_state == auth_state::none;
     }
+
+    api_version get_sasl_authenticate_request_version() const;
+    api_version get_sasl_handshake_request_version() const;
 
     ss::future<> do_authenticate();
     /*
@@ -178,6 +203,9 @@ private:
     ss::gate _gate;
     prefix_logger _logger;
     auth_state _authentication_state = auth_state::none;
+    // We store the versions in flat has map as the number of supported
+    // versions is expected to be small.
+    absl::flat_hash_map<kafka::api_key, api_version_range> _supported_versions;
     ss::abort_source _reconnect_as;
 };
 

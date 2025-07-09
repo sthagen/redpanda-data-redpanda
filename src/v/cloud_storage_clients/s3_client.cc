@@ -580,8 +580,27 @@ s3_client::self_configure() {
     // but self-configuration will misconfigure to virtual-host style due to a
     // ListObjects request that happens to succeed. Override for this
     // specific case.
+    //
+    // Similarily, MinIO supports `virtual_host` only iff the property
+    // MINIO_DOMAIN is set, see:
+    // (https://min.io/docs/minio/linux/reference/minio-server/settings/core.html#envvar.MINIO_DOMAIN).
+    // If it is not, API calls with `virtual_host` will fail, though the
+    // ListObjects request used for self configuration still manages to succeed,
+    // leading to a similarily bad state as Oracle. Override for this case as
+    // well.
+    auto backend = config::shard_local_cfg().cloud_storage_backend();
+    if (
+      backend == model::cloud_storage_backend::oracle_s3_compat
+      || backend == model::cloud_storage_backend::minio) {
+        result.url_style = s3_url_style::path;
+        co_return result;
+    }
+
+    // Also handle possibly inferred backend.
     auto inferred_backend = infer_backend_from_uri(_requestor._ap);
-    if (inferred_backend == model::cloud_storage_backend::oracle_s3_compat) {
+    if (
+      inferred_backend == model::cloud_storage_backend::oracle_s3_compat
+      || inferred_backend == model::cloud_storage_backend::minio) {
         result.url_style = s3_url_style::path;
         co_return result;
     }

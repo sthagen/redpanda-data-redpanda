@@ -352,6 +352,7 @@ ss::future<server::reply_t> get_schemas_ids_id(
     auto id = parse::request_param<schema_id>(*rq.req, "id");
     const auto format = parse_output_format(*rq.req);
 
+    co_await rq.service().writer().read_sync();
     auto subjects = co_await rq.service().schema_store().get_schema_subjects(
       id, include_deleted::yes);
 
@@ -814,6 +815,22 @@ void check_feature_ready(const server::request_t& rq) {
           fmt::format("Feature '{}' is not yet available", feature));
     }
 }
+
+void check_licence(const server::request_t& rq) {
+    const auto& ft = rq.service().controller()->get_feature_table().local();
+    if (ft.should_sanction()) {
+        const auto& license = ft.get_license();
+        auto status = [&license]() {
+            return !license.has_value()    ? "not present"
+                   : license->is_expired() ? "expired"
+                                           : "unknown error";
+        };
+        throw ss::httpd::base_exception(
+          fmt::format("Invalid license: {}", status()),
+          ss::http::reply::status_type::forbidden);
+    }
+}
+
 } // namespace
 
 ss::future<server::reply_t>
@@ -860,6 +877,8 @@ get_security_acls(server::request_t rq, server::reply_t rp) {
 
 ss::future<server::reply_t>
 post_security_acls(server::request_t rq, server::reply_t rp) {
+    check_licence(rq);
+
     auto& security_frontend
       = rq.service().controller()->get_security_frontend().local();
 
@@ -908,6 +927,8 @@ post_security_acls(server::request_t rq, server::reply_t rp) {
 
 ss::future<server::reply_t>
 delete_security_acls(server::request_t rq, server::reply_t rp) {
+    check_licence(rq);
+
     auto& security_frontend
       = rq.service().controller()->get_security_frontend().local();
 

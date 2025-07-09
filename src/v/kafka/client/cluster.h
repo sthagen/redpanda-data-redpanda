@@ -56,13 +56,14 @@ public:
      */
     template<typename Req, typename Ret = typename Req::api_type::response_type>
     requires(KafkaApi<typename Req::api_type>)
-    ss::future<Ret> dispatch_to(model::node_id broker_id, Req request) {
+    ss::future<Ret>
+    dispatch_to(model::node_id broker_id, Req request, api_version version) {
         auto broker = _brokers.find(broker_id);
         if (!broker) {
             throw broker_error(
               broker_id, error_code::broker_not_available, "Broker not found");
         }
-        return broker->dispatch(std::move(request))
+        return broker->dispatch(std::move(request), version)
           .then([](response_t response) {
               return std::get<Ret>(std::move(response));
           });
@@ -79,12 +80,12 @@ public:
 
     template<typename Req, typename Ret = typename Req::api_type::response_type>
     requires(KafkaApi<typename Req::api_type>)
-    ss::future<Ret> dispatch_to_any(Req request) {
+    ss::future<Ret> dispatch_to_any(Req request, api_version version) {
         if (_brokers.empty()) {
             co_await request_metadata_update();
         }
         co_return co_await _brokers.any()
-          ->dispatch(std::move(request))
+          ->dispatch(std::move(request), version)
           .then([](response_t response) {
               return std::get<Ret>(std::move(response));
           });
@@ -128,6 +129,22 @@ public:
     void unregister_metadata_cb(callback_id id) {
         _notifications.unregister_cb(id);
     }
+    /**
+     * Returns the range of versions that is supported by all the brokers in the
+     * cluster. It connects to the brokers if necessary.
+     */
+    ss::future<std::optional<api_version_range>> supported_api_versions(
+      api_key key,
+      std::optional<std::reference_wrapper<ss::abort_source>> = std::nullopt);
+
+    /**
+     * Returns the range of versions that is supported the requested broker.
+     * Connection to the broker is established if necessary.
+     */
+    ss::future<std::optional<api_version_range>> supported_api_versions(
+      model::node_id id,
+      api_key key,
+      std::optional<std::reference_wrapper<ss::abort_source>> = std::nullopt);
 
 private:
     ss::future<> update_metadata();

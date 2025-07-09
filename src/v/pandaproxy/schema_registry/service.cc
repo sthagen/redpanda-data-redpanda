@@ -57,11 +57,17 @@ const security::acl_principal principal{
 
 class wrap {
 public:
-    wrap(ss::gate& g, one_shot& os, auth auth, auth::function_handler h)
+    wrap(
+      ss::gate& g,
+      one_shot& os,
+      auth auth,
+      auth::function_handler h,
+      std::string_view operation_name)
       : _g{g}
       , _os{os}
       , _auth{std::move(auth)}
-      , _h{std::move(h)} {
+      , _h{std::move(h)}
+      , _operation_name(operation_name) {
         const auto is_h_deferred
           = std::holds_alternative<auth::deferred_function_handler>(_h);
         vassert(
@@ -70,7 +76,7 @@ public:
     }
     ss::future<server::reply_t>
     operator()(server::request_t rq, server::reply_t rp) const {
-        auto auth_result = _auth.handle_auth(rq);
+        auto auth_result = _auth.handle_auth(rq, _operation_name);
 
         co_await _os();
         auto guard = _g.hold();
@@ -105,6 +111,7 @@ private:
     one_shot& _os;
     auth _auth;
     auth::function_handler _h;
+    std::string_view _operation_name;
 };
 
 server::routes_t get_schema_registry_routes(ss::gate& gate, one_shot& es) {
@@ -114,229 +121,225 @@ server::routes_t get_schema_registry_routes(ss::gate& gate, one_shot& es) {
     routes.api = ss::httpd::schema_registry_json::name;
 
     auto wrap = [&gate, &es](
+                  const ss::httpd::path_description& path,
                   auth::level lvl,
                   std::optional<auth::op> op,
                   auth::resource res,
                   auth::function_handler h) {
-        return schema_registry::wrap(
-          gate, es, auth{lvl, op, std::move(res)}, std::move(h));
+        return server::route_t{
+          path,
+          schema_registry::wrap(
+            gate,
+            es,
+            auth{lvl, op, std::move(res)},
+            std::move(h),
+            path.operations.nickname)};
     };
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_config,
-      wrap(
-        auth::level::user,
-        acl_operation::describe_configs,
-        registry_resource{},
-        get_config)});
+      auth::level::user,
+      acl_operation::describe_configs,
+      registry_resource{},
+      get_config));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::put_config,
-      wrap(
-        auth::level::user,
-        acl_operation::alter_configs,
-        registry_resource{},
-        put_config)});
+      auth::level::user,
+      acl_operation::alter_configs,
+      registry_resource{},
+      put_config));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_config_subject,
-      wrap(
-        auth::level::user,
-        acl_operation::describe_configs,
-        subject{},
-        get_config_subject)});
+      auth::level::user,
+      acl_operation::describe_configs,
+      subject{},
+      get_config_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::put_config_subject,
-      wrap(
-        auth::level::user,
-        acl_operation::alter_configs,
-        subject{},
-        put_config_subject)});
+      auth::level::user,
+      acl_operation::alter_configs,
+      subject{},
+      put_config_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::delete_config_subject,
-      wrap(
-        auth::level::user,
-        acl_operation::alter_configs,
-        subject{},
-        delete_config_subject)});
+      auth::level::user,
+      acl_operation::alter_configs,
+      subject{},
+      delete_config_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_mode,
-      wrap(
-        auth::level::user,
-        acl_operation::describe_configs,
-        registry_resource{},
-        get_mode)});
+      auth::level::user,
+      acl_operation::describe_configs,
+      registry_resource{},
+      get_mode));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::put_mode,
-      wrap(
-        auth::level::superuser,
-        acl_operation::alter_configs,
-        registry_resource{},
-        put_mode)});
+      auth::level::superuser,
+      acl_operation::alter_configs,
+      registry_resource{},
+      put_mode));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_mode_subject,
-      wrap(
-        auth::level::user,
-        acl_operation::describe_configs,
-        subject{},
-        get_mode_subject)});
+      auth::level::user,
+      acl_operation::describe_configs,
+      subject{},
+      get_mode_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::put_mode_subject,
-      wrap(
-        auth::level::superuser,
-        acl_operation::alter_configs,
-        subject{},
-        put_mode_subject)});
+      auth::level::superuser,
+      acl_operation::alter_configs,
+      subject{},
+      put_mode_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::delete_mode_subject,
-      wrap(
-        auth::level::superuser,
-        acl_operation::alter_configs,
-        subject{},
-        delete_mode_subject)});
+      auth::level::superuser,
+      acl_operation::alter_configs,
+      subject{},
+      delete_mode_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_schemas_types,
-      wrap(
-        auth::level::publik, std::nullopt, auth::none{}, get_schemas_types)});
+      auth::level::publik,
+      acl_operation::read,
+      auth::none{},
+      get_schemas_types));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_schemas_ids_id,
-      wrap(
-        auth::level::user,
-        std::nullopt,
-        auth::deferred{},
-        get_schemas_ids_id)});
+      auth::level::user,
+      std::nullopt,
+      auth::deferred{},
+      get_schemas_ids_id));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_schemas_ids_id_versions,
-      wrap(
-        auth::level::user,
-        acl_operation::describe,
-        registry_resource{},
-        get_schemas_ids_id_versions)});
+      auth::level::user,
+      acl_operation::describe,
+      registry_resource{},
+      get_schemas_ids_id_versions));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_schemas_ids_id_subjects,
-      wrap(
-        auth::level::user,
-        acl_operation::describe,
-        registry_resource{},
-        get_schemas_ids_id_subjects)});
+      auth::level::user,
+      acl_operation::describe,
+      registry_resource{},
+      get_schemas_ids_id_subjects));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_subjects,
-      wrap(auth::level::user, std::nullopt, auth::deferred{}, get_subjects)});
+      auth::level::user,
+      std::nullopt,
+      auth::deferred{},
+      get_subjects));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_subject_versions,
-      wrap(
-        auth::level::user,
-        acl_operation::describe,
-        subject{},
-        get_subject_versions)});
+      auth::level::user,
+      acl_operation::describe,
+      subject{},
+      get_subject_versions));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::post_subject,
-      wrap(auth::level::user, acl_operation::read, subject{}, post_subject)});
+      auth::level::user,
+      acl_operation::read,
+      subject{},
+      post_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::post_subject_versions,
-      wrap(
-        auth::level::user,
-        acl_operation::write,
-        subject{},
-        post_subject_versions)});
+      auth::level::user,
+      acl_operation::write,
+      subject{},
+      post_subject_versions));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_subject_versions_version,
-      wrap(
-        auth::level::user,
-        acl_operation::read,
-        subject{},
-        get_subject_versions_version)});
+      auth::level::user,
+      acl_operation::read,
+      subject{},
+      get_subject_versions_version));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_subject_versions_version_schema,
-      wrap(
-        auth::level::user,
-        acl_operation::read,
-        subject{},
-        get_subject_versions_version_schema)});
+      auth::level::user,
+      acl_operation::read,
+      subject{},
+      get_subject_versions_version_schema));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::
         get_subject_versions_version_referenced_by,
-      wrap(
-        auth::level::user,
-        acl_operation::describe,
-        registry_resource{},
-        get_subject_versions_version_referenced_by)});
+      auth::level::user,
+      acl_operation::describe,
+      registry_resource{},
+      get_subject_versions_version_referenced_by));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::
         get_subject_versions_version_referenced_by_deprecated,
-      wrap(
-        auth::level::user,
-        acl_operation::describe,
-        registry_resource{},
-        get_subject_versions_version_referenced_by)});
+      auth::level::user,
+      acl_operation::describe,
+      registry_resource{},
+      get_subject_versions_version_referenced_by));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::delete_subject,
-      wrap(
-        auth::level::user, acl_operation::remove, subject{}, delete_subject)});
+      auth::level::user,
+      acl_operation::remove,
+      subject{},
+      delete_subject));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::delete_subject_version,
-      wrap(
-        auth::level::user,
-        acl_operation::remove,
-        subject{},
-        delete_subject_version)});
+      auth::level::user,
+      acl_operation::remove,
+      subject{},
+      delete_subject_version));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::compatibility_subject_version,
-      wrap(
-        auth::level::user,
-        acl_operation::read,
-        subject{},
-        compatibility_subject_version)});
+      auth::level::user,
+      acl_operation::read,
+      subject{},
+      compatibility_subject_version));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::schema_registry_status_ready,
-      wrap(auth::level::publik, std::nullopt, auth::none{}, status_ready)});
+      auth::level::publik,
+      acl_operation::read,
+      auth::none{},
+      status_ready));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::get_security_acls,
-      wrap(
-        auth::level::superuser,
-        acl_operation::describe,
-        security::default_cluster_name,
-        get_security_acls)});
+      auth::level::superuser,
+      acl_operation::describe,
+      security::default_cluster_name,
+      get_security_acls));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::post_security_acls,
-      wrap(
-        auth::level::superuser,
-        acl_operation::alter,
-        security::default_cluster_name,
-        post_security_acls)});
+      auth::level::superuser,
+      acl_operation::alter,
+      security::default_cluster_name,
+      post_security_acls));
 
-    routes.routes.emplace_back(server::route_t{
+    routes.routes.emplace_back(wrap(
       ss::httpd::schema_registry_json::delete_security_acls,
-      wrap(
-        auth::level::superuser,
-        acl_operation::alter,
-        security::default_cluster_name,
-        delete_security_acls)});
+      auth::level::superuser,
+      acl_operation::alter,
+      security::default_cluster_name,
+      delete_security_acls));
 
     return routes;
 }

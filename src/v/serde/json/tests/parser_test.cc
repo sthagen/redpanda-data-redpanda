@@ -368,3 +368,106 @@ TEST_CORO(json_parser, skip_value_bad_precondition) {
             StrEq("skip_value called with unexpected token: end_array")));
     });
 }
+
+TEST_CORO(json_parser, invalid_array_missing_comma) {
+    auto p = parser(iobuf::from(R"([42.1"zz"])"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::start_array);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_double);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::error);
+}
+
+TEST_CORO(json_parser, invalid_object_missing_comma) {
+    auto p = parser(iobuf::from(R"({"a": 1 "b": 2})"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::start_object);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::key);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_int);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::error);
+}
+
+TEST_CORO(json_parser, top_level_string) {
+    auto p = parser(iobuf::from(R"("A simple string at top level")"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_string);
+    EXPECT_EQ(p.value_string(), iobuf::from("A simple string at top level"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::eof);
+}
+
+TEST_CORO(json_parser, top_level_integer) {
+    auto p = parser(iobuf::from("42"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_int);
+    EXPECT_EQ(p.value_int(), 42);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::eof);
+}
+
+TEST_CORO(json_parser, top_level_double) {
+    auto p = parser(iobuf::from("3.14159"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_double);
+    EXPECT_DOUBLE_EQ(p.value_double(), 3.14159);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::eof);
+}
+
+TEST_CORO(json_parser, top_level_true) {
+    auto p = parser(iobuf::from("true"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_true);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::eof);
+}
+
+TEST_CORO(json_parser, top_level_false) {
+    auto p = parser(iobuf::from("false"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_false);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::eof);
+}
+
+TEST_CORO(json_parser, top_level_null) {
+    auto p = parser(iobuf::from("null"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_null);
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::eof);
+}
+
+TEST_CORO(json_parser, top_level_extra_number) {
+    auto p = parser(iobuf::from(R"("hello"42)"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::value_string);
+    EXPECT_EQ(p.value_string(), iobuf::from("hello"));
+
+    EXPECT_TRUE(co_await p.next());
+    EXPECT_EQ(p.token(), token::error);
+}
