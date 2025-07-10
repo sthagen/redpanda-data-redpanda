@@ -2555,7 +2555,7 @@ class AuditLogTestSchemaRegistryACLs(AuditLogTestSchemaRegistryBase):
         denied_subjects = subjects[1::2]
 
         self._post_acl([
-            self._create_acl(subject, "SUBJECT", "LITERAL", "READ")
+            self._create_acl(subject, "SUBJECT", "LITERAL", "DESCRIBE")
             for subject in allowed_subjects
         ])
 

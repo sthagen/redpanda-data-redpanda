@@ -12,10 +12,10 @@
 #include "absl/strings/str_split.h"
 #include "cloud_topics/level_one/state_update.h"
 #include "cloud_topics/types.h"
+#include "gmock/gmock.h"
 #include "model/fundamental.h"
 #include "utils/uuid.h"
 
-#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 using namespace experimental::cloud_topics;
@@ -24,6 +24,7 @@ using namespace experimental::cloud_topics::l1;
 namespace {
 const object_id oid1{uuid_t::create()};
 const object_id oid2{uuid_t::create()};
+const object_id oid3{uuid_t::create()};
 const std::string_view tidp_a = "deadbeef-aaaa-0000-0000-000000000000/0";
 const std::string_view tidp_b = "deadbeef-bbbb-0000-0000-000000000000/0";
 const std::string_view tidp_c = "deadbeef-cccc-0000-0000-000000000000/0";
@@ -78,6 +79,18 @@ public:
 
 private:
     add_objects_update out;
+};
+
+struct replace_objects_builder {
+public:
+    replace_objects_builder& add(new_object o) {
+        out.new_objects.emplace_back(std::move(o));
+        return *this;
+    }
+    replace_objects_update build() { return std::move(out); }
+
+private:
+    replace_objects_update out;
 };
 } // namespace
 
@@ -194,4 +207,174 @@ TEST(StateUpdateTest, TestDuplicateAddMultipleUpdates) {
       dupe_res.error()(), testing::HasSubstr("Input object breaks partition"))
       << dupe_res.error();
     EXPECT_EQ(1, s.objects.size());
+}
+
+namespace {
+
+MATCHER_P3(MatchesRange, oid, base, last, "") {
+    return arg.oid == oid && arg.base_offset == base && arg.last_offset == last;
+}
+} // namespace
+
+TEST(StateUpdateTest, TestReplaceBasic) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
+                        .build())
+                 .add(new_obj_builder(oid2, 100)
+                        .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                        .add(tidp_c, 11_o, 20_o, 1999_t, 0, 99)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Fully replace partition a, partially replace c.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid3, 100)
+                            .add(tidp_a, 0_o, 20_o, 1999_t, 0, 99)
+                            .add(tidp_c, 0_o, 10_o, 1999_t, 100, 199)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    // Fully replaced.
+    const auto& prt_a
+      = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+    EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid3, 0_o, 20_o)));
+
+    // Not replaced.
+    const auto& prt_b
+      = s.partition_state(model::topic_id_partition::from(tidp_b))->get();
+    EXPECT_THAT(prt_b.extents, ElementsAre(MatchesRange(oid1, 0_o, 10_o)));
+
+    // Partially replaced.
+    const auto& prt_c
+      = s.partition_state(model::topic_id_partition::from(tidp_c))->get();
+    EXPECT_THAT(
+      prt_c.extents,
+      ElementsAre(
+        MatchesRange(oid3, 0_o, 10_o), MatchesRange(oid2, 11_o, 20_o)));
+
+    EXPECT_EQ(s.objects.at(oid1).removed_data_size, 198);
+    EXPECT_EQ(s.objects.at(oid2).removed_data_size, 99);
+    EXPECT_EQ(s.objects.at(oid3).removed_data_size, 0);
+}
+
+TEST(StateUpdateTest, TestReplaceEmptyState) {
+    state s;
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid1, 100)
+                            .add(tidp_a, 0_o, 20_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex("Partition .+ not tracked by state"));
+}
+
+TEST(StateUpdateTest, TestReplaceDuplicate) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid1, 100)
+                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex("Object .+ already exists"));
+}
+
+TEST(StateUpdateTest, TestReplaceMisaligned) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid2, 100)
+                            .add(tidp_a, 0_o, 9_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex(
+        "Partition .+ doesn't contain extents that span exactly"));
+}
+
+TEST(StateUpdateTest, TestReplaceBadOrdering) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Make the replacement overlap with itself.
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid2, 100)
+                            .add(tidp_a, 0_o, 7_o, 1999_t, 0, 99)
+                            .build())
+                     .add(new_obj_builder(oid3, 100)
+                            .add(tidp_a, 5_o, 10_o, 1999_t, 0, 99)
+                            .build())
+                     .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex("breaks partition .+ offset ordering"));
+}
+
+TEST(StateUpdateTest, TestEmptyReplace) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 100)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto replace = replace_objects_builder().build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::StrEq("No objects requested"));
 }

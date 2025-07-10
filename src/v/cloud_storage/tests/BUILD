@@ -450,6 +450,7 @@ redpanda_cc_btest(
     ],
     cpu = 1,
     deps = [
+        "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
         "//src/v/cloud_storage",
         "//src/v/config",

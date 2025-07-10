@@ -22,7 +22,7 @@ object_path_factory::level_zero_path(object_id id) {
 
 cloud_storage_clients::object_key object_path_factory::level_one_path() {
     return cloud_storage_clients::object_key(
-      ssx::sformat("l1_{}", uuid_t::create()));
+      ssx::sformat("l1_v0_{}", uuid_t::create()));
 }
 
 } // namespace experimental::cloud_topics

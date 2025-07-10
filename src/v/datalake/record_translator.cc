@@ -281,11 +281,9 @@ structured_data_translator::translate_data(
       val_type->schema.get_schema_ref());
     if (translated_val.has_error()) {
         vlog(
-          datalake_log.error,
+          datalake_log.warn,
           "Error converting buffer: {}",
           translated_val.error());
-        // TODO: metric for data translation errors.
-        // Either needs to drop the data or send it to a dead-letter queue.
         co_return errc::translation_error;
     }
 

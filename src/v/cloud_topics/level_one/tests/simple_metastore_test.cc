@@ -317,3 +317,257 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampOutOfRange) {
     ASSERT_FALSE(get_res.has_value());
     ASSERT_EQ(metastore::errc::out_of_range, get_res.error());
 }
+
+TEST(StateUpdateTest, TestReplaceBasic) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    om_list_t new_os;
+    new_os.emplace_back(
+      om_builder(oid2, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto replace_res = m.replace_objects(new_os).get();
+    ASSERT_TRUE(replace_res.has_value());
+
+    // Sanity check that replacement leaves us with expected offsets.
+    auto offsets_res
+      = m.get_offsets(model::topic_id_partition::from(tid_a)).get();
+    ASSERT_TRUE(offsets_res.has_value());
+    ASSERT_EQ(0_o, offsets_res->start_offset);
+    ASSERT_EQ(11_o, offsets_res->next_offset);
+}
+
+TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(om_builder(oid1, 100)
+                      .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                      .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
+                      .build());
+    os.emplace_back(om_builder(oid2, 100)
+                      .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
+                      .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
+                      .build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    om_list_t new_os;
+    new_os.emplace_back(
+      om_builder(oid3, 100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
+    auto replace_res = m.replace_objects(new_os).get();
+    ASSERT_TRUE(replace_res.has_value());
+
+    // Replaced offsets should be served from oid3.
+    auto tpr = model::topic_id_partition::from(tid_a);
+    for (const auto& o : std::views::iota(0, 21)) {
+        auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid3);
+        ASSERT_EQ(get_res->footer_pos, 100);
+    }
+    // Others should be served from oid1 or oid2.
+    tpr = model::topic_id_partition::from(tid_b);
+    for (const auto& o : std::views::iota(0, 11)) {
+        auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid1);
+        ASSERT_EQ(get_res->footer_pos, 100);
+    }
+    for (const auto& o : std::views::iota(11, 21)) {
+        auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid2);
+        ASSERT_EQ(get_res->footer_pos, 100);
+    }
+    // Sanity check that replacement leaves us with expected offsets.
+    for (const auto& tid : {tid_a, tid_b}) {
+        auto offsets_res
+          = m.get_offsets(model::topic_id_partition::from(tid)).get();
+        ASSERT_TRUE(offsets_res.has_value());
+        ASSERT_EQ(0_o, offsets_res->start_offset);
+        ASSERT_EQ(21_o, offsets_res->next_offset);
+    }
+}
+
+TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(om_builder(oid1, 100)
+                      .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                      .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
+                      .build());
+    os.emplace_back(om_builder(oid2, 100)
+                      .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
+                      .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
+                      .build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // For one partition, replace the entire range. For another, replace part
+    // of the range. As long as they're both aligned this should succeed.
+    om_list_t new_os;
+    new_os.emplace_back(om_builder(oid3, 100)
+                          .add(tid_a, 0_o, 20_o, 2000_t, 0, 99)
+                          .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
+                          .build());
+    auto replace_res = m.replace_objects(new_os).get();
+    ASSERT_TRUE(replace_res.has_value());
+
+    // Replaced offsets should be served from oid3.
+    auto tpr = model::topic_id_partition::from(tid_a);
+    for (const auto& o : std::views::iota(0, 21)) {
+        auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid3);
+        ASSERT_EQ(get_res->footer_pos, 100);
+    }
+    tpr = model::topic_id_partition::from(tid_b);
+    for (const auto& o : std::views::iota(11, 21)) {
+        auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid3);
+        ASSERT_EQ(get_res->footer_pos, 100);
+    }
+    // Others should be served from oid1 or oid2.
+    for (const auto& o : std::views::iota(0, 11)) {
+        auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid1);
+        ASSERT_EQ(get_res->footer_pos, 100);
+    }
+    // Sanity check that replacement leaves us with expected offsets.
+    for (const auto& tid : {tid_a, tid_b}) {
+        auto offsets_res
+          = m.get_offsets(model::topic_id_partition::from(tid)).get();
+        ASSERT_TRUE(offsets_res.has_value());
+        ASSERT_EQ(0_o, offsets_res->start_offset);
+        ASSERT_EQ(21_o, offsets_res->next_offset);
+    }
+}
+
+TEST(StateUpdateTest, TestReplaceEmptyRequest) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Add a replacement object that has no objects.
+    om_list_t new_os;
+    auto replace_res = m.replace_objects(new_os).get();
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+}
+
+TEST(StateUpdateTest, TestReplaceEmptyState) {
+    simple_metastore m;
+    {
+        // Add a replacement object that has no objects.
+        om_list_t new_os;
+        auto replace_res = m.replace_objects(new_os).get();
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+    }
+    {
+        // Now try with an actual object. It should be rejected.
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        auto replace_res = m.replace_objects(new_os).get();
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+    }
+}
+
+TEST(StateUpdateTest, TestReplaceMisaligned) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    for (const auto& [base_o, last_o] :
+         std::initializer_list<std::pair<kafka::offset, kafka::offset>>{
+           {0_o, 11_o}, {1_o, 11_o}, {1_o, 10_o}, {1_o, 9_o}}) {
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid2, 100)
+                              .add(tid_a, base_o, last_o, 2000_t, 0, 99)
+                              .build());
+        auto replace_res = m.replace_objects(new_os).get();
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+    }
+}
+
+TEST(StateUpdateTest, TestReplaceOneWithMultipleMisaligned) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    {
+        // Even though one extent overlaps, the complete range for tid_a does
+        // not align.
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid2, 100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .add(tid_a, 11_o, 12_o, 2000_t, 0, 99)
+                              .build());
+        auto replace_res = m.replace_objects(new_os).get();
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+    }
+    {
+        // Even though tid_a overlaps exactly, tid_b does not exist.
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid2, 100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
+        auto replace_res = m.replace_objects(new_os).get();
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+    }
+}
+
+TEST(StateUpdateTest, TestReplaceMultipleMisaligned) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(om_builder(oid1, 100)
+                      .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                      .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
+                      .build());
+    os.emplace_back(om_builder(oid2, 100)
+                      .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
+                      .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
+                      .build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid3, 100).add(tid_a, 0_o, 19_o, 2000_t, 0, 99).build());
+        auto replace_res = m.replace_objects(new_os).get();
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+    }
+    {
+        // Even though tid_a overlaps exactly, tid_b is misaligned.
+        om_list_t new_os;
+        new_os.emplace_back(om_builder(oid3, 100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .add(tid_b, 0_o, 19_o, 2000_t, 0, 99)
+                              .build());
+        auto replace_res = m.replace_objects(new_os).get();
+        ASSERT_FALSE(replace_res.has_value());
+        EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
+    }
+}

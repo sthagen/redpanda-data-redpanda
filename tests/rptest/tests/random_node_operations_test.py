@@ -82,7 +82,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
             log_config=LoggingConfig(
                 'info', {
                     'storage-resources': 'warn',
-                    'storage-gc': 'warn',
+                    'storage-gc': 'debug',
                     'raft': 'debug',
                     'cluster': 'debug',
                     'datalake': 'trace',

@@ -16,6 +16,7 @@
 #include "iceberg/values.h"
 #include "serde/json/parser.h"
 
+#include <exception>
 #include <memory>
 #include <optional>
 #include <variant>
@@ -250,7 +251,7 @@ ss::future<> decode_list(
 }; // namespace
 
 ss::future<value_outcome>
-deserialize_json(iobuf buf, const json_conversion_ir& ir) {
+deserialize_json_impl(iobuf buf, const json_conversion_ir& ir) {
     std::optional<iceberg::value> root_value;
 
     experimental::serde::json::parser p(std::move(buf));
@@ -273,6 +274,20 @@ deserialize_json(iobuf buf, const json_conversion_ir& ir) {
         auto sv = std::make_unique<struct_value>();
         sv->fields.push_back(std::move(root_value.value()));
         co_return std::move(sv);
+    }
+}
+
+ss::future<value_outcome>
+deserialize_json(iobuf buf, const json_conversion_ir& ir) {
+    try {
+        // Firewall for exceptions during deserialization because the caller
+        // does not expect exceptions to be thrown.
+        co_return co_await deserialize_json_impl(std::move(buf), ir);
+    } catch (const value_conversion_exception& e) {
+        co_return e;
+    } catch (std::exception& e) {
+        co_return value_conversion_exception(
+          fmt::format("Exception during JSON deserialization: {}", e.what()));
     }
 }
 

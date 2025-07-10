@@ -87,6 +87,17 @@ public:
     virtual ss::future<std::expected<void, errc>>
     add_objects(const chunked_vector<object_metadata>&) = 0;
 
+    // Adds the given objects to the metastore, expecting that the new extents
+    // replace an extent or set of extents covering the same range.
+    // It is expected that the set of new extents per partition covers a
+    // contiguous range of that partition's offset space.
+    //
+    // While these constraints aren't the only way we could ensure
+    // correctness, these simplify accounting and makes it easier to validate
+    // that we haven't lost data.
+    virtual ss::future<std::expected<void, errc>>
+    replace_objects(const chunked_vector<object_metadata>&) = 0;
+
     // Finds the first object of a given partition with data greater than or
     // equal to the given offset. If no such offset exists, returns
     // `out_of_range`.

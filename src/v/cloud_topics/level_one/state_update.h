@@ -22,6 +22,7 @@ namespace experimental::cloud_topics::l1 {
 
 enum class update_key : uint8_t {
     add_objects = 0,
+    replace_objects = 1,
 };
 
 using stm_update_error = named_type<ss::sstring, struct update_error_tag>;
@@ -80,6 +81,26 @@ struct add_objects_update
     chunked_vector<new_object> new_objects;
 };
 
+struct replace_objects_update
+  : public serde::envelope<
+      replace_objects_update,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    friend bool
+    operator==(const replace_objects_update&, const replace_objects_update&)
+      = default;
+    auto serde_fields() { return std::tie(new_objects); }
+
+    static constexpr auto key{update_key::replace_objects};
+    static std::expected<replace_objects_update, stm_update_error>
+    build(const state&, chunked_vector<new_object>);
+
+    std::expected<std::monostate, stm_update_error> can_apply(const state&);
+    std::expected<std::monostate, stm_update_error> apply(state&);
+
+    chunked_vector<new_object> new_objects;
+};
+
 } // namespace experimental::cloud_topics::l1
 
 template<>
@@ -92,6 +113,8 @@ struct fmt::formatter<experimental::cloud_topics::l1::update_key> final
         switch (k) {
         case experimental::cloud_topics::l1::update_key::add_objects:
             return formatter<string_view>::format("add_objects", ctx);
+        case experimental::cloud_topics::l1::update_key::replace_objects:
+            return formatter<string_view>::format("replace_objects", ctx);
         }
     }
 };

@@ -60,6 +60,23 @@ simple_metastore::add_objects(const chunked_vector<object_metadata>& objects) {
     co_return std::expected<void, metastore::errc>{};
 }
 
+ss::future<std::expected<void, metastore::errc>>
+simple_metastore::replace_objects(
+  const chunked_vector<object_metadata>& objects) {
+    chunked_vector<new_object> new_objects;
+    for (const auto& o : objects) {
+        new_objects.emplace_back(make_new_object(o));
+    }
+    auto update_res = replace_objects_update::build(
+      state_, std::move(new_objects));
+    if (!update_res.has_value()) {
+        co_return std::unexpected(metastore::errc::invalid_request);
+    }
+    auto apply_res = update_res->apply(state_);
+    vassert(apply_res.has_value(), "Apply must succeed if can_apply() is true");
+    co_return std::expected<void, metastore::errc>{};
+}
+
 ss::future<std::expected<metastore::object_response, metastore::errc>>
 simple_metastore::get_first_ge(
   const model::topic_id_partition& tpr, kafka::offset o) {

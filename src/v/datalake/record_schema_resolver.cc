@@ -132,6 +132,12 @@ checked<resolved_type, type_resolver::errc> translate_json_schema(
               std::move(iceberg_ir.value()))),
           .id = {.schema_id = id, .protobuf_offsets = std::nullopt},
           .type = std::move(root_struct.value())};
+    } catch (iceberg::conversion::json_schema::unsupported_feature_error& e) {
+        vlog(
+          datalake_log.warn,
+          "JSON schema translation failed due to unsupported feature: {}",
+          e.what());
+        return type_resolver::errc::translation_error;
     } catch (...) {
         vlog(
           datalake_log.error,

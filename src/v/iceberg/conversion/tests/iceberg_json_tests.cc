@@ -865,10 +865,6 @@ TEST(JsonConversionIr, StructFieldIndex) {
 // TODO: what to do with NULL values?
 
 TEST_CORO(IcebergValues, ValuePrimitives) {
-    // Temporarily nest primitives in an array because we can't parse primitives
-    // at root until https://redpandadata.atlassian.net/browse/CORE-12529 is
-    // done.
-
     const auto json_primitives = std::to_array<
       std::tuple<std::string_view, std::string_view, iceberg::value>>({
       {"boolean", "true", iceberg::boolean_value(true)},
@@ -884,23 +880,18 @@ TEST_CORO(IcebergValues, ValuePrimitives) {
 
         auto schema = fmt::format(
           R"({{
-          "$schema": "http://json-schema.org/draft-07/schema#",
-          "type": "array",
-          "items": {{"type": "{}"}}
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "{}"
           }})",
           type);
         auto result = co_await to_iceberg_value(
-          schema, fmt::format("[{}]", value));
+          schema, fmt::format("{}", value));
 
         ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
         auto result_value = std::get<std::unique_ptr<struct_value>>(
           std::move(result.value()));
 
-        const auto& list = std::get<std::unique_ptr<iceberg::list_value>>(
-          *result_value->fields[0]);
-
-        EXPECT_EQ(list->elements.at(0), expected) << fmt::format(
-          "Expected: {}, got: {}", expected, *list->elements.at(0));
+        EXPECT_EQ(*result_value->fields[0], expected);
     }
 }
 
@@ -1119,12 +1110,11 @@ TEST_CORO(IcebergValues, Format) {
     })";
     auto value = R"(["2025-01-01T01:02:03Z"])";
 
-    co_await ss::async([&] {
-        EXPECT_THAT(
-          [&]() { to_iceberg_value(schema, value).get(); },
-          ThrowsMessage<value_conversion_exception>(
-            StrEq("Failed to parse date value '2025-01-01T01:02:03Z'")));
-    });
+    auto result = co_await to_iceberg_value(schema, value);
+    ASSERT_TRUE_CORO(result.has_error());
+    ASSERT_STREQ_CORO(
+      result.error().what(),
+      "Failed to parse date value '2025-01-01T01:02:03Z'");
 }
 
 TEST_CORO(IcebergValues, FormatValueTooLong) {
@@ -1136,12 +1126,11 @@ TEST_CORO(IcebergValues, FormatValueTooLong) {
     auto value
       = R"(["2025-01-01T01:02:03.111111111111111111111111111111111111111111111111Z"])";
 
-    co_await ss::async([&] {
-        EXPECT_THAT(
-          [&]() { to_iceberg_value(schema, value).get(); },
-          ThrowsMessage<value_conversion_exception>(
-            StrEq("String value exceeds maximum length of 32 bytes: 69")));
-    });
+    auto result = co_await to_iceberg_value(schema, value);
+    ASSERT_TRUE_CORO(result.has_error());
+    ASSERT_STREQ_CORO(
+      result.error().what(),
+      "String value exceeds maximum length of 32 bytes: 69");
 }
 
 TEST_CORO(IcebergValues, Empty) {
@@ -1168,13 +1157,11 @@ TEST_CORO(IcebergValues, MismatchedTypes) {
     })";
     auto value = R"([42])";
 
-    co_await ss::async([&] {
-        EXPECT_THAT(
-          [&]() { to_iceberg_value(schema, value).get(); },
-          ThrowsMessage<value_conversion_exception>(
-            StrEq("Mismatch json between json integer value and schema type: "
-                  "string")));
-    });
+    auto result = co_await to_iceberg_value(schema, value);
+    ASSERT_TRUE_CORO(result.has_error());
+    ASSERT_STREQ_CORO(
+      result.error().what(),
+      "Mismatch json between json integer value and schema type: string");
 }
 
 TEST_CORO(IcebergValues, TruncatedInputs) {
@@ -1234,11 +1221,12 @@ TEST_CORO(IcebergValues, TruncatedInputs) {
         // Truncate the input string
         auto truncated_input = input.substr(0, i);
 
-        co_await ss::async([&] {
-            EXPECT_THROW(
-              to_iceberg_value(schema, truncated_input).get(),
-              value_conversion_exception);
-        });
+        auto result = co_await to_iceberg_value(schema, truncated_input);
+        ASSERT_TRUE_CORO(result.has_error());
+
+        static_assert(
+          std::is_same_v<decltype(result.error()), value_conversion_exception&>,
+          "Expected value_conversion_exception");
     }
 
     SCOPED_TRACE("Testing full input");

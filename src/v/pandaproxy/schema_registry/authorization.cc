@@ -209,7 +209,7 @@ void handle_get_subjects_authz(
   chunked_vector<subject>& subjects) {
     const auto& operation_name
       = ss::httpd::schema_registry_json::get_subjects.operations.nickname;
-    constexpr auto op = security::acl_operation::read;
+    constexpr auto op = security::acl_operation::describe;
 
     if (!auth_result.has_value()) {
         // ACLs or authentication is disabled

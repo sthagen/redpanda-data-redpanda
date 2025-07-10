@@ -273,13 +273,29 @@ AVRO_SCHEMA_TEST_CASES = {
 
 
 class JsonSchemaTestCase:
-    def __init__(self, schema_str, record_generator, expected_spark):
+    def __init__(self,
+                 schema_str,
+                 record_generator,
+                 expected_spark,
+                 skip_encoding=False,
+                 dlq_cause=None):
+        """
+        :param skip_encoding: If True, the record generator will return a JSON string
+            that needs to be produced as-is. If False, the record generator will return
+            a dict that needs to be converted to JSON before producing.
+        """
         self.schema_str = schema_str
         self.record_generator = record_generator
         self.expected_spark = expected_spark
+        self.dlq_cause = dlq_cause
+
+        self._skip_encoding = skip_encoding
 
     def generate_record(self, t):
-        return self.record_generator(t)
+        if self._skip_encoding:
+            return self.record_generator(t)
+        else:
+            return json.dumps(self.record_generator(t))
 
 
 TRINO_RP_FIELD_TYPE = (
@@ -319,6 +335,55 @@ JSON_SCHEMA_TEST_CASES = {
             ('# Partitioning', '', ''),
             ('Part 0', 'hours(redpanda.timestamp)', ''),
         ],
+    ),
+}
+
+JSON_SCHEMA_DLQ_TEST_CASES = {
+    "bad_schema_dialect":
+    JsonSchemaTestCase(
+        schema_str="""{
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "type": "object",
+            "properties": {
+                "number": {"type": "integer"}
+            }
+        }""",
+        record_generator=lambda t: {
+            "number": int(t),
+        },
+        expected_spark=None,
+        # This cause is slightly misleading.
+        dlq_cause="failed_kafka_schema_resolution",
+    ),
+    "mismatched_types":
+    JsonSchemaTestCase(
+        schema_str="""{
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "number": {"type": "integer"}
+            }
+        }""",
+        record_generator=lambda t: {
+            "number": str(t),
+        },
+        expected_spark=None,
+        dlq_cause="failed_data_translation",
+    ),
+    "bad_input":
+    JsonSchemaTestCase(
+        schema_str="""{
+            "$schema": "http://json-schema.org/draft-07/schema#",
+            "type": "object",
+            "properties": {
+                "number": {"type": "integer"}
+            }
+        }""",
+        # Incomplete JSON on purpose to trigger a parsing failure.
+        record_generator=lambda t: f"""{{"number": {int(t)}, """,
+        expected_spark=None,
+        skip_encoding=True,
+        dlq_cause="failed_data_translation",
     ),
 }
 
@@ -445,9 +510,8 @@ class DatalakeE2ETests(RedpandaTest):
                     {'bootstrap.servers': self.redpanda.brokers()})
                 for i in range(count):
                     t = time.time()
-                    record = tc_data.generate_record(t)
                     producer.produce(topic=test_case_topic_name,
-                                     value=json.dumps(record))
+                                     value=tc_data.generate_record(t))
                 producer.flush()
 
                 self.logger.info(
@@ -579,6 +643,77 @@ class DatalakeE2ETests(RedpandaTest):
             else:
                 raise RuntimeError(
                     f"Unsupported query engine {query_engine} for this test")
+
+    # Note: nothing unique about this test so run it with single catalog/query engine.
+    @cluster(num_nodes=3)
+    @matrix(cloud_storage_type=supported_storage_types(),
+            query_engine=[QueryEngineType.SPARK],
+            catalog_type=[CatalogType.REST_JDBC])
+    def test_json_schema_dlq(self, cloud_storage_type, query_engine,
+                             catalog_type):
+        count = 100
+
+        with DatalakeServices(self.test_ctx,
+                              redpanda=self.redpanda,
+                              include_query_engines=[query_engine],
+                              catalog_type=catalog_type) as dl:
+            for tc_name, tc_data in JSON_SCHEMA_DLQ_TEST_CASES.items():
+                self.logger.info(
+                    f"Running JSON schema dlq test case {tc_name}")
+                test_case_topic_name = f"{tc_name}_test_case"
+                dl.create_iceberg_enabled_topic(
+                    test_case_topic_name, iceberg_mode="value_schema_latest")
+
+                self.logger.info(
+                    f"Creating schema for topic {test_case_topic_name}")
+                rpk = RpkTool(self.redpanda)
+                rpk.create_schema_from_str(
+                    subject=f"{test_case_topic_name}-value",
+                    schema=tc_data.schema_str,
+                    schema_suffix="json",
+                )
+
+                self.logger.info(
+                    f"Producing records for topic {test_case_topic_name}")
+                producer = Producer(
+                    {'bootstrap.servers': self.redpanda.brokers()})
+                for i in range(count):
+                    t = time.time()
+                    producer.produce(topic=test_case_topic_name,
+                                     value=tc_data.generate_record(t))
+                producer.flush()
+
+                self.logger.info(
+                    f"Waiting for translation for dlq table for {test_case_topic_name}"
+                )
+                dl.wait_for_translation(
+                    test_case_topic_name,
+                    msg_count=count,
+                    table_override=f"{test_case_topic_name}~dlq")
+
+                topic_leader = self.redpanda.partitions(
+                    test_case_topic_name)[0].leader
+
+                assert tc_data.dlq_cause is not None
+
+                # Check that DLQ cause is failed translation rather than some
+                # other cause like missing schema which would indicate a bug in
+                # the test.
+                MetricCheck(
+                    self.redpanda.logger,
+                    self.redpanda,
+                    topic_leader,
+                    ["redpanda_iceberg_translation_invalid_records_total"],
+                    labels={
+                        'redpanda_namespace': 'kafka',
+                        'redpanda_topic': test_case_topic_name,
+                        'redpanda_cause': tc_data.dlq_cause,
+                    },
+                    reduce=sum,
+                    metrics_endpoint=MetricsEndpoint.PUBLIC_METRICS).expect([
+                        ('redpanda_iceberg_translation_invalid_records_total',
+                         lambda _, val: val == count)
+                    ])
 
     @cluster(num_nodes=3)
     @matrix(cloud_storage_type=supported_storage_types(),

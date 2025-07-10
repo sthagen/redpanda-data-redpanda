@@ -158,12 +158,19 @@ private:
     ASSERT_PRED_FORMAT2_CORO(::testing::internal::CmpHelperLE, val1, val2)
 #define GTEST_ASSERT_NE_CORO(val1, val2)                                       \
     ASSERT_PRED_FORMAT2_CORO(::testing::internal::CmpHelperNE, val1, val2)
+
+#define GTEST_ASSERT_STREQ_CORO(val1, val2)                                    \
+    ASSERT_PRED_FORMAT2_CORO(::testing::internal::CmpHelperSTREQ, val1, val2)
+#define GTEST_ASSERT_STRNE_CORO(val1, val2)                                    \
+    ASSERT_PRED_FORMAT2_CORO(::testing::internal::CmpHelperSTRNE, val1, val2)
+
 #define GTEST_TEST_THROW_CORO(statement, expected_exception)                   \
     GTEST_TEST_THROW_(statement, expected_exception, GTEST_FATAL_FAILURE_CORO_)
 #define GTEST_TEST_NO_THROW_CORO(statement)                                    \
     GTEST_TEST_NO_THROW_(statement, GTEST_FATAL_FAILURE_CORO_)
 #define ASSERT_NO_FATAL_FAILURE_CORO(statement)                                \
     GTEST_TEST_NO_FATAL_FAILURE_(statement, GTEST_FATAL_FAILURE_CORO_)
+
 /*
  * Coroutine safe assertions
  */
@@ -180,6 +187,9 @@ private:
 #define ASSERT_LT_CORO(val1, val2) GTEST_ASSERT_LT_CORO(val1, val2)
 #define ASSERT_LE_CORO(val1, val2) GTEST_ASSERT_LE_CORO(val1, val2)
 #define ASSERT_NE_CORO(val1, val2) GTEST_ASSERT_NE_CORO(val1, val2)
+
+#define ASSERT_STREQ_CORO(val1, val2) GTEST_ASSERT_STREQ_CORO(val1, val2)
+#define ASSERT_STRNE_CORO(val1, val2) GTEST_ASSERT_NE_CORO(val1, val2)
 
 #define ASSERT_RESULT_EQ_CORO(result_val, exp_naked_value)                     \
     /* NOLINTNEXTLINE(cppcoreguidelines-avoid-do-while) */                     \

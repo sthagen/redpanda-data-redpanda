@@ -26,5 +26,5 @@ TEST(ObjectPathFactory, LevelOnePathFormat) {
     auto path
       = experimental::cloud_topics::object_path_factory::level_one_path();
     EXPECT_THAT(
-      path().string(), ::testing::MatchesRegex("^l1_" UUID_REGEX "$"));
+      path().string(), ::testing::MatchesRegex("^l1_v0_" UUID_REGEX "$"));
 }

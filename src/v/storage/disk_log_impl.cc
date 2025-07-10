@@ -526,7 +526,7 @@ ss::future<> disk_log_impl::adjacent_merge_compact(
           new_start_offset
           && s.offsets().get_base_offset() < *new_start_offset) {
             vlog(
-              gclog.debug,
+              gclog.trace,
               "[{}] segment {} base offs {}, new start offset {}, "
               "skipping self compaction.",
               config().ntp(),
@@ -538,7 +538,7 @@ ss::future<> disk_log_impl::adjacent_merge_compact(
 
         if (s.is_compactible(cfg)) {
             vlog(
-              gclog.debug,
+              gclog.trace,
               "[{}] segment {} stable offs {}, max compactible {}, "
               "compacting.",
               config().ntp(),
@@ -1560,7 +1560,7 @@ ss::future<> disk_log_impl::rewrite_segment_with_offset_map(
         }
 
         vlog(
-          gclog.debug,
+          gclog.trace,
           "[{}] treating segment as compacted, offsets fall above highest "
           "indexed key {}, likely because they are non-data batches: {}",
           config().ntp(),

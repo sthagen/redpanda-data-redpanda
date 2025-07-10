@@ -2165,13 +2165,13 @@ configuration::configuration()
       "cloud_storage_segment_upload_timeout_ms",
       "Log segment upload timeout (ms)",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      30s)
+      90s)
   , cloud_storage_manifest_upload_timeout_ms(
       *this,
       "cloud_storage_manifest_upload_timeout_ms",
       "Manifest upload timeout (ms).",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      10s)
+      30s)
   , cloud_storage_garbage_collect_timeout_ms(
       *this,
       "cloud_storage_garbage_collect_timeout_ms",
@@ -4124,7 +4124,9 @@ configuration::configuration()
       "aws_sigv4 authentication mode. Accepted values: config_file, "
       "aws_instance_metadata, sts, gcp_instance_metadata, "
       "azure_vm_instance_metadata, azure_aks_oidc_federation.",
-      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      {.needs_restart = needs_restart::yes,
+       .example = "config_file",
+       .visibility = visibility::user},
       std::nullopt,
       {
         model::cloud_credentials_source::config_file,

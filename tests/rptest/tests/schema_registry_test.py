@@ -7128,20 +7128,20 @@ class SchemaRegistryAclAuthzTest(SchemaRegistryEndpoints):
 
         # Grant READ to subject_1 only - should only return subject_1
         self._post_acl(
-            self._create_acl(subject_1, "SUBJECT", "LITERAL", "READ"))
+            self._create_acl(subject_1, "SUBJECT", "LITERAL", "DESCRIBE"))
         result = self.sr_client.get_subjects(auth=self.user_auth)
         self.assert_equal(result.status_code, 200)
         self.assert_equal(result.json(), [subject_1])
 
         # Grant wildcard (*) access - should return all subjects
-        self._post_acl(self._create_acl("*", "SUBJECT", "LITERAL", "READ"))
+        self._post_acl(self._create_acl("*", "SUBJECT", "LITERAL", "DESCRIBE"))
         result = self.sr_client.get_subjects(auth=self.user_auth)
         self.assert_equal(result.status_code, 200)
         self.assert_equal(set(result.json()), {subject_1, subject_2})
 
         # Deny all access - should return no subjects
         self._post_acl(
-            self._create_acl("*", "SUBJECT", "LITERAL", "READ", "DENY"))
+            self._create_acl("*", "SUBJECT", "LITERAL", "DESCRIBE", "DENY"))
         result = self.sr_client.get_subjects(auth=self.user_auth)
         self.assert_equal(result.status_code, 200)
         self.assert_equal(result.json(), [])

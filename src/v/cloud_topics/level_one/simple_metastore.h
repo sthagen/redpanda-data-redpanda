@@ -27,6 +27,9 @@ public:
     ss::future<std::expected<void, errc>>
     add_objects(const chunked_vector<object_metadata>&) override;
 
+    ss::future<std::expected<void, errc>>
+    replace_objects(const chunked_vector<object_metadata>&) override;
+
     ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, kafka::offset) override;
 

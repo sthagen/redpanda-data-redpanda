@@ -63,9 +63,10 @@ struct partition_state
     // allows us to perform efficient lookups by offset.
     // Using a set here allows us to:
     // - perform efficient lookups by offset
-    // - remove elements from the begining e.g. for prefix truncation
+    // - remove elements from the beginning e.g. for prefix truncation
     // - replace ranges in the middle with new extents e.g. for compaction
-    absl::btree_set<extent> extents;
+    using extent_set_t = absl::btree_set<extent>;
+    extent_set_t extents;
 
     // The start offset of the partition. This may not align with the front of
     // `extents` if the offset was set through the Kafka API.

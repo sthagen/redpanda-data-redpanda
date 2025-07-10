@@ -64,7 +64,7 @@ redpanda_cc_btest(
     ],
 )
 
-redpanda_cc_btest(
+redpanda_cc_gtest(
     name = "authorizer_test",
     timeout = "short",
     srcs = [
@@ -75,12 +75,13 @@ redpanda_cc_btest(
         "//src/v/pandaproxy/schema_registry:types",
         "//src/v/random:generators",
         "//src/v/security",
-        "//src/v/test_utils:seastar_boost",
+        "//src/v/test_utils:gtest",
         "//src/v/utils:base64",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@boost//:algorithm",
-        "@boost//:test",
         "@fmt",
+        "@googletest//:gtest",
+        "@seastar",
         "@seastar//:testing",
     ],
 )
