@@ -668,6 +668,7 @@ TEST_F(storage_test_fixture, test_time_based_eviction) {
       std::nullopt,
       model::offset::min(), // should prevent compaction
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
     auto before = disk_log->offsets();
@@ -682,6 +683,7 @@ TEST_F(storage_test_fixture, test_time_based_eviction) {
             model::to_timestamp(timestamp),
             std::nullopt,
             model::offset::max(),
+            std::nullopt,
             std::nullopt,
             0ms,
             as);
@@ -757,6 +759,7 @@ TEST_F(storage_test_fixture, test_size_based_eviction) {
       total_size + first_size,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
     compact_and_prefix_truncate(*disk_log, ccfg_no_compact);
@@ -786,6 +789,7 @@ TEST_F(storage_test_fixture, test_size_based_eviction) {
       model::timestamp::min(),
       max_size,
       model::offset::max(),
+      std::nullopt,
       std::nullopt,
       0ms,
       as);
@@ -853,7 +857,13 @@ TEST_F(storage_test_fixture, test_eviction_notification) {
       model::term_id(0),
       custom_ts_batch_generator(model::timestamp(gc_ts() + 10)));
     storage::housekeeping_config ccfg(
-      gc_ts, std::nullopt, model::offset::max(), std::nullopt, 0ms, as);
+      gc_ts,
+      std::nullopt,
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      0ms,
+      as);
 
     log->housekeeping(ccfg).get();
 
@@ -964,6 +974,7 @@ TEST_F(storage_test_fixture, write_concurrently_with_gc) {
           model::timestamp::min(),
           1000,
           model::offset::max(),
+          std::nullopt,
           std::nullopt,
           0ms,
           as);
@@ -1251,7 +1262,13 @@ TEST_F(storage_test_fixture, test_compaction_preserve_state) {
       ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov));
 
     storage::housekeeping_config compaction_cfg(
-      model::timestamp::min(), 1, model::offset::max(), std::nullopt, 0ms, as);
+      model::timestamp::min(),
+      1,
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      0ms,
+      as);
     auto log = mgr.manage(std::move(ntp_cfg)).get();
     auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
     auto offsets_after_recovery = log->offsets();
@@ -1411,6 +1428,7 @@ TEST_F(storage_test_fixture, compacted_log_truncation) {
           std::nullopt,
           model::offset::max(),
           std::nullopt,
+          std::nullopt,
           0ms,
           as);
         log->flush().get();
@@ -1476,6 +1494,7 @@ TEST_F(storage_test_fixture, check_segment_roll_after_compacted_log_truncate) {
       model::timestamp::min(),
       std::nullopt,
       model::offset::max(),
+      std::nullopt,
       std::nullopt,
       0ms,
       as);
@@ -1664,6 +1683,7 @@ TEST_F(storage_test_fixture, partition_size_while_cleanup) {
       50_KiB,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
 
@@ -1784,6 +1804,7 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
 
@@ -1848,6 +1869,7 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_terms) {
       model::timestamp::min(),
       std::nullopt,
       model::offset::max(),
+      std::nullopt,
       std::nullopt,
       0ms,
       as);
@@ -1920,6 +1942,7 @@ TEST_F(storage_test_fixture, max_adjacent_segment_compaction) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
 
@@ -1978,7 +2001,8 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_range_u32_bounds) {
       storage::segment::offset_tracker::dirty_offset_t{one_past_u32_max});
 
     ss::abort_source as;
-    storage::compaction_config cfg(model::offset::max(), std::nullopt, as);
+    storage::compaction_config cfg(
+      model::offset::max(), std::nullopt, std::nullopt, as);
     auto ranges = disk_log->find_adjacent_compaction_ranges(cfg);
     ASSERT_TRUE(!ranges.has_value());
 
@@ -2173,6 +2197,7 @@ TEST_F(storage_test_fixture, compaction_backlog_calculation) {
       model::timestamp::min(),
       std::nullopt,
       model::offset::max(),
+      std::nullopt,
       std::nullopt,
       0ms,
       as);
@@ -2505,6 +2530,7 @@ TEST_F(storage_test_fixture, changing_cleanup_policy_back_and_forth) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
 
@@ -2742,6 +2768,7 @@ TEST_F(storage_test_fixture, test_compacting_batches_of_different_types) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
     auto before_compaction = compact_in_memory(log);
@@ -2978,6 +3005,7 @@ TEST_F(storage_test_fixture, write_truncate_compact) {
                              std::nullopt,
                              model::offset::max(),
                              std::nullopt,
+                             std::nullopt,
                              0ms,
                              as))
                            .handle_exception_type(
@@ -3143,6 +3171,7 @@ TEST_F(storage_test_fixture, compaction_non_raft_batches_regression_test) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
     log->housekeeping(compaction_cfg).get();
@@ -3227,6 +3256,7 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
               model::timestamp::min(),
               std::nullopt,
               model::offset::max(),
+              std::nullopt,
               std::nullopt,
               0ms,
               as))
@@ -3355,6 +3385,7 @@ TEST_F(storage_test_fixture, test_max_compact_offset) {
       std::nullopt,
       max_compact_offset,
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
     log->housekeeping(ccfg).get();
@@ -3419,6 +3450,7 @@ TEST_F(storage_test_fixture, test_self_compaction_while_reader_is_open) {
       std::nullopt,
       model::offset::max(),
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
     auto& segment = *(disk_log->segments().begin());
@@ -3470,6 +3502,7 @@ TEST_F(storage_test_fixture, test_simple_compaction_rebuild_index) {
       model::timestamp::min(),
       std::nullopt,
       model::offset::max(),
+      std::nullopt,
       std::nullopt,
       0ms,
       as);
@@ -3565,6 +3598,7 @@ do_compact_test(const compact_test_args args, storage_test_fixture& f) {
       model::timestamp::max(), // no time-based deletion
       std::nullopt,
       model::offset(args.max_compact_offs),
+      std::nullopt,
       std::nullopt,
       0ms,
       as);
@@ -3836,6 +3870,7 @@ TEST_F(storage_test_fixture, test_bytes_eviction_overrides) {
             model::timestamp::min(),
             cfg.retention_bytes(),
             model::offset::max(),
+            std::nullopt,
             std::nullopt,
             0ms,
             as));
@@ -4552,6 +4587,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
       std::nullopt,
       log->offsets().committed_offset,
       std::nullopt,
+      std::nullopt,
       0ms,
       as);
     log->housekeeping(h_cfg).get();
@@ -4742,6 +4778,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
       model::timestamp::min(),
       std::nullopt,
       log->offsets().committed_offset,
+      std::nullopt,
       std::nullopt,
       0ms,
       as);
@@ -5164,7 +5201,7 @@ TEST_F(storage_test_fixture, dirty_ratio) {
         // Perform sliding window compaction, which will fully cleanly compact
         // the log.
         static const storage::compaction_config compact_cfg(
-          model::offset::max(), std::nullopt, as);
+          model::offset::max(), std::nullopt, std::nullopt, as);
         disk_log->sliding_window_compact(compact_cfg).get();
 
         dirty_segments_size_bytes = 0;
@@ -5278,7 +5315,13 @@ TEST_F(storage_test_fixture, dirty_and_closed_bytes_bookkeeping) {
     auto* disk_log = static_cast<disk_log_impl*>(log.get());
 
     housekeeping_config cfg{
-      model::timestamp::max(), 1, model::offset::max(), std::nullopt, 0ms, abs};
+      model::timestamp::max(),
+      1,
+      model::offset::max(),
+      std::nullopt,
+      std::nullopt,
+      0ms,
+      abs};
 
     // add a segment with random keys until a certain size
     auto add_segment = [&](size_t size, model::term_id term) {
@@ -6206,7 +6249,8 @@ TEST_F(storage_test_fixture, find_sliding_ranges) {
             disk_log->force_roll().get();
         }
 
-        storage::compaction_config cfg(model::offset::max(), std::nullopt, as);
+        storage::compaction_config cfg(
+          model::offset::max(), std::nullopt, std::nullopt, as);
 
         for (size_t i = 0; i < segment_fields.size(); ++i) {
             auto& seg = disk_log->segments()[i];
@@ -6290,7 +6334,8 @@ TEST_F(storage_test_fixture, segment_cached_disk_usage_set_after_compaction) {
     add_segment_func();
 
     ss::abort_source as;
-    storage::compaction_config cfg(model::offset::max(), std::nullopt, as);
+    storage::compaction_config cfg(
+      model::offset::max(), std::nullopt, std::nullopt, as);
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
 
     auto check_cached_sizes = [](auto& seg) {
@@ -6346,3 +6391,58 @@ TEST_F(storage_test_fixture, segment_cached_disk_usage_set_after_compaction) {
         }
     }
 }
+
+TEST_F(storage_test_fixture, delete_retention_ms_with_ts) {
+    auto cfg = default_log_config(test_dir);
+    storage::log_manager mgr = make_log_manager(cfg);
+    using overrides_t = storage::ntp_config::default_overrides;
+    overrides_t ov;
+    auto delete_retention_ms = 10ms;
+    ov.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+    ov.delete_retention_ms = tristate<std::chrono::milliseconds>(
+      delete_retention_ms);
+    ov.shadow_indexing_mode = model::shadow_indexing_mode::full;
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp = model::ntp("default", "test", 0);
+
+    storage::ntp_config ntp_cfg(
+      ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov));
+
+    auto log = mgr.manage(std::move(ntp_cfg)).get();
+
+    // tombstone_retention_ms should be nullopt
+    ASSERT_EQ(log->config().tombstone_retention_ms(), std::nullopt);
+
+    // tx_retention_ms should have value
+    auto tx_retention_ms = log->config().tx_retention_ms();
+    ASSERT_TRUE(tx_retention_ms.has_value());
+    ASSERT_EQ(tx_retention_ms.value(), delete_retention_ms);
+};
+
+TEST_F(storage_test_fixture, delete_retention_ms_without_ts) {
+    auto cfg = default_log_config(test_dir);
+    storage::log_manager mgr = make_log_manager(cfg);
+    using overrides_t = storage::ntp_config::default_overrides;
+    overrides_t ov;
+    auto delete_retention_ms = 10ms;
+    ov.cleanup_policy_bitflags = model::cleanup_policy_bitflags::compaction;
+    ov.delete_retention_ms = tristate<std::chrono::milliseconds>(
+      delete_retention_ms);
+    ov.shadow_indexing_mode = model::shadow_indexing_mode::disabled;
+    auto deferred = ss::defer([&mgr]() mutable { mgr.stop().get(); });
+    auto ntp = model::ntp("default", "test", 0);
+
+    storage::ntp_config ntp_cfg(
+      ntp, mgr.config().base_dir, std::make_unique<overrides_t>(ov));
+    auto log = mgr.manage(std::move(ntp_cfg)).get();
+
+    // tombstone_retention_ms should have value
+    auto tombstone_retention_ms = log->config().tombstone_retention_ms();
+    ASSERT_TRUE(tombstone_retention_ms.has_value());
+    ASSERT_EQ(tombstone_retention_ms.value(), delete_retention_ms);
+
+    // tx_retention_ms should have value
+    auto tx_retention_ms = log->config().tx_retention_ms();
+    ASSERT_TRUE(tx_retention_ms.has_value());
+    ASSERT_EQ(tx_retention_ms.value(), delete_retention_ms);
+};

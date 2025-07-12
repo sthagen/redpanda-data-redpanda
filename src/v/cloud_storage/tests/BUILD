@@ -635,6 +635,7 @@ redpanda_cc_gtest(
         "//src/v/cluster",
         "//src/v/cluster/cloud_metadata/tests:manual_mixin",
         "//src/v/kafka/data:partition_proxy",
+        "//src/v/kafka/protocol:find_coordinator",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
         "//src/v/random:generators",

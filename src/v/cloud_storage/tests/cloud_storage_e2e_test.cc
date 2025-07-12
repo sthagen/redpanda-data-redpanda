@@ -15,8 +15,10 @@
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/cloud_metadata/tests/manual_mixin.h"
+#include "cluster/controller_api.h"
 #include "cluster/health_monitor_frontend.h"
 #include "kafka/data/replicated_partition.h"
+#include "kafka/protocol/find_coordinator.h"
 #include "kafka/server/tests/list_offsets_utils.h"
 #include "kafka/server/tests/produce_consume_utils.h"
 #include "model/fundamental.h"
@@ -244,6 +246,7 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloud) {
       model::timestamp::min(),
       1,
       log->stm_manager()->max_removable_local_log_offset(),
+      std::nullopt,
       std::nullopt,
       std::chrono::milliseconds{0},
       as);
@@ -688,6 +691,7 @@ TEST_P(CloudStorageEndToEndManualTest, TestTimequeryAfterArchivalGC) {
       1, // max_bytes_in_log
       log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
+      std::nullopt,
       std::chrono::milliseconds{0},
       as);
     partition->log()->housekeeping(housekeeping_conf).get();
@@ -996,6 +1000,7 @@ TEST_P(EndToEndFixture, TestCloudStorageTimequery) {
       0,
       log->stm_manager()->max_removable_local_log_offset(),
       std::nullopt,
+      std::nullopt,
       std::chrono::milliseconds{0},
       as);
     partition->log()->housekeeping(housekeeping_conf).get();
@@ -1264,6 +1269,34 @@ TEST_P(EndToEndFixture, TestMixedTimequery) {
           true,
           model::offset{i});
     }
+}
+
+TEST_P(EndToEndFixture, TestConsumerOffsetsNoTieredStorage) {
+    model::ntp ntp(
+      model::kafka_consumer_offsets_nt.ns,
+      model::kafka_consumer_offsets_nt.tp,
+      model::partition_id{0});
+
+    auto client = make_kafka_client().get();
+    auto client_stop_guard = ss::defer([&client] { client.stop().get(); });
+
+    client.connect().get();
+    kafka::find_coordinator_request req(kafka::group_instance_id("foo"));
+    req.data.key_type = kafka::coordinator_type::group;
+    client.dispatch(std::move(req), kafka::api_version(1)).get();
+
+    ASSERT_EQ(
+      cluster::errc::success,
+      app.controller->get_api()
+        .local()
+        .wait_for_topic(
+          model::kafka_consumer_offsets_nt, model::timeout_clock::now() + 30s)
+        .get());
+
+    auto partition = app.partition_manager.local().get(ntp);
+    ASSERT_FALSE(partition->archiver().has_value());
+    ASSERT_EQ(nullptr, partition->archival_meta_stm().get());
+    ASSERT_FALSE(partition->cloud_data_available());
 }
 
 INSTANTIATE_TEST_SUITE_P(WithOverride, EndToEndFixture, ::testing::Bool());

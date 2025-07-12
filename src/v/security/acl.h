@@ -858,4 +858,10 @@ struct acl_binding_filter_v2 : public acl_binding_filter {
 
 } // namespace testing
 
+/**
+ *  list of acl operations for specific resource
+ */
+template<typename T>
+const std::vector<acl_operation>& get_allowed_operations();
+
 } // namespace security

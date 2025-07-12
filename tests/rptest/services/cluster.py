@@ -121,7 +121,22 @@ def cluster(log_allow_list: LogAllowList | None = None,
 
                     if isinstance(redpanda, RedpandaService):
                         redpanda.cloud_storage_diagnostics()
+
+                        # stop the cluster before decoding the logs so the decode process doesn't
+                        # complete with the Redpanda nodes
+                        try:
+                            redpanda.logger.info(
+                                f"While finishing failed test, stopping Redpanda service {redpanda.who_am_i()}..."
+                            )
+                            redpanda.stop()
+                        except Exception as e:
+                            # ignore this since we want to propagate the original exception
+                            redpanda.logger.info(
+                                f"While finishing failed test, failed to stop Redpanda service (ignored): {e}"
+                            )
+
                         redpanda.decode_backtraces()
+
                     if isinstance(redpanda,
                                   RedpandaService | RedpandaServiceCloud):
                         redpanda.raise_on_crash(log_allow_list=log_allow_list)

@@ -864,7 +864,7 @@ get_security_acls(server::request_t rq, server::reply_t rp) {
         security::resource_pattern_filter::resource_subsystem::schema_registry},
       security::acl_entry_filter{principal, host, operation, permission}};
 
-    auto sr_acls = std::ranges::to<std::vector>(
+    auto sr_acls = std::ranges::to<fragmented_vector<acl>>(
       acl_store.acls(filter)
       | std::views::transform(
         [](const security::acl_binding& binding) { return acl(binding); }));
@@ -955,7 +955,7 @@ delete_security_acls(server::request_t rq, server::reply_t rp) {
     auto deleted = co_await security_frontend.delete_acls(
       std::move(filters), 5s);
 
-    auto res = std::vector<acl>{};
+    auto res = fragmented_vector<acl>{};
     std::ranges::for_each(deleted, [&res](cluster::delete_acls_result r) {
         if (r.error != cluster::errc::success) {
             throw exception(

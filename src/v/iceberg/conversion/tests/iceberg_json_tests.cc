@@ -862,7 +862,27 @@ TEST(JsonConversionIr, StructFieldIndex) {
     ASSERT_EQ(result.value().struct_field_map().at("field2").field_pos, 1);
 }
 
-// TODO: what to do with NULL values?
+TEST_CORO(IcebergValues, ValueNull) {
+    // This test passes even without extending the type with a null, i.e.
+    // `{"type": ["string", "null"]}` because we make all types nullable
+    // by default.
+    //
+    // In theory, a null value shouldn't be allowed for this schema but we
+    // allow it because we are explicitly not a JSON Schema validator.
+    auto schema = R"({
+      "$schema": "http://json-schema.org/draft-07/schema#",
+      "type": "string"
+    })";
+
+    auto result = co_await to_iceberg_value(schema, "null");
+
+    ASSERT_TRUE_CORO(result.has_value()) << result.error().what();
+    auto result_value = std::get<std::unique_ptr<struct_value>>(
+      std::move(result.value()));
+
+    ASSERT_EQ_CORO(result_value->fields.size(), 1);
+    ASSERT_FALSE_CORO(result_value->fields[0].has_value());
+}
 
 TEST_CORO(IcebergValues, ValuePrimitives) {
     const auto json_primitives = std::to_array<
@@ -1134,9 +1154,6 @@ TEST_CORO(IcebergValues, FormatValueTooLong) {
 }
 
 TEST_CORO(IcebergValues, Empty) {
-    GTEST_SKIP_CORO()
-      << "waiting for empty document handling to be merged in json parser";
-
     const auto schema = R"({
       "$schema": "http://json-schema.org/draft-07/schema#",
       "type": "array",

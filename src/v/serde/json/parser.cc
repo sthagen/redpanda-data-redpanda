@@ -509,10 +509,6 @@ public:
                == detail::numeric_parser::result::need_more_data) {
             if (_buf.empty()) {
                 if (_suspension_stack.empty()) {
-                    // If we reach the end of the input parsing a number, and
-                    // we're at the top-level, it's valid if the number literal
-                    // is valid. To force the number parser to finalize the
-                    // number, feed it a space. Bit of a hack :).
                     TRACE(
                       "parse_number: EOF at top level, trying to finalize\n");
                     numeric_parser.finalize(numeric_parse_result);

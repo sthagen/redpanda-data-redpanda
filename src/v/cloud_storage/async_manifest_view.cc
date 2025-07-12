@@ -35,7 +35,6 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/smp.hh>
-#include <seastar/core/with_scheduling_group.hh>
 #include <seastar/util/defer.hh>
 
 #include <boost/lexical_cast.hpp>

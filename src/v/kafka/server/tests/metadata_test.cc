@@ -349,7 +349,7 @@ FIXTURE_TEST(metadata_cluster_auth, metadata_fixture) {
 
     const metadata_response_data default_response;
     const auto cluster_ops = kafka::details::to_bit_field(
-      kafka::details::get_allowed_operations<security::acl_cluster_name>());
+      security::get_allowed_operations<security::acl_cluster_name>());
 
     for (api_version ver{1}; ver < max_supported; ++ver) {
         auto resp = client.dispatch(make_request(), ver).get();

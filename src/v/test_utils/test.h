@@ -64,21 +64,35 @@ private:
         static ::testing::TestInfo* const test_info_ [[maybe_unused]];         \
     };                                                                         \
                                                                                \
+    constexpr auto GTEST_CONCAT_TOKEN_(                                        \
+      GTEST_TEST_CLASS_NAME_(test_suite_name, test_name), _init)               \
+      = []() noexcept {                                                        \
+            try {                                                              \
+                /* NOLINTNEXTLINE(cppcoreguidelines-owning-memory) */          \
+                auto test_factory = new ::testing::internal::TestFactoryImpl<  \
+                  GTEST_TEST_CLASS_NAME_(test_suite_name, test_name)>;         \
+                return ::testing::internal::MakeAndRegisterTestInfo(           \
+                  #test_suite_name,                                            \
+                  #test_name,                                                  \
+                  nullptr,                                                     \
+                  nullptr,                                                     \
+                  ::testing::internal::CodeLocation(__FILE__, __LINE__),       \
+                  (parent_id),                                                 \
+                  ::testing::internal::SuiteApiResolver<                       \
+                    parent_class>::GetSetUpCaseOrSuite(__FILE__, __LINE__),    \
+                  ::testing::internal::SuiteApiResolver<                       \
+                    parent_class>::GetTearDownCaseOrSuite(__FILE__, __LINE__), \
+                  test_factory);                                               \
+            } catch (...) {                                                    \
+                std::print(std::cerr, "Unknown exception during test init.");  \
+                std::terminate();                                              \
+            }                                                                  \
+        };                                                                     \
     ::testing::TestInfo* const GTEST_TEST_CLASS_NAME_(                         \
       test_suite_name, test_name)::test_info_                                  \
-      = ::testing::internal::MakeAndRegisterTestInfo(                          \
-        #test_suite_name,                                                      \
-        #test_name,                                                            \
-        nullptr,                                                               \
-        nullptr,                                                               \
-        ::testing::internal::CodeLocation(__FILE__, __LINE__),                 \
-        (parent_id),                                                           \
-        ::testing::internal::SuiteApiResolver<                                 \
-          parent_class>::GetSetUpCaseOrSuite(__FILE__, __LINE__),              \
-        ::testing::internal::SuiteApiResolver<                                 \
-          parent_class>::GetTearDownCaseOrSuite(__FILE__, __LINE__),           \
-        new ::testing::internal::TestFactoryImpl<GTEST_TEST_CLASS_NAME_(       \
-          test_suite_name, test_name)>);                                       \
+      = GTEST_CONCAT_TOKEN_(                                                   \
+        GTEST_TEST_CLASS_NAME_(test_suite_name, test_name), _init());          \
+                                                                               \
     seastar::future<> GTEST_TEST_CLASS_NAME_(                                  \
       test_suite_name, test_name)::TestBodyWrapped()
 

@@ -16,6 +16,7 @@
 #include "cloud_storage/cache_service.h"
 #include "cloud_storage/download_exception.h"
 #include "cloud_storage/logger.h"
+#include "cloud_storage/materialized_resources.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote_segment_index.h"
 #include "cloud_storage/segment_chunk_data_source.h"
@@ -176,8 +177,11 @@ remote_segment::remote_segment(
     }
 
     // run hydration loop in the background
+    auto sg = _api.resources().get_scheduling_group();
     _hydration_loop_running = true;
-    ssx::background = run_hydrate_bg();
+
+    ssx::background = ss::with_scheduling_group(
+      sg, [this] { return run_hydrate_bg(); });
 }
 
 const model::ntp& remote_segment::get_ntp() const { return _ntp; }

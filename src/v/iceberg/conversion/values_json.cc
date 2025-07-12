@@ -11,6 +11,7 @@
 #include "iceberg/conversion/values_json.h"
 
 #include "bytes/iobuf_parser.h"
+#include "iceberg/conversion/conversion_outcome.h"
 #include "iceberg/conversion/ir_json.h"
 #include "iceberg/conversion/time_rfc3339.h"
 #include "iceberg/values.h"
@@ -262,17 +263,15 @@ deserialize_json_impl(iobuf buf, const json_conversion_ir& ir) {
 
     co_await decode_field(p, root_value, ir.root(), ir.struct_field_map());
 
-    if (!root_value.has_value()) {
-        co_return value_conversion_exception("No value decoded from JSON");
-    }
-
     // Wrap the root value in a struct_value if it is not already one.
-    if (std::holds_alternative<std::unique_ptr<struct_value>>(
-          root_value.value())) {
+    if (
+      root_value.has_value()
+      && std::holds_alternative<std::unique_ptr<struct_value>>(
+        root_value.value())) {
         co_return std::move(root_value.value());
     } else {
         auto sv = std::make_unique<struct_value>();
-        sv->fields.push_back(std::move(root_value.value()));
+        sv->fields.push_back(std::move(root_value));
         co_return std::move(sv);
     }
 }

@@ -129,7 +129,9 @@ operator<<(std::ostream& o, const ntp_config::default_overrides& v) {
       "remote_delete: {}, segment_ms: {}, "
       "initial_retention_local_target_bytes: {}, "
       "initial_retention_local_target_ms: {}, write_caching: {}, flush_ms: {}, "
-      "flush_bytes: {} iceberg_mode: {}, remote_allow_gaps: {} }}",
+      "flush_bytes: {}, iceberg_mode: {}, remote_allow_gaps: {}, "
+      "delete_retention_ms: {}, min_cleanable_dirty_ratio: {}, "
+      "min_compaction_lag_ms: {}, max_compaction_lag_ms: {} }}",
       v.compaction_strategy,
       v.cleanup_policy_bitflags,
       v.segment_size,
@@ -146,7 +148,11 @@ operator<<(std::ostream& o, const ntp_config::default_overrides& v) {
       v.flush_ms,
       v.flush_bytes,
       v.iceberg_mode,
-      v.remote_allow_gaps);
+      v.remote_allow_gaps,
+      v.delete_retention_ms,
+      v.min_cleanable_dirty_ratio,
+      v.min_compaction_lag_ms,
+      v.max_compaction_lag_ms);
 
     if (config::shard_local_cfg().development_enable_cloud_topics()) {
         fmt::print(o, ", cloud_topic_enabled: {}", v.cloud_topic_enabled);
@@ -223,10 +229,12 @@ std::ostream& operator<<(std::ostream& o, const compaction_config& c) {
       o,
       "{{max_removable_local_log_offset:{}, "
       "should_sanitize:{}, "
-      "tombstone_retention_ms:{}}}",
+      "tombstone_retention_ms:{}, "
+      "tx_retention_ms:{}}}",
       c.max_removable_local_log_offset,
       c.sanitizer_config,
-      c.tombstone_retention_ms);
+      c.tombstone_retention_ms,
+      c.tx_retention_ms);
     return o;
 }
 

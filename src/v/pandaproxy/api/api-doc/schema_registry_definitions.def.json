@@ -166,7 +166,6 @@
             "DELETE",
             "DESCRIBE",
             "DESCRIBE_CONFIGS",
-            "ALTER",
             "ALTER_CONFIGS"
           ],
           "description": "The operation to allow or deny."

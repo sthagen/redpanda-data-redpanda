@@ -156,6 +156,10 @@ public:
     /// \brief Start the remote
     ss::future<> start();
 
+    const cloud_io::io_resources& resources() const {
+        return _io.local().resources();
+    }
+
     /// \brief Stop the remote
     ///
     /// Wait until all background operations complete

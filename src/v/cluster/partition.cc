@@ -803,7 +803,16 @@ bool partition::should_construct_archiver() {
     return config::shard_local_cfg().cloud_storage_enabled()
            && config::shard_local_cfg().cloud_storage_disable_archiver_manager()
            && _cloud_storage_api.local_is_initialized()
+           // The archiver can only be created for partitions that belong to
+           // user topics. This includes everything inside the kafka namespace
+           // except for the kafka consumer offsets topic. The consumer offsets
+           // topic is backed up separately by the cluster/cluster_metadata
+           // subsystem. The archival_metadata_stm can't be created for the
+           // consumer offsets topic partitions. The schema registry topic is
+           // not exempt from this. It should be possible to create an archiver
+           // for it.
            && _raft->ntp().ns == model::kafka_namespace
+           && _raft->ntp().tp.topic != model::kafka_consumer_offsets_topic
            && (ntp_config.is_archival_enabled() || ntp_config.is_read_replica_mode_enabled());
 }
 

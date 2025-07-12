@@ -1272,7 +1272,7 @@
             "name": "operation",
             "in": "query",
             "type": "string",
-            "enum": ["ALL", "READ", "WRITE", "REMOVE", "DESCRIBE", "DESCRIBE_CONFIGS", "ALTER", "ALTER_CONFIGS"],
+            "enum": ["ALL", "READ", "WRITE", "DELETE", "DESCRIBE", "DESCRIBE_CONFIGS", "ALTER_CONFIGS"],
             "description": "The operation to allow or deny."
           },
           {

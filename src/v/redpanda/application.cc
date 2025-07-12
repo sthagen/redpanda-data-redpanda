@@ -1626,8 +1626,7 @@ void application::wire_up_redpanda_services(
           ss::sharded_parameter([&cloud_configs] {
               return cloud_configs.local().cloud_credentials_source;
           }),
-          ss::sharded_parameter(
-            [this] { return sched_groups.archival_upload(); }))
+          ss::sharded_parameter([this] { return sched_groups.ts_read_sg(); }))
           .get();
         cloud_io.invoke_on_all(&cloud_io::remote::start).get();
         bucket_name = cloud_configs.local().bucket_name;
