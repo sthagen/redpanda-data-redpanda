@@ -130,6 +130,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:extent_meta",
+        "//src/v/cloud_topics/level_one:domain_supervisor",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/container:fragmented_vector",
         "//src/v/model",

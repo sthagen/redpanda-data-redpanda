@@ -33,6 +33,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/bytes",
         "//src/v/bytes:iobuf",
+        "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
         "//src/v/cloud_roles",
