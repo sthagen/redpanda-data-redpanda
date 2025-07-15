@@ -11,7 +11,7 @@ import requests
 
 from rptest.services.admin import Admin
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.tests.pandaproxy_test import PandaProxyEndpoints
+from rptest.tests.schema_registry_test import SchemaRegistryEndpoints
 from rptest.clients.rpk import RpkTool
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import SaslCredentials, SecurityConfig
@@ -221,7 +221,7 @@ class AdminApiAuthEnablementTest(RedpandaTest):
                 {"superusers": [self.redpanda.SUPERUSER_CREDENTIALS.username]})
 
 
-class AdminApiListUsersTest(PandaProxyEndpoints):
+class AdminApiListUsersTest(SchemaRegistryEndpoints):
     def __init__(self, context):
         security = SecurityConfig()
         security.kafka_enable_authorization = True
@@ -237,10 +237,10 @@ class AdminApiListUsersTest(PandaProxyEndpoints):
 
     @cluster(num_nodes=3)
     def test_list_users(self):
-        # Create ephemeral users for each pandaproxy instance
+        # Create ephemeral users for each schema registry instance
         pp_hosts = [node.account.hostname for node in self.redpanda.nodes]
         for host in pp_hosts:
-            res = requests.get(f"http://{host}:8082/status/ready")
+            res = requests.get(f"http://{host}:8081/status/ready")
             assert res.status_code == requests.codes.ok
 
         users = self.superuser_admin.list_users()

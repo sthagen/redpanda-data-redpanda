@@ -855,16 +855,19 @@ ss::future<> log_manager::remove(model::ntp ntp) {
           //
           // TODO: we should more consistently clean up the staging operations
           // to clean up after themselves on failure.
-          if (boost::algorithm::ends_with(de.name, ".staging")) {
+          static constexpr auto suffixes_to_remove = std::to_array(
+            {".staging", ".cannotrecover", ".ignore_have_newer"});
+          const auto should_remove = std::ranges::any_of(
+            suffixes_to_remove,
+            [&](const auto& v) { return de.name.ends_with(v); });
+
+          if (should_remove) {
               // It isn't necessarily problematic to get here since we can
               // proceed with removal, but it points to a missing cleanup which
               // can be problematic for users, as it needlessly consumes space.
               // Log verbosely to make it easier to catch.
               auto file_path = fmt::format("{}/{}", ntp_dir, de.name);
-              vlog(
-                stlog.error,
-                "Leftover staging file found, removing: {}",
-                file_path);
+              vlog(stlog.warn, "Leftover file found, removing: {}", file_path);
               return ss::remove_file(file_path);
           }
           return ss::make_ready_future<>();

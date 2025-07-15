@@ -1358,10 +1358,6 @@ class SchemaRegistryEndpoints(RedpandaTest):
                            payload_class=payload_class,
                            compression_type=compression_type)
 
-    def _get_topics(self):
-        return requests.get(
-            f"http://{self.redpanda.nodes[0].account.hostname}:8082/topics")
-
     def _create_topic(self,
                       topic=create_topic_names(1),
                       partition_count=1,
@@ -1378,11 +1374,10 @@ class SchemaRegistryEndpoints(RedpandaTest):
                                config=config)
 
         def has_topic():
-            self_topics = self._get_topics()
+            self_topics = set(rpk_tools.list_topics())
             self.logger.info(
-                f"name: {topic}, self._get_topics().status_code: {self_topics.status_code}, self_topics.json(): {self_topics.json()}"
-            )
-            return topic in self_topics.json()
+                f"name: {topic}, self._get_topics(): {self_topics}")
+            return topic in self_topics
 
         wait_until(has_topic,
                    timeout_sec=10,

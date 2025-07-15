@@ -658,6 +658,22 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "segment_set_test",
+    timeout = "short",
+    srcs = [
+        "segment_set_test.cc",
+    ],
+    deps = [
+        "//src/v/storage",
+        "//src/v/storage:resources",
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:directory_walker",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "log_segment_reader_test",
     timeout = "short",
     srcs = [

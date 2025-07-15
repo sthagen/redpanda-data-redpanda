@@ -1941,9 +1941,27 @@ TEST_F(
     log = partition->log().get();
     disk_log = dynamic_cast<storage::disk_log_impl*>(log);
 
-    // Some of the concatenated segments will have been left on disk.
+    // Some of the concatenated segments will have been left on disk, but
+    // segment_set recovery should have ignored these.
     auto segment_count_after = disk_log->segment_count();
-    ASSERT_EQ(segment_count_before, segment_count_after);
+    ASSERT_LT(segment_count_after, segment_count_before);
+
+    {
+        auto dir_path = log->config().work_directory();
+        int num_redundant_files = 0;
+        directory_walker walker;
+        walker
+          .walk(
+            dir_path,
+            [&num_redundant_files](const ss::directory_entry& de) {
+                if (de.name.ends_with(".ignore_have_newer")) {
+                    ++num_redundant_files;
+                }
+                return ss::make_ready_future<>();
+            })
+          .get();
+        ASSERT_GT(num_redundant_files, 0);
+    }
 
     // Read log with a Kafka consumer.
     auto make_kafka_consumer = [&]() {
@@ -2022,15 +2040,11 @@ TEST_F(
     ASSERT_EQ(num_data_records(log_reader_batches_before), cardinality);
 
     // Raw batches on disk in segment files
-    // We will see that the old data is actually still around.
     auto on_disk_batches_before = make_log_segment_batch_reader();
-    ASSERT_EQ(
-      num_data_records(on_disk_batches_before),
-      cardinality * (segment_count_after - 1));
+    ASSERT_EQ(num_data_records(on_disk_batches_before), cardinality);
 
     // One more adjacent compact. There should be no differences in batches
-    // processed by the log reader or kafka consumer after this compaction.
-    // However, expect the redundant data on disk to be removed.
+    // processed by any of the readers after this compaction.
     do_adjacent_compact(disk_log);
 
     // Kafka consumer
@@ -2044,7 +2058,6 @@ TEST_F(
     // Raw batches on disk in segment files.
     auto on_disk_batches_after = make_log_segment_batch_reader();
     ASSERT_EQ(num_data_records(on_disk_batches_after), cardinality);
-    ASSERT_NE(on_disk_batches_before, on_disk_batches_after);
 }
 
 TEST_F(CompactionFixtureTest, TestBatchCacheResetAfterAdjacentMerge) {

@@ -227,7 +227,7 @@ struct archival_metadata_stm::read_write_fence_cmd
 //
 struct archival_metadata_stm::snapshot
   : public serde::
-      envelope<snapshot, serde::version<5>, serde::compat_version<0>> {
+      envelope<snapshot, serde::version<6>, serde::compat_version<0>> {
     /// List of segments
     fragmented_vector<segment> segments;
     /// List of replaced segments
@@ -272,6 +272,12 @@ struct archival_metadata_stm::snapshot
     model::producer_id highest_producer_id;
     // Offset of the last applied command
     model::offset applied_offset;
+    // The offset of the last mark_clean_cmd applied;
+    // default (-inf) in v5 and earlier
+    model::offset last_clean_at;
+    // The offset of the last record that modified the stm;
+    // default (-inf) in v5 and earlier
+    model::offset last_dirty_at;
 
     auto serde_fields() {
         return std::tie(
@@ -291,7 +297,9 @@ struct archival_metadata_stm::snapshot
           last_scrubbed_offset,
           detected_anomalies,
           highest_producer_id,
-          applied_offset);
+          applied_offset,
+          last_clean_at,
+          last_dirty_at);
     }
 };
 
@@ -1259,11 +1267,20 @@ archival_metadata_stm::apply_local_snapshot(
     // reset counter, the value depended on the previous _manifest
     _compacted_replaced_bytes = 0;
 
-    if (snap.dirty == state_dirty::dirty) {
-        _last_clean_at = model::offset{0};
+    if (snap.last_clean_at == model::offset{}) {
+        // Handle legacy snapshots which don't have the 'last_clean_at'
+        // field.
+        if (snap.dirty == state_dirty::dirty) {
+            _last_clean_at = model::offset{};
+        } else {
+            _last_clean_at = header.offset;
+        }
     } else {
-        _last_clean_at = header.offset;
+        _last_clean_at = snap.last_clean_at;
     }
+
+    _last_dirty_at = snap.last_dirty_at;
+
     co_return raft::local_snapshot_applied::yes;
 }
 
@@ -1290,7 +1307,9 @@ archival_metadata_stm::take_local_snapshot(ssx::semaphore_units apply_units) {
       .last_scrubbed_offset = _manifest->last_scrubbed_offset(),
       .detected_anomalies = _manifest->detected_anomalies(),
       .highest_producer_id = _manifest->highest_producer_id(),
-      .applied_offset = _manifest->get_applied_offset()});
+      .applied_offset = _manifest->get_applied_offset(),
+      .last_clean_at = _last_clean_at,
+      .last_dirty_at = _last_dirty_at});
     auto snapshot_offset = last_applied_offset();
     apply_units.return_all();
 
@@ -1304,6 +1323,21 @@ archival_metadata_stm::take_local_snapshot(ssx::semaphore_units apply_units) {
 
     co_return raft::stm_snapshot::create(
       0, snapshot_offset, std::move(snap_data));
+}
+
+model::offset archival_metadata_stm::cloud_recoverable_offset() {
+    auto lo = get_last_offset();
+    if (_manifest->size() == 0 && lo == model::offset{0}) {
+        lo = model::offset::min();
+    }
+
+    // Do not collect past the offset we last uploaded manifest for: this is
+    // needed for correctness because the remote manifest is used in
+    // handle_eviction() - it is what a remote node doing snapshot-driven
+    // raft recovery will use to start from.
+    lo = std::min(lo, _last_clean_at);
+
+    return lo;
 }
 
 model::offset archival_metadata_stm::max_removable_local_log_offset() {
@@ -1332,18 +1366,7 @@ model::offset archival_metadata_stm::max_removable_local_log_offset() {
         // need to interact with local retention.
         return model::offset::max();
     }
-    auto lo = get_last_offset();
-    if (_manifest->size() == 0 && lo == model::offset{0}) {
-        lo = model::offset::min();
-    }
-
-    // Do not collect past the offset we last uploaded manifest for: this is
-    // needed for correctness because the remote manifest is used in
-    // handle_eviction() - it is what a remote node doing snapshot-driven
-    // raft recovery will use to start from.
-    lo = std::min(lo, _last_clean_at);
-
-    return lo;
+    return cloud_recoverable_offset();
 }
 
 void archival_metadata_stm::maybe_notify_waiter(cluster::errc err) noexcept {
