@@ -1,0 +1,211 @@
+/*
+ * Copyright 2025 Redpanda Data, Inc.
+ *
+ * Use of this software is governed by the Business Source License
+ * included in the file licenses/BSL.md
+ *
+ * As of the Change Date specified in that file, in accordance with
+ * the Business Source License, use of this software will be governed
+ * by the Apache License, Version 2.0
+ */
+
+#pragma once
+
+#include "cluster/cluster_link/table.h"
+#include "cluster_link/manager.h"
+#include "kafka/data/rpc/deps.h"
+
+#include <seastar/util/defer.hh>
+namespace cluster_link::tests {
+
+class test_link_registry : public link_registry {
+public:
+    explicit test_link_registry(cluster::cluster_link::table* table)
+      : _table(table) {}
+
+    std::optional<std::reference_wrapper<const model::metadata>>
+    find_link_by_id(model::id_t id) const override {
+        return _table->find_link_by_id(id);
+    }
+
+    std::optional<std::reference_wrapper<const model::metadata>>
+    find_link_by_name(const model::name_t& name) const override {
+        return _table->find_link_by_name(name);
+    }
+
+    chunked_vector<model::id_t> get_all_link_ids() const override {
+        return _table->get_all_link_ids();
+    }
+
+private:
+    cluster::cluster_link::table* _table;
+};
+class fake_partition_manager_proxy {
+public:
+    std::optional<ss::shard_id> shard_owner(const ::model::ktp& ktp) {
+        auto it = _shard_locations.find(ktp);
+        if (it == _shard_locations.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+    std::optional<ss::shard_id> shard_owner(const ::model::ntp& ntp) {
+        auto it = _shard_locations.find(ntp);
+        if (it == _shard_locations.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+
+    void set_shard_owner(const ::model::ntp& ntp, ss::shard_id shard_id) {
+        _shard_locations.insert_or_assign(ntp, shard_id);
+    }
+
+    void remove_shard_owner(const ::model::ntp& ntp) {
+        _shard_locations.erase(ntp);
+    }
+
+    template<typename R, typename N>
+    ss::future<::result<R, cluster::errc>> invoke_on_shard_impl(
+      ss::shard_id,
+      const N&,
+      ss::noncopyable_function<
+        ss::future<::result<R, cluster::errc>>(kafka::partition_proxy*)>) {
+        throw std::runtime_error("not implemented");
+    }
+
+private:
+    ::model::ntp_map_type<ss::shard_id> _shard_locations;
+};
+
+class fake_partition_manager : public kafka::data::rpc::partition_manager {
+public:
+    explicit fake_partition_manager(fake_partition_manager_proxy* impl)
+      : _impl(impl) {}
+
+    std::optional<ss::shard_id> shard_owner(const ::model::ktp& ktp) override {
+        return _impl->shard_owner(ktp);
+    }
+
+    std::optional<ss::shard_id> shard_owner(const ::model::ntp& ntp) override {
+        return _impl->shard_owner(ntp);
+    }
+
+    void set_shard_owner(const ::model::ntp& ntp, ss::shard_id shard_id) {
+        _impl->set_shard_owner(ntp, shard_id);
+    }
+
+    void remove_shard_owner(const ::model::ntp& ntp) {
+        _impl->remove_shard_owner(ntp);
+    }
+
+    ss::future<::result<::model::offset, cluster::errc>> invoke_on_shard(
+      ss::shard_id shard_id,
+      const ::model::ktp& ktp,
+      ss::noncopyable_function<
+        ss::future<::result<::model::offset, cluster::errc>>(
+          kafka::partition_proxy*)> fn) final {
+        return _impl->invoke_on_shard_impl(shard_id, ktp, std::move(fn));
+    }
+    ss::future<::result<::model::offset, cluster::errc>> invoke_on_shard(
+      ss::shard_id shard_id,
+      const ::model::ntp& ntp,
+      ss::noncopyable_function<
+        ss::future<::result<::model::offset, cluster::errc>>(
+          kafka::partition_proxy*)> fn) final {
+        return _impl->invoke_on_shard_impl(shard_id, ntp, std::move(fn));
+    }
+
+private:
+    fake_partition_manager_proxy* _impl;
+};
+class fake_partition_leader_cache_impl
+  : public kafka::data::rpc::partition_leader_cache {
+public:
+    std::optional<::model::node_id> get_leader_node(
+      ::model::topic_namespace_view tp_ns, ::model::partition_id pid) const {
+        auto ntp = ::model::ntp(tp_ns.ns, tp_ns.tp, pid);
+        auto it = _leader_map.find(ntp);
+        if (it == _leader_map.end()) {
+            return std::nullopt;
+        }
+        return it->second;
+    }
+    void set_leader_node(const ::model::ntp& ntp, ::model::node_id node_id) {
+        _leader_map.insert_or_assign(ntp, node_id);
+    }
+
+private:
+    chunked_hash_map<::model::ntp, ::model::node_id> _leader_map;
+};
+
+class fake_partition_leader_cache
+  : public kafka::data::rpc::partition_leader_cache {
+public:
+    explicit fake_partition_leader_cache(fake_partition_leader_cache_impl* impl)
+      : _impl(impl) {}
+    std::optional<::model::node_id> get_leader_node(
+      ::model::topic_namespace_view tp_ns,
+      ::model::partition_id pid) const final {
+        return _impl->get_leader_node(tp_ns, pid);
+    }
+
+private:
+    fake_partition_leader_cache_impl* _impl;
+};
+
+class cluster_link_manager_test_fixture {
+public:
+    explicit cluster_link_manager_test_fixture(::model::node_id self);
+    ~cluster_link_manager_test_fixture() = default;
+
+    cluster_link_manager_test_fixture(const cluster_link_manager_test_fixture&)
+      = delete;
+    cluster_link_manager_test_fixture&
+    operator=(const cluster_link_manager_test_fixture&)
+      = delete;
+    cluster_link_manager_test_fixture(cluster_link_manager_test_fixture&&)
+      = delete;
+    cluster_link_manager_test_fixture&
+    operator=(cluster_link_manager_test_fixture&&)
+      = delete;
+
+    ss::future<> wire_up_and_start(std::unique_ptr<link_factory>);
+
+    ss::future<> reset();
+
+    fake_partition_manager_proxy* partition_manager_proxy() {
+        return _fpmp.get();
+    }
+
+    ss::sharded<manager>& get_manager() { return _manager; }
+
+    void elect_leader(
+      const ::model::ntp& ntp,
+      ::model::node_id node_id,
+      std::optional<ss::shard_id> shard_id);
+
+    fake_partition_leader_cache_impl* partition_leader_cache() {
+        return _fplci;
+    }
+
+    fake_partition_manager* partition_manager() { return _fpm; }
+
+    ss::future<> upsert_link(model::metadata metadata);
+
+    link_factory* get_link_factory() { return _lf; }
+
+private:
+    chunked_vector<ss::deferred_action<ss::noncopyable_function<void()>>>
+      _notification_cleanups;
+    ss::sharded<cluster::cluster_link::table> _table;
+    std::unique_ptr<fake_partition_manager_proxy> _fpmp;
+    fake_partition_manager* _fpm{nullptr};
+    fake_partition_leader_cache_impl* _fplci{nullptr};
+    link_factory* _lf{nullptr};
+    ss::sharded<manager> _manager;
+
+    ::model::node_id _self;
+    model::id_t _next_link_id{0};
+};
+} // namespace cluster_link::tests

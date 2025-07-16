@@ -15,6 +15,7 @@
 #include "base/seastarx.h"
 #include "base/units.h"
 #include "bytes/iobuf.h"
+#include "cloud_topics/cluster_services.h"
 #include "cloud_topics/core/pipeline_stage.h"
 #include "cloud_topics/core/write_pipeline.h"
 #include "cloud_topics/types.h"
@@ -65,7 +66,8 @@ public:
     explicit batcher(
       core::write_pipeline<Clock>::stage stage,
       cloud_storage_clients::bucket_name bucket,
-      cloud_io::remote_api<Clock>& remote_api);
+      cloud_io::remote_api<Clock>& remote_api,
+      cluster_services* cluster_services);
 
     ss::future<> start();
     ss::future<> stop();
@@ -96,6 +98,7 @@ private:
     /// \return size of the uploaded object or error code
     ss::future<result<size_t>> upload_object(object_id id, iobuf payload);
 
+    cluster_services* _cluster_services;
     cloud_io::remote_api<Clock>& _remote;
     cloud_storage_clients::bucket_name _bucket;
     config::binding<std::chrono::milliseconds> _upload_timeout;

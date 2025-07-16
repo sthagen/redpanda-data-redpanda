@@ -25,7 +25,7 @@ namespace pandaproxy::schema_registry {
 struct acl_control_character_thrower {
     explicit acl_control_character_thrower(std::string_view field)
       : field_name(field) {}
-    [[noreturn]] void conversion_error() {
+    [[noreturn]] void conversion_error() const {
         throw exception(
           error_code::acl_invalid,
           fmt::format("Control characters not allowed in '{}'", field_name));

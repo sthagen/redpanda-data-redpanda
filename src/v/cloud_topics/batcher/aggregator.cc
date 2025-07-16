@@ -124,7 +124,8 @@ void aggregator<Clock>::ack() {
         if (p->ref != nullptr) {
             try {
                 p->ref->set_value(std::move(p->extents));
-            } catch (const ss::broken_promise&) {
+            } catch (const ss::broken_promise& e) {
+                std::ignore = e;
             }
         }
     }
@@ -140,7 +141,8 @@ void aggregator<Clock>::ack_error(errc e) {
         if (p->ref != nullptr) {
             try {
                 p->ref->set_value(e);
-            } catch (const ss::broken_promise&) {
+            } catch (const ss::broken_promise& e) {
+                std::ignore = e;
             }
         }
     }

@@ -14,6 +14,7 @@
 #include "cloud_io/remote.h"
 #include "cloud_topics/batcher/batcher.h"
 #include "cloud_topics/extent_meta.h"
+#include "cloud_topics/object_utils.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record.h"
@@ -81,6 +82,14 @@ get_random_batches(int num_batches, int num_records) { // NOLINT
     };
 }
 
+class static_cluster_services : public cloud_topics::cluster_services {
+public:
+    static_cluster_services() = default;
+    seastar::future<cloud_topics::cluster_epoch> current_epoch() override {
+        return seastar::make_ready_future<cloud_topics::cluster_epoch>(0);
+    }
+};
+
 namespace experimental::cloud_topics {
 struct batcher_accessor {
     ss::future<result<bool>> run_once() noexcept { return batcher->run_once(); }
@@ -125,8 +134,12 @@ TEST_CORO(batcher_test, single_write_request) {
     remote_mock mock;
     cloud_storage_clients::bucket_name bucket("foo");
     cloud_topics::core::write_pipeline<ss::manual_clock> pipeline;
+    static_cluster_services cluster_services;
     cloud_topics::batcher<ss::manual_clock> batcher(
-      pipeline.register_write_pipeline_stage(), bucket, mock);
+      pipeline.register_write_pipeline_stage(),
+      bucket,
+      mock,
+      &cluster_services);
     cloud_topics::batcher_accessor batcher_accessor{
       .batcher = &batcher,
     };
@@ -161,9 +174,8 @@ TEST_CORO(batcher_test, single_write_request) {
     auto placeholder_batches = std::move(write_res.value());
     ASSERT_EQ_CORO(placeholder_batches.size(), num_batches);
     for (const cloud_topics::extent_meta& ext : placeholder_batches) {
-        // TODO: revisit this code when the object path format will change
-        auto sid = ssx::sformat("{}", ext.id);
-        ASSERT_EQ_CORO(sid, id());
+        auto sid = cloud_topics::object_path_factory::level_zero_path(ext.id);
+        ASSERT_EQ_CORO(sid, id);
     }
 }
 
@@ -171,8 +183,12 @@ TEST_CORO(batcher_test, many_write_requests) {
     remote_mock mock;
     cloud_storage_clients::bucket_name bucket("foo");
     cloud_topics::core::write_pipeline<ss::manual_clock> pipeline;
+    static_cluster_services cluster_services;
     cloud_topics::batcher<ss::manual_clock> batcher(
-      pipeline.register_write_pipeline_stage(), bucket, mock);
+      pipeline.register_write_pipeline_stage(),
+      bucket,
+      mock,
+      &cluster_services);
     cloud_topics::batcher_accessor batcher_accessor{
       .batcher = &batcher,
     };
@@ -236,8 +252,9 @@ TEST_CORO(batcher_test, many_write_requests) {
         auto placeholder_batches = std::move(write_res.value());
         ASSERT_EQ_CORO(placeholder_batches.size(), expected_num_batches.at(ix));
         for (const cloud_topics::extent_meta& ext : placeholder_batches) {
-            auto sid = ssx::sformat("{}", ext.id);
-            ASSERT_EQ_CORO(sid, id());
+            auto sid = cloud_topics::object_path_factory::level_zero_path(
+              ext.id);
+            ASSERT_EQ_CORO(sid, id);
         }
         ix++;
     }
@@ -250,8 +267,12 @@ TEST_CORO(batcher_test, expired_write_request) {
     remote_mock mock;
     cloud_storage_clients::bucket_name bucket("foo");
     cloud_topics::core::write_pipeline<ss::manual_clock> pipeline;
+    static_cluster_services cluster_services;
     cloud_topics::batcher<ss::manual_clock> batcher(
-      pipeline.register_write_pipeline_stage(), bucket, mock);
+      pipeline.register_write_pipeline_stage(),
+      bucket,
+      mock,
+      &cluster_services);
     cloud_topics::batcher_accessor batcher_accessor{
       .batcher = &batcher,
     };
@@ -314,8 +335,8 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     ASSERT_EQ_CORO(placeholder_batches.size(), expected_num_batches);
     for (const cloud_topics::extent_meta& ext : placeholder_batches) {
-        auto sid = ssx::sformat("{}", ext.id);
-        ASSERT_EQ_CORO(sid, id());
+        auto sid = cloud_topics::object_path_factory::level_zero_path(ext.id);
+        ASSERT_EQ_CORO(sid, id);
     }
 }
 

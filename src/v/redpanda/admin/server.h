@@ -107,7 +107,7 @@ public:
           : default_control_character_thrower()
           , _parameter_name(parameter_name) {}
 
-        [[noreturn]] [[gnu::cold]] void conversion_error() override {
+        [[noreturn]] [[gnu::cold]] void conversion_error() const override {
             throw ss::httpd::bad_request_exception(fmt::format(
               "Parameter '{}' contained invalid control characters",
               _parameter_name));

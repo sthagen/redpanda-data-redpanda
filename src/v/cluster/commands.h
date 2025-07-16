@@ -150,7 +150,7 @@ inline constexpr int8_t create_data_migration_cmd_type = 0;
 inline constexpr int8_t update_data_migration_state_cmd_type = 1;
 inline constexpr int8_t remove_data_migration_cmd_type = 2;
 
-// panda link commands
+// cluster link commands
 inline constexpr int8_t cluster_link_upsert_cmd_type = 0;
 inline constexpr int8_t cluster_link_remove_cmd_type = 1;
 inline constexpr int8_t cluster_link_add_mirror_topic_cmd_type = 2;

@@ -23,11 +23,11 @@
 #include <seastar/util/bool_class.hh>
 
 namespace cluster_link::model {
-/// ID of the panda link - used internally based off of controller offset
+/// ID of the cluster link - used internally based off of controller offset
 using id_t = named_type<int64_t, struct id_tag>;
-/// UUID of the panda link - used externally
+/// UUID of the cluster link - used externally
 using uuid_t = named_type<uuid_t, struct uuid_tag>;
-/// Name of the panda link
+/// Name of the cluster link
 using name_t = named_type<ss::sstring, struct name_tag>;
 
 enum class mirror_topic_state : uint8_t {
@@ -51,6 +51,38 @@ static constexpr std::string_view to_string_view(mirror_topic_state s) {
         return "paused";
     case mirror_topic_state::promoted:
         return "promoted";
+    }
+    return "unknown";
+}
+
+enum class task_state : uint8_t {
+    /// The task is currently active and processing
+    active,
+    /// The task has been paused by the user
+    paused,
+    /// The link to the source cluster is unavailable.  This could be a
+    /// temporary condition that can be resolved by changing configuration of
+    /// the task or on the source cluster.  This state is informative and the
+    /// task will continue to run at its set interval
+    link_unavailable,
+    /// The task is not configured to run
+    not_running,
+    /// The task has encountered an unexpected fault
+    faulted,
+};
+
+static constexpr std::string_view to_string_view(task_state st) {
+    switch (st) {
+    case task_state::active:
+        return "active";
+    case task_state::paused:
+        return "paused";
+    case task_state::link_unavailable:
+        return "link_unavailable";
+    case task_state::not_running:
+        return "not_running";
+    case task_state::faulted:
+        return "faulted";
     }
     return "unknown";
 }
@@ -142,9 +174,9 @@ struct link_state
     link_state& operator=(const link_state&) = delete;
     ~link_state() noexcept = default;
 
-    /// Type to indicate if the panda link is paused
+    /// Type to indicate if the cluster link is paused
     using paused_t = ss::bool_class<struct paused_tag>;
-    /// Flag indicating if the panda link has been paused
+    /// Flag indicating if the cluster link has been paused
     paused_t paused{paused_t::no};
     using mirror_topics_t
       = chunked_hash_map<::model::topic, mirror_topic_metadata>;
@@ -161,11 +193,11 @@ struct link_state
 };
 struct metadata
   : serde::envelope<metadata, serde::version<0>, serde::compat_version<0>> {
-    /// Name of the panda link
+    /// Name of the cluster link
     name_t name;
-    /// Unique identifier for the panda link
+    /// Unique identifier for the cluster link
     uuid_t uuid;
-    /// Connection settings for the panda link
+    /// Connection settings for the cluster link
     connection_config connection;
     /// The state of the link
     link_state state;
@@ -219,12 +251,69 @@ struct update_mirror_topic_state_cmd
 
     auto serde_fields() { return std::tie(topic, state); }
 };
+
+/// Status report for a task
+struct task_status_report
+  : serde::envelope<
+      task_status_report,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    ss::sstring task_name;
+    task_state task_state;
+    ss::sstring task_state_reason;
+
+    friend bool operator==(const task_status_report&, const task_status_report&)
+      = default;
+
+    auto serde_fields() {
+        return std::tie(task_name, task_state, task_state_reason);
+    }
+};
+
+/// The status report of a link
+struct link_task_status_report
+  : serde::envelope<
+      link_task_status_report,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    name_t link_name;
+    chunked_hash_map<ss::sstring, task_status_report> task_status_reports;
+
+    friend bool
+    operator==(const link_task_status_report&, const link_task_status_report&)
+      = default;
+
+    auto serde_fields() { return std::tie(link_name, task_status_reports); }
+};
+
+/// A map of task status reports per link
+struct cluster_link_task_status_report
+  : serde::envelope<
+      cluster_link_task_status_report,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    chunked_hash_map<name_t, link_task_status_report> link_reports;
+
+    friend bool operator==(
+      const cluster_link_task_status_report&,
+      const cluster_link_task_status_report&)
+      = default;
+
+    auto serde_fields() { return std::tie(link_reports); }
+};
 } // namespace cluster_link::model
 
 template<>
 struct fmt::formatter<cluster_link::model::mirror_topic_state>
   : fmt::formatter<string_view> {
     auto format(cluster_link::model::mirror_topic_state s, format_context& ctx)
+      -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::task_state>
+  : fmt::formatter<string_view> {
+    auto format(cluster_link::model::task_state, format_context& ctx) const
       -> decltype(ctx.out());
 };
 
@@ -308,4 +397,48 @@ struct fmt::formatter<cluster_link::model::update_mirror_topic_state_cmd>
     auto format(
       const cluster_link::model::update_mirror_topic_state_cmd& m,
       format_context& ctx) -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::task_status_report>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::task_status_report& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<decltype(cluster_link::model::link_task_status_report::
+                                 task_status_reports)::value_type>
+  : fmt::formatter<string_view> {
+    auto format(
+      const decltype(cluster_link::model::link_task_status_report::
+                       task_status_reports)::value_type& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::link_task_status_report>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::link_task_status_report& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<
+  decltype(cluster_link::model::cluster_link_task_status_report::link_reports)::
+    value_type> : fmt::formatter<string_view> {
+    auto format(
+      const decltype(cluster_link::model::cluster_link_task_status_report::
+                       link_reports)::value_type& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::cluster_link_task_status_report>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::cluster_link_task_status_report& m,
+      format_context& ctx) const -> decltype(ctx.out());
 };

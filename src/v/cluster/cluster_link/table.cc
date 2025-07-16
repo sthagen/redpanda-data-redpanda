@@ -70,7 +70,7 @@ void table::reset_links(map_t links) {
         auto it = snap_name_index.emplace(metadata.name, id);
         if (!it.second) {
             throw std::logic_error(fmt::format(
-              "panda link id={} is attempting to use a name {} which is "
+              "cluster link id={} is attempting to use a name {} which is "
               "already registered to {}",
               id,
               metadata.name,
@@ -80,7 +80,7 @@ void table::reset_links(map_t links) {
             auto topic_it = snap_topic_name_index.emplace(t.first, id);
             if (!topic_it.second) {
                 throw std::logic_error(fmt::format(
-                  "panda link id={} is attempting to use a topic {} which is "
+                  "cluster link id={} is attempting to use a topic {} which is "
                   "already registered to {}",
                   id,
                   t.first,
@@ -264,7 +264,7 @@ cluster::cluster_link::errc table::upsert_link(id_t id, metadata meta) {
         if (name_it->second != id) {
             vlog(
               cluster::clusterlog.error,
-              "panda link id={} is attempting to use a name {} which is "
+              "cluster link id={} is attempting to use a name {} which is "
               "already registered to {}",
               id,
               meta.name,

@@ -223,14 +223,12 @@ ss::future<> reconciler::commit_object(const object_range_info& range) {
      * TODO register the L1 object with L1 metastore.
      */
     const auto& part = range.partition->partition;
-    object_id id = object_id{uuid_t::create()};
 
     range.partition->lro = range.info.last_offset + kafka::offset(1);
 
     vlog(
       lg.info,
-      "Committed overlay {} for {} phy {}~{} log {}~{}. New LRO {}",
-      id,
+      "Committed overlay for {} phy {}~{} log {}~{}. New LRO {}",
       part->ntp(),
       range.physical_offset_start,
       range.physical_offset_end,

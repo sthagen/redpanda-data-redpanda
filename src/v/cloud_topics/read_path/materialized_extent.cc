@@ -16,6 +16,7 @@
 #include "cloud_topics/errc.h"
 #include "cloud_topics/extent_meta.h"
 #include "cloud_topics/logger.h"
+#include "cloud_topics/object_utils.h"
 #include "storage/record_batch_utils.h"
 #include "utils/retry_chain_node.h"
 
@@ -141,7 +142,7 @@ ss::future<result<bool>> materialize(
 
     // 2. download object from S3
     auto cache_file_name = std::filesystem::path(
-      ssx::sformat("{}", ext->meta.id()));
+      object_path_factory::level_zero_path(ext->meta.id));
     // TODO: replace this with proper object name
     // currently this value is used as both cloud storage name
     // and cache name. This shouldn't necessary be the case in the

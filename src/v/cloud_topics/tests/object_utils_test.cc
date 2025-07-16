@@ -18,8 +18,10 @@
 TEST(ObjectPathFactory, LevelZeroPathFormat) {
     auto path
       = experimental::cloud_topics::object_path_factory::level_zero_path(
-        experimental::cloud_topics::object_id{uuid_t::create()});
-    EXPECT_THAT(path().string(), ::testing::MatchesRegex("^" UUID_REGEX "$"));
+        experimental::cloud_topics::object_id::create(
+          experimental::cloud_topics::cluster_epoch{42}));
+    EXPECT_THAT(
+      path().string(), ::testing::MatchesRegex("^42/" UUID_REGEX "$"));
 }
 
 TEST(ObjectPathFactory, LevelOnePathFormat) {

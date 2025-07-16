@@ -37,13 +37,13 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
   cloud_io::remote_api<>* api,
   cloud_io::basic_cache_service_api<>* cache,
   retry_chain_node* rtc) {
-    absl::node_hash_map<uuid_t, iobuf> hydrated;
+    absl::node_hash_map<object_id, iobuf> hydrated;
     chunked_vector<materialized_extent> extents;
     for (const auto& extent : query) {
         extents.push_back(materialized_extent{.meta = extent});
         auto& back = extents.back();
         // reuse hydrated objects if possible
-        auto it = hydrated.find(back.meta.id());
+        auto it = hydrated.find(back.meta.id);
         if (it != hydrated.end()) {
             auto& payload = it->second;
             // TODO: check that id of the payload matches
@@ -73,7 +73,7 @@ ss::future<chunked_vector<model::record_batch>> materialize_placeholders(
       std::move(query), bucket, &api, &cache, &rtc);
     if (extents.has_error()) {
         vlog(
-          logger.error,
+          logger.warn,
           "Failed to materialize sorted run: {}",
           extents.error().message());
         throw std::system_error(extents.error());

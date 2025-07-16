@@ -321,7 +321,7 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
                   // update an existing link with a different UUID.
                   vlog(
                     cluster::clusterlog.info,
-                    "Attempting to upsert a panda link with name {} with a "
+                    "Attempting to upsert a cluster link with name {} with a "
                     "different UUID ({}) than the existing one ({})",
                     cmd.value.name,
                     cmd.value.uuid,
@@ -331,7 +331,7 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
               if (cmd.value.connection.bootstrap_servers.empty()) {
                   vlog(
                     cluster::clusterlog.info,
-                    "Attempting to update a panda link without bootstrap "
+                    "Attempting to update a cluster link without bootstrap "
                     "servers");
                   return errc::invalid_update;
               }
@@ -341,14 +341,14 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
           if (cmd.value.name().empty()) {
               vlog(
                 cluster::clusterlog.info,
-                "Attempting to create a panda link without a name");
+                "Attempting to create a cluster link without a name");
               return errc::invalid_create;
           }
           constexpr static size_t max_name_size = 128;
           if (cmd.value.name().size() > max_name_size) {
               vlog(
                 cluster::clusterlog.info,
-                "Attempting to create a panda link with too large of a "
+                "Attempting to create a cluster link with too large of a "
                 "name "
                 "{} > {}",
                 cmd.value.name().size(),
@@ -360,20 +360,22 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
               })) {
               vlog(
                 cluster::clusterlog.info,
-                "Attempting to create a panda link with a name containing "
+                "Attempting to create a cluster link with a name containing "
                 "invalid characters");
               return errc::invalid_create;
           }
           if (cmd.value.connection.bootstrap_servers.empty()) {
               vlog(
                 cluster::clusterlog.info,
-                "Attempting to create a panda link without bootstrap servers");
+                "Attempting to create a cluster link without bootstrap "
+                "servers");
               return errc::invalid_create;
           }
           if (_table->size() >= _max_links) {
               vlog(
                 cluster::clusterlog.info,
-                "Attempting to create a panda link when the maximum number of "
+                "Attempting to create a cluster link when the maximum number "
+                "of "
                 "links ({}) is already reached",
                 _max_links);
               return errc::limit_exceeded;

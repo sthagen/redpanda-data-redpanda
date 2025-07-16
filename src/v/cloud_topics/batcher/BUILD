@@ -23,6 +23,7 @@ redpanda_cc_library(
     include_prefix = "cloud_topics/batcher",
     deps = [
         "//src/v/base",
+        "//src/v/cloud_topics:cluster_services_interface",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/core:write_request",
         "//src/v/container:fragmented_vector",
@@ -55,6 +56,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/bytes",
         "//src/v/bytes:iobuf",
+        "//src/v/cloud_topics:cluster_services_interface",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/core:event_filter",
         "//src/v/cloud_topics/core:pipeline_stage",

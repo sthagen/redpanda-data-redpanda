@@ -16,7 +16,7 @@ namespace experimental::cloud_topics::l1 {
 
 new_object make_new_object(const metastore::object_metadata& o) {
     new_object new_o{
-      .oid = object_id{o.oid()},
+      .oid = o.oid,
       .footer_pos = o.footer_pos,
     };
     for (const auto& c : o.ntp_metas) {

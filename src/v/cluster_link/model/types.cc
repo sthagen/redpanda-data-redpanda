@@ -49,6 +49,12 @@ auto fmt::formatter<cluster_link::model::mirror_topic_state>::format(
     return fmt::format_to(ctx.out(), "{}", to_string_view(s));
 }
 
+auto fmt::formatter<cluster_link::model::task_state>::format(
+  cluster_link::model::task_state st, format_context& ctx) const
+  -> decltype(ctx.out()) {
+    return fmt::format_to(ctx.out(), "{}", to_string_view(st));
+}
+
 auto fmt::formatter<cluster_link::model::scram_credentials>::format(
   const cluster_link::model::scram_credentials& c, format_context& ctx)
   -> decltype(ctx.out()) {
@@ -153,4 +159,60 @@ auto fmt::formatter<cluster_link::model::update_mirror_topic_state_cmd>::format(
   format_context& ctx) -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(), "{{topic={}, state={}}}", m.topic, m.state);
+}
+
+auto fmt::formatter<cluster_link::model::task_status_report>::format(
+  const cluster_link::model::task_status_report& r, format_context& ctx) const
+  -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{task_name={}, task_state={}, task_state_reason={}}}",
+      r.task_name,
+      r.task_state,
+      r.task_state_reason);
+}
+
+auto fmt::formatter<decltype(cluster_link::model::link_task_status_report::
+                               task_status_reports)::value_type>::
+  format(
+    const decltype(cluster_link::model::link_task_status_report::
+                     task_status_reports)::value_type& m,
+    format_context& ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{task_name: {}, task_status_report: {}}}",
+      m.first,
+      m.second);
+}
+
+auto fmt::formatter<cluster_link::model::link_task_status_report>::format(
+  const cluster_link::model::link_task_status_report& r,
+  format_context& ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{link_name={}, task_status_reports={}}}",
+      r.link_name,
+      fmt::join(
+        r.task_status_reports.begin(), r.task_status_reports.end(), ","));
+}
+
+auto fmt::formatter<
+  decltype(cluster_link::model::cluster_link_task_status_report::link_reports)::
+    value_type>::
+  format(
+    const decltype(cluster_link::model::cluster_link_task_status_report::
+                     link_reports)::value_type& m,
+    format_context& ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(), "{{topic: {}, metadata: {}}}", m.first, m.second);
+}
+
+auto fmt::formatter<cluster_link::model::cluster_link_task_status_report>::
+  format(
+    const cluster_link::model::cluster_link_task_status_report& r,
+    format_context& ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{link_reports={}}}",
+      fmt::join(r.link_reports.begin(), r.link_reports.end(), ","));
 }

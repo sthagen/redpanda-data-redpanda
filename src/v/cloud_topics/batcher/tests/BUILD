@@ -37,6 +37,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics:extent_meta",
+        "//src/v/cloud_topics:object_utils",
         "//src/v/cloud_topics/batcher",
         "//src/v/cloud_topics/batcher:aggregator",
         "//src/v/cloud_topics/core:event_filter",

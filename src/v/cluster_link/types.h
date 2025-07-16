@@ -1,5 +1,5 @@
 /*
- * Copyright 2023 Redpanda Data, Inc.
+ * Copyright 2025 Redpanda Data, Inc.
  *
  * Use of this software is governed by the Business Source License
  * included in the file licenses/BSL.md
@@ -9,6 +9,13 @@
  * by the Apache License, Version 2.0
  */
 
-#include "strings/utf8.h"
+#pragma once
 
-thread_local bool permit_unsafe_log_operation::_flag = false;
+#include "base/seastarx.h"
+
+#include <seastar/util/bool_class.hh>
+
+namespace cluster_link {
+/// Indicates if the current node is the leader for a given NTP
+using ntp_leader = ss::bool_class<struct is_ntp_leader_tag>;
+} // namespace cluster_link

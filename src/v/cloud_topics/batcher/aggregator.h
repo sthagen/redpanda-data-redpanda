@@ -12,6 +12,7 @@
 
 #include "absl/container/btree_map.h"
 #include "base/seastarx.h"
+#include "cloud_topics/cluster_services.h"
 #include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/types.h"
@@ -36,7 +37,7 @@ struct extents_for_req {
 template<class Clock>
 class aggregator {
 public:
-    explicit aggregator(object_id id = object_id{uuid_t::create()});
+    explicit aggregator(object_id id);
     aggregator(const aggregator&) = delete;
     aggregator(aggregator&&) = delete;
     aggregator& operator=(const aggregator&) = delete;

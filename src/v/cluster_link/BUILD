@@ -17,14 +17,32 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "errc",
+    srcs = [
+        "errc.cc",
+    ],
+    hdrs = [
+        "errc.h",
+    ],
+    include_prefix = "cluster_link",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+    ],
+)
+
+redpanda_cc_library(
     name = "impl",
     srcs = [
         "link.cc",
         "manager.cc",
+        "task.cc",
     ],
     hdrs = [
         "link.h",
         "manager.h",
+        "task.h",
+        "types.h",
     ],
     implementation_deps = [
         ":logger",
@@ -32,12 +50,21 @@ redpanda_cc_library(
     include_prefix = "cluster_link",
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
+        ":errc",
+        "//src/v/base",
         "//src/v/cluster",
         "//src/v/cluster_link/model",
         "//src/v/container:fragmented_vector",
+        "//src/v/kafka/data/rpc",
         "//src/v/model",
+        "//src/v/ssx:future_util",
         "//src/v/ssx:work_queue",
+        "//src/v/utils:mutex",
+        "//src/v/utils:notification_list",
+        "//src/v/utils:prefix_logger",
         "@abseil-cpp//absl/container:flat_hash_map",
+        "@fmt",
+        "@seastar",
     ],
 )
 

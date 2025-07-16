@@ -9,26 +9,20 @@
  */
 #pragma once
 
-#include "cloud_storage_clients/types.h"
 #include "cloud_topics/cluster_services.h"
-#include "cloud_topics/types.h"
+
+#include <seastar/core/coroutine.hh>
 
 namespace experimental::cloud_topics {
 
-/*
- * Utilities for working with the object storage paths.
- */
-class object_path_factory {
+class ephemeral_cluster_services : public cluster_services {
 public:
-    /*
-     * Generate the path of a level-zero object.
-     */
-    static cloud_storage_clients::object_key level_zero_path(object_id id);
+    seastar::future<cluster_epoch> current_epoch() override {
+        co_return epoch_++;
+    }
 
-    /*
-     * Generate the path of a level-one object.
-     */
-    static cloud_storage_clients::object_key level_one_path();
+private:
+    cluster_epoch epoch_{0};
 };
 
 } // namespace experimental::cloud_topics

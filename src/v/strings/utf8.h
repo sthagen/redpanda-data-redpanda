@@ -16,6 +16,7 @@
 
 #include <boost/locale.hpp>
 #include <boost/locale/encoding_utf.hpp>
+#include <boost/locale/utf.hpp>
 
 #include <string>
 #include <string_view>
@@ -74,10 +75,10 @@ struct invalid_utf8_exception : public invalid_character_exception {
 };
 
 template<typename T>
-concept ExceptionThrower = requires(T obj) { obj.conversion_error(); };
+concept ExceptionThrower = requires(const T obj) { obj.conversion_error(); };
 
 struct default_utf8_thrower {
-    [[noreturn]] [[gnu::cold]] void conversion_error() {
+    [[noreturn]] [[gnu::cold]] void conversion_error() const {
         throw invalid_utf8_exception("Cannot decode string as UTF8");
     }
 };
@@ -90,7 +91,7 @@ struct control_character_present_exception
 
 struct default_control_character_thrower {
     virtual ~default_control_character_thrower() = default;
-    [[noreturn]] [[gnu::cold]] virtual void conversion_error() {
+    [[noreturn]] [[gnu::cold]] virtual void conversion_error() const {
         throw control_character_present_exception(
           "String contains control character");
     }
@@ -138,13 +139,25 @@ inline size_t validate_and_truncate(std::string_view s) {
     return valid_length;
 }
 
+inline bool is_valid_utf8(std::string_view s) {
+    auto begin = s.cbegin();
+    auto end = s.cend();
+
+    while (begin != end) {
+        const boost::locale::utf::code_point c
+          = boost::locale::utf::utf_traits<char>::decode(begin, end);
+        if (!boost::locale::utf::is_valid_codepoint(c)) {
+            return false;
+        }
+        // continue
+    }
+    return true;
+}
+
 template<typename Thrower>
 requires ExceptionThrower<Thrower>
-inline void validate_utf8(std::string_view s, Thrower&& thrower) {
-    try {
-        boost::locale::conv::utf_to_utf<char>(
-          s.data(), s.data() + s.size(), boost::locale::conv::stop);
-    } catch (const boost::locale::conv::conversion_error& ex) {
+inline void validate_utf8(std::string_view s, const Thrower& thrower) {
+    if (!is_valid_utf8(s)) {
         thrower.conversion_error();
     }
 }
@@ -152,5 +165,3 @@ inline void validate_utf8(std::string_view s, Thrower&& thrower) {
 inline void validate_utf8(std::string_view s) {
     validate_utf8(s, default_utf8_thrower{});
 }
-
-bool is_valid_utf8(std::string_view s);

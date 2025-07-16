@@ -17,9 +17,9 @@ using namespace experimental::cloud_topics::l1;
 
 namespace {
 
-const object_id oid1{uuid_t::create()};
-const object_id oid2{uuid_t::create()};
-const object_id oid3{uuid_t::create()};
+const object_id oid1{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
+const object_id oid2{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
+const object_id oid3{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
 
 const std::string_view tid_a = "deadbeef-aaaa-0000-0000-000000000000/0";
 const std::string_view tid_b = "deadbeef-bbbb-0000-0000-000000000000/0";

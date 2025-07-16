@@ -51,7 +51,8 @@ TEST(AggregatorTest, SingleRequestAck) {
     auto fut = request.response.get_future();
 
     // The aggregator produces single L0 object
-    cloud_topics::aggregator<ss::manual_clock> aggregator;
+    cloud_topics::aggregator<ss::manual_clock> aggregator{
+      cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
 
     aggregator.add(request);
     auto dest = aggregator.prepare();
@@ -74,7 +75,8 @@ TEST(AggregatorTest, SingleRequestDtorWithStagedRequest) {
     auto fut = request.response.get_future();
 
     {
-        cloud_topics::aggregator<ss::manual_clock> aggregator;
+        cloud_topics::aggregator<ss::manual_clock> aggregator{
+          cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
         aggregator.add(request);
     }
     ASSERT_TRUE(fut.available());
@@ -93,7 +95,8 @@ TEST(AggregatorTest, SingleRequestDtorWithPreparedRequest) {
     auto fut = request.response.get_future();
 
     {
-        cloud_topics::aggregator<ss::manual_clock> aggregator;
+        cloud_topics::aggregator<ss::manual_clock> aggregator{
+          cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
         aggregator.add(request);
         std::ignore = aggregator.prepare();
     }
@@ -112,7 +115,8 @@ TEST(AggregatorTest, SingleRequestDtorWithLostRequestStaged) {
     auto fut = request.response.get_future();
 
     {
-        cloud_topics::aggregator<ss::manual_clock> aggregator;
+        cloud_topics::aggregator<ss::manual_clock> aggregator{
+          cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
         aggregator.add(request);
         {
             // tmp_request is destroyed at the end of this block and aggregator
@@ -146,7 +150,8 @@ TEST(AggregatorTest, SingleRequestDtorWithLostRequestPrepared) {
     {
         cloud_topics::core::write_request<ss::manual_clock> tmp_request(
           model::controller_ntp, get_random_serialized_chunk(10, 10), timeout);
-        cloud_topics::aggregator<ss::manual_clock> aggregator;
+        cloud_topics::aggregator<ss::manual_clock> aggregator{
+          cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
         aggregator.add(request);
         aggregator.add(tmp_request);
         std::ignore = aggregator.prepare();
@@ -164,7 +169,8 @@ TEST(AggregatorTest, SingleRequestWithLostRequestPrepared) {
       model::controller_ntp, std::move(chunk), timeout);
     auto fut = request.response.get_future();
 
-    cloud_topics::aggregator<ss::manual_clock> aggregator;
+    cloud_topics::aggregator<ss::manual_clock> aggregator{
+      cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
     aggregator.add(request);
     {
         cloud_topics::core::write_request<ss::manual_clock> tmp_request(

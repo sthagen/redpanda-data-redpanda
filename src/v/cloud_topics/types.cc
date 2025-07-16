@@ -28,7 +28,7 @@ auto fmt::formatter<experimental::cloud_topics::ctp_stm_key>::format(
 auto fmt::formatter<experimental::cloud_topics::object_id>::format(
   const experimental::cloud_topics::object_id& id,
   fmt::format_context& ctx) const -> decltype(ctx.out()) {
-    return fmt::format_to(ctx.out(), "{}", id());
+    return fmt::format_to(ctx.out(), "{}/{}", id.epoch(), id.name);
 }
 
 auto fmt::formatter<experimental::cloud_topics::ctp_stm_object_ownership>::

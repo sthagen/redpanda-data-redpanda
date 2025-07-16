@@ -15,6 +15,7 @@
 #include "cloud_topics/batcher/batcher.h"
 #include "cloud_topics/core/read_pipeline.h"
 #include "cloud_topics/core/write_pipeline.h"
+#include "cloud_topics/ephemeral_cluster_services.h"
 #include "cloud_topics/read_path/fetch_request_handler.h"
 #include "cloud_topics/reconciler/reconciler.h"
 #include "cloud_topics/throttler/throttler.h"
@@ -46,7 +47,8 @@ public:
       , _batcher(std::make_unique<batcher<>>(
           _write_pipeline->register_write_pipeline_stage(),
           bucket,
-          io->local()))
+          io->local(),
+          &_cluster_services))
       , _read_pipeline(std::make_unique<core::read_pipeline<>>())
       , _l0_resolver(std::make_unique<fetch_handler>(
           _read_pipeline->register_read_pipeline_stage(),
@@ -104,6 +106,7 @@ private:
     // Write path
     std::unique_ptr<core::write_pipeline<>> _write_pipeline;
     std::unique_ptr<throttler<>> _throttler;
+    ephemeral_cluster_services _cluster_services;
     std::unique_ptr<batcher<>> _batcher;
     // Read path
     std::unique_ptr<core::read_pipeline<>> _read_pipeline;

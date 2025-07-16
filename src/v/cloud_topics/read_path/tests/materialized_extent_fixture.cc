@@ -2,6 +2,8 @@
 
 #include "cloud_storage_clients/types.h"
 #include "cloud_topics/dl_placeholder.h"
+#include "cloud_topics/object_utils.h"
+#include "cloud_topics/types.h"
 #include "gmock/gmock.h"
 #include "model/record_batch_reader.h"
 #include "model/tests/random_batch.h"
@@ -53,12 +55,12 @@ void materialized_extent_fixture::produce_placeholders(
     // source record batch
     auto generate_placeholder =
       [](
-        uuid_t id,
+        cloud_topics::object_id id,
         size_t offset,
         size_t size,
         const model::record_batch& source) -> model::record_batch {
         cloud_topics::dl_placeholder p{
-          .id = cloud_topics::object_id(id),
+          .id = id,
           .offset = cloud_topics::first_byte_offset_t(offset),
           .size_bytes = cloud_topics::byte_range_size_t(size),
         };
@@ -95,7 +97,8 @@ void materialized_extent_fixture::produce_placeholders(
         std::map<std::filesystem::path, iobuf> uploads;
         while (!sources.empty()) {
             iobuf current;
-            auto id = uuid_t::create();
+            auto id = cloud_topics::object_id::create(
+              cloud_topics::cluster_epoch(1));
             for (int i = 0; i < group_by; i++) {
                 auto buf = std::move(serialized_batches.front());
                 serialized_batches.pop();
@@ -106,7 +109,7 @@ void materialized_extent_fixture::produce_placeholders(
                 placeholders.push_back(std::move(placeholder));
                 current.append(std::move(buf));
             }
-            auto fname = std::filesystem::path(ssx::sformat("{}", id));
+            auto fname = cloud_topics::object_path_factory::level_zero_path(id);
             uploads[fname] = std::move(current);
         }
         return {

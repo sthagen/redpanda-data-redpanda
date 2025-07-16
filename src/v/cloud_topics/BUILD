@@ -44,6 +44,7 @@ redpanda_cc_library(
     include_prefix = "cloud_topics",
     visibility = [":__subpackages__"],
     deps = [
+        "//src/v/serde",
         "//src/v/utils:named_type",
         "//src/v/utils:uuid",
         "@fmt",
@@ -152,6 +153,7 @@ redpanda_cc_library(
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage",
         "//src/v/cloud_topics:data_plane_api",
+        "//src/v/cloud_topics:ephemeral_cluster_services",
         "//src/v/cloud_topics/batcher",
         "//src/v/cloud_topics/core:read_pipeline",
         "//src/v/cloud_topics/core:write_pipeline",
@@ -191,10 +193,37 @@ redpanda_cc_library(
     ],
     include_prefix = "cloud_topics",
     deps = [
+        ":cluster_services_interface",
         ":types",
         "//src/v/cloud_storage_clients",
         "//src/v/ssx:sformat",
         "//src/v/utils:uuid",
         "@fmt",
+    ],
+)
+
+redpanda_cc_library(
+    name = "cluster_services_interface",
+    hdrs = [
+        "cluster_services.h",
+    ],
+    include_prefix = "cloud_topics",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":types",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "ephemeral_cluster_services",
+    hdrs = [
+        "ephemeral_cluster_services.h",
+    ],
+    include_prefix = "cloud_topics",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":cluster_services_interface",
+        "@seastar",
     ],
 )
