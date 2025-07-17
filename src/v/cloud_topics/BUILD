@@ -1,6 +1,7 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 package(default_visibility = [
+    "//src/v/cloud_topics/batch_cache:__pkg__",
     "//src/v/cloud_topics/batcher:__pkg__",
     "//src/v/cloud_topics/batcher/tests:__pkg__",
     "//src/v/cloud_topics/core:__pkg__",
@@ -154,6 +155,7 @@ redpanda_cc_library(
         "//src/v/cloud_storage",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:ephemeral_cluster_services",
+        "//src/v/cloud_topics/batch_cache",
         "//src/v/cloud_topics/batcher",
         "//src/v/cloud_topics/core:read_pipeline",
         "//src/v/cloud_topics/core:write_pipeline",

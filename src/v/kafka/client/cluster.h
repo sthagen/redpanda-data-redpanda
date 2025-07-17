@@ -146,6 +146,11 @@ public:
       api_key key,
       std::optional<std::reference_wrapper<ss::abort_source>> = std::nullopt);
 
+    /**
+     * Returns logger prefixed with the client id.
+     */
+    prefix_logger& logger() { return _logger; }
+
 private:
     ss::future<> update_metadata();
     ss::future<> dispatch_metadata_request();

@@ -356,9 +356,10 @@ static void propagate_result(
 
     // iterate backward to calculate last offsets
     auto last_offset = r.value().last_offset;
+    auto last_term = r.value().last_term;
     for (auto it = notifications.rbegin(); it != notifications.rend(); ++it) {
         if (pred(*it)) {
-            (*it)->set_value(replicate_result{last_offset});
+            (*it)->set_value(replicate_result{last_offset, last_term});
         }
         last_offset = last_offset - model::offset((*it)->get_record_count());
     }

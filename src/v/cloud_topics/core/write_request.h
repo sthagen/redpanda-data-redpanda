@@ -60,7 +60,7 @@ struct write_request : ss::weakly_referencable<write_request<Clock>> {
     write_request(
       model::ntp ntp,
       serialized_chunk chunk,
-      std::chrono::milliseconds timeout,
+      timestamp_t timeout,
       pipeline_stage stage = unassigned_pipeline_stage);
 
     size_t size_bytes() const noexcept;

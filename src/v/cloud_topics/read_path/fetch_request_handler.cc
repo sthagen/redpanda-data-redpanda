@@ -118,7 +118,7 @@ ss::future<> fetch_handler::process_single_request(core::read_request<>* req) {
 
         if (extent.failed()) {
             vlog(
-              req->rtc_logger.error,
+              req->rtc_logger.warn,
               "Failed to materialize placeholders, error: {}",
               extent.get_exception());
             req->set_value(errc::download_failure);

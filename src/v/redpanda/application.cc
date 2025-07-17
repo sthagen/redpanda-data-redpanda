@@ -2089,7 +2089,11 @@ void application::wire_up_redpanda_services(
           cloud_topics_api,
           ss::sharded_parameter([this, bucket] {
               return experimental::cloud_topics::make_data_plane(
-                &partition_manager, &cloud_io, &shadow_index_cache, bucket);
+                &partition_manager,
+                &cloud_io,
+                &shadow_index_cache,
+                bucket,
+                &storage);
           }),
           ss::sharded_parameter([this, bucket] {
               return std::make_unique<

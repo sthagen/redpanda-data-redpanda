@@ -90,6 +90,23 @@ ss::future<response_t> cluster_mock::handle_metadata_request(
           .rack = b.second.rack,
         });
     }
+
+    for (auto& [topic, partitions] : _topics) {
+        metadata_response::topic md_topic;
+        md_topic.name = topic;
+        md_topic.partitions.reserve(partitions.size());
+        for (auto& [part_id, part_meta] : partitions) {
+            md_topic.partitions.push_back(metadata_response::partition{
+              .partition_index = part_id,
+              .leader_id = part_meta.leader,
+              .leader_epoch = part_meta.leader_epoch,
+              .replica_nodes = part_meta.replicas});
+        }
+        r_data.topics.push_back(std::move(md_topic));
+    }
+
+    r_data.controller_id = _brokers.begin()->first;
+
     co_return metadata_response{.data = std::move(r_data)};
 }
 
@@ -152,6 +169,38 @@ ss::future<response_t> cluster_mock::handle(
         return do_handle<decltype(r)>(node_id, std::move(r), version, as)
           .then([](auto resp) { return response_t{std::move(resp)}; });
     });
+}
+
+void cluster_mock::add_topic(
+  model::topic topic_name, size_t partition_count, size_t replication_factor) {
+    if (_topics.contains(topic_name)) {
+        // Topic already exists, do not overwrite
+        throw std::invalid_argument(
+          fmt::format("Topic {} already exists", topic_name));
+    }
+    if (replication_factor > _brokers.size()) {
+        throw std::invalid_argument(fmt::format(
+          "Replication factor {} exceeds available brokers",
+          replication_factor));
+    }
+
+    auto cluster_nodes = get_broker_ids();
+    std::ranges::sort(cluster_nodes);
+
+    for (auto p_id : std::views::iota(size_t(0), partition_count)) {
+        partition_metadata p_md{
+          .id = model::partition_id(p_id), .leader = model::node_id(-1)};
+
+        std::copy_n(
+          cluster_nodes.begin(),
+          replication_factor,
+          std::back_inserter(p_md.replicas));
+        std::ranges::rotate(cluster_nodes, cluster_nodes.begin() + 1);
+        p_md.leader = p_md.replicas[0];
+        p_md.leader_epoch = kafka::invalid_leader_epoch;
+
+        _topics[topic_name].emplace(model::partition_id(p_id), std::move(p_md));
+    }
 }
 
 cluster_mock::cluster_mock()

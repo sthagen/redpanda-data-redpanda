@@ -13,6 +13,7 @@
 
 #include "cluster_link/logger.h"
 #include "model/namespace.h"
+#include "ssx/future-util.h"
 
 #include <seastar/coroutine/as_future.hh>
 

@@ -112,3 +112,25 @@ public:
 };
 
 } // namespace experimental::cloud_topics::l1
+
+template<>
+struct fmt::formatter<experimental::cloud_topics::l1::metastore::errc> final
+  : fmt::formatter<std::string_view> {
+    template<typename FormatContext>
+    auto format(
+      const experimental::cloud_topics::l1::metastore::errc& k,
+      FormatContext& ctx) const {
+        using enum experimental::cloud_topics::l1::metastore::errc;
+        switch (k) {
+        case invalid_request:
+            return formatter<string_view>::format(
+              "metastore::errc::invalid_request", ctx);
+        case missing_ntp:
+            return formatter<string_view>::format(
+              "metastore::errc::missing_ntp", ctx);
+        case out_of_range:
+            return formatter<string_view>::format(
+              "metastore::errc::out_of_range", ctx);
+        }
+    }
+};

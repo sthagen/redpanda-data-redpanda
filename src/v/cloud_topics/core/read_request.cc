@@ -22,13 +22,13 @@ template<class Clock>
 read_request<Clock>::read_request(
   model::ntp ntp,
   dataplane_query query,
-  std::chrono::milliseconds timeout,
+  timestamp_t timeout,
   basic_retry_chain_node<Clock>* root_rtc,
   pipeline_stage stage)
   : ntp(std::move(ntp))
   , query(std::move(query))
   , ingestion_time(Clock::now())
-  , expiration_time(Clock::now() + timeout)
+  , expiration_time(timeout)
   , stage(stage)
   , rtc(
       expiration_time,

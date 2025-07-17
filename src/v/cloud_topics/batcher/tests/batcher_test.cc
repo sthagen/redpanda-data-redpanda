@@ -1,11 +1,12 @@
-// Copyright 2024 Redpanda Data, Inc.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.md
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0
+/*
+ * Copyright 2025 Redpanda Data, Inc.
+ *
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
+ */
 
 #include "base/vlog.h"
 #include "bytes/bytes.h"
@@ -152,8 +153,9 @@ TEST_CORO(batcher_test, single_write_request) {
     mock.expect_upload_object(records);
 
     const auto timeout = 1s;
+    auto deadline = ss::manual_clock::now() + timeout;
     auto fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader), timeout);
+      model::controller_ntp, std::move(reader), deadline);
     // Make sure the write request is in the _pending list
     co_await sleep_until(
       10ms, [&] { return pipeline_accessor.write_requests_pending(1); });
@@ -219,14 +221,15 @@ TEST_CORO(batcher_test, many_write_requests) {
     mock.expect_upload_object(all_records);
 
     const auto timeout = 1s;
+    auto deadline = ss::manual_clock::now() + timeout;
     std::vector<ss::future<result<chunked_vector<cloud_topics::extent_meta>>>>
       futures;
     futures.push_back(pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader1), timeout));
+      model::controller_ntp, std::move(reader1), deadline));
     futures.push_back(pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader2), timeout));
+      model::controller_ntp, std::move(reader2), deadline));
     futures.push_back(pipeline.write_and_debounce(
-      model::controller_ntp, std::move(reader3), timeout));
+      model::controller_ntp, std::move(reader3), deadline));
 
     // Make sure that all write requests are in the _pending list
     co_await sleep_until(
@@ -300,16 +303,18 @@ TEST_CORO(batcher_test, expired_write_request) {
     mock.expect_upload_object(all_records);
 
     const auto timeout = 1s;
+    auto deadline = ss::manual_clock::now() + timeout;
     auto expect_fail_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(timedout_batches), timeout);
+      model::controller_ntp, std::move(timedout_batches), deadline);
 
     // Let time pass to invalidate the first enqueued write request
     co_await sleep_until(
       10ms, [&] { return pipeline_accessor.write_requests_pending(1); });
     ss::manual_clock::advance(timeout);
 
+    deadline = ss::manual_clock::now() + timeout;
     auto expect_pass_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(included_batches), timeout);
+      model::controller_ntp, std::move(included_batches), deadline);
 
     // Make sure that both write requests are pending
     co_await sleep_until(

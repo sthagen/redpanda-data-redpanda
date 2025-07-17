@@ -21,7 +21,9 @@ namespace cloud_topics = experimental::cloud_topics;
 
 TEST(WriteRequestTest, Expiration) {
     cloud_topics::core::write_request<ss::manual_clock> req(
-      model::kvstore_ntp(ss::shard_id(0)), {}, std::chrono::milliseconds(100));
+      model::kvstore_ntp(ss::shard_id(0)),
+      {},
+      ss::manual_clock::now() + std::chrono::milliseconds(100));
     ASSERT_FALSE(req.has_expired());
     ss::manual_clock::advance(std::chrono::milliseconds(10));
     ASSERT_FALSE(req.has_expired());

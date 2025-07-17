@@ -122,6 +122,7 @@ redpanda_cc_library(
     ],
     include_prefix = "storage",
     visibility = [
+        "//src/v/cloud_topics/batch_cache:__pkg__",
         "//src/v/resource_mgmt/tests:__pkg__",
         "//src/v/storage/tests:__pkg__",
     ],
@@ -424,6 +425,7 @@ redpanda_cc_library(
         "//src/v/utils:directory_walker",
         "//src/v/utils:file_io",
         "//src/v/utils:filtered_lower_bound",
+        "//src/v/utils:functional",
         "//src/v/utils:human",
         "//src/v/utils:moving_average",
         "//src/v/utils:mutex",

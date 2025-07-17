@@ -167,6 +167,8 @@ public:
     struct offset_range_size_result_t {
         size_t on_disk_size;
         model::offset last_offset;
+        model::timestamp first_timestamp;
+        model::timestamp last_timestamp;
     };
 
     struct offset_range_size_requirements_t {
@@ -179,7 +181,11 @@ public:
     /// The 'first' offset should be the first offset of the batch. The 'last'
     /// should be the last offset of the batch. The offset range is inclusive.
     virtual ss::future<std::optional<offset_range_size_result_t>>
-    offset_range_size(model::offset first, model::offset last) = 0;
+    offset_range_size(
+      model::offset first,
+      model::offset last,
+      ss::semaphore::time_point timeout = ss::semaphore::time_point::max())
+      = 0;
 
     /// Find the offset range based on size requirements
     ///
@@ -192,6 +198,29 @@ public:
       = 0;
 
     virtual bool is_compacted(model::offset first, model::offset last) const
+      = 0;
+
+    /// Determine whether an offset range is eligible for compacted reupload by
+    /// the archival system.
+    ///
+    /// The result depends on whether sliding window compaction is enabled and
+    /// on the configured cleanup policy.
+    ///
+    /// Returns 'false' unless all segments covering the offset range are marked
+    /// compacted.
+    ///
+    /// When sliding window compaction is enabled, returns true iff:
+    ///   - delete policy: all segments are marked as having finished windowed
+    ///     compaction
+    ///   - no-delete policy: all segments have a clean compact timestamp
+    /// Otherwise returns true iff all segments have a self compact timestamp
+    virtual bool eligible_for_compacted_reupload(
+      model::offset first, model::offset last) const
+      = 0;
+
+    virtual std::optional<model::offset>
+    max_eligible_for_compacted_reupload_offset(
+      model::offset first = model::offset{0}) const
       = 0;
 
     /// Mutates the ntp_config stored in the log with the new

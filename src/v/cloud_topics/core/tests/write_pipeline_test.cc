@@ -1,11 +1,12 @@
-// Copyright 2024 Redpanda Data, Inc.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.md
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0
+/*
+ * Copyright 2025 Redpanda Data, Inc.
+ *
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
+ */
 
 #include "cloud_topics/core/write_pipeline.h"
 #include "cloud_topics/extent_meta.h"
@@ -65,7 +66,7 @@ TEST_CORO(write_pipeline_test, single_write_request) {
 
     auto stage = pipeline.register_write_pipeline_stage();
 
-    const auto timeout = 1s;
+    const auto timeout = ss::manual_clock::now() + 1s;
     auto fut = pipeline.write_and_debounce(model::controller_ntp, {}, timeout);
 
     // Make sure the write request is in the _pending list
@@ -92,17 +93,19 @@ TEST_CORO(batcher_test, expired_write_request) {
 
     auto stage = pipeline.register_write_pipeline_stage();
 
-    const auto timeout = 1s;
+    static constexpr auto timeout = 1s;
+    auto deadline = ss::manual_clock::now() + 1s;
     auto expect_fail_fut = pipeline.write_and_debounce(
-      model::controller_ntp, {}, timeout);
+      model::controller_ntp, {}, deadline);
 
     // Expire first request
     co_await sleep_until(
       10ms, [&] { return accessor.write_requests_pending(1); });
     ss::manual_clock::advance(timeout);
 
+    deadline = ss::manual_clock::now() + 1s;
     auto expect_pass_fut = pipeline.write_and_debounce(
-      model::controller_ntp, {}, timeout);
+      model::controller_ntp, {}, deadline);
 
     // Make sure that both write requests are pending
     co_await sleep_until(

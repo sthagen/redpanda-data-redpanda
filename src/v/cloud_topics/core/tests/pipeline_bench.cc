@@ -61,7 +61,9 @@ PERF_TEST_C(read_pipeline_bench, propagation_latency) {
     sink.start();
     perf_tests::start_measuring_time();
     perf_tests::do_not_optimize(co_await pipeline.make_reader(
-      model::controller_ntp, {}, std::chrono::milliseconds(10)));
+      model::controller_ntp,
+      {},
+      ss::lowres_clock::now() + std::chrono::milliseconds(10)));
     perf_tests::stop_measuring_time();
 
     co_await pipeline.stop();
@@ -111,7 +113,9 @@ PERF_TEST_C(write_pipeline_bench, propagation_latency) {
 
     perf_tests::start_measuring_time();
     perf_tests::do_not_optimize(co_await pipeline.write_and_debounce(
-      model::controller_ntp, {}, std::chrono::milliseconds(10)));
+      model::controller_ntp,
+      {},
+      ss::lowres_clock::now() + std::chrono::milliseconds(10)));
     perf_tests::stop_measuring_time();
 
     co_await sink.stop();

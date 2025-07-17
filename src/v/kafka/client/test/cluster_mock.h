@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "container/chunked_hash_map.h"
 #include "kafka/client/broker.h"
 #include "kafka/client/brokers.h"
 #include "kafka/client/logger.h"
@@ -65,6 +66,14 @@ private:
 using mock_handler = std::function<ss::future<response_t>(
   model::node_id, request_t, api_version)>;
 
+struct partition_metadata {
+    model::partition_id id;
+    model::node_id leader;
+    std::vector<model::node_id> replicas;
+    kafka::leader_epoch leader_epoch = kafka::invalid_leader_epoch;
+    model::offset start_offset = model::offset(0);
+    model::offset high_watermark = model::offset(0);
+};
 class cluster_mock {
 public:
     cluster_mock();
@@ -94,6 +103,19 @@ public:
         _broker_api_versions[id].insert_or_assign(key, range);
     }
 
+    void add_topic(
+      model::topic topic_name,
+      size_t partition_count,
+      size_t replication_factor);
+
+    std::vector<model::node_id> get_broker_ids() const {
+        return std::ranges::views::keys(_brokers)
+               | std::ranges::to<std::vector<model::node_id>>();
+    }
+
+    auto& get_topics() { return _topics; }
+
+public:
     supported_versions default_supported_versions;
 
 private:
@@ -131,7 +153,12 @@ private:
     absl::flat_hash_map<model::node_id, broker_info> _brokers;
     absl::flat_hash_map<model::node_id, supported_versions>
       _broker_api_versions;
+    chunked_hash_map<
+      model::topic,
+      chunked_hash_map<model::partition_id, partition_metadata>>
+      _topics;
 
+    std::optional<model::node_id> _controller_id;
     prefix_logger _logger;
 };
 

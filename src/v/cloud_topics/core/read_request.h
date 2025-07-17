@@ -87,7 +87,7 @@ struct read_request : ss::weakly_referencable<read_request<Clock>> {
     read_request(
       model::ntp ntp,
       dataplane_query query,
-      std::chrono::milliseconds timeout,
+      timestamp_t timeout,
       basic_retry_chain_node<Clock>* root,
       pipeline_stage stage = unassigned_pipeline_stage);
 

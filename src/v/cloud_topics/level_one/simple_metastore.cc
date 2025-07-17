@@ -11,6 +11,7 @@
 
 #include "cloud_topics/level_one/state.h"
 #include "cloud_topics/level_one/state_update.h"
+#include "cloud_topics/logger.h"
 
 namespace experimental::cloud_topics::l1 {
 
@@ -36,6 +37,7 @@ ss::future<std::expected<metastore::offsets_response, metastore::errc>>
 simple_metastore::get_offsets(const model::topic_id_partition& tpr) {
     auto prt_ref = state_.partition_state(tpr);
     if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tpr);
         co_return std::unexpected(metastore::errc::missing_ntp);
     }
     const auto& prt = prt_ref->get();
@@ -53,6 +55,7 @@ simple_metastore::add_objects(const chunked_vector<object_metadata>& objects) {
     }
     auto update_res = add_objects_update::build(state_, std::move(new_objects));
     if (!update_res.has_value()) {
+        vlog(cd_log.debug, "Object add failed: {}", update_res.error());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
     auto apply_res = update_res->apply(state_);
@@ -70,6 +73,7 @@ simple_metastore::replace_objects(
     auto update_res = replace_objects_update::build(
       state_, std::move(new_objects));
     if (!update_res.has_value()) {
+        vlog(cd_log.debug, "Object replacement failed: {}", update_res.error());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
     auto apply_res = update_res->apply(state_);
@@ -82,6 +86,7 @@ simple_metastore::get_first_ge(
   const model::topic_id_partition& tpr, kafka::offset o) {
     auto prt_ref = state_.partition_state(tpr);
     if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tpr);
         co_return std::unexpected(metastore::errc::missing_ntp);
     }
     auto& prt = prt_ref->get();
@@ -102,6 +107,7 @@ simple_metastore::get_first_ge(
   const model::topic_id_partition& tpr, model::timestamp ts) {
     auto prt_ref = state_.partition_state(tpr);
     if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tpr);
         co_return std::unexpected(metastore::errc::missing_ntp);
     }
     auto& prt = prt_ref->get();

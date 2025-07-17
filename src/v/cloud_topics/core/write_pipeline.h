@@ -54,7 +54,7 @@ public:
     ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
       chunked_vector<model::record_batch> batches,
-      std::chrono::milliseconds timeout);
+      Clock::time_point timeout);
 
     using write_requests_list
       = requests_list<write_pipeline<Clock>, write_request<Clock>>;

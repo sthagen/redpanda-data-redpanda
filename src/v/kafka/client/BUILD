@@ -14,6 +14,16 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "errors",
+    hdrs = ["errors.h"],
+    include_prefix = "kafka/client",
+    deps = [
+        "//src/v/base",
+        "//src/v/kafka/protocol",
+    ],
+)
+
+redpanda_cc_library(
     name = "api_types",
     hdrs = ["api_types.h"],
     include_prefix = "kafka/client",
@@ -149,6 +159,7 @@ redpanda_cc_library(
         "//src/v/kafka/protocol:sasl_handshake",
         "//src/v/kafka/protocol:sync_group",
         "//src/v/net",
+        "//src/v/ssx:future_util",
         "//src/v/utils:mutex",
         "//src/v/utils:prefix_logger",
         "//src/v/utils:unresolved_address",
@@ -378,6 +389,7 @@ redpanda_cc_library(
         ":types",
         "//src/v/base",
         "//src/v/random:generators",
+        "//src/v/ssx:future_util",
         "//src/v/utils:notification_list",
         "//src/v/utils:prefix_logger",
         "@abseil-cpp//absl/container:flat_hash_map",

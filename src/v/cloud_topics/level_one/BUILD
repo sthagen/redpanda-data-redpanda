@@ -46,6 +46,7 @@ redpanda_cc_library(
         "simple_metastore.h",
     ],
     implementation_deps = [
+        "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics/level_one:state_update",
     ],
     include_prefix = "cloud_topics/level_one",

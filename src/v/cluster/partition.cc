@@ -354,7 +354,8 @@ ss::future<result<kafka_result>> partition::replicate(
         co_return ret_t(res.error());
     }
     co_return ret_t(kafka_result{
-      kafka::offset(log()->from_log_offset(res.value().last_offset)())});
+      model::offset_cast(log()->from_log_offset(res.value().last_offset)),
+      res.value().last_term});
 }
 
 ss::shared_ptr<cluster::rm_stm> partition::rm_stm() {
@@ -446,9 +447,10 @@ kafka_stages partition::replicate_in_stages(
                     return ret_t(r.error());
                 }
                 auto old_offset = r.value().last_offset;
+                auto term = r.value().last_term;
                 auto new_offset = kafka::offset(
                   log()->from_log_offset(old_offset)());
-                return ret_t(kafka_result{new_offset});
+                return ret_t(kafka_result{new_offset, term});
             });
           return kafka_stages(
             std::move(res.request_enqueued), std::move(replicate_finished));

@@ -42,7 +42,7 @@ ss::future<result<chunked_vector<extent_meta>>>
 write_pipeline<Clock>::write_and_debounce(
   model::ntp ntp,
   chunked_vector<model::record_batch> batches,
-  std::chrono::milliseconds timeout) {
+  Clock::time_point timeout) {
     auto h = this->hold_gate();
     // The write request is stored on the stack of the
     // fiber until the 'response' promise is set. The
@@ -66,7 +66,9 @@ write_pipeline<Clock>::write_and_debounce(
       "write_pipeline.write_and_debounce, created write_request(size={}, "
       "timeout={})",
       sz,
-      std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+        timeout - Clock::now())
+        .count());
     auto fut = request.response.get_future();
     this->get_pending().push_back(request);
 

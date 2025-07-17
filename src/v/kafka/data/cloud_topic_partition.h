@@ -134,6 +134,8 @@ private:
       model::record_batch,
       raft::replicate_options);
 
+    bool cache_enabled() const;
+
     ss::lw_shared_ptr<cluster::partition> _partition;
     ss::shared_ptr<experimental::cloud_topics::data_plane_api> _ct_api;
 };

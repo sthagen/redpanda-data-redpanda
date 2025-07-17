@@ -39,7 +39,7 @@ read_pipeline<Clock>::read_pipeline()
 
 template<class Clock>
 ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
-  model::ntp ntp, dataplane_query query, std::chrono::milliseconds timeout) {
+  model::ntp ntp, dataplane_query query, timestamp_t timeout) {
     auto h = this->hold_gate();
     auto& as = this->get_root_rtc().root_abort_source();
     auto size_estimate = query.output_size_estimate;
@@ -77,7 +77,8 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
       request.rtc_logger.trace,
       "read_pipeline.make_reader called with {}, (timeout: {})",
       size_estimate,
-      std::chrono::duration_cast<std::chrono::milliseconds>(timeout).count());
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+        timeout - Clock::now()));
 
     auto fut = request.response.get_future();
     this->get_pending().push_back(request);

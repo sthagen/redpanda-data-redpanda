@@ -18,6 +18,7 @@
 #include "cluster/partition.h"
 #include "cluster/rm_stm.h"
 #include "cluster/types.h"
+#include "kafka/data/cloud_topic_partition_reader.h"
 #include "kafka/protocol/batch_reader.h"
 #include "kafka/protocol/errors.h"
 #include "logger.h"
@@ -55,40 +56,6 @@ struct placeholder_batches_with_size {
 
 static constexpr auto L0_upload_default_timeout = 1s;
 static constexpr auto L0_replicate_default_timeout = 1s;
-
-/// Get raft_data batch returned by the 'materialize' method
-/// of the data layer and enrich it with the information from the
-/// L0 metadata batch.
-static void fill_record_batch_header(
-  const model::record_batch_header& placeholder,
-  model::record_batch& raft_data_batch) {
-    auto& data_hdr = raft_data_batch.header();
-    auto size = data_hdr.size_bytes;
-    auto crc = data_hdr.crc;
-    data_hdr = placeholder;
-    data_hdr.type = model::record_batch_type::raft_data;
-    data_hdr.size_bytes = size;
-    data_hdr.crc = crc;
-    // Recalculate the header crc
-    data_hdr.header_crc = model::internal_header_only_crc(data_hdr);
-}
-
-/// Get list of raft_data batches and the list of placeholder headers and
-/// propagate metadata from headers into the raft_data batch headers.
-/// The data contained in L0 objects doesn't have proper term and offset.
-/// This information should be propagated from the placeholder header.
-static void fill_level_zero_headers(
-  chunked_vector<model::record_batch>& data_batches,
-  const chunked_vector<model::record_batch_header>& placeholder_headers) {
-    vassert(
-      data_batches.size() == placeholder_headers.size(),
-      "Output size mismatch, {} batches vs {} headers",
-      data_batches.size(),
-      placeholder_headers.size());
-    for (size_t ix = 0; ix < data_batches.size(); ix++) {
-        fill_record_batch_header(placeholder_headers[ix], data_batches[ix]);
-    }
-}
 
 // Create a placeholder batch using the original header and the extent.
 // The caller is supposed to use the correct batch header
@@ -169,6 +136,42 @@ static placeholder_batches_with_size convert_to_placeholders(
         result.extent_size += extent.byte_range_size;
     }
     return result;
+}
+
+/// Get original record batch and prepare it for the record batch cache
+static void update_batch_base_offset(
+  model::record_batch& src, model::offset offset, model::term_id term) {
+    src.set_term(term);
+    src.header().base_offset = offset;
+    src.header().header_crc = model::internal_header_only_crc(src.header());
+}
+
+static chunked_vector<model::record_batch>
+clone_batches(chunked_vector<model::record_batch>& src) {
+    chunked_vector<model::record_batch> res;
+    for (auto& s : src) {
+        res.push_back(s.copy());
+    }
+    return res;
+}
+
+/// Write proper offsets into the record batches
+static void update_batches(
+  chunked_vector<model::record_batch>& src,
+  model::offset last_offset,
+  model::term_id term) {
+    chunked_vector<model::record_batch> ret;
+
+    int64_t num_records = 0;
+    for (const auto& s : src) {
+        num_records += s.record_count();
+    }
+
+    auto o = model::offset(last_offset() - (num_records - 1));
+    for (auto& s : src) {
+        update_batch_base_offset(s, o, term);
+        o = model::next_offset(s.last_offset());
+    }
 }
 
 } // namespace
@@ -286,70 +289,15 @@ kafka::leader_epoch cloud_topic_partition::leader_epoch() const {
 
 ss::future<storage::translating_reader> cloud_topic_partition::make_reader(
   storage::log_reader_config cfg,
-  std::optional<model::timeout_clock::time_point> timeout) {
+  std::optional<model::timeout_clock::time_point>) {
     vassert(_ct_api != nullptr, "cloud topics api not initialized");
 
     auto ot_state = _partition->get_offset_translator_state();
 
-    cfg.start_offset = ot_state->to_log_offset(cfg.start_offset);
-    cfg.max_offset = ot_state->to_log_offset(cfg.max_offset);
-    cfg.translate_offsets = storage::translate_offsets::yes;
-    cfg.type_filter = {model::record_batch_type::dl_placeholder};
-
-    // TODO: add code path that fetches metadata from the metadata layer for L1
-    // read path
-
-    // This part comprises the metadata layer query. The partition is a metadata
-    // storage for the cloud topic.
-    auto underlying = co_await _partition->make_reader(cfg, timeout);
-    auto placeholders = co_await model::consume_reader_to_chunked_vector(
-      std::move(underlying), model::no_timeout);
-
-    auto [extents, headers] = [ph = std::move(placeholders)]() mutable {
-        chunked_vector<experimental::cloud_topics::extent_meta> res;
-        chunked_vector<model::record_batch_header> hdr;
-        for (auto&& batch : ph) {
-            hdr.push_back(batch.header());
-            experimental::cloud_topics::extent_meta e{
-              .base_offset = model::offset_cast(batch.base_offset()),
-              .last_offset = model::offset_cast(batch.last_offset()),
-            };
-            iobuf payload = std::move(batch).release_data();
-            iobuf_parser parser(std::move(payload));
-            auto record = model::parse_one_record_from_buffer(parser);
-            iobuf value = std::move(record).release_value();
-            auto placeholder
-              = serde::from_iobuf<experimental::cloud_topics::dl_placeholder>(
-                std::move(value));
-            e.id = placeholder.id;
-            e.first_byte_offset = placeholder.offset;
-            e.byte_range_size = placeholder.size_bytes;
-            res.push_back(e);
-        }
-        return std::make_pair(std::move(res), std::move(hdr));
-    }();
-
-    // This part comprises the data plane query. The 'cloud_topics::api' is
-    // responsible for moving the data from the cloud storage to the local
-    // cache.
-    auto data_batches = co_await _ct_api->materialize(
-      ntp(),
-      cfg.max_bytes,
-      std::move(extents),
-      // TODO: use configurable default timeout or derive from the log reader
-      // config
-      10s);
-
-    if (!data_batches) {
-        throw std::system_error(data_batches.error());
-    }
-
-    fill_level_zero_headers(data_batches.value(), headers);
-
-    co_return storage::translating_reader(
-      model::make_fragmented_memory_record_batch_reader(
-        std::move(data_batches.value())),
-      ot_state);
+    auto impl = std::make_unique<cloud_topic_partition_reader_impl>(
+      cfg, _partition, _ct_api);
+    co_return storage::translating_reader{
+      model::record_batch_reader(std::move(impl)), std::move(ot_state)};
 }
 
 ss::future<std::vector<cluster::tx::tx_range>>
@@ -366,6 +314,16 @@ cloud_topic_partition::aborted_transactions(
       .end_rp = last_rp,
     };
     co_return co_await get_aborted_transactions_local(*_partition, offsets);
+}
+
+bool cloud_topic_partition::cache_enabled() const {
+    if (!_partition->log()->config().cache_enabled()) {
+        return false;
+    }
+    if (config::shard_local_cfg().disable_batch_cache()) {
+        return false;
+    }
+    return true;
 }
 
 ss::future<std::optional<storage::timequery_result>>
@@ -406,7 +364,8 @@ static ss::future<> bg_upload_and_replicate(
   ss::shared_ptr<experimental::cloud_topics::data_plane_api> api,
   ss::lw_shared_ptr<cluster::partition> partition,
   model::record_batch_header header,
-  ss::lw_shared_ptr<upload_and_replicate_stages> op) {
+  ss::lw_shared_ptr<upload_and_replicate_stages> op,
+  bool cache_enabled) {
     vassert(api != nullptr, "cloud topics api is not initialized");
     auto fallback = ss::defer([op] {
         // This guarantees that the promises are set.
@@ -415,9 +374,14 @@ static ss::future<> bg_upload_and_replicate(
         op->request_enqueued.set_value();
         op->replicate_finished.set_value(raft::errc::timeout);
     });
+
+    chunked_vector<model::record_batch> rb_copy;
+    if (cache_enabled) {
+        rb_copy = clone_batches(op->batches);
+    }
     auto timeout = op->timeout == 0ms ? L0_upload_default_timeout : op->timeout;
     auto res = co_await api->write_and_debounce(
-      op->ntp, std::move(op->batches), timeout);
+      op->ntp, std::move(op->batches), model::timeout_clock::now() + timeout);
 
     if (res.has_error()) {
         vlog(
@@ -449,16 +413,43 @@ static ss::future<> bg_upload_and_replicate(
     replicate_stages.request_enqueued.forward_to(
       std::move(op->request_enqueued));
 
-    auto replicate_fut = std::move(replicate_stages.replicate_finished)
-                           .then(
-                             [](result<cluster::kafka_result> res)
-                               -> result<raft::replicate_result> {
-                                 if (res.has_error()) {
-                                     return res.error();
-                                 }
-                                 return raft::replicate_result{
-                                   model::offset(res.value().last_offset())};
-                             });
+    auto replicate_fut
+      = std::move(replicate_stages.replicate_finished)
+          .then(
+            [api,
+             cache_enabled,
+             inp = std::move(rb_copy),
+             ntp = partition->ntp()](result<cluster::kafka_result> res) mutable
+              -> result<raft::replicate_result> {
+                if (res.has_error()) {
+                    return res.error();
+                }
+                // We know that the data is replicated so it's safe to add
+                // the batch to the record batch cache before returning.
+                if (cache_enabled) {
+                    // NOTE: the assumption is that the cached term matches
+                    // the actual term. If this is not the case the replication
+                    // should fail.
+                    vassert(
+                      res.value().last_term != model::term_id{},
+                      "Term not set");
+                    update_batches(
+                      inp,
+                      kafka::offset_cast(res.value().last_offset),
+                      res.value().last_term);
+                    for (const auto& b : inp) {
+                        vlog(
+                          kdlog.trace,
+                          "Putting batch to cache: {}",
+                          b.base_offset(),
+                          b.term());
+                        api->cache_put(ntp, b);
+                    }
+                }
+                return raft::replicate_result{
+                  kafka::offset_cast(res.value().last_offset),
+                  res.value().last_term};
+            });
 
     replicate_fut.forward_to(std::move(op->replicate_finished));
 }
@@ -473,11 +464,17 @@ ss::future<result<model::offset>> cloud_topic_partition::replicate(
         headers.push_back(batch.header());
     }
 
+    chunked_vector<model::record_batch> rb_copy;
+    if (cache_enabled()) {
+        rb_copy = clone_batches(batches);
+    }
+
     // Dataplane.
     auto res = co_await _ct_api->write_and_debounce(
       ntp(),
       std::move(batches),
-      opts.timeout.value_or(L0_replicate_default_timeout));
+      model::timeout_clock::now()
+        + opts.timeout.value_or(L0_replicate_default_timeout));
 
     if (res.has_error()) {
         co_return ret_t(res.error());
@@ -497,7 +494,19 @@ ss::future<result<model::offset>> cloud_topic_partition::replicate(
     if (!result) {
         co_return ret_t(result.error());
     }
-    co_return ret_t(model::offset(result.value().last_offset()));
+    auto ret_offset = model::offset(result.value().last_offset());
+    if (!rb_copy.empty()) {
+        update_batches(rb_copy, ret_offset, result.value().last_term);
+        for (const auto& b : rb_copy) {
+            vlog(
+              kdlog.trace,
+              "Putting batch to cache: {}",
+              b.base_offset(),
+              b.term());
+            _ct_api->cache_put(ntp(), b);
+        }
+    }
+    co_return ret_t(ret_offset);
 }
 
 ss::future<result<model::offset>> cloud_topic_partition::replicate(
@@ -524,7 +533,7 @@ raft::replicate_stages cloud_topic_partition::replicate(
     out.request_enqueued = op_state->request_enqueued.get_future();
     out.replicate_finished = op_state->replicate_finished.get_future();
     ssx::background = bg_upload_and_replicate(
-      _ct_api, _partition, header, op_state);
+      _ct_api, _partition, header, op_state, cache_enabled());
     return out;
 }
 

@@ -1,11 +1,12 @@
-// Copyright 2024 Redpanda Data, Inc.
-//
-// Use of this software is governed by the Business Source License
-// included in the file licenses/BSL.md
-//
-// As of the Change Date specified in that file, in accordance with
-// the Business Source License, use of this software will be governed
-// by the Apache License, Version 2.0
+/*
+ * Copyright 2025 Redpanda Data, Inc.
+ *
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
+ */
 
 #include "cloud_topics/core/pipeline_stage.h"
 #include "cloud_topics/throttler/throttler.h"
@@ -170,7 +171,7 @@ TEST_CORO(throttler_test, no_throttling) {
     // This fut will become ready when something will get the write
     // request from the pipeline and acknowledge it.
     auto write_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(batches), 1s);
+      model::controller_ntp, std::move(batches), ss::manual_clock::now() + 1s);
     co_await sleep_until(1ms, [throttler_accessor, reader_size_bytes] {
         return throttler_accessor.units_available() == reader_size_bytes;
     });
@@ -231,7 +232,7 @@ TEST_CORO(throttler_test, tput_limit_reached) {
     // is greater than tput
     vlog(test_log.info, "Writing first request");
     auto write_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(batches), 10s);
+      model::controller_ntp, std::move(batches), ss::manual_clock::now() + 10s);
 
     //  This should move the write request out of the pipeline
     auto throttle_res = co_await std::move(throttle_fut);
@@ -303,7 +304,9 @@ TEST_CORO(throttler_test, tput_limit_reached_req_timed_out) {
     // is greater than tput. The timeout is lower than the throttling
     // that will be applied.
     auto write_fut = pipeline.write_and_debounce(
-      model::controller_ntp, std::move(batches), 200ms);
+      model::controller_ntp,
+      std::move(batches),
+      ss::manual_clock::now() + 200ms);
 
     // This should move the write request out of the pipeline.
     // It should stay there up until it times out.

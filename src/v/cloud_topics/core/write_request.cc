@@ -20,12 +20,12 @@ template<class Clock>
 write_request<Clock>::write_request(
   model::ntp ntp,
   serialized_chunk chunk,
-  std::chrono::milliseconds timeout,
+  timestamp_t timeout,
   pipeline_stage stage)
   : ntp(std::move(ntp))
   , data_chunk(std::move(chunk))
   , ingestion_time(Clock::now())
-  , expiration_time(Clock::now() + timeout)
+  , expiration_time(timeout)
   , stage(stage) {}
 
 template<class Clock>

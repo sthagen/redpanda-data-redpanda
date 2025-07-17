@@ -101,7 +101,7 @@ TEST_CORO(EventFilterTest, filter_triggered_once) {
     auto write = pipeline.write_and_debounce(
       model::controller_ntp,
       chunked_vector<model::record_batch>(std::move(batches)),
-      1s);
+      ss::lowres_clock::now() + 1s);
     auto event = co_await std::move(sub);
     ASSERT_EQ_CORO(event.pending_write_bytes, reader_size_bytes);
     auto pending = stage.pull_write_requests(
@@ -133,7 +133,7 @@ TEST_CORO(EventFilterTest, filter_has_memory) {
     auto write = pipeline.write_and_debounce(
       model::controller_ntp,
       chunked_vector<model::record_batch>(std::move(batches)),
-      1s);
+      ss::lowres_clock::now() + 1s);
     // wait until submitted
     // this is needed because 'write_and_debounce' has a scheduling point
     // before the write request is added to the list

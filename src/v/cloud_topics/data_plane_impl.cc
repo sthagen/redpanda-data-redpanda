@@ -1,17 +1,18 @@
 /*
  * Copyright 2025 Redpanda Data, Inc.
  *
- * Use of this software is governed by the Business Source License
- * included in the file licenses/BSL.md
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- * As of the Change Date specified in that file, in accordance with
- * the Business Source License, use of this software will be governed
- * by the Apache License, Version 2.0
+ * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
+
 #include "cloud_topics/data_plane_impl.h"
 
 #include "base/outcome.h"
 #include "cloud_storage/cache_service.h"
+#include "cloud_topics/batch_cache/batch_cache.h"
 #include "cloud_topics/batcher/batcher.h"
 #include "cloud_topics/core/read_pipeline.h"
 #include "cloud_topics/core/write_pipeline.h"
@@ -38,7 +39,8 @@ public:
       seastar::sharded<cluster::partition_manager>* pm,
       seastar::sharded<cloud_io::remote>* io,
       seastar::sharded<cloud_storage::cache>* cache,
-      cloud_storage_clients::bucket_name bucket)
+      cloud_storage_clients::bucket_name bucket,
+      seastar::sharded<storage::api>* storage_api)
       : _reconciler(std::make_unique<reconciler::reconciler>(pm, io, bucket))
       , _write_pipeline(std::make_unique<core::write_pipeline<>>())
       , _throttler(std::make_unique<throttler<>>(
@@ -54,9 +56,13 @@ public:
           _read_pipeline->register_read_pipeline_stage(),
           bucket,
           &io->local(),
-          &cache->local())) {}
+          &cache->local()))
+      , _batch_cache(
+          std::make_unique<batch_cache>(&storage_api->local().log_mgr())) {}
 
     seastar::future<> start() override {
+        // Batcher
+        co_await _batch_cache->start();
         // Reconciler
         co_await _reconciler->start();
         // Write path
@@ -75,12 +81,14 @@ public:
         co_await _throttler->stop();
         //  Reconciler
         co_await _reconciler->stop();
+        // Batcher
+        co_await _batch_cache->stop();
     }
 
     ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
       chunked_vector<model::record_batch> r,
-      std::chrono::milliseconds timeout) override {
+      model::timeout_clock::time_point timeout) override {
         return _write_pipeline->write_and_debounce(
           std::move(ntp), std::move(r), timeout);
     }
@@ -89,7 +97,7 @@ public:
       model::ntp ntp,
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
-      std::chrono::milliseconds timeout) override {
+      model::timeout_clock::time_point timeout) override {
         auto res = co_await _read_pipeline->make_reader(
           ntp,
           {.output_size_estimate = output_size_estimate,
@@ -99,6 +107,15 @@ public:
             co_return res.error();
         }
         co_return std::move(res.value().results);
+    }
+
+    void cache_put(const model::ntp& ntp, const model::record_batch& b) final {
+        _batch_cache->put(ntp, b);
+    }
+
+    std::optional<model::record_batch>
+    cache_get(const model::ntp& ntp, model::offset o) final {
+        return _batch_cache->get(ntp, o);
     }
 
 private:
@@ -111,15 +128,18 @@ private:
     // Read path
     std::unique_ptr<core::read_pipeline<>> _read_pipeline;
     std::unique_ptr<fetch_handler> _l0_resolver;
+    // Batch cache
+    std::unique_ptr<batch_cache> _batch_cache;
 };
 
 ss::shared_ptr<data_plane_api> make_data_plane(
   ss::sharded<cluster::partition_manager>* partition_manager,
   ss::sharded<cloud_io::remote>* remote,
   ss::sharded<cloud_storage::cache>* cache,
-  cloud_storage_clients::bucket_name bucket) {
+  cloud_storage_clients::bucket_name bucket,
+  ss::sharded<storage::api>* log_manager) {
     return ss::make_shared<impl>(
-      partition_manager, remote, cache, std::move(bucket));
+      partition_manager, remote, cache, std::move(bucket), log_manager);
 }
 
 } // namespace experimental::cloud_topics

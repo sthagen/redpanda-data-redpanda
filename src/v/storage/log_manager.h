@@ -256,6 +256,8 @@ public:
 
     gc_config default_gc_config() const;
 
+    std::optional<batch_cache_index> create_cache(with_cache);
+
 private:
     using logs_type
       = chunked_hash_map<model::ntp, std::unique_ptr<log_housekeeping_meta>>;
@@ -292,8 +294,6 @@ private:
     ssx::semaphore _gc_sem{0, "log_manager::gc"};
 
     disk_space_alert _disk_space_alert{disk_space_alert::ok};
-
-    std::optional<batch_cache_index> create_cache(with_cache);
 
     ss::future<> dispatch_topic_dir_deletion(ss::sstring dir);
     ss::future<> maybe_clear_kvstore(const ntp_config&);
