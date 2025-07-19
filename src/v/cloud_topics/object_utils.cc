@@ -11,18 +11,12 @@
 #include "cloud_topics/object_utils.h"
 
 #include "ssx/sformat.h"
-#include "utils/uuid.h"
 
 namespace experimental::cloud_topics {
 
 cloud_storage_clients::object_key
 object_path_factory::level_zero_path(object_id id) {
     return cloud_storage_clients::object_key(ssx::sformat("{}", id));
-}
-
-cloud_storage_clients::object_key object_path_factory::level_one_path() {
-    return cloud_storage_clients::object_key(
-      ssx::sformat("l1_v0_{}", uuid_t::create()));
 }
 
 } // namespace experimental::cloud_topics

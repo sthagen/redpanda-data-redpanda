@@ -12,6 +12,7 @@
 
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
+#include "cloud_topics/level_one/common/object_utils.h"
 #include "cloud_topics/level_zero/ctp_stm_api.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
@@ -210,7 +211,7 @@ ss::future<cloud_io::upload_result> reconciler::upload_object(iobuf payload) {
     co_return co_await _cloud_io->local().upload_object({
       .transfer_details = {
         .bucket = _bucket,
-        .key = object_path_factory::level_one_path(),
+        .key = l1::object_path_factory::level_one_path(),
         .parent_rtc = rtc,
       },
       .display_str = "l1_object",

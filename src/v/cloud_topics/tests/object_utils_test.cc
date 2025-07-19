@@ -23,10 +23,3 @@ TEST(ObjectPathFactory, LevelZeroPathFormat) {
     EXPECT_THAT(
       path().string(), ::testing::MatchesRegex("^42/" UUID_REGEX "$"));
 }
-
-TEST(ObjectPathFactory, LevelOnePathFormat) {
-    auto path
-      = experimental::cloud_topics::object_path_factory::level_one_path();
-    EXPECT_THAT(
-      path().string(), ::testing::MatchesRegex("^l1_v0_" UUID_REGEX "$"));
-}

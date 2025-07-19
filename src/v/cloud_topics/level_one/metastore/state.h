@@ -11,7 +11,7 @@
 
 #include "absl/container/btree_set.h"
 #include "base/seastarx.h"
-#include "cloud_topics/types.h"
+#include "cloud_topics/level_one/common/object_id.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"

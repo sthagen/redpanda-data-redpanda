@@ -43,12 +43,26 @@ services:
     networks:
       redpanda-test:
         ipv4_address: 192.168.215.125
+  mysql:
+    image: mysql:9.3.0
+    restart: always
+    expose:
+    - '3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: panda-secret
+    volumes:
+    - ./mysql-init:/docker-entrypoint-initdb.d
+    networks:
+    - redpanda-test
   azurite:
     container_name: azurite
     restart: always
+    command: "azurite-blob -l /data --blobHost 0.0.0.0"
     ports:
     - 10000:10000
-    image: mcr.microsoft.com/azure-storage/azurite:3.25.0
+    image: mcr.microsoft.com/azure-storage/azurite:3.34.0
+    environment:
+      AZURITE_DB: mysql://root:panda-secret@mysql:3306/azurite_blob
     networks:
     - redpanda-test
   rp:

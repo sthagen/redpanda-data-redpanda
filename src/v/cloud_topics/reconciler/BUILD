@@ -40,6 +40,7 @@ redpanda_cc_library(
         "//src/v/cloud_storage",
         "//src/v/cloud_topics:object_utils",
         "//src/v/cloud_topics:types",
+        "//src/v/cloud_topics/level_one/common:object_utils",
         "//src/v/cloud_topics/level_zero:ctp_stm_api",
         "//src/v/cluster",
         "//src/v/cluster:notification",

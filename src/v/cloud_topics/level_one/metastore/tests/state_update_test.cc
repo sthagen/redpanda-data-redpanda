@@ -10,8 +10,8 @@
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_split.h"
-#include "cloud_topics/level_one/state_update.h"
-#include "cloud_topics/types.h"
+#include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/state_update.h"
 #include "gmock/gmock.h"
 #include "model/fundamental.h"
 #include "utils/uuid.h"
@@ -22,9 +22,9 @@ using namespace experimental::cloud_topics;
 using namespace experimental::cloud_topics::l1;
 
 namespace {
-const object_id oid1{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
-const object_id oid2{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
-const object_id oid3{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
+const object_id oid1 = l1::create_object_id();
+const object_id oid2 = l1::create_object_id();
+const object_id oid3 = l1::create_object_id();
 const std::string_view tidp_a = "deadbeef-aaaa-0000-0000-000000000000/0";
 const std::string_view tidp_b = "deadbeef-bbbb-0000-0000-000000000000/0";
 const std::string_view tidp_c = "deadbeef-cccc-0000-0000-000000000000/0";

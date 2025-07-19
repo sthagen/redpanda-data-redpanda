@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_one/object.h"
+#include "cloud_topics/level_one/common/object.h"
 
 #include "base/vassert.h"
 #include "bytes/iostream.h"

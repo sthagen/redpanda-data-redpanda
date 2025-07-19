@@ -7,10 +7,10 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/level_one/simple_metastore.h"
+#include "cloud_topics/level_one/metastore/simple_metastore.h"
 
-#include "cloud_topics/level_one/state.h"
-#include "cloud_topics/level_one/state_update.h"
+#include "cloud_topics/level_one/metastore/state.h"
+#include "cloud_topics/level_one/metastore/state_update.h"
 #include "cloud_topics/logger.h"
 
 namespace experimental::cloud_topics::l1 {

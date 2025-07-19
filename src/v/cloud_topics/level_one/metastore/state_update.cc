@@ -7,7 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/level_one/state_update.h"
+#include "cloud_topics/level_one/metastore/state_update.h"
 
 #include "model/fundamental.h"
 
@@ -92,7 +92,8 @@ add_objects_update::can_apply(const state& state) {
         for (const auto& extent : extents) {
             if (extent.base_offset != expected_next) {
                 return std::unexpected(stm_update_error(fmt::format(
-                  "Input object breaks partition {} offset ordering: expected "
+                  "Input object breaks partition {} offset ordering: "
+                  "expected "
                   "next: {}, actual: {}",
                   tidp,
                   expected_next,
@@ -166,7 +167,8 @@ replace_objects_update::can_apply(const state& state) {
         auto iters = get_range(prt.extents, req_base, req_last);
         if (!iters.has_value()) {
             return std::unexpected(stm_update_error(fmt::format(
-              "Partition {} doesn't contain extents that span exactly [{}, {}]",
+              "Partition {} doesn't contain extents that span exactly [{}, "
+              "{}]",
               tidp,
               req_base,
               req_last)));
@@ -179,7 +181,8 @@ replace_objects_update::can_apply(const state& state) {
         for (const auto& new_extent : new_prt_extents) {
             if (new_extent.base_offset != expected_next) {
                 return std::unexpected(stm_update_error(fmt::format(
-                  "Input object breaks partition {} offset ordering: expected "
+                  "Input object breaks partition {} offset ordering: "
+                  "expected "
                   "next: {}, actual: {}",
                   tidp,
                   expected_next,

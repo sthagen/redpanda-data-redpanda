@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_one/domain_supervisor.h"
+#include "cloud_topics/level_one/domain/domain_supervisor.h"
 
 #include "cloud_topics/logger.h"
 #include "cluster/controller.h"

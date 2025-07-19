@@ -11,7 +11,7 @@
 #pragma once
 
 #include "cloud_topics/data_plane_api.h"
-#include "cloud_topics/level_one/domain_supervisor.h"
+#include "cloud_topics/level_one/domain/domain_supervisor.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>

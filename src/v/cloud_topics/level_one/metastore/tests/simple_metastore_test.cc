@@ -7,8 +7,8 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/level_one/simple_metastore.h"
-#include "cloud_topics/types.h"
+#include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/simple_metastore.h"
 
 #include <gtest/gtest.h>
 
@@ -17,9 +17,9 @@ using namespace experimental::cloud_topics::l1;
 
 namespace {
 
-const object_id oid1{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
-const object_id oid2{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
-const object_id oid3{.epoch = cluster_epoch{1}, .name = uuid_t::create()};
+const object_id oid1 = l1::create_object_id();
+const object_id oid2 = l1::create_object_id();
+const object_id oid3 = l1::create_object_id();
 
 const std::string_view tid_a = "deadbeef-aaaa-0000-0000-000000000000/0";
 const std::string_view tid_b = "deadbeef-bbbb-0000-0000-000000000000/0";
@@ -38,7 +38,7 @@ class om_builder {
 public:
     om_builder(object_id oid, size_t footer_pos) {
         out.oid = oid;
-        out.footer_pos = first_byte_offset_t(footer_pos);
+        out.footer_pos = footer_pos;
     }
     om_builder& add(
       std::string_view tpr_str,
@@ -52,8 +52,8 @@ public:
           .base_offset = base_o,
           .last_offset = last_o,
           .max_timestamp = last_t,
-          .pos = first_byte_offset_t{first_pos},
-          .size = byte_range_size_t{last_pos - first_pos},
+          .pos = first_pos,
+          .size = last_pos - first_pos,
         });
         return *this;
     }

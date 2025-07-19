@@ -133,6 +133,14 @@ ENV PATH="${PATH}:/usr/local/go/bin"
 
 #################################
 
+FROM base AS nodejs
+
+COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/nodejs /
+RUN /nodejs && rm /nodejs
+ENV PATH="${PATH}:/opt/nodejs/bin"
+
+#################################
+
 FROM golang AS kaf
 
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kaf /
@@ -180,6 +188,15 @@ COPY --chown=0:0 --chmod=0755 tests/go /opt/redpanda-tests/go
 COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/golang-test-clients /
 RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
     /golang-test-clients && rm /golang-test-clients
+
+#################################
+
+FROM nodejs AS nodejs-test-clients
+
+COPY --chown=0:0 --chmod=0755 tests/nodejs /opt/redpanda-tests/nodejs
+COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/nodejs-test-clients /
+RUN --mount=type=cache,target=/root/.npm,id=npm-cache \
+    /nodejs-test-clients && rm /nodejs-test-clients
 
 #################################
 
@@ -439,6 +456,8 @@ COPY --from=iceberg-rest /opt/iceberg-rest-catalog /opt/iceberg-rest-catalog
 COPY --from=trino /opt/trino /opt/trino
 COPY --from=spark /opt/spark /opt/spark
 COPY --from=m2-collector /root/.m2 /root/.m2
+COPY --from=nodejs /opt/nodejs/ /opt/nodejs/
+COPY --from=nodejs-test-clients /opt/redpanda-tests/nodejs /opt/redpanda-tests/nodejs
 
 RUN ldconfig
 

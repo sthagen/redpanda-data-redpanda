@@ -4885,6 +4885,17 @@ class SchemaRegistryTest(SchemaRegistryTestMethods):
     def __init__(self, context):
         super(SchemaRegistryTest, self).__init__(context)
 
+    @cluster(num_nodes=3)
+    def test_nodejs_serde_client(self):
+        brokers = self.redpanda.brokers(limit=1)
+        sr = self.redpanda.schema_reg(limit=1)
+        node = "/opt/nodejs/bin/node"
+        protobuf_serde = "/opt/redpanda-tests/nodejs/protobuf-serde/src/index.js"
+        cmd = f"{node} {protobuf_serde} --brokers={brokers} --sr={sr}"
+        self.logger.info(f"running: {cmd}")
+        exit_code = self.redpanda.nodes[0].account.ssh(cmd)
+        assert exit_code == 0, "expected exit code 0 from nodejs serde client, got {exit_code}"
+
 
 class SchemaRegistryAutoAuthTest(SchemaRegistryTestMethods):
     """

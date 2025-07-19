@@ -1,21 +1,19 @@
 /*
  * Copyright 2025 Redpanda Data, Inc.
  *
- * Use of this software is governed by the Business Source License
- * included in the file licenses/BSL.md
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
  *
- * As of the Change Date specified in that file, in accordance with
- * the Business Source License, use of this software will be governed
- * by the Apache License, Version 2.0
+ * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-
-#include "kafka/data/cloud_topic_partition_reader.h"
+#include "cloud_topics/frontend/level_zero_reader_impl.h"
 
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/dl_placeholder.h"
+#include "cloud_topics/logger.h"
 #include "cluster/partition.h"
 #include "config/configuration.h"
-#include "logger.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 
@@ -24,12 +22,12 @@
 #include <iterator>
 #include <utility>
 
-namespace kafka {
+namespace experimental::cloud_topics {
 
 // TODO: add config
 static constexpr size_t L0_max_bytes_per_metadata_fetch = 4_KiB;
 
-cloud_topic_partition_reader_impl::cloud_topic_partition_reader_impl(
+level_zero_log_reader_impl::level_zero_log_reader_impl(
   storage::log_reader_config& cfg,
   ss::lw_shared_ptr<cluster::partition> underlying,
   ss::shared_ptr<experimental::cloud_topics::data_plane_api> ct_api)
@@ -42,7 +40,7 @@ cloud_topic_partition_reader_impl::cloud_topic_partition_reader_impl(
 }
 
 ss::future<model::record_batch_reader::storage_t>
-cloud_topic_partition_reader_impl::do_load_slice(
+level_zero_log_reader_impl::do_load_slice(
   model::timeout_clock::time_point deadline) {
     // We're only fetching from the record batch cache if the reader is in
     // the 'empty' state. It doesn't make any difference if the reader is in
@@ -85,7 +83,7 @@ cloud_topic_partition_reader_impl::do_load_slice(
 }
 
 std::optional<chunked_circular_buffer<model::record_batch>>
-cloud_topic_partition_reader_impl::maybe_load_slices_from_cache() {
+level_zero_log_reader_impl::maybe_load_slices_from_cache() {
     if (_config.skip_batch_cache) {
         return std::nullopt;
     }
@@ -104,7 +102,7 @@ cloud_topic_partition_reader_impl::maybe_load_slices_from_cache() {
             break;
         }
         vlog(
-          kdlog.trace,
+          cd_log.trace,
           "Loaded batch from cache: {}",
           batch.value().base_offset(),
           batch.value().term());
@@ -135,7 +133,7 @@ cloud_topic_partition_reader_impl::maybe_load_slices_from_cache() {
       _config.start_offset == _config.max_offset
       || _config.start_offset > last_offset) {
         vlog(
-          kdlog.debug,
+          cd_log.debug,
           "reached end of stream, start offset: {}, max offset: {}, "
           "last offset: {}",
           _config.start_offset,
@@ -149,7 +147,7 @@ cloud_topic_partition_reader_impl::maybe_load_slices_from_cache() {
     return std::nullopt;
 }
 
-ss::future<> cloud_topic_partition_reader_impl::fetch_metadata(
+ss::future<> level_zero_log_reader_impl::fetch_metadata(
   model::timeout_clock::time_point deadline) {
     vassert(
       _current == state::empty_state || _current == state::materialized_state,
@@ -212,7 +210,7 @@ ss::future<> cloud_topic_partition_reader_impl::fetch_metadata(
         _headers = std::move(headers);
         if (!_meta.empty()) {
             vlog(
-              kdlog.debug,
+              cd_log.debug,
               "Fetched {} L0 meta batches from the underlying partition, "
               "first byte offset: {}, last byte offset: {}",
               _meta.size(),
@@ -220,7 +218,7 @@ ss::future<> cloud_topic_partition_reader_impl::fetch_metadata(
               _meta.back().last_offset);
         } else {
             vlog(
-              kdlog.debug,
+              cd_log.debug,
               "No L0 meta batches fetched from the underlying partition, "
               "start offset: {}, max offset: {}",
               cfg.start_offset,
@@ -229,7 +227,7 @@ ss::future<> cloud_topic_partition_reader_impl::fetch_metadata(
 
     } catch (...) {
         vlog(
-          kdlog.info,
+          cd_log.info,
           "Failed to fetch metadata from the underlying partition: {}",
           std::current_exception());
         _current = state::end_of_stream_state;
@@ -238,11 +236,11 @@ ss::future<> cloud_topic_partition_reader_impl::fetch_metadata(
     _current = _meta.empty() ? state::end_of_stream_state : state::ready_state;
 }
 
-ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
+ss::future<> level_zero_log_reader_impl::materialize_batches(
   model::timeout_clock::time_point deadline) {
     if (_current == state::end_of_stream_state) {
         _current = state::end_of_stream_state;
-        vlog(kdlog.trace, "Materialize batches called while EOS");
+        vlog(cd_log.trace, "Materialize batches called while EOS");
         co_return;
     }
     vassert(
@@ -254,7 +252,7 @@ ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
         // We're already materialized.
         _current = state::materialized_state;
         vlog(
-          kdlog.trace,
+          cd_log.trace,
           "Materialize batches call redundant, already materialized");
         co_return;
     }
@@ -284,7 +282,7 @@ ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
                 // limit). In this case we don't want to stall the reader
                 // completely.
                 vlog(
-                  kdlog.trace,
+                  cd_log.trace,
                   "Materialize batches overshot at {} bytes, config: {}, last "
                   "extent size: {}",
                   materialize_bytes,
@@ -299,7 +297,7 @@ ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
             to_materialize.push_back(meta);
             to_materialize_headers.push_back(header);
             vlog(
-              kdlog.trace, "Materialize {} bytes total...", materialize_bytes);
+              cd_log.trace, "Materialize {} bytes total...", materialize_bytes);
         }
 
         // we reached max_bytes limit and nothing is collected
@@ -309,7 +307,7 @@ ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
         }
 
         vlog(
-          kdlog.trace,
+          cd_log.trace,
           "Invoking 'materialize' for {}, {} bytes to materialize",
           _underlying->ntp(),
           materialize_bytes);
@@ -321,7 +319,7 @@ ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
           deadline);
         if (mat_res.has_error()) {
             vlog(
-              kdlog.info,
+              cd_log.info,
               "Failed to materialize batches from the cloud storage: {}",
               mat_res.error().message());
             _current = state::end_of_stream_state;
@@ -352,12 +350,12 @@ ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
         _batches = std::move(batches);
         // Materialize batches from the L0 meta batches.
         vlog(
-          kdlog.debug,
+          cd_log.debug,
           "Materialized {} batches from the L0 meta batches",
           _batches.size());
     } catch (...) {
         vlog(
-          kdlog.info,
+          cd_log.info,
           "Failed to materialize batches {}",
           std::current_exception());
         _current = state::end_of_stream_state;
@@ -367,7 +365,7 @@ ss::future<> cloud_topic_partition_reader_impl::materialize_batches(
     _current = state::materialized_state;
 }
 
-bool cloud_topic_partition_reader_impl::cache_enabled() const {
+bool level_zero_log_reader_impl::cache_enabled() const {
     if (_config.skip_batch_cache) {
         return false;
     }
@@ -380,10 +378,10 @@ bool cloud_topic_partition_reader_impl::cache_enabled() const {
     return true;
 }
 
-void cloud_topic_partition_reader_impl::consume_materialized_batches(
+void level_zero_log_reader_impl::consume_materialized_batches(
   chunked_circular_buffer<model::record_batch>* dest) {
     vlog(
-      kdlog.debug,
+      cd_log.debug,
       "consuming {} materialized batches, cached {} extents",
       _batches.size(),
       _meta.size());
@@ -393,12 +391,12 @@ void cloud_topic_partition_reader_impl::consume_materialized_batches(
     _current = _meta.empty() ? state::empty_state : state::ready_state;
 }
 
-void cloud_topic_partition_reader_impl::print(std::ostream& o) {
+void level_zero_log_reader_impl::print(std::ostream& o) {
     o << "cloud_topics_reader";
 }
 
-bool cloud_topic_partition_reader_impl::is_end_of_stream() const {
+bool level_zero_log_reader_impl::is_end_of_stream() const {
     return _current == state::end_of_stream_state;
 }
 
-} // namespace kafka
+} // namespace experimental::cloud_topics

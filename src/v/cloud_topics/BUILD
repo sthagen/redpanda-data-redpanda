@@ -6,6 +6,7 @@ package(default_visibility = [
     "//src/v/cloud_topics/batcher/tests:__pkg__",
     "//src/v/cloud_topics/core:__pkg__",
     "//src/v/cloud_topics/core/tests:__pkg__",
+    "//src/v/cloud_topics/frontend:__pkg__",
     "//src/v/cloud_topics/level_zero:__pkg__",
     "//src/v/cloud_topics/level_zero/tests:__pkg__",
     "//src/v/cloud_topics/read_path:__pkg__",
@@ -101,6 +102,7 @@ redpanda_cc_library(
     ],
     include_prefix = "cloud_topics",
     visibility = [
+        "//src/v/cloud_topics/frontend:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
     ],
@@ -124,6 +126,7 @@ redpanda_cc_library(
     ],
     include_prefix = "cloud_topics",
     visibility = [
+        "//src/v/cloud_topics/frontend:__pkg__",
         "//src/v/cloud_topics/reconciler:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
@@ -132,7 +135,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:extent_meta",
-        "//src/v/cloud_topics/level_one:domain_supervisor",
+        "//src/v/cloud_topics/level_one/domain:domain_supervisor",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/container:fragmented_vector",
         "//src/v/model",

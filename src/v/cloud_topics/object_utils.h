@@ -10,7 +10,6 @@
 #pragma once
 
 #include "cloud_storage_clients/types.h"
-#include "cloud_topics/cluster_services.h"
 #include "cloud_topics/types.h"
 
 namespace experimental::cloud_topics {
@@ -24,11 +23,6 @@ public:
      * Generate the path of a level-zero object.
      */
     static cloud_storage_clients::object_key level_zero_path(object_id id);
-
-    /*
-     * Generate the path of a level-one object.
-     */
-    static cloud_storage_clients::object_key level_one_path();
 };
 
 } // namespace experimental::cloud_topics

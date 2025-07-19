@@ -10,8 +10,8 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "cloud_topics/level_one/metastore.h"
-#include "cloud_topics/level_one/state.h"
+#include "cloud_topics/level_one/metastore/metastore.h"
+#include "cloud_topics/level_one/metastore/state.h"
 
 #include <seastar/core/future.hh>
 

@@ -136,7 +136,7 @@ admin_server::list_transforms(std::unique_ptr<ss::http::request>) {
 
 namespace {
 void validate_transform_deploy_document(const json::Document& doc) {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {

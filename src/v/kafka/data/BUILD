@@ -12,34 +12,6 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "cloud_topic_partition_reader",
-    srcs = [
-        "cloud_topic_partition_reader.cc",
-    ],
-    hdrs = [
-        "cloud_topic_partition_reader.h",
-    ],
-    implementation_deps = [
-        ":logger",
-        "//src/v/cloud_topics:app",
-        "//src/v/cloud_topics:data_plane_api",
-        "//src/v/cloud_topics:placeholder",
-        "//src/v/cluster",
-        "//src/v/config",
-    ],
-    include_prefix = "kafka/data",
-    visibility = ["//visibility:__subpackages__"],
-    deps = [
-        "//src/v/base",
-        "//src/v/cloud_topics:extent_meta",
-        "//src/v/model",
-        "//src/v/storage",
-        "@boost//:outcome",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_library(
     name = "partition_proxy",
     srcs = [
         "cloud_topic_partition.cc",
@@ -59,13 +31,15 @@ redpanda_cc_library(
     include_prefix = "kafka/data",
     visibility = ["//visibility:public"],
     deps = [
-        ":cloud_topic_partition_reader",
         "//src/v/base",
         "//src/v/cloud_storage",
         "//src/v/cloud_topics:app",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:extent_meta",
         "//src/v/cloud_topics:placeholder",
+        "//src/v/cloud_topics/frontend",
+        "//src/v/cloud_topics/frontend:errc",
+        "//src/v/cloud_topics/frontend:level_zero_reader_impl",
         "//src/v/kafka/protocol",
         "//src/v/kafka/server:errors",
         "//src/v/model",

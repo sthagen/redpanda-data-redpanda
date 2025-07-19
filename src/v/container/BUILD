@@ -46,6 +46,9 @@ redpanda_cc_library(
     include_prefix = "container",
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/serde",
+        "//src/v/serde:map",
         "@abseil-cpp//absl/container:btree",
     ],
 )

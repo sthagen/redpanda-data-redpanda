@@ -1532,7 +1532,7 @@ void admin_server::register_config_routes() {
 
 namespace {
 json::validator make_cluster_config_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {
@@ -2163,7 +2163,7 @@ void admin_server::register_status_routes() {
 
 namespace {
 json::validator make_feature_put_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {
@@ -2451,9 +2451,10 @@ void admin_server::register_features_routes() {
                   lc.format_version = license->format_version;
                   lc.org = license->organization;
               }
-              lc.type = security::license_type_to_string(license->type);
+              lc.type = license->get_type();
               lc.expires = license->expiry.count();
               lc.sha256 = license->checksum;
+              lc.products = license->products;
               res.license = lc;
           }
           return ss::make_ready_future<ss::json::json_return_type>(
@@ -2969,7 +2970,7 @@ void admin_server::register_hbadger_routes() {
 
 namespace {
 json::validator make_self_test_start_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {
@@ -3185,7 +3186,7 @@ admin_server::get_disk_stat_handler(std::unique_ptr<ss::http::request> req) {
 
 namespace {
 json::validator make_disk_stat_overrides_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {
@@ -3368,7 +3369,7 @@ admin_server::get_metrics_uuid(std::unique_ptr<ss::http::request>) {
 }
 
 static json::validator make_post_cluster_partitions_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {

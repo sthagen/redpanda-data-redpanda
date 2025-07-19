@@ -362,7 +362,7 @@ admin_server::unclean_abort_partition_reconfig_handler(
 namespace {
 
 json::validator make_set_replicas_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "array",
     "items": {
@@ -612,7 +612,7 @@ admin_server::set_partition_replicas_handler(
 
 namespace {
 json::validator make_set_replica_core_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {
@@ -1183,7 +1183,7 @@ admin_server::get_majority_lost_partitions(
 
 namespace {
 json::validator make_node_id_array_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
     {
       "type": "array",
       "items": {
@@ -1207,7 +1207,7 @@ parse_node_ids_from_json(const json::Document::ValueType& val) {
 }
 
 json::validator make_force_recover_partitions_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
   "type": "object",
   "properties": {
@@ -1288,7 +1288,7 @@ json::validator make_force_recover_partitions_validator() {
 }
 
 json::validator make_ntp_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
   "type": "object",
   "properties": {
@@ -1322,7 +1322,7 @@ model::ntp parse_ntp_from_json(const json::Document::ValueType& value) {
 }
 
 json::validator make_replicas_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
   "type": "array",
   "items": {

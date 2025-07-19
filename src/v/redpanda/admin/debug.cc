@@ -983,7 +983,7 @@ ss::future<ss::json::json_return_type> admin_server::get_node_uuid_handler() {
 }
 
 static json::validator make_broker_id_override_validator() {
-    const std::string schema = R"(
+    const std::string_view schema = R"(
 {
     "type": "object",
     "properties": {

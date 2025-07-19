@@ -10,7 +10,7 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "cloud_topics/types.h"
+#include "cloud_topics/level_one/common/object_id.h"
 #include "container/fragmented_vector.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
@@ -58,12 +58,12 @@ public:
             kafka::offset base_offset;
             kafka::offset last_offset;
             model::timestamp max_timestamp;
-            first_byte_offset_t pos;
-            byte_range_size_t size;
+            size_t pos;
+            size_t size;
         };
 
         object_id oid;
-        first_byte_offset_t footer_pos;
+        size_t footer_pos;
         chunked_vector<ntp_metadata> ntp_metas;
     };
 
