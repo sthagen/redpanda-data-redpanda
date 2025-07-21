@@ -92,9 +92,9 @@ def data_dependency():
     http_archive(
         name = "libprotobuf_mutator",
         build_file = "//bazel/thirdparty:libprotobuf-mutator.BUILD",
-        integrity = "sha256-KWUbFgNpDJtAO6Kr0eTo1v6iczEOta72jSle9oivFhg=",
-        strip_prefix = "libprotobuf-mutator-b922c8ab9004ef9944982e4f165e2747b13223fa",
-        url = "https://github.com/google/libprotobuf-mutator/archive/b922c8ab9004ef9944982e4f165e2747b13223fa.zip",
+        sha256 = "0847a2ee65552a92643131e934b50164e8b79fadc7be24b180a1c8d6dbb05952",
+        strip_prefix = "libprotobuf-mutator-dc4ced337a9fb4047e2dc727268fbac55ca82f73",
+        url = "https://github.com/google/libprotobuf-mutator/archive/dc4ced337a9fb4047e2dc727268fbac55ca82f73.zip",
     )
 
     http_archive(
@@ -162,9 +162,9 @@ def data_dependency():
     http_archive(
         name = "seastar",
         build_file = "//bazel/thirdparty:seastar.BUILD",
-        sha256 = "4f64324c068aff7fec3cb9bba9b49bd876b0a07889de325a38385463716af18a",
-        strip_prefix = "seastar-8a5ef9d49b50d2056637db761938fbf23a35013b",
-        url = "https://github.com/redpanda-data/seastar/archive/8a5ef9d49b50d2056637db761938fbf23a35013b.tar.gz",
+        sha256 = "1ec7a91eef59a3d5d0761517807c0b1762f83174c2a6a8efe3dc0b3840901dc1",
+        strip_prefix = "seastar-0aed36eee620e95c0c8289801824ca52091a0e66",
+        url = "https://github.com/redpanda-data/seastar/archive/0aed36eee620e95c0c8289801824ca52091a0e66.tar.gz",
     )
 
     http_archive(

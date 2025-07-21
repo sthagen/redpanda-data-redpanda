@@ -13,7 +13,6 @@
 
 #include "container/fragmented_vector.h"
 #include "model/fundamental.h"
-#include "model/limits.h"
 #include "model/record.h"
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
@@ -21,7 +20,6 @@
 #include "storage/fwd.h"
 #include "storage/key_offset_map.h"
 #include "storage/scoped_file_tracker.h"
-#include "utils/tristate.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/file.hh> //io_priority
@@ -285,11 +283,17 @@ struct timequery_config {
     friend std::ostream& operator<<(std::ostream& o, const timequery_config&);
 };
 struct timequery_result {
-    timequery_result(model::offset o, model::timestamp t) noexcept
-      : offset(o)
+    timequery_result(
+      model::term_id term, model::offset o, model::timestamp t) noexcept
+      : term(term)
+      , offset(o)
       , time(t) {}
+
+    model::term_id term;
     model::offset offset;
     model::timestamp time;
+
+    bool operator==(const timequery_result& other) const = default;
 
     friend std::ostream& operator<<(std::ostream& o, const timequery_result&);
 };

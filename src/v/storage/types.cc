@@ -14,7 +14,6 @@
 #include "storage/logger.h"
 #include "storage/ntp_config.h"
 #include "utils/human.h"
-#include "utils/to_string.h"
 
 #include <fmt/core.h>
 #include <fmt/ostream.h>
@@ -104,8 +103,9 @@ std::ostream& operator<<(std::ostream& o, const append_result& a) {
       a.byte_size);
     return o;
 }
-std::ostream& operator<<(std::ostream& o, const timequery_result& a) {
-    return o << "{offset:" << a.offset << ", time:" << a.time << "}";
+std::ostream& operator<<(std::ostream& o, const timequery_result& r) {
+    return o << "{term:" << r.term << ", offset:" << r.offset
+             << ", time:" << r.time << "}";
 }
 std::ostream& operator<<(std::ostream& o, const timequery_config& a) {
     o << "{min_offset: " << a.min_offset << ", max_offset: " << a.max_offset

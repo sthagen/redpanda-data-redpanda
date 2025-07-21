@@ -14,6 +14,7 @@
 #include "container/chunked_circular_buffer.h"
 #include "finjector/stress_fiber.h"
 #include "model/fundamental.h"
+#include "model/limits.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"

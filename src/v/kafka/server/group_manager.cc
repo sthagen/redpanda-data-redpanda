@@ -35,6 +35,7 @@
 #include "kafka/server/group_tx_tracker_stm.h"
 #include "kafka/server/logger.h"
 #include "model/fundamental.h"
+#include "model/limits.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "raft/errc.h"
