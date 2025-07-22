@@ -29,6 +29,7 @@
 #include "ssx/checkpoint_mutex.h"
 #include "ssx/event.h"
 #include "storage/fwd.h"
+#include "utils/execution_monitor.h"
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/abort_source.hh>
@@ -377,6 +378,8 @@ public:
     /// Return reference to partition manifest from archival STM
     const cloud_storage::partition_manifest& manifest() const;
 
+    void log_collected_traces() noexcept;
+
     /// Get segment size for the partition
     size_t get_local_segment_size() const;
 
@@ -697,6 +700,7 @@ private:
     std::optional<cloud_storage_clients::bucket_name> _bucket_override;
     ss::gate _gate;
     ss::abort_source _as;
+    retry_chain_context _rtctx;
     retry_chain_node _rtcnode;
     retry_chain_logger _rtclog;
 
@@ -791,6 +795,8 @@ private:
 
     config::binding<std::chrono::milliseconds> _initial_backoff;
     config::binding<std::chrono::milliseconds> _max_backoff;
+
+    ssx::execution_monitor _execution_monitor;
 
     friend class archiver_fixture;
 };

@@ -740,6 +740,7 @@ redpanda_cc_library(
         "//src/v/utils:available_promise",
         "//src/v/utils:directory_walker",
         "//src/v/utils:exceptions",
+        "//src/v/utils:execution_monitor",
         "//src/v/utils:expiring_promise",
         "//src/v/utils:file_io",
         "//src/v/utils:fixed_string",

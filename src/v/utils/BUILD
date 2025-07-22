@@ -720,3 +720,17 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "execution_monitor",
+    hdrs = [
+        "execution_monitor.h",
+    ],
+    include_prefix = "utils",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/utils:retry_chain_node",
+        "@seastar",
+    ],
+)

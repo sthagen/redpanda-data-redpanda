@@ -576,3 +576,19 @@ redpanda_cc_btest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_btest(
+    name = "execution_monitor_test",
+    timeout = "short",
+    srcs = [
+        "execution_monitor_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:execution_monitor",
+        "@boost//:test",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)
