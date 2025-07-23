@@ -107,6 +107,7 @@
 #include "kafka/server/consumer_group_lag_metrics_frontend.h"
 #include "kafka/server/consumer_group_lag_metrics_service.h"
 #include "kafka/server/coordinator_ntp_mapper.h"
+#include "kafka/server/data_migration_group_proxy_impl.h"
 #include "kafka/server/group_manager.h"
 #include "kafka/server/group_router.h"
 #include "kafka/server/group_tx_tracker_stm.h"
@@ -2158,6 +2159,14 @@ void application::wire_up_redpanda_services(
       std::ref(controller->get_members_table()),
       std::ref(controller->get_api()))
       .get();
+    construct_service(
+      _data_migrations_group_proxy, ss::sharded_parameter([&]() {
+          return std::make_unique<kafka::data_migration_group_proxy_impl>(
+            coordinator_ntp_mapper.local(),
+            _group_manager.local(),
+            group_initializer.local());
+      }))
+      .get();
 
     offsets_recovery_manager
       = ss::make_shared<cluster::cloud_metadata::offsets_recovery_manager>(
@@ -3112,7 +3121,8 @@ void application::start_runtime_services(
         std::move(offsets_upload_requestor),
         producer_id_recovery_manager,
         std::move(offsets_recovery_requestor),
-        redpanda_start_time)
+        redpanda_start_time,
+        _data_migrations_group_proxy)
       .get();
 
     if (archiver_manager.local_is_initialized()) {

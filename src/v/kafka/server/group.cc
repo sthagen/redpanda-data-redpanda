@@ -1474,6 +1474,14 @@ void group::remove_member(member_ptr member) {
     }
 }
 
+void group::remove_full_members() {
+    while (!_members.empty()) {
+        auto member = _members.begin()->second;
+        member->expire_timer().cancel();
+        remove_member(member);
+    }
+}
+
 group::sync_group_stages group::handle_sync_group(sync_group_request&& r) {
     vlog(_ctxlog.trace, "Handling sync group request {}", r);
 
@@ -2497,7 +2505,7 @@ group::handle_offset_fetch(offset_fetch_request&& r) {
     if (!r.data.topics) {
         absl::flat_hash_map<
           model::topic,
-          small_fragment_vector<offset_fetch_response_partition>>
+          chunked_vector<offset_fetch_response_partition>>
           tmp;
         for (const auto& e : _offsets) {
             offset_fetch_response_partition p = {

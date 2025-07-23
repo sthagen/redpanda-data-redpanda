@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/outcome.h"
+#include "cluster/data_migration_group_proxy.h"
 #include "cluster/data_migration_types.h"
 #include "cluster/fwd.h"
 #include "cluster/notification.h"
@@ -34,6 +35,7 @@ public:
       model::node_id,
       partition_leaders_table&,
       partition_manager&,
+      group_proxy&,
       ss::abort_source&);
     ss::future<> stop();
 
@@ -85,11 +87,17 @@ private:
       const outbound_partition_work_info&);
 
     ss::future<result<model::offset, errc>>
-    block(ss::lw_shared_ptr<partition> partition, bool block);
+    block_partition(ss::lw_shared_ptr<partition> partition, bool block);
+
+    ss::future<result<model::offset, errc>> block_groups(
+      const model::ntp& ntp,
+      const chunked_vector<kafka::group_id>& groups,
+      bool block);
 
     model::node_id _self;
     partition_leaders_table& _leaders_table;
     partition_manager& _partition_manager;
+    group_proxy& _group_proxy;
     ss::abort_source& _as;
     std::chrono::milliseconds _operation_timeout;
 

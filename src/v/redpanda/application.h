@@ -39,6 +39,7 @@
 #include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/service.h"
 #include "kafka/server/app.h"
+#include "kafka/server/data_migration_group_proxy_impl.h"
 #include "kafka/server/fwd.h"
 #include "kafka/server/group_initializer.h"
 #include "kafka/server/snc_quota_manager.h"
@@ -415,6 +416,8 @@ private:
     metrics::internal_metric_groups _metrics;
     ss::sharded<metrics::public_metrics_group_service> _public_metrics;
     std::unique_ptr<kafka::rm_group_proxy_impl> _rm_group_proxy;
+    ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>
+      _data_migrations_group_proxy;
 
     ss::sharded<resources::cpu_profiler> _cpu_profiler;
     ss::sharded<debug_bundle::service> _debug_bundle_service;

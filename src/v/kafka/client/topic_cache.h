@@ -42,7 +42,7 @@ public:
     ~topic_cache() noexcept = default;
 
     /// \brief Apply the given metadata response.
-    void apply(const small_fragment_vector<metadata_response::topic>& topics);
+    void apply(const chunked_vector<metadata_response::topic>& topics);
 
     /// \brief Obtain the leader for the given topic-partition
     std::optional<model::node_id> leader(model::topic_partition_view) const;

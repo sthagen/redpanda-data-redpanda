@@ -13,6 +13,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "cluster/errc.h"
 #include "container/fragmented_vector.h"
+#include "kafka/protocol/types.h"
 #include "model/metadata.h"
 #include "model/timestamp.h"
 #include "serde/rw/enum.h"
@@ -35,7 +36,7 @@ namespace cluster::data_migrations {
  * same identifiers.
  */
 using id = named_type<int64_t, struct data_migration_type_tag>;
-using consumer_group = named_type<ss::sstring, struct consumer_group_tag>;
+using consumer_group = kafka::group_id;
 /**
  * Migration state
  *  ┌─────────┐
@@ -180,6 +181,7 @@ struct inbound_topic
       = default;
     friend std::ostream& operator<<(std::ostream&, const inbound_topic&);
 };
+
 /**
  * Inbound migration object representing topics and consumer groups that
  * ownership should be acquired.
@@ -203,9 +205,16 @@ struct inbound_migration
     friend std::ostream& operator<<(std::ostream&, const inbound_migration&);
 
     auto topic_nts() const {
-        return std::as_const(topics)
+        auto pieces = std::vector{std::as_const(topics) | std::views::all};
+        if (!groups.empty()) {
+            pieces.push_back(consumer_offsets_topic | std::views::all);
+        }
+        return std::move(pieces) | std::views::join
                | std::views::transform(&inbound_topic::effective_topic_name);
     }
+
+private:
+    static const chunked_vector<inbound_topic> consumer_offsets_topic;
 };
 
 /**
@@ -275,7 +284,16 @@ struct outbound_migration
       = default;
     friend std::ostream& operator<<(std::ostream&, const outbound_migration&);
 
-    auto topic_nts() const { return std::as_const(topics) | std::views::all; }
+    auto topic_nts() const {
+        auto pieces = std::vector{std::as_const(topics) | std::views::all};
+        if (!groups.empty()) {
+            pieces.push_back(consumer_offsets_topic | std::views::all);
+        }
+        return std::move(pieces) | std::views::join;
+    }
+
+private:
+    static const chunked_vector<model::topic_namespace> consumer_offsets_topic;
 };
 
 /**
@@ -290,9 +308,13 @@ data_migration copy_migration(const data_migration& migration);
 struct inbound_partition_work_info {
     std::optional<model::topic_namespace> source;
     std::optional<cloud_storage_location> cloud_storage_location;
+    chunked_vector<consumer_group>
+      groups; // not empty iff partition of consumer offsets topic
 };
 struct outbound_partition_work_info {
     std::optional<copy_target> copy_to;
+    chunked_vector<consumer_group>
+      groups; // not empty iff partition of consumer offsets topic
 };
 using partition_work_info
   = std::variant<inbound_partition_work_info, outbound_partition_work_info>;

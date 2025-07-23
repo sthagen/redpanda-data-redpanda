@@ -14,7 +14,9 @@
 #include "base/vassert.h"
 #include "cluster/data_migration_types.h"
 #include "cluster_utils.h"
+#include "container/fragmented_vector.h"
 #include "errc.h"
+#include "kafka/protocol/types.h"
 #include "logger.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -41,10 +43,12 @@ worker::worker(
   model::node_id self,
   partition_leaders_table& leaders_table,
   partition_manager& partition_manager,
+  group_proxy& group_proxy,
   ss::abort_source& as)
   : _self(self)
   , _leaders_table(leaders_table)
   , _partition_manager(partition_manager)
+  , _group_proxy(group_proxy)
   , _as(as)
   , _operation_timeout(5s) {}
 
@@ -241,7 +245,7 @@ ss::future<errc> worker::do_work(
 ss::future<errc> worker::do_work(
   const model::ntp& ntp,
   state sought_state,
-  const outbound_partition_work_info&) {
+  const outbound_partition_work_info& otwi) {
     auto partition = _partition_manager.get(ntp);
     if (!partition) {
         co_return errc::partition_not_exists;
@@ -249,20 +253,46 @@ ss::future<errc> worker::do_work(
 
     switch (sought_state) {
     case state::prepared:
+        vassert(otwi.groups.empty(), "nothing to do with groups in preparing");
         co_return co_await partition->flush_archiver();
-    case state::executed: {
-        auto block_res = co_await block(partition, true);
+    case state::executed:
+        if (!otwi.groups.empty()) {
+            auto res = co_await block_groups(ntp, otwi.groups, true);
+            co_return res.has_value() ? errc::success : res.error();
+        } else {
+            auto block_res = co_await block_partition(partition, true);
+            if (!block_res.has_value()) {
+                co_return block_res.error();
+            }
+            auto block_offset = block_res.value();
+
+            auto deadline = model::timeout_clock::now() + 5s;
+            co_return co_await partition->flush(block_offset, deadline, _as);
+        }
+    case state::finished: {
+        vassert(
+          !otwi.groups.empty(),
+          "nothing to do with data partitions in cut_over, they are also being "
+          "deleted by topic work");
+        // todo: shift to a new "cleanup" stage?
+        auto block_res = co_await block_groups(ntp, otwi.groups, false);
         if (!block_res.has_value()) {
             co_return block_res.error();
         }
-        auto block_offset = block_res.value();
-
-        auto deadline = model::timeout_clock::now() + 5s;
-        co_return co_await partition->flush(block_offset, deadline, _as);
+        auto del_res = co_await _group_proxy.delete_groups(ntp, otwi.groups);
+        if (del_res != std::error_code{}) {
+            co_return map_update_interruption_error_code(del_res);
+        }
+        co_return errc::success;
     }
     case state::cancelled: {
-        auto res = co_await block(partition, false);
-        co_return res.has_value() ? errc::success : res.error();
+        if (!otwi.groups.empty()) {
+            auto res = co_await block_groups(ntp, otwi.groups, false);
+            co_return res.has_value() ? errc::success : res.error();
+        } else {
+            auto res = co_await block_partition(partition, false);
+            co_return res.has_value() ? errc::success : res.error();
+        }
     }
     default:
         vassert(
@@ -274,10 +304,21 @@ ss::future<errc> worker::do_work(
 }
 
 ss::future<result<model::offset, errc>>
-worker::block(ss::lw_shared_ptr<partition> partition, bool block) {
+worker::block_partition(ss::lw_shared_ptr<partition> partition, bool block) {
     auto res = co_await partition->set_writes_disabled(
       partition_properties_stm::writes_disabled{block},
       model::timeout_clock::now() + 5s);
+    if (res.has_value()) {
+        co_return res.value();
+    }
+    co_return map_update_interruption_error_code(res.error());
+}
+
+ss::future<result<model::offset, errc>> worker::block_groups(
+  const model::ntp& ntp,
+  const chunked_vector<kafka::group_id>& groups,
+  bool block) {
+    auto res = co_await _group_proxy.set_blocked_for_groups(ntp, groups, block);
     if (res.has_value()) {
         co_return res.value();
     }

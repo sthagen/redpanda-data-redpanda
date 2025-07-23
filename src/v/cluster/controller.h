@@ -15,6 +15,7 @@
 #include "cluster/cluster_link/fwd.h"
 #include "cluster/controller_probe.h"
 #include "cluster/controller_stm.h"
+#include "cluster/data_migration_group_proxy.h"
 #include "cluster/fwd.h"
 #include "cluster/node_status_table.h"
 #include "cluster/scheduling/leader_balancer.h"
@@ -219,7 +220,8 @@ public:
       ss::shared_ptr<cluster::cloud_metadata::offsets_upload_requestor>,
       ss::shared_ptr<cluster::cloud_metadata::producer_id_recovery_manager>,
       ss::shared_ptr<cluster::cloud_metadata::offsets_recovery_requestor>,
-      std::chrono::milliseconds application_start_time);
+      std::chrono::milliseconds application_start_time,
+      ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>&);
 
     // prevents controller from accepting new requests
     ss::future<> shutdown_input();

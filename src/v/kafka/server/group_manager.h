@@ -183,8 +183,11 @@ public:
     using partition_producers = partition_response;
     partition_response describe_partition_producers(const model::ntp&);
 
-    ss::future<std::vector<deletable_group_result>>
-      delete_groups(std::vector<std::pair<model::ntp, group_id>>);
+    ss::future<std::error_code>
+    empty_and_delete_groups(const model::ntp&, const chunked_vector<group_id>&);
+
+    ss::future<chunked_vector<deletable_group_result>>
+      delete_groups(chunked_vector<std::pair<model::ntp, group_id>>);
 
     ss::future<> reload_groups();
 
@@ -244,6 +247,7 @@ private:
         ss::lw_shared_ptr<cluster::partition> partition;
         ss::lw_shared_ptr<ssx::rwlock> catchup_lock;
         model::term_id term{-1};
+        chunked_hash_set<kafka::group_id> blocked_groups;
 
         explicit attached_partition(ss::lw_shared_ptr<cluster::partition> p);
         ~attached_partition() noexcept;
@@ -321,7 +325,6 @@ private:
     ss::sharded<consumer_group_lag_metrics_frontend>& _lag_metrics_frontend;
     config::configuration& _conf;
     absl::node_hash_map<group_id, group_ptr> _groups;
-    chunked_hash_set<kafka::group_id> _blocked_groups;
     absl::node_hash_map<model::ntp, ss::lw_shared_ptr<attached_partition>>
       _partitions;
 

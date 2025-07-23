@@ -13,6 +13,8 @@
 #include "test_utils/async.h"
 #include "test_utils/test.h"
 
+#include <seastar/util/defer.hh>
+
 using namespace kafka::client;
 using namespace std::chrono_literals;
 
@@ -37,7 +39,7 @@ TEST_F(cluster_mock_fixture, TestBrokerDiscovery) {
     cluster_mock.add_broker(
       model::node_id(1), net::unresolved_address{"localhost", 9092});
     cluster.start().get();
-
+    auto deferred_stop = ss::defer([&cluster] { cluster.stop().get(); });
     RPTEST_REQUIRE_EVENTUALLY(
       5s, [&cluster]() { return cluster.get_brokers().size() == 1; });
 
@@ -62,6 +64,7 @@ TEST_F(cluster_mock_fixture, TestBrokerDiscovery) {
 TEST_F(cluster_mock_fixture, TestMetadataCallback) {
     cluster_mock.register_default_handlers();
     auto cluster = create_client_cluster();
+    auto deferred_stop = ss::defer([&cluster] { cluster.stop().get(); });
     int callback_invocations = 0;
 
     cluster_mock.add_broker(
@@ -76,8 +79,8 @@ TEST_F(cluster_mock_fixture, TestMetadataCallback) {
 TEST_F(cluster_mock_fixture, TestApiVersionDiscovery) {
     cluster_mock.register_default_handlers();
     auto cluster = create_client_cluster();
-    model::node_id broker_0(0);
 
+    model::node_id broker_0(0);
     cluster_mock.add_broker(
       broker_0, net::unresolved_address{"localhost", 9092});
     cluster_mock.set_supported_versions(
@@ -86,6 +89,7 @@ TEST_F(cluster_mock_fixture, TestApiVersionDiscovery) {
       api_version_range{
         .min = kafka::api_version(0), .max = kafka::api_version(8)});
     cluster.start().get();
+    auto deferred_stop = ss::defer([&cluster] { cluster.stop().get(); });
 
     /**
      * In this single node cluster the supported API versions for the

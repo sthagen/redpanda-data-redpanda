@@ -495,6 +495,7 @@ redpanda_cc_library(
         "data_migrated_resources.h",
         "data_migration_backend.h",
         "data_migration_frontend.h",
+        "data_migration_group_proxy.h",
         "data_migration_irpc_frontend.h",
         "data_migration_rpc_service.h",
         "data_migration_service_handler.h",

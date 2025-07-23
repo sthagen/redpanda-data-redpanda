@@ -561,6 +561,9 @@ public:
     /// Removes a full member and may rebalance.
     void remove_member(member_ptr member);
 
+    /// Remove all full members so that group can be deleted.
+    void remove_full_members();
+
     /// Handle a group sync request.
     sync_group_stages handle_sync_group(sync_group_request&& r);
 

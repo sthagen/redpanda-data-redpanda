@@ -427,6 +427,7 @@ redpanda_cc_gtest(
         "//src/v/kafka/client:cluster",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
+        "@seastar",
     ],
 )
 

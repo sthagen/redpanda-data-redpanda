@@ -94,6 +94,7 @@
 #include <seastar/util/later.hh>
 
 #include <chrono>
+#include <memory>
 #include <optional>
 namespace cluster {
 
@@ -234,7 +235,9 @@ ss::future<> controller::start(
     producer_id_recovery,
   ss::shared_ptr<cluster::cloud_metadata::offsets_recovery_requestor>
     offsets_recovery,
-  std::chrono::milliseconds application_start_time) {
+  std::chrono::milliseconds application_start_time,
+  ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>&
+    data_migrations_group_proxy) {
     /**
      * Switch to cluster scheduling group to ensure that all the controller
      * services are started within that scheduling group.
@@ -325,6 +328,9 @@ ss::future<> controller::start(
       std::ref(_feature_table),
       std::ref(_stm),
       std::ref(_partition_leaders),
+      ss::sharded_parameter([&data_migrations_group_proxy] {
+          return std::ref(*data_migrations_group_proxy.local());
+      }),
       std::ref(_connections),
       ss::sharded_parameter(
         [this]() -> std::optional<
@@ -343,6 +349,9 @@ ss::future<> controller::start(
         [this] { return std::ref(_partition_leaders.local()); }),
       ss::sharded_parameter(
         [this] { return std::ref(_partition_manager.local()); }),
+      ss::sharded_parameter([&data_migrations_group_proxy] {
+          return std::ref(*data_migrations_group_proxy.local());
+      }),
       ss::sharded_parameter([this] { return std::ref(_as.local()); }));
     {
         limiter_configuration limiter_conf{
@@ -825,6 +834,7 @@ ss::future<> controller::start(
       std::ref(_tp_frontend.local()),
       std::ref(_tp_state.local()),
       std::ref(_shard_table.local()),
+      std::ref(*data_migrations_group_proxy.local()),
       _cloud_storage_api.local_is_initialized()
         ? std::make_optional(std::ref(_cloud_storage_api.local()))
         : std::nullopt,

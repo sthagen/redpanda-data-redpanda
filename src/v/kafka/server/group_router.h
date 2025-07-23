@@ -113,8 +113,9 @@ private:
     template<typename Request, typename FwdFunc>
     auto route_stages(Request r, FwdFunc func);
 
-    using sharded_groups = absl::
-      node_hash_map<ss::shard_id, std::vector<std::pair<model::ntp, group_id>>>;
+    using sharded_groups = absl::node_hash_map<
+      ss::shard_id,
+      chunked_vector<std::pair<model::ntp, group_id>>>;
 
     std::optional<std::pair<model::ntp, ss::shard_id>>
     shard_for(const group_id& group) {
@@ -126,8 +127,8 @@ private:
         return std::nullopt;
     }
 
-    ss::future<std::vector<deletable_group_result>> route_delete_groups(
-      ss::shard_id, std::vector<std::pair<model::ntp, group_id>>);
+    ss::future<chunked_vector<deletable_group_result>> route_delete_groups(
+      ss::shard_id, chunked_vector<std::pair<model::ntp, group_id>>);
 
     ss::future<> parallel_route_delete_groups(
       std::vector<deletable_group_result>&, sharded_groups&);
