@@ -104,7 +104,7 @@ private:
     table* _table;
     ss::abort_source* _as;
     cluster::controller_stm* _controller;
-    features::feature_table* _features;
+    [[maybe_unused]] features::feature_table* _features;
 
     mutex _mu{"panda-link::frontend::mu"};
 };

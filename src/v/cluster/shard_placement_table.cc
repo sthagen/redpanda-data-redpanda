@@ -242,13 +242,14 @@ ss::future<> shard_placement_table::enable_persistence() {
 
     vlog(clusterlog.info, "enabling table persistence...");
 
-    auto write_locks = container().map([](shard_placement_table& local) {
-        return local._persistence_lock.hold_write_lock().then(
-          [](ss::rwlock::holder holder) {
-              return ss::make_foreign(
-                std::make_unique<ss::rwlock::holder>(std::move(holder)));
-          });
-    });
+    auto write_locks = co_await container().map(
+      [](shard_placement_table& local) {
+          return local._persistence_lock.hold_write_lock().then(
+            [](ss::rwlock::holder holder) {
+                return ss::make_foreign(
+                  std::make_unique<ss::rwlock::holder>(std::move(holder)));
+            });
+      });
 
     co_await container().invoke_on_all([](shard_placement_table& local) {
         return local.persist_shard_local_state();

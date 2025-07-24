@@ -7,7 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/reconciler/range_batch_consumer.h"
+#include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
 #include "model/record_batch_reader.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/random_bytes.h"

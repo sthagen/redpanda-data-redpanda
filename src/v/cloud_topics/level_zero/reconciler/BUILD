@@ -1,6 +1,6 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
-package(default_visibility = ["//src/v/cloud_topics/reconciler/tests:__pkg__"])
+package(default_visibility = [":__subpackages__"])
 
 redpanda_cc_library(
     name = "range_batch_consumer",
@@ -10,7 +10,7 @@ redpanda_cc_library(
     hdrs = [
         "range_batch_consumer.h",
     ],
-    include_prefix = "cloud_topics/reconciler",
+    include_prefix = "cloud_topics/level_zero/reconciler",
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
@@ -31,7 +31,7 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/kafka/data:partition_proxy",
     ],
-    include_prefix = "cloud_topics/reconciler",
+    include_prefix = "cloud_topics/level_zero/reconciler",
     visibility = ["//visibility:public"],
     deps = [
         ":range_batch_consumer",
@@ -41,7 +41,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics:object_utils",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_one/common:object_utils",
-        "//src/v/cloud_topics/level_zero:ctp_stm_api",
+        "//src/v/cloud_topics/level_zero/stm:ctp_stm_api",
         "//src/v/cluster",
         "//src/v/cluster:notification",
         "//src/v/container:fragmented_vector",

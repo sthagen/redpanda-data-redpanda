@@ -1061,6 +1061,26 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_btest(
+    name = "controller_state_test",
+    timeout = "short",
+    srcs = [
+        "controller_state_test.cc",
+    ],
+    deps = [
+        ":cluster_test_fixture",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/features",
+        "//src/v/model",
+        "//src/v/security",
+        "//src/v/test_utils:seastar_boost",
+        "//src/v/utils:unresolved_address",
+        "@boost//:test",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_btest(
     name = "ephemeral_credential_test",
     timeout = "short",
     srcs = [

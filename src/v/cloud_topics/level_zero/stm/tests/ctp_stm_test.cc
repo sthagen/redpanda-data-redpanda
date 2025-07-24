@@ -8,9 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/ctp_stm.h"
-#include "cloud_topics/level_zero/ctp_stm_api.h"
-#include "cloud_topics/level_zero/ctp_stm_factory.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_api.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_factory.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/types.h"
 #include "cluster/state_machine_registry.h"

@@ -368,9 +368,8 @@ TEST_F(cluster_metadata_uploader_fixture, test_upload_loop_deletes_orphans) {
     auto& uploader = app.controller->metadata_uploader().value().get();
     RPTEST_REQUIRE_EVENTUALLY(5s, [this] { return raft0->is_leader(); });
 
-    auto upload_in_term
-      = uploader.upload_until_term_change().handle_exception_type(
-        [](const seastar::abort_requested_exception& e) { std::ignore = e; });
+    ssx::background = uploader.upload_until_term_change().handle_exception_type(
+      [](const seastar::abort_requested_exception& e) { std::ignore = e; });
     // Wait for some valid metadata to show up.
     cluster::cloud_metadata::cluster_metadata_manifest manifest;
     RPTEST_REQUIRE_EVENTUALLY(5s, [this, &manifest] {

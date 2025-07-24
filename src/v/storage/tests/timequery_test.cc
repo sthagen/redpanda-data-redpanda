@@ -30,10 +30,14 @@ model::record_batch make_random_batch(
         batch_size = 1024;
     }
 
+    // Don't allow compression if we are purposefully trying to make this batch
+    // large enough to be indexed in the `segment_index`.
+    bool allow_compression = !big_enough_for_index;
+
     auto b = model::test::make_random_batch(
       model::offset(o),
       num_records,
-      true,
+      allow_compression,
       model::record_batch_type::raft_data,
       std::vector<size_t>(num_records, batch_size),
       ts);

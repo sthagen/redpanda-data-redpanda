@@ -8,11 +8,11 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/ctp_stm_api.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 
 #include "base/outcome.h"
-#include "cloud_topics/level_zero/ctp_stm.h"
-#include "cloud_topics/level_zero/ctp_stm_commands.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_commands.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
 #include "raft/consensus.h"

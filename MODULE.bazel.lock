@@ -4499,99 +4499,12 @@
     "@@toolchains_llvm+//toolchain/extensions:llvm.bzl%llvm": {
       "general": {
         "bzlTransitiveDigest": "Y2heRh/+vyv+TNlxvHaJMv4Qvk/skBlTnhqOk6s4VjY=",
-        "usagesDigest": "IA3VY3eCQ0agjYBS73Jyh+E890b93T9etIojaGQbxEs=",
+        "usagesDigest": "rwpkkTnNHzR5ruvmlEIhcIOwvqU55SHssS+CA2XsDnU=",
         "recordedFileInputs": {},
         "recordedDirentsInputs": {},
         "envVariables": {},
         "generatedRepoSpecs": {
           "previous_llvm_toolchain_llvm": {
-            "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%llvm",
-            "attributes": {
-              "alternative_llvm_sources": [],
-              "auth_patterns": {},
-              "distribution": "auto",
-              "exec_arch": "",
-              "exec_os": "",
-              "libclang_rt": {},
-              "llvm_mirror": "",
-              "llvm_version": "18.1.8",
-              "llvm_versions": {},
-              "netrc": "",
-              "sha256": {
-                "linux-aarch64": "9f52789c5aee794d6f013249b6e003b50f72e4c3874fd656723a72bf9322eff9",
-                "linux-x86_64": "51e547308112bc6671f391d03420c315b7c099238d797631e00374f1bd80712e"
-              },
-              "strip_prefix": {},
-              "urls": {
-                "linux-aarch64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-18.1.8/llvm-18.1.8-debian-11-aarch64-2025-03-10.tar.zst"
-                ],
-                "linux-x86_64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-18.1.8/llvm-18.1.8-debian-11-x86_64-2025-03-10.tar.zst"
-                ]
-              }
-            }
-          },
-          "previous_llvm_toolchain": {
-            "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%toolchain",
-            "attributes": {
-              "absolute_paths": false,
-              "archive_flags": {},
-              "compile_flags": {
-                "linux-aarch64": [
-                  "--target=aarch64-unknown-linux-gnu",
-                  "-march=armv8-a+crc+crypto",
-                  "-U_FORTIFY_SOURCE",
-                  "-fstack-protector",
-                  "-fno-omit-frame-pointer",
-                  "-fcolor-diagnostics",
-                  "-Wall",
-                  "-Wthread-safety",
-                  "-Wself-assign"
-                ],
-                "linux-x86_64": [
-                  "--target=x86_64-unknown-linux-gnu",
-                  "-march=westmere",
-                  "-U_FORTIFY_SOURCE",
-                  "-fstack-protector",
-                  "-fno-omit-frame-pointer",
-                  "-fcolor-diagnostics",
-                  "-Wall",
-                  "-Wthread-safety",
-                  "-Wself-assign"
-                ]
-              },
-              "conly_flags": {},
-              "coverage_compile_flags": {},
-              "coverage_link_flags": {},
-              "cxx_builtin_include_directories": {},
-              "cxx_flags": {},
-              "cxx_standard": {
-                "": "c++23"
-              },
-              "dbg_compile_flags": {},
-              "exec_arch": "",
-              "exec_os": "",
-              "extra_exec_compatible_with": {},
-              "extra_target_compatible_with": {},
-              "link_flags": {},
-              "link_libs": {},
-              "llvm_versions": {
-                "": "18.1.8"
-              },
-              "opt_compile_flags": {},
-              "opt_link_flags": {},
-              "stdlib": {},
-              "target_settings": {},
-              "unfiltered_compile_flags": {},
-              "toolchain_roots": {},
-              "sysroot": {
-                "linux-x86_64": "'@@+non_module_dependencies+x86_64_sysroot//:sysroot'",
-                "linux-aarch64": "'@@+non_module_dependencies+aarch64_sysroot//:sysroot'"
-              }
-            }
-          },
-          "current_llvm_toolchain_llvm": {
             "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%llvm",
             "attributes": {
               "alternative_llvm_sources": [],
@@ -4619,7 +4532,7 @@
               }
             }
           },
-          "current_llvm_toolchain": {
+          "previous_llvm_toolchain": {
             "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%toolchain",
             "attributes": {
               "absolute_paths": false,
@@ -4678,7 +4591,7 @@
               }
             }
           },
-          "next_llvm_toolchain_llvm": {
+          "current_llvm_toolchain_llvm": {
             "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%llvm",
             "attributes": {
               "alternative_llvm_sources": [],
@@ -4688,25 +4601,25 @@
               "exec_os": "",
               "libclang_rt": {},
               "llvm_mirror": "",
-              "llvm_version": "20.1.7",
+              "llvm_version": "20.1.8",
               "llvm_versions": {},
               "netrc": "",
               "sha256": {
-                "linux-aarch64": "895bc671e9d75e80fb09b1cf842b3191239d4aeb1bf79bb8108490571481c177",
-                "linux-x86_64": "6eee67bc40ffe6a8470df0f8bea5ab0e99ad5785d1cc84d2c5d14c1a9021b3da"
+                "linux-aarch64": "ce0a8d7f4df980dd3aa0deacd390804f887d31065cd79b71827bba6cd4d2e2e8",
+                "linux-x86_64": "c424df0195e1641b6226dbb380a849d2013975150af40932392361d9893005ac"
               },
               "strip_prefix": {},
               "urls": {
                 "linux-aarch64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.7/llvm-20.1.7-debian-11-aarch64-2025-06-18.tar.zst"
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.8/llvm-20.1.8-debian-11-aarch64-2025-07-22.tar.zst"
                 ],
                 "linux-x86_64": [
-                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.7/llvm-20.1.7-debian-11-x86_64-2025-06-18.tar.zst"
+                  "https://github.com/redpanda-data/llvm-project/releases/download/llvmorg-20.1.8/llvm-20.1.8-debian-11-x86_64-2025-07-22.tar.zst"
                 ]
               }
             }
           },
-          "next_llvm_toolchain": {
+          "current_llvm_toolchain": {
             "repoRuleId": "@@toolchains_llvm+//toolchain:rules.bzl%toolchain",
             "attributes": {
               "absolute_paths": false,
@@ -4751,7 +4664,7 @@
               "link_flags": {},
               "link_libs": {},
               "llvm_versions": {
-                "": "20.1.7"
+                "": "20.1.8"
               },
               "opt_compile_flags": {},
               "opt_link_flags": {},

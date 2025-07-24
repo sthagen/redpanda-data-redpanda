@@ -25,6 +25,7 @@ namespace {
 const object_id oid1 = l1::create_object_id();
 const object_id oid2 = l1::create_object_id();
 const object_id oid3 = l1::create_object_id();
+const object_id oid4 = l1::create_object_id();
 const std::string_view tidp_a = "deadbeef-aaaa-0000-0000-000000000000/0";
 const std::string_view tidp_b = "deadbeef-bbbb-0000-0000-000000000000/0";
 const std::string_view tidp_c = "deadbeef-cccc-0000-0000-000000000000/0";
@@ -85,6 +86,23 @@ struct replace_objects_builder {
 public:
     replace_objects_builder& add(new_object o) {
         out.new_objects.emplace_back(std::move(o));
+        return *this;
+    }
+    replace_objects_builder& clean(
+      std::string_view tp_str,
+      struct compaction_state_update::cleaned_range r,
+      model::timestamp cleaned_at) {
+        auto tp = model::topic_id_partition::from(tp_str);
+        auto& c_state = out.compaction_updates[tp.topic_id][tp.partition];
+        c_state.cleaned_at = cleaned_at;
+        c_state.new_cleaned_range = r;
+        return *this;
+    }
+    replace_objects_builder& clean_tombstones(
+      std::string_view tp_str, kafka::offset base, kafka::offset last) {
+        auto tp = model::topic_id_partition::from(tp_str);
+        auto& c_state = out.compaction_updates[tp.topic_id][tp.partition];
+        c_state.removed_tombstones_ranges.insert(base, last);
         return *this;
     }
     replace_objects_update build() { return std::move(out); }
@@ -214,6 +232,10 @@ namespace {
 MATCHER_P3(MatchesRange, oid, base, last, "") {
     return arg.oid == oid && arg.base_offset == base && arg.last_offset == last;
 }
+MATCHER_P2(MatchesRange, base, last, "") {
+    return arg.base_offset == base && arg.last_offset == last;
+}
+
 } // namespace
 
 TEST(StateUpdateTest, TestReplaceBasic) {
@@ -377,4 +399,305 @@ TEST(StateUpdateTest, TestEmptyReplace) {
     EXPECT_THAT(
       std::string(replace_res.error()()),
       testing::StrEq("No objects requested"));
+}
+
+TEST(StateUpdateTest, TestReplaceWithCompaction) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Fully replace partition a and clean part of it.
+    auto replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid2, 100)
+                 .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 5_o, .last_offset = 10_o, .has_tombstones = true},
+            1999_t)
+          .build();
+
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    // Compact an extent, marking [5, 10] cleaned with tombstones.
+    const auto& prt_a
+      = s.partition_state(model::topic_id_partition::from(tidp_a))->get();
+    ASSERT_TRUE(prt_a.compaction_state.has_value());
+    EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid2, 0_o, 10_o)));
+    EXPECT_THAT(
+      prt_a.compaction_state->cleaned_ranges.to_vec(),
+      ElementsAre(MatchesRange(5_o, 10_o)));
+    EXPECT_THAT(
+      prt_a.compaction_state->cleaned_ranges_with_tombstones,
+      ElementsAre(MatchesRange(5_o, 10_o)));
+
+    // Compact an extent, marking [3, 4] cleaned with tombstones.
+    replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid3, 100)
+                 .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 3_o, .last_offset = 4_o, .has_tombstones = true},
+            1999_t)
+          .build();
+    replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid3, 0_o, 10_o)));
+    EXPECT_THAT(
+      prt_a.compaction_state->cleaned_ranges.to_vec(),
+      ElementsAre(MatchesRange(3_o, 10_o)));
+    EXPECT_THAT(
+      prt_a.compaction_state->cleaned_ranges_with_tombstones,
+      ElementsAre(MatchesRange(3_o, 4_o), MatchesRange(5_o, 10_o)));
+
+    // Now mark [3, 8] as having removed tombstones.
+    replace = replace_objects_builder()
+                .add(new_obj_builder(oid4, 100)
+                       .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                       .build())
+                .clean_tombstones(tidp_a, 3_o, 8_o)
+                .build();
+    replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value()) << replace_res.error();
+
+    EXPECT_THAT(prt_a.extents, ElementsAre(MatchesRange(oid4, 0_o, 10_o)));
+    EXPECT_THAT(
+      prt_a.compaction_state->cleaned_ranges.to_vec(),
+      ElementsAre(MatchesRange(3_o, 10_o)));
+    EXPECT_THAT(
+      prt_a.compaction_state->cleaned_ranges_with_tombstones,
+      ElementsAre(MatchesRange(9_o, 10_o)));
+}
+
+TEST(StateUpdateTest, TestCompactionMissingExtent) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Add a clean range for tidp_a but only supply an extent with tidp_b.
+    auto replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid2, 100)
+                 .add(tidp_b, 0_o, 10_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 5_o, .last_offset = 10_o, .has_tombstones = true},
+            1999_t)
+          .build();
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex(
+        "New cleaned range does not refer to partition with extent"));
+}
+
+TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid3, 100)
+                 .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 5_o, .last_offset = 11_o, .has_tombstones = true},
+            1999_t)
+          .build();
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex("Cleaned range for .+ does not match requested "
+                             "new extents' last_offset"));
+}
+
+TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+    add = add_objects_builder()
+            .add(new_obj_builder(oid2, 300)
+                   .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                   .build())
+            .build();
+    add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Add a replacement extent and claim that it cleans a larger offset range.
+    auto replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid3, 100)
+                 .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 0_o, .last_offset = 20_o, .has_tombstones = true},
+            1999_t)
+          .build();
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex(
+        "Cleaned range start_offset for .+ is not covered by extents"));
+}
+
+TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+    add = add_objects_builder()
+            .add(new_obj_builder(oid2, 300)
+                   .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                   .build())
+            .build();
+    add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    // Add a replacement extent and claim that it makes a larger range clean.
+    auto replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid3, 100)
+                 .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 11_o, .last_offset = 20_o, .has_tombstones = true},
+            1999_t)
+          .build();
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex(
+        "Cleaned range .+ does not replace to the beginning of the log"));
+}
+
+TEST(StateUpdateTest, TestOverlappingTombstones) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid2, 100)
+                 .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 5_o, .last_offset = 10_o, .has_tombstones = true},
+            1999_t)
+          .build();
+    auto replace_res = replace.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    replace
+      = replace_objects_builder()
+          .add(new_obj_builder(oid3, 100)
+                 .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 10_o, .last_offset = 10_o, .has_tombstones = true},
+            1999_t)
+          .build();
+    replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex("Cleaned range for .+ has tombstones and overlaps "
+                             "with an existing cleaned range with tombstones"));
+}
+
+TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
+    using testing::ElementsAre;
+    auto add = add_objects_builder()
+                 .add(new_obj_builder(oid1, 300)
+                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                        .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                        .build())
+                 .build();
+    state s;
+    auto add_res = add.apply(s);
+    ASSERT_TRUE(add_res.has_value());
+
+    auto replace = replace_objects_builder()
+                     .add(new_obj_builder(oid2, 100)
+                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                            .build())
+                     .clean_tombstones(tidp_a, 5_o, 10_o)
+                     .build();
+    auto replace_res = replace.apply(s);
+    ASSERT_FALSE(replace_res.has_value());
+    EXPECT_THAT(
+      std::string(replace_res.error()()),
+      testing::ContainsRegex("Tombstone-removed range .+ for .+ is not tracked "
+                             "as having tombstones"));
 }

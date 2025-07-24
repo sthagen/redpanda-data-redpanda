@@ -121,8 +121,7 @@ proxy::proxy(
       json::serialization_format::application_json,
       plog,
       preqs)
-  , _ensure_started{[this]() { return do_start(); }}
-  , _controller(controller) {
+  , _ensure_started{[this]() { return do_start(); }} {
     _inflight_config_binding.watch([this]() {
         const size_t capacity = _inflight_config_binding();
         _inflight_sem.set_capacity(capacity);

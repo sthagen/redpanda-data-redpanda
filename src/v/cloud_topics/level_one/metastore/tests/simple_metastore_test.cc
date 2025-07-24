@@ -9,6 +9,7 @@
  */
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
+#include "gmock/gmock.h"
 
 #include <gtest/gtest.h>
 
@@ -20,6 +21,7 @@ namespace {
 const object_id oid1 = l1::create_object_id();
 const object_id oid2 = l1::create_object_id();
 const object_id oid3 = l1::create_object_id();
+const object_id oid4 = l1::create_object_id();
 
 const std::string_view tid_a = "deadbeef-aaaa-0000-0000-000000000000/0";
 const std::string_view tid_b = "deadbeef-bbbb-0000-0000-000000000000/0";
@@ -33,7 +35,12 @@ model::timestamp operator""_t(unsigned long long t) {
     return model::timestamp{static_cast<int64_t>(t)};
 }
 
+MATCHER_P2(MatchesRange, base, last, "") {
+    return arg.base_offset == base && arg.last_offset == last;
+}
+
 using om_list_t = chunked_vector<metastore::object_metadata>;
+using cmap_t = metastore::compaction_map_t;
 class om_builder {
 public:
     om_builder(object_id oid, size_t footer_pos) {
@@ -61,6 +68,39 @@ public:
 
 private:
     metastore::object_metadata out;
+};
+class cm_builder {
+public:
+    cm_builder& clean(
+      std::string_view tpr_str,
+      kafka::offset base,
+      kafka::offset last,
+      std::optional<model::timestamp> with_tombstones_ts = std::nullopt) {
+        auto tp = model::topic_id_partition::from(tpr_str);
+        auto& cmp_meta = out[tp];
+        cmp_meta.new_cleaned_range
+          = metastore::compaction_update::cleaned_range{
+            .base_offset = base,
+            .last_offset = last,
+            .has_tombstones = with_tombstones_ts.has_value(),
+          };
+        if (with_tombstones_ts) {
+            cmp_meta.cleaned_at = *with_tombstones_ts;
+        }
+        return *this;
+    }
+    cm_builder& remove_tombstones(
+      std::string_view tpr_str, kafka::offset base, kafka::offset last) {
+        auto tp = model::topic_id_partition::from(tpr_str);
+        auto& cmp_meta = out[tp];
+        cmp_meta.removed_tombstones_ranges.insert(base, last);
+        cmp_meta.cleaned_at = model::timestamp::now();
+        return *this;
+    }
+    cmap_t build() { return std::move(out); }
+
+private:
+    cmap_t out;
 };
 
 } // namespace
@@ -570,4 +610,226 @@ TEST(StateUpdateTest, TestReplaceMultipleMisaligned) {
         ASSERT_FALSE(replace_res.has_value());
         EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
     }
+}
+
+TEST(SimpleMetastoreTest, TestCompactionOffsetsMissingPartition) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_b, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Look for a different partition.
+    auto cmp_a = m.get_compaction_offsets(
+                    model::topic_id_partition::from(tid_a), 2000_t)
+                   .get();
+    ASSERT_FALSE(cmp_a.has_value());
+    EXPECT_EQ(cmp_a.error(), metastore::errc::missing_ntp);
+}
+
+TEST(SimpleMetastoreTest, TestCompactionOffsetsAllDirty) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(om_builder(oid1, 100)
+                      .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                      .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
+                      .build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Without having anything compacted, the whole log is dirty.
+    auto cmp_a = m.get_compaction_offsets(
+                    model::topic_id_partition::from(tid_a), 2000_t)
+                   .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(
+      cmp_a->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(0_o, 10_o)));
+}
+
+TEST(SimpleMetastoreTest, TestCompactionOffsets) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Simple compaction to clean offsets [3, 5].
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid2, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 3_o, 5_o, 3000_t);
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    // Sanity check that replacement leaves us with expected offsets.
+    auto offsets_res
+      = m.get_offsets(model::topic_id_partition::from(tid_a)).get();
+    ASSERT_TRUE(offsets_res.has_value());
+    ASSERT_EQ(0_o, offsets_res->start_offset);
+    ASSERT_EQ(11_o, offsets_res->next_offset);
+
+    // Check that the cleaned range is reflected in the returned dirty ranges.
+    auto cmp_a = m.get_compaction_offsets(
+                    model::topic_id_partition::from(tid_a), 3000_t)
+                   .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(
+      cmp_a->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(0_o, 2_o), MatchesRange(6_o, 10_o)));
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(3_o, 5_o)));
+
+    // Sanity check that tombstone ranges aren't reported if the removable
+    // cutoff is too low.
+    cmp_a = m.get_compaction_offsets(
+               model::topic_id_partition::from(tid_a), 2999_t)
+              .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(
+      cmp_a->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(0_o, 2_o), MatchesRange(6_o, 10_o)));
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(), testing::ElementsAre());
+
+    // Now perform another replacement and remove some tombstones.
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid3, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 0_o, 2_o);
+        cmb.remove_tombstones(tid_a, 3_o, 4_o);
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+    cmp_a = m.get_compaction_offsets(
+               model::topic_id_partition::from(tid_a), 3000_t)
+              .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(
+      cmp_a->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(6_o, 10_o)));
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(5_o, 5_o)));
+
+    // Remove the rest of the tombstones and dirty ranges.
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid4, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 6_o, 10_o);
+        cmb.remove_tombstones(tid_a, 5_o, 5_o);
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+    cmp_a = m.get_compaction_offsets(
+               model::topic_id_partition::from(tid_a), 3000_t)
+              .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(cmp_a->dirty_ranges.to_vec(), testing::ElementsAre());
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(), testing::ElementsAre());
+}
+
+TEST(SimpleMetastoreTest, TestCompactionOffsetsNoTombstones) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    auto add_res = m.add_objects(os).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Simple compaction to clean offsets [3, 5].
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid2, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 3_o, 5_o);
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    // Sanity check that replacement leaves us with expected offsets.
+    auto offsets_res
+      = m.get_offsets(model::topic_id_partition::from(tid_a)).get();
+    ASSERT_TRUE(offsets_res.has_value());
+    ASSERT_EQ(0_o, offsets_res->start_offset);
+    ASSERT_EQ(11_o, offsets_res->next_offset);
+
+    // Check that the cleaned range is reflected in the returned dirty ranges.
+    auto cmp_a = m.get_compaction_offsets(
+                    model::topic_id_partition::from(tid_a), 3000_t)
+                   .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(
+      cmp_a->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(0_o, 2_o), MatchesRange(6_o, 10_o)));
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(), testing::ElementsAre());
+
+    // Sanity check that we have no tombstone ranges, since we didn't mark any
+    // tombstoned ranges.
+    cmp_a = m.get_compaction_offsets(
+               model::topic_id_partition::from(tid_a), 2999_t)
+              .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(
+      cmp_a->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(0_o, 2_o), MatchesRange(6_o, 10_o)));
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(), testing::ElementsAre());
+
+    // Now perform another replacement.
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid3, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 0_o, 2_o);
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+    cmp_a = m.get_compaction_offsets(
+               model::topic_id_partition::from(tid_a), 3000_t)
+              .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(
+      cmp_a->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(6_o, 10_o)));
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(), testing::ElementsAre());
+
+    // Remove the rest of the dirty ranges.
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid4, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 6_o, 10_o);
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+    cmp_a = m.get_compaction_offsets(
+               model::topic_id_partition::from(tid_a), 3000_t)
+              .get();
+    ASSERT_TRUE(cmp_a.has_value());
+    EXPECT_THAT(cmp_a->dirty_ranges.to_vec(), testing::ElementsAre());
+    EXPECT_THAT(
+      cmp_a->removable_tombstone_ranges.to_vec(), testing::ElementsAre());
 }

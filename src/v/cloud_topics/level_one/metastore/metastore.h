@@ -11,6 +11,8 @@
 
 #include "base/seastarx.h"
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/offset_interval_set.h"
+#include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
@@ -66,7 +68,6 @@ public:
         size_t footer_pos;
         chunked_vector<ntp_metadata> ntp_metas;
     };
-
     struct object_response {
         object_id oid;
         size_t footer_pos;
@@ -109,6 +110,102 @@ public:
     // `out_of_range`.
     virtual ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, model::timestamp) = 0;
+
+    // Compaction metadata updates per partition
+    //
+    // Kafka compaction works by taking "dirty" ranges of data, collecting the
+    // keys and offsets within that range, and then removing all older
+    // instances of those keys from the beginning of the log. At that point,
+    // that range of data is considered "cleaned". For all keys in a cleaned
+    // range, only the latest version of that key exists in the log up to the
+    // cleaned range.
+    //
+    // Kafka also has the concept of a "tombstone" (empty-value record) that
+    // indicates the logical deletion of the record's key. Once a given
+    // tombstone record has been cleaned, a timer begins and after
+    // delete.retention.ms elapses, the cleaned tombstone record may be
+    // removed.
+    //
+    // To support these ideas, the metastore tracks cleaned offset ranges and
+    // whether they contain tombstones. This allows it to expose dirty ranges
+    // and ranges with removable tombstones to callers.
+    struct compaction_update {
+        bool operator==(const compaction_update&) const = default;
+        struct cleaned_range {
+            bool operator==(const cleaned_range&) const = default;
+            kafka::offset base_offset;
+            kafka::offset last_offset;
+
+            // Whether or not the cleaned range included any tombstones.
+            bool has_tombstones{false};
+        };
+        // A range indicating that the data's keys have been fully deduplicated
+        // from the start of the log.
+        std::optional<cleaned_range> new_cleaned_range;
+
+        // Ranges of cleaned offsets that previously had tombstones, that have
+        // been removed.
+        offset_interval_set removed_tombstones_ranges;
+
+        // Timsetamp at which the compaction operation happened.
+        model::timestamp cleaned_at;
+    };
+    using compaction_map_t
+      = chunked_hash_map<model::topic_id_partition, compaction_update>;
+    struct compaction_offsets_response {
+        // Offset ranges whose keys have not been fully deduplicated from the
+        // start of the log.
+        offset_interval_set dirty_ranges;
+
+        // The set of offset ranges that contain tombstones whose keys have
+        // been cleaned long enough to be eligible for tombstone removal.
+        //
+        // A compaction method, when iterating over a tombstone record, may
+        // consult this to determine if the tombstone should be removed.
+        offset_interval_set removable_tombstone_ranges;
+    };
+    // Similar to replace_objects(), but with additional constraints based on
+    // compaction metadata. See get_compaction_offsets() for more details on
+    // expected usage.
+    virtual ss::future<std::expected<void, errc>> compact_objects(
+      const chunked_vector<object_metadata>&, const compaction_map_t&)
+      = 0;
+
+    // Returns metadata required to determine what to compact for the given
+    // partition. Below is pseudocode for sample usage:
+    //
+    // offsets = co_await metastore.get_compaction_offsets( \
+    //   partition, tombstone_removal_upper_bound_ts);
+    //
+    // key_offset_map m;
+    // cleaned_ranges new_cleaned_ranges;
+    // offset_interval_set removed_tombstones_ranges;
+    //
+    // # Build an offset map based on the dirty ranges.
+    // for dirty_range in offsets.dirty_ranges:
+    //     reader = log.reader(dirty_range.base, dirty_range.last)
+    //     co_await m.add_latest_offset_per_key(reader)
+    //
+    //     cleaned_range r(...offset range that was actually read...);
+    //     if ...reader witnessed tombstones...:
+    //         cleaned_range.cleaned_with_tombstones_at = now()
+    //
+    //     new_cleaned_ranges.insert(cleaned_range)
+    //
+    // # Determine what ranges to remove tombstones from.
+    // removed_tombstones_ranges = \
+    //   ...offsets.removable_tombstone_ranges that fall below m.max_offset()...
+    //
+    // # This operation deduplicates based on the offset map and removes
+    // # tombstones in the given ranges, up to the max indexed by the map.
+    // objects = co_await log.compact( \
+    //   m.max_offset(), m, removed_tombstones_ranges)
+    //
+    // co_await metastore.compact_objects( \
+    //   objects, {{tp, {new_cleaned_ranges, removed_tombstones_ranges}}})
+    virtual ss::future<std::expected<compaction_offsets_response, errc>>
+    get_compaction_offsets(const model::topic_id_partition&, model::timestamp)
+      = 0;
 };
 
 } // namespace experimental::cloud_topics::l1

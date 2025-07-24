@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "cloud_topics/level_zero/ctp_stm_state.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "raft/persisted_stm.h"
 
 namespace experimental::cloud_topics {

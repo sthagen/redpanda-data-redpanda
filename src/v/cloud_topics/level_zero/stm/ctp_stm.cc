@@ -8,12 +8,12 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/ctp_stm.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
 
 #include "bytes/iobuf.h"
 #include "bytes/iobuf_parser.h"
-#include "cloud_topics/level_zero/ctp_stm_commands.h"
-#include "cloud_topics/level_zero/ctp_stm_state.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_commands.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "cloud_topics/types.h"
 #include "serde/rw/map.h"
 #include "serde/rw/uuid.h"

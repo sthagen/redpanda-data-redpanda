@@ -1164,7 +1164,6 @@ TEST_P(
   all_types_throttle_remote_fixture,
   test_download_segment_throttle) { // NOLINT
     set_expectations_and_listen({});
-    auto subscription = remote.local().subscribe(allow_all);
     auto name = segment_name("1-2-v1.log");
     auto path = remote_segment_path{prefixed_segment_path(
       manifest_ntp, manifest_revision, name, model::term_id{123})};
@@ -1251,7 +1250,6 @@ TEST_P(
   all_types_no_throttle_remote_fixture,
   test_download_segment_no_throttle) { // NOLINT
     set_expectations_and_listen({});
-    auto subscription = remote.local().subscribe(allow_all);
     auto name = segment_name("1-2-v1.log");
     auto path = remote_segment_path{prefixed_segment_path(
       manifest_ntp, manifest_revision, name, model::term_id{123})};

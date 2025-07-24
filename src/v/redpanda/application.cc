@@ -21,7 +21,7 @@
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_topics/data_plane_impl.h"
-#include "cloud_topics/level_zero/ctp_stm_factory.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_factory.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/archiver_manager.h"
 #include "cluster/archival/ntp_archiver_service.h"
@@ -1382,8 +1382,7 @@ void application::wire_up_runtime_services(
             std::ref(cloud_io),
             std::ref(_datalake_credential_mgr)),
           std::ref(cloud_io),
-          std::ref(*bucket),
-          std::ref(_datalake_credential_mgr))
+          std::ref(*bucket))
           .get();
         construct_service(
           _datalake_coordinator_fe,
@@ -2170,12 +2169,7 @@ void application::wire_up_redpanda_services(
 
     offsets_recovery_manager
       = ss::make_shared<cluster::cloud_metadata::offsets_recovery_manager>(
-        std::ref(offsets_recovery_router),
-        std::ref(coordinator_ntp_mapper),
-        controller->get_members_table(),
-        controller->get_api(),
-        std::ref(controller->get_topics_frontend()),
-        group_initializer.local());
+        std::ref(offsets_recovery_router), group_initializer.local());
 
     syschecks::systemd_message("Creating kafka group router").get();
     construct_service(

@@ -8,12 +8,12 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/reconciler/reconciler.h"
+#include "cloud_topics/level_zero/reconciler/reconciler.h"
 
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
 #include "cloud_topics/level_one/common/object_utils.h"
-#include "cloud_topics/level_zero/ctp_stm_api.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
 #include "cluster/partition.h"

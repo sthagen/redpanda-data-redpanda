@@ -10,8 +10,10 @@ redpanda_cc_library(
     include_prefix = "cloud_topics/level_one/metastore",
     visibility = ["//visibility:public"],
     deps = [
+        ":offset_interval_set",
         "//src/v/base",
         "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/container:chunked_hash_map",
         "//src/v/container:fragmented_vector",
         "//src/v/model",
         "@seastar",
@@ -50,6 +52,7 @@ redpanda_cc_library(
     ],
     include_prefix = "cloud_topics/level_one/metastore",
     deps = [
+        ":offset_interval_set",
         "//src/v/base",
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/container:chunked_hash_map",

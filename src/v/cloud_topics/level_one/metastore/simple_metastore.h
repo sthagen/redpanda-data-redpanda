@@ -36,6 +36,13 @@ public:
     ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, model::timestamp) override;
 
+    ss::future<std::expected<void, errc>> compact_objects(
+      const chunked_vector<object_metadata>&, const compaction_map_t&) override;
+
+    ss::future<std::expected<compaction_offsets_response, errc>>
+    get_compaction_offsets(
+      const model::topic_id_partition&, model::timestamp) override;
+
 private:
     state state_;
 };

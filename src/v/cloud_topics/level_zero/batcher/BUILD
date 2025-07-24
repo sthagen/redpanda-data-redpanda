@@ -1,8 +1,8 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 package(default_visibility = [
+    ":__subpackages__",
     "//src/v/cloud_topics:__pkg__",
-    "//src/v/cloud_topics/batcher/tests:__pkg__",
 ])
 
 redpanda_cc_library(
@@ -20,7 +20,7 @@ redpanda_cc_library(
         "//src/v/container:chunked_circular_buffer",
         "//src/v/storage:record_batch_builder",
     ],
-    include_prefix = "cloud_topics/batcher",
+    include_prefix = "cloud_topics/level_zero/batcher",
     deps = [
         "//src/v/base",
         "//src/v/cloud_topics:cluster_services_interface",
@@ -42,16 +42,16 @@ redpanda_cc_library(
         "batcher.h",
     ],
     implementation_deps = [
+        ":aggregator",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_topics:extent_meta",
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics:object_utils",
-        "//src/v/cloud_topics/batcher:aggregator",
         "//src/v/cloud_topics/core:serializer",
         "//src/v/ssx:sformat",
         "//src/v/utils:human",
     ],
-    include_prefix = "cloud_topics/batcher",
+    include_prefix = "cloud_topics/level_zero/batcher",
     deps = [
         "//src/v/base",
         "//src/v/bytes",

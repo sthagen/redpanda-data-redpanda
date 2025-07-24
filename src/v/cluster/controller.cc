@@ -614,7 +614,7 @@ ss::future<> controller::start(
 
     co_await cluster_creation_hook(discovery);
     {
-        auto u = _stm.local().lock_apply();
+        auto u = co_await _stm.local().lock_apply();
         // start shard_balancer before controller_backend so that it bootstraps
         // shard_placement_table and controller_backend can start with already
         // initialized table.

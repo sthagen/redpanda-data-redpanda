@@ -557,7 +557,7 @@ TEST_F_CORO(raft_fixture, test_prioritizing_longest_log) {
         co_await n->init_and_start(all_vnodes());
     }
 
-    auto leader_id = wait_for_leader(10s);
+    co_await wait_for_leader(10s);
 
     co_await wait_for_visible_offset(visible_offset, 10s);
 }

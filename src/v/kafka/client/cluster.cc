@@ -136,9 +136,11 @@ ss::future<> cluster::initialize_metadata_with_seed() {
             co_await broker->stop();
             continue;
         }
-
         auto reply_f = co_await ss::coroutine::as_future(broker->dispatch(
-          metadata_request{.list_all_topics = false}, request_version_f.get()));
+          // use empty topic list not to request all topics, we are only
+          // interested in brokers list
+          metadata_request{.data = metadata_request_data{.topics = {}}},
+          request_version_f.get()));
         /**
          * stop the broker after the request is done to ensure that
          * the broker is not left in a connected state. This is important
@@ -188,7 +190,7 @@ ss::future<> cluster::dispatch_metadata_request() {
           broker, _as);
         // TODO: support topic subscription
         auto reply = co_await broker->dispatch(
-          metadata_request{.list_all_topics = false}, request_version);
+          metadata_request{}, request_version);
         vassert(
           std::holds_alternative<kafka::metadata_response>(reply),
           "Metadata response is required to be returned as a result of "

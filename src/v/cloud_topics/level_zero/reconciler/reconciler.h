@@ -13,7 +13,7 @@
 #include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "cloud_io/remote.h"
-#include "cloud_topics/reconciler/range_batch_consumer.h"
+#include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
 #include "cluster/notification.h"
 #include "cluster/partition.h"
 #include "cluster/partition_manager.h"

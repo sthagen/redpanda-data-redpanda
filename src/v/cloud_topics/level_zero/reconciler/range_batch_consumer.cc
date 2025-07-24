@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/reconciler/range_batch_consumer.h"
+#include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
 
 #include "model/timestamp.h"
 

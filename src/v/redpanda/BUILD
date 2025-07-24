@@ -22,7 +22,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:data_plane_impl",
         "//src/v/cloud_topics:app",
-        "//src/v/cloud_topics/level_zero:ctp_stm_factory",
+        "//src/v/cloud_topics/level_zero/stm:ctp_stm_factory",
         "//src/v/cluster",
         "//src/v/cluster:cloud_metadata_offsets_recovery_router",
         "//src/v/cluster:cloud_metadata_offsets_recovery_service",

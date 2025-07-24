@@ -7,7 +7,7 @@ redpanda_cc_gtest(
         "range_batch_consumer_test.cc",
     ],
     deps = [
-        "//src/v/cloud_topics/reconciler:range_batch_consumer",
+        "//src/v/cloud_topics/level_zero/reconciler:range_batch_consumer",
         "//src/v/model",
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:gtest",

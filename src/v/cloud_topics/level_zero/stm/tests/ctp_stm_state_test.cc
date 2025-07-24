@@ -9,7 +9,7 @@
  */
 
 #include "cloud_topics/dl_version.h"
-#include "cloud_topics/level_zero/ctp_stm_state.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "random/generators.h"

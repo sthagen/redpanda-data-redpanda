@@ -61,7 +61,6 @@ private:
     server::context_t _ctx;
     server _server;
     one_shot _ensure_started;
-    cluster::controller* _controller;
     bool _is_started{false};
 };
 

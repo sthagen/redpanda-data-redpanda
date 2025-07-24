@@ -8,15 +8,15 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/batcher/batcher.h"
+#include "cloud_topics/level_zero/batcher/batcher.h"
 
 #include "base/unreachable.h"
 #include "cloud_io/remote.h"
-#include "cloud_topics/batcher/aggregator.h"
 #include "cloud_topics/core/event_filter.h"
 #include "cloud_topics/core/serializer.h"
 #include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
+#include "cloud_topics/level_zero/batcher/aggregator.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"

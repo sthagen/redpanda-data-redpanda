@@ -12,6 +12,7 @@
 #include "absl/container/btree_set.h"
 #include "base/seastarx.h"
 #include "cloud_topics/level_one/common/object_id.h"
+#include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
@@ -50,6 +51,109 @@ struct extent
     object_id oid;
 };
 
+struct compaction_state
+  : public serde::
+      envelope<compaction_state, serde::version<0>, serde::compat_version<0>> {
+    struct cleaned_range_with_tombstones
+      : public serde::envelope<
+          cleaned_range_with_tombstones,
+          serde::version<0>,
+          serde::compat_version<0>> {
+        friend bool operator==(
+          const cleaned_range_with_tombstones&,
+          const cleaned_range_with_tombstones&)
+          = default;
+        auto operator<=>(const cleaned_range_with_tombstones&) const = default;
+        auto serde_fields() {
+            return std::tie(
+              base_offset, last_offset, cleaned_with_tombstones_at);
+        }
+
+        kafka::offset base_offset;
+        kafka::offset last_offset;
+
+        // Timestamp at which this clean range was generated.
+        // This is important to track to be able to schedule tombstone removal
+        // some time (delete.retention.ms) after cleaning.
+        model::timestamp cleaned_with_tombstones_at;
+    };
+    using tombstone_range_set_t
+      = absl::btree_set<cleaned_range_with_tombstones>;
+
+    friend bool operator==(const compaction_state&, const compaction_state&)
+      = default;
+    auto serde_fields() {
+        return std::tie(cleaned_ranges, cleaned_ranges_with_tombstones);
+    }
+    compaction_state copy() const;
+
+    // Returns false if the input range overlaps with another existing range
+    // with tombstones.
+    bool may_add(const cleaned_range_with_tombstones&) const;
+
+    // Adds the input range to the set of cleaned ranges with tombstones.
+    bool add(const cleaned_range_with_tombstones&);
+
+    // Returns true if the input inclusive range is fully covered by a set of
+    // cleaned ranges with tombstones.
+    bool
+      has_contiguous_range_with_tombstones(kafka::offset, kafka::offset) const;
+
+    // Removes the input inclusive range from the set of cleaned ranges with
+    // tombstones. The input range doesn't need to align exactly with any of
+    // `cleaned_ranges_with_tombstones`, but it must be fully covered.
+    //
+    // For example, let's say our cleaned ranges with tombstones were:
+    // ┌───────────┬───────────┐
+    // │           │           │
+    // │10..99     │100..199   │
+    // │ts=900     │ts=1000    │
+    // └───────────┴───────────┘
+    //
+    // Even though it doesn't align with the bounds of any range, we could
+    // erase [80, 129] because that entire range is covered.
+    // ┌─────────┬────┬────────┐
+    // │         │    │        │
+    // │10..79   │    │130..199│
+    // │ts=900   │    │ts=1000 │
+    // └─────────┴────┴────────┘
+    //
+    // We are not able to erase [0, 79], because [0, 9] are not covered.
+    bool erase_contiguous_range_with_tombstones(kafka::offset, kafka::offset);
+
+private:
+    struct tombstone_range_iters {
+        tombstone_range_set_t::const_iterator begin;
+        tombstone_range_set_t::const_iterator last;
+    };
+    // Returns iterators that span the contiguous, minimal set that fully cover
+    // the given inclusive offset range. If no such set of contiguous ranges
+    // exist, returns std::nullopt.
+    std::optional<tombstone_range_iters>
+      get_contiguous_range_with_tombstones(kafka::offset, kafka::offset) const;
+
+public:
+    // Ranges of the log whose keys have been deduplicated from the _beginning
+    // of the log_ (NOT from the cleaned range's start offset!) to and
+    // including the interval's last offset.
+    //
+    // While extents that overlap with a cleaned range may be replaced when
+    // cleaning a dirty range, there is no point in recompacting an offset
+    // range that is cleaned (because all the records are already deduplicated)
+    // unless it contains tombstones that are eligible for compaction.
+    offset_interval_set cleaned_ranges;
+
+    // Cleaned offset ranges that contain tombstones, tracked separately to
+    // avoid complicating reasoning about cleaned ranges. Ordered, and
+    // maintained to be non-overlapping.
+    //
+    // These must overlap with `cleaned_ranges`.
+    //
+    // For a tombstone record to be elegible for removal, all offsets at and
+    // below it must have been cleaned for at least delete.retention.ms.
+    tombstone_range_set_t cleaned_ranges_with_tombstones;
+};
+
 // State tracked per Kafka partition. The extents added to this state must have
 // no overlaps and no gaps in order to ensure there is no data loss.
 struct partition_state
@@ -58,6 +162,8 @@ struct partition_state
     friend bool operator==(const partition_state&, const partition_state&)
       = default;
     auto serde_fields() { return std::tie(extents, start_offset, next_offset); }
+
+    partition_state copy() const;
 
     // The list of extents that comprise this partition. The ordering here
     // allows us to perform efficient lookups by offset.
@@ -77,15 +183,12 @@ struct partition_state
     // is empty.
     kafka::offset next_offset{0};
 
-    // TODO: strawman compaction:
-    // - cleaned_range ([kafka::offset, kafka::offset]): range of offsets whose
-    //   keys have been deduplicated fully. May not start at the beginning of
-    //   the log in case the sliding window was too large to fit in memory.
-    // - If there is no cleaned range, or if the cleaned range starts at or
-    //   below the start offset, build sliding window from log end.
-    // - If the clenaed range is above the start offset, building sliding
-    //   window below the start of the cleaned range
-    // - When adding objects from compaction, expand the cleaned range.
+    // Describes the current state of compacted regions of this partition's
+    // log, if it belongs to a compacted topic.
+    //
+    // Empty iff compaction has not been run for this partition.
+    // TODO: should we remove this if cleanup policy is switched?
+    std::optional<compaction_state> compaction_state;
 };
 
 // Tracks the state managed for each partition of a Kafka topic.

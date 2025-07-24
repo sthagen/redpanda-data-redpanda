@@ -8,9 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/ctp_stm_factory.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_factory.h"
 
-#include "cloud_topics/level_zero/ctp_stm.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/logger.h"
 
 namespace experimental::cloud_topics {

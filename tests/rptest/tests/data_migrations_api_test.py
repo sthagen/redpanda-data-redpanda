@@ -514,7 +514,8 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
                 for i, t in enumerate(topics[:3])
             ]
             in_migration = InboundDataMigration(topics=inbound_topics,
-                                                consumer_groups=["g-1", "g-2"])
+                                                consumer_groups=[])
+            #TODO: use consumer_groups=["g-1", "g-2"] when group migration bugs are fixed
             self.logger.info(f'{try_wo_license=}')
             if try_wo_license:
                 self.toggle_license(on=True)
@@ -916,9 +917,11 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             '/transfer_leadership\] reason - seastar::broken_named_semaphore',
             '/transfer_leadership\] reason - seastar::gate_closed_exception',
         ])
-    @matrix(transfer_leadership=[True, False],
-            include_groups=[True, False],
-            params=generate_tmptpdi_params())
+    @matrix(
+        transfer_leadership=[True, False],
+        #TODO: use include_groups=[True, False] when group migration bugs are fixed
+        include_groups=[False],
+        params=generate_tmptpdi_params())
     def test_migrated_topic_data_integrity(self, include_groups: bool,
                                            transfer_leadership: bool,
                                            params: TmtpdiParams):

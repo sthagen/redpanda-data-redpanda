@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/ctp_stm_state.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 
 #include "cloud_topics/dl_snapshot.h"
 #include "model/fundamental.h"

@@ -93,8 +93,7 @@ add_objects_update::can_apply(const state& state) {
             if (extent.base_offset != expected_next) {
                 return std::unexpected(stm_update_error(fmt::format(
                   "Input object breaks partition {} offset ordering: "
-                  "expected "
-                  "next: {}, actual: {}",
+                  "expected next: {}, actual: {}",
                   tidp,
                   expected_next,
                   extent.base_offset)));
@@ -182,13 +181,109 @@ replace_objects_update::can_apply(const state& state) {
             if (new_extent.base_offset != expected_next) {
                 return std::unexpected(stm_update_error(fmt::format(
                   "Input object breaks partition {} offset ordering: "
-                  "expected "
-                  "next: {}, actual: {}",
+                  "expected next: {}, actual: {}",
                   tidp,
                   expected_next,
                   new_extent.base_offset)));
             }
             expected_next = kafka::next_offset(new_extent.last_offset);
+        }
+    }
+    if (compaction_updates.empty()) {
+        return std::monostate{};
+    }
+
+    for (const auto& [t, t_req] : compaction_updates) {
+        for (const auto& [p, compaction_update] : t_req) {
+            model::topic_id_partition tidp{t, p};
+            auto p_ref = state.partition_state(tidp);
+            const auto& p_state = p_ref->get();
+            // Validate that any cleaned ranges actually correspond to the new
+            // extents.
+            auto new_extent_iter = new_extents_by_tp.find(tidp);
+            if (new_extent_iter == new_extents_by_tp.end()) {
+                return std::unexpected(stm_update_error(fmt::format(
+                  "New cleaned range does not refer to partition with extent: "
+                  "{}",
+                  tidp)));
+            }
+            if (compaction_update.new_cleaned_range.has_value()) {
+                const auto& req_cleaned_range
+                  = *compaction_update.new_cleaned_range;
+
+                // Check that the new extents span the start of the log to the
+                // end of the new clean range.
+                auto& [_, new_extents] = *new_extent_iter;
+                auto req_last = new_extents.rbegin()->last_offset;
+                if (req_cleaned_range.last_offset > req_last) {
+                    return std::unexpected(stm_update_error(fmt::format(
+                      "Cleaned range for {} does not match requested new "
+                      "extents' last_offset {} > {}",
+                      tidp,
+                      req_cleaned_range.last_offset,
+                      req_last)));
+                }
+                auto req_extents_base = new_extents.begin()->base_offset;
+                if (req_extents_base > req_cleaned_range.base_offset) {
+                    return std::unexpected(stm_update_error(fmt::format(
+                      "Cleaned range start_offset for {} is not covered by "
+                      "extents: {} > {}",
+                      tidp,
+                      req_extents_base,
+                      req_cleaned_range.base_offset)));
+                }
+
+                // Check that the extents replace down to the start of the log.
+                // By definition, this is a requirement of cleaning the log.
+                if (req_extents_base > p_state.start_offset) {
+                    return std::unexpected(stm_update_error(fmt::format(
+                      "Cleaned range for {} does not replace to the beginning "
+                      "of the log: {} > {}",
+                      tidp,
+                      req_extents_base,
+                      p_state.start_offset)));
+                }
+
+                // Check that ranges with tombstones don't overlap with existing
+                // ranges with tombstones.
+                if (
+                  req_cleaned_range.has_tombstones
+                  && p_state.compaction_state.has_value()
+                  && !p_state.compaction_state->may_add(
+                    compaction_state::cleaned_range_with_tombstones{
+                      .base_offset = req_cleaned_range.base_offset,
+                      .last_offset = req_cleaned_range.last_offset,
+                      .cleaned_with_tombstones_at
+                      = compaction_update.cleaned_at,
+                    })) {
+                    return std::unexpected(stm_update_error(fmt::format(
+                      "Cleaned range for {} has tombstones and overlaps with "
+                      "an existing cleaned range with tombstones: [{}, {}]",
+                      tidp,
+                      req_cleaned_range.base_offset,
+                      req_cleaned_range.last_offset)));
+                }
+            }
+
+            // Check that the requested range with removed tombstones is
+            // tracked as actually having tombstones.
+            auto req_range_removed_tombstones
+              = compaction_update.removed_tombstones_ranges.make_stream();
+            while (req_range_removed_tombstones.has_next()) {
+                auto req_range = req_range_removed_tombstones.next();
+                if (
+                  !p_state.compaction_state.has_value()
+                  || !p_state.compaction_state
+                        ->has_contiguous_range_with_tombstones(
+                          req_range.base_offset, req_range.last_offset)) {
+                    return std::unexpected(stm_update_error(fmt::format(
+                      "Tombstone-removed range [{}, {}] for {} is not tracked "
+                      "as having tombstones",
+                      req_range.base_offset,
+                      req_range.last_offset,
+                      tidp)));
+                }
+            }
         }
     }
     return std::monostate{};
@@ -235,14 +330,79 @@ replace_objects_update::apply(state& state) {
             state.objects[extent.oid].total_data_size += extent.len;
         }
     }
+    for (const auto& [t, t_req] : compaction_updates) {
+        for (const auto& [p, compaction_update] : t_req) {
+            model::topic_id_partition tidp{t, p};
+            auto& p_state = state.topic_to_state[tidp.topic_id]
+                              .pid_to_state[tidp.partition];
+            if (!p_state.compaction_state.has_value()) {
+                p_state.compaction_state.emplace();
+            }
+            if (compaction_update.new_cleaned_range.has_value()) {
+                const auto& req_cleaned_range
+                  = *compaction_update.new_cleaned_range;
+                [[maybe_unused]] auto inserted
+                  = p_state.compaction_state->cleaned_ranges.insert(
+                    req_cleaned_range.base_offset,
+                    req_cleaned_range.last_offset);
+                dassert(
+                  inserted,
+                  "Invalid interval [{}, {}]",
+                  req_cleaned_range.base_offset,
+                  req_cleaned_range.last_offset);
+                if (req_cleaned_range.has_tombstones) {
+                    [[maybe_unused]] auto inserted
+                      = p_state.compaction_state->add(
+                        compaction_state::cleaned_range_with_tombstones{
+                          .base_offset = req_cleaned_range.base_offset,
+                          .last_offset = req_cleaned_range.last_offset,
+                          .cleaned_with_tombstones_at
+                          = compaction_update.cleaned_at,
+                        });
+                    dassert(
+                      inserted,
+                      "Failed to insert cleaned range with tombstones: [{}, "
+                      "{}]",
+                      req_cleaned_range.base_offset,
+                      req_cleaned_range.last_offset);
+                }
+            }
+
+            auto& cstate = *p_state.compaction_state;
+            auto req_range_removed_tombstones
+              = compaction_update.removed_tombstones_ranges.make_stream();
+            while (req_range_removed_tombstones.has_next()) {
+                auto cleaned_range = req_range_removed_tombstones.next();
+                [[maybe_unused]] auto erased
+                  = cstate.erase_contiguous_range_with_tombstones(
+                    cleaned_range.base_offset, cleaned_range.last_offset);
+                dassert(
+                  erased,
+                  "Failed to remove range: [{}, {}]",
+                  cleaned_range.base_offset,
+                  cleaned_range.last_offset);
+            }
+        }
+    }
     return std::monostate{};
 }
 
 std::expected<replace_objects_update, stm_update_error>
 replace_objects_update::build(
-  const state& state, chunked_vector<new_object> objects) {
+  const state& state,
+  chunked_vector<new_object> objects,
+  chunked_hash_map<model::topic_id_partition, compaction_state_update>
+    compaction_updates) {
+    chunked_hash_map<
+      model::topic_id,
+      chunked_hash_map<model::partition_id, compaction_state_update>>
+      cmp_state_updates;
+    for (auto& [tp, update] : compaction_updates) {
+        cmp_state_updates[tp.topic_id][tp.partition] = std::move(update);
+    }
     replace_objects_update update{
       .new_objects = std::move(objects),
+      .compaction_updates = std::move(cmp_state_updates),
     };
     auto allowed = update.can_apply(state);
     if (!allowed.has_value()) {

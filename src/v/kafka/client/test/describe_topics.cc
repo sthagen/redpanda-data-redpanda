@@ -72,7 +72,7 @@ FIXTURE_TEST(test_describe_with_configuration_keys, describe_topic_fixture) {
       .replication_factor = 1,
       .configs = {custom_config},
     };
-    const auto created_topic = client.create_topic(std::move(req));
+    const auto created_topic = client.create_topic(std::move(req)).get();
 
     {
         info("Checking if describing the topic returns the custom config");

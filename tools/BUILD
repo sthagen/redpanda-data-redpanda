@@ -61,10 +61,10 @@ sh_binary(
     name = "clang_format",
     srcs = ["format_cc.sh"],
     args = [
-        "$(rootpath @current_llvm_toolchain//:clang-format)",
+        "$(rootpath @previous_llvm_toolchain//:clang-format)",
     ],
     data = [
-        "@current_llvm_toolchain//:clang-format",
+        "@previous_llvm_toolchain//:clang-format",
     ],
     # Only build this target on demand, so we don't download
     # this toolchain if we're using a different one for the build.

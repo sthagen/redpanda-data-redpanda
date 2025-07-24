@@ -139,19 +139,6 @@ COMPILERS = {
     "previous": {
         "tars": {
             "aarch64": {
-                "build_date": "2025-03-10",
-                "sha": "9f52789c5aee794d6f013249b6e003b50f72e4c3874fd656723a72bf9322eff9",
-            },
-            "x86_64": {
-                "build_date": "2025-03-10",
-                "sha": "51e547308112bc6671f391d03420c315b7c099238d797631e00374f1bd80712e",
-            },
-        },
-        "version": "18.1.8",
-    },
-    "current": {
-        "tars": {
-            "aarch64": {
                 "build_date": "2025-03-15",
                 "sha": "cdba86609d71cfc379bfce9fb5ce97389cc08320fb713c6abab8d698a53e3fa2",
             },
@@ -162,18 +149,18 @@ COMPILERS = {
         },
         "version": "19.1.7",
     },
-    "next": {
+    "current": {
         "tars": {
             "aarch64": {
-                "build_date": "2025-06-18",
-                "sha": "895bc671e9d75e80fb09b1cf842b3191239d4aeb1bf79bb8108490571481c177",
+                "build_date": "2025-07-22",
+                "sha": "ce0a8d7f4df980dd3aa0deacd390804f887d31065cd79b71827bba6cd4d2e2e8",
             },
             "x86_64": {
-                "build_date": "2025-06-18",
-                "sha": "6eee67bc40ffe6a8470df0f8bea5ab0e99ad5785d1cc84d2c5d14c1a9021b3da",
+                "build_date": "2025-07-22",
+                "sha": "c424df0195e1641b6226dbb380a849d2013975150af40932392361d9893005ac",
             },
         },
-        "version": "20.1.7",
+        "version": "20.1.8",
     },
 }
 
