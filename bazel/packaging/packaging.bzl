@@ -3,6 +3,7 @@ A rule to create a redpanda tarball given inputs from the build system.
 """
 
 load("@bazel_skylib//lib:collections.bzl", "collections")
+load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_tools//tools/cpp:toolchain_utils.bzl", "find_cpp_toolchain")
 
 def _is_versioned(file, starts_with):
@@ -139,6 +140,13 @@ def _common_redpanda_package_cfg(ctx, package_content, fips_enabled, base_path =
         return "{}/{}".format(base_path, path) if base_path else path
 
     files = []
+
+    # Redpanda binary is always required.
+    files.append({
+        "path": _path("bin"),
+        "name": "redpanda",
+        "source": package_content.redpanda_binary.path,
+    })
     if package_content.rp_util != None:
         files.append({
             "path": _path("bin"),
@@ -205,7 +213,6 @@ def _common_redpanda_package_cfg(ctx, package_content, fips_enabled, base_path =
         "package_dirs": [
             _path("bin"),
             _path("lib"),
-            _path("libexec"),
             _path("config"),
         ],
         "owner": ctx.attr.owner,
@@ -213,7 +220,6 @@ def _common_redpanda_package_cfg(ctx, package_content, fips_enabled, base_path =
 
 def _dir_package_configuration(ctx, package_content, fips_enabled):
     cfg = _common_redpanda_package_cfg(ctx, package_content, fips_enabled)
-    cfg["package_files"].append({"path": "libexec", "name": "redpanda", "source": package_content.redpanda_binary.path})
     cfg["directory_mode"] = True
     if ctx.file.default_yaml_config != None:
         cfg["package_files"].append({
@@ -225,7 +231,6 @@ def _dir_package_configuration(ctx, package_content, fips_enabled):
 
 def _tarball_package_configuration(ctx, package_content, fips_enabled):
     cfg = _common_redpanda_package_cfg(ctx, package_content, fips_enabled, "opt/redpanda")
-    cfg["package_files"].append({"path": "opt/redpanda/bin", "name": "redpanda", "source": package_content.redpanda_binary.path})
     cfg["directory_mode"] = False
     cfg["package_dirs"].append("etc/redpanda")
     cfg["package_dirs"].append("var/lib/redpanda/data")
@@ -240,7 +245,10 @@ def _tarball_package_configuration(ctx, package_content, fips_enabled):
 def _impl(ctx):
     use_dir = not ctx.attr.out.endswith(".tar.gz")
     out = ctx.actions.declare_directory(ctx.attr.out) if use_dir else ctx.actions.declare_file(ctx.attr.out)
-    package_content = _prepare_redpanda_package_content(ctx)
+    interpreter_path = "/opt/redpanda/lib"
+    if ctx.attr.install_path:
+        interpreter_path = "{}/lib".format(ctx.attr.install_path[BuildSettingInfo].value)
+    package_content = _prepare_redpanda_package_content(ctx, interpreter_path)
 
     fips_enabled = ctx.file.fips_module != None
     if fips_enabled != (ctx.file.fips_config != None):
@@ -331,6 +339,7 @@ redpanda_package = rule(
         ),
         "include_sysroot_libs": attr.bool(),
         "rpath_override": attr.string(mandatory = False),
+        "install_path": attr.label(),
         "_tool": attr.label(
             executable = True,
             allow_files = True,

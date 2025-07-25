@@ -1,3 +1,4 @@
+load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load(":packaging.bzl", "redpanda_package")
@@ -10,6 +11,13 @@ redpanda_package(
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
     rpk_binary = "//:rpk",
+)
+
+# Flag to control the install path of the redpanda package.
+# This flag is used to set the interpret path for redpanda binary.
+string_flag(
+    name = "install_path",
+    build_setting_default = "/opt/redpanda",
 )
 
 redpanda_package(
@@ -31,6 +39,7 @@ redpanda_package(
     name = "ducktape",
     out = "redpanda_ducktape",
     include_sysroot_libs = True,
+    install_path = ":install_path",
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
     rpk_binary = "//:rpk",

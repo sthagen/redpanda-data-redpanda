@@ -134,6 +134,7 @@ public:
                 req, model::timeout_clock::now() + 5s);
             if (
               result.errc == cluster::errc::not_leader_controller
+              || result.errc == cluster::errc::no_leader_controller
               || result.errc == raft::errc::not_leader) {
                 vlog(
                   logger.debug,
@@ -351,7 +352,8 @@ TEST_F(cluster_metadata_uploader_fixture, test_upload_in_term) {
     auto result = patch_config(cluster::config_update_request{
                                  .upsert = {{"cluster_id", "foo"}}})
                     .get();
-    ASSERT_TRUE(!result.errc);
+    ASSERT_TRUE(!result.errc)
+      << fmt::format("errc {} version {}", result.errc, result.version);
     RPTEST_REQUIRE_EVENTUALLY(
       5s, [this] { return controller_stm.maybe_write_snapshot(); });
     const auto new_snap_offset = get_local_snap_offset();

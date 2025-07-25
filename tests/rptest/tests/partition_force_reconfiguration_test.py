@@ -566,7 +566,9 @@ class NodeWiseRecoveryTest(RedpandaTest):
         self.producer.clean()
         self.producer.free()
 
-    def wait_for_final_manifest_uploads(self, topic):
+    def wait_for_final_manifest_uploads(self,
+                                        topic,
+                                        fraction_uploaded: float = 0.8):
         def all_uploaded():
             for p in self.rpk.describe_topic(topic):
                 status = self.admin.get_partition_cloud_storage_status(
@@ -575,6 +577,16 @@ class NodeWiseRecoveryTest(RedpandaTest):
                     node=self.redpanda.get_node_by_id(p.leader))
                 if ("ms_since_last_manifest_upload"
                         not in status) or status["metadata_update_pending"]:
+                    self.logger.debug(
+                        f"Pending manifest update: {status['ms_since_last_manifest_upload']=} {status['metadata_update_pending']=}"
+                    )
+                    return False
+                if int(
+                        status["cloud_log_last_offset"]
+                ) < fraction_uploaded * int(status["local_log_last_offset"]):
+                    self.logger.debug(
+                        f"{topic}/{p.id}: {status['cloud_log_last_offset']=} vs {status['local_log_last_offset']=}"
+                    )
                     return False
             return True
 
@@ -623,10 +635,12 @@ class NodeWiseRecoveryTest(RedpandaTest):
         to_kill_node_ids = [
             int(self.redpanda.node_id(n)) for n in to_kill_nodes
         ]
+        expected_fraction_uploaded = 0.8
         for t in topics:
             self.produce_until_log_eviction(t.name)
         for t in topics:
-            self.wait_for_final_manifest_uploads(t.name)
+            self.wait_for_final_manifest_uploads(
+                t.name, fraction_uploaded=expected_fraction_uploaded)
 
         partitions_lost_majority = admin.get_majority_lost_partitions_from_nodes(
             dead_brokers=to_kill_node_ids)
@@ -754,7 +768,8 @@ class NodeWiseRecoveryTest(RedpandaTest):
                     f"partition {t}/{partition_id} replicas initial high watermark: {initial_hw} final high watermark: {final_hw}"
                 )
                 if t.redpanda_remote_write or t.replication_factor == 3:
-                    assert 0.8 * initial_hw <= final_hw <= initial_hw
+                    assert expected_fraction_uploaded * initial_hw <= final_hw <= initial_hw, \
+                        f"partition {t.name}/{partition_id}: {initial_hw=} vs {final_hw=}"
 
     @cluster(num_nodes=6)
     def test_recovery_local_data_missing(self):
