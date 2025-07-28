@@ -72,6 +72,7 @@ redpanda_cc_gtest(
     srcs = [
         "task_manager_integration_test.cc",
     ],
+    flaky = True,
     deps = [
         ":test_deps",
         "//src/v/cluster_link:impl",

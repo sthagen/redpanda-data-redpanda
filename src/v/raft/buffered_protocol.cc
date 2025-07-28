@@ -185,6 +185,20 @@ buffered_protocol::transfer_leadership(
       &consensus_client_protocol::transfer_leadership);
 }
 
+ss::future<result<remake_learner_state_reply>>
+buffered_protocol::remake_learner_state(
+  model::node_id target_node,
+  remake_learner_state_request req,
+  rpc::client_opts opts) {
+    return apply_with_gate(
+      _gate,
+      _base_protocol,
+      target_node,
+      std::move(req),
+      std::move(opts),
+      &consensus_client_protocol::remake_learner_state);
+}
+
 ss::future<bool> buffered_protocol::ensure_disconnect(model::node_id node_id) {
     return _base_protocol.ensure_disconnect(node_id);
 }

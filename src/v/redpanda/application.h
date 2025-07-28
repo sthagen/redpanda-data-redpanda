@@ -316,6 +316,51 @@ private:
         }
     }
 
+    template<class T>
+    static ss::sstring service_type_name() {
+        if constexpr (detail::is_specialization_of_v<T, std::unique_ptr>) {
+            return service_type_name<typename T::element_type>();
+        } else if constexpr (detail::is_specialization_of_v<T, std::vector>) {
+            return fmt::format(
+              "std::vector<{}>", service_type_name<typename T::value_type>());
+        }
+        return ss::pretty_type_name(typeid(T));
+    }
+
+    // Shutdown the service with custom method.
+    // The method should be invoked in the ss::thread context.
+    template<class Service, class StopFunc>
+    void shutdown_with_watchdog(
+      Service& s,
+      StopFunc stop_func,
+      const ss::sstring& name = service_type_name<Service>()) {
+        auto start_watchdog = [&name, this](
+                                std::chrono::milliseconds timeout,
+                                ss::log_level log_level) {
+            return ssx::watchdog(timeout, [this, timeout, &name, log_level] {
+                vlogl(
+                  _log,
+                  log_level,
+                  "Service {} is taking more than {} seconds to shutdown",
+                  name,
+                  timeout / 1s);
+            });
+        };
+        // This watchdog is triggered after short period of time (30s). It
+        // adds message to the log that service is taking a long time to
+        // shutdown on INFO level.
+        ssx::watchdog short_wd = start_watchdog(
+          short_shutdown_warning_timeout, ss::log_level::info);
+        // This watchdog is triggered after long period of time. This indicates
+        // a bug (most likely).
+        ssx::watchdog long_wd = start_watchdog(
+          long_shutdown_warning_timeout, ss::log_level::error);
+
+        vlog(_log.info, "Shutting down: {}", name);
+        stop_func(s).get();
+        vlog(_log.info, "Shutdown completed: {}", name);
+    }
+
     /**
      * @brief Construct service boilerplate.
      *

@@ -757,6 +757,58 @@ struct xshard_transfer_state {
     std::optional<model::term_id> leader_term;
 };
 
+struct remake_learner_state_request
+  : serde::envelope<
+      remake_learner_state_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using rpc_adl_exempt = std::true_type;
+
+    friend std::ostream&
+    operator<<(std::ostream& o, const remake_learner_state_request& r) {
+        fmt::print(
+          o,
+          "{{node_id: {}, target_node_id: {}, group: {}, term: {}}}",
+          r.node_id,
+          r.target_node_id,
+          r.group,
+          r.term);
+        return o;
+    }
+
+    auto serde_fields() {
+        return std::tie(node_id, target_node_id, group, term);
+    }
+
+    raft::group_id target_group() const { return group; }
+    vnode source_node() const { return node_id; }
+    vnode target_node() const { return target_node_id; }
+
+    vnode node_id;
+    vnode target_node_id;
+    raft::group_id group;
+    model::term_id term;
+};
+
+struct remake_learner_state_reply
+  : serde::envelope<
+      remake_learner_state_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using rpc_adl_exempt = std::true_type;
+    using is_success = ss::bool_class<struct remake_learner_state_tag>;
+
+    friend std::ostream&
+    operator<<(std::ostream& o, const remake_learner_state_reply& r) {
+        fmt::print(o, "success: {}", r.success);
+        return o;
+    }
+
+    auto serde_fields() { return std::tie(success); }
+
+    is_success success = is_success::no;
+};
+
 } // namespace raft
 
 namespace reflection {

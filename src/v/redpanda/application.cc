@@ -288,23 +288,28 @@ void application::shutdown() {
     storage.invoke_on_all(&storage::api::stop_cluster_uuid_waiters).get();
     // Stop accepting new requests.
     if (_kafka_server.ref().local_is_initialized()) {
-        _kafka_server.shutdown_input().get();
+        shutdown_with_watchdog(_kafka_server, [](auto& kafka_server) {
+            return kafka_server.shutdown_input();
+        });
     }
     if (_rpc.local_is_initialized()) {
-        _rpc.invoke_on_all(&rpc::rpc_server::shutdown_input).get();
+        shutdown_with_watchdog(_rpc, [](auto& rpc_server) {
+            return rpc_server.invoke_on_all(&rpc::rpc_server::shutdown_input);
+        });
     }
     // Stop routing upload requests, as each may take a while to finish.
     if (offsets_upload_router.local_is_initialized()) {
-        offsets_upload_router
-          .invoke_on_all(
-            &cluster::cloud_metadata::offsets_upload_router::request_stop)
-          .get();
+        shutdown_with_watchdog(
+          offsets_upload_router, [](auto& offsets_upload_router) {
+              return offsets_upload_router.invoke_on_all(
+                &cluster::cloud_metadata::offsets_upload_router::request_stop);
+          });
     }
     if (offsets_uploader.local_is_initialized()) {
-        offsets_uploader
-          .invoke_on_all(
-            &cluster::cloud_metadata::offsets_uploader::request_stop)
-          .get();
+        shutdown_with_watchdog(offsets_uploader, [](auto& offsets_uploader) {
+            return offsets_uploader.invoke_on_all(
+              &cluster::cloud_metadata::offsets_uploader::request_stop);
+        });
     }
 
     // We schedule shutting down controller input and aborting its operation as
@@ -312,41 +317,48 @@ void application::shutdown() {
     // operations before shutting down the RPC server, preventing it from
     // waiting on background dispatch gate `close` call.
     if (controller) {
-        controller->shutdown_input().get();
+        shutdown_with_watchdog(controller, [](auto& controller) {
+            return controller->shutdown_input();
+        });
     }
 
-    ss::do_for_each(
-      _migrators,
-      [](std::unique_ptr<features::feature_migrator>& fm) {
-          return fm->stop();
-      })
-      .get();
+    shutdown_with_watchdog(_migrators, [](auto& migrators) {
+        return ss::do_for_each(
+          migrators, [](std::unique_ptr<features::feature_migrator>& fm) {
+              return fm->stop();
+          });
+    });
 
     // Stop processing heartbeats before stopping the partition manager (and
     // the underlying Raft consensus instances). Otherwise we'd process
     // heartbeats for consensus objects that no longer exist.
     if (raft_group_manager.local_is_initialized()) {
-        raft_group_manager.invoke_on_all(&raft::group_manager::stop_heartbeats)
-          .get();
+        shutdown_with_watchdog(raft_group_manager, [](auto& mgr) {
+            return mgr.invoke_on_all(&raft::group_manager::stop_heartbeats);
+        });
     }
 
     if (topic_recovery_service.local_is_initialized()) {
-        topic_recovery_service
-          .invoke_on_all(
-            &cloud_storage::topic_recovery_service::shutdown_recovery)
-          .get();
+        shutdown_with_watchdog(
+          topic_recovery_service, [](auto& topic_recovery_service) {
+              return topic_recovery_service.invoke_on_all(
+                &cloud_storage::topic_recovery_service::shutdown_recovery);
+          });
     }
 
     // Stop any I/O to object store: this will cause any readers in flight
     // to abort and enables partition shutdown to proceed reliably.
     if (cloud_storage_clients.local_is_initialized()) {
-        cloud_storage_clients
-          .invoke_on_all(
-            &cloud_storage_clients::client_pool::shutdown_connections)
-          .get();
+        shutdown_with_watchdog(
+          cloud_storage_clients, [](auto& cloud_storage_clients) {
+              return cloud_storage_clients.invoke_on_all(
+                &cloud_storage_clients::client_pool::shutdown_connections);
+          });
     }
     if (cloud_io.local_is_initialized()) {
-        cloud_io.invoke_on_all(&cloud_io::remote::request_stop).get();
+        shutdown_with_watchdog(cloud_io, [](auto& cloud_io) {
+            return cloud_io.invoke_on_all(&cloud_io::remote::request_stop);
+        });
     }
     /**
      * Shutdown the datalake services before stopping all the partitions.
@@ -355,41 +367,55 @@ void application::shutdown() {
      * possible.
      */
     if (_datalake_coordinator_mgr.local_is_initialized()) {
-        _datalake_coordinator_mgr
-          .invoke_on_all(&datalake::coordinator::coordinator_manager::shutdown)
-          .get();
+        shutdown_with_watchdog(_datalake_coordinator_mgr, [](auto& mgr) {
+            return mgr.invoke_on_all(
+              &datalake::coordinator::coordinator_manager::shutdown);
+        });
     }
     if (_datalake_manager.local_is_initialized()) {
-        _datalake_manager.invoke_on_all(&datalake::datalake_manager::shutdown)
-          .get();
+        shutdown_with_watchdog(_datalake_manager, [](auto& mgr) {
+            return mgr.invoke_on_all(&datalake::datalake_manager::shutdown);
+        });
     }
     if (_datalake_credential_mgr.local_is_initialized()) {
-        _datalake_credential_mgr
-          .invoke_on_all(&datalake::credential_manager::stop)
-          .get();
+        shutdown_with_watchdog(_datalake_credential_mgr, [](auto& mgr) {
+            return mgr.invoke_on_all(&datalake::credential_manager::stop);
+        });
     }
 
     // Stop all partitions before destructing the subsystems (transaction
     // coordinator, etc). This interrupts ongoing replication requests,
     // allowing higher level state machines to shutdown cleanly.
     if (partition_manager.local_is_initialized()) {
-        partition_manager
-          .invoke_on_all(&cluster::partition_manager::stop_partitions)
-          .get();
+        shutdown_with_watchdog(partition_manager, [](auto& partition_manager) {
+            return partition_manager.invoke_on_all(
+              &cluster::partition_manager::stop_partitions);
+        });
     }
 
     // Wait for all requests to finish before destructing services that may be
     // used by pending requests.
     if (_kafka_server.ref().local_is_initialized()) {
-        _kafka_server.wait_for_shutdown().get();
-        _kafka_server.stop().get();
+        shutdown_with_watchdog(_kafka_server, [](auto& kafka_server) {
+            return kafka_server.wait_for_shutdown();
+        });
+        shutdown_with_watchdog(_kafka_server, [](auto& kafka_server) {
+            return kafka_server.stop();
+        });
     }
     if (_kafka_conn_quotas.local_is_initialized()) {
-        _kafka_conn_quotas.stop().get();
+        shutdown_with_watchdog(_kafka_conn_quotas, [](auto& conn_quotas) {
+            return conn_quotas.stop();
+        });
     }
     if (_rpc.local_is_initialized()) {
-        _rpc.invoke_on_all(&rpc::rpc_server::wait_for_shutdown).get();
-        _rpc.stop().get();
+        shutdown_with_watchdog(_rpc, [](auto& rpc_server) {
+            return rpc_server.invoke_on_all(
+              &rpc::rpc_server::wait_for_shutdown);
+        });
+        shutdown_with_watchdog(_rpc, [](auto& rpc_server) {
+            return rpc_server.invoke_on_all(&rpc::rpc_server::stop);
+        });
     }
 
     // Shut down services in reverse order to which they were registered.

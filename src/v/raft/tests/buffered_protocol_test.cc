@@ -64,6 +64,11 @@ public:
     ss::future<> reset_backoff(model::node_id) final {
         return ss::make_ready_future<>();
     }
+    ss::future<result<remake_learner_state_reply>> remake_learner_state(
+      model::node_id, remake_learner_state_request, rpc::client_opts) final {
+        return ss::make_ready_future<result<raft::remake_learner_state_reply>>(
+          raft::remake_learner_state_reply{});
+    }
 };
 
 class BufferedProtocolFixture : public seastar_test {

@@ -152,6 +152,9 @@ public:
 
     ss::future<> reset_backoff(model::node_id n) final;
 
+    ss::future<result<remake_learner_state_reply>> remake_learner_state(
+      model::node_id, remake_learner_state_request, rpc::client_opts) final;
+
     ss::future<> stop();
 
 private:
