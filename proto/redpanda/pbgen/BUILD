@@ -29,7 +29,6 @@ proto_library(
     srcs = ["rpc.proto"],
     visibility = ["//visibility:public"],
     deps = [
-        "//proto/redpanda/core:version_proto",
         "@protobuf//:descriptor_proto",
     ],
 )
@@ -39,9 +38,6 @@ go_proto_library(
     importpath = "github.com/redpanda-data/redpanda/proto/redpanda/pbgen/rpc",
     protos = [":rpc_proto"],
     visibility = ["//visibility:public"],
-    deps = [
-        "//proto/redpanda/core:version_go_proto",
-    ],
 )
 
 cc_proto_library(

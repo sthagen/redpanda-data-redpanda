@@ -30,6 +30,16 @@ struct error_category final : public std::error_category {
             return "failed to start task";
         case errc::task_already_registered_on_link:
             return "task already registered on link";
+        case errc::failed_to_connect_to_remote_cluster:
+            return "failed to connect to remote cluster";
+        case errc::remote_cluster_does_not_support_required_api:
+            return "remote cluster does not support required API";
+        case errc::link_id_not_found:
+            return "link ID not found";
+        case errc::link_connection_failed:
+            return "link connection failed";
+        case errc::task_creation_failed:
+            return "task creation failed";
         }
 
         return "(unknown error code)";

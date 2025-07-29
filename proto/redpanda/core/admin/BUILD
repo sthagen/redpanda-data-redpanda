@@ -6,7 +6,6 @@ proto_library(
     srcs = ["admin.proto"],
     visibility = ["//visibility:public"],
     deps = [
-        "//proto/redpanda/core:version_proto",
         "//proto/redpanda/pbgen:options_proto",
         "//proto/redpanda/pbgen:rpc_proto",
     ],
@@ -16,5 +15,4 @@ redpanda_proto_library(
     name = "admin_redpanda_proto",
     protos = [":admin_proto"],
     visibility = ["//visibility:public"],
-    deps = ["//proto/redpanda/core:version_redpanda_proto"],
 )

@@ -122,14 +122,12 @@ service ExampleService {
     // A get RPC method
     rpc GetPerson(GetPersonRequest) returns (GetPersonResponse) {
         option (redpanda.pbgen.rpc) = {
-            version: V25_2_0,
             authz: USER,
         };
     }
     // A list RPC method
     rpc ListPersons(ListPersonsRequest) returns (ListPersonsResponse) {
         option (redpanda.pbgen.rpc) = {
-            version: V25_2_0,
             authz: SUPERUSER,
             http_route: "/api/v1/persons",
         };

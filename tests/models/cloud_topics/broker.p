@@ -58,13 +58,15 @@ event broker_commit_event;
 
 machine Broker {
   var storage: Storage;
+  var epoch_service: EpochService;
   // received produce requests that will be committed together
   var produce_requests: seq[produce_request];
   var request_id: int;
 
   start state Init {
-    entry (config: (storage: Storage)) {
+    entry (config: (storage: Storage, epoch_service: EpochService)) {
       storage = config.storage;
+      epoch_service = config.epoch_service;
       goto WaitForRequest;
     }
   }
@@ -87,7 +89,7 @@ machine Broker {
       //
       // When I talk about "capturing the non-determinism of a real system" what
       // I mean is that the model uses a scheduling point to drive the policy of
-      // which produce requests are included in an L0d object, so the model
+      // which produce requests are included in an L0 object, so the model
       // itself captures a wide range of possible policies.
       if (sizeof(produce_requests) == 1) {
         send this, broker_commit_event;
@@ -100,7 +102,7 @@ machine Broker {
 
     // Commit and reset the accumulated set of produce requests.
     on broker_commit_event do {
-      new CommitProtocol((storage = storage, requests = produce_requests));
+      new CommitProtocol((storage = storage, epoch_service = epoch_service, requests = produce_requests));
       produce_requests = default(seq[produce_request]);
     }
   }

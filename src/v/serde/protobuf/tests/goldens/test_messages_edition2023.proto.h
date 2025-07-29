@@ -50,40 +50,36 @@ void enum_from_proto(iobuf_parser*, foreign_enum_edition2023*);
 std::string_view enum_to_string(const foreign_enum_edition2023&);
 void enum_from_json(serde::pb::json::peekable_parser*, foreign_enum_edition2023*);
 
-class test_all_types_edition2023_nested_message {
+class foreign_message_edition2023 {
 public:
-  test_all_types_edition2023_nested_message() noexcept;
-  test_all_types_edition2023_nested_message(const test_all_types_edition2023_nested_message&) = delete;
-  test_all_types_edition2023_nested_message& operator=(const test_all_types_edition2023_nested_message&) = delete;
-  test_all_types_edition2023_nested_message(test_all_types_edition2023_nested_message&&) noexcept;
-  test_all_types_edition2023_nested_message& operator=(test_all_types_edition2023_nested_message&&) noexcept;
-  ~test_all_types_edition2023_nested_message() noexcept;
+  foreign_message_edition2023() noexcept;
+  foreign_message_edition2023(const foreign_message_edition2023&) = delete;
+  foreign_message_edition2023& operator=(const foreign_message_edition2023&) = delete;
+  foreign_message_edition2023(foreign_message_edition2023&&) noexcept;
+  foreign_message_edition2023& operator=(foreign_message_edition2023&&) noexcept;
+  ~foreign_message_edition2023() noexcept;
   
-  bool operator==(const test_all_types_edition2023_nested_message&) const;  
-  // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into a protocol buffer, in a way that will not cause stalls for large messages.
+  bool operator==(const foreign_message_edition2023&) const;  
+  // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
-  // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into proto3 JSON, in a way that will not cause stalls for large messages.
+  // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into proto3 JSON, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_json() const;
-  // Deserializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage from a protocol buffer, in a way that will not cause stalls for large messages.
-  static seastar::future<test_all_types_edition2023_nested_message> from_proto(iobuf);
+  // Deserializes protobuf_test_messages.editions.ForeignMessageEdition2023 from a protocol buffer, in a way that will not cause stalls for large messages.
+  static seastar::future<foreign_message_edition2023> from_proto(iobuf);
   // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
   // Use the iobuf version instead.
-  static seastar::future<> from_proto(serde::pb::wire_format_parser*, test_all_types_edition2023_nested_message*);
-  // Deserializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage from json, in a way that will not cause stalls for large messages.
-  static seastar::future<test_all_types_edition2023_nested_message> from_json(iobuf);
+  static seastar::future<> from_proto(serde::pb::wire_format_parser*, foreign_message_edition2023*);
+  // Deserializes protobuf_test_messages.editions.ForeignMessageEdition2023 from json, in a way that will not cause stalls for large messages.
+  static seastar::future<foreign_message_edition2023> from_json(iobuf);
   // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
   // Use the iobuf version instead.
-  static seastar::future<> from_json(serde::pb::json::peekable_parser*, test_all_types_edition2023_nested_message*);
+  static seastar::future<> from_json(serde::pb::json::peekable_parser*, foreign_message_edition2023*);
   
-  int32_t get_a() const;
-  void set_a(int32_t v);
-  std::unique_ptr<test_all_types_edition2023>& get_corecursive();
-  const std::unique_ptr<test_all_types_edition2023>& get_corecursive() const;
-  void set_corecursive(std::unique_ptr<test_all_types_edition2023>&& v);
+  int32_t get_c() const;
+  void set_c(int32_t v);
 
 private:
-  int32_t a_{};
-  std::unique_ptr<test_all_types_edition2023> corecursive_;
+  int32_t c_{};
 };
 
 // groups
@@ -120,6 +116,42 @@ public:
 private:
   int32_t group_int32_{};
   uint32_t group_uint32_{};
+};
+
+class test_all_types_edition2023_nested_message {
+public:
+  test_all_types_edition2023_nested_message() noexcept;
+  test_all_types_edition2023_nested_message(const test_all_types_edition2023_nested_message&) = delete;
+  test_all_types_edition2023_nested_message& operator=(const test_all_types_edition2023_nested_message&) = delete;
+  test_all_types_edition2023_nested_message(test_all_types_edition2023_nested_message&&) noexcept;
+  test_all_types_edition2023_nested_message& operator=(test_all_types_edition2023_nested_message&&) noexcept;
+  ~test_all_types_edition2023_nested_message() noexcept;
+  
+  bool operator==(const test_all_types_edition2023_nested_message&) const;  
+  // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into a protocol buffer, in a way that will not cause stalls for large messages.
+  seastar::future<iobuf> to_proto() const;
+  // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into proto3 JSON, in a way that will not cause stalls for large messages.
+  seastar::future<iobuf> to_json() const;
+  // Deserializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage from a protocol buffer, in a way that will not cause stalls for large messages.
+  static seastar::future<test_all_types_edition2023_nested_message> from_proto(iobuf);
+  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
+  // Use the iobuf version instead.
+  static seastar::future<> from_proto(serde::pb::wire_format_parser*, test_all_types_edition2023_nested_message*);
+  // Deserializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage from json, in a way that will not cause stalls for large messages.
+  static seastar::future<test_all_types_edition2023_nested_message> from_json(iobuf);
+  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
+  // Use the iobuf version instead.
+  static seastar::future<> from_json(serde::pb::json::peekable_parser*, test_all_types_edition2023_nested_message*);
+  
+  int32_t get_a() const;
+  void set_a(int32_t v);
+  std::unique_ptr<test_all_types_edition2023>& get_corecursive();
+  const std::unique_ptr<test_all_types_edition2023>& get_corecursive() const;
+  void set_corecursive(std::unique_ptr<test_all_types_edition2023>&& v);
+
+private:
+  int32_t a_{};
+  std::unique_ptr<test_all_types_edition2023> corecursive_;
 };
 
 class test_all_types_edition2023 {
@@ -540,38 +572,6 @@ private:
   std::variant<std::monostate, uint32_t, test_all_types_edition2023_nested_message, ss::sstring, iobuf, bool, uint64_t, float, double, test_all_types_edition2023_nested_enum> oneof_field_{};
   test_all_types_edition2023_group_like_type groupliketype_;
   test_all_types_edition2023_group_like_type delimited_field_;
-};
-
-class foreign_message_edition2023 {
-public:
-  foreign_message_edition2023() noexcept;
-  foreign_message_edition2023(const foreign_message_edition2023&) = delete;
-  foreign_message_edition2023& operator=(const foreign_message_edition2023&) = delete;
-  foreign_message_edition2023(foreign_message_edition2023&&) noexcept;
-  foreign_message_edition2023& operator=(foreign_message_edition2023&&) noexcept;
-  ~foreign_message_edition2023() noexcept;
-  
-  bool operator==(const foreign_message_edition2023&) const;  
-  // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into a protocol buffer, in a way that will not cause stalls for large messages.
-  seastar::future<iobuf> to_proto() const;
-  // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into proto3 JSON, in a way that will not cause stalls for large messages.
-  seastar::future<iobuf> to_json() const;
-  // Deserializes protobuf_test_messages.editions.ForeignMessageEdition2023 from a protocol buffer, in a way that will not cause stalls for large messages.
-  static seastar::future<foreign_message_edition2023> from_proto(iobuf);
-  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
-  // Use the iobuf version instead.
-  static seastar::future<> from_proto(serde::pb::wire_format_parser*, foreign_message_edition2023*);
-  // Deserializes protobuf_test_messages.editions.ForeignMessageEdition2023 from json, in a way that will not cause stalls for large messages.
-  static seastar::future<foreign_message_edition2023> from_json(iobuf);
-  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
-  // Use the iobuf version instead.
-  static seastar::future<> from_json(serde::pb::json::peekable_parser*, foreign_message_edition2023*);
-  
-  int32_t get_c() const;
-  void set_c(int32_t v);
-
-private:
-  int32_t c_{};
 };
 
 } // protobuf_test_messages::editions

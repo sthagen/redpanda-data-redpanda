@@ -379,6 +379,7 @@ redpanda_cc_library(
     srcs = ["cluster.cc"],
     hdrs = ["cluster.h"],
     include_prefix = "kafka/client",
+    visibility = ["//visibility:public"],
     deps = [
         ":brokers",
         ":configuration",

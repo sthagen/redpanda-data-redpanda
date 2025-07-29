@@ -13,6 +13,7 @@
 
 #include "base/seastarx.h"
 #include "cluster_link/errc.h"
+#include "cluster_link/fwd.h"
 #include "cluster_link/model/types.h"
 #include "utils/notification_list.h"
 #include "utils/prefix_logger.h"
@@ -36,8 +37,10 @@ public:
     using is_locked_to_controller
       = ss::bool_class<struct is_locked_to_controller_tag>;
 
-    /// Creates a task with a specified run interval and name
-    task(ss::lowres_clock::duration run_interval, ss::sstring name);
+    /// Creates a task with a specified run interval and name.  Also includes a
+    /// pointer back to the owning link so the task has access to the link's
+    /// cluster connection
+    task(link* link, ss::lowres_clock::duration run_interval, ss::sstring name);
     task(const task&) = delete;
     task& operator=(const task&) = delete;
     task(task&&) = delete;
@@ -98,8 +101,11 @@ private:
     void run_callbacks(const state_change&);
     /// Validates that the state change is valid
     bool valid_previous_state(model::task_state st) const;
+    /// Returns the owning link
+    link* get_link() const noexcept;
 
 private:
+    link* _link;
     ss::lowres_clock::duration _run_interval;
     task_status_cb _status_cb;
     model::task_state _state{model::task_state::not_running};
@@ -125,7 +131,8 @@ public:
     /// Returns the name of the task that this factory creates
     virtual std::string_view created_task_name() const noexcept = 0;
 
-    virtual std::unique_ptr<task> create_task() = 0;
+    /// Creates a new task through the factory.  Provides the owning link
+    virtual std::unique_ptr<task> create_task(link* link) = 0;
 };
 } // namespace cluster_link
 

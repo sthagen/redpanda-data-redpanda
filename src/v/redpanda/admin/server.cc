@@ -83,6 +83,7 @@
 #include "redpanda/admin/api-doc/shadow_indexing.json.hh"
 #include "redpanda/admin/api-doc/status.json.hh"
 #include "redpanda/admin/cluster_config_schema_util.h"
+#include "redpanda/admin/services/admin.h"
 #include "redpanda/admin/util.h"
 #include "resource_mgmt/memory_sampling.h"
 #include "rpc/errc.h"
@@ -114,6 +115,7 @@
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 #include <seastar/http/api_docs.hh>
+#include <seastar/http/common.hh>
 #include <seastar/http/exception.hh>
 #include <seastar/http/httpd.hh>
 #include <seastar/http/json_path.hh>
@@ -338,6 +340,36 @@ admin_server::admin_server(
   , _default_blocked_reactor_notify(
       ss::engine().get_blocked_reactor_notify_ms()) {
     _server.set_content_streaming(true);
+    // NOTE: This isn't normally where services should be registered
+    // but this service is special as it has some reflection based methods.
+    add_service(std::make_unique<admin::admin_service_impl>(&_services));
+}
+
+void admin_server::add_service(
+  std::unique_ptr<serde::pb::rpc::base_service> service) {
+    vlog(adminlog.debug, "Registering RPC service: {}", service->name());
+    for (auto& route : service->all_routes()) {
+        vlog(adminlog.debug, "Registering RPC route: {}", route.name);
+        ss::httpd::path_description path{
+          fmt::format("/v2{}", route.path),
+          ss::httpd::operation_type::POST,
+          route.name,
+          /*path_parameters=*/{},
+          /*mandatory_params=*/{},
+        };
+        switch (route.authz_level) {
+        case serde::pb::rpc::authz_level::unauthenticated:
+            register_route_raw_async<publik>(path, route.handler);
+            break;
+        case serde::pb::rpc::authz_level::user:
+            register_route_raw_async<user>(path, route.handler);
+            break;
+        case serde::pb::rpc::authz_level::superuser:
+            register_route_raw_async<superuser>(path, route.handler);
+            break;
+        }
+    }
+    _services.push_back(std::move(service));
 }
 
 ss::future<> admin_server::start() {

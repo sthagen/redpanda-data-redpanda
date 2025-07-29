@@ -74,6 +74,14 @@ struct partition_metadata {
     model::offset start_offset = model::offset(0);
     model::offset high_watermark = model::offset(0);
 };
+
+struct topic_metadata {
+    kafka::topic_authorized_operations authorized_operations
+      = kafka::topic_authorized_operations_not_set;
+    model::topic_id topic_id;
+    chunked_hash_map<model::partition_id, partition_metadata> partitions;
+};
+
 class cluster_mock {
 public:
     cluster_mock();
@@ -106,7 +114,9 @@ public:
     void add_topic(
       model::topic topic_name,
       size_t partition_count,
-      size_t replication_factor);
+      size_t replication_factor,
+      kafka::topic_authorized_operations authorized_operations
+      = kafka::topic_authorized_operations_not_set);
 
     std::vector<model::node_id> get_broker_ids() const {
         return std::ranges::views::keys(_brokers)
@@ -153,10 +163,7 @@ private:
     absl::flat_hash_map<model::node_id, broker_info> _brokers;
     absl::flat_hash_map<model::node_id, supported_versions>
       _broker_api_versions;
-    chunked_hash_map<
-      model::topic,
-      chunked_hash_map<model::partition_id, partition_metadata>>
-      _topics;
+    chunked_hash_map<model::topic, topic_metadata> _topics;
 
     std::optional<model::node_id> _controller_id;
     prefix_logger _logger;

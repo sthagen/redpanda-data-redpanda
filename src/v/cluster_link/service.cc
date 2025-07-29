@@ -56,28 +56,30 @@ public:
       ::model::node_id self,
       model::metadata config,
       partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager) override {
+      partition_manager* partition_manager,
+      kafka::client::cluster cluster_connection) override {
         return std::make_unique<link>(
           self,
           link_reconciler_period,
           std::move(config),
           partition_leader_cache,
-          partition_manager);
+          partition_manager,
+          std::move(cluster_connection));
     }
 };
 
 service::service(
   ::model::node_id self,
   ss::sharded<frontend>* plf,
+  std::unique_ptr<cluster::partition_change_notifier> notifications,
   ss::sharded<cluster::partition_manager>* partition_manager,
-  ss::sharded<raft::group_manager>* group_manager,
   ss::sharded<cluster::partition_leaders_table>* partition_leaders_table,
   ss::sharded<cluster::shard_table>* shard_table,
   ss::smp_service_group smp_group)
   : _self(self)
   , _plf(plf)
+  , _notifications(std::move(notifications))
   , _partition_manager(partition_manager)
-  , _group_manager(group_manager)
   , _partition_leaders_table(partition_leaders_table)
   , _shard_table(shard_table)
   , _smp_group(smp_group) {}
@@ -93,6 +95,7 @@ ss::future<> service::start() {
         _shard_table, _partition_manager, _smp_group),
       std::make_unique<link_registry_adapter>(&_plf->local()),
       std::make_unique<default_link_factory>(),
+      std::make_unique<cluster_factory>(),
       30s); // Temporary until we have a proper configuration for this
 
     // Register notifications before the manager starts.  The manager will have
@@ -104,7 +107,7 @@ ss::future<> service::start() {
 
 ss::future<> service::stop() {
     vlog(cllog.info, "Stopping cluster link service");
-    unregister_notifications();
+
     co_await _manager->stop();
 }
 
@@ -115,81 +118,30 @@ void service::register_notifications() {
         _plf->local().unregister_for_updates(pl_notif_id);
     });
 
-    auto leadership_notif_id
-      = _group_manager->local().register_leadership_notification(
+    auto partition_notifications_id
+      = _notifications->register_partition_notifications(
         [this](
-          raft::group_id group_id,
-          ::model::term_id term,
-          std::optional<::model::node_id> leader) {
-            on_leadership_change(group_id, term, leader);
+          cluster::partition_change_notifier::notification_type type,
+          const ::model::ntp& ntp,
+          std::optional<cluster::partition_change_notifier::partition_state>
+            partition) {
+            auto is_leader = partition && partition->is_leader ? ntp_leader::yes
+                                                               : ntp_leader::no;
+            using ntype = cluster::partition_change_notifier::notification_type;
+            switch (type) {
+            case ntype::leadership_change:
+            case ntype::partition_replica_assigned:
+            case ntype::partition_replica_unassigned:
+                _manager->handle_partition_state_change(ntp, is_leader);
+                break;
+            case ntype::partition_properties_change:
+                // TODO: once we have partition properties
+                break;
+            }
         });
-    _notification_cleanups.emplace_back([this, leadership_notif_id] {
-        _group_manager->local().unregister_leadership_notification(
-          leadership_notif_id);
+    _notification_cleanups.emplace_back([this, partition_notifications_id] {
+        _notifications->unregister_partition_notifications(
+          partition_notifications_id);
     });
-
-    auto umanage_notif_id
-      = _partition_manager->local().register_unmanage_notification(
-        ::model::kafka_namespace, [this](::model::topic_partition_view tp) {
-            on_unmanage_notification(tp);
-        });
-    _notification_cleanups.emplace_back([this, umanage_notif_id] {
-        _partition_manager->local().unregister_unmanage_notification(
-          umanage_notif_id);
-    });
-    auto manage_notif_id
-      = _partition_manager->local().register_manage_notification(
-        ::model::kafka_namespace,
-        [this](const ss::lw_shared_ptr<cluster::partition>& p) {
-            on_manage_notification(p);
-        });
-    _notification_cleanups.emplace_back([this, manage_notif_id] {
-        _partition_manager->local().unregister_manage_notification(
-          manage_notif_id);
-    });
-}
-
-void service::unregister_notifications() { _notification_cleanups.clear(); }
-
-void service::on_leadership_change(
-  raft::group_id group_id,
-  ::model::term_id term,
-  std::optional<::model::node_id> leader) {
-    vlog(
-      cllog.trace,
-      "on_leadership_change: group_id={}, term={}, leader={}",
-      group_id,
-      term,
-      leader);
-    auto partition = _partition_manager->local().partition_for(group_id);
-    if (!partition) {
-        vlog(
-          cllog.debug,
-          "got leadership notification for unknown partition: {}",
-          group_id);
-        return;
-    }
-    bool node_is_leader = leader.has_value() && *leader == _self;
-    if (!node_is_leader) {
-        _manager->on_leadership_change(partition->ntp(), ntp_leader::no);
-        return;
-    }
-    auto is_leader = partition->is_leader() ? ntp_leader::yes : ntp_leader::no;
-    _manager->on_leadership_change(partition->ntp(), is_leader);
-}
-
-void service::on_unmanage_notification(::model::topic_partition_view tp) {
-    vlog(
-      cllog.trace, "on_unmanage_notification: {}/{}", tp.topic, tp.partition);
-    _manager->on_leadership_change(
-      ::model::ntp{::model::kafka_namespace, tp.topic, tp.partition},
-      ntp_leader::no);
-}
-
-void service::on_manage_notification(
-  const ss::lw_shared_ptr<cluster::partition>& p) {
-    vlog(cllog.trace, "on_manage_notification: {}", p->ntp());
-    _manager->on_leadership_change(
-      p->ntp(), p->is_elected_leader() ? ntp_leader::yes : ntp_leader::no);
 }
 } // namespace cluster_link

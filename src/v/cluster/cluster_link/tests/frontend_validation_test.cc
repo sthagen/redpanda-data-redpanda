@@ -24,6 +24,8 @@ using ::cluster_link::model::id_t;
 using ::cluster_link::model::metadata;
 using ::cluster_link::model::mirror_topic_state;
 using ::cluster_link::model::name_t;
+using ::cluster_link::model::tls_file_path;
+using ::cluster_link::model::tls_value;
 using ::cluster_link::model::update_mirror_topic_state_cmd;
 using ::cluster_link::model::uuid_t;
 
@@ -267,6 +269,32 @@ TEST_F_CORO(frontend_validation_test, control_character_in_name) {
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{
         .bootstrap_servers = {net::unresolved_address{"localhost", 9092}}}};
+    EXPECT_EQ(
+      co_await upsert_cluster_link(std::move(m)),
+      cluster::cluster_link::errc::invalid_create);
+}
+
+TEST_F_CORO(frontend_validation_test, add_mirror_topic_missing_key) {
+    metadata m{
+      .name = name_t("link1\x0d"), // Contains a control character
+      .uuid = uuid_t(::uuid_t::create()),
+      .connection = connection_config{
+        .bootstrap_servers = {net::unresolved_address{"localhost", 9092}},
+        .cert = tls_value("bah")}};
+    EXPECT_EQ(
+      co_await upsert_cluster_link(std::move(m)),
+      cluster::cluster_link::errc::invalid_create);
+}
+
+TEST_F_CORO(
+  frontend_validation_test, add_mirror_topic_key_cert_types_different) {
+    metadata m{
+      .name = name_t("link1\x0d"), // Contains a control character
+      .uuid = uuid_t(::uuid_t::create()),
+      .connection = connection_config{
+        .bootstrap_servers = {net::unresolved_address{"localhost", 9092}},
+        .cert = tls_value("bah"),
+        .key = tls_file_path("key.pem")}};
     EXPECT_EQ(
       co_await upsert_cluster_link(std::move(m)),
       cluster::cluster_link::errc::invalid_create);

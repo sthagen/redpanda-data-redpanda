@@ -14,6 +14,7 @@
 #include "cluster_link/model/types.h"
 #include "cluster_link/task.h"
 #include "cluster_link/types.h"
+#include "kafka/client/cluster.h"
 #include "kafka/data/rpc/deps.h"
 #include "utils/mutex.h"
 #include "utils/notification_list.h"
@@ -29,7 +30,8 @@ public:
       ss::lowres_clock::duration task_reconciler_interval,
       model::metadata config,
       kafka::data::rpc::partition_leader_cache* partition_leader_cache,
-      kafka::data::rpc::partition_manager* partition_manager);
+      kafka::data::rpc::partition_manager* partition_manager,
+      kafka::client::cluster cluster_connection);
     link(const link&) = delete;
     link(link&&) = delete;
     link& operator=(const link&) = delete;
@@ -39,7 +41,7 @@ public:
     virtual ss::future<> start();
     virtual ss::future<> stop();
 
-    ss::future<result<void>> register_task(std::unique_ptr<task>);
+    ss::future<result<void>> register_task(task_factory*);
 
     void update_config(model::metadata);
 
@@ -72,6 +74,7 @@ private:
     ss::future<>
     do_handle_controller_leadership_change(ntp_leader is_ntp_leader);
     ss::future<> run_task_reconciler();
+    ss::future<result<void>> do_register_task(std::unique_ptr<task>);
 
 private:
     ::model::node_id _self;
@@ -79,6 +82,8 @@ private:
     model::metadata _config;
     kafka::data::rpc::partition_leader_cache* _partition_leader_cache;
     kafka::data::rpc::partition_manager* _partition_manager;
+    kafka::client::cluster _cluster_connection;
+
     notification_list<task_state_change_cb, task_state_notification_id>
       _task_state_change_notifications;
     ss::lowres_clock::duration _task_reconciler_interval;

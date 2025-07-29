@@ -13,6 +13,8 @@
 
 #include "cluster/cluster_link/table.h"
 #include "cluster_link/manager.h"
+#include "cluster_link/utils.h"
+#include "kafka/client/test/cluster_mock.h"
 #include "kafka/data/rpc/deps.h"
 
 #include <seastar/util/defer.hh>
@@ -154,6 +156,21 @@ private:
     fake_partition_leader_cache_impl* _impl;
 };
 
+class cluster_mock_factory : public cluster_factory {
+public:
+    explicit cluster_mock_factory(kafka::client::cluster_mock* cluster_mock)
+      : _cluster_mock(cluster_mock) {}
+
+    kafka::client::cluster create_cluster(const model::metadata& md) final {
+        return {
+          metadata_to_kafka_config(md),
+          std::make_unique<kafka::client::broker_mock_factory>(_cluster_mock)};
+    }
+
+private:
+    kafka::client::cluster_mock* _cluster_mock;
+};
+
 class cluster_link_manager_test_fixture {
 public:
     explicit cluster_link_manager_test_fixture(::model::node_id self);
@@ -196,6 +213,11 @@ public:
     link_factory* get_link_factory() { return _lf; }
 
 private:
+    void setup_cluster_mock();
+
+private:
+    kafka::client::cluster_mock _cluster_mock;
+    std::unique_ptr<cluster_factory> _cluster_factory;
     chunked_vector<ss::deferred_action<ss::noncopyable_function<void()>>>
       _notification_cleanups;
     ss::sharded<cluster::cluster_link::table> _table;

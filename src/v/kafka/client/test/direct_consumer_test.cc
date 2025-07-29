@@ -81,8 +81,9 @@ struct consumer_test_mock : public ::testing::Test {
                     topic_data.partitions.push_back(std::move(part_data));
                     continue;
                 }
-                auto p_it = t_it->second.find(partition.partition_index);
-                if (p_it == t_it->second.end()) {
+                auto p_it = t_it->second.partitions.find(
+                  partition.partition_index);
+                if (p_it == t_it->second.partitions.end()) {
                     part_data.error_code
                       = kafka::error_code::unknown_topic_or_partition;
                     topic_data.partitions.push_back(std::move(part_data));
@@ -150,8 +151,8 @@ struct consumer_test_mock : public ::testing::Test {
                     topic_data.partitions.push_back(std::move(part_data));
                     continue;
                 }
-                auto p_it = t_it->second.find(partition.partition);
-                if (p_it == t_it->second.end()) {
+                auto p_it = t_it->second.partitions.find(partition.partition);
+                if (p_it == t_it->second.partitions.end()) {
                     part_data.error_code
                       = kafka::error_code::unknown_topic_or_partition;
                     topic_data.partitions.push_back(std::move(part_data));
@@ -440,8 +441,12 @@ TEST_F(consumer_test_mock, TestLeadershipChange) {
     vlog(
       test_log.info,
       "Changing leadership from {} to 2",
-      cluster_mock.get_topics()[test_topic][model::partition_id(0)].leader);
-    cluster_mock.get_topics()[test_topic][model::partition_id(0)].leader
+      cluster_mock.get_topics()[test_topic]
+        .partitions[model::partition_id(0)]
+        .leader);
+    cluster_mock.get_topics()[test_topic]
+      .partitions[model::partition_id(0)]
+      .leader
       = model::node_id(2);
     // add some more data to partition 0
     make_data_available(test_topic, 0, 23);

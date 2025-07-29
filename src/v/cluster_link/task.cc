@@ -82,8 +82,10 @@ private:
     task* _task;
 };
 
-task::task(ss::lowres_clock::duration run_interval, ss::sstring name)
-  : _run_interval(run_interval)
+task::task(
+  link* link, ss::lowres_clock::duration run_interval, ss::sstring name)
+  : _link(link)
+  , _run_interval(run_interval)
   , _name(std::move(name))
   , _logger(cllog, _name) {}
 
@@ -206,6 +208,8 @@ bool task::valid_previous_state(model::task_state st) const {
         return true;
     }
 }
+
+link* task::get_link() const noexcept { return _link; }
 } // namespace cluster_link
 
 auto fmt::formatter<cluster_link::task::state_change>::format(

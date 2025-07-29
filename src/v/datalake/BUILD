@@ -162,6 +162,7 @@ redpanda_cc_library(
         ":types",
         "//src/v/base",
         "//src/v/cluster",
+        "//src/v/cluster/utils:partition_change_notifier_api",
         "//src/v/config",
         "//src/v/container:chunked_hash_map",
         "//src/v/datalake:record_schema_resolver",

@@ -2,7 +2,7 @@ This is a P model for L0-only commit protocol, plus fetch. The architecture
 covered by the model is depicted in the diagram below.
 
 ```
-                                L0d Object                                   
+                                L0 Object                                   
                                     |                                        
                                     |                                        
                                     |                                        

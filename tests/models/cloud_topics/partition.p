@@ -3,13 +3,13 @@
 // appended to the log its offset is returned.
 //
 
-// placeholder_batch - reference to a batch in an L0d object
+// placeholder_batch - reference to a batch in an L0 object
 //
-// L0d_object_id: identifier of the object in cloud storage
-// L0d_offset: offset of batch within the object
+// L0_object_id: identifier of the object in cloud storage
+// L0_offset: offset of batch within the object
 type placeholder_batch = (
-  L0d_object_id: int,
-  L0d_offset: int);
+  L0_object_id: int,
+  L0_offset: int);
 
 // append_request - request to append a batch to the partition's log
 //

@@ -11,11 +11,12 @@
 
 #include "absl/strings/escaping.h"
 #include "base/units.h"
-#include "bytes/iobuf_parser.h"
 #include "gtest/gtest.h"
 #include "proto/redpanda/core/testing/example.pb.h"
 #include "proto/redpanda/core/testing/example.proto.h"
 #include "serde/protobuf/json.h"
+#include "src/v/serde/protobuf/tests/codegen_test.pb.h"
+#include "src/v/serde/protobuf/tests/codegen_test.proto.h"
 #include "src/v/serde/protobuf/tests/test_messages_edition2023.pb.h"
 #include "src/v/serde/protobuf/tests/test_messages_edition2023.proto.h"
 
@@ -25,7 +26,7 @@
 
 namespace {
 
-std::string iobuf_to_string(iobuf b) {
+std::string iobuf_to_string(const iobuf& b) {
     std::string output;
     for (const auto& frag : b) {
         output.append(frag.get(), frag.size());
@@ -254,4 +255,28 @@ TEST(ProtobufCompat, RandomizedConformanceJsonTest) {
             ;
         }
     }
+}
+
+TEST(ProtobufCompat, Wellknown) {
+    proto::example::well_known_protos original;
+    original.set_single_duration(
+      absl::Seconds(123456) + absl::Nanoseconds(789012));
+    original.get_repeated_duration().emplace_back(
+      absl::Seconds(123) + absl::Nanoseconds(789));
+    original.get_duration_map().insert(
+      {"foo", absl::Seconds(1) + absl::Nanoseconds(7)});
+    proto::example::well_known_protos deserialized;
+    iobuf serialized = original.to_proto().get();
+    EXPECT_NO_THROW(
+      (deserialized = proto::example::well_known_protos::from_proto(
+                        std::move(serialized))
+                        .get()));
+    EXPECT_EQ(original, deserialized);
+    deserialized = {};
+    serialized = original.to_json().get();
+    EXPECT_NO_THROW(
+      (deserialized
+       = proto::example::well_known_protos::from_json(serialized.copy()).get()))
+      << "JSON: " << iobuf_to_string(serialized);
+    EXPECT_EQ(original, deserialized);
 }

@@ -32,29 +32,48 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "utils",
+    srcs = [
+        "utils.cc",
+    ],
+    hdrs = [
+        "utils.h",
+    ],
+    include_prefix = "cluster_link",
+    visibility = ["//src/v/cluster_link:__subpackages__"],
+    deps = [
+        "//src/v/cluster_link/model",
+        "//src/v/kafka/client:configuration",
+    ],
+)
+
+redpanda_cc_library(
     name = "impl",
     srcs = [
+        "deps.cc",
         "link.cc",
         "manager.cc",
         "task.cc",
     ],
     hdrs = [
+        "deps.h",
         "link.h",
         "manager.h",
         "task.h",
         "types.h",
     ],
-    implementation_deps = [
-        ":logger",
-    ],
     include_prefix = "cluster_link",
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
         ":errc",
+        ":fwd",
+        ":logger",
+        ":utils",
         "//src/v/base",
         "//src/v/cluster",
         "//src/v/cluster_link/model",
         "//src/v/container:fragmented_vector",
+        "//src/v/kafka/client:cluster",
         "//src/v/kafka/data/rpc",
         "//src/v/model",
         "//src/v/ssx:future_util",
@@ -96,6 +115,7 @@ redpanda_cc_library(
         ":fwd",
         "//src/v/base",
         "//src/v/cluster",
+        "//src/v/cluster/utils:partition_change_notifier_api",
         "//src/v/model",
         "//src/v/raft",
         "@seastar",

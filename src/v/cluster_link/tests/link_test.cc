@@ -40,7 +40,8 @@ public:
       link_test* link_test,
       model::metadata metadata,
       partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager);
+      partition_manager* partition_manager,
+      kafka::client::cluster cluster_connection);
 
     ss::future<> start() override;
     ss::future<> stop() override;
@@ -60,14 +61,16 @@ public:
       ::model::node_id self,
       model::metadata metadata,
       partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager) override {
+      partition_manager* partition_manager,
+      kafka::client::cluster cluster_connection) override {
         return std::make_unique<test_link>(
           self,
           _task_reconciler_interval,
           _link_test,
           std::move(metadata),
           partition_leader_cache,
-          partition_manager);
+          partition_manager,
+          std::move(cluster_connection));
     }
 
 private:
@@ -79,6 +82,7 @@ private:
 class link_test_base : public seastar_test {
 public:
     virtual ss::future<> SetUpAsync() override {
+        setup_cluster_mock();
         _partition_leader_cache_impl
           = std::make_unique<fake_partition_leader_cache_impl>();
         _partition_manager_proxy
@@ -127,6 +131,7 @@ public:
     void unregister_callback(notification_id id) { _callbacks.erase(id); }
 
 protected:
+    kafka::client::cluster_mock _cluster_mock;
     std::unique_ptr<fake_partition_leader_cache_impl>
       _partition_leader_cache_impl;
     std::unique_ptr<fake_partition_manager_proxy> _partition_manager_proxy;
@@ -137,6 +142,17 @@ protected:
     absl::flat_hash_map<notification_id, ss::noncopyable_function<void(uuid_t)>>
       _callbacks;
     notification_id _latest_id{0};
+
+private:
+    void setup_cluster_mock() {
+        _cluster_mock.register_default_handlers();
+        _cluster_mock.add_broker(
+          ::model::node_id(0), net::unresolved_address{"localhost", 9092});
+        _cluster_mock.add_broker(
+          ::model::node_id(1), net::unresolved_address{"localhost", 9093});
+        _cluster_mock.add_broker(
+          ::model::node_id(2), net::unresolved_address{"localhost", 9094});
+    }
 };
 
 class link_test : public link_test_base {
@@ -152,6 +168,7 @@ public:
             _partition_manager_proxy.get()),
           std::make_unique<test_link_registry>(&_table.local()),
           std::make_unique<test_link_factory>(this, 1s),
+          std::make_unique<cluster_mock_factory>(&_cluster_mock),
           task_reconciler_interval);
     }
 
@@ -194,13 +211,15 @@ test_link::test_link(
   link_test* link_test,
   model::metadata metadata,
   partition_leader_cache* partition_leader_cache,
-  partition_manager* partition_manager)
+  partition_manager* partition_manager,
+  kafka::client::cluster cluster_connection)
   : link(
       self,
       task_reconciler_interval,
       std::move(metadata),
       partition_leader_cache,
-      partition_manager)
+      partition_manager,
+      std::move(cluster_connection))
   , _link_test(link_test) {}
 
 ss::future<> test_link::start() {
@@ -352,13 +371,15 @@ public:
       ::model::node_id self,
       model::metadata metadata,
       partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager) override {
+      partition_manager* partition_manager,
+      kafka::client::cluster cluster_connection) override {
         return std::make_unique<evil_link>(
           self,
           1s,
           std::move(metadata),
           partition_leader_cache,
-          partition_manager);
+          partition_manager,
+          std::move(cluster_connection));
     }
 };
 
@@ -377,6 +398,7 @@ public:
             _partition_manager_proxy.get()),
           std::make_unique<test_link_registry>(&_table.local()),
           std::move(elf),
+          std::make_unique<cluster_mock_factory>(&_cluster_mock),
           task_reconciler_interval);
         co_await _manager->start();
     }

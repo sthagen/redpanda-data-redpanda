@@ -79,18 +79,50 @@ auto fmt::formatter<
     });
 }
 
+auto fmt::formatter<cluster_link::model::tls_file_or_value>::format(
+  const cluster_link::model::tls_file_or_value& t, format_context& ctx)
+  -> decltype(ctx.out()) {
+    return ss::visit(
+      t,
+      [&ctx](const cluster_link::model::tls_file_path& p) {
+          return fmt::format_to(ctx.out(), "{{file={}}}", p());
+      },
+      [this, &ctx](const cluster_link::model::tls_value& v) {
+          if (_is_sensitive) {
+              return fmt::format_to(ctx.out(), "{{value=****}}");
+          }
+          // If not sensitive, we can show the value
+          // This is useful for debugging purposes.
+          return fmt::format_to(ctx.out(), "{{value={}}}", v());
+      });
+}
+
+auto fmt::formatter<std::optional<cluster_link::model::tls_file_or_value>>::
+  format(
+    const std::optional<cluster_link::model::tls_file_or_value>& m,
+    format_context& ctx) -> decltype(ctx.out()) {
+    if (!m) {
+        return fmt::format_to(ctx.out(), "not-set");
+    }
+    if (_is_sensitive) {
+        return fmt::format_to(ctx.out(), "{:s}", *m);
+    }
+    return fmt::format_to(ctx.out(), "{}", *m);
+}
+
 auto fmt::formatter<cluster_link::model::connection_config>::format(
   const cluster_link::model::connection_config& c, format_context& ctx)
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{bootstrap_servers={}, authn_config={}, cert_file_path={}, "
-      "key_file_path={}, ca_file_path={}}}",
+      "{{bootstrap_servers={}, authn_config={}, cert={}, key={:s}, ca={}, "
+      "client_id={}}}",
       c.bootstrap_servers,
       c.authn_config,
-      c.cert_file_path,
-      c.key_file_path,
-      c.ca_file_path);
+      c.cert,
+      c.key,
+      c.ca,
+      c.client_id);
 }
 
 auto fmt::formatter<std::optional<model::topic_id>>::format(

@@ -29,6 +29,8 @@ class topic_cache {
 
     struct topic_data {
         chunked_hash_map<model::partition_id, partition_data> partitions;
+        kafka::topic_authorized_operations authorized_operations
+          = kafka::topic_authorized_operations_not_set;
     };
 
     using topics_t = chunked_hash_map<model::topic, topic_data>;
@@ -48,6 +50,13 @@ public:
     std::optional<model::node_id> leader(model::topic_partition_view) const;
     std::optional<kafka::leader_epoch>
       leader_epoch(model::topic_partition_view) const;
+
+    auto topics() const { return std::views::keys(_topics); }
+
+    std::optional<kafka::topic_authorized_operations>
+    authorized_operations_for_topic(model::topic_view tp) const;
+
+    std::optional<size_t> partition_count(model::topic_view tp) const;
 
 private:
     /// \brief Cache of topic information.

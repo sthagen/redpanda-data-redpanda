@@ -258,7 +258,11 @@ path_type_map = {
                 "IsrNodes": ("model::node_id", "int32"),
                 "LeaderEpoch": ("kafka::leader_epoch", "int32"),
             },
+            "TopicAuthorizedOperations":
+            ("kafka::topic_authorized_operations", "int32"),
         },
+        "ClusterAuthorizedOperations":
+        ("kafka::cluster_authorized_operations", "int32"),
     },
     "FetchRequestData": {
         "MaxWaitMs": ("std::chrono::milliseconds", "int32"),

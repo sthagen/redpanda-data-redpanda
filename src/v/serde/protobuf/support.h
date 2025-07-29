@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/time/time.h"
 #include "base/units.h"
 #include "bytes/iobuf_parser.h"
 #include "container/fragmented_vector.h"
@@ -254,11 +255,52 @@ public:
         }
     }
 
+    template<fixed_string full_name>
+    absl::Duration read_wellknown_duration(tag t) {
+        auto parser = read_message<full_name>(t);
+        int64_t seconds = 0;
+        int32_t nanos = 0;
+        while (parser.bytes_left() > 0) {
+            auto tag = parser.read_tag();
+            if (tag.field_number == 1) {
+                seconds
+                  = parser.template read_singular_varint<full_name, int64_t>(
+                    tag);
+            } else if (tag.field_number == 2) {
+                nanos
+                  = parser.template read_singular_varint<full_name, int32_t>(
+                    tag);
+            } else {
+                parser.skip_unknown(tag);
+            }
+        }
+        return absl::Seconds(seconds) + absl::Nanoseconds(nanos);
+    }
+
     void skip_unknown(tag t) { skip_unknown_field(&_parser, t.wire_type); }
 
 private:
     iobuf_parser _parser;
     size_t _depth;
 };
+
+namespace wellknown {
+
+inline iobuf duration_to_proto(absl::Duration d) {
+    iobuf buf;
+    // seconds
+    serde::pb::tag::write(
+      {.wire_type = serde::pb::wire_type::varint, .field_number = 1}, &buf);
+    serde::pb::write_varint(d / absl::Seconds(1), &buf);
+    // nanos
+    serde::pb::tag::write(
+      {.wire_type = serde::pb::wire_type::varint, .field_number = 2}, &buf);
+    serde::pb::write_varint(
+      static_cast<int32_t>((d % absl::Seconds(1)) / absl::Nanoseconds(1)),
+      &buf);
+    return buf;
+}
+
+} // namespace wellknown
 
 } // namespace serde::pb

@@ -24,6 +24,7 @@ void topic_cache::apply(
     new_cache.reserve(topics.size());
     for (const auto& t : topics) {
         auto& cache_t = new_cache.emplace(t.name, topic_data{}).first->second;
+        cache_t.authorized_operations = t.topic_authorized_operations;
         cache_t.partitions.reserve(t.partitions.size());
         for (const auto& p : t.partitions) {
             cache_t.partitions.emplace(
@@ -74,6 +75,23 @@ topic_cache::leader_epoch(model::topic_partition_view tp) const {
     }
 
     return p_data.leader_epoch;
+}
+
+std::optional<kafka::topic_authorized_operations>
+topic_cache::authorized_operations_for_topic(model::topic_view tp) const {
+    auto topic_it = _topics.find(tp);
+    if (topic_it == _topics.end()) {
+        return std::nullopt;
+    }
+    return topic_it->second.authorized_operations;
+}
+
+std::optional<size_t> topic_cache::partition_count(model::topic_view tp) const {
+    auto topic_it = _topics.find(tp);
+    if (topic_it == _topics.end()) {
+        return std::nullopt;
+    }
+    return topic_it->second.partitions.size();
 }
 
 } // namespace kafka::client

@@ -12,7 +12,9 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
+#include "cluster_link/deps.h"
 #include "cluster_link/link.h"
+#include "cluster_link/logger.h"
 #include "cluster_link/model/types.h"
 #include "cluster_link/task.h"
 #include "cluster_link/types.h"
@@ -22,49 +24,6 @@
 #include "utils/mutex.h"
 
 namespace cluster_link {
-
-/**
- * @brief Abstract class that provides accessors to cluster link table
- *
- */
-class link_registry {
-public:
-    link_registry() = default;
-    link_registry(const link_registry&) = delete;
-    link_registry(link_registry&&) = delete;
-    link_registry& operator=(const link_registry&) = delete;
-    link_registry& operator=(link_registry&&) = delete;
-    virtual ~link_registry() = default;
-
-    virtual std::optional<std::reference_wrapper<const model::metadata>>
-      find_link_by_id(model::id_t) const = 0;
-
-    virtual std::optional<std::reference_wrapper<const model::metadata>>
-    find_link_by_name(const model::name_t&) const = 0;
-
-    virtual chunked_vector<model::id_t> get_all_link_ids() const = 0;
-};
-
-/**
- * @brief Factory abstract class to create new links
- *
- */
-class link_factory {
-public:
-    link_factory() = default;
-    link_factory(const link_factory&) = delete;
-    link_factory(link_factory&&) = delete;
-    link_factory& operator=(const link_factory&) = delete;
-    link_factory& operator=(link_factory&&) = delete;
-    virtual ~link_factory() = default;
-
-    virtual std::unique_ptr<link> create_link(
-      ::model::node_id self,
-      model::metadata config,
-      kafka::data::rpc::partition_leader_cache* partition_leader_cache,
-      kafka::data::rpc::partition_manager* partition_manager)
-      = 0;
-};
 
 /**
  * @brief Class used to manage cluster links
@@ -81,6 +40,7 @@ public:
       std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager,
       std::unique_ptr<link_registry> registry,
       std::unique_ptr<link_factory> link_factory,
+      std::unique_ptr<cluster_factory> cluster_factory,
       ss::lowres_clock::duration task_reconciler_interval);
     manager(const manager&) = delete;
     manager(manager&&) = delete;
@@ -94,7 +54,8 @@ public:
     /// Used to notify that a cluster link has been updated
     void on_link_change(model::id_t id);
     /// Used to notify manager in a change of NTP leadership
-    void on_leadership_change(::model::ntp ntp, ntp_leader is_ntp_leader);
+    void
+    handle_partition_state_change(::model::ntp ntp, ntp_leader is_ntp_leader);
     /// Handles creation and start of a link
     ss::future<> handle_on_link_change(model::id_t id);
     /// Handles leadership changes for a given NTP
@@ -103,7 +64,20 @@ public:
     /// Registers a task factory that will be used to create tasks when links
     /// are created
     template<typename T, typename... Args>
-    void register_task_factory(Args&&... args) {
+    ss::future<> register_task_factory(Args&&... args) {
+        auto fut = co_await ss::coroutine::as_future(
+          _link_task_reconciler_mutex.get_units(_as));
+        if (fut.failed()) {
+            auto ex = fut.get_exception();
+            if (ssx::is_shutdown_exception(ex)) {
+                vlog(
+                  cllog.info,
+                  "Task factory registration skipped due to shutdown");
+            } else {
+                vlog(cllog.error, "Task factory registration failed: {}", ex);
+            }
+            co_return;
+        }
         _task_factories.emplace_back(
           std::make_unique<T>(std::forward<Args>(args)...));
     }
@@ -121,6 +95,7 @@ private:
     std::unique_ptr<kafka::data::rpc::partition_manager> _partition_manager;
     std::unique_ptr<link_registry> _registry;
     std::unique_ptr<link_factory> _link_factory;
+    std::unique_ptr<cluster_factory> _cluster_factory;
     ssx::work_queue _queue;
 
     chunked_vector<std::unique_ptr<task_factory>> _task_factories;

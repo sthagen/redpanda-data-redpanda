@@ -91,11 +91,17 @@ ss::future<response_t> cluster_mock::handle_metadata_request(
         });
     }
 
-    for (auto& [topic, partitions] : _topics) {
+    for (const auto& [topic, md] : _topics) {
         metadata_response::topic md_topic;
+        // TODO - Update when supporting topic IDs on RP
         md_topic.name = topic;
-        md_topic.partitions.reserve(partitions.size());
-        for (auto& [part_id, part_meta] : partitions) {
+
+        md_topic.topic_authorized_operations
+          = md_req.data.include_topic_authorized_operations
+              ? md.authorized_operations
+              : kafka::topic_authorized_operations_not_set;
+        md_topic.partitions.reserve(md.partitions.size());
+        for (auto& [part_id, part_meta] : md.partitions) {
             md_topic.partitions.push_back(metadata_response::partition{
               .partition_index = part_id,
               .leader_id = part_meta.leader,
@@ -172,7 +178,10 @@ ss::future<response_t> cluster_mock::handle(
 }
 
 void cluster_mock::add_topic(
-  model::topic topic_name, size_t partition_count, size_t replication_factor) {
+  model::topic topic_name,
+  size_t partition_count,
+  size_t replication_factor,
+  kafka::topic_authorized_operations authorized_operations) {
     if (_topics.contains(topic_name)) {
         // Topic already exists, do not overwrite
         throw std::invalid_argument(
@@ -187,6 +196,9 @@ void cluster_mock::add_topic(
     auto cluster_nodes = get_broker_ids();
     std::ranges::sort(cluster_nodes);
 
+    topic_metadata md;
+    md.authorized_operations = authorized_operations;
+
     for (auto p_id : std::views::iota(size_t(0), partition_count)) {
         partition_metadata p_md{
           .id = model::partition_id(p_id), .leader = model::node_id(-1)};
@@ -198,9 +210,10 @@ void cluster_mock::add_topic(
         std::ranges::rotate(cluster_nodes, cluster_nodes.begin() + 1);
         p_md.leader = p_md.replicas[0];
         p_md.leader_epoch = kafka::invalid_leader_epoch;
-
-        _topics[topic_name].emplace(model::partition_id(p_id), std::move(p_md));
+        md.partitions.emplace(model::partition_id(p_id), std::move(p_md));
     }
+
+    _topics.emplace(topic_name, std::move(md));
 }
 
 cluster_mock::cluster_mock()

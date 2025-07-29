@@ -37,8 +37,8 @@ struct test_metadata : public model::metadata {
 class test_task : public task {
 public:
     static constexpr auto name = "test_task";
-    explicit test_task(ss::lowres_clock::duration run_interval)
-      : task(run_interval, name) {}
+    explicit test_task(link* link, ss::lowres_clock::duration run_interval)
+      : task(link, run_interval, name) {}
 
     task::is_locked_to_controller
     locked_to_controller() const noexcept override {
@@ -67,8 +67,8 @@ public:
     std::string_view created_task_name() const noexcept override {
         return test_task::name;
     }
-    std::unique_ptr<task> create_task() override {
-        return std::make_unique<test_task>(initial_run_interval);
+    std::unique_ptr<task> create_task(link* link) override {
+        return std::make_unique<test_task>(link, initial_run_interval);
     }
 };
 
@@ -83,7 +83,9 @@ public:
         return ss::now();
     }
 
-    std::unique_ptr<task> create_task() { return _task_factory->create_task(); }
+    std::unique_ptr<task> create_task() {
+        return _task_factory->create_task(nullptr);
+    }
 
 private:
     std::unique_ptr<task_factory> _task_factory{nullptr};
@@ -214,7 +216,7 @@ class evil_task : public task {
 public:
     static constexpr auto name = "evil_task";
     explicit evil_task(ss::lowres_clock::duration run_interval)
-      : task(run_interval, name) {}
+      : task(nullptr, run_interval, name) {}
 
     task::is_locked_to_controller
     locked_to_controller() const noexcept override {
@@ -247,7 +249,7 @@ class link_unavailable_task : public task {
 public:
     static constexpr auto name = "link_unavailable_task";
     explicit link_unavailable_task(ss::lowres_clock::duration run_interval)
-      : task(run_interval, name) {}
+      : task(nullptr, run_interval, name) {}
 
     task::is_locked_to_controller
     locked_to_controller() const noexcept override {

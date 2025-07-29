@@ -16,7 +16,7 @@ write_file(
     name = "nostamp_variables",
     out = "nostamp_variables.txt",
     content = [
-        "STABLE_GIT_LATEST_TAG 0.0.0-dev",
+        "STABLE_GIT_LATEST_TAG v0.0.0-dev",
         "STABLE_GIT_COMMIT 0000000000000000000000000000000000000000",
         "STABLE_GIT_TREE_DIRTY ",
     ],

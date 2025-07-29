@@ -93,6 +93,11 @@ public:
         validate_mutation(const cluster_link_cmd&) const;
 
     private:
+        cluster::cluster_link::errc validate_connection_config(
+          const ::cluster_link::model::connection_config& config,
+          cluster::cluster_link::errc error_code) const;
+
+    private:
         table* _table;
         size_t _max_links;
     };

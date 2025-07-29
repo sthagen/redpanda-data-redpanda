@@ -51,9 +51,10 @@ class test_task : public task {
 public:
     static constexpr auto name = "test_task";
     test_task(
+      link* link,
       ss::lowres_clock::duration run_interval,
       is_locked_to_controller is_locked)
-      : task(run_interval, name)
+      : task(link, run_interval, name)
       , _is_locked_to_controller(is_locked) {}
 
     task::is_locked_to_controller
@@ -79,8 +80,9 @@ public:
         return test_task::name;
     }
 
-    std::unique_ptr<task> create_task() override {
-        return std::make_unique<test_task>(100ms, _is_locked_to_controller);
+    std::unique_ptr<task> create_task(link* link) override {
+        return std::make_unique<test_task>(
+          link, 100ms, _is_locked_to_controller);
     }
 
 private:
@@ -96,14 +98,16 @@ public:
       ::model::node_id self,
       model::metadata metadata,
       partition_leader_cache* leader_cache,
-      partition_manager* pm) override {
+      partition_manager* pm,
+      kafka::client::cluster cluster_connection) override {
         auto name = metadata.name;
         auto created_link = std::make_unique<link>(
           self,
           _task_reconciler_interval,
           std::move(metadata),
           leader_cache,
-          pm);
+          pm,
+          std::move(cluster_connection));
 
         _links.emplace(std::move(name), created_link.get());
         return created_link;
@@ -182,7 +186,8 @@ TEST_P(task_manager_integration_test, create_task_no_controller) {
       ->get_manager()
       .invoke_on_all([](manager& m) {
           m.register_task_factory<test_task_factory>(
-            GetParam().is_locked_to_controller);
+             GetParam().is_locked_to_controller)
+            .get();
       })
       .get();
     {
@@ -220,7 +225,8 @@ TEST_P(task_manager_integration_test, create_task_with_controller) {
       ->get_manager()
       .invoke_on_all([](manager& m) {
           m.register_task_factory<test_task_factory>(
-            GetParam().is_locked_to_controller);
+             GetParam().is_locked_to_controller)
+            .get();
       })
       .get();
     fixture()->elect_leader(::model::controller_ntp, self(), std::nullopt);
@@ -254,7 +260,8 @@ TEST_P(task_manager_integration_test, controller_leadership_moved_on) {
       ->get_manager()
       .invoke_on_all([](manager& m) {
           m.register_task_factory<test_task_factory>(
-            GetParam().is_locked_to_controller);
+             GetParam().is_locked_to_controller)
+            .get();
       })
       .get();
 
@@ -339,7 +346,8 @@ TEST_P(task_manager_integration_test, controller_leadership_move_off) {
       ->get_manager()
       .invoke_on_all([](manager& m) {
           m.register_task_factory<test_task_factory>(
-            GetParam().is_locked_to_controller);
+             GetParam().is_locked_to_controller)
+            .get();
       })
       .get();
 
@@ -464,8 +472,8 @@ public:
         return evil_task::name;
     }
 
-    std::unique_ptr<task> create_task() override {
-        return std::make_unique<evil_task>(100ms, evil_task::name);
+    std::unique_ptr<task> create_task(link* link) override {
+        return std::make_unique<evil_task>(link, 100ms, evil_task::name);
     }
 };
 
@@ -517,7 +525,7 @@ TEST_F_CORO(
     /// the task reconciliation mechanism can recover from the failure.
 
     co_await fixture()->get_manager().invoke_on_all(
-      [](manager& m) { m.register_task_factory<evil_task_factory>(); });
+      [](manager& m) { return m.register_task_factory<evil_task_factory>(); });
 
     fixture()->elect_leader(::model::controller_ntp, self(), std::nullopt);
 
@@ -584,7 +592,7 @@ TEST_F_CORO(
     /// the task reconciliation mechanism can recover from the failure.
 
     co_await fixture()->get_manager().invoke_on_all(
-      [](manager& m) { m.register_task_factory<evil_task_factory>(); });
+      [](manager& m) { return m.register_task_factory<evil_task_factory>(); });
 
     auto link_name = model::name_t("link1");
 
@@ -636,7 +644,7 @@ TEST_F_CORO(
     co_await fixture()->upsert_link(std::move(m1));
 
     co_await fixture()->get_manager().invoke_on_all(
-      [](manager& m) { m.register_task_factory<evil_task_factory>(); });
+      [](manager& m) { return m.register_task_factory<evil_task_factory>(); });
 
     auto report = co_await await_status_report(
       5s,

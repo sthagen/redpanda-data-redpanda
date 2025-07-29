@@ -12,10 +12,13 @@
 
 #include "absl/strings/numbers.h"
 #include "base/units.h"
+#include "serde/json/writer.h"
 #include "utils/base64.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
+
+#include <algorithm>
 
 namespace serde::pb::json {
 
@@ -259,5 +262,58 @@ iobuf read_base64_encoded_bytes(peekable_parser* parser) {
     }
     return base64_to_iobuf(parser->value_string());
 }
+
+namespace wellknown {
+ss::future<absl::Duration> duration_from_json(peekable_parser* parser) {
+    absl::Duration seconds;
+    absl::Duration nanos;
+    constexpr static auto key_to_field_number
+      = std::to_array<std::pair<std::string_view, int32_t>>({
+        {"nanos", 2},
+        {"seconds", 1},
+      });
+    object_key_generator entries(parser);
+    while (auto key = co_await entries()) {
+        auto fields = std::ranges::equal_range(
+          key_to_field_number,
+          *key,
+          std::less<>(),
+          &decltype(key_to_field_number)::value_type::first);
+        if (fields.empty()) {
+            co_await parser->skip_value();
+            continue;
+        }
+        co_await parser->next();
+        switch (fields.begin()->second) {
+        case 1: { // seconds
+            seconds = absl::Seconds(read_int64(parser));
+            break;
+        }
+        case 2: { // nanos
+            nanos = absl::Nanoseconds(read_int32(parser));
+            break;
+        }
+        default:
+            std::unreachable();
+        }
+    }
+    co_return seconds + nanos;
+}
+
+iobuf duration_to_json(absl::Duration d) {
+    int64_t seconds = absl::ToInt64Seconds(d);
+    auto nanos = static_cast<int32_t>(
+      absl::ToInt64Nanoseconds(d % absl::Seconds(1)));
+    serde::json::writer w;
+    w.begin_object();
+    w.key("seconds");
+    w.integer_string(seconds);
+    w.key("nanos");
+    w.integer(nanos);
+    w.end_object();
+    return std::move(w).finish();
+}
+
+} // namespace wellknown
 
 } // namespace serde::pb::json

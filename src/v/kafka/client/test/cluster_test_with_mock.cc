@@ -134,3 +134,29 @@ TEST_F(cluster_mock_fixture, TestApiVersionDiscovery) {
     ASSERT_EQ(broker_versions->min, kafka::api_version(1));
     ASSERT_EQ(broker_versions->max, kafka::api_version(10));
 }
+
+TEST_F(cluster_mock_fixture, TestTopicMetadata) {
+    cluster_mock.register_default_handlers();
+    auto cluster = create_client_cluster();
+
+    cluster_mock.add_broker(
+      model::node_id(1), net::unresolved_address{"localhost", 9092});
+    cluster.start().get();
+    cluster_mock.add_topic(
+      model::topic{"test-topic"},
+      3,
+      1,
+      kafka::topic_authorized_operations{0x508});
+    cluster.request_metadata_update().get();
+    RPTEST_REQUIRE_EVENTUALLY(30s, [&] {
+        const auto& topics = cluster.get_topics().topics();
+        return topics.size() == 1 && topics[0] == model::topic{"test-topic"};
+    });
+    const auto& topics = cluster.get_topics();
+    auto num_parts = topics.partition_count(model::topic_view{"test-topic"});
+    EXPECT_EQ(num_parts.value(), 3);
+    auto auth_ops = topics.authorized_operations_for_topic(
+      model::topic_view{"test-topic"});
+    ASSERT_TRUE(auth_ops.has_value());
+    EXPECT_EQ(auth_ops.value(), 0x508);
+}

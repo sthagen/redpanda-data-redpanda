@@ -32,6 +32,10 @@ TEST(cluster_link_errc_fixture, errc_all_values_message_test) {
        .expected_message = "failed to start task"},
       {.value = errc::task_already_registered_on_link,
        .expected_message = "task already registered on link"},
+      {.value = errc::failed_to_connect_to_remote_cluster,
+       .expected_message = "failed to connect to remote cluster"},
+      {.value = errc::remote_cluster_does_not_support_required_api,
+       .expected_message = "remote cluster does not support required API"},
     });
 
     for (const auto& tc : test_cases) {

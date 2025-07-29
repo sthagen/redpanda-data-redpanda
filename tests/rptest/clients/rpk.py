@@ -1413,7 +1413,8 @@ class RpkTool:
             "list",
             "--format",
             format,
-        ] + flags + self._kafka_conn_settings(node)
+        ] + flags + self._schema_registry_conn_settings(
+        ) + self._kafka_conn_settings(node)
 
         output = self._execute(cmd)
 
@@ -1694,7 +1695,7 @@ class RpkTool:
 
         return result
 
-    def trim_prefix(self, topic, offset, partitions=[]):
+    def trim_prefix(self, topic: str, offset: int, partitions: list[int] = []):
         def parse(line):
             if line.startswith("Request error") or not line.strip():
                 # RPK may print messages about request errors, which it internally

@@ -75,6 +75,7 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/base",
+        "//src/v/serde/json:writer",
         "//src/v/utils:base64",
         "@abseil-cpp//absl/strings",
     ],
@@ -82,6 +83,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/serde/json:parser",
+        "@abseil-cpp//absl/time",
         "@fmt",
         "@seastar",
     ],

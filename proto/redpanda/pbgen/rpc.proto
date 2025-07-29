@@ -19,7 +19,6 @@ package redpanda.pbgen;
 option go_package = "github.com/redpanda-data/redpanda/proto/redpanda/pbgen";
 
 import "google/protobuf/descriptor.proto";
-import "proto/redpanda/core/version.proto";
 
 // The authentication level for this handler.
 enum RPCAuthZLevel {
@@ -30,8 +29,6 @@ enum RPCAuthZLevel {
 }
 
 message RPCOptions {
-    // The version at which this API was added to Redpanda.
-    redpanda.core.Version version = 1;
     // The authentication level required to invoke the handler. Must be
     // specified.
     //
@@ -55,7 +52,6 @@ extend google.protobuf.MethodOptions {
     //
     //   rpc GetFoo(GetFooRequest) returns (GetFooResponse) {
     //     option (redpanda.pbgen.rpc) = {
-    //       version: V25_2_0,
     //       authz: USER,
     //       http_route: "/v2/myapi/foo",
     //   }

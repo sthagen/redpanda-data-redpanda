@@ -20,7 +20,7 @@ machine FetchProtocol {
 
   fun fetch() {
     var placeholder: placeholder_batch;
-    var object: L0d_object;
+    var object: L0_object;
     var request_id: int;
 
     // A fetch request is handled by first reading the placeholder batch out of
@@ -38,24 +38,24 @@ machine FetchProtocol {
     }
 
     // After the placeholder is read from the partition the next step is to read
-    // the referenced L0d object from cloud storage.
+    // the referenced L0 object from cloud storage.
     request_id = request_id + 1;
     send storage, get_request_event, (
       source = this,
       request_id = request_id,
-      object_id = placeholder.L0d_object_id);
+      object_id = placeholder.L0_object_id);
 
     receive {
       case get_response_event: (response: get_response) {
         assert response.request_id == request_id;
-        object = response.object as L0d_object;
+        object = response.object as L0_object;
       }
     }
 
-    // Finally the target batch is plucked out of the L0d object and a response
+    // Finally the target batch is plucked out of the L0 object and a response
     // to the original fetch request is sent back to the client.
     send request.source, fetch_response_event, (
       request_id = request.request_id,
-      batch_id = object[placeholder.L0d_offset]);
+      batch_id = object[placeholder.L0_offset]);
   }
 }

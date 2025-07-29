@@ -23,6 +23,11 @@ enum class errc : int {
     task_already_running,
     failed_to_start_task,
     task_already_registered_on_link,
+    failed_to_connect_to_remote_cluster,
+    remote_cluster_does_not_support_required_api,
+    link_id_not_found,
+    link_connection_failed,
+    task_creation_failed,
 };
 
 std::error_code make_error_code(errc) noexcept;

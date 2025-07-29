@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "absl/time/time.h"
 #include "serde/json/parser.h"
 
 #include <seastar/core/coroutine.hh>
@@ -109,5 +110,10 @@ double read_double(peekable_parser* parser);
 ss::sstring read_string(peekable_parser* parser);
 iobuf read_string_as_bytes(peekable_parser* parser);
 iobuf read_base64_encoded_bytes(peekable_parser* parser);
+
+namespace wellknown {
+ss::future<absl::Duration> duration_from_json(peekable_parser* parser);
+iobuf duration_to_json(absl::Duration);
+} // namespace wellknown
 
 } // namespace serde::pb::json

@@ -14,6 +14,8 @@ redpanda_test_cc_library(
         "//src/v/cluster",
         "//src/v/cluster/cluster_link/tests:test_lib",
         "//src/v/cluster_link:impl",
+        "//src/v/cluster_link:utils",
+        "//src/v/kafka/client/test:cluster_mock",
         "//src/v/kafka/data/rpc",
         "//src/v/model",
         "@seastar",
@@ -81,5 +83,19 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "utils_test",
+    timeout = "short",
+    srcs = [
+        "utils_test.cc",
+    ],
+    deps = [
+        "//src/v/cluster_link:utils",
+        "//src/v/cluster_link/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
     ],
 )

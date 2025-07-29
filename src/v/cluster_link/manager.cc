@@ -15,6 +15,8 @@
 
 #include <seastar/coroutine/as_future.hh>
 
+#include <utility>
+
 using namespace std::chrono_literals;
 
 namespace cluster_link {
@@ -25,12 +27,14 @@ manager::manager(
   std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager,
   std::unique_ptr<link_registry> registry,
   std::unique_ptr<link_factory> link_factory,
+  std::unique_ptr<cluster_factory> cluster_factory,
   ss::lowres_clock::duration task_reconciler_interval)
   : _self(self)
   , _partition_leader_cache(std::move(partition_leader_cache))
   , _partition_manager(std::move(partition_manager))
   , _registry(std::move(registry))
   , _link_factory(std::move(link_factory))
+  , _cluster_factory(std::move(cluster_factory))
   , _queue(
       [](const std::exception_ptr& ex) {
           vlog(cllog.warn, "unexpected cluster link manager error: {}", ex);
@@ -70,7 +74,8 @@ void manager::on_link_change(model::id_t id) {
     _queue.submit([this, id] { return handle_on_link_change(id); });
 }
 
-void manager::on_leadership_change(::model::ntp ntp, ntp_leader is_ntp_leader) {
+void manager::handle_partition_state_change(
+  ::model::ntp ntp, ntp_leader is_ntp_leader) {
     vlog(cllog.trace, "NTP={} leadership changed to {}", ntp, is_ntp_leader);
     _queue.submit([this, ntp{std::move(ntp)}, is_ntp_leader]() mutable {
         return handle_on_leadership_change(std::move(ntp), is_ntp_leader);
@@ -132,20 +137,15 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
               _self,
               link_metadata.copy(),
               _partition_leader_cache.get(),
-              _partition_manager.get());
+              _partition_manager.get(),
+              _cluster_factory->create_cluster(link_metadata));
             vassert(
               new_link, "Link factory returned a null link for id={}", id);
             // Register tasks for the link
             for (auto& task_factory : _task_factories) {
-                auto task = task_factory->create_task();
-                vassert(
-                  task,
-                  "Task factory for task {} returned a null task for link "
-                  "id={}",
-                  task_factory->created_task_name(),
-                  id);
                 try {
-                    auto ec = co_await new_link->register_task(std::move(task));
+                    auto ec = co_await new_link->register_task(
+                      task_factory.get());
                     if (!ec) {
                         vlog(
                           cllog.warn,
@@ -208,13 +208,7 @@ ss::future<> manager::link_task_reconciler() {
                   task_name,
                   link->config().name,
                   link->config().uuid);
-                auto task = task_factory->create_task();
-                vassert(
-                  task,
-                  "Task factory for task {} returned a null task for link {}",
-                  task_name,
-                  link->config().name);
-                auto ec = co_await link->register_task(std::move(task));
+                auto ec = co_await link->register_task(task_factory.get());
                 if (!ec) {
                     vlog(
                       cllog.error,

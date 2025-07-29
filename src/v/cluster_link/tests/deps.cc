@@ -23,7 +23,9 @@ cluster_link_manager_test_fixture::cluster_link_manager_test_fixture(
 
 ss::future<> cluster_link_manager_test_fixture::wire_up_and_start(
   std::unique_ptr<link_factory> lf) {
+    setup_cluster_mock();
     co_await _table.start_single();
+    _cluster_factory = std::make_unique<cluster_mock_factory>(&_cluster_mock);
 
     _fpmp = std::make_unique<fake_partition_manager_proxy>();
     auto fplc = std::make_unique<fake_partition_leader_cache_impl>();
@@ -43,6 +45,9 @@ ss::future<> cluster_link_manager_test_fixture::wire_up_and_start(
           return std::make_unique<test_link_registry>(&_table.local());
       }),
       ss::sharded_parameter([&lf]() { return std::move(lf); }),
+      ss::sharded_parameter([this]() {
+          return std::make_unique<cluster_mock_factory>(&_cluster_mock);
+      }),
       1s);
 
     auto notif_id = _table.local().register_for_updates(
@@ -71,11 +76,11 @@ void cluster_link_manager_test_fixture::elect_leader(
     if (node_id == _self) {
         auto shard = shard_id.value_or(ss::this_shard_id());
         partition_manager()->set_shard_owner(ntp, shard);
-        _manager.local().on_leadership_change(
+        _manager.local().handle_partition_state_change(
           ntp, shard == ss::this_shard_id() ? ntp_leader::yes : ntp_leader::no);
     } else {
         partition_manager()->remove_shard_owner(ntp);
-        _manager.local().on_leadership_change(ntp, ntp_leader::no);
+        _manager.local().handle_partition_state_change(ntp, ntp_leader::no);
     }
 }
 
@@ -100,5 +105,15 @@ cluster_link_manager_test_fixture::upsert_link(model::metadata metadata) {
                   });
             });
       });
+}
+
+void cluster_link_manager_test_fixture::setup_cluster_mock() {
+    _cluster_mock.register_default_handlers();
+    _cluster_mock.add_broker(
+      ::model::node_id(0), net::unresolved_address{"localhost", 9092});
+    _cluster_mock.add_broker(
+      ::model::node_id(1), net::unresolved_address{"localhost", 9093});
+    _cluster_mock.add_broker(
+      ::model::node_id(2), net::unresolved_address{"localhost", 9094});
 }
 } // namespace cluster_link::tests
