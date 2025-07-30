@@ -15,7 +15,7 @@
 #include "cloud_topics/dl_placeholder.h"
 #include "cloud_topics/extent_meta.h"
 #include "cloud_topics/frontend/errc.h"
-#include "cloud_topics/frontend/level_zero_reader_impl.h"
+#include "cloud_topics/level_zero/reader/reader.h"
 #include "cloud_topics/logger.h"
 #include "cluster/partition.h"
 #include "cluster/rm_stm_types.h"

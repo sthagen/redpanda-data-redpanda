@@ -12,11 +12,11 @@
 
 #include "base/unreachable.h"
 #include "cloud_io/remote.h"
-#include "cloud_topics/core/event_filter.h"
-#include "cloud_topics/core/serializer.h"
-#include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/batcher/aggregator.h"
+#include "cloud_topics/level_zero/event_filter.h"
+#include "cloud_topics/level_zero/serializer.h"
+#include "cloud_topics/level_zero/write_request.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
@@ -36,7 +36,7 @@ namespace experimental::cloud_topics {
 
 template<class Clock>
 batcher<Clock>::batcher(
-  core::write_pipeline<Clock>::stage stage,
+  l0::write_pipeline<Clock>::stage stage,
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<Clock>& remote_api,
   cluster_services* cluster_services)

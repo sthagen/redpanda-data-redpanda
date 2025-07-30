@@ -8,9 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/core/serializer.h"
-#include "cloud_topics/core/write_request.h"
 #include "cloud_topics/level_zero/batcher/aggregator.h"
+#include "cloud_topics/level_zero/serializer.h"
+#include "cloud_topics/level_zero/write_request.h"
 #include "model/namespace.h"
 #include "model/record.h"
 #include "model/tests/random_batch.h"
@@ -29,7 +29,7 @@ namespace cloud_topics = experimental::cloud_topics;
 
 static ss::logger test_log("aggregator_test_log"); // NOLINT
 
-cloud_topics::core::serialized_chunk get_random_serialized_chunk(
+cloud_topics::l0::serialized_chunk get_random_serialized_chunk(
   int num_batches, int num_records_per_batch) { // NOLINT
     chunked_vector<model::record_batch> batches;
     model::offset o{0};
@@ -39,14 +39,14 @@ cloud_topics::core::serialized_chunk get_random_serialized_chunk(
         o = model::next_offset(batch.last_offset());
         batches.push_back(std::move(batch));
     }
-    auto fut = cloud_topics::core::serialize_batches(std::move(batches));
+    auto fut = cloud_topics::l0::serialize_batches(std::move(batches));
     return fut.get();
 }
 
 TEST(AggregatorTest, SingleRequestAck) {
     auto timeout = ss::manual_clock::now() + 10s;
     auto chunk = get_random_serialized_chunk(10, 10);
-    cloud_topics::core::write_request<ss::manual_clock> request(
+    cloud_topics::l0::write_request<ss::manual_clock> request(
       model::controller_ntp, std::move(chunk), timeout);
     auto fut = request.response.get_future();
 
@@ -70,7 +70,7 @@ TEST(AggregatorTest, SingleRequestDtorWithStagedRequest) {
     // is destroyed after the request is staged.
     auto timeout = ss::manual_clock::now() + 10s;
     auto chunk = get_random_serialized_chunk(10, 10);
-    cloud_topics::core::write_request<ss::manual_clock> request(
+    cloud_topics::l0::write_request<ss::manual_clock> request(
       model::controller_ntp, std::move(chunk), timeout);
     auto fut = request.response.get_future();
 
@@ -90,7 +90,7 @@ TEST(AggregatorTest, SingleRequestDtorWithPreparedRequest) {
     // prepared request is never acknowledged and aggregator is destroyed.
     auto timeout = ss::manual_clock::now() + 10s;
     auto chunk = get_random_serialized_chunk(10, 10);
-    cloud_topics::core::write_request<ss::manual_clock> request(
+    cloud_topics::l0::write_request<ss::manual_clock> request(
       model::controller_ntp, std::move(chunk), timeout);
     auto fut = request.response.get_future();
 
@@ -110,7 +110,7 @@ TEST(AggregatorTest, SingleRequestDtorWithLostRequestStaged) {
     // Checks situation when the aggregator is destroyed with staging write
     // requests but one write request is destroyed before the aggregator.
     auto timeout = ss::manual_clock::now() + 10s;
-    cloud_topics::core::write_request<ss::manual_clock> request(
+    cloud_topics::l0::write_request<ss::manual_clock> request(
       model::controller_ntp, get_random_serialized_chunk(10, 10), timeout);
     auto fut = request.response.get_future();
 
@@ -121,7 +121,7 @@ TEST(AggregatorTest, SingleRequestDtorWithLostRequestStaged) {
         {
             // tmp_request is destroyed at the end of this block and aggregator
             // is destroyed outside
-            cloud_topics::core::write_request<ss::manual_clock> tmp_request(
+            cloud_topics::l0::write_request<ss::manual_clock> tmp_request(
               model::controller_ntp,
               get_random_serialized_chunk(10, 10),
               timeout);
@@ -143,12 +143,12 @@ TEST(AggregatorTest, SingleRequestDtorWithLostRequestPrepared) {
     // method is called.
     auto timeout = ss::manual_clock::now() + 10s;
     auto chunk = get_random_serialized_chunk(10, 10);
-    cloud_topics::core::write_request<ss::manual_clock> request(
+    cloud_topics::l0::write_request<ss::manual_clock> request(
       model::controller_ntp, std::move(chunk), timeout);
     auto fut = request.response.get_future();
 
     {
-        cloud_topics::core::write_request<ss::manual_clock> tmp_request(
+        cloud_topics::l0::write_request<ss::manual_clock> tmp_request(
           model::controller_ntp, get_random_serialized_chunk(10, 10), timeout);
         cloud_topics::aggregator<ss::manual_clock> aggregator{
           cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
@@ -165,7 +165,7 @@ TEST(AggregatorTest, SingleRequestDtorWithLostRequestPrepared) {
 TEST(AggregatorTest, SingleRequestWithLostRequestPrepared) {
     auto timeout = ss::manual_clock::now() + 10s;
     auto chunk = get_random_serialized_chunk(10, 10);
-    cloud_topics::core::write_request<ss::manual_clock> request(
+    cloud_topics::l0::write_request<ss::manual_clock> request(
       model::controller_ntp, std::move(chunk), timeout);
     auto fut = request.response.get_future();
 
@@ -173,7 +173,7 @@ TEST(AggregatorTest, SingleRequestWithLostRequestPrepared) {
       cloud_topics::object_id::create(cloud_topics::cluster_epoch{0})};
     aggregator.add(request);
     {
-        cloud_topics::core::write_request<ss::manual_clock> tmp_request(
+        cloud_topics::l0::write_request<ss::manual_clock> tmp_request(
           model::controller_ntp, get_random_serialized_chunk(10, 10), timeout);
         aggregator.add(tmp_request);
     }

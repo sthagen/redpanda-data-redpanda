@@ -1,7 +1,7 @@
 load("@bazel_skylib//rules:common_settings.bzl", "string_flag")
 load("@rules_go//go:def.bzl", "go_binary", "go_library")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
-load(":packaging.bzl", "redpanda_package")
+load(":packaging.bzl", "native_package", "redpanda_package")
 
 redpanda_package(
     name = "redpanda_tar",
@@ -56,6 +56,28 @@ redpanda_package(
     redpanda_binary = "//:redpanda",
     rpath_override = "$ORIGIN/../lib",
     rpk_binary = "//:rpk",
+)
+
+native_package(
+    name = "direct_consumer_verifier_ducktape",
+    out = "direct_consumer_verifier_ducktape",
+    cc_binaries = [
+        "//src/v/kafka/client/direct_consumer/verifier:direct_consumer_verifier",
+    ],
+    include_sysroot_libs = True,
+    install_path = ":install_path",
+    rpath_override = "$ORIGIN/../lib",
+)
+
+native_package(
+    name = "direct_consumer_verifier_tar",
+    out = "direct_consumer_verifier.tar.gz",
+    cc_binaries = [
+        "//src/v/kafka/client/direct_consumer/verifier:direct_consumer_verifier",
+    ],
+    include_sysroot_libs = True,
+    install_path = ":install_path",
+    rpath_override = "$ORIGIN/../lib",
 )
 
 # NOTE: this image is currently experimental, don't use this for production.

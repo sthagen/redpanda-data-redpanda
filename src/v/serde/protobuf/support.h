@@ -13,6 +13,7 @@
 #include "base/units.h"
 #include "bytes/iobuf_parser.h"
 #include "container/fragmented_vector.h"
+#include "serde/protobuf/field_mask.h"
 #include "serde/protobuf/wire_format.h"
 #include "utils/fixed_string.h"
 
@@ -277,6 +278,22 @@ public:
         return absl::Seconds(seconds) + absl::Nanoseconds(nanos);
     }
 
+    template<fixed_string full_name>
+    field_mask read_wellknown_field_mask(tag t) {
+        auto parser = read_message<full_name>(t);
+        field_mask mask;
+        while (parser.bytes_left() > 0) {
+            auto tag = parser.read_tag();
+            if (tag.field_number == 1) {
+                mask.paths.push_back(
+                  parser.template read_string<full_name>(tag));
+            } else {
+                parser.skip_unknown(tag);
+            }
+        }
+        return mask;
+    }
+
     void skip_unknown(tag t) { skip_unknown_field(&_parser, t.wire_type); }
 
 private:
@@ -298,6 +315,18 @@ inline iobuf duration_to_proto(absl::Duration d) {
     serde::pb::write_varint(
       static_cast<int32_t>((d % absl::Seconds(1)) / absl::Nanoseconds(1)),
       &buf);
+    return buf;
+}
+
+inline iobuf field_mask_to_proto(const field_mask& mask) {
+    iobuf buf;
+    // paths
+    for (const auto& path : mask.paths) {
+        serde::pb::tag::write(
+          {.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+        serde::pb::write_length(path.size(), &buf);
+        buf.append_str(path);
+    }
     return buf;
 }
 

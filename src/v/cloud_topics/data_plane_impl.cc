@@ -13,13 +13,13 @@
 #include "base/outcome.h"
 #include "cloud_storage/cache_service.h"
 #include "cloud_topics/batch_cache/batch_cache.h"
-#include "cloud_topics/core/read_pipeline.h"
-#include "cloud_topics/core/write_pipeline.h"
 #include "cloud_topics/ephemeral_cluster_services.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"
+#include "cloud_topics/level_zero/read_pipeline.h"
+#include "cloud_topics/level_zero/reader/fetch_request_handler.h"
 #include "cloud_topics/level_zero/reconciler/reconciler.h"
-#include "cloud_topics/read_path/fetch_request_handler.h"
-#include "cloud_topics/throttler/throttler.h"
+#include "cloud_topics/level_zero/throttler/throttler.h"
+#include "cloud_topics/level_zero/write_pipeline.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 #include "storage/types.h"
@@ -42,7 +42,7 @@ public:
       cloud_storage_clients::bucket_name bucket,
       seastar::sharded<storage::api>* storage_api)
       : _reconciler(std::make_unique<reconciler::reconciler>(pm, io, bucket))
-      , _write_pipeline(std::make_unique<core::write_pipeline<>>())
+      , _write_pipeline(std::make_unique<l0::write_pipeline<>>())
       , _throttler(std::make_unique<throttler<>>(
           10_MiB /*TODO: fixme*/,
           _write_pipeline->register_write_pipeline_stage()))
@@ -51,7 +51,7 @@ public:
           bucket,
           io->local(),
           &_cluster_services))
-      , _read_pipeline(std::make_unique<core::read_pipeline<>>())
+      , _read_pipeline(std::make_unique<l0::read_pipeline<>>())
       , _l0_resolver(std::make_unique<fetch_handler>(
           _read_pipeline->register_read_pipeline_stage(),
           bucket,
@@ -121,12 +121,12 @@ public:
 private:
     std::unique_ptr<reconciler::reconciler> _reconciler;
     // Write path
-    std::unique_ptr<core::write_pipeline<>> _write_pipeline;
+    std::unique_ptr<l0::write_pipeline<>> _write_pipeline;
     std::unique_ptr<throttler<>> _throttler;
     ephemeral_cluster_services _cluster_services;
     std::unique_ptr<batcher<>> _batcher;
     // Read path
-    std::unique_ptr<core::read_pipeline<>> _read_pipeline;
+    std::unique_ptr<l0::read_pipeline<>> _read_pipeline;
     std::unique_ptr<fetch_handler> _l0_resolver;
     // Batch cache
     std::unique_ptr<batch_cache> _batch_cache;

@@ -7,6 +7,7 @@
 #include "container/chunked_hash_map.h"
 #include "container/fragmented_vector.h"
 #include "absl/time/time.h"
+#include "serde/protobuf/field_mask.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
@@ -203,11 +204,23 @@ public:
   chunked_hash_map<ss::sstring, absl::Duration>& get_duration_map();
   const chunked_hash_map<ss::sstring, absl::Duration>& get_duration_map() const;
   void set_duration_map(chunked_hash_map<ss::sstring, absl::Duration>&& v);
+  serde::pb::field_mask& get_single_field_mask();
+  const serde::pb::field_mask& get_single_field_mask() const;
+  void set_single_field_mask(serde::pb::field_mask&& v);
+  chunked_vector<serde::pb::field_mask>& get_repeated_field_mask();
+  const chunked_vector<serde::pb::field_mask>& get_repeated_field_mask() const;
+  void set_repeated_field_mask(chunked_vector<serde::pb::field_mask>&& v);
+  chunked_hash_map<ss::sstring, serde::pb::field_mask>& get_field_mask_map();
+  const chunked_hash_map<ss::sstring, serde::pb::field_mask>& get_field_mask_map() const;
+  void set_field_mask_map(chunked_hash_map<ss::sstring, serde::pb::field_mask>&& v);
 
 private:
   absl::Duration single_duration_;
   chunked_vector<absl::Duration> repeated_duration_;
   chunked_hash_map<ss::sstring, absl::Duration> duration_map_;
+  serde::pb::field_mask single_field_mask_;
+  chunked_vector<serde::pb::field_mask> repeated_field_mask_;
+  chunked_hash_map<ss::sstring, serde::pb::field_mask> field_mask_map_;
 };
 
 } // proto::example

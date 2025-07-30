@@ -56,7 +56,7 @@ struct partition_info {
 /// Data Plane:
 /// - Accessible via the 'cloud_topics::app' instance passed through the
 ///   constructor.
-/// - Contains 'core::read_pipeline' and 'core::write_pipeline'.
+/// - Contains 'l0::read_pipeline' and 'l0::write_pipeline'.
 ///
 /// Metadata layer:
 /// - Composed of 'cluster::partition' and 'metastore' components

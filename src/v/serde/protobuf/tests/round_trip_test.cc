@@ -265,18 +265,55 @@ TEST(ProtobufCompat, Wellknown) {
       absl::Seconds(123) + absl::Nanoseconds(789));
     original.get_duration_map().insert(
       {"foo", absl::Seconds(1) + absl::Nanoseconds(7)});
+    original.set_single_field_mask(
+      {.paths = {"foo_bar", "really.long_path.nested"}});
+    original.get_repeated_field_mask().push_back(
+      {.paths = {"foo_bar", "really.long_path.nested"}});
+    original.get_field_mask_map().insert(
+      {"qux", {.paths = {"tada", "really.nested"}}});
     proto::example::well_known_protos deserialized;
     iobuf serialized = original.to_proto().get();
     EXPECT_NO_THROW(
       (deserialized = proto::example::well_known_protos::from_proto(
-                        std::move(serialized))
+                        serialized.copy())
+                        .get()));
+    EXPECT_EQ(original, deserialized)
+      << "Proto: " << iobuf_to_string(original.to_json().get())
+      << "\nDeserialized: " << iobuf_to_string(deserialized.to_json().get());
+    deserialized = {};
+    example::WellKnownProtos libpb;
+    EXPECT_TRUE(libpb.ParseFromString(iobuf_to_string(serialized.copy())));
+    EXPECT_NO_THROW(
+      (deserialized = proto::example::well_known_protos::from_proto(
+                        iobuf::from(libpb.SerializeAsString()))
                         .get()));
     EXPECT_EQ(original, deserialized);
+
     deserialized = {};
     serialized = original.to_json().get();
     EXPECT_NO_THROW(
       (deserialized
        = proto::example::well_known_protos::from_json(serialized.copy()).get()))
       << "JSON: " << iobuf_to_string(serialized);
-    EXPECT_EQ(original, deserialized);
+    EXPECT_EQ(original, deserialized)
+      << "Proto: " << iobuf_to_string(original.to_json().get())
+      << "\nDeserialized: " << iobuf_to_string(deserialized.to_json().get());
+
+    libpb = {};
+    deserialized = {};
+    ASSERT_TRUE(google::protobuf::json::JsonStringToMessage(
+                  iobuf_to_string(serialized.copy()), &libpb, {})
+                  .ok());
+    std::string libpb_serialized;
+    ASSERT_TRUE(
+      google::protobuf::json::MessageToJsonString(libpb, &libpb_serialized, {})
+        .ok());
+    EXPECT_NO_THROW(
+      (deserialized = proto::example::well_known_protos::from_json(
+                        iobuf::from(libpb_serialized))
+                        .get()))
+      << "JSON: " << libpb_serialized;
+    EXPECT_EQ(original, deserialized)
+      << "Proto: " << iobuf_to_string(original.to_json().get())
+      << "\nDeserialized: " << iobuf_to_string(deserialized.to_json().get());
 }

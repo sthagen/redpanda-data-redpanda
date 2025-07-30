@@ -320,6 +320,9 @@ func mapImport(path string) string {
 	if path == "google/protobuf/duration.proto" {
 		return "absl/time/time.h"
 	}
+	if path == "google/protobuf/field_mask.proto" {
+		return "serde/protobuf/field_mask.h"
+	}
 	return path + ".h"
 }
 
@@ -921,10 +924,10 @@ func (g *implGenerator) generateMessageWriteJson(msg protoreflect.MessageDescrip
 	for i := range msg.Fields().Len() {
 		f := msg.Fields().Get(i)
 		if f.IsList() {
-			w.Printf("w.key(%q);\n", f.Name())
+			w.Printf("w.key(%q);\n", f.JSONName())
 			g.generateRepeatedFieldWriteJson(f, w)
 		} else if f.IsMap() {
-			w.Printf("w.key(%q);\n", f.Name())
+			w.Printf("w.key(%q);\n", f.JSONName())
 			g.generateMapFieldWriteJson(f, w)
 		} else if oneof := f.ContainingOneof(); oneof != nil {
 			if oneofs[oneof.Name()] {
@@ -933,7 +936,7 @@ func (g *implGenerator) generateMessageWriteJson(msg protoreflect.MessageDescrip
 			oneofs[oneof.Name()] = true
 			g.generateOneofFieldWriteJson(oneof, w)
 		} else {
-			w.Printf("w.key(%q);\n", f.Name())
+			w.Printf("w.key(%q);\n", f.JSONName())
 			g.generateSingularFieldWriteJson(f, w)
 		}
 	}
@@ -984,6 +987,8 @@ func (g *implGenerator) generateMapFieldWriteJson(f protoreflect.FieldDescriptor
 		switch {
 		case f.MapValue().Message().FullName() == "google.protobuf.Duration":
 			w.Printf("w.append_raw_json(serde::pb::json::wellknown::duration_to_json(value));\n")
+		case f.MapValue().Message().FullName() == "google.protobuf.FieldMask":
+			w.Printf("w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(value));\n")
 		default:
 			deref := "."
 			if isPtr(f.MapValue()) {
@@ -1042,6 +1047,8 @@ func (g *implGenerator) generateRepeatedFieldWriteJson(f protoreflect.FieldDescr
 		switch {
 		case f.Message().FullName() == "google.protobuf.Duration":
 			w.Printf("w.append_raw_json(serde::pb::json::wellknown::duration_to_json(e));\n")
+		case f.Message().FullName() == "google.protobuf.FieldMask":
+			w.Printf("w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(e));\n")
 		default:
 			deref := "."
 			if isPtr(f) {
@@ -1082,7 +1089,7 @@ func (g *implGenerator) generateOneofFieldWriteJson(o protoreflect.OneofDescript
 			w.Indent()
 			defer w.Dedent()
 			defer w.Println("break;")
-			w.Printf("w.key(%q);\n", f.Name())
+			w.Printf("w.key(%q);\n", f.JSONName())
 			g.generateSingularFieldWriteJson(f, w)
 		}()
 	}
@@ -1118,6 +1125,8 @@ func (g *implGenerator) generateSingularFieldWriteJson(f protoreflect.FieldDescr
 		switch {
 		case f.Message().FullName() == "google.protobuf.Duration":
 			w.Printf("w.append_raw_json(serde::pb::json::wellknown::duration_to_json(get_%s()));\n", f.Name())
+		case f.Message().FullName() == "google.protobuf.FieldMask":
+			w.Printf("w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(get_%s()));\n", f.Name())
 		default:
 			deref := "."
 			if isPtr(f) {
@@ -1240,6 +1249,8 @@ func (g *implGenerator) generateSingularFieldWrite(f protoreflect.FieldDescripto
 		switch {
 		case f.Message().FullName() == "google.protobuf.Duration":
 			w.Printf("iobuf msg_buf = serde::pb::wellknown::duration_to_proto(get_%s());\n", f.Name())
+		case f.Message().FullName() == "google.protobuf.FieldMask":
+			w.Printf("iobuf msg_buf = serde::pb::wellknown::field_mask_to_proto(get_%s());\n", f.Name())
 		default:
 			w.Printf("iobuf msg_buf = co_await get_%s()%sto_proto();\n", f.Name(), deref)
 		}
@@ -1371,6 +1382,8 @@ func (g *implGenerator) generateRepeatedFieldWrite(f protoreflect.FieldDescripto
 		switch {
 		case f.Message().FullName() == "google.protobuf.Duration":
 			w.Println("iobuf msg_buf = serde::pb::wellknown::duration_to_proto(e);")
+		case f.Message().FullName() == "google.protobuf.FieldMask":
+			w.Println("iobuf msg_buf = serde::pb::wellknown::field_mask_to_proto(e);")
 		default:
 			w.Printf("iobuf msg_buf = co_await e%sto_proto();\n", deref)
 		}
@@ -1476,7 +1489,9 @@ func (g *implGenerator) generateMessageReadJson(msg protoreflect.MessageDescript
 		w.Indent()
 		switch {
 		case f.Message().FullName() == "google.protobuf.Duration":
-			w.Println("absl::Duration v = co_await serde::pb::json::wellknown::duration_from_json(parser);")
+			w.Println("auto v = co_await serde::pb::json::wellknown::duration_from_json(parser);")
+		case f.Message().FullName() == "google.protobuf.FieldMask":
+			w.Println("auto v = co_await serde::pb::json::wellknown::field_mask_from_json(parser);")
 		case isPtr(f):
 			w.Printf("auto v = std::make_unique<%s>();\n", typ)
 			w.Printf("co_await %s::from_json(parser, v.get());\n", typ)
@@ -1796,6 +1811,8 @@ func (g *implGenerator) generateRepeatedFieldRead(f protoreflect.FieldDescriptor
 		switch {
 		case f.Message().FullName() == "google.protobuf.Duration":
 			w.Printf("self->get_%s().push_back(parser->read_wellknown_duration<%q>(tag));\n", f.Name(), f.FullName())
+		case f.Message().FullName() == "google.protobuf.FieldMask":
+			w.Printf("self->get_%s().push_back(parser->read_wellknown_field_mask<%q>(tag));\n", f.Name(), f.FullName())
 		default:
 			w.Printf("auto msg_parser = parser->read_message<%q>(tag);\n", f.FullName())
 			msgType := g.translateBaseType(f)
@@ -1844,6 +1861,8 @@ func (g *implGenerator) generateSingularFieldRead(f protoreflect.FieldDescriptor
 		switch {
 		case f.Message().FullName() == "google.protobuf.Duration":
 			w.Printf("self->set_%s(parser->read_wellknown_duration<%q>(tag));\n", f.Name(), f.FullName())
+		case f.Message().FullName() == "google.protobuf.FieldMask":
+			w.Printf("self->set_%s(parser->read_wellknown_field_mask<%q>(tag));\n", f.Name(), f.FullName())
 		default:
 			w.Printf("auto msg_parser = parser->read_message<%q>(tag);\n", f.FullName())
 			msgType := g.translateBaseType(f)
@@ -1944,6 +1963,8 @@ func fullyQualifiedTypeName(d protoreflect.Descriptor) string {
 	switch d.FullName() {
 	case "google.protobuf.Duration":
 		return "absl::Duration"
+	case "google.protobuf.FieldMask":
+		return "serde::pb::field_mask"
 	}
 	ns := nameToCppNamespace(d.ParentFile())
 	name := cppTypeName(d)

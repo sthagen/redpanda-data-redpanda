@@ -10,8 +10,8 @@
 
 #include "cloud_topics/level_zero/batcher/aggregator.h"
 
-#include "cloud_topics/core/serializer.h"
-#include "cloud_topics/core/write_request.h"
+#include "cloud_topics/level_zero/serializer.h"
+#include "cloud_topics/level_zero/write_request.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/util/defer.hh>
@@ -51,8 +51,8 @@ namespace {
 template<class Clock>
 void make_dl_placeholders(
   prepared_extents<Clock>& ctx,
-  core::write_request<Clock>& req,
-  const core::serialized_chunk& chunk) {
+  l0::write_request<Clock>& req,
+  const l0::serialized_chunk& chunk) {
     auto result = std::make_unique<extents_for_req<Clock>>();
     for (const auto& b : chunk.extents) {
         extent_meta placeholder{
@@ -149,11 +149,11 @@ void aggregator<Clock>::ack_error(errc e) {
 }
 
 template<class Clock>
-void aggregator<Clock>::add(core::write_request<Clock>& req) {
+void aggregator<Clock>::add(l0::write_request<Clock>& req) {
     auto it = _staging.find(req.ntp);
     if (it == _staging.end()) {
         it = _staging.emplace_hint(
-          it, req.ntp, core::write_request_list<Clock>());
+          it, req.ntp, l0::write_request_list<Clock>());
     }
     req._hook.unlink();
     it->second.push_back(req);

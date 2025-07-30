@@ -643,6 +643,7 @@ redpanda_cc_library(
         "//src/v/crash_tracker",
         "//src/v/features:enterprise_feature_messages",
         "//src/v/resource_mgmt:memory_groups",
+        "//src/v/ssx:abort_source",
     ],
     include_prefix = "cluster",
     visibility = ["//visibility:public"],

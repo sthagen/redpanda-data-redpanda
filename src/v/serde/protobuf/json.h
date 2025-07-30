@@ -13,6 +13,7 @@
 
 #include "absl/time/time.h"
 #include "serde/json/parser.h"
+#include "serde/protobuf/field_mask.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
@@ -111,9 +112,18 @@ ss::sstring read_string(peekable_parser* parser);
 iobuf read_string_as_bytes(peekable_parser* parser);
 iobuf read_base64_encoded_bytes(peekable_parser* parser);
 
+// Well known protos have special representation in the JSON format.
+//
+// To learn more about each JSON representation, see the comments in the proto
+// files.
 namespace wellknown {
+
 ss::future<absl::Duration> duration_from_json(peekable_parser* parser);
 iobuf duration_to_json(absl::Duration);
+
+ss::future<field_mask> field_mask_from_json(peekable_parser* parser);
+iobuf field_mask_to_json(const field_mask&);
+
 } // namespace wellknown
 
 } // namespace serde::pb::json

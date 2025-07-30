@@ -48,6 +48,7 @@ proto_library(
     deps = [
         "//proto/redpanda/pbgen:options_proto",
         "@protobuf//:duration_proto",
+        "@protobuf//:field_mask_proto",
     ],
 )
 
@@ -59,7 +60,10 @@ cc_proto_library(
 redpanda_proto_library(
     name = "codegen_test_redpanda_proto",
     protos = [":codegen_test_proto"],
-    deps = ["@abseil-cpp//absl/time"],
+    deps = [
+        "//src/v/serde/protobuf:field_mask",
+        "@abseil-cpp//absl/time",
+    ],
 )
 
 redpanda_cc_gtest(

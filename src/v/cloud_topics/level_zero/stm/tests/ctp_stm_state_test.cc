@@ -8,8 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/dl_version.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
+#include "cloud_topics/level_zero/stm/dl_version.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "random/generators.h"

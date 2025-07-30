@@ -333,7 +333,8 @@ private:
     void shutdown_with_watchdog(
       Service& s,
       StopFunc stop_func,
-      const ss::sstring& name = service_type_name<Service>()) {
+      const ss::sstring& name = service_type_name<Service>(),
+      std::source_location location = std::source_location::current()) {
         auto start_watchdog = [&name, this](
                                 std::chrono::milliseconds timeout,
                                 ss::log_level log_level) {
@@ -356,9 +357,19 @@ private:
         ssx::watchdog long_wd = start_watchdog(
           long_shutdown_warning_timeout, ss::log_level::error);
 
-        vlog(_log.info, "Shutting down: {}", name);
+        vlog(
+          _log.info,
+          "Shutting down: {} at {}:{}",
+          name,
+          location.file_name(),
+          location.line());
         stop_func(s).get();
-        vlog(_log.info, "Shutdown completed: {}", name);
+        vlog(
+          _log.info,
+          "Shutdown completed: {} started at {}:{}",
+          name,
+          location.file_name(),
+          location.line());
     }
 
     /**

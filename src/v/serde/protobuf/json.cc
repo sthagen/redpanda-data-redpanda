@@ -11,8 +11,11 @@
 #include "serde/protobuf/json.h"
 
 #include "absl/strings/numbers.h"
+#include "absl/strings/str_format.h"
+#include "absl/strings/str_split.h"
 #include "base/units.h"
 #include "serde/json/writer.h"
+#include "serde/protobuf/field_mask.h"
 #include "utils/base64.h"
 
 #include <seastar/core/coroutine.hh>
@@ -264,53 +267,147 @@ iobuf read_base64_encoded_bytes(peekable_parser* parser) {
 }
 
 namespace wellknown {
+
 ss::future<absl::Duration> duration_from_json(peekable_parser* parser) {
-    absl::Duration seconds;
-    absl::Duration nanos;
-    constexpr static auto key_to_field_number
-      = std::to_array<std::pair<std::string_view, int32_t>>({
-        {"nanos", 2},
-        {"seconds", 1},
-      });
-    object_key_generator entries(parser);
-    while (auto key = co_await entries()) {
-        auto fields = std::ranges::equal_range(
-          key_to_field_number,
-          *key,
-          std::less<>(),
-          &decltype(key_to_field_number)::value_type::first);
-        if (fields.empty()) {
-            co_await parser->skip_value();
-            continue;
-        }
-        co_await parser->next();
-        switch (fields.begin()->second) {
-        case 1: { // seconds
-            seconds = absl::Seconds(read_int64(parser));
-            break;
-        }
-        case 2: { // nanos
-            nanos = absl::Nanoseconds(read_int32(parser));
-            break;
-        }
-        default:
-            std::unreachable();
-        }
+    co_await parser->next();
+    if (parser->token() == token::value_null) {
+        co_return absl::ZeroDuration();
     }
-    co_return seconds + nanos;
+    ss::sstring encoded = read_string(parser);
+    if (encoded.empty()) {
+        co_return absl::ZeroDuration();
+    }
+    std::string_view str(encoded);
+    size_t int_part_end = 0;
+    for (char c : str) {
+        if (!absl::ascii_isdigit(c) && c != '-') {
+            break;
+        }
+        ++int_part_end;
+    }
+    if (int_part_end == 0) {
+        throw std::runtime_error(
+          fmt::format("invalid duration string: {}", encoded));
+    }
+    int64_t secs = 0;
+    if (!absl::SimpleAtoi(str.substr(0, int_part_end), &secs)) {
+        throw std::runtime_error(
+          fmt::format("invalid duration string: {}", str));
+    }
+    constexpr int64_t kMaxSeconds = int64_t{3652500} * 86400;
+    if (secs > kMaxSeconds || secs < -kMaxSeconds) {
+        throw std::runtime_error(fmt::format("duration out of range: {}", str));
+    }
+    absl::string_view rest = str.substr(int_part_end);
+    int32_t frac_secs = 0;
+    size_t frac_digits = 0;
+    if (absl::StartsWith(rest, ".")) {
+        for (char c : rest.substr(1)) {
+            if (!absl::ascii_isdigit(c)) {
+                break;
+            }
+            ++frac_digits;
+        }
+        auto digits = rest.substr(1, frac_digits);
+        if (
+          frac_digits == 0 || frac_digits > 9
+          || !absl::SimpleAtoi(digits, &frac_secs)) {
+            throw std::runtime_error(
+              fmt::format("invalid duration string: {}", str));
+        }
+        rest = rest.substr(frac_digits + 1);
+    }
+    for (size_t i = 0; i < (9 - frac_digits); ++i) {
+        frac_secs *= 10;
+    }
+    bool is_negative = (secs < 0) || absl::StartsWith(str, "-");
+    if (is_negative) {
+        frac_secs *= -1;
+    }
+    if (rest != "s") {
+        throw std::runtime_error(
+          fmt::format("invalid duration string: {}", str));
+    }
+    co_return absl::Seconds(secs) + absl::Nanoseconds(frac_secs);
 }
 
 iobuf duration_to_json(absl::Duration d) {
-    int64_t seconds = absl::ToInt64Seconds(d);
+    int64_t secs = absl::ToInt64Seconds(d);
     auto nanos = static_cast<int32_t>(
       absl::ToInt64Nanoseconds(d % absl::Seconds(1)));
+    if (nanos == 0) {
+        return iobuf::from(absl::StrFormat(R"("%ds")", secs));
+    }
+    size_t digits = 9;
+    uint32_t frac_seconds = std::abs(nanos);
+    while (frac_seconds % 1000 == 0) {
+        frac_seconds /= 1000;
+        digits -= 3;
+    }
+    absl::string_view sign = ((secs < 0) || (nanos < 0)) ? "-" : "";
+    return iobuf::from(absl::StrFormat(
+      R"("%s%d.%.*ds")", sign, std::abs(secs), digits, frac_seconds));
+}
+
+namespace {
+void proto_name_to_json_name(std::string_view s, iobuf* b) {
+    bool was_underscore = false;
+    for (char c : s) {
+        if (c != '_') {
+            if (was_underscore && absl::ascii_islower(c)) {
+                c = absl::ascii_toupper(c);
+            }
+            b->append(&c, 1);
+        }
+        was_underscore = c == '_';
+    }
+}
+
+void json_name_to_proto_name(std::string_view s, std::string* b) {
+    for (char c : s) {
+        if (absl::ascii_isupper(c)) {
+            b->push_back('_');
+            c = absl::ascii_tolower(c);
+        }
+        b->push_back(c);
+    }
+}
+} // namespace
+
+ss::future<field_mask> field_mask_from_json(peekable_parser* parser) {
+    co_await parser->next();
+    field_mask mask;
+    if (parser->token() == token::value_null) {
+        co_return mask;
+    }
+    ss::sstring encoded = read_string(parser);
+    if (encoded.empty()) {
+        co_return mask;
+    }
+    std::string proto_name;
+    for (std::string_view json_name :
+         absl::StrSplit(std::string_view(encoded), ',')) {
+        if (json_name.empty()) {
+            throw std::runtime_error(
+              fmt::format("empty field mask path in: {}", encoded));
+        }
+        proto_name.clear();
+        json_name_to_proto_name(json_name, &proto_name);
+        mask.paths.emplace_back(std::string_view(proto_name));
+    }
+    co_return mask;
+}
+
+iobuf field_mask_to_json(const field_mask& mask) {
+    iobuf encoded;
+    for (const auto& path : mask.paths) {
+        if (!encoded.empty()) {
+            encoded.append(std::to_array({','}));
+        }
+        proto_name_to_json_name(path, &encoded);
+    }
     serde::json::writer w;
-    w.begin_object();
-    w.key("seconds");
-    w.integer_string(seconds);
-    w.key("nanos");
-    w.integer(nanos);
-    w.end_object();
+    w.string(encoded);
     return std::move(w).finish();
 }
 

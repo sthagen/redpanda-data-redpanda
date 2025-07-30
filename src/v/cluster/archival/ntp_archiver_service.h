@@ -423,7 +423,8 @@ public:
       model::timestamp scrub_timestamp,
       std::optional<model::offset> last_scrubbed_offset,
       cloud_storage::scrub_status status,
-      cloud_storage::anomalies detected);
+      cloud_storage::anomalies detected,
+      ss::abort_source& caller_as);
 
     ss::future<std::error_code> reset_scrubbing_metadata();
 

@@ -3,6 +3,7 @@ syntax = "proto3";
 package example;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/field_mask.proto";
 import "proto/redpanda/pbgen/options.proto";
 
 option (redpanda.pbgen.cpp_namespace) = "proto::example";
@@ -51,4 +52,7 @@ message WellKnownProtos {
     google.protobuf.Duration single_duration = 1;
     repeated google.protobuf.Duration repeated_duration = 2;
     map<string, google.protobuf.Duration> duration_map = 3;
+    google.protobuf.FieldMask single_field_mask = 4;
+    repeated google.protobuf.FieldMask repeated_field_mask = 5;
+    map<string, google.protobuf.FieldMask> field_mask_map = 6;
 }

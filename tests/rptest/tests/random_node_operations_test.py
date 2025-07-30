@@ -91,6 +91,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                     'datalake': 'trace',
                     'cloud_storage': 'debug',
                     'cloud_io': 'debug',
+                    'kafka': 'debug',
                 }),
             *args,
             **kwargs)

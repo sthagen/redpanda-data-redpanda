@@ -43,6 +43,7 @@
 #include "model/timeout_clock.h"
 #include "net/connection.h"
 #include "raft/fundamental.h"
+#include "ssx/abort_source.h"
 #include "ssx/checkpoint_mutex.h"
 #include "ssx/future-util.h"
 #include "storage/disk_log_impl.h"
@@ -892,9 +893,12 @@ ss::future<std::error_code> ntp_archiver::process_anomalies(
   model::timestamp scrub_timestamp,
   std::optional<model::offset> last_scrubbed_offset,
   cloud_storage::scrub_status status,
-  cloud_storage::anomalies detected) {
+  cloud_storage::anomalies detected,
+  ss::abort_source& caller_as) {
+    ssx::composite_abort_source cas{caller_as, _as};
+
     // If there's ongoing housekeeping job, let it finish first.
-    auto units = co_await _mutex.get_units(_as);
+    auto units = co_await _mutex.get_units(cas.as());
 
     auto sync_timeout = config::shard_local_cfg()
                           .cloud_storage_metadata_sync_timeout_ms.value();
@@ -906,7 +910,7 @@ ss::future<std::error_code> ntp_archiver::process_anomalies(
       status,
       std::move(detected),
       deadline,
-      _as);
+      cas.as());
     if (error != cluster::errc::success) {
         vlog(
           _rtclog.warn,
@@ -1694,13 +1698,7 @@ ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
     // index in the background.
     auto upload_segment_ready = co_await ss::coroutine::as_future(
       _remote.upload_segment(
-        get_bucket_name(),
-        path,
-        meta.size_bytes,
-        get_stream,
-        rtc,
-        lazy_abort,
-        1));
+        get_bucket_name(), path, meta.size_bytes, get_stream, rtc, lazy_abort));
 
     // As noted above, check whether 'get_stream' was called. If not, close the
     // upload stream.
@@ -3439,14 +3437,7 @@ ntp_archiver::find_reupload_candidate(
   manifest_scanner_t scanner, ss::abort_source& caller_as) {
     ss::gate::holder holder(_gate);
 
-    caller_as.check();
-    _as.check();
-
-    ss::abort_source local_as{};
-    auto archival_as_sub = _as.subscribe(
-      [&local_as] noexcept { local_as.request_abort(); });
-    auto caller_as_sub = caller_as.subscribe(
-      [&local_as] noexcept { local_as.request_abort(); });
+    ssx::composite_abort_source cas{caller_as, _as};
 
     archival_stm_fence rw_fence{
       .read_write_fence
@@ -3465,7 +3456,7 @@ ntp_archiver::find_reupload_candidate(
     } else {
         vlog(_rtclog.debug, "Scan result: {}", run);
     }
-    auto units = co_await _mutex.get_units(local_as);
+    auto units = co_await _mutex.get_units(cas.as());
     if (run->meta.base_offset >= _parent.raft_start_offset()) {
         auto log_generic = _parent.log();
         auto& log = *log_generic;

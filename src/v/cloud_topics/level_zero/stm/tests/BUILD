@@ -7,10 +7,10 @@ redpanda_cc_gtest(
         "ctp_stm_state_test.cc",
     ],
     deps = [
-        "//src/v/cloud_topics:dl_version",
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm_state",
+        "//src/v/cloud_topics/level_zero/stm:dl_version",
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/test_utils:gtest",

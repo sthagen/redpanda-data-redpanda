@@ -1,12 +1,41 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
+package(default_visibility = [
+    ":__subpackages__",
+])
+
+redpanda_cc_library(
+    name = "dl_version",
+    hdrs = ["dl_version.h"],
+    include_prefix = "cloud_topics/level_zero/stm",
+    deps = ["//src/v/utils:named_type"],
+)
+
+redpanda_cc_library(
+    name = "dl_snapshot",
+    srcs = [
+        "dl_snapshot.cc",
+    ],
+    hdrs = [
+        "dl_snapshot.h",
+    ],
+    implementation_deps = [
+        "@fmt",
+    ],
+    include_prefix = "cloud_topics/level_zero/stm",
+    deps = [
+        ":dl_version",
+        "//src/v/container:fragmented_vector",
+        "//src/v/serde",
+    ],
+)
+
 redpanda_cc_library(
     name = "ctp_stm_commands",
     hdrs = ["ctp_stm_commands.h"],
     include_prefix = "cloud_topics/level_zero/stm",
-    visibility = [":__subpackages__"],
     deps = [
-        "//src/v/cloud_topics:dl_version",
+        ":dl_version",
         "//src/v/serde",
     ],
 )
@@ -15,9 +44,8 @@ redpanda_cc_library(
     name = "ctp_stm_offsets",
     hdrs = ["ctp_stm_offsets.h"],
     include_prefix = "cloud_topics/level_zero/stm",
-    visibility = [":__subpackages__"],
     deps = [
-        "//src/v/cloud_topics:dl_version",
+        ":dl_version",
         "//src/v/model",
         "//src/v/serde",
     ],
@@ -28,11 +56,10 @@ redpanda_cc_library(
     srcs = ["ctp_stm_state.cc"],
     hdrs = ["ctp_stm_state.h"],
     include_prefix = "cloud_topics/level_zero/stm",
-    visibility = [":__subpackages__"],
     deps = [
         ":ctp_stm_offsets",
-        "//src/v/cloud_topics:dl_snapshot",
-        "//src/v/cloud_topics:dl_version",
+        ":dl_snapshot",
+        ":dl_version",
         "//src/v/container:fragmented_vector",
         "//src/v/model",
         "//src/v/serde",
@@ -75,9 +102,9 @@ redpanda_cc_library(
     include_prefix = "cloud_topics/level_zero/stm",
     visibility = ["//visibility:public"],
     deps = [
+        ":dl_snapshot",
+        ":dl_version",
         "//src/v/base",
-        "//src/v/cloud_topics:dl_snapshot",
-        "//src/v/cloud_topics:dl_version",
         "//src/v/model",
         "@seastar",
     ],

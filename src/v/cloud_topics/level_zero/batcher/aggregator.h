@@ -13,8 +13,8 @@
 #include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "cloud_topics/cluster_services.h"
-#include "cloud_topics/core/write_request.h"
 #include "cloud_topics/errc.h"
+#include "cloud_topics/level_zero/write_request.h"
 #include "cloud_topics/types.h"
 #include "container/fragmented_vector.h"
 
@@ -29,7 +29,7 @@ struct extents_for_req {
     /// Generated placeholder batches
     chunked_vector<extent_meta> extents;
     /// Source write request
-    ss::weak_ptr<core::write_request<Clock>> ref;
+    ss::weak_ptr<l0::write_request<Clock>> ref;
 };
 
 // This component aggregates a bunch of write
@@ -51,7 +51,7 @@ public:
     /// included into L0 object. The size value returned by
     /// the 'size_bytes' call will not match the actual size
     /// of the object.
-    void add(core::write_request<Clock>& req);
+    void add(l0::write_request<Clock>& req);
 
     /// Estimate L0 object size
     size_t size_bytes() const noexcept;
@@ -77,7 +77,7 @@ private:
     object_id _id;
 
     /// Source data for the aggregator
-    absl::btree_map<model::ntp, core::write_request_list<Clock>> _staging;
+    absl::btree_map<model::ntp, l0::write_request_list<Clock>> _staging;
     /// Prepared placeholders
     chunked_vector<std::unique_ptr<extents_for_req<Clock>>> _aggregated;
     size_t _size_bytes{0};

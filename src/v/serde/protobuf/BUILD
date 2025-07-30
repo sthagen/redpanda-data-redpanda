@@ -55,6 +55,7 @@ redpanda_cc_library(
     include_prefix = "serde/protobuf",
     visibility = ["//visibility:public"],
     deps = [
+        ":field_mask",
         ":wire_format",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
@@ -78,10 +79,12 @@ redpanda_cc_library(
         "//src/v/serde/json:writer",
         "//src/v/utils:base64",
         "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
     ],
     include_prefix = "serde/protobuf",
     visibility = ["//visibility:public"],
     deps = [
+        ":field_mask",
         "//src/v/serde/json:parser",
         "@abseil-cpp//absl/time",
         "@fmt",
@@ -99,6 +102,19 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "field_mask",
+    hdrs = [
+        "field_mask.h",
+    ],
+    include_prefix = "serde/protobuf",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/container:fragmented_vector",
         "@seastar",
     ],
 )

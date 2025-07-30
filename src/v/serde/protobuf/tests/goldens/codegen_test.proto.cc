@@ -296,6 +296,15 @@ void well_known_protos::set_repeated_duration(chunked_vector<absl::Duration>&& v
 chunked_hash_map<ss::sstring, absl::Duration>& well_known_protos::get_duration_map() { return duration_map_; }
 const chunked_hash_map<ss::sstring, absl::Duration>& well_known_protos::get_duration_map() const { return duration_map_; }
 void well_known_protos::set_duration_map(chunked_hash_map<ss::sstring, absl::Duration>&& v) { duration_map_ = std::move(v); }
+serde::pb::field_mask& well_known_protos::get_single_field_mask() { return single_field_mask_; }
+const serde::pb::field_mask& well_known_protos::get_single_field_mask() const { return single_field_mask_; }
+void well_known_protos::set_single_field_mask(serde::pb::field_mask&& v) { single_field_mask_ = std::move(v); }
+chunked_vector<serde::pb::field_mask>& well_known_protos::get_repeated_field_mask() { return repeated_field_mask_; }
+const chunked_vector<serde::pb::field_mask>& well_known_protos::get_repeated_field_mask() const { return repeated_field_mask_; }
+void well_known_protos::set_repeated_field_mask(chunked_vector<serde::pb::field_mask>&& v) { repeated_field_mask_ = std::move(v); }
+chunked_hash_map<ss::sstring, serde::pb::field_mask>& well_known_protos::get_field_mask_map() { return field_mask_map_; }
+const chunked_hash_map<ss::sstring, serde::pb::field_mask>& well_known_protos::get_field_mask_map() const { return field_mask_map_; }
+void well_known_protos::set_field_mask_map(chunked_hash_map<ss::sstring, serde::pb::field_mask>&& v) { field_mask_map_ = std::move(v); }
 seastar::future<> well_known_protos::from_proto(serde::pb::wire_format_parser* parser, well_known_protos* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -338,6 +347,46 @@ seastar::future<> well_known_protos::from_proto(serde::pb::wire_format_parser* p
         }
       }
       self->get_duration_map().insert_or_assign(std::move(entry.key), std::move(entry.value));
+      break;
+    }
+    case 4: { // single_field_mask
+      self->set_single_field_mask(parser->read_wellknown_field_mask<"example.WellKnownProtos.single_field_mask">(tag));
+      break;
+    }
+    case 5: { // repeated_field_mask
+      self->get_repeated_field_mask().push_back(parser->read_wellknown_field_mask<"example.WellKnownProtos.repeated_field_mask">(tag));
+      break;
+    }
+    case 6: { // field_mask_map
+      serde::pb::wire_format_parser entry_parser = parser->read_message<"example.WellKnownProtos.field_mask_map">(tag);
+      serde::pb::wire_format_parser* parser = &entry_parser;
+      struct map_entry {
+        ss::sstring key{};
+        serde::pb::field_mask value{};
+        void set_key(ss::sstring&& k) { key = std::move(k); }
+        void set_value(serde::pb::field_mask&& v) { value = std::move(v); }
+      };
+      map_entry entry;
+      {
+        map_entry* self = &entry;
+        while (parser->bytes_left() > 0) {
+          auto tag = parser->read_tag();
+          switch (tag.field_number) {
+          case 1: { // key
+            self->set_key(parser->read_string<"example.WellKnownProtos.FieldMaskMapEntry.key">(tag));
+            break;
+          }
+          case 2: { // value
+            self->set_value(parser->read_wellknown_field_mask<"example.WellKnownProtos.FieldMaskMapEntry.value">(tag));
+            break;
+          }
+          default:
+            parser->skip_unknown(tag);
+            break;
+          }
+        }
+      }
+      self->get_field_mask_map().insert_or_assign(std::move(entry.key), std::move(entry.value));
       break;
     }
     default:
@@ -392,24 +441,75 @@ seastar::future<iobuf> well_known_protos::to_proto() const {
     serde::pb::write_length(static_cast<int32_t>(buf.size_bytes()), &parent_buf);
     parent_buf.append(std::move(buf));
   }
+  {
+    // single_field_mask
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 4}, &buf);
+    iobuf msg_buf = serde::pb::wellknown::field_mask_to_proto(get_single_field_mask());
+    serde::pb::write_length(static_cast<int32_t>(msg_buf.size_bytes()), &buf);
+    buf.append(std::move(msg_buf));
+  }
+  // repeated_field_mask
+  for (const auto& e : get_repeated_field_mask()) {
+    iobuf msg_buf = serde::pb::wellknown::field_mask_to_proto(e);
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 5}, &buf);
+    serde::pb::write_length(static_cast<int32_t>(msg_buf.size_bytes()), &buf);
+    buf.append(std::move(msg_buf));
+  }
+  // field_mask_map
+  for (const auto& [key, value] : get_field_mask_map()) {
+    iobuf& parent_buf = buf;
+    iobuf buf;
+    auto get_key = [&key]() -> const ss::sstring& { return key; };
+    auto get_value = [&value]() -> const serde::pb::field_mask& { return value; };
+    // key
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+    serde::pb::write_length(static_cast<int32_t>(get_key().size()), &buf);
+    buf.append(get_key().data(), get_key().size());
+    {
+      // value
+      serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 2}, &buf);
+      iobuf msg_buf = serde::pb::wellknown::field_mask_to_proto(get_value());
+      serde::pb::write_length(static_cast<int32_t>(msg_buf.size_bytes()), &buf);
+      buf.append(std::move(msg_buf));
+    }
+    // now write the entry submessage
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 6}, &parent_buf);
+    serde::pb::write_length(static_cast<int32_t>(buf.size_bytes()), &parent_buf);
+    parent_buf.append(std::move(buf));
+  }
   co_return buf;
 }
 seastar::future<iobuf> well_known_protos::to_json() const {
   serde::json::writer w;
   w.begin_object();
-  w.key("single_duration");
+  w.key("singleDuration");
   w.append_raw_json(serde::pb::json::wellknown::duration_to_json(get_single_duration()));
-  w.key("repeated_duration");
+  w.key("repeatedDuration");
   w.begin_array();
   for (const auto& e : get_repeated_duration()) {
     w.append_raw_json(serde::pb::json::wellknown::duration_to_json(e));
   }
   w.end_array();
-  w.key("duration_map");
+  w.key("durationMap");
   w.begin_object();
   for (const auto& [key, value] : get_duration_map()) {
     w.key(key);
     w.append_raw_json(serde::pb::json::wellknown::duration_to_json(value));
+  }
+  w.end_object();
+  w.key("singleFieldMask");
+  w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(get_single_field_mask()));
+  w.key("repeatedFieldMask");
+  w.begin_array();
+  for (const auto& e : get_repeated_field_mask()) {
+    w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(e));
+  }
+  w.end_array();
+  w.key("fieldMaskMap");
+  w.begin_object();
+  for (const auto& [key, value] : get_field_mask_map()) {
+    w.key(key);
+    w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(value));
   }
   w.end_object();
   w.end_object();
@@ -419,10 +519,16 @@ seastar::future<> well_known_protos::from_json(serde::pb::json::peekable_parser*
   constexpr static auto key_to_field_number = std::to_array<std::pair<std::string_view, int32_t>>({
     {"durationMap", 3},
     {"duration_map", 3},
+    {"fieldMaskMap", 6},
+    {"field_mask_map", 6},
     {"repeatedDuration", 2},
+    {"repeatedFieldMask", 5},
     {"repeated_duration", 2},
+    {"repeated_field_mask", 5},
     {"singleDuration", 1},
+    {"singleFieldMask", 4},
     {"single_duration", 1},
+    {"single_field_mask", 4},
   });
   auto entries = serde::pb::json::object_key_generator(parser);
   while (auto key = co_await entries()) {
@@ -436,7 +542,7 @@ seastar::future<> well_known_protos::from_json(serde::pb::json::peekable_parser*
       if (co_await parser->peek() == serde::json::token::value_null) {
         co_await parser->next();
       } else {
-        absl::Duration v = co_await serde::pb::json::wellknown::duration_from_json(parser);
+        auto v = co_await serde::pb::json::wellknown::duration_from_json(parser);
         self->set_single_duration(std::move(v));
       }
       break;
@@ -450,7 +556,7 @@ seastar::future<> well_known_protos::from_json(serde::pb::json::peekable_parser*
           if (co_await parser->peek() == serde::json::token::value_null) {
             co_await parser->next();
           } else {
-            absl::Duration v = co_await serde::pb::json::wellknown::duration_from_json(parser);
+            auto v = co_await serde::pb::json::wellknown::duration_from_json(parser);
             self->get_repeated_duration().push_back(std::move(v));
           }
         }
@@ -467,8 +573,50 @@ seastar::future<> well_known_protos::from_json(serde::pb::json::peekable_parser*
           if (co_await parser->peek() == serde::json::token::value_null) {
             co_await parser->next();
           } else {
-            absl::Duration v = co_await serde::pb::json::wellknown::duration_from_json(parser);
+            auto v = co_await serde::pb::json::wellknown::duration_from_json(parser);
             self->get_duration_map().insert_or_assign(std::move(k), std::move(v));
+          }
+        }
+      }
+      break;
+    }
+    case 4: { // single_field_mask
+      if (co_await parser->peek() == serde::json::token::value_null) {
+        co_await parser->next();
+      } else {
+        auto v = co_await serde::pb::json::wellknown::field_mask_from_json(parser);
+        self->set_single_field_mask(std::move(v));
+      }
+      break;
+    }
+    case 5: { // repeated_field_mask
+      if (co_await parser->peek() == serde::json::token::value_null) {
+        co_await parser->next();
+      } else {
+        auto elements = serde::pb::json::array_element_generator(parser);
+        while (co_await elements()) {
+          if (co_await parser->peek() == serde::json::token::value_null) {
+            co_await parser->next();
+          } else {
+            auto v = co_await serde::pb::json::wellknown::field_mask_from_json(parser);
+            self->get_repeated_field_mask().push_back(std::move(v));
+          }
+        }
+      }
+      break;
+    }
+    case 6: { // field_mask_map
+      if (co_await parser->peek() == serde::json::token::value_null) {
+        co_await parser->next();
+      } else {
+        auto map_entries = serde::pb::json::object_key_generator(parser);
+        while (auto map_key = co_await map_entries()) {
+          auto k = serde::pb::json::transform_map_key<ss::sstring>(std::move(*map_key));
+          if (co_await parser->peek() == serde::json::token::value_null) {
+            co_await parser->next();
+          } else {
+            auto v = co_await serde::pb::json::wellknown::field_mask_from_json(parser);
+            self->get_field_mask_map().insert_or_assign(std::move(k), std::move(v));
           }
         }
       }

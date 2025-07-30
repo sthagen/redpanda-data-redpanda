@@ -358,3 +358,104 @@ redpanda_package = rule(
     },
     toolchains = ["@bazel_tools//tools/cpp:toolchain_type"],
 )
+
+def _prepapare_package_conent(ctx):
+    cc_binaries = [
+    ]
+    for b in ctx.attr.cc_binaries:
+        cc_binaries += [struct(attr = b, file = file) for file in b.files.to_list()]
+    install_path_value = ctx.attr.install_path[BuildSettingInfo].value if ctx.attr.install_path else "/opt/{}".format(ctx.attr.name)
+    package_cc_binaries = _prepare_package_binaries(
+        ctx,
+        cc_binaries,
+        "{}/lib".format(install_path_value),
+    )
+
+    return struct(
+        cc_binaries = package_cc_binaries.binary_files,
+        shared_libraries = package_cc_binaries.shared_libraries,
+    )
+
+def _create_package_config(ctx, package_content):
+    package_files = []
+
+    for b in package_content.cc_binaries:
+        package_files.append({
+            "path": "bin",
+            "name": b.basename.removesuffix("_ld").removesuffix("_patched"),
+            "source": b.path,
+        })
+
+    for sl in package_content.shared_libraries:
+        package_files.append({
+            "path": "lib",
+            "name": sl.basename,
+            "source": sl.path,
+        })
+
+    return {
+        "package_dirs": ["bin", "lib"],
+        "directory_mode": True,
+        "owner": ctx.attr.owner,  # Default owner
+        "package_files": package_files,
+    }
+
+def _native_pkg_impl(ctx):
+    use_dir = not ctx.attr.out.endswith(".tar.gz")
+    out = ctx.actions.declare_directory(ctx.attr.out) if use_dir else ctx.actions.declare_file(ctx.attr.out)
+    package_content = _prepapare_package_conent(ctx)
+    cfg = _create_package_config(ctx, package_content)
+    cfg["directory_mode"] = use_dir
+
+    # Create the configuration file for the packaging tool
+    cfg_file = ctx.actions.declare_file("%s.config.json" % ctx.attr.name)
+    ctx.actions.write(cfg_file, content = json.encode_indent(cfg))
+
+    inputs = [cfg_file] + package_content.shared_libraries + package_content.cc_binaries
+
+    # run the packaging tool
+    ctx.actions.run(
+        outputs = [out],
+        inputs = inputs,
+        tools = [ctx.executable._tool],
+        executable = ctx.executable._tool,
+        arguments = [
+            "-config",
+            cfg_file.path,
+            "-output",
+            out.path,
+        ],
+        mnemonic = "BuildingRedpandaPackage",
+        use_default_shell_env = False,
+    )
+    return [DefaultInfo(files = depset([out]))]
+
+native_package = rule(
+    implementation = _native_pkg_impl,
+    attrs = {
+        "cc_binaries": attr.label_list(),
+        "out": attr.string(
+            mandatory = True,
+        ),
+        "include_sysroot_libs": attr.bool(),
+        "rpath_override": attr.string(mandatory = False),
+        "owner": attr.int(),
+        "install_path": attr.label(),
+        "_tool": attr.label(
+            executable = True,
+            allow_files = True,
+            cfg = "exec",
+            default = Label("//bazel/packaging:tool"),
+        ),
+        "_cc_toolchain": attr.label(
+            default = Label("@bazel_tools//tools/cpp:current_cc_toolchain"),
+        ),
+        "_patchelf": attr.label(
+            executable = True,
+            allow_files = True,
+            cfg = "exec",
+            default = Label("@patchelf"),
+        ),
+    },
+    toolchains = ["@bazel_tools//tools/cpp:toolchain_type"],
+)

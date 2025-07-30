@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "cloud_topics/dl_version.h"
+#include "cloud_topics/level_zero/stm/dl_version.h"
 #include "serde/envelope.h"
 
 namespace experimental::cloud_topics {

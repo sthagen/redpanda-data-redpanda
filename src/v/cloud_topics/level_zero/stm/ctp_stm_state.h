@@ -10,9 +10,9 @@
 
 #pragma once
 
-#include "cloud_topics/dl_snapshot.h"
-#include "cloud_topics/dl_version.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_offsets.h"
+#include "cloud_topics/level_zero/stm/dl_snapshot.h"
+#include "cloud_topics/level_zero/stm/dl_version.h"
 #include "serde/envelope.h"
 
 namespace experimental::cloud_topics {

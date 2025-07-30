@@ -6,11 +6,9 @@ package(default_visibility = [
     "//src/v/cloud_topics/core/tests:__pkg__",
     "//src/v/cloud_topics/frontend:__pkg__",
     "//src/v/cloud_topics/level_zero:__subpackages__",
-    "//src/v/cloud_topics/read_path:__pkg__",
-    "//src/v/cloud_topics/read_path/tests:__pkg__",
+    "//src/v/cloud_topics/level_zero/throttler:__pkg__",
+    "//src/v/cloud_topics/level_zero/throttler/tests:__pkg__",
     "//src/v/cloud_topics/tests:__pkg__",
-    "//src/v/cloud_topics/throttler:__pkg__",
-    "//src/v/cloud_topics/throttler/tests:__pkg__",
     "//src/v/kafka/data:__pkg__",
 ])
 
@@ -65,32 +63,6 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "dl_version",
-    hdrs = ["dl_version.h"],
-    include_prefix = "cloud_topics",
-    deps = ["//src/v/utils:named_type"],
-)
-
-redpanda_cc_library(
-    name = "dl_snapshot",
-    srcs = [
-        "dl_snapshot.cc",
-    ],
-    hdrs = [
-        "dl_snapshot.h",
-    ],
-    implementation_deps = [
-        "@fmt",
-    ],
-    include_prefix = "cloud_topics",
-    deps = [
-        ":dl_version",
-        "//src/v/container:fragmented_vector",
-        "//src/v/serde",
-    ],
-)
-
-redpanda_cc_library(
     name = "data_plane_api",
     hdrs = [
         "data_plane_api.h",
@@ -98,6 +70,7 @@ redpanda_cc_library(
     include_prefix = "cloud_topics",
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",
+        "//src/v/cloud_topics/level_zero/reader:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
     ],
@@ -122,6 +95,7 @@ redpanda_cc_library(
     include_prefix = "cloud_topics",
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",
+        "//src/v/cloud_topics/level_zero/reader:__pkg__",
         "//src/v/cloud_topics/level_zero/reconciler:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
@@ -154,12 +128,12 @@ redpanda_cc_library(
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:ephemeral_cluster_services",
         "//src/v/cloud_topics/batch_cache",
-        "//src/v/cloud_topics/core:read_pipeline",
-        "//src/v/cloud_topics/core:write_pipeline",
         "//src/v/cloud_topics/level_zero/batcher",
+        "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
+        "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",
+        "//src/v/cloud_topics/level_zero/reader:fetch_handler",
         "//src/v/cloud_topics/level_zero/reconciler",
-        "//src/v/cloud_topics/read_path:fetch_handler",
-        "//src/v/cloud_topics/throttler",
+        "//src/v/cloud_topics/level_zero/throttler",
         "//src/v/model",
         "//src/v/storage",
     ],

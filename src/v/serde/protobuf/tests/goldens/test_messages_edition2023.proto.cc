@@ -176,9 +176,9 @@ seastar::future<iobuf> test_all_types_edition2023_group_like_type::to_proto() co
 seastar::future<iobuf> test_all_types_edition2023_group_like_type::to_json() const {
   serde::json::writer w;
   w.begin_object();
-  w.key("group_int32");
+  w.key("groupInt32");
   w.integer(get_group_int32());
-  w.key("group_uint32");
+  w.key("groupUint32");
   w.integer(get_group_uint32());
   w.end_object();
   co_return std::move(w).finish();
@@ -2476,479 +2476,479 @@ seastar::future<iobuf> test_all_types_edition2023::to_proto() const {
 seastar::future<iobuf> test_all_types_edition2023::to_json() const {
   serde::json::writer w;
   w.begin_object();
-  w.key("optional_int32");
+  w.key("optionalInt32");
   w.integer(get_optional_int32());
-  w.key("optional_int64");
+  w.key("optionalInt64");
   w.integer_string(get_optional_int64());
-  w.key("optional_uint32");
+  w.key("optionalUint32");
   w.integer(get_optional_uint32());
-  w.key("optional_uint64");
+  w.key("optionalUint64");
   w.integer_string(get_optional_uint64());
-  w.key("optional_sint32");
+  w.key("optionalSint32");
   w.integer(get_optional_sint32());
-  w.key("optional_sint64");
+  w.key("optionalSint64");
   w.integer_string(get_optional_sint64());
-  w.key("optional_fixed32");
+  w.key("optionalFixed32");
   w.integer(get_optional_fixed32());
-  w.key("optional_fixed64");
+  w.key("optionalFixed64");
   w.integer_string(get_optional_fixed64());
-  w.key("optional_sfixed32");
+  w.key("optionalSfixed32");
   w.integer(get_optional_sfixed32());
-  w.key("optional_sfixed64");
+  w.key("optionalSfixed64");
   w.integer_string(get_optional_sfixed64());
-  w.key("optional_float");
+  w.key("optionalFloat");
   w.number(get_optional_float());
-  w.key("optional_double");
+  w.key("optionalDouble");
   w.number(get_optional_double());
-  w.key("optional_bool");
+  w.key("optionalBool");
   w.boolean(get_optional_bool());
-  w.key("optional_string");
+  w.key("optionalString");
   w.string(get_optional_string());
-  w.key("optional_bytes");
+  w.key("optionalBytes");
   w.base64_string(get_optional_bytes());
-  w.key("optional_nested_message");
+  w.key("optionalNestedMessage");
   w.append_raw_json(co_await get_optional_nested_message().to_json());
-  w.key("optional_foreign_message");
+  w.key("optionalForeignMessage");
   if (get_optional_foreign_message()) {
     w.append_raw_json(co_await get_optional_foreign_message()->to_json());
   } else {
     w.null();
   }
-  w.key("optional_nested_enum");
+  w.key("optionalNestedEnum");
   w.string(enum_to_string(get_optional_nested_enum()));
-  w.key("optional_foreign_enum");
+  w.key("optionalForeignEnum");
   w.string(enum_to_string(get_optional_foreign_enum()));
-  w.key("optional_string_piece");
+  w.key("optionalStringPiece");
   w.string(get_optional_string_piece());
-  w.key("optional_cord");
+  w.key("optionalCord");
   w.string(get_optional_cord());
-  w.key("recursive_message");
+  w.key("recursiveMessage");
   if (get_recursive_message()) {
     w.append_raw_json(co_await get_recursive_message()->to_json());
   } else {
     w.null();
   }
-  w.key("repeated_int32");
+  w.key("repeatedInt32");
   w.begin_array();
   for (const auto& e : get_repeated_int32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("repeated_int64");
+  w.key("repeatedInt64");
   w.begin_array();
   for (const auto& e : get_repeated_int64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("repeated_uint32");
+  w.key("repeatedUint32");
   w.begin_array();
   for (const auto& e : get_repeated_uint32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("repeated_uint64");
+  w.key("repeatedUint64");
   w.begin_array();
   for (const auto& e : get_repeated_uint64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("repeated_sint32");
+  w.key("repeatedSint32");
   w.begin_array();
   for (const auto& e : get_repeated_sint32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("repeated_sint64");
+  w.key("repeatedSint64");
   w.begin_array();
   for (const auto& e : get_repeated_sint64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("repeated_fixed32");
+  w.key("repeatedFixed32");
   w.begin_array();
   for (const auto& e : get_repeated_fixed32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("repeated_fixed64");
+  w.key("repeatedFixed64");
   w.begin_array();
   for (const auto& e : get_repeated_fixed64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("repeated_sfixed32");
+  w.key("repeatedSfixed32");
   w.begin_array();
   for (const auto& e : get_repeated_sfixed32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("repeated_sfixed64");
+  w.key("repeatedSfixed64");
   w.begin_array();
   for (const auto& e : get_repeated_sfixed64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("repeated_float");
+  w.key("repeatedFloat");
   w.begin_array();
   for (const auto& e : get_repeated_float()) {
     w.number(e);
   }
   w.end_array();
-  w.key("repeated_double");
+  w.key("repeatedDouble");
   w.begin_array();
   for (const auto& e : get_repeated_double()) {
     w.number(e);
   }
   w.end_array();
-  w.key("repeated_bool");
+  w.key("repeatedBool");
   w.begin_array();
   for (const auto& e : get_repeated_bool()) {
     w.boolean(e);
   }
   w.end_array();
-  w.key("repeated_string");
+  w.key("repeatedString");
   w.begin_array();
   for (const auto& e : get_repeated_string()) {
     w.string(e);
   }
   w.end_array();
-  w.key("repeated_bytes");
+  w.key("repeatedBytes");
   w.begin_array();
   for (const auto& e : get_repeated_bytes()) {
     w.base64_string(e);
   }
   w.end_array();
-  w.key("repeated_nested_message");
+  w.key("repeatedNestedMessage");
   w.begin_array();
   for (const auto& e : get_repeated_nested_message()) {
     w.append_raw_json(co_await e.to_json());
   }
   w.end_array();
-  w.key("repeated_foreign_message");
+  w.key("repeatedForeignMessage");
   w.begin_array();
   for (const auto& e : get_repeated_foreign_message()) {
     w.append_raw_json(co_await e.to_json());
   }
   w.end_array();
-  w.key("repeated_nested_enum");
+  w.key("repeatedNestedEnum");
   w.begin_array();
   for (const auto& e : get_repeated_nested_enum()) {
     w.string(enum_to_string(e));
   }
   w.end_array();
-  w.key("repeated_foreign_enum");
+  w.key("repeatedForeignEnum");
   w.begin_array();
   for (const auto& e : get_repeated_foreign_enum()) {
     w.string(enum_to_string(e));
   }
   w.end_array();
-  w.key("repeated_string_piece");
+  w.key("repeatedStringPiece");
   w.begin_array();
   for (const auto& e : get_repeated_string_piece()) {
     w.string(e);
   }
   w.end_array();
-  w.key("repeated_cord");
+  w.key("repeatedCord");
   w.begin_array();
   for (const auto& e : get_repeated_cord()) {
     w.string(e);
   }
   w.end_array();
-  w.key("packed_int32");
+  w.key("packedInt32");
   w.begin_array();
   for (const auto& e : get_packed_int32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("packed_int64");
+  w.key("packedInt64");
   w.begin_array();
   for (const auto& e : get_packed_int64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("packed_uint32");
+  w.key("packedUint32");
   w.begin_array();
   for (const auto& e : get_packed_uint32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("packed_uint64");
+  w.key("packedUint64");
   w.begin_array();
   for (const auto& e : get_packed_uint64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("packed_sint32");
+  w.key("packedSint32");
   w.begin_array();
   for (const auto& e : get_packed_sint32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("packed_sint64");
+  w.key("packedSint64");
   w.begin_array();
   for (const auto& e : get_packed_sint64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("packed_fixed32");
+  w.key("packedFixed32");
   w.begin_array();
   for (const auto& e : get_packed_fixed32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("packed_fixed64");
+  w.key("packedFixed64");
   w.begin_array();
   for (const auto& e : get_packed_fixed64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("packed_sfixed32");
+  w.key("packedSfixed32");
   w.begin_array();
   for (const auto& e : get_packed_sfixed32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("packed_sfixed64");
+  w.key("packedSfixed64");
   w.begin_array();
   for (const auto& e : get_packed_sfixed64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("packed_float");
+  w.key("packedFloat");
   w.begin_array();
   for (const auto& e : get_packed_float()) {
     w.number(e);
   }
   w.end_array();
-  w.key("packed_double");
+  w.key("packedDouble");
   w.begin_array();
   for (const auto& e : get_packed_double()) {
     w.number(e);
   }
   w.end_array();
-  w.key("packed_bool");
+  w.key("packedBool");
   w.begin_array();
   for (const auto& e : get_packed_bool()) {
     w.boolean(e);
   }
   w.end_array();
-  w.key("packed_nested_enum");
+  w.key("packedNestedEnum");
   w.begin_array();
   for (const auto& e : get_packed_nested_enum()) {
     w.string(enum_to_string(e));
   }
   w.end_array();
-  w.key("unpacked_int32");
+  w.key("unpackedInt32");
   w.begin_array();
   for (const auto& e : get_unpacked_int32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("unpacked_int64");
+  w.key("unpackedInt64");
   w.begin_array();
   for (const auto& e : get_unpacked_int64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("unpacked_uint32");
+  w.key("unpackedUint32");
   w.begin_array();
   for (const auto& e : get_unpacked_uint32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("unpacked_uint64");
+  w.key("unpackedUint64");
   w.begin_array();
   for (const auto& e : get_unpacked_uint64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("unpacked_sint32");
+  w.key("unpackedSint32");
   w.begin_array();
   for (const auto& e : get_unpacked_sint32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("unpacked_sint64");
+  w.key("unpackedSint64");
   w.begin_array();
   for (const auto& e : get_unpacked_sint64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("unpacked_fixed32");
+  w.key("unpackedFixed32");
   w.begin_array();
   for (const auto& e : get_unpacked_fixed32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("unpacked_fixed64");
+  w.key("unpackedFixed64");
   w.begin_array();
   for (const auto& e : get_unpacked_fixed64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("unpacked_sfixed32");
+  w.key("unpackedSfixed32");
   w.begin_array();
   for (const auto& e : get_unpacked_sfixed32()) {
     w.integer(e);
   }
   w.end_array();
-  w.key("unpacked_sfixed64");
+  w.key("unpackedSfixed64");
   w.begin_array();
   for (const auto& e : get_unpacked_sfixed64()) {
     w.integer_string(e);
   }
   w.end_array();
-  w.key("unpacked_float");
+  w.key("unpackedFloat");
   w.begin_array();
   for (const auto& e : get_unpacked_float()) {
     w.number(e);
   }
   w.end_array();
-  w.key("unpacked_double");
+  w.key("unpackedDouble");
   w.begin_array();
   for (const auto& e : get_unpacked_double()) {
     w.number(e);
   }
   w.end_array();
-  w.key("unpacked_bool");
+  w.key("unpackedBool");
   w.begin_array();
   for (const auto& e : get_unpacked_bool()) {
     w.boolean(e);
   }
   w.end_array();
-  w.key("unpacked_nested_enum");
+  w.key("unpackedNestedEnum");
   w.begin_array();
   for (const auto& e : get_unpacked_nested_enum()) {
     w.string(enum_to_string(e));
   }
   w.end_array();
-  w.key("map_int32_int32");
+  w.key("mapInt32Int32");
   w.begin_object();
   for (const auto& [key, value] : get_map_int32_int32()) {
     w.key(std::to_string(key));
     w.integer(value);
   }
   w.end_object();
-  w.key("map_int64_int64");
+  w.key("mapInt64Int64");
   w.begin_object();
   for (const auto& [key, value] : get_map_int64_int64()) {
     w.key(std::to_string(key));
     w.integer_string(value);
   }
   w.end_object();
-  w.key("map_uint32_uint32");
+  w.key("mapUint32Uint32");
   w.begin_object();
   for (const auto& [key, value] : get_map_uint32_uint32()) {
     w.key(std::to_string(key));
     w.integer(value);
   }
   w.end_object();
-  w.key("map_uint64_uint64");
+  w.key("mapUint64Uint64");
   w.begin_object();
   for (const auto& [key, value] : get_map_uint64_uint64()) {
     w.key(std::to_string(key));
     w.integer_string(value);
   }
   w.end_object();
-  w.key("map_sint32_sint32");
+  w.key("mapSint32Sint32");
   w.begin_object();
   for (const auto& [key, value] : get_map_sint32_sint32()) {
     w.key(std::to_string(key));
     w.integer(value);
   }
   w.end_object();
-  w.key("map_sint64_sint64");
+  w.key("mapSint64Sint64");
   w.begin_object();
   for (const auto& [key, value] : get_map_sint64_sint64()) {
     w.key(std::to_string(key));
     w.integer_string(value);
   }
   w.end_object();
-  w.key("map_fixed32_fixed32");
+  w.key("mapFixed32Fixed32");
   w.begin_object();
   for (const auto& [key, value] : get_map_fixed32_fixed32()) {
     w.key(std::to_string(key));
     w.integer(value);
   }
   w.end_object();
-  w.key("map_fixed64_fixed64");
+  w.key("mapFixed64Fixed64");
   w.begin_object();
   for (const auto& [key, value] : get_map_fixed64_fixed64()) {
     w.key(std::to_string(key));
     w.integer_string(value);
   }
   w.end_object();
-  w.key("map_sfixed32_sfixed32");
+  w.key("mapSfixed32Sfixed32");
   w.begin_object();
   for (const auto& [key, value] : get_map_sfixed32_sfixed32()) {
     w.key(std::to_string(key));
     w.integer(value);
   }
   w.end_object();
-  w.key("map_sfixed64_sfixed64");
+  w.key("mapSfixed64Sfixed64");
   w.begin_object();
   for (const auto& [key, value] : get_map_sfixed64_sfixed64()) {
     w.key(std::to_string(key));
     w.integer_string(value);
   }
   w.end_object();
-  w.key("map_int32_float");
+  w.key("mapInt32Float");
   w.begin_object();
   for (const auto& [key, value] : get_map_int32_float()) {
     w.key(std::to_string(key));
     w.number(value);
   }
   w.end_object();
-  w.key("map_int32_double");
+  w.key("mapInt32Double");
   w.begin_object();
   for (const auto& [key, value] : get_map_int32_double()) {
     w.key(std::to_string(key));
     w.number(value);
   }
   w.end_object();
-  w.key("map_bool_bool");
+  w.key("mapBoolBool");
   w.begin_object();
   for (const auto& [key, value] : get_map_bool_bool()) {
     w.key(key ? "true" : "false");
     w.boolean(value);
   }
   w.end_object();
-  w.key("map_string_string");
+  w.key("mapStringString");
   w.begin_object();
   for (const auto& [key, value] : get_map_string_string()) {
     w.key(key);
     w.string(value);
   }
   w.end_object();
-  w.key("map_string_bytes");
+  w.key("mapStringBytes");
   w.begin_object();
   for (const auto& [key, value] : get_map_string_bytes()) {
     w.key(key);
     w.base64_string(value);
   }
   w.end_object();
-  w.key("map_string_nested_message");
+  w.key("mapStringNestedMessage");
   w.begin_object();
   for (const auto& [key, value] : get_map_string_nested_message()) {
     w.key(key);
     w.append_raw_json(co_await value.to_json());
   }
   w.end_object();
-  w.key("map_string_foreign_message");
+  w.key("mapStringForeignMessage");
   w.begin_object();
   for (const auto& [key, value] : get_map_string_foreign_message()) {
     w.key(key);
     w.append_raw_json(co_await value.to_json());
   }
   w.end_object();
-  w.key("map_string_nested_enum");
+  w.key("mapStringNestedEnum");
   w.begin_object();
   for (const auto& [key, value] : get_map_string_nested_enum()) {
     w.key(key);
     w.string(enum_to_string(value));
   }
   w.end_object();
-  w.key("map_string_foreign_enum");
+  w.key("mapStringForeignEnum");
   w.begin_object();
   for (const auto& [key, value] : get_map_string_foreign_enum()) {
     w.key(key);
@@ -2958,47 +2958,47 @@ seastar::future<iobuf> test_all_types_edition2023::to_json() const {
   // oneof_field
   switch (oneof_field_.index()) {
     case 1: {
-      w.key("oneof_uint32");
+      w.key("oneofUint32");
       w.integer(get_oneof_uint32());
       break;
     }
     case 2: {
-      w.key("oneof_nested_message");
+      w.key("oneofNestedMessage");
       w.append_raw_json(co_await get_oneof_nested_message().to_json());
       break;
     }
     case 3: {
-      w.key("oneof_string");
+      w.key("oneofString");
       w.string(get_oneof_string());
       break;
     }
     case 4: {
-      w.key("oneof_bytes");
+      w.key("oneofBytes");
       w.base64_string(get_oneof_bytes());
       break;
     }
     case 5: {
-      w.key("oneof_bool");
+      w.key("oneofBool");
       w.boolean(get_oneof_bool());
       break;
     }
     case 6: {
-      w.key("oneof_uint64");
+      w.key("oneofUint64");
       w.integer_string(get_oneof_uint64());
       break;
     }
     case 7: {
-      w.key("oneof_float");
+      w.key("oneofFloat");
       w.number(get_oneof_float());
       break;
     }
     case 8: {
-      w.key("oneof_double");
+      w.key("oneofDouble");
       w.number(get_oneof_double());
       break;
     }
     case 9: {
-      w.key("oneof_enum");
+      w.key("oneofEnum");
       w.string(enum_to_string(get_oneof_enum()));
       break;
     }
@@ -3006,7 +3006,7 @@ seastar::future<iobuf> test_all_types_edition2023::to_json() const {
   }
   w.key("groupliketype");
   w.append_raw_json(co_await get_groupliketype().to_json());
-  w.key("delimited_field");
+  w.key("delimitedField");
   w.append_raw_json(co_await get_delimited_field().to_json());
   w.end_object();
   co_return std::move(w).finish();

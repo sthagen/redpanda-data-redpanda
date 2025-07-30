@@ -11,8 +11,8 @@
 #pragma once
 
 #include "base/outcome.h"
-#include "cloud_topics/dl_snapshot.h"
-#include "cloud_topics/dl_version.h"
+#include "cloud_topics/level_zero/stm/dl_snapshot.h"
+#include "cloud_topics/level_zero/stm/dl_version.h"
 #include "model/record.h"
 
 #include <seastar/core/gate.hh>
