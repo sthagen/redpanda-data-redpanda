@@ -15,6 +15,8 @@
 #include "json/istreamwrapper.h"
 #include "json/reader.h"
 
+#include <seastar/core/coroutine.hh>
+
 #include <rapidjson/error/en.h>
 
 namespace serde::json::test::dom {
@@ -28,16 +30,16 @@ ss::future<value> parse_document_rapidjson(iobuf buf) {
 
     struct stack_element {
         container_type type;
-        fragmented_vector<value> values;
+        chunked_vector<value> values;
     };
 
-    fragmented_vector<stack_element> stack{};
+    chunked_vector<stack_element> stack{};
     stack.push_back({container_type::document, {}});
 
     struct dom_handler {
-        fragmented_vector<stack_element>* stack;
+        chunked_vector<stack_element>* stack;
 
-        explicit dom_handler(fragmented_vector<stack_element>* stack)
+        explicit dom_handler(chunked_vector<stack_element>* stack)
           : stack(stack) {};
 
         using Ch = rapidjson::UTF8<>::Ch;

@@ -13,7 +13,7 @@
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/offset_interval_set.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 
@@ -63,20 +63,49 @@ public:
             size_t pos;
             size_t size;
         };
+        using ntp_metas_list_t = chunked_vector<ntp_metadata>;
 
         object_id oid;
         size_t footer_pos;
-        chunked_vector<ntp_metadata> ntp_metas;
+        ntp_metas_list_t ntp_metas;
     };
     struct object_response {
         object_id oid;
         size_t footer_pos;
     };
 
+    // Interface to build object metadata for the L1 metastore. Meant to be
+    // totally agnostic to the underlying implementation, whether it's
+    // logically partitioned or not.
+    class object_metadata_builder {
+    public:
+        using error = named_type<ss::sstring, struct builder_error_tag>;
+        virtual ~object_metadata_builder() = default;
+
+        // Returns an object ID that hasn't yet been finished that is
+        // appropriate for the given partition. Potentially shares the object
+        // with another partition, if the object is allowed by the metastore to
+        // be shared by the other partition.
+        virtual object_id
+        get_or_create_object_for(const model::topic_id_partition&)
+          = 0;
+
+        // Adds the given partition metadata for the given object. Expected
+        // that finish() has not yet been called on the object.
+        virtual std::expected<void, error>
+          add(object_id, object_metadata::ntp_metadata) = 0;
+
+        // Tracks the given object as finished. Further calls to
+        // get_or_create_object_for() will not return the finished object ID.
+        virtual std::expected<void, error>
+        finish(object_id, size_t footer_pos) = 0;
+    };
+
     struct offsets_response {
         kafka::offset start_offset;
         kafka::offset next_offset;
     };
+    virtual std::unique_ptr<object_metadata_builder> object_builder() = 0;
 
     // Returns offsets (e.g. start, next) for the given partition.
     virtual ss::future<std::expected<offsets_response, errc>>
@@ -86,7 +115,7 @@ public:
     // because they break an invariant of a partition's offset ranges, all
     // objects are rejected.
     virtual ss::future<std::expected<void, errc>>
-    add_objects(const chunked_vector<object_metadata>&) = 0;
+      add_objects(std::unique_ptr<object_metadata_builder>) = 0;
 
     // Adds the given objects to the metastore, expecting that the new extents
     // replace an extent or set of extents covering the same range.
@@ -97,7 +126,7 @@ public:
     // correctness, these simplify accounting and makes it easier to validate
     // that we haven't lost data.
     virtual ss::future<std::expected<void, errc>>
-    replace_objects(const chunked_vector<object_metadata>&) = 0;
+      replace_objects(std::unique_ptr<object_metadata_builder>) = 0;
 
     // Finds the first object of a given partition with data greater than or
     // equal to the given offset. If no such offset exists, returns
@@ -168,7 +197,7 @@ public:
     // compaction metadata. See get_compaction_offsets() for more details on
     // expected usage.
     virtual ss::future<std::expected<void, errc>> compact_objects(
-      const chunked_vector<object_metadata>&, const compaction_map_t&)
+      std::unique_ptr<object_metadata_builder>, const compaction_map_t&)
       = 0;
 
     // Returns metadata required to determine what to compact for the given

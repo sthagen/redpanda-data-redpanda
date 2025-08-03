@@ -12,7 +12,7 @@
 
 #include "base/outcome.h"
 #include "cluster/errc.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"

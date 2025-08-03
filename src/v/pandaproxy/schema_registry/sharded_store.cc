@@ -14,7 +14,7 @@
 #include "absl/algorithm/container.h"
 #include "base/vlog.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "hashing/jump_consistent_hash.h"
 #include "hashing/xx.h"
 #include "pandaproxy/logger.h"
@@ -169,34 +169,47 @@ sharded_store::get_schema_version(stored_schema schema) {
       map, std::optional<schema_id>{}, reduce);
 
     // Determine if a provided schema id is appropriate
-    if (schema.id != invalid_schema_id) {
+    const auto& sub = schema.schema.sub();
+    const auto mode = co_await get_mode(sub, default_to_global::yes);
+    if (mode == mode::import) {
+        if (
+          schema.id != invalid_schema_id && s_id != schema.id
+          && co_await has_schema(schema.id)) {
+            // The supplied id already exists, but the schema is different
+            co_return ss::coroutine::return_exception(
+              as_exception(overwrite_schema_with_id_not_permitted(schema.id)));
+        }
+        vlog(
+          srlog.debug,
+          "get_schema_version: existing ID {} in import mode",
+          s_id);
+    } else if (schema.id != invalid_schema_id) {
         if (s_id.has_value() && s_id != schema.id) {
             co_return ss::coroutine::return_exception(exception(
               error_code::subject_version_schema_id_already_exists,
               fmt::format(
-                "Schema already registered with id {} instead of input id {}",
+                "Schema already registered with id {} instead of input id "
+                "{}",
                 s_id.value()(),
                 schema.id())));
         } else if (co_await has_schema(schema.id)) {
             // The supplied id already exists, but the schema is different
-            co_return ss::coroutine::return_exception(exception(
-              error_code::subject_version_schema_id_already_exists,
-              fmt::format(
-                "Overwrite new schema with id {} is not permitted.",
-                schema.id())));
+            co_return ss::coroutine::return_exception(
+              as_exception(overwrite_schema_with_id_not_permitted(schema.id)));
         } else {
             // Use the supplied id
             s_id = schema.id;
             vlog(
-              srlog.debug, "project_ids: using supplied ID {}", s_id.value());
+              srlog.debug,
+              "get_schema_version: using supplied ID {}",
+              s_id.value());
         }
     } else if (s_id) {
-        vlog(srlog.debug, "project_ids: existing ID {}", s_id.value());
+        vlog(srlog.debug, "get_schema_version: existing ID {}", s_id.value());
     }
 
     // Determine if the subject already has a version that references this
     // schema, deleted versions are seen.
-    const auto& sub = schema.schema.sub();
     const auto versions = co_await _store.invoke_on(
       shard_for(sub),
       _smp_opts,
@@ -221,7 +234,7 @@ sharded_store::get_schema_version(stored_schema schema) {
     }
 
     // Check compatibility of the schema
-    if (!v_id.has_value() && !versions.empty()) {
+    if (!v_id.has_value() && !versions.empty() && mode != mode::import) {
         auto compat = co_await is_compatible(
           versions.back().version, schema.schema.share(), verbose::yes);
         if (!compat.is_compat) {

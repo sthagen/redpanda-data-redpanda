@@ -157,8 +157,8 @@ ss::future<> reconciler::reconcile() {
     if (!object.has_value()) {
         co_return;
     }
-
-    auto result = co_await upload_object(std::move(object->data));
+    auto path = l1::object_path_factory::level_one_path();
+    auto result = co_await upload_object(path, std::move(object->data));
     if (result != cloud_io::upload_result::success) {
         vlog(lg.info, "Failed to upload L1 object: {}", result);
         co_return;
@@ -166,7 +166,7 @@ ss::future<> reconciler::reconcile() {
 
     // commit for each partition represented in the uploaded object
     for (const auto& range : object->ranges) {
-        co_await commit_object(range);
+        co_await commit_object(path, range);
     }
 }
 
@@ -202,7 +202,8 @@ ss::future<std::optional<reconciler::object>> reconciler::build_object() {
     co_return object;
 }
 
-ss::future<cloud_io::upload_result> reconciler::upload_object(iobuf payload) {
+ss::future<cloud_io::upload_result> reconciler::upload_object(
+  cloud_storage_clients::object_key key, iobuf payload) {
     retry_chain_node rtc(
       _as,
       ss::lowres_clock::now() + std::chrono::seconds(20),
@@ -211,7 +212,7 @@ ss::future<cloud_io::upload_result> reconciler::upload_object(iobuf payload) {
     co_return co_await _cloud_io->local().upload_object({
       .transfer_details = {
         .bucket = _bucket,
-        .key = l1::object_path_factory::level_one_path(),
+        .key = key,
         .parent_rtc = rtc,
       },
       .display_str = "l1_object",
@@ -219,7 +220,9 @@ ss::future<cloud_io::upload_result> reconciler::upload_object(iobuf payload) {
     });
 }
 
-ss::future<> reconciler::commit_object(const object_range_info& range) {
+ss::future<> reconciler::commit_object(
+  const cloud_storage_clients::object_key& key,
+  const object_range_info& range) {
     /*
      * TODO register the L1 object with L1 metastore.
      */
@@ -229,7 +232,8 @@ ss::future<> reconciler::commit_object(const object_range_info& range) {
 
     vlog(
       lg.info,
-      "Committed overlay for {} phy {}~{} log {}~{}. New LRO {}",
+      "Committed overlay to {} for {} phy {}~{} log {}~{}. New LRO {}",
+      key,
       part->ntp(),
       range.physical_offset_start,
       range.physical_offset_end,

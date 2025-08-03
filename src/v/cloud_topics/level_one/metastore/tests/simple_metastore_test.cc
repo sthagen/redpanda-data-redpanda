@@ -833,3 +833,168 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsNoTombstones) {
     EXPECT_THAT(
       cmp_a->removable_tombstone_ranges.to_vec(), testing::ElementsAre());
 }
+
+TEST(SimpleMetastoreTest, TestObjectBuilder) {
+    simple_metastore m;
+    auto ob = m.object_builder();
+    auto tp_a = model::topic_id_partition::from(tid_a);
+
+    // Creating objects for the same partition will result in the same object.
+    auto o_a = ob->get_or_create_object_for(tp_a);
+    auto o_a_2 = ob->get_or_create_object_for(tp_a);
+    ASSERT_EQ(o_a, o_a_2);
+
+    // Creating objects for different partitions will result in the same
+    // object.
+    auto tp_b = model::topic_id_partition::from(tid_b);
+    auto o_b = ob->get_or_create_object_for(tp_b);
+    ASSERT_EQ(o_a, o_b);
+    auto o_b_2 = ob->get_or_create_object_for(tp_b);
+    ASSERT_EQ(o_b, o_b_2);
+
+    // Add a partition's metadata to the object.
+    ASSERT_TRUE(ob->add(o_a, {}).has_value());
+
+    // Finish the current object. The next object will be different.
+    ASSERT_TRUE(ob->finish(o_a, 0).has_value());
+
+    auto o_a_3 = ob->get_or_create_object_for(tp_a);
+    ASSERT_NE(o_a_2, o_a_3);
+
+    // We can't release the result until we finish all objects.
+    ASSERT_FALSE(dynamic_cast<simple_object_builder*>(ob.get())->release());
+    ASSERT_TRUE(ob->finish(o_a_3, 0).has_value());
+
+    auto release_res
+      = dynamic_cast<simple_object_builder*>(ob.get())->release();
+    ASSERT_TRUE(release_res.has_value());
+    ASSERT_EQ(2, release_res->size());
+    ASSERT_EQ(1, release_res.value()[0].ntp_metas.size());
+    ASSERT_EQ(0, release_res.value()[1].ntp_metas.size());
+}
+
+TEST(SimpleMetastoreTest, TestObjectBuilderBadObjects) {
+    // Test calls for objects that don't exist in the builder.
+    simple_metastore m;
+    auto ob = m.object_builder();
+    auto add_res = ob->add(create_object_id(), {});
+    ASSERT_FALSE(add_res.has_value());
+
+    auto finish_res = ob->finish(create_object_id(), 0);
+    ASSERT_FALSE(finish_res.has_value());
+
+    // Both operations failed -- the builder should be empty.
+    auto release_res
+      = dynamic_cast<simple_object_builder*>(ob.get())->release();
+    ASSERT_TRUE(release_res.has_value());
+    ASSERT_EQ(0, release_res->size());
+}
+
+TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
+    simple_metastore m;
+    auto tp_a = model::topic_id_partition::from(tid_a);
+    {
+        auto ob = m.object_builder();
+        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto add_res = ob->add(
+          o_a,
+          metastore::object_metadata::ntp_metadata{
+            .tidp = tp_a,
+            .base_offset = 0_o,
+            .last_offset = 9_o,
+            .max_timestamp = 1000_t,
+            .pos = 0,
+            .size = 0,
+          });
+        ASSERT_TRUE(add_res.has_value());
+        auto fin_res = ob->finish(o_a, 0);
+        ASSERT_TRUE(fin_res.has_value());
+        auto add_obj_res = m.add_objects(std::move(ob)).get();
+        ASSERT_TRUE(add_obj_res.has_value());
+
+        auto offsets_res = m.get_offsets(tp_a).get();
+        ASSERT_TRUE(offsets_res.has_value());
+        ASSERT_EQ(0_o, offsets_res->start_offset);
+        ASSERT_EQ(10_o, offsets_res->next_offset);
+    }
+    {
+        auto ob = m.object_builder();
+        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto add_res = ob->add(
+          o_a,
+          metastore::object_metadata::ntp_metadata{
+            .tidp = tp_a,
+            .base_offset = 10_o,
+            .last_offset = 19_o,
+            .max_timestamp = 1000_t,
+            .pos = 0,
+            .size = 0,
+          });
+        ASSERT_TRUE(add_res.has_value());
+        auto fin_res = ob->finish(o_a, 0);
+        ASSERT_TRUE(fin_res.has_value());
+        auto add_obj_res = m.add_objects(std::move(ob)).get();
+        ASSERT_TRUE(add_obj_res.has_value());
+
+        auto offsets_res = m.get_offsets(tp_a).get();
+        ASSERT_TRUE(offsets_res.has_value());
+        ASSERT_EQ(0_o, offsets_res->start_offset);
+        ASSERT_EQ(20_o, offsets_res->next_offset);
+    }
+    {
+        auto ob = m.object_builder();
+        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto add_res = ob->add(
+          o_a,
+          metastore::object_metadata::ntp_metadata{
+            .tidp = tp_a,
+            .base_offset = 0_o,
+            .last_offset = 19_o,
+            .max_timestamp = 1000_t,
+            .pos = 0,
+            .size = 0,
+          });
+        ASSERT_TRUE(add_res.has_value());
+        auto fin_res = ob->finish(o_a, 0);
+        ASSERT_TRUE(fin_res.has_value());
+        auto replace_obj_res = m.replace_objects(std::move(ob)).get();
+        ASSERT_TRUE(replace_obj_res.has_value());
+
+        auto offsets_res = m.get_offsets(tp_a).get();
+        ASSERT_TRUE(offsets_res.has_value());
+        ASSERT_EQ(0_o, offsets_res->start_offset);
+        ASSERT_EQ(20_o, offsets_res->next_offset);
+    }
+    {
+        auto ob = m.object_builder();
+        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto add_res = ob->add(
+          o_a,
+          metastore::object_metadata::ntp_metadata{
+            .tidp = tp_a,
+            .base_offset = 0_o,
+            .last_offset = 19_o,
+            .max_timestamp = 1000_t,
+            .pos = 0,
+            .size = 0,
+          });
+        ASSERT_TRUE(add_res.has_value());
+        auto fin_res = ob->finish(o_a, 0);
+        ASSERT_TRUE(fin_res.has_value());
+
+        cm_builder cmb;
+        cmb.clean(tid_a, 10_o, 19_o);
+        auto compact_obj_res
+          = m.compact_objects(std::move(ob), cmb.build()).get();
+        ASSERT_TRUE(compact_obj_res.has_value());
+
+        auto offsets_res = m.get_offsets(tp_a).get();
+        ASSERT_TRUE(offsets_res.has_value());
+        ASSERT_EQ(0_o, offsets_res->start_offset);
+        ASSERT_EQ(20_o, offsets_res->next_offset);
+
+        auto compact_offsets_res = m.get_compaction_offsets(tp_a, 1000_t).get();
+        auto dirty = compact_offsets_res->dirty_ranges.to_vec();
+        EXPECT_THAT(dirty, testing::ElementsAre(MatchesRange(0_o, 9_o)));
+    }
+}

@@ -1051,7 +1051,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/cluster",
         "//src/v/config",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/test_utils:gtest",
@@ -1165,7 +1165,7 @@ redpanda_cc_btest(
         "//src/v/cluster/tests:randoms",
         "//src/v/cluster/tests:topic_properties_generator",
         "//src/v/compat",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/pandaproxy/schema_registry/test:random",
@@ -1287,5 +1287,22 @@ redpanda_cc_btest(
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "epoch_service_test",
+    timeout = "short",
+    srcs = [
+        "epoch_service_test.cc",
+    ],
+    cpu = 2,
+    deps = [
+        "//src/v/cluster",
+        "//src/v/ssx:abort_source",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+        "@seastar//:testing",
     ],
 )

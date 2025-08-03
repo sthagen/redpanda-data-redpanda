@@ -11,7 +11,7 @@
 #pragma once
 
 #include "absl/hash/hash.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 
 #include <ankerl/unordered_dense.h>
 

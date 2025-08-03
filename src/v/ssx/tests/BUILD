@@ -156,7 +156,7 @@ redpanda_cc_btest(
     cpu = 1,
     deps = [
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/ssx:future_util",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
@@ -173,7 +173,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/ssx:when_all",
         "//src/v/test_utils:gtest",
         "@boost//:container",

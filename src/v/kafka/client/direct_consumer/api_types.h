@@ -11,7 +11,7 @@
 #pragma once
 #include "base/outcome.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/fetch_response.h"
 #include "kafka/protocol/types.h"

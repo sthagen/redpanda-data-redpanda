@@ -18,7 +18,7 @@
 #include "cluster_link/model/types.h"
 #include "cluster_link/task.h"
 #include "cluster_link/types.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "ssx/work_queue.h"
 #include "utils/mutex.h"

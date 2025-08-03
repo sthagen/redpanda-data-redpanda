@@ -119,12 +119,12 @@ public:
      * Given a list of defunct nodes, generates a list of ntps that lost
      * majority due to unavailability of the nodes.
      */
-    ss::future<result<fragmented_vector<ntp_with_majority_loss>>>
+    ss::future<result<chunked_vector<ntp_with_majority_loss>>>
     partitions_with_lost_majority(std::vector<model::node_id> dead_nodes);
 
     ss::future<std::error_code> force_recover_partitions_from_nodes(
       std::vector<model::node_id> nodes,
-      fragmented_vector<ntp_with_majority_loss>
+      chunked_vector<ntp_with_majority_loss>
         user_approved_force_recovery_partitions,
       model::timeout_clock::time_point timeout);
 

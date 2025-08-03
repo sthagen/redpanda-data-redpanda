@@ -12,7 +12,7 @@
 
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/remote.h"
-#include "cloud_topics/extent_meta.h"
+#include "cloud_topics/level_zero/common/extent_meta.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 

@@ -13,8 +13,8 @@
 #include "bytes/iostream.h"
 #include "cloud_io/io_result.h"
 #include "cloud_io/remote.h"
-#include "cloud_topics/extent_meta.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"
+#include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/object_utils.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
@@ -86,7 +86,8 @@ get_random_batches(int num_batches, int num_records) { // NOLINT
 class static_cluster_services : public cloud_topics::cluster_services {
 public:
     static_cluster_services() = default;
-    seastar::future<cloud_topics::cluster_epoch> current_epoch() override {
+    seastar::future<cloud_topics::cluster_epoch>
+    current_epoch(seastar::abort_source*) override {
         return seastar::make_ready_future<cloud_topics::cluster_epoch>(0);
     }
 };

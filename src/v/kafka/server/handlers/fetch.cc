@@ -15,7 +15,7 @@
 #include "cluster/partition_manager.h"
 #include "cluster/shard_table.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "features/enterprise_feature_messages.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/protocol/batch_consumer.h"

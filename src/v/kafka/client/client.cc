@@ -12,7 +12,7 @@
 #include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/broker.h"
 #include "kafka/client/configuration.h"
 #include "kafka/client/consumer.h"

@@ -284,12 +284,12 @@ ss::future<eviction_policy::schedule> eviction_policy::create_new_schedule() {
     co_return sched;
 }
 
-ss::future<fragmented_vector<eviction_policy::partition>>
+ss::future<chunked_vector<eviction_policy::partition>>
 eviction_policy::collect_reclaimable_offsets() {
     /*
      * build a lightweight copy to avoid invalidations during iteration
      */
-    fragmented_vector<ss::lw_shared_ptr<cluster::partition>> partitions;
+    chunked_vector<ss::lw_shared_ptr<cluster::partition>> partitions;
     for (const auto& p : _pm->local().partitions()) {
         if (!p.second->remote_partition()) {
             continue;
@@ -309,7 +309,7 @@ eviction_policy::collect_reclaimable_offsets() {
      * in smallish batches partitions are queried for their reclaimable
      * segments. all of this information is bundled up and returned.
      */
-    fragmented_vector<partition> res;
+    chunked_vector<partition> res;
     co_await ss::max_concurrent_for_each(
       partitions.begin(), partitions.end(), 20, [&res, cfg](const auto& p) {
           auto log = p->log();

@@ -12,7 +12,7 @@
 
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/remote.h"
-#include "cloud_topics/extent_meta.h"
+#include "cloud_topics/level_zero/common/extent_meta.h"
 #include "model/record_batch_reader.h"
 #include "storage/log_reader.h"
 

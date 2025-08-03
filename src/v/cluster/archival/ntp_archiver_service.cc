@@ -35,7 +35,7 @@
 #include "cluster/archival/types.h"
 #include "cluster/partition_manager.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -1533,20 +1533,20 @@ std::optional<ss::sstring> ntp_archiver::upload_should_abort() const {
     }
 }
 
-ss::future<fragmented_vector<model::tx_range>>
+ss::future<chunked_vector<model::tx_range>>
 ntp_archiver::get_aborted_transactions(
   model::offset start_offset, model::offset end_offset) {
     auto guard = _gate.hold();
     co_return co_await _parent.aborted_transactions(start_offset, end_offset);
 }
 
-ss::future<std::pair<std::optional<fragmented_vector<model::tx_range>>, size_t>>
+ss::future<std::pair<std::optional<chunked_vector<model::tx_range>>, size_t>>
 ntp_archiver::get_aborted_transactions(
   const segment_collector_stream& meta,
   const cloud_storage::segment_name& sname) {
     ss::log_level level{};
     std::exception_ptr ep{};
-    std::optional<fragmented_vector<model::tx_range>> tx_ranges{};
+    std::optional<chunked_vector<model::tx_range>> tx_ranges{};
     size_t tx_size{0};
     if (!meta.is_compacted) {
         try {
@@ -1619,7 +1619,7 @@ ntp_archiver::make_segment_index(
 ss::future<std::optional<cloud_storage::upload_result>>
 ntp_archiver::maybe_upload_aborted_tx(
   cloud_storage::remote_segment_path path,
-  std::optional<fragmented_vector<model::tx_range>> tx,
+  std::optional<chunked_vector<model::tx_range>> tx,
   retry_chain_node& parent_rtc) {
     retry_chain_node fib(&parent_rtc);
     if (tx.has_value() && !tx.value().empty()) {
@@ -1649,7 +1649,7 @@ ss::future<> ntp_archiver::upload_index(
 ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
   segment_collector_stream strm,
   const cloud_storage::segment_meta& meta,
-  std::optional<fragmented_vector<model::tx_range>> tx_ranges) {
+  std::optional<chunked_vector<model::tx_range>> tx_ranges) {
     retry_chain_node rtc(
       _conf->segment_upload_timeout(),
       _conf->upload_loop_initial_backoff(),

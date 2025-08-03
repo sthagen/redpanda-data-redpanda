@@ -14,7 +14,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/broker.h"
 #include "kafka/client/configuration.h"
 #include "kafka/protocol/metadata.h"

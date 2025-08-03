@@ -14,7 +14,7 @@ redpanda_cc_library(
         ":probe",
         ":utils",
         "//src/v/bytes:iostream",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/ssx:future_util",
         "//src/v/utils:external_process",
         "//src/v/utils:file_io",
@@ -66,7 +66,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/security",
         "//src/v/utils:named_type",
@@ -106,7 +106,7 @@ redpanda_cc_library(
     deps = [
         ":types",
         "//src/v/bytes",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/serde",
         "//src/v/serde:bytes",
         "//src/v/serde:named_type",

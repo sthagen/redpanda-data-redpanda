@@ -9,7 +9,7 @@
 
 #include "kafka/client/producer.h"
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/brokers.h"
 #include "kafka/client/configuration.h"
 #include "kafka/client/exceptions.h"

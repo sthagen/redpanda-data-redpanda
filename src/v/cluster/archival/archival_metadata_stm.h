@@ -256,7 +256,7 @@ public:
 
     // Return list of all segments that has to be
     // removed from S3.
-    fragmented_vector<cloud_storage::partition_manifest::lw_segment_meta>
+    chunked_vector<cloud_storage::partition_manifest::lw_segment_meta>
     get_segments_to_cleanup() const;
 
     /// Create batch builder that can be used to combine and replicate multiple
@@ -345,13 +345,13 @@ private:
 
     friend segment segment_from_meta(const cloud_storage::segment_meta& meta);
 
-    static fragmented_vector<segment>
+    static chunked_vector<segment>
     segments_from_manifest(const cloud_storage::partition_manifest& manifest);
 
-    static fragmented_vector<segment> replaced_segments_from_manifest(
+    static chunked_vector<segment> replaced_segments_from_manifest(
       const cloud_storage::partition_manifest& manifest);
 
-    static fragmented_vector<segment>
+    static chunked_vector<segment>
     spillover_from_manifest(const cloud_storage::partition_manifest& manifest);
 
     void apply_add_segment(const segment& segment);

@@ -450,7 +450,7 @@ public:
     using ntp_delta = topic_table_ntp_delta;
 
     using ntp_delta_range_t
-      = boost::iterator_range<fragmented_vector<ntp_delta>::const_iterator>;
+      = boost::iterator_range<chunked_vector<ntp_delta>::const_iterator>;
     using ntp_delta_cb_t = ss::noncopyable_function<void(ntp_delta_range_t)>;
     using lw_ntp_cb_t = ss::noncopyable_function<void()>;
 
@@ -816,7 +816,7 @@ public:
     }
 
     std::error_code validate_force_reconfigurable_partitions(
-      const fragmented_vector<ntp_with_majority_loss>&) const;
+      const chunked_vector<ntp_with_majority_loss>&) const;
 
     auto partitions_to_force_recover_it_begin() const {
         return stable_iterator<
@@ -855,7 +855,7 @@ private:
     struct waiter {
         explicit waiter(uint64_t id)
           : id(id) {}
-        ss::promise<fragmented_vector<ntp_delta>> promise;
+        ss::promise<chunked_vector<ntp_delta>> promise;
         ss::abort_source::subscription sub;
         uint64_t id;
     };
@@ -910,7 +910,7 @@ private:
     std::vector<std::pair<cluster::notification_id_type, topic_delta_cb_t>>
       _topic_notifications;
 
-    fragmented_vector<ntp_delta> _pending_ntp_deltas;
+    chunked_vector<ntp_delta> _pending_ntp_deltas;
     cluster::notification_id_type _ntp_notification_id{0};
     cluster::notification_id_type _lw_ntp_notification_id{0};
     std::vector<std::pair<cluster::notification_id_type, ntp_delta_cb_t>>

@@ -17,7 +17,7 @@
 #include "base/vlog.h"
 #include "bytes/iobuf_parser.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/adl_serde.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
@@ -664,7 +664,7 @@ ss::future<compaction_result> do_self_compact_segment(
 ss::future<> build_compaction_index(
   model::record_batch_reader rdr,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  fragmented_vector<model::tx_range> aborted_txs,
+  chunked_vector<model::tx_range> aborted_txs,
   segment_full_path p,
   compaction_config cfg,
   storage_resources& resources) {
@@ -1225,7 +1225,7 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
       feature_table,
       kvs,
       true);
-    vlog(gclog.debug, "Final compacted segment {}", replacement);
+    vlog(gclog.info, "Final compacted segment {}", replacement);
 
     /*
      * remove index files (ignoring failures if they do not exist). they will be

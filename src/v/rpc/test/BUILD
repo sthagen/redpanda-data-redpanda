@@ -18,16 +18,30 @@ redpanda_test_cc_library(
     ],
 )
 
+redpanda_test_cc_library(
+    name = "test_types",
+    hdrs = [
+        "test_types.h",
+    ],
+    include_prefix = "rpc/test",
+    deps = [
+        "//src/v/bytes:iobuf",
+        "@seastar",
+    ],
+)
+
 redpanda_cc_btest(
     name = "netbuf_test",
     timeout = "short",
     srcs = [
         "netbuf_tests.cc",
-        "test_types.h",
     ],
     deps = [
+        ":test_types",
         "//src/v/bytes:iobuf",
         "//src/v/rpc",
+        "//src/v/serde",
+        "//src/v/serde:sstring",
         "//src/v/test_utils:seastar_boost",
         "@fmt",
         "@seastar",
@@ -40,9 +54,9 @@ redpanda_cc_btest(
     timeout = "short",
     srcs = [
         "roundtrip_tests.cc",
-        "test_types.h",
     ],
     deps = [
+        ":test_types",
         "//src/v/bytes:iobuf",
         "//src/v/reflection:adl",
         "//src/v/test_utils:seastar_boost",
@@ -70,9 +84,9 @@ redpanda_cc_btest(
     timeout = "short",
     srcs = [
         "serialization_test.cc",
-        "test_types.h",
     ],
     deps = [
+        ":test_types",
         "//src/v/bytes:iobuf",
         "//src/v/reflection:adl",
         "//src/v/reflection:arity",

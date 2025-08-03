@@ -16,7 +16,7 @@
 #include "cluster/cloud_metadata/offsets_snapshot.h"
 #include "cluster/notification.h"
 #include "cluster/topic_table.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/heartbeat.h"
 #include "kafka/protocol/join_group.h"

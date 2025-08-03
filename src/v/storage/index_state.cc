@@ -11,7 +11,7 @@
 
 #include "base/vassert.h"
 #include "bytes/iobuf_parser.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "hashing/crc32c.h"
 #include "hashing/xx.h"
 #include "reflection/adl.h"

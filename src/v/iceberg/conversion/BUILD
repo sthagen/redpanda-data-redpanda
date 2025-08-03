@@ -118,6 +118,7 @@ redpanda_cc_library(
         ":conversion_outcome",
         "//src/v/iceberg:values",
         "//src/v/serde/parquet:value",
+        "@seastar",
     ],
 )
 
@@ -135,7 +136,7 @@ redpanda_cc_library(
         ":conversion_outcome",
         ":protobuf_utils",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/iceberg:values",
         "//src/v/serde/protobuf",
         "//src/v/ssx:future_util",

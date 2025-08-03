@@ -11,7 +11,7 @@
 #include "base/vlog.h"
 #include "cluster/feature_manager.h"
 #include "cluster/feature_update_action.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "features/feature_state.h"
 #include "features/feature_table.h"
 #include "gtest/gtest.h"

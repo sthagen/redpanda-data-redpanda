@@ -10,7 +10,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "config/configuration.h"
 #include "config/leaders_preference.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "features/enterprise_feature_messages.h"
 #include "kafka/protocol/alter_configs.h"
 #include "kafka/protocol/create_topics.h"

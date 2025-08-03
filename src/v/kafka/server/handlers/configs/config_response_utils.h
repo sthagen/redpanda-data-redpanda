@@ -12,7 +12,7 @@
 #pragma once
 
 #include "cluster/types.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/describe_configs.h"
 #include "kafka/protocol/schemata/create_topics_response.h"
 

@@ -10,7 +10,7 @@
 #include "datalake/coordinator/iceberg_file_committer.h"
 
 #include "base/vlog.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "datalake/coordinator/commit_offset_metadata.h"
 #include "datalake/coordinator/state.h"
 #include "datalake/coordinator/state_update.h"

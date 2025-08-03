@@ -203,7 +203,7 @@ redpanda_cc_library(
         ":json",
         ":parsing",
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client",
         "//src/v/kafka/protocol:fetch",
         "//src/v/kafka/protocol:join_group",

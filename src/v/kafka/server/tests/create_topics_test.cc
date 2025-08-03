@@ -10,7 +10,7 @@
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "config/leaders_preference.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "features/enterprise_feature_messages.h"
 #include "kafka/protocol/create_topics.h"
 #include "kafka/protocol/errors.h"

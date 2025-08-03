@@ -49,7 +49,7 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client:transport",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:delete_records",
@@ -254,7 +254,7 @@ redpanda_cc_btest(
         "member_test.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/kafka/server",
         "//src/v/test_utils:seastar_boost",
@@ -306,7 +306,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/cluster",
         "//src/v/config",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/kafka/server",
         "//src/v/test_utils:seastar_boost",
@@ -342,7 +342,7 @@ redpanda_cc_btest(
         "delete_topics_test.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:create_topics",
         "//src/v/kafka/protocol:delete_topics",
@@ -416,7 +416,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/cluster",
         "//src/v/config",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/features:enterprise_feature_messages",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:create_topics",
@@ -454,7 +454,7 @@ redpanda_cc_btest(
         "list_offsets_test.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:list_offset",
         "//src/v/kafka/protocol:produce",
@@ -475,7 +475,7 @@ redpanda_cc_btest(
         "topic_recreate_test.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:create_topics",
         "//src/v/kafka/protocol:delete_topics",
@@ -565,7 +565,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/config",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol:alter_partition_reassignments",
         "//src/v/kafka/protocol:list_partition_reassignments",
         "//src/v/kafka/protocol:metadata",
@@ -672,7 +672,7 @@ redpanda_cc_btest(
     cpu = "1",
     deps = [
         "//src/v/config",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/features:enterprise_feature_messages",
         "//src/v/kafka/client",
         "//src/v/kafka/protocol",
@@ -702,7 +702,7 @@ redpanda_cc_btest(
     cpu = "1",
     deps = [
         ":kafka_test_utils",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client:transport",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:fetch",
@@ -853,7 +853,7 @@ redpanda_cc_bench(
     redirect_stderr = True,
     runs = 1,
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/protocol/schemata:produce_request",
         "//src/v/kafka/server",
         "//src/v/model",

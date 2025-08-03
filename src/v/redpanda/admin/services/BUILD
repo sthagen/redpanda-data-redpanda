@@ -10,5 +10,6 @@ redpanda_cc_library(
     deps = [
         "//proto/redpanda/core/admin:admin_redpanda_proto",
         "//src/v/version",
+        "@seastar",
     ],
 )

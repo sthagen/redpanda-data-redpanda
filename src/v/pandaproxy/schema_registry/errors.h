@@ -207,6 +207,12 @@ inline error_info format_not_supported(const output_format f) {
       fmt::format("Format value '{}' is not supported", f)};
 }
 
+inline error_info overwrite_schema_with_id_not_permitted(schema_id id) {
+    return error_info{
+      error_code::subject_version_operation_not_permitted,
+      fmt::format("Overwrite new schema with id {} is not permitted.", id())};
+}
+
 inline bool failed_subject_schema_lookup(std::error_code ec) {
     return ec == error_code::subject_not_found
            || ec == error_code::subject_version_not_found;

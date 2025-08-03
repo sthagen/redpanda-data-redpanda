@@ -28,8 +28,7 @@ model::record_batch_reader make_reader(
         }
         batches.push_back(std::move(b).build());
     }
-    return model::make_fragmented_memory_record_batch_reader(
-      std::move(batches));
+    return model::make_chunked_memory_record_batch_reader(std::move(batches));
 }
 
 TEST(RangeBatchConsumer, EmptyReader) {

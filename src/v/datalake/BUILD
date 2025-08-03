@@ -195,7 +195,7 @@ redpanda_cc_library(
         "partition_spec_parser.h",
     ],
     implementation_deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/iceberg:transform",
         "//src/v/utils:fixed_string",
         "//src/v/utils:variant",
@@ -286,7 +286,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage_clients",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/utils:lazy_abort_source",
         "//src/v/utils:named_type",

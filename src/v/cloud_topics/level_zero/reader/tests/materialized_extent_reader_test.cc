@@ -11,7 +11,7 @@
 #include "base/vlog.h"
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"
 #include "cloud_topics/level_zero/reader/tests/materialized_extent_fixture.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "test_utils/test.h"

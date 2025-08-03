@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "pandaproxy/schema_registry/auth.h"
 #include "pandaproxy/schema_registry/fwd.h"
 #include "pandaproxy/server.h"

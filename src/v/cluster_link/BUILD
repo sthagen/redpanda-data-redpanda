@@ -72,7 +72,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cluster",
         "//src/v/cluster_link/model",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client:cluster",
         "//src/v/kafka/data/rpc",
         "//src/v/model",

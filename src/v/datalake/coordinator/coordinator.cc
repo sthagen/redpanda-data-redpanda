@@ -12,7 +12,7 @@
 #include "base/vlog.h"
 #include "cluster/topic_table.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/coordinator/state_update.h"
 #include "datalake/logger.h"

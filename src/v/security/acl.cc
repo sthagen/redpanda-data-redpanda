@@ -22,7 +22,7 @@
 
 #include <seastar/coroutine/maybe_yield.hh>
 
-#include <container/fragmented_vector.h>
+#include <container/chunked_vector.h>
 #include <fmt/format.h>
 
 namespace security {
@@ -262,8 +262,8 @@ acl_store::acls(const acl_binding_filter& filter) const {
     return result;
 }
 
-ss::future<fragmented_vector<acl_binding>> acl_store::all_bindings() const {
-    fragmented_vector<acl_binding> result;
+ss::future<chunked_vector<acl_binding>> acl_store::all_bindings() const {
+    chunked_vector<acl_binding> result;
     for (const auto& acl : _acls) {
         for (const auto& entry : acl.second) {
             result.push_back(acl_binding{acl.first, entry});
@@ -274,7 +274,7 @@ ss::future<fragmented_vector<acl_binding>> acl_store::all_bindings() const {
 }
 
 ss::future<>
-acl_store::reset_bindings(const fragmented_vector<acl_binding>& bindings) {
+acl_store::reset_bindings(const chunked_vector<acl_binding>& bindings) {
     // NOTE: not coroutinized because otherwise clang-14 crashes.
     _acls.clear();
     return ss::do_for_each(

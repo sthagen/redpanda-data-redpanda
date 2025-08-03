@@ -11,6 +11,7 @@
 
 #include "cloud_topics/types.h"
 
+#include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
 
 namespace experimental::cloud_topics {
@@ -37,7 +38,8 @@ public:
      * cluster. The rate at which the epoch is incremented is implementation
      * specific.
      */
-    virtual seastar::future<cluster_epoch> current_epoch() = 0;
+    virtual seastar::future<cluster_epoch>
+    current_epoch(seastar::abort_source*) = 0;
 };
 
 } // namespace experimental::cloud_topics

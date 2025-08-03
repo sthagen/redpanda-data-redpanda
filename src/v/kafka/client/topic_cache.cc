@@ -9,7 +9,7 @@
 
 #include "kafka/client/topic_cache.h"
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/exceptions.h"
 #include "kafka/client/types.h"
 #include "kafka/protocol/metadata.h"

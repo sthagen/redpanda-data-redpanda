@@ -339,7 +339,7 @@ func (g *headerGenerator) generateFile(w *codewriter) {
 			w.PreludePrintln(`#include "container/chunked_hash_map.h"`)
 		}
 		if g.needsChunkedVector {
-			w.PreludePrintln(`#include "container/fragmented_vector.h"`)
+			w.PreludePrintln(`#include "container/chunked_vector.h"`)
 		}
 		if g.needsRpcs {
 			w.PreludePrintln(`#include "serde/protobuf/rpc.h"`)

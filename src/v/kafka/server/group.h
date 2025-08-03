@@ -21,7 +21,7 @@
 #include "config/property.h"
 #include "config/types.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "features/feature_table.h"
 #include "kafka/protocol/fwd.h"
 #include "kafka/protocol/offset_commit.h"

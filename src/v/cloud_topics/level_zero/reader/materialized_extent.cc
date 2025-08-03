@@ -14,7 +14,7 @@
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/io_result.h"
 #include "cloud_topics/errc.h"
-#include "cloud_topics/extent_meta.h"
+#include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/object_utils.h"
 #include "storage/record_batch_utils.h"

@@ -229,7 +229,7 @@ public:
     const storage::ntp_config& get_ntp_config() const;
     ss::shared_ptr<cluster::tm_stm> tm_stm();
 
-    ss::future<fragmented_vector<model::tx_range>>
+    ss::future<chunked_vector<model::tx_range>>
     aborted_transactions(model::offset from, model::offset to);
 
     ss::future<std::vector<model::tx_range>>

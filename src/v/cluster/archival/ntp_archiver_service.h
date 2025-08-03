@@ -567,8 +567,7 @@ private:
     ss::future<ntp_archiver_upload_result> upload_segment(
       segment_collector_stream strm,
       const cloud_storage::segment_meta& meta,
-      std::optional<fragmented_vector<model::tx_range>> tx_ranges
-      = std::nullopt);
+      std::optional<chunked_vector<model::tx_range>> tx_ranges = std::nullopt);
 
     /// Upload tx-manifest
     /// Return error-code if the manifest was uploaded or upload was attempted
@@ -577,17 +576,17 @@ private:
     ss::future<std::optional<cloud_storage::upload_result>>
     maybe_upload_aborted_tx(
       cloud_storage::remote_segment_path path,
-      std::optional<fragmented_vector<model::tx_range>> tx,
+      std::optional<chunked_vector<model::tx_range>> tx,
       retry_chain_node& parent_rtc);
 
     /// Get aborted transactions for upload
     ///
     /// \return list of aborted transactions
-    ss::future<fragmented_vector<model::tx_range>> get_aborted_transactions(
+    ss::future<chunked_vector<model::tx_range>> get_aborted_transactions(
       model::offset start_offset, model::offset end_offset);
 
     ss::future<
-      std::pair<std::optional<fragmented_vector<model::tx_range>>, size_t>>
+      std::pair<std::optional<chunked_vector<model::tx_range>>, size_t>>
     get_aborted_transactions(
       const segment_collector_stream& meta, const cloud_storage::segment_name&);
 

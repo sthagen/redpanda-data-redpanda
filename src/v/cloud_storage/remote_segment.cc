@@ -736,7 +736,7 @@ void remote_segment::set_waiter_errors(const std::exception_ptr& err) {
         _wait_list.pop_front();
     }
 
-    fragmented_vector<chunk_request> chunk_waiters;
+    chunked_vector<chunk_request> chunk_waiters;
     chunk_waiters.swap(_chunk_waiters);
     for (auto& w : chunk_waiters) {
         w.promise.set_exception(err);
@@ -895,13 +895,13 @@ ss::future<> remote_segment::run_hydrate_bg() {
     _hydration_loop_running = false;
 }
 
-ss::future<fragmented_vector<remote_segment::chunk_request>>
+ss::future<chunked_vector<remote_segment::chunk_request>>
 remote_segment::service_chunk_requests() {
     auto g = _gate.hold();
-    fragmented_vector<ss::future<ss::file>> chunk_op_results;
+    chunked_vector<ss::future<ss::file>> chunk_op_results;
     chunk_op_results.reserve(_chunk_waiters.size());
 
-    fragmented_vector<chunk_request> requests;
+    chunked_vector<chunk_request> requests;
     requests.swap(_chunk_waiters);
 
     std::ranges::transform(
@@ -915,7 +915,7 @@ remote_segment::service_chunk_requests() {
     auto results = co_await ss::when_all(
       chunk_op_results.begin(), chunk_op_results.end());
 
-    fragmented_vector<chunk_request> failed;
+    chunked_vector<chunk_request> failed;
     for (size_t i = 0; i < results.size(); ++i) {
         auto request = std::move(requests[i]);
         auto current_result = std::move(results[i]);

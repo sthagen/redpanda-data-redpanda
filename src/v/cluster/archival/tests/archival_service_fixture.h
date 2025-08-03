@@ -20,7 +20,7 @@
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "config/property.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "http/tests/http_imposter.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -130,11 +130,11 @@ public:
       : cluster_test_fixture()
       , http_imposter_fixture(fixture_port_number) {}
 
-    fragmented_vector<model::ntp> create_topic(
+    chunked_vector<model::ntp> create_topic(
       model::topic id,
       int num_partitions,
       std::vector<model::node_id> replicas) {
-        fragmented_vector<model::ntp> ntp_list;
+        chunked_vector<model::ntp> ntp_list;
         cluster::topic_configuration cfg(
           model::kafka_namespace, id, num_partitions, (int16_t)replicas.size());
 
@@ -340,7 +340,7 @@ public:
     /// on every node.
     /// Returns number of managed replicas.
     void wait_all_partitions_managed(
-      const fragmented_vector<model::ntp>& all_ntp,
+      const chunked_vector<model::ntp>& all_ntp,
       model::node_id node_id,
       ss::lowres_clock::duration timeout = 30s) {
         std::set<model::ntp> expected(all_ntp.begin(), all_ntp.end());
@@ -360,7 +360,7 @@ public:
     /// on every node.
     /// Returns number of managed replicas.
     void wait_all_partitions_managed(
-      const fragmented_vector<model::ntp>& all_ntp,
+      const chunked_vector<model::ntp>& all_ntp,
       ss::lowres_clock::duration timeout = 30s) {
         std::set<model::ntp> expected(all_ntp.begin(), all_ntp.end());
         auto deadline = ss::lowres_clock::now() + timeout;
@@ -379,7 +379,7 @@ public:
     /// on every node.
     /// Returns number of managed replicas.
     void wait_all_partition_leaders(
-      const fragmented_vector<model::ntp>& expected,
+      const chunked_vector<model::ntp>& expected,
       model::node_id target,
       ss::lowres_clock::duration timeout = 30s) {
         std::set<model::ntp> s_expected(expected.begin(), expected.end());
@@ -399,7 +399,7 @@ public:
     /// on every node.
     /// Returns number of managed replicas.
     void wait_all_partition_leaders(
-      const fragmented_vector<model::ntp>& expected,
+      const chunked_vector<model::ntp>& expected,
       ss::lowres_clock::duration timeout = 30s) {
         std::set<model::ntp> s_expected(expected.begin(), expected.end());
         auto deadline = ss::lowres_clock::now() + timeout;

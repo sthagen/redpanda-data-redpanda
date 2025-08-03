@@ -3,6 +3,7 @@
 #include "absl/strings/strip.h"
 #include "base/vlog.h"
 #include "net/dns.h"
+#include "serde/protobuf/rpc.h"
 #include "ssx/future-util.h"
 #include "utils/stop_signal.h"
 #include "utils/unresolved_address.h"
@@ -145,19 +146,17 @@ verifier_service_impl::status(verifier::status_request) {
 seastar::future<verifier::api_response> verifier_service_impl::create_consumer(
   verifier::create_direct_consumer_request req) {
     if (req.get_client_id().empty()) {
-        throw serde::pb::rpc::base_exception(
-          400, "Bad Request", "Client ID must be provided");
+        throw serde::pb::rpc::invalid_argument_exception(
+          "Client ID must be provided");
     }
     if (req.get_initial_brokers().empty()) {
-        throw serde::pb::rpc::base_exception(
-          400, "Bad Request", "Initial brokers must be provided");
+        throw serde::pb::rpc::invalid_argument_exception(
+          "Initial brokers must be provided");
     }
     kafka::client_id client_id{req.get_client_id()};
     auto it = _consumers.find(client_id);
     if (it != _consumers.end()) {
-        throw serde::pb::rpc::base_exception(
-          400,
-          "Bad Request",
+        throw serde::pb::rpc::invalid_argument_exception(
           ssx::sformat("Consumer with client ID {} already exists", client_id));
     }
 
@@ -180,11 +179,8 @@ verifier_service_impl::assign_partitions(
   verifier::assign_partitions_request req) {
     auto it = _consumers.find(kafka::client_id(req.get_client_id()));
     if (it == _consumers.end()) {
-        throw serde::pb::rpc::base_exception(
-          404,
-          "Not Found",
-          ssx::sformat(
-            "Consumer with client ID {} not found", req.get_client_id()));
+        throw serde::pb::rpc::not_found_exception(ssx::sformat(
+          "Consumer with client ID {} not found", req.get_client_id()));
     }
     auto& runner = it->second;
     chunked_vector<topic_assignment> assignments;
@@ -213,11 +209,8 @@ ss::future<verifier::api_response> verifier_service_impl::unassign_partitions(
   verifier::unassign_partitions_request req) {
     auto it = _consumers.find(kafka::client_id(req.get_client_id()));
     if (it == _consumers.end()) {
-        throw serde::pb::rpc::base_exception(
-          404,
-          "Not Found",
-          ssx::sformat(
-            "Consumer with client ID {} not found", req.get_client_id()));
+        throw serde::pb::rpc::not_found_exception(ssx::sformat(
+          "Consumer with client ID {} not found", req.get_client_id()));
     }
     auto& runner = it->second;
     chunked_vector<model::topic_partition> topic_partitions;
@@ -241,11 +234,8 @@ verifier_service_impl::get_consumer_state(
     auto it = _consumers.find(client_id);
     if (it == _consumers.end()) {
         // Consumer not found - return empty response with client_id
-        throw serde::pb::rpc::base_exception(
-          404,
-          "Not Found",
-          ssx::sformat(
-            "Consumer with client ID {} not found", req.get_client_id()));
+        throw serde::pb::rpc::not_found_exception(ssx::sformat(
+          "Consumer with client ID {} not found", req.get_client_id()));
     }
 
     auto& runner = it->second;

@@ -154,8 +154,6 @@ ss::future<result<bool>> batcher<Clock>::run_once() noexcept {
         // collecting the write requests. The second invariant is enforced
         // by the strict order in which the ack() method is called
         // explicitly after the operation is either committed or failed.
-        auto epoch = co_await _cluster_services->current_epoch();
-
         auto list = _stage.pull_write_requests(
           10_MiB); // TODO: use configuration parameter
 
@@ -164,7 +162,23 @@ ss::future<result<bool>> batcher<Clock>::run_once() noexcept {
             co_return true;
         }
 
-        aggregator<Clock> aggregator{object_id::create(epoch)};
+        auto epoch_fut = co_await ss::coroutine::as_future<cluster_epoch>(
+          _cluster_services->current_epoch(&_as));
+
+        if (epoch_fut.failed()) {
+            vlog(
+              _logger.warn,
+              "Failed to get cluster epoch: {}",
+              epoch_fut.get_exception());
+            while (!list.requests.empty()) {
+                auto& wr = list.requests.back();
+                wr.set_value(errc::failed_to_get_epoch);
+                list.requests.pop_back();
+            }
+            co_return errc::failed_to_get_epoch;
+        }
+
+        aggregator<Clock> aggregator{object_id::create(epoch_fut.get())};
         while (!list.requests.empty()) {
             auto& wr = list.requests.back();
             wr._hook.unlink();

@@ -12,7 +12,7 @@
 #include "cloud_topics/level_zero/read_pipeline.h"
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
 #include "cloud_topics/level_zero/reader/tests/materialized_extent_fixture.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
 #include "model/record.h"

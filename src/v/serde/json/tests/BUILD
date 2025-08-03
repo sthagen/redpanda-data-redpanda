@@ -130,7 +130,7 @@ redpanda_test_cc_library(
         "//src/v/bytes:hash",
         "//src/v/bytes:iobuf",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
     ],
 )
 
@@ -144,7 +144,7 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/serde/json:parser",
     ],
     include_prefix = "serde/json/tests",
@@ -190,7 +190,7 @@ redpanda_test_cc_library(
     implementation_deps = [
         "//src/v/bytes:streambuf",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/json",
         "//src/v/serde/json:parser",
         "@rapidjson",

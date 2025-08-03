@@ -17,7 +17,7 @@
 #include "cluster/rm_stm.h"
 #include "cluster/shard_table.h"
 #include "cluster/topics_frontend.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "container/lw_shared_container.h"
 #include "kafka/data/partition_proxy.h"
 #include "model/record.h"
@@ -744,7 +744,7 @@ void admin_server::register_partition_routes() {
             [](auto& partition_manager, bool materialized, auto get_leader) {
                 return partition_manager.map_reduce0(
                   [materialized, get_leader](auto& pm) {
-                      fragmented_vector<summary> partitions;
+                      chunked_vector<summary> partitions;
                       for (const auto& it : pm.partitions()) {
                           summary p;
                           p.ns = it.first.ns;
@@ -757,10 +757,10 @@ void admin_server::register_partition_routes() {
                       }
                       return partitions;
                   },
-                  fragmented_vector<summary>{},
+                  chunked_vector<summary>{},
                   [](
-                    fragmented_vector<summary> acc,
-                    fragmented_vector<summary> update) {
+                    chunked_vector<summary> acc,
+                    chunked_vector<summary> update) {
                       std::move(
                         std::make_move_iterator(update.begin()),
                         std::make_move_iterator(update.end()),
@@ -1047,7 +1047,7 @@ admin_server::get_topic_partitions_handler(
           fmt::format("Could not find topic: {}/{}", tp_ns.ns, tp_ns.tp));
     }
     using partition_t = ss::httpd::partition_json::partition;
-    fragmented_vector<partition_t> partitions;
+    chunked_vector<partition_t> partitions;
     const auto& assignments = tp_md->get().get_assignments();
     partitions.reserve(assignments.size());
 
@@ -1385,8 +1385,7 @@ admin_server::force_recover_partitions_from_nodes(
     // parse the json body into a controller command.
     std::vector<model::node_id> dead_nodes = parse_node_ids_from_json(
       doc["dead_nodes"]);
-    fragmented_vector<cluster::ntp_with_majority_loss>
-      partitions_to_force_recover;
+    chunked_vector<cluster::ntp_with_majority_loss> partitions_to_force_recover;
     for (auto& r : doc["partitions_to_force_recover"].GetArray()) {
         auto ntp = parse_ntp_from_json(r["ntp"]);
         auto replicas = parse_replicas_from_json(r["replicas"]);

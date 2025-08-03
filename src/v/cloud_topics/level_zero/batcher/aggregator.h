@@ -16,7 +16,7 @@
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/write_request.h"
 #include "cloud_topics/types.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 
 #include <seastar/core/weak_ptr.hh>
 

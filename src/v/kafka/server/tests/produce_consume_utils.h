@@ -9,7 +9,7 @@
  */
 #pragma once
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/transport.h"
 #include "kafka/protocol/schemata/produce_request.h"
 #include "model/compression.h"

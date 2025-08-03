@@ -15,7 +15,7 @@
 #include "storage/segment_set.h"
 
 namespace storage {
-using segment_list_t = fragmented_vector<segment_set::type>;
+using segment_list_t = chunked_vector<segment_set::type>;
 class stm_manager;
 
 // Adds the keys from the given compacted index reader to the map. Returns

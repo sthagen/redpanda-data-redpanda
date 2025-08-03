@@ -372,7 +372,7 @@ redpanda_cc_library(
     ],
     include_prefix = "utils",
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/reflection:type_traits",
         "@seastar",
     ],

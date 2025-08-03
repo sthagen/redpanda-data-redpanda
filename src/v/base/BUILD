@@ -10,6 +10,7 @@ redpanda_cc_library(
         "oncore.h",
         "outcome.h",
         "outcome_future_utils.h",
+        "seastar_fwd.h",
         "seastarx.h",
         "source_location.h",
         "type_traits.h",

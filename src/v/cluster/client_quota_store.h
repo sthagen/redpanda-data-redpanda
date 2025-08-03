@@ -12,7 +12,7 @@
 #include "absl/container/node_hash_map.h"
 #include "cluster/client_quota_serde.h"
 #include "cluster/controller_snapshot.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 
 namespace cluster::client_quota {
 

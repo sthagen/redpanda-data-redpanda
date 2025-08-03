@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+from re import sub
 from ducktape.tests.test import TestContext
 from ducktape.services.service import Service
 from ducktape.utils.util import wait_until
@@ -16,6 +17,11 @@ from dataclasses import dataclass, asdict, fields
 from typing import List, Optional, Dict, Any
 from enum import Enum
 import json
+
+
+def to_json_case(input_str: str):
+    s = sub(r"(_|-)+", " ", input_str).title().replace(" ", "")
+    return ''.join([s[0].lower(), s[1:]])
 
 
 def as_dict(obj):
@@ -29,7 +35,7 @@ def as_dict(obj):
         for field in fields(obj):
             value = getattr(obj, field.name)
             if value is not None:
-                result[field.name] = as_dict(value)
+                result[to_json_case(field.name)] = as_dict(value)
         return result
     elif isinstance(obj, list):
         # Handle lists recursively
@@ -261,29 +267,29 @@ class DirectConsumerVerifier(Service):
         response = self.request("consumers/state", request)
 
         assigned_topics = []
-        for topic_data in response.get("assigned_topics", []):
+        for topic_data in response.get("assignedTopics", []):
             partitions = []
             for partition_data in topic_data.get("partitions", []):
                 partitions.append(
                     PartitionState(
-                        partition_id=partition_data["partition_id"],
+                        partition_id=partition_data["partitionId"],
                         last_fetch_timestamp=partition_data[
-                            "last_fetch_timestamp"],
-                        last_fetch_offset=partition_data["last_fetch_offset"],
-                        fetched_bytes=partition_data["fetched_bytes"],
-                        fetched_records=partition_data["fetched_records"],
-                        error_code=partition_data["error_code"]))
+                            "lastFetchTimestamp"],
+                        last_fetch_offset=partition_data["lastFetchOffset"],
+                        fetched_bytes=partition_data["fetchedBytes"],
+                        fetched_records=partition_data["fetchedRecords"],
+                        error_code=partition_data["errorCode"]))
             assigned_topics.append(
                 TopicState(topic=topic_data["topic"], partitions=partitions))
 
         return ConsumerStateResponse(
             client_id=response.get("client_id", ""),
             assigned_topics=assigned_topics,
-            total_consumed_bytes=int(response.get("total_consumed_bytes", 0)),
+            total_consumed_bytes=int(response.get("totalConsumedBytes", 0)),
             total_consumed_messages=int(
-                response.get("total_consumed_messages", 0)),
-            last_error_code=response.get("last_error_code", 0),
-            non_monotonic_fetches=response.get("non_monotonic_fetches", 0))
+                response.get("totalConsumedMessages", 0)),
+            last_error_code=response.get("lastErrorCode", 0),
+            non_monotonic_fetches=response.get("nonMonotonicFetches", 0))
 
     def _url(self, path) -> str:
         return f"http://{self._node.account.hostname}:{self._listener_port}/{path}"

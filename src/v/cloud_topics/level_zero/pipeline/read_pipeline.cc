@@ -155,6 +155,7 @@ void read_pipeline<Clock>::register_pipeline_error(errc e) {
     case errc::success:
     case errc::timeout:
     case errc::upload_failure:
+    case errc::failed_to_get_epoch:
     case errc::cache_write_error:
     case errc::download_not_found:
     case errc::shutting_down:

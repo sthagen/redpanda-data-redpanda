@@ -562,7 +562,7 @@ def ssh_output_stderr(source_service,
         exit_status = stdin.channel.recv_exit_status()
         if exit_status != 0:
             if not allow_fail:
-                raise RemoteCommandError(source_service, cmd, exit_status,
+                raise RemoteCommandError(node.account, cmd, exit_status,
                                          stderrdata)
             else:
                 source_service.logger.debug(

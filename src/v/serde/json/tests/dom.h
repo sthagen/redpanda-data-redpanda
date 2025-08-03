@@ -13,7 +13,7 @@
 
 #include "bytes/iobuf.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "src/v/bytes/hash.h" // IWYU pragma: keep
 
 #include <variant>
@@ -27,7 +27,7 @@ struct null_t {
 class value;
 
 using json_object = chunked_hash_map<iobuf, value>;
-using json_array = fragmented_vector<value>;
+using json_array = chunked_vector<value>;
 
 constexpr null_t null_value{};
 

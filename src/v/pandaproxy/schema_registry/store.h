@@ -16,7 +16,7 @@
 #include "absl/container/btree_set.h"
 #include "absl/container/node_hash_map.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
 #include "pandaproxy/logger.h"

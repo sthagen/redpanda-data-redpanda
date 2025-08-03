@@ -1,6 +1,42 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
+load("//src/v/rpc:compiler.bzl", "redpanda_cc_rpc_library")
 
 package(default_visibility = ["//src/v/cloud_topics/level_one:__subpackages__"])
+
+redpanda_cc_rpc_library(
+    name = "generated_level_one_rpc",
+    src = "rpc.json",
+    include_prefix = "cloud_topics/level_one/metastore",
+)
+
+redpanda_cc_library(
+    name = "frontend",
+    srcs = [
+        "frontend.cc",
+        "service.cc",
+    ],
+    hdrs = [
+        "frontend.h",
+        "service.h",
+    ],
+    implementation_deps = [
+        "//src/v/cloud_topics:logger",
+        "//src/v/hashing:murmur",
+        "@fmt",
+    ],
+    include_prefix = "cloud_topics/level_one/metastore",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":generated_level_one_rpc",
+        ":rpc_types",
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/model",
+        "//src/v/raft",
+        "//src/v/rpc",
+        "@seastar",
+    ],
+)
 
 redpanda_cc_library(
     name = "metastore",
@@ -14,9 +50,26 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "rpc_types",
+    hdrs = [
+        "rpc_types.h",
+    ],
+    include_prefix = "cloud_topics/level_one/metastore",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":offset_interval_set",
+        ":state_update",
+        "//src/v/cloud_topics/level_one/common:object_id",
+        "//src/v/model",
+        "//src/v/serde",
+        "//src/v/serde:enum",
     ],
 )
 
@@ -38,6 +91,7 @@ redpanda_cc_library(
         ":metastore",
         ":state",
         "//src/v/base",
+        "//src/v/cloud_topics/level_one/common:object_id",
         "@seastar",
     ],
 )
@@ -81,7 +135,7 @@ redpanda_cc_library(
         ":state",
         "//src/v/base",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "@abseil-cpp//absl/container:btree",
     ],
@@ -97,7 +151,7 @@ redpanda_cc_library(
     ],
     include_prefix = "cloud_topics/level_one/metastore",
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/container:interval_set",
         "//src/v/model",
         "//src/v/serde",

@@ -13,6 +13,8 @@
 #include "iceberg/table_requirement.h"
 #include "iceberg/table_update.h"
 
+#include <seastar/core/coroutine.hh>
+
 namespace iceberg {
 
 ss::future<action::action_outcome> update_schema_action::build_updates() && {

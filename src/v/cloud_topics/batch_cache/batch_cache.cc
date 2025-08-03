@@ -44,6 +44,7 @@ void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
     if (_lm == nullptr) {
         return;
     }
+    _gate.check();
     auto it = _index.find(ntp);
     if (it == _index.end()) {
         auto cache_ix = _lm->create_cache(storage::with_cache::yes);
@@ -67,6 +68,7 @@ batch_cache::get(const model::ntp& ntp, model::offset o) {
     if (_lm == nullptr) {
         return std::nullopt;
     }
+    _gate.check();
     if (auto it = _index.find(ntp); it != _index.end()) {
         return it->second->get(o);
     }

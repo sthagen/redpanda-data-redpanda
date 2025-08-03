@@ -137,7 +137,7 @@ redpanda_cc_library(
         "//src/v/bytes",
         "//src/v/bytes:random",
         "//src/v/config",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/crypto",
         "//src/v/hashing:secure",
         "//src/v/http",

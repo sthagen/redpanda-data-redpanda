@@ -124,7 +124,7 @@ redpanda_cc_library(
     ],
     include_prefix = "iceberg/rest_client",
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/http:rest_entity",
         "//src/v/ssx:sformat",
     ],

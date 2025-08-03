@@ -13,7 +13,7 @@
 #include "absl/container/btree_map.h"
 #include "base/seastarx.h"
 #include "base/units.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/timestamp.h"
@@ -30,7 +30,7 @@ namespace experimental::cloud_topics::l1 {
 // L1 Object File Format:
 // =====================
 //
-// An L1 object consists of multiple partitions written sequentially, each 
+// An L1 object consists of multiple partitions written sequentially, each
 // containing a series of record batches, followed by a footer with index data.
 //
 // Structure:

@@ -226,9 +226,10 @@ RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
 
 FROM golang AS kgo-verifier
 
-COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kgo-verifier /
+COPY --chown=0:0 --chmod=0755 tests/go /opt/redpanda-tests/go
+COPY --chown=0:0 --chmod=0755 tests/docker/ducktape-deps/kgo-verifier-build /
 RUN --mount=type=cache,target=/root/go/pkg/mod,id=go-mod-cache \
-    /kgo-verifier && rm /kgo-verifier
+    /kgo-verifier-build && rm /kgo-verifier-build
 
 #################################
 

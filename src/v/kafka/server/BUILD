@@ -213,7 +213,7 @@ redpanda_cc_library(
         "//src/v/cluster:state_machine_registry",
         "//src/v/config",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/container:intrusive",
         "//src/v/datalake:partition_spec_parser",
         "//src/v/features",
@@ -379,7 +379,7 @@ redpanda_cc_library(
     include_prefix = "kafka/server",
     visibility = ["//visibility:public"],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/utils:to_string",
         "@seastar",

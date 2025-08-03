@@ -17,7 +17,8 @@ namespace experimental::cloud_topics {
 
 class ephemeral_cluster_services : public cluster_services {
 public:
-    seastar::future<cluster_epoch> current_epoch() override {
+    seastar::future<cluster_epoch>
+    current_epoch(seastar::abort_source*) override {
         co_return epoch_++;
     }
 

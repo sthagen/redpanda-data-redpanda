@@ -77,7 +77,8 @@ public:
     disk_log_impl(const disk_log_impl&) = delete;
     disk_log_impl& operator=(const disk_log_impl&) = delete;
 
-    ss::future<> start(std::optional<truncate_prefix_config>) final;
+    ss::future<>
+    start(std::optional<truncate_prefix_config>, ss::abort_source& as) final;
     ss::future<std::optional<ss::sstring>> close() final;
     ss::future<> remove() final;
     ss::future<> flush() final;
@@ -185,7 +186,7 @@ public:
      * across all partitions.
      */
     auto& gate() { return _compaction_housekeeping_gate; }
-    fragmented_vector<ss::lw_shared_ptr<segment>> cloud_gc_eligible_segments();
+    chunked_vector<ss::lw_shared_ptr<segment>> cloud_gc_eligible_segments();
     void set_cloud_gc_offset(model::offset) override;
 
     ss::future<reclaimable_offsets>

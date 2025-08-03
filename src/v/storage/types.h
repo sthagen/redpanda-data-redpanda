@@ -11,7 +11,7 @@
 
 #pragma once
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/timeout_clock.h"
@@ -121,7 +121,7 @@ public:
 
     // Only valid for state machines maintaining transactional state.
     // Returns aborted transactions in range [from, to] offsets.
-    virtual ss::future<fragmented_vector<model::tx_range>>
+    virtual ss::future<chunked_vector<model::tx_range>>
       aborted_tx_ranges(model::offset, model::offset) = 0;
 
     virtual model::control_record_type
@@ -187,9 +187,9 @@ public:
     model::offset max_removable_local_log_offset();
     std::optional<kafka::offset> lowest_pinned_data_offset() const;
 
-    ss::future<fragmented_vector<model::tx_range>>
+    ss::future<chunked_vector<model::tx_range>>
     aborted_tx_ranges(model::offset to, model::offset from) {
-        fragmented_vector<model::tx_range> r;
+        chunked_vector<model::tx_range> r;
         if (_tx_stm) {
             r = co_await _tx_stm->aborted_tx_ranges(to, from);
         }

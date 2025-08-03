@@ -13,7 +13,7 @@
 
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/schemata/offset_fetch_request.h"
 #include "kafka/protocol/schemata/offset_fetch_response.h"

@@ -13,7 +13,7 @@
 #include "base/seastarx.h"
 #include "cluster/fwd.h"
 #include "cluster/shard_table.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/describe_groups.h"
 #include "kafka/protocol/heartbeat.h"
 #include "kafka/protocol/join_group.h"

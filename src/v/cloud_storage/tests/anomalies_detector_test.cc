@@ -394,7 +394,7 @@ public:
           0);
     }
 
-    fragmented_vector<uint64_t> path_hashes(
+    chunked_vector<uint64_t> path_hashes(
       const absl::flat_hash_set<cloud_storage::segment_meta>& skip_metas) {
         std::vector<ss::sstring> paths;
         std::ranges::copy(
@@ -530,8 +530,8 @@ private:
         return paths;
     }
 
-    fragmented_vector<uint64_t> path_hashes(std::vector<ss::sstring> paths) {
-        fragmented_vector<uint64_t> hashes;
+    chunked_vector<uint64_t> path_hashes(std::vector<ss::sstring> paths) {
+        chunked_vector<uint64_t> hashes;
         for (auto& path : paths) {
             hashes.push_back(xxhash_64(path.data(), path.size()));
         }

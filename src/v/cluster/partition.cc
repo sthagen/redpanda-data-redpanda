@@ -1564,11 +1564,11 @@ ss::shared_ptr<cluster::tm_stm> partition::tm_stm() {
     return _raft->stm_manager()->get<cluster::tm_stm>();
 }
 
-ss::future<fragmented_vector<tx::tx_range>>
+ss::future<chunked_vector<tx::tx_range>>
 partition::aborted_transactions(model::offset from, model::offset to) {
     if (!_rm_stm) {
-        return ss::make_ready_future<fragmented_vector<tx::tx_range>>(
-          fragmented_vector<tx::tx_range>());
+        return ss::make_ready_future<chunked_vector<tx::tx_range>>(
+          chunked_vector<tx::tx_range>());
     }
     return _rm_stm->aborted_transactions(from, to);
 }

@@ -20,7 +20,7 @@ redpanda_cc_gtest(
         "fragmented_vector_test.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/random:generators",
         "//src/v/serde",
         "//src/v/serde:vector",
@@ -71,7 +71,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/test_utils:seastar_boost",
         "@seastar//:testing",
     ],
@@ -100,8 +100,8 @@ redpanda_cc_bench(
     deps = [
         ":bench_utils",
         "//src/v/base",
+        "//src/v/container:chunked_vector",
         "//src/v/container:contiguous_range_map",
-        "//src/v/container:fragmented_vector",
         "//src/v/random:generators",
         "@abseil-cpp//absl/container:btree",
         "@boost//:range",

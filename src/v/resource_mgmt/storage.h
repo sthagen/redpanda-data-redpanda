@@ -92,7 +92,7 @@ public:
      */
     struct shard_partitions {
         ss::shard_id shard;
-        fragmented_vector<partition> partitions;
+        chunked_vector<partition> partitions;
     };
 
     /*
@@ -207,7 +207,7 @@ private:
     size_t evict_balanced_from_level(
       schedule&, size_t, std::string_view, const level_selector&);
 
-    ss::future<fragmented_vector<partition>> collect_reclaimable_offsets();
+    ss::future<chunked_vector<partition>> collect_reclaimable_offsets();
     ss::future<size_t> install_schedule(shard_partitions);
 };
 

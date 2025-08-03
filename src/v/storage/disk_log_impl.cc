@@ -257,8 +257,8 @@ ss::future<> disk_log_impl::remove() {
       .finally([this] { _probe->clear_metrics(); });
 }
 
-ss::future<>
-disk_log_impl::start(std::optional<truncate_prefix_config> truncate_cfg) {
+ss::future<> disk_log_impl::start(
+  std::optional<truncate_prefix_config> truncate_cfg, ss::abort_source& as) {
     auto is_new = is_new_log();
     co_await offset_translator().start(
       storage::offset_translator::must_reset{is_new});
@@ -268,7 +268,7 @@ disk_log_impl::start(std::optional<truncate_prefix_config> truncate_cfg) {
     // Reset or load the offset translator state, depending on whether this is
     // a brand new log.
     if (!is_new) {
-        co_await offset_translator().sync_with_log(*this, _compaction_as);
+        co_await offset_translator().sync_with_log(*this, as);
     }
 }
 
@@ -722,7 +722,7 @@ ss::future<bool> disk_log_impl::sliding_window_compact(
         co_return has_self_compacted;
     }
     vlog(
-      gclog.debug,
+      gclog.info,
       "[{}] window compacting {} segments in interval [{}, {}]",
       config().ntp(),
       segs.size(),
@@ -1090,7 +1090,7 @@ ss::future<compaction_result> disk_log_impl::do_compact_adjacent_segments(
     }
 
     vlog(
-      gclog.debug,
+      gclog.info,
       "Compacting {} adjacent segments over range: [{}:{}]",
       segments.size(),
       segments.front()->filename(),
@@ -1384,7 +1384,7 @@ ss::future<> disk_log_impl::do_compact(
         compact_fut = sliding_window_compact(compact_cfg, new_start_offset)
                         .then([&](bool compacted) {
                             vlog(
-                              gclog.debug,
+                              gclog.info,
                               "Sliding compaction of {} did {}compact "
                               "data, proceeding to adjacent "
                               "segment compaction",
@@ -1419,7 +1419,7 @@ ss::future<bool> disk_log_impl::chunked_sliding_window_compact(
     // failed to index (the "unindexed" segment)
     auto seg = segs.back();
     vlog(
-      gclog.debug,
+      gclog.info,
       "Unable to fully index segment with max allowed keys {}. Performing "
       "chunked sliding window compaction for segment {}",
       map.capacity(),
@@ -1784,7 +1784,7 @@ ss::future<> disk_log_impl::maybe_adjust_retention_timestamps() {
     auto retention_cfg = time_based_retention_cfg::make(
       _feature_table.local()); // this will retrieve cluster cfgs
 
-    fragmented_vector<segment_set::type> segs_all_bogus;
+    chunked_vector<segment_set::type> segs_all_bogus;
     for (const auto& s : _segs) {
         auto max_ts = s->index().retention_timestamp(retention_cfg);
 
@@ -3855,10 +3855,10 @@ disk_log_impl::disk_usage_and_reclaimable_space(gc_config input_cfg) {
      * retention is not enabled data may be available in cloud storage and
      * still be subject to reclaim in low disk space situations.
      */
-    fragmented_vector<segment_set::type> retention_segments;
-    fragmented_vector<segment_set::type> available_segments;
-    fragmented_vector<segment_set::type> remaining_segments;
-    fragmented_vector<segment_set::type> local_retention_segments;
+    chunked_vector<segment_set::type> retention_segments;
+    chunked_vector<segment_set::type> available_segments;
+    chunked_vector<segment_set::type> remaining_segments;
+    chunked_vector<segment_set::type> local_retention_segments;
     for (auto& seg : _segs) {
         if (
           retention_offset.has_value()
@@ -4073,7 +4073,7 @@ disk_log_impl::disk_usage_target_time_retention(gc_config cfg) {
       });
 
     // collect segments for reducing
-    fragmented_vector<segment_set::type> segments;
+    chunked_vector<segment_set::type> segments;
     for (; it != std::cend(_segs); ++it) {
         segments.push_back(*it);
     }
@@ -4210,7 +4210,7 @@ ss::future<usage_report> disk_log_impl::disk_usage(gc_config cfg) {
     co_return usage_report(use, reclaim, target);
 }
 
-fragmented_vector<ss::lw_shared_ptr<segment>>
+chunked_vector<ss::lw_shared_ptr<segment>>
 disk_log_impl::cloud_gc_eligible_segments() {
     vassert(
       is_cloud_retention_active(),
@@ -4233,7 +4233,7 @@ disk_log_impl::cloud_gc_eligible_segments() {
     const auto max_removable = stm_manager()->max_removable_local_log_offset();
 
     // collect eligible segments
-    fragmented_vector<segment_set::type> segments;
+    chunked_vector<segment_set::type> segments;
     for (auto remaining = _segs.size() - keep_segs; auto& seg : _segs) {
         if (seg->offsets().get_committed_offset() <= max_removable) {
             segments.push_back(seg);
@@ -4331,7 +4331,7 @@ disk_log_impl::get_reclaimable_offsets(gc_config cfg) {
     /*
      * lightweight segment set copy for safe iteration
      */
-    fragmented_vector<segment_set::type> segments;
+    chunked_vector<segment_set::type> segments;
     for (const auto& seg : _segs) {
         segments.push_back(seg);
     }

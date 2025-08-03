@@ -11,7 +11,7 @@
 #include "materialized_extent_fixture.h"
 
 #include "cloud_storage_clients/types.h"
-#include "cloud_topics/dl_placeholder.h"
+#include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
 #include "gmock/gmock.h"

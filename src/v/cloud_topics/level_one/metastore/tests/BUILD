@@ -41,7 +41,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_topics/level_one/common:object_id",
         "//src/v/cloud_topics/level_one/metastore:state",
         "//src/v/cloud_topics/level_one/metastore:state_update",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/test_utils:gtest",
         "//src/v/utils:uuid",

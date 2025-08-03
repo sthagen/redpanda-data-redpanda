@@ -45,7 +45,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/container:interval_set",
         "//src/v/hashing:crc32c",
         "//src/v/io",

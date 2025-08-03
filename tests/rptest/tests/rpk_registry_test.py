@@ -651,7 +651,12 @@ message Test3 {
         # It goes back to the global mode (READONLY)
         assert findModeBySubject(out, subject_2) == read_only_mode
 
-        # We do not support import yet
-        with expect_exception(RpkException,
-                              lambda e: 'invalid mode "IMPORT"' in str(e)):
-            self._rpk.set_mode("IMPORT", [subject_1, subject_2], format="text")
+        # We support import as well
+        self._rpk.set_mode("IMPORT", [subject_1, subject_2], format="text")
+
+        # Invalid modes should throw
+        with expect_exception(
+                RpkException,
+                lambda e: 'invalid mode "SOME_INVALID"' in str(e)):
+            self._rpk.set_mode("SOME_INVALID", [subject_1, subject_2],
+                               format="text")

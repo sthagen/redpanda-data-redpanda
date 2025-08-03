@@ -17,6 +17,8 @@
 #include "iceberg/values.h"
 #include "serde/json/parser.h"
 
+#include <seastar/core/coroutine.hh>
+
 #include <exception>
 #include <memory>
 #include <optional>

@@ -46,7 +46,7 @@ redpanda_test_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/pandaproxy/schema_registry:server",
         "//src/v/serde/avro/tests:data_generator",
@@ -279,7 +279,7 @@ redpanda_cc_bench(
         ":test_data_writer",
         ":test_utils",
         "//src/v/cloud_io:provider",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/datalake:catalog_schema_manager",
         "//src/v/datalake:location",
         "//src/v/datalake:record_multiplexer",

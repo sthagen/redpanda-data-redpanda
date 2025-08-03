@@ -13,11 +13,12 @@
 #include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
 #include "cloud_io/remote.h"
+#include "cloud_storage_clients/types.h"
 #include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
 #include "cluster/notification.h"
 #include "cluster/partition.h"
 #include "cluster/partition_manager.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
@@ -131,8 +132,10 @@ private:
      * it is uploaded to cloud storage, and finally its committed.
      */
     ss::future<std::optional<object>> build_object();
-    ss::future<cloud_io::upload_result> upload_object(iobuf);
-    ss::future<> commit_object(const object_range_info&);
+    ss::future<cloud_io::upload_result>
+      upload_object(cloud_storage_clients::object_key, iobuf);
+    ss::future<> commit_object(
+      const cloud_storage_clients::object_key&, const object_range_info&);
 
     /*
      * build a partition reader that returns batches to be reconciled. reading

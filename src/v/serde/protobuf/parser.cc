@@ -14,6 +14,7 @@
 #include "bytes/iobuf_parser.h"
 #include "serde/protobuf/wire_format.h"
 
+#include <seastar/core/coroutine.hh>
 #include <seastar/util/variant_utils.hh>
 
 #include <google/protobuf/descriptor.h>

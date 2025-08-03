@@ -11,7 +11,7 @@
 #pragma once
 
 #include "cloud_topics/level_zero/stm/dl_version.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "serde/envelope.h"
 
 namespace experimental::cloud_topics {

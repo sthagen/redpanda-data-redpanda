@@ -1523,7 +1523,7 @@ consensus::do_start(std::optional<xshard_transfer_state> xst_state) {
             }
             _snapshot_size = co_await _snapshot_mgr.get_snapshot_size();
         }
-        co_await _log->start(start_truncate_cfg);
+        co_await _log->start(start_truncate_cfg, _as);
         snapshot_units.return_all();
 
         vlog(
@@ -2973,8 +2973,7 @@ ss::future<storage::append_result> consensus::disk_append(
 
     return details::for_each_ref_extract_configuration(
              _log->offsets().dirty_offset,
-             model::make_fragmented_memory_record_batch_reader(
-               std::move(batches)),
+             model::make_chunked_memory_record_batch_reader(std::move(batches)),
              consumer(_log->make_appender(cfg)),
              cfg.timeout)
       .then([this, should_update_last_quorum_idx](

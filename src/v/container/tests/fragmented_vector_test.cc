@@ -9,7 +9,7 @@
  * by the Apache License, Version 2.0
  */
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "gmock/gmock.h"
 #include "gtest/gtest.h"
 #include "random/generators.h"
@@ -22,9 +22,7 @@
 #include <cstdint>
 #include <initializer_list>
 #include <limits>
-#include <memory>
 #include <numeric>
-#include <span>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -32,16 +30,16 @@
 using testing::AssertionFailure;
 using testing::AssertionResult;
 using testing::AssertionSuccess;
-using vec = fragmented_vector<int>;
+using vec = chunked_vector<int>;
 
 static_assert(std::forward_iterator<vec::iterator>);
 static_assert(std::forward_iterator<vec::const_iterator>);
 
-class fragmented_vector_validator {
+class chunked_vector_validator {
 public:
     // perform an internal consistency check of the vector structure
-    template<typename T, size_t S>
-    static AssertionResult validate(const fragmented_vector<T, S>& v) {
+    template<typename T>
+    static AssertionResult validate(const chunked_vector<T>& v) {
         if (v._size > v._capacity) {
             return AssertionFailure() << "size greater than capacity";
         }
@@ -95,16 +93,15 @@ public:
      * Lets tests access private members for when they
      * need to inspect internals.
      */
-    template<typename T, size_t Size, typename MemberType>
-    const MemberType& access(
-      const fragmented_vector<T, Size>& v,
-      MemberType fragmented_vector<T, Size>::* member) {
+    template<typename T, typename MemberType>
+    const MemberType&
+    access(const chunked_vector<T>& v, MemberType chunked_vector<T>::* member) {
         return v.*member;
     }
 };
 
 MATCHER(IsValid, "") {
-    AssertionResult result = fragmented_vector_validator::validate(arg);
+    AssertionResult result = chunked_vector_validator::validate(arg);
     *result_listener << result.message();
     return result;
 }
@@ -116,7 +113,7 @@ namespace {
  */
 template<typename T>
 struct checker {
-    using underlying = fragmented_vector<T>;
+    using underlying = chunked_vector<T>;
 
     static checker<T> make(std::vector<T> in) {
         checker ret;
@@ -127,7 +124,7 @@ struct checker {
     }
 
     underlying* operator->() {
-        auto is_valid = fragmented_vector_validator::validate(u);
+        auto is_valid = chunked_vector_validator::validate(u);
         if (!is_valid) {
             throw std::runtime_error(is_valid.message());
         }
@@ -154,8 +151,8 @@ using testing::Lt;
 using testing::Ne;
 using testing::Not;
 
-template<typename T, size_t S>
-AssertionResult is_eq(fragmented_vector<T, S>& impl, std::vector<T>& shadow) {
+template<typename T>
+AssertionResult is_eq(chunked_vector<T>& impl, std::vector<T>& shadow) {
     if (!std::equal(impl.begin(), impl.end(), shadow.begin(), shadow.end())) {
         return testing::AssertionFailure()
                << "iterators not equal: " << testing::PrintToString(impl)
@@ -171,12 +168,11 @@ AssertionResult is_eq(fragmented_vector<T, S>& impl, std::vector<T>& shadow) {
                << "size not equal: " << testing::PrintToString(impl) << " vs "
                << testing::PrintToString(shadow);
     }
-    return fragmented_vector_validator::validate(impl);
+    return chunked_vector_validator::validate(impl);
 }
 
-template<size_t S>
 AssertionResult
-push(fragmented_vector<int, S>& impl, std::vector<int>& shadow, int count) {
+push(chunked_vector<int>& impl, std::vector<int>& shadow, int count) {
     for (int i = 0; i < count; ++i) {
         shadow.push_back(i);
         impl.push_back(i);
@@ -194,9 +190,8 @@ push(fragmented_vector<int, S>& impl, std::vector<int>& shadow, int count) {
     return testing::AssertionSuccess();
 }
 
-template<size_t S>
 AssertionResult
-pop(fragmented_vector<int, S>& impl, std::vector<int>& shadow, int count) {
+pop(chunked_vector<int>& impl, std::vector<int>& shadow, int count) {
     for (int i = 0; i < count; ++i) {
         shadow.pop_back();
         impl.pop_back();
@@ -216,7 +211,7 @@ pop(fragmented_vector<int, S>& impl, std::vector<int>& shadow, int count) {
 
 TEST(Vector, PushPop) {
     std::vector<int> shadow;
-    fragmented_vector<int> impl;
+    chunked_vector<int> impl;
     EXPECT_TRUE(impl.empty());
     ASSERT_TRUE(push(impl, shadow, 2500));
     EXPECT_TRUE(pop(impl, shadow, 1234));
@@ -229,7 +224,7 @@ TEST(Vector, PushPop) {
 
 TEST(Vector, Iterator) {
     std::vector<int> shadow;
-    fragmented_vector<int> impl;
+    chunked_vector<int> impl;
 
     EXPECT_TRUE(push(impl, shadow, 2000));
     for (int i = 0; i < 6000; i++) {
@@ -262,7 +257,7 @@ TEST(Vector, Iterator) {
 }
 
 TEST(Vector, IteratorTypes) {
-    using vtype = fragmented_vector<int64_t>;
+    using vtype = chunked_vector<int64_t>;
     using iter = vtype::iterator;
     using citer = vtype::const_iterator;
     auto v = vtype{};
@@ -286,7 +281,7 @@ struct foo {
 };
 
 TEST(Vector, IteratorAccess) {
-    using vtype = fragmented_vector<foo>;
+    using vtype = chunked_vector<foo>;
     auto vec = vtype{};
     vec.push_back(foo{2});
 
@@ -338,7 +333,7 @@ TEST(Vector, IteratorCmp) {
 TEST(Vector, EmptyAfterMove) {
     // Checks that post move, the source vector is empty().
     // This is inline with std::vector guarantees.
-    fragmented_vector<int> v1;
+    chunked_vector<int> v1;
     v1.push_back(1);
     EXPECT_FALSE(v1.empty());
 
@@ -402,8 +397,7 @@ TEST(Vector, PopBackN) {
 }
 
 TEST(Vector, EraseToEnd) {
-    // small fragment size to stress multiple fragments
-    fragmented_vector<char, 2> v;
+    chunked_vector<char> v;
 
     EXPECT_THAT(v, IsValid());
 
@@ -433,7 +427,7 @@ TEST(Vector, EraseToEnd) {
 TEST(Vector, FromIterRangeConstructor) {
     std::vector<int> vals{1, 2, 3};
 
-    fragmented_vector<int> fv(vals.begin(), vals.end());
+    chunked_vector<int> fv(vals.begin(), vals.end());
 
     EXPECT_THAT(fv, IsValid());
     EXPECT_THAT(fv, ElementsAre(1, 2, 3));
@@ -441,14 +435,14 @@ TEST(Vector, FromIterRangeConstructor) {
 
 TEST(Vector, FromInitializerListConstructor) {
     {
-        fragmented_vector<int> fv({});
+        chunked_vector<int> fv({});
 
         EXPECT_THAT(fv, IsValid());
         EXPECT_THAT(fv, ElementsAre());
     }
 
     {
-        fragmented_vector<int> fv({1, 2, 3});
+        chunked_vector<int> fv({1, 2, 3});
 
         EXPECT_THAT(fv, IsValid());
         EXPECT_THAT(fv, ElementsAre(1, 2, 3));
@@ -475,7 +469,7 @@ TEST(ChunkedVector, PushPop) {
             } else {
                 vec.pop_back();
             }
-            EXPECT_TRUE(fragmented_vector_validator::validate(vec));
+            EXPECT_TRUE(chunked_vector_validator::validate(vec));
         }
     }
 }
@@ -501,7 +495,7 @@ TEST(ChunkedVector, PushPopN) {
                 break;
             }
 
-            EXPECT_TRUE(fragmented_vector_validator::validate(vec));
+            EXPECT_TRUE(chunked_vector_validator::validate(vec));
         }
     }
 }
@@ -510,7 +504,7 @@ TEST(ChunkedVector, FirstChunkCapacityDoubles) {
     chunked_vector<int32_t> vec;
     for (size_t i = 0; i < vec.elements_per_fragment(); ++i) {
         vec.push_back(i);
-        EXPECT_TRUE(fragmented_vector_validator::validate(vec));
+        EXPECT_TRUE(chunked_vector_validator::validate(vec));
     }
 }
 
@@ -531,25 +525,25 @@ TEST(ChunkedVector, Reserve) {
          ++i) {
         growing_vec.reserve(i);
         EXPECT_EQ(growing_vec.capacity(), i);
-        EXPECT_TRUE(fragmented_vector_validator::validate(growing_vec));
+        EXPECT_TRUE(chunked_vector_validator::validate(growing_vec));
         // Also ensure "jumping" to that reserved size does the right thing.
         chunked_vector<int32_t> new_vec;
         new_vec.reserve(i);
         EXPECT_EQ(new_vec.capacity(), i);
-        EXPECT_TRUE(fragmented_vector_validator::validate(new_vec));
+        EXPECT_TRUE(chunked_vector_validator::validate(new_vec));
     }
 }
 
 TEST(ChunkedVector, ShrinkToFit) {
     chunked_vector<int32_t> vec;
     vec.reserve(32);
-    EXPECT_TRUE(fragmented_vector_validator::validate(vec));
+    EXPECT_TRUE(chunked_vector_validator::validate(vec));
     for (int i = 0; i < 10; ++i) {
         vec.push_back(1);
-        EXPECT_TRUE(fragmented_vector_validator::validate(vec));
+        EXPECT_TRUE(chunked_vector_validator::validate(vec));
     }
     vec.shrink_to_fit();
-    EXPECT_TRUE(fragmented_vector_validator::validate(vec));
+    EXPECT_TRUE(chunked_vector_validator::validate(vec));
     EXPECT_EQ(vec.capacity(), 10);
 }
 

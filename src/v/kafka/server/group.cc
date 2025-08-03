@@ -19,7 +19,7 @@
 #include "cluster/tx_utils.h"
 #include "config/configuration.h"
 #include "config/types.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/heartbeat.h"
 #include "kafka/protocol/leave_group.h"

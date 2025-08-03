@@ -82,9 +82,10 @@ public:
 //
 // See: https://connectrpc.com/docs/protocol#error-codes
 class base_exception : public std::exception {
-public:
+protected:
     base_exception(int status_code, ss::sstring code, ss::sstring message);
 
+public:
     // Handle the HTTP reply to report the error as suggested.
     std::unique_ptr<ss::http::reply>
       handle(std::unique_ptr<ss::http::reply>) const;

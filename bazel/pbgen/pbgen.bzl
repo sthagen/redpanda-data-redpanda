@@ -257,7 +257,7 @@ def redpanda_proto_library(name, protos, deps = [], **kwargs):
             "//src/v/bytes:iobuf",
             "//src/v/serde/protobuf:rpc",
             "//src/v/container:chunked_hash_map",
-            "//src/v/container:fragmented_vector",
+            "//src/v/container:chunked_vector",
             "@seastar",
         ] + deps,
         **kwargs

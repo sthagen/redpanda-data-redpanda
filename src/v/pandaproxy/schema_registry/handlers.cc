@@ -259,6 +259,8 @@ ss::future<server::reply_t> put_mode(server::request_t rq, server::reply_t rp) {
                  .value_or(force::no);
     auto res = co_await rjson_parse(*rq.req, mode_handler<>{});
 
+    // Ensure we are up to date (eg. see all existing subjects for import mode)
+    co_await rq.service().writer().read_sync();
     co_await rq.service().writer().write_mode(std::nullopt, res.mode, frc);
 
     auto resp = ppj::rjson_serialize_iobuf(res);
@@ -556,12 +558,16 @@ post_subject_versions(server::request_t rq, server::reply_t rp) {
     auto ids = co_await rq.service().schema_store().get_schema_version(
       schema.share());
 
+    const auto mode = co_await rq.service().schema_store().get_mode(
+      sub, default_to_global::yes);
+    const auto should_reinsert = mode == mode::import && ids.id != schema.id;
+
     schema_id schema_id{ids.id.value_or(invalid_schema_id)};
-    if (!ids.version.has_value()) {
-        schema.id = ids.id.value_or(invalid_schema_id);
-        schema.version = schema.version == invalid_schema_version
-                           ? ids.version.value_or(invalid_schema_version)
-                           : schema.version;
+    if (!ids.version.has_value() || should_reinsert) {
+        schema.id = (schema.id == invalid_schema_id)
+                      ? ids.id.value_or(invalid_schema_id)
+                      : schema.id;
+
         schema_id = co_await rq.service().writer().write_subject_version(
           std::move(schema));
     }
@@ -864,7 +870,7 @@ get_security_acls(server::request_t rq, server::reply_t rp) {
         security::resource_pattern_filter::resource_subsystem::schema_registry},
       security::acl_entry_filter{principal, host, operation, permission}};
 
-    auto sr_acls = std::ranges::to<fragmented_vector<acl>>(
+    auto sr_acls = std::ranges::to<chunked_vector<acl>>(
       acl_store.acls(filter)
       | std::views::transform(
         [](const security::acl_binding& binding) { return acl(binding); }));
@@ -955,7 +961,7 @@ delete_security_acls(server::request_t rq, server::reply_t rp) {
     auto deleted = co_await security_frontend.delete_acls(
       std::move(filters), 5s);
 
-    auto res = fragmented_vector<acl>{};
+    auto res = chunked_vector<acl>{};
     std::ranges::for_each(deleted, [&res](cluster::delete_acls_result r) {
         if (r.error != cluster::errc::success) {
             throw exception(

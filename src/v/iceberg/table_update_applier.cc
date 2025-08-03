@@ -11,7 +11,7 @@
 
 #include "base/vlog.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "iceberg/logger.h"
 #include "iceberg/schema.h"
 #include "iceberg/table_metadata.h"

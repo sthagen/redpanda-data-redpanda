@@ -50,7 +50,7 @@
 #include "config/configuration.h"
 #include "config/endpoint_tls_config.h"
 #include "config/validators.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "container/lw_shared_container.h"
 #include "features/enterprise_features.h"
 #include "features/feature_table.h"

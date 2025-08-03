@@ -12,7 +12,7 @@
 #include "cluster/controller.h"
 #include "cluster/data_migration_frontend.h"
 #include "cluster/data_migration_types.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "json/chunked_buffer.h"
 #include "json/validator.h"
 #include "redpanda/admin/api-doc/migration.json.hh"

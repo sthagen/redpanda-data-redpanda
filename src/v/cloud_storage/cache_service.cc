@@ -720,7 +720,7 @@ cache::remove_segment_full(const file_list_item& file_stat) {
 }
 
 ss::future<cache::trim_result> cache::trim_fast(
-  const fragmented_vector<file_list_item>& candidates,
+  const chunked_vector<file_list_item>& candidates,
   uint64_t size_to_delete,
   size_t objects_to_delete) {
     probe.fast_trim();
@@ -728,7 +728,7 @@ ss::future<cache::trim_result> cache::trim_fast(
 }
 
 ss::future<cache::trim_result> cache::do_trim(
-  const fragmented_vector<file_list_item>& candidates,
+  const chunked_vector<file_list_item>& candidates,
   uint64_t size_to_delete,
   size_t objects_to_delete) {
     trim_result result;
@@ -776,7 +776,7 @@ ss::future<cache::trim_result> cache::do_trim(
     ssize_t max_carryover_bytes
       = config::shard_local_cfg()
           .cloud_storage_cache_trim_carryover_bytes.value();
-    fragmented_vector<file_list_item> tmp;
+    chunked_vector<file_list_item> tmp;
     auto estimated_size = std::min(
       static_cast<size_t>(max_carryover_bytes),
       candidates.size() - candidate_i);
@@ -1635,7 +1635,7 @@ cache::trim_carryover(uint64_t delete_bytes, uint64_t delete_objects) {
     if (it == _last_trim_carryover->end()) {
         _last_trim_carryover = std::nullopt;
     } else {
-        fragmented_vector<file_list_item> tmp;
+        chunked_vector<file_list_item> tmp;
         size_t estimate = _last_trim_carryover->end() - it;
         tmp.reserve(estimate);
         std::copy(it, _last_trim_carryover->end(), std::back_inserter(tmp));

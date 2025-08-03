@@ -15,6 +15,7 @@
 #include "model/timeout_clock.h"
 #include "storage/parser_utils.h"
 
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/smp.hh>
 
 namespace storage {

@@ -943,7 +943,7 @@ redpanda_cc_gtest(
         "//src/v/base",
         "//src/v/cluster",
         "//src/v/cluster:features",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/features",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
@@ -995,7 +995,7 @@ redpanda_cc_gtest(
     deps = [
         ":disk_log_builder",
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/storage",

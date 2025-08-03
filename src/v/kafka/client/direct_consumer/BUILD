@@ -18,7 +18,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/container:intrusive",
         "//src/v/kafka/client:cluster",
         "//src/v/kafka/client:errors",

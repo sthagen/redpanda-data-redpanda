@@ -1049,7 +1049,7 @@ ss::future<usage_report> log_manager::disk_usage() {
      */
     auto cfg = default_gc_config();
 
-    fragmented_vector<ss::shared_ptr<log>> logs;
+    chunked_vector<ss::shared_ptr<log>> logs;
     for (auto& it : _logs) {
         logs.push_back(it.second->handle);
     }

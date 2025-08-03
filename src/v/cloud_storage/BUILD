@@ -161,7 +161,7 @@ redpanda_cc_library(
         "//src/v/compression",
         "//src/v/config",
         "//src/v/container:chunked_circular_buffer",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/container:intrusive",
         "//src/v/hashing:xx",
         "//src/v/metrics",

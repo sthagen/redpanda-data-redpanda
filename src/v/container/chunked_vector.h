@@ -10,11 +10,8 @@
  */
 #pragma once
 
+#include "base/seastar_fwd.h"
 #include "base/vassert.h"
-
-#include <seastar/core/coroutine.hh>
-#include <seastar/core/future.hh>
-#include <seastar/util/later.hh>
 
 #include <bit>
 #include <climits>
@@ -22,6 +19,7 @@
 #include <cstddef>
 #include <initializer_list>
 #include <iterator>
+#include <ostream>
 #include <ranges>
 #include <span>
 #include <stdexcept>
@@ -561,15 +559,15 @@ private:
     }
 
 private:
-    friend class fragmented_vector_validator;
+    friend class chunked_vector_validator;
     fragmented_vector(const fragmented_vector&) noexcept = default;
 
     template<typename TT, size_t SS>
-    friend seastar::future<>
+    friend seastar::future<void>
     fragmented_vector_fill_async(fragmented_vector<TT, SS>&, const TT&);
 
     template<typename TT, size_t SS>
-    friend seastar::future<>
+    friend seastar::future<void>
     fragmented_vector_clear_async(fragmented_vector<TT, SS>&);
 
     size_t _size{0};
@@ -593,50 +591,3 @@ private:
  */
 template<typename T>
 using chunked_vector = fragmented_vector<T, std::dynamic_extent>;
-
-/**
- * A futurized version of std::fill optimized for fragmented vector. It is
- * futurized to allow for large vectors to be filled without incurring reactor
- * stalls. It is optimized by circumventing the indexing indirection incurred by
- * using the fragmented vector interface directly.
- */
-template<typename T, size_t S>
-inline seastar::future<>
-fragmented_vector_fill_async(fragmented_vector<T, S>& vec, const T& value) {
-    auto remaining = vec._size;
-    for (auto& frag : vec._frags) {
-        const auto n = std::min(frag.size(), remaining);
-        if (n == 0) {
-            break;
-        }
-        std::fill_n(frag.begin(), n, value);
-        remaining -= n;
-        if (seastar::need_preempt()) {
-            co_await seastar::yield();
-        }
-    }
-    vassert(
-      remaining == 0,
-      "fragmented vector inconsistency filling remaining {} size {} cap {} "
-      "nfrags {}",
-      remaining,
-      vec._size,
-      vec._capacity,
-      vec._frags.size());
-}
-
-/**
- * A futurized version of fragmented_vector::clear that allows clearing a large
- * vector without incurring a reactor stall.
- */
-template<typename T, size_t S>
-inline seastar::future<>
-fragmented_vector_clear_async(fragmented_vector<T, S>& vec) {
-    while (!vec._frags.empty()) {
-        vec._frags.pop_back();
-        if (seastar::need_preempt()) {
-            co_await seastar::yield();
-        }
-    }
-    vec.clear();
-}

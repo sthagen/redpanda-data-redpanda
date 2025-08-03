@@ -199,7 +199,7 @@ FIXTURE_TEST(
         auto eb = get_error_body(res.body);
         BOOST_REQUIRE(
           eb.ec
-          == pp::reply_error_code::subject_version_schema_id_already_exists);
+          == pp::reply_error_code::subject_version_operation_not_permitted);
         BOOST_REQUIRE_EQUAL(
           eb.message, R"(Overwrite new schema with id 4 is not permitted.)");
     }

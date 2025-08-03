@@ -24,8 +24,6 @@ namespace kafka::data::rpc {
 struct kafka_topic_data
   : serde::
       envelope<kafka_topic_data, serde::version<0>, serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
-
     kafka_topic_data() = default;
     kafka_topic_data(model::topic_partition, model::record_batch);
     kafka_topic_data(
@@ -42,8 +40,6 @@ struct kafka_topic_data
 struct produce_request
   : serde::
       envelope<produce_request, serde::version<0>, serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
-
     produce_request() = default;
     produce_request(
       ss::chunked_fifo<kafka_topic_data> topic_data,
@@ -78,8 +74,6 @@ struct kafka_topic_data_result
 struct produce_reply
   : serde::
       envelope<produce_reply, serde::version<0>, serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
-
     produce_reply() = default;
     explicit produce_reply(ss::chunked_fifo<kafka_topic_data_result> r)
       : results(std::move(r)) {}

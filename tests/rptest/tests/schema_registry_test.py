@@ -3964,22 +3964,21 @@ class SchemaRegistryModeMutableTest(SchemaRegistryEndpoints):
             subject=subject, data=json.dumps({"schema": schema1_def}))
         assert result_raw.status_code == requests.codes.ok
 
-        self.logger.debug("Set global mode to IMPORT")
+        self.logger.debug("Set global mode to UNSUPPORTED")
         result_raw = self.sr_client.set_mode(
-            data=json.dumps({"mode": "IMPORT"}))
+            data=json.dumps({"mode": "UNSUPPORTED"}))
         assert result_raw.status_code == 422
         assert result_raw.json()["error_code"] == 42204
         assert result_raw.json(
-        )["message"] == "Invalid mode. Valid values are READWRITE, READONLY"
+        )["message"] == "Invalid mode. Valid values are READWRITE, READONLY, IMPORT"
 
-        self.logger.debug("Set subject mode to IMPORT")
-        result_raw = self.sr_client.set_mode_subject(subject="test-sub",
-                                                     data=json.dumps(
-                                                         {"mode": "IMPORT"}))
+        self.logger.debug("Set subject mode to UNSUPPORTED")
+        result_raw = self.sr_client.set_mode_subject(
+            subject="test-sub", data=json.dumps({"mode": "UNSUPPORTED"}))
         assert result_raw.status_code == 422
         assert result_raw.json()["error_code"] == 42204
         assert result_raw.json(
-        )["message"] == "Invalid mode. Valid values are READWRITE, READONLY"
+        )["message"] == "Invalid mode. Valid values are READWRITE, READONLY, IMPORT"
 
     @cluster(num_nodes=3)
     def test_mode_readonly(self):
@@ -4129,6 +4128,255 @@ class SchemaRegistryModeMutableTest(SchemaRegistryEndpoints):
 
         result_raw = self.sr_client.get_schemas_ids_id_versions(id=1)
         assert result_raw.status_code == 200
+
+    @cluster(num_nodes=3)
+    def test_enabling_import_mode(self):
+        """
+        Test the conditions on enabling import mode
+        """
+        sub1 = "test-subject-1"
+        sub2 = "test-subject-2"
+
+        schema1 = json.dumps({"schema": schema1_def})
+        schema2 = json.dumps({"schema": schema2_def})
+
+        # Test criteria for enabling global-level import mode (schema registry is empty)
+        self.logger.info("Testing global import mode enablement conditions")
+
+        self.logger.debug("Creating schema for global import mode testing")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=schema1)
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug(
+            "Try to enable global import mode with existing schema - should fail"
+        )
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug(
+            "Try to enable global import mode with existing schema with force=true - should succeed"
+        )
+        result_raw = self.sr_client.set_mode(data=json.dumps(
+            {"mode": "IMPORT"}),
+                                             force=True)
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        self.logger.debug("Reset to READWRITE mode")
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "READWRITE"}))
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug("Soft delete schema version")
+        result_raw = self.sr_client.delete_subject_version(subject=sub1,
+                                                           version=1)
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug(
+            "Try to enable global import mode after soft delete - should still fail"
+        )
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug("Hard delete schema version")
+        result_raw = self.sr_client.delete_subject_version(subject=sub1,
+                                                           version=1,
+                                                           permanent=True)
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug(
+            "Enable global import mode after hard delete - should succeed")
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        self.logger.debug("Reset global mode for further testing")
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "READWRITE"}))
+        self.assert_equal(result_raw.status_code, 200)
+
+        # Test subject-level criteria for enabling subject-level import mode (subject is empty)
+        self.logger.info(
+            "Testing subject-level import mode enablement conditions")
+
+        self.logger.debug(
+            "Creating schema for subject-level import mode testing")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub2, data=schema2)
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug(
+            "Try to enable subject import mode with existing schema - should fail"
+        )
+        result_raw = self.sr_client.set_mode_subject(subject=sub2,
+                                                     data=json.dumps(
+                                                         {"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug(
+            "Try to enable subject import mode with existing schema with force=true - should succeed"
+        )
+        result_raw = self.sr_client.set_mode_subject(subject=sub2,
+                                                     data=json.dumps(
+                                                         {"mode": "IMPORT"}),
+                                                     force=True)
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        self.logger.debug("Reset to READWRITE mode")
+        result_raw = self.sr_client.set_mode_subject(
+            subject=sub2, data=json.dumps({"mode": "READWRITE"}))
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug("Soft delete schema for subject")
+        result_raw = self.sr_client.delete_subject_version(subject=sub2,
+                                                           version=1)
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug(
+            "Try to enable subject import mode after soft delete - should still fail"
+        )
+        result_raw = self.sr_client.set_mode_subject(subject=sub2,
+                                                     data=json.dumps(
+                                                         {"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug("Hard delete schema for subject")
+        result_raw = self.sr_client.delete_subject_version(subject=sub2,
+                                                           version=1,
+                                                           permanent=True)
+        self.assert_equal(result_raw.status_code, 200)
+
+        self.logger.debug(
+            "Enable subject import mode after hard delete - should succeed")
+        result_raw = self.sr_client.set_mode_subject(subject=sub2,
+                                                     data=json.dumps(
+                                                         {"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        self.logger.debug("Cleaning up - reset modes")
+        result_raw = self.sr_client.delete_mode_subject(subject=sub2)
+        self.assert_equal(result_raw.status_code, 200)
+
+    @cluster(num_nodes=3)
+    @matrix(subject_scope=[False, True])
+    def test_import_mode_behaviour(self, subject_scope):
+        """Test expected import mode behaviour"""
+        sub1 = "test-subject-1"
+        expected_ver_to_id = {}
+
+        if subject_scope:
+            self.logger.debug(f"Enable IMPORT mode for subject {sub1}")
+            result_raw = self.sr_client.set_mode_subject(
+                subject=sub1, data=json.dumps({"mode": "IMPORT"}))
+            self.assert_equal(result_raw.status_code, 200)
+            self.assert_equal(result_raw.json()["mode"], "IMPORT")
+        else:
+            self.logger.debug(f"Enable IMPORT mode globally")
+            result_raw = self.sr_client.set_mode(
+                data=json.dumps({"mode": "IMPORT"}))
+            self.assert_equal(result_raw.status_code, 200)
+            self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        self.logger.debug("Post schema without id - should fail")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({"schema": schema1_def}))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug("Post schema with arbitrary id - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({
+                "schema": schema1_def,
+                "id": 4
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 4)
+        expected_ver_to_id[1] = 4
+
+        self.logger.debug(
+            "Re-post existing schema without id - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({"schema": schema1_def}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 4)
+
+        self.logger.debug(
+            "Post the same schema again with a different id - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({
+                "schema": schema1_def,
+                "id": 2
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 2)
+        expected_ver_to_id[2] = 2
+
+        self.logger.debug(
+            "Post a compatible schema with arbitrary version - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1,
+            data=json.dumps({
+                "schema": schema2_def,
+                "id": 6,
+                "version": 7
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 6)
+        expected_ver_to_id[7] = 6
+
+        self.logger.debug("Post an incompatible schema - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({
+                "schema": schema3_def,
+                "id": 7
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 7)
+        expected_ver_to_id[8] = 7
+
+        self.logger.debug(
+            "Try to overwrite an existing schema id - should fail")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({
+                "schema": schema2_def,
+                "id": 7
+            }))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug(
+            "Try to overwrite an existing schema version (with different schema id) - should succeed"
+        )
+        # Note: version=1 here corresponds to the earlier schema id 4 using the schema definition schema1_def
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1,
+            data=json.dumps({
+                "schema": schema2_def,
+                "id": 8,
+                "version": 1
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 8)
+        self.assert_equal(expected_ver_to_id[1], 4)
+        expected_ver_to_id[1] = 8
+
+        self.logger.debug(
+            f"Finally, sanity check the expected set of schemas - expecting: {expected_ver_to_id=}"
+        )
+        rpk = self._get_rpk_tools()
+        resp = rpk.list_schemas([sub1])
+        got_ver_to_id = {int(elem["version"]): elem["id"] for elem in resp}
+        self.assert_equal(expected_ver_to_id, got_ver_to_id)
 
 
 class SchemaRegistryBasicAuthTest(SchemaRegistryEndpoints):

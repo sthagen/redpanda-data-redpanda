@@ -872,7 +872,7 @@ std::error_code topic_table::validate_force_reconfigurable_partition(
 }
 
 std::error_code topic_table::validate_force_reconfigurable_partitions(
-  const fragmented_vector<ntp_with_majority_loss>& partitions) const {
+  const chunked_vector<ntp_with_majority_loss>& partitions) const {
     std::error_code result = errc::success;
     for (const auto& entry : partitions) {
         auto error = validate_force_reconfigurable_partition(entry);
@@ -1309,7 +1309,7 @@ class topic_table::snapshot_applier {
     updates_t& _updates_in_progress;
     disabled_partitions_t& _disabled_partitions;
     chunked_vector<topic_delta>& _pending_topic_deltas;
-    fragmented_vector<ntp_delta>& _pending_ntp_deltas;
+    chunked_vector<ntp_delta>& _pending_ntp_deltas;
     topic_table_probe& _probe;
     model::revision_id& _topics_map_revision;
     model::revision_id _snap_revision;

@@ -13,7 +13,7 @@
 #include "base/seastarx.h"
 #include "cloud_topics/level_one/metastore/state.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/fundamental.h"
 
 #include <expected>

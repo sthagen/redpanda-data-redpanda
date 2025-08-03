@@ -8,12 +8,13 @@
 // by the Apache License, Version 2.0
 
 #include "base/seastarx.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
+#include "container/chunked_vector_async.h"
 
 #include <seastar/testing/thread_test_case.hh>
 
 SEASTAR_THREAD_TEST_CASE(fragmented_vector_fill_async_test) {
-    fragmented_vector<int> v;
+    chunked_vector<int> v;
     fragmented_vector_fill_async(v, 0).get();
     BOOST_REQUIRE(v.size() == 0);
 
@@ -35,7 +36,7 @@ SEASTAR_THREAD_TEST_CASE(fragmented_vector_fill_async_test) {
 }
 
 SEASTAR_THREAD_TEST_CASE(fragmented_vector_clear_async_test) {
-    fragmented_vector<int> v;
+    chunked_vector<int> v;
     fragmented_vector_clear_async(v).get();
     BOOST_REQUIRE(v.size() == 0);
 

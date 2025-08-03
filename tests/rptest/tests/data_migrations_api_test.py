@@ -514,8 +514,7 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
                 for i, t in enumerate(topics[:3])
             ]
             in_migration = InboundDataMigration(topics=inbound_topics,
-                                                consumer_groups=[])
-            #TODO: use consumer_groups=["g-1", "g-2"] when group migration bugs are fixed
+                                                consumer_groups=["g-1", "g-2"])
             self.logger.info(f'{try_wo_license=}')
             if try_wo_license:
                 self.toggle_license(on=True)
@@ -791,13 +790,24 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
         if group is not None:
 
             def read_with_group(topic, group):
-                with self.ck_consumer(group) as consumer:
-                    consumer.subscribe([topic])
-                    msg = consumer.poll(20)
-                    if msg is None or msg.error() is not None:
-                        raise ck.KafkaException(
-                            f"Failed to read from topic {topic} with group {group}: {msg and msg.error()}"
-                        )
+                while True:
+                    try:
+                        with self.ck_consumer(group) as consumer:
+                            consumer.subscribe([topic])
+                            msg = consumer.poll(20)
+                            if msg is None or msg.error() is not None:
+                                raise ck.KafkaException(
+                                    f"Failed to read from topic {topic} with group {group}: {msg and msg.error()}"
+                                )
+                        break
+                    except ck.KafkaException as e:
+                        if "Failed to fetch committed offsets for 0 partition" in str(
+                                e.args[0]):
+                            self.logger.info(
+                                f"Hit https://github.com/confluentinc/librdkafka/issues/4963 bug, retrying"
+                            )
+                            continue
+                        raise
 
             self._do_validate_operation(**entities,
                                         op_name="read_with_group",
@@ -917,11 +927,9 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
             '/transfer_leadership\] reason - seastar::broken_named_semaphore',
             '/transfer_leadership\] reason - seastar::gate_closed_exception',
         ])
-    @matrix(
-        transfer_leadership=[True, False],
-        #TODO: use include_groups=[True, False] when group migration bugs are fixed
-        include_groups=[False],
-        params=generate_tmptpdi_params())
+    @matrix(transfer_leadership=[True, False],
+            include_groups=[True, False],
+            params=generate_tmptpdi_params())
     def test_migrated_topic_data_integrity(self, include_groups: bool,
                                            transfer_leadership: bool,
                                            params: TmtpdiParams):

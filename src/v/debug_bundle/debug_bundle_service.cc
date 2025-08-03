@@ -14,7 +14,7 @@
 #include "bytes/iostream.h"
 #include "config/configuration.h"
 #include "config/node_config.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "debug_bundle/error.h"
 #include "debug_bundle/metadata.h"
 #include "debug_bundle/probe.h"

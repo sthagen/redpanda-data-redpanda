@@ -10,7 +10,7 @@
 #include "cloud_topics/level_zero/reader/reader.h"
 
 #include "cloud_topics/data_plane_api.h"
-#include "cloud_topics/dl_placeholder.h"
+#include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
 #include "cluster/partition.h"
 #include "config/configuration.h"

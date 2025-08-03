@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "base/seastarx.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "ssx/future-util.h"
 
 #include <seastar/core/sstring.hh>

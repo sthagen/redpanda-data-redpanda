@@ -9,7 +9,7 @@
 
 #include "storage/lock_manager.h"
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "model/offset_interval.h"
 #include "ssx/when_all.h"
 #include "storage/segment.h"

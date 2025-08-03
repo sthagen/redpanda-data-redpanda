@@ -7,7 +7,7 @@ redpanda_cc_gtest(
         "write_pipeline_test.cc",
     ],
     deps = [
-        "//src/v/cloud_topics:extent_meta",
+        "//src/v/cloud_topics/level_zero/common:extent_meta",
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
@@ -58,11 +58,11 @@ redpanda_cc_gtest(
         "event_filter_test.cc",
     ],
     deps = [
-        "//src/v/cloud_topics:extent_meta",
+        "//src/v/cloud_topics/level_zero/common:extent_meta",
         "//src/v/cloud_topics/level_zero/pipeline:event_filter",
         "//src/v/cloud_topics/level_zero/pipeline:pipeline_stage",
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/model/tests:random",
         "//src/v/random:generators",

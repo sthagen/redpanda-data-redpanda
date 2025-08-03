@@ -14,7 +14,7 @@
 #include "absl/container/btree_map.h"
 #include "base/units.h"
 #include "bytes/bytes.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "hashing/xx.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
@@ -268,7 +268,7 @@ public:
     explicit tx_reducer(
       model::ntp ntp,
       ss::lw_shared_ptr<storage::stm_manager> stm_mgr,
-      fragmented_vector<model::tx_range>&& txs,
+      chunked_vector<model::tx_range>&& txs,
       compacted_index_writer* w) noexcept
       : _ntp(std::move(ntp))
       , _delegate(index_rebuilder_reducer(w))
@@ -313,7 +313,7 @@ private:
     // A min heap of aborted transactions based on begin offset.
     using underlying_t = std::priority_queue<
       model::tx_range,
-      fragmented_vector<model::tx_range>,
+      chunked_vector<model::tx_range>,
       model::tx_range_cmp>;
     underlying_t _aborted_txs;
     // Current list of aborted transactions maintained up to the

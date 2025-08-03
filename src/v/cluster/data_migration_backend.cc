@@ -15,7 +15,7 @@
 #include "cloud_storage/topic_mount_handler.h"
 #include "cluster/partition_leaders_table.h"
 #include "config/node_config.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "data_migration_frontend.h"
 #include "data_migration_types.h"
 #include "data_migration_worker.h"

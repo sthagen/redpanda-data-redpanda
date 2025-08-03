@@ -10,6 +10,8 @@
 
 #include "cloud_topics/app.h"
 
+#include <seastar/core/coroutine.hh>
+
 namespace experimental::cloud_topics {
 
 app::app(

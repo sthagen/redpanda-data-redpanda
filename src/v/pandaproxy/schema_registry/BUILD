@@ -80,7 +80,7 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/bytes:iobuf_parser",
         "//src/v/bytes:streambuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/container:json",
         "//src/v/hashing:jump_consistent",
         "//src/v/hashing:xx",
@@ -180,7 +180,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf_parser",
         "//src/v/cluster",
         "//src/v/config",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/container:json",
         "//src/v/json",
         "//src/v/kafka/client",

@@ -19,7 +19,7 @@
 #include "cluster/topic_table.h"
 #include "config/configuration.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/delete_groups.h"
 #include "kafka/protocol/describe_groups.h"
 #include "kafka/protocol/errors.h"
@@ -289,7 +289,7 @@ ss::future<> group_manager::handle_offset_expiration() {
      * build a light-weight snapshot of the groups to process. the snapshot
      * allows us to avoid concurrent modifications to _groups container.
      */
-    fragmented_vector<std::pair<group_ptr, size_t>> groups;
+    chunked_vector<std::pair<group_ptr, size_t>> groups;
     for (auto& group : _groups) {
         groups.emplace_back(group.second, 0);
     }
@@ -796,7 +796,7 @@ ss::future<group_offsets_snapshot_result> group_manager::snapshot_groups(
     }
     // Make a copy of the groups that we're about to snapshot, to avoid racing
     // with removals during iteration.
-    fragmented_vector<std::pair<group_id, group_ptr>> groups;
+    chunked_vector<std::pair<group_id, group_ptr>> groups;
     std::copy_if(
       _groups.begin(),
       _groups.end(),
@@ -815,7 +815,7 @@ ss::future<group_offsets_snapshot_result> group_manager::snapshot_groups(
         go.group_id = group_id();
         absl::btree_map<
           model::topic,
-          fragmented_vector<group_offsets::partition_offset>>
+          chunked_vector<group_offsets::partition_offset>>
           offsets;
         for (const auto& [tp, o] : group->offsets()) {
             offsets[tp.topic].emplace_back(

@@ -289,7 +289,7 @@ redpanda_cc_btest(
         "describe_topics.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client",
         "//src/v/kafka/client:configuration",
         "//src/v/kafka/client/test:fixture",
@@ -361,7 +361,7 @@ redpanda_cc_gtest(
         "utils_test.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client:brokers",
         "//src/v/kafka/client:utils",
         "//src/v/kafka/protocol",
@@ -379,7 +379,7 @@ redpanda_cc_btest(
         "list_offsets.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/kafka/client",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",

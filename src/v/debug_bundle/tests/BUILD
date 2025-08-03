@@ -9,7 +9,7 @@ redpanda_cc_gtest(
         "types_test.cc",
     ],
     deps = [
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/debug_bundle",
         "//src/v/debug_bundle:json",
         "//src/v/debug_bundle:metadata",

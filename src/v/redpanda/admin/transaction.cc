@@ -88,7 +88,7 @@ admin_server::get_all_transactions_handler(
     }
 
     using tx_info = ss::httpd::transaction_json::transaction_summary;
-    fragmented_vector<tx_info> ans;
+    chunked_vector<tx_info> ans;
     ans.reserve(res.value().size());
 
     for (auto& tx : res.value()) {

@@ -8,7 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "absl/container/flat_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/create_topics.h"
 #include "kafka/protocol/delete_topics.h"
 #include "kafka/protocol/errors.h"

@@ -13,7 +13,7 @@
 
 #include "absl/container/node_hash_map.h"
 #include "absl/hash/hash.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/assignment_plans.h"
 #include "kafka/client/brokers.h"
 #include "kafka/client/configuration.h"

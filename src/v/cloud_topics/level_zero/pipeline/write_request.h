@@ -13,10 +13,10 @@
 #include "base/outcome.h"
 #include "base/seastarx.h"
 #include "cloud_topics/errc.h"
-#include "cloud_topics/extent_meta.h"
+#include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/pipeline_stage.h"
 #include "cloud_topics/level_zero/serializer.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "container/intrusive_list_helpers.h"
 
 #include <seastar/core/lowres_clock.hh>

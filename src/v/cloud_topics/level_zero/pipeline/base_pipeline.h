@@ -16,7 +16,7 @@
 #include "cloud_topics/level_zero/event_filter.h"
 #include "cloud_topics/level_zero/pipeline_stage.h"
 #include "cloud_topics/logger.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "ssx/future-util.h"
 #include "utils/retry_chain_node.h"
 

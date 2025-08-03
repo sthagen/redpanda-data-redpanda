@@ -22,7 +22,7 @@
 #include "cluster/prefix_truncate_record.h"
 #include "cluster/snapshot.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -228,9 +228,9 @@ struct archival_metadata_stm::snapshot
   : public serde::
       envelope<snapshot, serde::version<6>, serde::compat_version<0>> {
     /// List of segments
-    fragmented_vector<segment> segments;
+    chunked_vector<segment> segments;
     /// List of replaced segments
-    fragmented_vector<segment> replaced;
+    chunked_vector<segment> replaced;
     /// Start offset (might be different from the base offset of the first
     /// segment). Default value means that the snapshot was old and didn't
     /// have start_offset. In this case we need to set it to compute it from
@@ -260,7 +260,7 @@ struct archival_metadata_stm::snapshot
     // when DeleteRecords was used to override)
     kafka::offset start_kafka_offset;
     // List of spillover manifests
-    fragmented_vector<segment> spillover_manifests;
+    chunked_vector<segment> spillover_manifests;
     // Timestamp of last completed scrub
     model::timestamp last_partition_scrub;
     // Offest at which the previous scrubbing stopped
@@ -515,10 +515,10 @@ command_batch_builder archival_metadata_stm::batch_start(
     return {*this, deadline, as};
 }
 
-fragmented_vector<archival_metadata_stm::segment>
+chunked_vector<archival_metadata_stm::segment>
 archival_metadata_stm::segments_from_manifest(
   const cloud_storage::partition_manifest& manifest) {
-    fragmented_vector<segment> segments;
+    chunked_vector<segment> segments;
     for (auto meta : manifest) {
         if (meta.ntp_revision == model::initial_revision_id{}) {
             meta.ntp_revision = manifest.get_revision_id();
@@ -539,11 +539,11 @@ archival_metadata_stm::segments_from_manifest(
     return segments;
 }
 
-fragmented_vector<archival_metadata_stm::segment>
+chunked_vector<archival_metadata_stm::segment>
 archival_metadata_stm::replaced_segments_from_manifest(
   const cloud_storage::partition_manifest& manifest) {
     auto replaced = manifest.replaced_segments();
-    fragmented_vector<segment> segments;
+    chunked_vector<segment> segments;
     for (auto meta : replaced) {
         if (meta.ntp_revision == model::initial_revision_id{}) {
             meta.ntp_revision = manifest.get_revision_id();
@@ -554,11 +554,11 @@ archival_metadata_stm::replaced_segments_from_manifest(
     return segments;
 }
 
-fragmented_vector<archival_metadata_stm::segment>
+chunked_vector<archival_metadata_stm::segment>
 archival_metadata_stm::spillover_from_manifest(
   const cloud_storage::partition_manifest& manifest) {
     const auto& sp_list = manifest.get_spillover_map();
-    fragmented_vector<segment> res;
+    chunked_vector<segment> res;
     for (auto meta : sp_list) {
         res.push_back(segment_from_meta(meta));
     }
@@ -1586,7 +1586,7 @@ void archival_metadata_stm::apply_reset_scrubbing_metadata() {
     _manifest->reset_scrubbing_metadata();
 }
 
-fragmented_vector<cloud_storage::partition_manifest::lw_segment_meta>
+chunked_vector<cloud_storage::partition_manifest::lw_segment_meta>
 archival_metadata_stm::get_segments_to_cleanup() const {
     // Include replaced segments to the backlog
     using lw_segment_meta = cloud_storage::partition_manifest::lw_segment_meta;
@@ -1596,7 +1596,7 @@ archival_metadata_stm::get_segments_to_cleanup() const {
     // segments. This is a protection from the data loss. This should not
     // happen, but protects us from data loss in cases where bugs elsewhere.
     const auto backlog_size = source_backlog.size();
-    fragmented_vector<lw_segment_meta> backlog;
+    chunked_vector<lw_segment_meta> backlog;
     std::copy_if(
       source_backlog.begin(),
       source_backlog.end(),

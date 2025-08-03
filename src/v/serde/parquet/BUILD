@@ -18,7 +18,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
         "@seastar",
     ],
@@ -37,7 +37,7 @@ redpanda_cc_library(
         ":schema",
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/hashing:crc32",
         "//src/v/serde/thrift:compact",
         "//src/v/utils:vint",
@@ -62,7 +62,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
     ],
 )
 
@@ -80,7 +80,7 @@ redpanda_cc_library(
         ":value",
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:vint",
     ],
 )
@@ -124,7 +124,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/compression",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/hashing:crc32",
         "@abseil-cpp//absl/numeric:int128",
         "@seastar",
@@ -154,7 +154,7 @@ redpanda_cc_library(
         ":schema",
         ":value",
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "@seastar",
     ],
 )

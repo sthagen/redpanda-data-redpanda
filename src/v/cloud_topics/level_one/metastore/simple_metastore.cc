@@ -9,11 +9,66 @@
  */
 #include "cloud_topics/level_one/metastore/simple_metastore.h"
 
+#include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/state.h"
 #include "cloud_topics/level_one/metastore/state_update.h"
 #include "cloud_topics/logger.h"
 
+#include <seastar/core/coroutine.hh>
+
 namespace experimental::cloud_topics::l1 {
+
+object_id simple_object_builder::get_or_create_object_for(
+  const model::topic_id_partition&) {
+    // The simple metastore isn't partitioned at all, so have all partitions
+    // blindly share any existing object.
+    if (pending_objects_.empty()) {
+        auto oid = create_object_id();
+        pending_objects_[oid] = {};
+        return oid;
+    }
+    return pending_objects_.begin()->first;
+}
+
+std::expected<void, metastore::object_metadata_builder::error>
+simple_object_builder::add(
+  object_id oid, metastore::object_metadata::ntp_metadata ntp_meta) {
+    auto it = pending_objects_.find(oid);
+    if (it == pending_objects_.end()) {
+        return std::unexpected(
+          error{fmt::format("Object {} is not a pending object", oid)});
+    }
+    auto& pending_metas = it->second;
+    pending_metas.emplace_back(ntp_meta);
+    return {};
+}
+
+std::expected<void, metastore::object_metadata_builder::error>
+simple_object_builder::finish(object_id oid, size_t footer_pos) {
+    auto it = pending_objects_.find(oid);
+    if (it == pending_objects_.end()) {
+        return std::unexpected(
+          error{fmt::format("Object {} is not a pending object", oid)});
+    }
+    finished_objects_.emplace_back(metastore::object_metadata{
+      .oid = oid,
+      .footer_pos = footer_pos,
+      .ntp_metas = std::move(it->second),
+    });
+    pending_objects_.erase(it);
+    return {};
+}
+
+std::expected<
+  chunked_vector<metastore::object_metadata>,
+  metastore::object_metadata_builder::error>
+simple_object_builder::release() {
+    if (!pending_objects_.empty()) {
+        return std::unexpected(error{fmt::format(
+          "Builder still has {} pending object", pending_objects_.size())});
+    }
+    return std::exchange(finished_objects_, {});
+}
 
 new_object make_new_object(const metastore::object_metadata& o) {
     new_object new_o{
@@ -33,6 +88,11 @@ new_object make_new_object(const metastore::object_metadata& o) {
     return new_o;
 }
 
+std::unique_ptr<metastore::object_metadata_builder>
+simple_metastore::object_builder() {
+    return std::make_unique<simple_object_builder>();
+}
+
 ss::future<std::expected<metastore::offsets_response, metastore::errc>>
 simple_metastore::get_offsets(const model::topic_id_partition& tpr) {
     auto prt_ref = state_.partition_state(tpr);
@@ -45,6 +105,17 @@ simple_metastore::get_offsets(const model::topic_id_partition& tpr) {
       .start_offset = prt.start_offset,
       .next_offset = prt.next_offset,
     };
+}
+
+ss::future<std::expected<void, metastore::errc>> simple_metastore::add_objects(
+  std::unique_ptr<metastore::object_metadata_builder> builder) {
+    auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
+    auto objects_res = simple_builder->release();
+    if (!objects_res.has_value()) {
+        vlog(cd_log.error, "Failed to add: {}", objects_res.error());
+        co_return std::unexpected(metastore::errc::invalid_request);
+    }
+    co_return co_await add_objects(objects_res.value());
 }
 
 ss::future<std::expected<void, metastore::errc>>
@@ -61,6 +132,18 @@ simple_metastore::add_objects(const chunked_vector<object_metadata>& objects) {
     auto apply_res = update_res->apply(state_);
     vassert(apply_res.has_value(), "Apply must succeed if can_apply() is true");
     co_return std::expected<void, metastore::errc>{};
+}
+
+ss::future<std::expected<void, metastore::errc>>
+simple_metastore::replace_objects(
+  std::unique_ptr<metastore::object_metadata_builder> builder) {
+    auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
+    auto objects_res = simple_builder->release();
+    if (!objects_res.has_value()) {
+        vlog(cd_log.error, "Failed to replace: {}", objects_res.error());
+        co_return std::unexpected(metastore::errc::invalid_request);
+    }
+    co_return co_await replace_objects(objects_res.value());
 }
 
 ss::future<std::expected<void, metastore::errc>>
@@ -157,6 +240,19 @@ simple_metastore::compact_objects(
     auto apply_res = update_res->apply(state_);
     vassert(apply_res.has_value(), "Apply must succeed if can_apply() is true");
     co_return std::expected<void, metastore::errc>{};
+}
+
+ss::future<std::expected<void, metastore::errc>>
+simple_metastore::compact_objects(
+  std::unique_ptr<metastore::object_metadata_builder> builder,
+  const compaction_map_t& compaction_metas) {
+    auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
+    auto objects_res = simple_builder->release();
+    if (!objects_res.has_value()) {
+        vlog(cd_log.error, "Failed to compact: {}", objects_res.error());
+        co_return std::unexpected(metastore::errc::invalid_request);
+    }
+    co_return co_await compact_objects(objects_res.value(), compaction_metas);
 }
 
 ss::future<

@@ -38,7 +38,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "@fmt",
         "@seastar",
     ],

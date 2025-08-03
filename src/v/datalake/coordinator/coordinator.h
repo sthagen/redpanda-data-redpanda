@@ -12,7 +12,7 @@
 #include "absl/hash/hash.h"
 #include "cluster/fwd.h"
 #include "config/property.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "datalake/coordinator/file_committer.h"
 #include "datalake/coordinator/snapshot_remover.h"
 #include "datalake/coordinator/state_machine.h"

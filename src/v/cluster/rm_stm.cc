@@ -17,7 +17,7 @@
 #include "cluster/tx_gateway_frontend.h"
 #include "cluster/types.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "metrics/metrics.h"
 #include "metrics/prometheus_sanitize.h"
 #include "model/fundamental.h"
@@ -1309,8 +1309,8 @@ model::offset rm_stm::last_stable_offset() {
 }
 
 static void filter_intersecting(
-  fragmented_vector<tx_range>& target,
-  const fragmented_vector<tx_range>& source,
+  chunked_vector<tx_range>& target,
+  const chunked_vector<tx_range>& source,
   model::offset from,
   model::offset to) {
     for (auto& range : source) {
@@ -1324,7 +1324,7 @@ static void filter_intersecting(
     }
 }
 
-ss::future<fragmented_vector<tx_range>>
+ss::future<chunked_vector<tx_range>>
 rm_stm::aborted_transactions(model::offset from, model::offset to) {
     return _state_lock.hold_read_lock().then(
       [from, to, this](ss::basic_rwlock<>::holder unit) mutable {
@@ -1337,13 +1337,13 @@ model::producer_id rm_stm::highest_producer_id() const {
     return _highest_producer_id;
 }
 
-ss::future<fragmented_vector<tx_range>>
+ss::future<chunked_vector<tx_range>>
 rm_stm::do_aborted_transactions(model::offset from, model::offset to) {
-    fragmented_vector<tx_range> result;
+    chunked_vector<tx_range> result;
     if (!_is_tx_enabled) {
         co_return result;
     }
-    fragmented_vector<abort_index> intersecting_idxes;
+    chunked_vector<abort_index> intersecting_idxes;
     for (const auto& idx : _aborted_tx_state.abort_indexes) {
         if (idx.last < from) {
             continue;
@@ -1937,8 +1937,8 @@ ss::future<raft::stm_snapshot> rm_stm::do_take_local_snapshot(
     // all the operations during snapshot creation are made against the two
     // local variables, after all garbage collection is done the internal stm
     // state is updated.
-    fragmented_vector<abort_index> final_abort_indexes;
-    fragmented_vector<abort_index> expired_abort_indexes;
+    chunked_vector<abort_index> final_abort_indexes;
+    chunked_vector<abort_index> expired_abort_indexes;
 
     // first, check if there are any indicies and aborted ranges to drop.
     // whatever is there to retain is moved to the `final_` local variables.
@@ -1953,7 +1953,7 @@ ss::future<raft::stm_snapshot> rm_stm::do_take_local_snapshot(
         }
     }
 
-    fragmented_vector<tx::tx_range> preserved_aborted_ranges;
+    chunked_vector<tx::tx_range> preserved_aborted_ranges;
     // remove obsolete aborted ranges, this doesn't influence correctness as
     // logs start offset already advanced past those ranges.
     std::copy_if(
@@ -1983,7 +1983,7 @@ ss::future<raft::stm_snapshot> rm_stm::do_take_local_snapshot(
 
         model::offset first = model::offset::max();
         model::offset last = model::offset::min();
-        fragmented_vector<tx::tx_range> aborted_ranges;
+        chunked_vector<tx::tx_range> aborted_ranges;
 
         for (const auto& entry : _aborted_tx_state.aborted) {
             first = std::min(first, entry.first);
@@ -2031,7 +2031,7 @@ ss::future<raft::stm_snapshot> rm_stm::do_take_local_snapshot(
       });
 
     _aborted_tx_state.abort_indexes = std::move(final_abort_indexes);
-    fragmented_vector<tx::tx_range> cleaned_aborted_ranges;
+    chunked_vector<tx::tx_range> cleaned_aborted_ranges;
     cleaned_aborted_ranges.reserve(_aborted_tx_state.aborted.size());
     // preserve those aborted ranges which were not included in the snapshot
     std::copy_if(

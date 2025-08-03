@@ -9,7 +9,7 @@
 
 #include "raft/replicate_batcher.h"
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "raft/consensus.h"
 #include "raft/replicate_entries_stm.h"
 #include "raft/types.h"

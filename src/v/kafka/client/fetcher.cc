@@ -11,7 +11,7 @@
 
 #include "kafka/client/fetcher.h"
 
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/client/exceptions.h"
 #include "kafka/client/logger.h"
 #include "kafka/client/types.h"

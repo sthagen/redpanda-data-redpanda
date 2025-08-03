@@ -5243,11 +5243,13 @@ class RedpandaService(RedpandaServiceBase):
         report = {}
         try:
             report = json.loads(output)
-        except:
+        except Exception as exc:
             self.logger.error(
                 f"Error running bucket scrub: {output=} {stderr=}")
             if not tolerate_empty_object_storage:
-                raise
+                raise RuntimeError(
+                    f"Failed to json parse report: {output=}, {stderr=}"
+                ) from exc
         else:
             self.logger.info(json.dumps(report, indent=2))
 

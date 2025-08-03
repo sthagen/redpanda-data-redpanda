@@ -1349,11 +1349,11 @@ ss::future<std::error_code> topics_frontend::force_update_partition_replicas(
       _stm, _as, std::move(cmd), tout, term);
 }
 
-ss::future<result<fragmented_vector<ntp_with_majority_loss>>>
+ss::future<result<chunked_vector<ntp_with_majority_loss>>>
 topics_frontend::partitions_with_lost_majority(
   std::vector<model::node_id> dead_nodes) {
     try {
-        fragmented_vector<ntp_with_majority_loss> result;
+        chunked_vector<ntp_with_majority_loss> result;
         const auto& topics = _topics.local();
         for (auto it = topics.topics_iterator_begin();
              it != topics.topics_iterator_end();
@@ -1399,7 +1399,7 @@ topics_frontend::partitions_with_lost_majority(
 ss::future<std::error_code>
 topics_frontend::force_recover_partitions_from_nodes(
   std::vector<model::node_id> nodes,
-  fragmented_vector<ntp_with_majority_loss>
+  chunked_vector<ntp_with_majority_loss>
     user_approved_force_recovery_partitions,
   model::timeout_clock::time_point timeout) {
     auto result = co_await stm_linearizable_barrier(timeout);

@@ -17,7 +17,7 @@
 #include "cluster/topics_frontend.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "datalake/partition_spec_parser.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/fwd.h"

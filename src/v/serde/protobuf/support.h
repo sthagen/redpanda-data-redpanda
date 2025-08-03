@@ -12,7 +12,7 @@
 #include "absl/time/time.h"
 #include "base/units.h"
 #include "bytes/iobuf_parser.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "serde/protobuf/field_mask.h"
 #include "serde/protobuf/wire_format.h"
 #include "utils/fixed_string.h"

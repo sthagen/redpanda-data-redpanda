@@ -20,6 +20,7 @@
 #include "cloud_storage/remote.h"
 #include "cloud_storage_clients/client_pool.h"
 #include "cloud_storage_clients/configuration.h"
+#include "cloud_topics/cluster_services.h"
 #include "cloud_topics/data_plane_impl.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_factory.h"
 #include "cluster/archival/archival_metadata_stm.h"
@@ -384,7 +385,10 @@ void application::shutdown() {
             return mgr.invoke_on_all(&datalake::credential_manager::stop);
         });
     }
-
+    if (cloud_topics_api.local_is_initialized()) {
+        shutdown_with_watchdog(
+          cloud_topics_api, [](auto& ct) { return ct.stop(); });
+    }
     // Stop all partitions before destructing the subsystems (transaction
     // coordinator, etc). This interrupts ongoing replication requests,
     // allowing higher level state machines to shutdown cleanly.
@@ -2125,6 +2129,28 @@ void application::wire_up_redpanda_services(
           archival_storage_enabled(),
           "cloud topics currently requires archival storage to be enabled");
 
+        class real_cluster_services
+          : public experimental::cloud_topics::cluster_services {
+        public:
+            explicit real_cluster_services(
+              ss::sharded<cluster::cluster_epoch_service<>>* epoch_generator)
+              : _epoch_service(epoch_generator) {}
+
+            seastar::future<experimental::cloud_topics::cluster_epoch>
+            current_epoch(seastar::abort_source* as) override {
+                std::expected<int64_t, std::error_code> epoch
+                  = co_await _epoch_service->local().get_cached_epoch(as);
+                if (!epoch) {
+                    throw std::system_error(epoch.error());
+                }
+                co_return experimental::cloud_topics::cluster_epoch(
+                  epoch.value());
+            }
+
+        private:
+            ss::sharded<cluster::cluster_epoch_service<>>* _epoch_service;
+        };
+
         construct_service(
           cloud_topics_api,
           ss::sharded_parameter([this, bucket] {
@@ -2133,16 +2159,15 @@ void application::wire_up_redpanda_services(
                 &cloud_io,
                 &shadow_index_cache,
                 bucket,
-                &storage);
+                &storage,
+                std::make_unique<real_cluster_services>(
+                  &controller->get_cluster_epoch_generator()));
           }),
           ss::sharded_parameter([this, bucket] {
               return std::make_unique<
                 experimental::cloud_topics::l1::domain_supervisor>(
                 controller.get());
           }))
-          .get();
-
-        cloud_topics_api.invoke_on_all([](auto& app) { return app.start(); })
           .get();
     }
 
@@ -3363,6 +3388,11 @@ void application::start_runtime_services(
             return fm.verify_enterprise_license();
         })
       .get();
+
+    if (cloud_storage_api.local_is_initialized()) {
+        cloud_topics_api.invoke_on_all([](auto& app) { return app.start(); })
+          .get();
+    }
 
     _debug_bundle_service.invoke_on_all(&debug_bundle::service::start).get();
 

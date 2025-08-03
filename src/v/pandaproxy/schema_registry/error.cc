@@ -79,7 +79,7 @@ struct error_category final : std::error_category {
                    "BACKWARD, FORWARD, FULL, BACKWARD_TRANSITIVE, "
                    "FORWARD_TRANSITIVE, and FULL_TRANSITIVE";
         case error_code::mode_invalid:
-            return "Invalid mode. Valid values are READWRITE, READONLY";
+            return "Invalid mode. Valid values are READWRITE, READONLY, IMPORT";
         case error_code::version_exhausted:
             return "Versions exhausted, maximum 2147483647 reached";
         case error_code::format_not_supported:

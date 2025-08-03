@@ -24,10 +24,6 @@ using namespace std::chrono_literals;
 namespace experimental::cloud_topics::l1 {
 
 class domain_supervisor::impl {
-    // Intentionally under the ss::sstring SSO size.
-    static constexpr model::topic_view domain_topic_name = model::topic_view{
-      std::string_view{"ct_l1_domain"}};
-
 public:
     explicit impl(cluster::controller* controller)
       : _controller(controller) {}
@@ -59,7 +55,8 @@ private:
             }
             if (_controller->get_topics_state().local().contains(
                   model::topic_namespace{
-                    model::kafka_internal_namespace, domain_topic_name})) {
+                    model::kafka_internal_namespace,
+                    model::l1_metastore_topic})) {
                 co_await ensure_domains_replication_factor();
             } else {
                 co_await create_domains_topic();
@@ -82,8 +79,7 @@ private:
     }
 
     ss::future<> ensure_domains_replication_factor() {
-        auto tp_ns = model::topic_namespace{
-          model::kafka_internal_namespace, domain_topic_name};
+        auto tp_ns = model::l1_metastore_nt;
         auto rf = _controller->get_topics_state()
                     .local()
                     .get_topic_replication_factor(tp_ns);
@@ -111,8 +107,7 @@ private:
     }
 
     ss::future<> create_domains_topic() {
-        auto tp_ns = model::topic_namespace{
-          model::kafka_internal_namespace, domain_topic_name};
+        auto tp_ns = model::l1_metastore_nt;
         cluster::topic_properties topic_props;
         // Mark all these as disabled
         topic_props.retention_bytes = tristate<size_t>();

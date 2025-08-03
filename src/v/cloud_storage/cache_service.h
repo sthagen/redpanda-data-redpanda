@@ -205,12 +205,12 @@ private:
     /// Ordinary trim: prioritze trimming data chunks, only delete indices etc
     /// if all their chunks are dropped.
     ss::future<trim_result> trim_fast(
-      const fragmented_vector<file_list_item>& candidates,
+      const chunked_vector<file_list_item>& candidates,
       uint64_t delete_bytes,
       size_t delete_objects);
 
     ss::future<trim_result> do_trim(
-      const fragmented_vector<file_list_item>& candidates,
+      const chunked_vector<file_list_item>& candidates,
       uint64_t delete_bytes,
       size_t delete_objects);
 
@@ -359,7 +359,7 @@ private:
     friend struct ::cloud_storage_fixture;
 
     // List of probable deletion candidates from the last trim.
-    std::optional<fragmented_vector<file_list_item>> _last_trim_carryover;
+    std::optional<chunked_vector<file_list_item>> _last_trim_carryover;
 
     ss::timer<ss::lowres_clock> _tracker_sync_timer;
     ssx::semaphore _tracker_sync_timer_sem{

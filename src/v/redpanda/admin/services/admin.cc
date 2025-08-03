@@ -13,6 +13,8 @@
 
 #include "version/version.h"
 
+#include <seastar/core/coroutine.hh>
+
 namespace proto {
 using namespace proto::admin;
 }

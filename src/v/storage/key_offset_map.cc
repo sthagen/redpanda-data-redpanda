@@ -10,6 +10,8 @@
  */
 #include "storage/key_offset_map.h"
 
+#include "container/chunked_vector_async.h"
+
 namespace storage {
 
 simple_key_offset_map::simple_key_offset_map(std::optional<size_t> max_keys)

@@ -12,7 +12,7 @@
 
 #include "absl/container/flat_hash_set.h"
 #include "cluster/errc.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 #include "kafka/protocol/types.h"
 #include "model/metadata.h"
 #include "model/timestamp.h"
@@ -386,7 +386,6 @@ struct data_migration_ntp_state
       data_migration_ntp_state,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     using self = data_migration_ntp_state;
 
     model::ntp ntp;
@@ -458,7 +457,6 @@ struct create_migration_request
       create_migration_request,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     data_migration migration;
 
     auto serde_fields() { return std::tie(migration); }
@@ -473,8 +471,6 @@ struct create_migration_reply
       create_migration_reply,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
-
     id id{-1};
     cluster::errc ec;
     auto serde_fields() { return std::tie(id, ec); }
@@ -492,7 +488,6 @@ struct update_migration_state_request
       update_migration_state_request,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     id id;
     state state;
     auto serde_fields() { return std::tie(id, state); }
@@ -510,7 +505,6 @@ struct update_migration_state_reply
       update_migration_state_reply,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     cluster::errc ec;
     auto serde_fields() { return std::tie(ec); }
 
@@ -526,7 +520,6 @@ struct remove_migration_request
       remove_migration_request,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     id id;
     auto serde_fields() { return std::tie(id); }
     friend bool
@@ -541,7 +534,6 @@ struct remove_migration_reply
       remove_migration_reply,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     cluster::errc ec;
 
     auto serde_fields() { return std::tie(ec); }
@@ -559,7 +551,6 @@ struct check_ntp_states_request
       check_ntp_states_request,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     using self = check_ntp_states_request;
 
     chunked_vector<data_migration_ntp_state> sought_states;
@@ -576,7 +567,6 @@ struct check_ntp_states_reply
       check_ntp_states_reply,
       serde::version<0>,
       serde::compat_version<0>> {
-    using rpc_adl_exempt = std::true_type;
     using self = check_ntp_states_reply;
 
     chunked_vector<data_migration_ntp_state> actual_states;

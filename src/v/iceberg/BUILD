@@ -45,7 +45,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "@avro",
     ],
 )
@@ -114,7 +114,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
         "@seastar",
     ],
@@ -230,7 +230,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":datatypes",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
     ],
 )
 
@@ -278,7 +278,7 @@ redpanda_cc_library(
         ":manifest_entry",
         ":partition",
         ":schema",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
     ],
 )
@@ -309,7 +309,7 @@ redpanda_cc_library(
         ":values_avro",
         "//src/v/base",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/strings:string_switch",
         "//src/v/utils:named_type",
         "@avro",
@@ -384,7 +384,7 @@ redpanda_cc_library(
     include_prefix = "iceberg",
     deps = [
         ":manifest_list",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
     ],
 )
 
@@ -428,7 +428,7 @@ redpanda_cc_library(
         ":manifest_entry",
         ":partition",
         "//src/v/bytes",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
     ],
 )
@@ -525,7 +525,7 @@ redpanda_cc_library(
         ":transform",
         ":transform_utils",
         ":unresolved_partition_spec",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
     ],
 )
@@ -547,7 +547,7 @@ redpanda_cc_library(
     include_prefix = "iceberg",
     deps = [
         ":partition",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/json",
     ],
 )
@@ -621,9 +621,10 @@ redpanda_cc_library(
     deps = [
         ":action",
         ":table_metadata",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/utils:prefix_logger",
+        "@seastar",
     ],
 )
 
@@ -779,8 +780,9 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "@boost//:container_hash",
+        "@fmt",
         "@seastar",
     ],
 )
@@ -819,7 +821,7 @@ redpanda_cc_library(
         ":snapshot",
         ":transform",
         ":uri",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/utils:absl_sstring_hash",
         "//src/v/utils:named_type",
@@ -867,7 +869,7 @@ redpanda_cc_library(
         ":table_requirement",
         ":table_update",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:uuid",
     ],
 )
@@ -922,7 +924,7 @@ redpanda_cc_library(
         ":datatypes",
         ":schema",
         ":snapshot",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:uuid",
     ],
 )
@@ -960,7 +962,7 @@ redpanda_cc_library(
         ":schema",
         "//src/v/base",
         "//src/v/container:chunked_hash_map",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
     ],
     include_prefix = "iceberg",
     deps = [
@@ -1008,7 +1010,7 @@ redpanda_cc_library(
         ":table_requirement",
         ":table_update",
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "@seastar",
     ],
 )
@@ -1122,7 +1124,7 @@ redpanda_cc_library(
     deps = [
         ":transform",
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "@seastar",
     ],
 )
@@ -1146,6 +1148,7 @@ redpanda_cc_library(
         ":table_metadata",
         ":unresolved_partition_spec",
         "//src/v/utils:prefix_logger",
+        "@seastar",
     ],
 )
 
@@ -1166,6 +1169,7 @@ redpanda_cc_library(
         ":action",
         ":schema",
         ":table_metadata",
+        "@seastar",
     ],
 )
 
@@ -1186,7 +1190,7 @@ redpanda_cc_library(
     deps = [
         ":datatypes",
         "//src/v/bytes:iobuf",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "//src/v/utils:uuid",
         "@abseil-cpp//absl/numeric:int128",
         "@boost//:container_hash",
@@ -1257,7 +1261,7 @@ redpanda_cc_library(
         ":table_requirement",
         ":table_update",
         "//src/v/base",
-        "//src/v/container:fragmented_vector",
+        "//src/v/container:chunked_vector",
         "@seastar",
     ],
 )

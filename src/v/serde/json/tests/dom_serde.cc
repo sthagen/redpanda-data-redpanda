@@ -12,6 +12,8 @@
 #include "serde/json/parser.h"
 #include "serde/json/tests/dom.h"
 
+#include <seastar/core/coroutine.hh>
+
 namespace serde::json::test::dom {
 
 ss::future<value> parse_document_serde(iobuf buf) {
@@ -25,10 +27,10 @@ ss::future<value> parse_document_serde(iobuf buf) {
 
     struct stack_element {
         container_type type;
-        fragmented_vector<value> values;
+        chunked_vector<value> values;
     };
 
-    fragmented_vector<stack_element> stack{};
+    chunked_vector<stack_element> stack{};
     stack.push_back({container_type::document, {}});
 
     while (co_await parser.next()) {

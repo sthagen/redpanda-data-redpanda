@@ -5,7 +5,7 @@
 
 #include "bytes/iobuf.h"
 #include "container/chunked_hash_map.h"
-#include "container/fragmented_vector.h"
+#include "container/chunked_vector.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>

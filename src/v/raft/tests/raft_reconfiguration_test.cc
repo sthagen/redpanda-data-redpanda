@@ -361,7 +361,7 @@ TEST_P_CORO(reconfiguration_test, configuration_replace_test) {
         }
 
         // heal the partition 5s later
-        (void)ss::sleep(5s).then([isolated_nodes] {
+        (void)ss::sleep(20s).then([isolated_nodes] {
             vlog(test_log.info, "healing the network partition");
             isolated_nodes->clear();
         });

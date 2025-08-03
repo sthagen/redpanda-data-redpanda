@@ -47,22 +47,6 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "placeholder",
-    hdrs = [
-        "dl_placeholder.h",
-    ],
-    include_prefix = "cloud_topics",
-    deps = [
-        ":types",
-        "//src/v/serde",
-        "//src/v/serde:named_type",
-        "//src/v/serde:uuid",
-        "//src/v/utils:named_type",
-        "//src/v/utils:uuid",
-    ],
-)
-
-redpanda_cc_library(
     name = "data_plane_api",
     hdrs = [
         "data_plane_api.h",
@@ -76,8 +60,8 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/cloud_topics:extent_meta",
-        "//src/v/container:fragmented_vector",
+        "//src/v/cloud_topics/level_zero/common:extent_meta",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/storage",
         "@seastar",
@@ -103,10 +87,9 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/cloud_topics:data_plane_api",
-        "//src/v/cloud_topics:extent_meta",
         "//src/v/cloud_topics/level_one/domain:domain_supervisor",
-        "//src/v/container:chunked_circular_buffer",
-        "//src/v/container:fragmented_vector",
+        "//src/v/cloud_topics/level_zero/common:extent_meta",
+        "//src/v/container:chunked_vector",
         "//src/v/model",
         "//src/v/storage",
         "@seastar",
@@ -125,8 +108,8 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage",
+        "//src/v/cloud_topics:cluster_services_interface",
         "//src/v/cloud_topics:data_plane_api",
-        "//src/v/cloud_topics:ephemeral_cluster_services",
         "//src/v/cloud_topics/batch_cache",
         "//src/v/cloud_topics/level_zero/batcher",
         "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
@@ -141,19 +124,6 @@ redpanda_cc_library(
     visibility = ["//src/v/redpanda:__pkg__"],
     deps = [
         "@seastar",
-    ],
-)
-
-redpanda_cc_library(
-    name = "extent_meta",
-    hdrs = [
-        "extent_meta.h",
-    ],
-    include_prefix = "cloud_topics",
-    deps = [
-        ":types",
-        "//src/v/model",
-        "@fmt",
     ],
 )
 
