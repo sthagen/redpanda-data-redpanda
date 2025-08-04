@@ -3611,143 +3611,37 @@ void disk_log_impl::set_overrides(ntp_config::default_overrides o) {
     mutable_config().set_overrides(o);
 }
 
-/// Calculate the compaction backlog of the segments within a particular term
-///
-/// This is the inner part of compaction_backlog()
-int64_t compaction_backlog_term(
-  std::vector<ss::lw_shared_ptr<segment>> segs, double cf) {
-    int64_t backlog = 0;
-
-    // Only compare each segment to a limited number of other segments, to
-    // avoid the loop below blowing up in runtime when there are many segments
-    // in the same term.
-    static constexpr size_t limit_lookahead = 8;
-
-    auto segment_count = segs.size();
-    if (segment_count <= 1) {
-        return 0;
-    }
-
-    for (size_t n = 1; n <= segment_count; ++n) {
-        auto& s = segs[n - 1];
-        auto sz = s->has_self_compact_timestamp() ? s->size_bytes()
-                                                  : s->size_bytes() * cf;
-        for (size_t k = 0; k <= segment_count - n && k < limit_lookahead; ++k) {
-            if (k == segment_count - 1) {
-                continue;
-            }
-            if (k == 0) {
-                backlog += static_cast<int64_t>(sz);
-            } else {
-                backlog += static_cast<int64_t>(std::pow(cf, k) * sz);
-            }
-        }
-    }
-
-    return backlog;
-}
-
 /**
- * We express compaction backlog as the size of a data that have to be read to
+ * We express compaction backlog as the size of data that has to be read to
  * perform full compaction.
- *
- * According to this assumption compaction backlog consist of two components
- *
- * 1) size of not yet self compacted segments
- * 2) size of all possible adjacent segments compactions
- *
- * Component 1. of a compaction backlog is simply a sum of sizes of all not self
- * compacted segments.
- *
- * Calculation of 2nd part of compaction backlog is based on the observation
- * that adjacent segment compactions can be presented as a tree
- * (each leaf represents a log segment)
- *                              ┌────┐
- *                        ┌────►│ s5 │◄┐
- *                        │     └────┘ │
- *                        │            │
- *                        │            │
- *                        │            │
- *                      ┌─┴──┐         │
- *                    ┌►│ s4 │◄┐       │
- *                    │ └────┘ │       │
- *                    │        │       │
- *                    │        │       │
- *                    │        │       │
- *                    │        │       │
- *                  ┌─┴──┐  ┌──┴─┐  ┌──┴─┐
- *                  │ s1 │  │ s2 │  │ s3 │
- *                  └────┘  └────┘  └────┘
- *
- * To create segment from upper tree level two self compacted adjacent segments
- * from level below are concatenated and then resulting segment is self
- * compacted.
- *
- * In presented example size of s4:
- *
- *          sizeof(s4) = sizeof(s1) + sizeof(s2)
- *
- * Estimation of an s4 size after it will be self compacted is based on the
- * average compaction factor - `cf`. After self compaction size of
- * s4 will be estimated as
- *
- *         sizeof(s4) = cf * s4
- *
- * This allows calculating next compaction step which would be:
- *
- *         sizeof(s5) = cf * sizeof(s4) + s3 = cf * (sizeof(s1) + sizeof(s2))
- *
- * In order to calculate the backlog we have to sum both terms.
- *
- * Continuing those operation for upper tree levels we can obtain an equation
- * describing adjacent segments compaction backlog:
- *
- * cnt - segments count
- *
- *  backlog = sum(n=1,cnt) [sum(k=0, cnt - n + 1)][cf^k * sizeof(sn)] -
- *  cf^(cnt-1) * s1
  */
-int64_t disk_log_impl::compaction_backlog() const {
+int64_t disk_log_impl::compaction_backlog() {
     if (!config().is_compacted() || _segs.empty()) {
         return 0;
     }
 
-    auto current_term = _segs.front()->offsets().get_term();
-    auto cf = _compaction_ratio.get();
-    int64_t backlog = 0;
-    std::vector<ss::lw_shared_ptr<segment>> segments_this_term;
-
-    // Limit how large we will try to allocate the sgements_this_term vector:
-    // this protects us against corner cases where a term has a really large
-    // number of segments.  Typical compaction use cases will have many fewer
-    // segments per term than this (because segments are continuously compacted
-    // away).  Corner cases include non-compactible data in a compacted topic,
-    // or enabling compaction on a previously non-compacted topic.
-    static constexpr size_t limit_segments_this_term = 1024;
-
-    for (auto& s : _segs) {
-        if (!s->has_self_compact_timestamp()) {
-            backlog += static_cast<int64_t>(s->size_bytes());
-        }
-        // if has appender do not include into adjacent segments calculation
-        if (s->has_appender()) {
-            continue;
-        }
-
-        if (current_term != s->offsets().get_term()) {
-            // New term: consume segments from the previous term.
-            backlog += compaction_backlog_term(
-              std::move(segments_this_term), cf);
-            segments_this_term.clear();
-        }
-
-        if (segments_this_term.size() < limit_segments_this_term) {
-            segments_this_term.push_back(s);
-        }
+    if (!needs_compaction()) {
+        return 0;
     }
 
-    // Consume segments from last term in the log after falling out of loop
-    backlog += compaction_backlog_term(std::move(segments_this_term), cf);
+    // Find the last closed yet dirty segment in the log, and sum over all bytes
+    // before it.
+    auto last_dirty_it = std::find_if(
+      _segs.rbegin(), _segs.rend(), [](const segment_set::type& s) {
+          return !s->has_appender() && !s->has_clean_compact_timestamp();
+      });
+
+    if (last_dirty_it == _segs.rend()) {
+        return 0;
+    }
+
+    int64_t backlog = std::accumulate(
+      _segs.begin(),
+      last_dirty_it.base(),
+      int64_t{0},
+      [](int64_t acc, ss::lw_shared_ptr<segment>& seg) {
+          return acc + seg->size_bytes();
+      });
 
     return backlog;
 }
@@ -4677,6 +4571,18 @@ disk_log_impl::earliest_removable_timestamp(model::offset o) const {
 
 std::optional<model::offset> disk_log_impl::max_removed_offset() const {
     return internal::read_max_removed_offset(_kvstore, config().ntp());
+}
+
+bool disk_log_impl::needs_compaction() {
+    auto max_lag = config().max_compaction_lag_ms();
+    const auto now = to_time_point(model::timestamp::now());
+    const auto earliest_dirty_ts = earliest_dirty_segment_ts();
+    const auto exceed_compact_lag
+      = earliest_dirty_ts.has_value()
+        && (now - to_time_point(earliest_dirty_ts.value()) > max_lag);
+
+    auto dr = dirty_ratio();
+    return dr >= config().min_cleanable_dirty_ratio() || exceed_compact_lag;
 }
 
 } // namespace storage

@@ -167,7 +167,7 @@ public:
     void set_overrides(ntp_config::default_overrides) final;
     bool notify_compaction_update() final;
 
-    int64_t compaction_backlog() const final;
+    int64_t compaction_backlog() final;
 
     ss::future<usage_report> disk_usage(gc_config) override;
 
@@ -437,6 +437,15 @@ private:
     // bounds [start_offset, committed_offset] of the log, false otherwise.
     bool log_contains_offset_range(
       model::offset first, model::offset last) const noexcept;
+
+    // A log is eligible for compaction if at least one of the following
+    // is true:
+    // 1. It's gone long enough without compaction: the earliest first
+    //    batch timestamp of a dirty segment is longer ago than
+    //    the max compaction lag.
+    // 2. It's dirty enough: the dirty ratio is at least the minimum
+    //    cleanable dirty ratio.
+    bool needs_compaction() final;
 
 private:
     // Computes the segment size based on the latest max_segment_size

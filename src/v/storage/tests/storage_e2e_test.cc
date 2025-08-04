@@ -2161,6 +2161,7 @@ TEST_F(storage_test_fixture, compaction_backlog_calculation) {
     storage::ntp_config::default_overrides overrides;
     overrides.cleanup_policy_bitflags
       = model::cleanup_policy_bitflags::compaction;
+    overrides.min_cleanable_dirty_ratio = tristate<double>{0.0};
 
     ss::abort_source as;
     storage::log_manager mgr = make_log_manager(cfg);
@@ -2204,34 +2205,43 @@ TEST_F(storage_test_fixture, compaction_backlog_calculation) {
       std::nullopt,
       0ms,
       as);
-    /**
-     * Initially all compaction rations are equal to 1.0 so it is easy to
-     * calculate backlog size.
-     */
     auto& segments = disk_log->segments();
-    auto backlog_size = log->compaction_backlog();
-    size_t self_seg_compaction_sz = 0;
-    for (auto& s : segments) {
-        self_seg_compaction_sz += s->size_bytes();
+    {
+        auto backlog_size = log->compaction_backlog();
+        size_t expected_backlog = 0;
+        for (auto& s : segments) {
+            if (!s->has_appender()) {
+                expected_backlog += s->size_bytes();
+            }
+        }
+        ASSERT_EQ(backlog_size, expected_backlog);
     }
-    ASSERT_EQ(
-      backlog_size,
-      3 * segments[0]->size_bytes() + 3 * segments[1]->size_bytes()
-        + 2 * segments[2]->size_bytes() + segments[3]->size_bytes()
-        + self_seg_compaction_sz);
-    // self compaction steps
+
+    // Perform compaction.
     log->housekeeping(c_cfg).get();
 
     ASSERT_EQ(disk_log->segment_count(), 2);
-    auto new_backlog_size = log->compaction_backlog();
-    /**
-     * after all self segments are compacted they shouldn't be included into the
-     * backlog (only last segment is since it has appender and isn't self
-     * compacted)
-     */
-    ASSERT_LT(
-      new_backlog_size,
-      backlog_size - self_seg_compaction_sz + segments[1]->size_bytes());
+    {
+        auto backlog_size = log->compaction_backlog();
+        // Log should be fully clean.
+        ASSERT_EQ(backlog_size, 0);
+    }
+
+    // Addition of a new segment results in all of the bytes of the log being
+    // added to backlog due to min.cleanable.dirty.ratio=0.0
+    add_segment(16_KiB, model::term_id(1));
+    disk_log->force_roll().get();
+    ASSERT_EQ(disk_log->segment_count(), 3);
+    {
+        auto backlog_size = log->compaction_backlog();
+        size_t expected_backlog = 0;
+        for (auto& s : segments) {
+            if (!s->has_appender()) {
+                expected_backlog += s->size_bytes();
+            }
+        }
+        ASSERT_EQ(backlog_size, expected_backlog);
+    }
 }
 
 TEST_F(storage_test_fixture, not_compacted_log_backlog) {

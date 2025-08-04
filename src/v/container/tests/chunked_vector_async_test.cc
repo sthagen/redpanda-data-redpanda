@@ -13,9 +13,9 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
-SEASTAR_THREAD_TEST_CASE(fragmented_vector_fill_async_test) {
+SEASTAR_THREAD_TEST_CASE(chunked_vector_fill_async_test) {
     chunked_vector<int> v;
-    fragmented_vector_fill_async(v, 0).get();
+    chunked_vector_fill_async(v, 0).get();
     BOOST_REQUIRE(v.size() == 0);
 
     // fill with non-zero
@@ -28,22 +28,22 @@ SEASTAR_THREAD_TEST_CASE(fragmented_vector_fill_async_test) {
     }
 
     // fill with zero
-    fragmented_vector_fill_async(v, 0).get();
+    chunked_vector_fill_async(v, 0).get();
     BOOST_REQUIRE(v.size() == 10);
     for (const auto& e : v) {
         BOOST_REQUIRE(e == 0);
     }
 }
 
-SEASTAR_THREAD_TEST_CASE(fragmented_vector_clear_async_test) {
+SEASTAR_THREAD_TEST_CASE(chunked_vector_clear_async_test) {
     chunked_vector<int> v;
-    fragmented_vector_clear_async(v).get();
+    chunked_vector_clear_async(v).get();
     BOOST_REQUIRE(v.size() == 0);
 
     // one element
     v.push_back(0);
     BOOST_REQUIRE(v.size() == 1);
-    fragmented_vector_clear_async(v).get();
+    chunked_vector_clear_async(v).get();
     BOOST_REQUIRE(v.size() == 0);
 
     // many fragments
@@ -54,6 +54,6 @@ SEASTAR_THREAD_TEST_CASE(fragmented_vector_clear_async_test) {
     }
     BOOST_REQUIRE(v.size() == (5 * v.elements_per_fragment()));
 
-    fragmented_vector_clear_async(v).get();
+    chunked_vector_clear_async(v).get();
     BOOST_REQUIRE(v.size() == 0);
 }

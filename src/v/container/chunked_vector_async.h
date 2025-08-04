@@ -27,9 +27,9 @@
  * stalls. It is optimized by circumventing the indexing indirection incurred by
  * using the fragmented vector interface directly.
  */
-template<typename T, size_t S>
+template<typename T>
 inline seastar::future<>
-fragmented_vector_fill_async(fragmented_vector<T, S>& vec, const T& value) {
+chunked_vector_fill_async(chunked_vector<T>& vec, const T& value) {
     auto remaining = vec._size;
     for (auto& frag : vec._frags) {
         const auto n = std::min(frag.size(), remaining);
@@ -53,12 +53,11 @@ fragmented_vector_fill_async(fragmented_vector<T, S>& vec, const T& value) {
 }
 
 /**
- * A futurized version of fragmented_vector::clear that allows clearing a large
+ * A futurized version of chunked_vector::clear that allows clearing a large
  * vector without incurring a reactor stall.
  */
-template<typename T, size_t S>
-inline seastar::future<>
-fragmented_vector_clear_async(fragmented_vector<T, S>& vec) {
+template<typename T>
+inline seastar::future<> chunked_vector_clear_async(chunked_vector<T>& vec) {
     while (!vec._frags.empty()) {
         vec._frags.pop_back();
         if (seastar::need_preempt()) {

@@ -215,7 +215,7 @@ bool failure_injectable_log::notify_compaction_update() {
     return _underlying_log->notify_compaction_update();
 }
 
-int64_t failure_injectable_log::compaction_backlog() const {
+int64_t failure_injectable_log::compaction_backlog() {
     return _underlying_log->compaction_backlog();
 }
 
@@ -282,6 +282,10 @@ failure_injectable_log::earliest_removable_timestamp(model::offset o) const {
 std::optional<model::offset>
 failure_injectable_log::max_removed_offset() const {
     return _underlying_log->max_removed_offset();
+}
+
+bool failure_injectable_log::needs_compaction() {
+    return _underlying_log->needs_compaction();
 }
 
 } // namespace raft

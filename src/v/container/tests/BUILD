@@ -14,10 +14,10 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
-    name = "fragmented_vector_test",
+    name = "chunked_vector_test",
     timeout = "short",
     srcs = [
-        "fragmented_vector_test.cc",
+        "chunked_vector_test.cc",
     ],
     deps = [
         "//src/v/container:chunked_vector",
@@ -64,10 +64,10 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_btest(
-    name = "fragmented_vector_async_test",
+    name = "chunked_vector_async_test",
     timeout = "short",
     srcs = [
-        "fragmented_vector_async_test.cc",
+        "chunked_vector_async_test.cc",
     ],
     deps = [
         "//src/v/base",

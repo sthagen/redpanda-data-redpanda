@@ -117,7 +117,7 @@ public:
 
     bool notify_compaction_update() final;
 
-    int64_t compaction_backlog() const final;
+    int64_t compaction_backlog() final;
 
     ss::future<storage::usage_report> disk_usage(storage::gc_config) final;
 
@@ -150,6 +150,8 @@ public:
       earliest_removable_timestamp(model::offset) const final;
 
     virtual std::optional<model::offset> max_removed_offset() const final;
+
+    bool needs_compaction() final;
 
 private:
     ss::shared_ptr<storage::log> _underlying_log;
