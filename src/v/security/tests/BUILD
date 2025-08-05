@@ -3,14 +3,17 @@ load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_btest", "redpanda_cc_
 redpanda_test_cc_library(
     name = "utils",
     hdrs = [
+        "license_utils.h",
         "randoms.h",
     ],
     include_prefix = "security/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/security",
+        "//src/v/security:license",
         "//src/v/test_utils:random",
         "//src/v/test_utils:random_bytes",
+        "@abseil-cpp//absl/strings",
     ],
 )
 
@@ -241,6 +244,7 @@ redpanda_cc_gtest(
         "license_test.cc",
     ],
     deps = [
+        ":utils",
         "//src/v/security:license",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",

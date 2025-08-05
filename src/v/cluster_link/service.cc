@@ -17,14 +17,14 @@
 #include "cluster_link/logger.h"
 #include "cluster_link/manager.h"
 #include "cluster_link/model/types.h"
-#include "model/namespace.h"
-#include "raft/group_manager.h"
+#include "cluster_link/source_topic_syncer.h"
 
 namespace cluster_link {
 
 using ::cluster::cluster_link::frontend;
 using kafka::data::rpc::partition_leader_cache;
 using kafka::data::rpc::partition_manager;
+using kafka::data::rpc::topic_metadata_cache;
 
 class link_registry_adapter : public link_registry {
 public:
@@ -45,6 +45,13 @@ public:
         return _plf->get_all_link_ids();
     }
 
+    ss::future<::cluster::cluster_link::errc> add_mirror_topic(
+      model::id_t id,
+      model::add_mirror_topic_cmd cmd,
+      ::model::timeout_clock::time_point timeout) override {
+        return _plf->add_mirror_topic(id, std::move(cmd), timeout);
+    }
+
 private:
     frontend* _plf;
 };
@@ -54,16 +61,22 @@ public:
     static constexpr auto link_reconciler_period = 5min;
     std::unique_ptr<link> create_link(
       ::model::node_id self,
+      model::id_t link_id,
+      manager* manager,
       model::metadata config,
       partition_leader_cache* partition_leader_cache,
       partition_manager* partition_manager,
+      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection) override {
         return std::make_unique<link>(
           self,
+          link_id,
+          manager,
           link_reconciler_period,
           std::move(config),
           partition_leader_cache,
           partition_manager,
+          topic_metadata_cache,
           std::move(cluster_connection));
     }
 };
@@ -75,6 +88,7 @@ service::service(
   ss::sharded<cluster::partition_manager>* partition_manager,
   ss::sharded<cluster::partition_leaders_table>* partition_leaders_table,
   ss::sharded<cluster::shard_table>* shard_table,
+  ss::sharded<cluster::metadata_cache>* metadata_cache,
   ss::smp_service_group smp_group)
   : _self(self)
   , _plf(plf)
@@ -82,6 +96,7 @@ service::service(
   , _partition_manager(partition_manager)
   , _partition_leaders_table(partition_leaders_table)
   , _shard_table(shard_table)
+  , _metadata_cache(metadata_cache)
   , _smp_group(smp_group) {}
 
 service::~service() = default;
@@ -93,10 +108,13 @@ ss::future<> service::start() {
       partition_leader_cache::make_default(_partition_leaders_table),
       partition_manager::make_default(
         _shard_table, _partition_manager, _smp_group),
+      topic_metadata_cache::make_default(_metadata_cache),
       std::make_unique<link_registry_adapter>(&_plf->local()),
       std::make_unique<default_link_factory>(),
       std::make_unique<cluster_factory>(),
       30s); // Temporary until we have a proper configuration for this
+
+    co_await _manager->register_task_factory<source_topic_syncer_factory>();
 
     // Register notifications before the manager starts.  The manager will have
     // a constructed the underlying workqueue to start in a paused state and

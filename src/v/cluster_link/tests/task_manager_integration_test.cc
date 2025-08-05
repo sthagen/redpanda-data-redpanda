@@ -44,9 +44,6 @@ void validate_report(
 }
 } // namespace
 
-using kafka::data::rpc::partition_leader_cache;
-using kafka::data::rpc::partition_manager;
-
 class test_task : public task {
 public:
     static constexpr auto name = "test_task";
@@ -87,43 +84,6 @@ public:
 
 private:
     task::is_locked_to_controller _is_locked_to_controller;
-};
-
-class test_link_factory : public link_factory {
-public:
-    explicit test_link_factory(
-      ss::lowres_clock::duration task_reconciler_interval)
-      : _task_reconciler_interval(task_reconciler_interval) {}
-    std::unique_ptr<link> create_link(
-      ::model::node_id self,
-      model::metadata metadata,
-      partition_leader_cache* leader_cache,
-      partition_manager* pm,
-      kafka::client::cluster cluster_connection) override {
-        auto name = metadata.name;
-        auto created_link = std::make_unique<link>(
-          self,
-          _task_reconciler_interval,
-          std::move(metadata),
-          leader_cache,
-          pm,
-          std::move(cluster_connection));
-
-        _links.emplace(std::move(name), created_link.get());
-        return created_link;
-    }
-
-    std::optional<link*> get_link(const model::name_t& name) const {
-        auto it = _links.find(name);
-        if (it != _links.end()) {
-            return it->second;
-        }
-        return std::nullopt;
-    }
-
-private:
-    ss::lowres_clock::duration _task_reconciler_interval;
-    chunked_hash_map<model::name_t, link*> _links;
 };
 
 struct test_parameters {

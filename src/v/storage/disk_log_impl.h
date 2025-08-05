@@ -278,7 +278,7 @@ public:
     // Returns the dirty ratio of the log.
     // The dirty ratio is the ratio of bytes in closed, dirty segments to the
     // total number of bytes in all closed segments in the log.
-    double dirty_ratio() final;
+    double dirty_ratio() const final;
 
     std::optional<model::timestamp> earliest_dirty_segment_ts() const final;
 
@@ -445,7 +445,7 @@ private:
     //    the max compaction lag.
     // 2. It's dirty enough: the dirty ratio is at least the minimum
     //    cleanable dirty ratio.
-    bool needs_compaction() final;
+    bool needs_compaction() const final;
 
 private:
     // Computes the segment size based on the latest max_segment_size
@@ -513,8 +513,8 @@ private:
 
     size_t _reclaimable_size_bytes{0};
 
-    ssize_t _dirty_segment_bytes{0};
-    ssize_t _closed_segment_bytes{0};
+    mutable ssize_t _dirty_segment_bytes{0};
+    mutable ssize_t _closed_segment_bytes{0};
 
     // Update the number of bytes in dirty segments.
     //
@@ -553,8 +553,9 @@ private:
     // Performs a manual O(n) reset of the dirty and closed bytes in the log by
     // iterating over segment in the log. Used as a safety hatch in
     // dirty_ratio() to prevent returning a bogus value due to improper
-    // book-keeping.
-    void reset_dirty_and_closed_bytes();
+    // book-keeping. Marked as `const` to make call from `dirty_ratio()` compile
+    // (`_bytes` are marked as `mutable`).
+    void reset_dirty_and_closed_bytes() const;
 
     bool _compaction_enabled;
 };

@@ -25,6 +25,7 @@ manager::manager(
   std::unique_ptr<kafka::data::rpc::partition_leader_cache>
     partition_leader_cache,
   std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager,
+  std::unique_ptr<kafka::data::rpc::topic_metadata_cache> topic_metadata_cache,
   std::unique_ptr<link_registry> registry,
   std::unique_ptr<link_factory> link_factory,
   std::unique_ptr<cluster_factory> cluster_factory,
@@ -32,6 +33,7 @@ manager::manager(
   : _self(self)
   , _partition_leader_cache(std::move(partition_leader_cache))
   , _partition_manager(std::move(partition_manager))
+  , _topic_metadata_cache(std::move(topic_metadata_cache))
   , _registry(std::move(registry))
   , _link_factory(std::move(link_factory))
   , _cluster_factory(std::move(cluster_factory))
@@ -135,9 +137,12 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
             auto units = co_await _link_task_reconciler_mutex.get_units(_as);
             auto new_link = _link_factory->create_link(
               _self,
+              id,
+              this,
               link_metadata.copy(),
               _partition_leader_cache.get(),
               _partition_manager.get(),
+              _topic_metadata_cache.get(),
               _cluster_factory->create_cluster(link_metadata));
             vassert(
               new_link, "Link factory returned a null link for id={}", id);
@@ -231,6 +236,15 @@ ss::future<> manager::handle_on_leadership_change(
     co_await ss::parallel_for_each(_links, [ntp, is_ntp_leader](auto& pair) {
         return pair.second->handle_on_leadership_change(ntp, is_ntp_leader);
     });
+}
+
+ss::future<::cluster::cluster_link::errc> manager::add_mirror_topic(
+  model::id_t link_id, model::add_mirror_topic_cmd cmd) {
+    static constexpr auto mirror_topic_timeout = 5s;
+    return _registry->add_mirror_topic(
+      link_id,
+      std::move(cmd),
+      ::model::timeout_clock::now() + mirror_topic_timeout);
 }
 
 model::cluster_link_task_status_report manager::get_task_status_report() const {

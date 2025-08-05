@@ -16,11 +16,46 @@
 #include <fmt/ranges.h>
 
 namespace cluster_link::model {
+
+mirror_topic_metadata mirror_topic_metadata::copy() const {
+    mirror_topic_metadata copy;
+    copy.state = state;
+    copy.source_topic_id = source_topic_id;
+    copy.source_topic_name = source_topic_name;
+    copy.destination_topic_id = destination_topic_id;
+    copy.partition_count = partition_count;
+    copy.replication_factor = replication_factor;
+    copy.topic_configs.reserve(topic_configs.size());
+    for (const auto& [key, value] : topic_configs) {
+        copy.topic_configs.emplace(key, value);
+    }
+
+    return copy;
+}
+
+topic_metadata_mirroring_config topic_metadata_mirroring_config::copy() const {
+    topic_metadata_mirroring_config copy;
+
+    copy.is_enabled = is_enabled;
+    copy.task_interval = task_interval;
+    copy.topic_name_filters.reserve(topic_name_filters.size());
+    for (const auto& filter : topic_name_filters) {
+        copy.topic_name_filters.emplace_back(filter);
+    }
+    copy.topic_properties_to_mirror = topic_properties_to_mirror;
+
+    return copy;
+}
+
 void link_state::set_mirror_topics(const mirror_topics_t& topics) {
     mirror_topics.reserve(topics.size());
     for (const auto& [topic, state] : topics) {
-        mirror_topics.emplace(topic, state);
+        mirror_topics.emplace(topic, state.copy());
     }
+}
+
+void link_state::set_mirror_topics(mirror_topics_t&& topics) {
+    mirror_topics = std::move(topics);
 }
 
 link_state link_state::copy() const {
@@ -28,8 +63,9 @@ link_state link_state::copy() const {
     copy.paused = paused;
     copy.mirror_topics.reserve(mirror_topics.size());
     for (const auto& [topic, state] : mirror_topics) {
-        copy.mirror_topics.emplace(topic, state);
+        copy.mirror_topics.emplace(topic, state.copy());
     }
+    copy.topic_metadata_mirroring_cfg = topic_metadata_mirroring_cfg.copy();
     return copy;
 }
 
@@ -39,6 +75,13 @@ metadata metadata::copy() const {
     copy.uuid = uuid;
     copy.connection = connection;
     copy.state = state.copy();
+    return copy;
+}
+
+add_mirror_topic_cmd add_mirror_topic_cmd::copy() const {
+    add_mirror_topic_cmd copy;
+    copy.topic = topic;
+    copy.metadata = metadata.copy();
     return copy;
 }
 } // namespace cluster_link::model
@@ -140,11 +183,15 @@ auto fmt::formatter<cluster_link::model::mirror_topic_metadata>::format(
     return fmt::format_to(
       ctx.out(),
       "{{state={}, source_topic_id={}, source_topic_name={}, "
-      "destination_topic_id={}}}",
+      "destination_topic_id={}, partition_count={}, replication_factor={}, "
+      "topic_configs={}}}",
       m.state,
       m.source_topic_id,
       m.source_topic_name,
-      m.destination_topic_id);
+      m.destination_topic_id,
+      m.partition_count,
+      m.replication_factor,
+      m.topic_configs);
 }
 
 auto fmt::formatter<
@@ -157,14 +204,52 @@ auto fmt::formatter<
       ctx.out(), "{{topic: {}, metadata: {}}}", m.first, m.second);
 }
 
+auto fmt::formatter<cluster_link::model::filter_pattern_type>::format(
+  cluster_link::model::filter_pattern_type s, format_context& ctx) const
+  -> decltype(ctx.out()) {
+    return fmt::format_to(ctx.out(), "{}", to_string_view(s));
+}
+
+auto fmt::formatter<cluster_link::model::filter_type>::format(
+  cluster_link::model::filter_type s, format_context& ctx) const
+  -> decltype(ctx.out()) {
+    return fmt::format_to(ctx.out(), "{}", to_string_view(s));
+}
+
+auto fmt::formatter<cluster_link::model::resource_name_filter_pattern>::format(
+  const cluster_link::model::resource_name_filter_pattern& m,
+  format_context& ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{pattern_type: {}, filter: {}, pattern: {}}}",
+      m.pattern_type,
+      m.filter,
+      m.pattern);
+}
+
+auto fmt::formatter<cluster_link::model::topic_metadata_mirroring_config>::
+  format(
+    const cluster_link::model::topic_metadata_mirroring_config& m,
+    format_context& ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{is_enabled: {}, task_interval: {}, filters: {}, "
+      "topic_properties_to_mirror: {}}}",
+      m.is_enabled,
+      m.task_interval,
+      m.topic_name_filters,
+      m.topic_properties_to_mirror);
+}
+
 auto fmt::formatter<cluster_link::model::link_state>::format(
   const cluster_link::model::link_state& s, format_context& ctx) const
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{paused: {}, mirror_topics: {}}}",
+      "{{paused: {}, mirror_topics: {}, auto_mirror_topic_task_config: {}}}",
       s.paused,
-      fmt::join(s.mirror_topics.begin(), s.mirror_topics.end(), ","));
+      fmt::join(s.mirror_topics.begin(), s.mirror_topics.end(), ","),
+      s.topic_metadata_mirroring_cfg);
 }
 
 auto fmt::formatter<cluster_link::model::metadata>::format(

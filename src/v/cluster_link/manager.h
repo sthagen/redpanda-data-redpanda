@@ -19,6 +19,7 @@
 #include "cluster_link/task.h"
 #include "cluster_link/types.h"
 #include "container/chunked_vector.h"
+#include "kafka/data/rpc/deps.h"
 #include "model/fundamental.h"
 #include "ssx/work_queue.h"
 #include "utils/mutex.h"
@@ -38,6 +39,8 @@ public:
       std::unique_ptr<kafka::data::rpc::partition_leader_cache>
         partition_leader_cache,
       std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager,
+      std::unique_ptr<kafka::data::rpc::topic_metadata_cache>
+        topic_metadata_cache,
       std::unique_ptr<link_registry> registry,
       std::unique_ptr<link_factory> link_factory,
       std::unique_ptr<cluster_factory> cluster_factory,
@@ -60,6 +63,9 @@ public:
     ss::future<> handle_on_link_change(model::id_t id);
     /// Handles leadership changes for a given NTP
     ss::future<> handle_on_leadership_change(::model::ntp, ntp_leader);
+    /// Used to add a mirror topic to a cluster link
+    ss::future<::cluster::cluster_link::errc>
+    add_mirror_topic(model::id_t link_id, model::add_mirror_topic_cmd cmd);
 
     /// Registers a task factory that will be used to create tasks when links
     /// are created
@@ -93,6 +99,8 @@ private:
     std::unique_ptr<kafka::data::rpc::partition_leader_cache>
       _partition_leader_cache;
     std::unique_ptr<kafka::data::rpc::partition_manager> _partition_manager;
+    std::unique_ptr<kafka::data::rpc::topic_metadata_cache>
+      _topic_metadata_cache;
     std::unique_ptr<link_registry> _registry;
     std::unique_ptr<link_factory> _link_factory;
     std::unique_ptr<cluster_factory> _cluster_factory;

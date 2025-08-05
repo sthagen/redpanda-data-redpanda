@@ -1107,7 +1107,8 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
-        "//src/v/storage",
+        "//src/v/features",
+        "//src/v/storage:disk",
         "@seastar",
     ],
 )

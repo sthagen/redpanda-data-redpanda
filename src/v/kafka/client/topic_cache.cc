@@ -25,6 +25,9 @@ void topic_cache::apply(
     for (const auto& t : topics) {
         auto& cache_t = new_cache.emplace(t.name, topic_data{}).first->second;
         cache_t.authorized_operations = t.topic_authorized_operations;
+        if (!t.partitions.empty()) {
+            cache_t.replication_factor = t.partitions[0].replica_nodes.size();
+        }
         cache_t.partitions.reserve(t.partitions.size());
         for (const auto& p : t.partitions) {
             cache_t.partitions.emplace(
@@ -92,6 +95,19 @@ std::optional<size_t> topic_cache::partition_count(model::topic_view tp) const {
         return std::nullopt;
     }
     return topic_it->second.partitions.size();
+}
+
+std::optional<size_t>
+topic_cache::replication_factor(model::topic_view tp) const {
+    auto topic_it = _topics.find(tp);
+    if (topic_it == _topics.end()) {
+        return std::nullopt;
+    }
+    return topic_it->second.replication_factor;
+}
+
+const topic_cache::topics_t& topic_cache::cache() const noexcept {
+    return _topics;
 }
 
 } // namespace kafka::client

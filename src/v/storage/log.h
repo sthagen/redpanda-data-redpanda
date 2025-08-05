@@ -263,7 +263,7 @@ public:
     // Returns the dirty ratio of the log. The dirty ratio is the ratio of bytes
     // in closed, dirty segments to the total number of bytes in all closed
     // segments in the log.
-    virtual double dirty_ratio() = 0;
+    virtual double dirty_ratio() const = 0;
 
     // Return the earliest batch timestamp among all dirty segments.
     virtual std::optional<model::timestamp>
@@ -273,7 +273,7 @@ public:
       earliest_removable_timestamp(model::offset) const = 0;
 
     virtual std::optional<model::offset> max_removed_offset() const = 0;
-    virtual bool needs_compaction() = 0;
+    virtual bool needs_compaction() const = 0;
 
 private:
     ntp_config _config;

@@ -26,6 +26,7 @@
 #include "model/namespace.h"
 #include "random/generators.h"
 #include "redpanda/tests/fixture.h"
+#include "storage/disk.h"
 #include "storage/ntp_config.h"
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"

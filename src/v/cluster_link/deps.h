@@ -40,6 +40,12 @@ public:
     find_link_by_name(const model::name_t&) const = 0;
 
     virtual chunked_vector<model::id_t> get_all_link_ids() const = 0;
+
+    virtual ss::future<::cluster::cluster_link::errc> add_mirror_topic(
+      model::id_t,
+      model::add_mirror_topic_cmd,
+      ::model::timeout_clock::time_point)
+      = 0;
 };
 
 /**
@@ -57,9 +63,12 @@ public:
 
     virtual std::unique_ptr<link> create_link(
       ::model::node_id self,
+      model::id_t link_id,
+      manager* manager,
       model::metadata config,
       kafka::data::rpc::partition_leader_cache* partition_leader_cache,
       kafka::data::rpc::partition_manager* partition_manager,
+      kafka::data::rpc::topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection)
       = 0;
 };

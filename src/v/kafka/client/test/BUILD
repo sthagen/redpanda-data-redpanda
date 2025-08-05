@@ -41,11 +41,13 @@ redpanda_test_cc_library(
         "cluster_mock.h",
     ],
     implementation_deps = [
+        "//src/v/kafka/server:topic_config_utils",
         "//src/v/random:generators",
     ],
     include_prefix = "kafka/client/test",
     visibility = ["//visibility:public"],
     deps = [
+        "//src/v/cluster:topic_configuration",
         "//src/v/container:chunked_hash_map",
         "//src/v/kafka/client:brokers",
         "//src/v/kafka/client:logger",

@@ -95,14 +95,14 @@ protected:
     prefix_logger& logger();
     /// Implementation of the task logic that will run periodically
     virtual ss::future<> run_impl() = 0;
+    /// Returns the owning link
+    link* get_link() const noexcept;
 
 private:
     /// Executes all callbacks on state change
     void run_callbacks(const state_change&);
     /// Validates that the state change is valid
     bool valid_previous_state(model::task_state st) const;
-    /// Returns the owning link
-    link* get_link() const noexcept;
 
 private:
     link* _link;

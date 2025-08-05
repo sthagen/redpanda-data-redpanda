@@ -12,6 +12,7 @@
 #include "cluster_link/link.h"
 
 #include "cluster_link/logger.h"
+#include "cluster_link/manager.h"
 #include "model/namespace.h"
 #include "ssx/future-util.h"
 
@@ -47,18 +48,25 @@ ss::future<result<void>> stop_task(task* t) {
 
 using kafka::data::rpc::partition_leader_cache;
 using kafka::data::rpc::partition_manager;
+using kafka::data::rpc::topic_metadata_cache;
 
 link::link(
   ::model::node_id self,
+  model::id_t link_id,
+  manager* manager,
   ss::lowres_clock::duration task_reconciler_interval,
   model::metadata config,
   partition_leader_cache* partition_leader_cache,
   partition_manager* partition_manager,
+  topic_metadata_cache* topic_metadata_cache,
   kafka::client::cluster cluster_connection)
   : _self(self)
+  , _link_id(link_id)
+  , _manager(manager)
   , _config(std::move(config))
   , _partition_leader_cache(partition_leader_cache)
   , _partition_manager(partition_manager)
+  , _topic_metadata_cache(topic_metadata_cache)
   , _cluster_connection(std::move(cluster_connection))
   , _task_reconciler_interval(task_reconciler_interval) {}
 
@@ -210,6 +218,21 @@ model::link_task_status_report link::get_task_status_report() const {
         report.task_status_reports.emplace(name, t->get_status_report());
     }
     return report;
+}
+
+ss::future<::cluster::cluster_link::errc>
+link::add_mirror_topic(model::add_mirror_topic_cmd cmd) {
+    return _manager->add_mirror_topic(_link_id, std::move(cmd));
+}
+
+const model::metadata& link::get_config() const noexcept { return _config; }
+
+topic_metadata_cache* link::get_topic_metadata_cache() const noexcept {
+    return _topic_metadata_cache;
+}
+
+kafka::client::cluster& link::get_cluster_connection() noexcept {
+    return _cluster_connection;
 }
 
 bool link::should_start_task(task* t) const {

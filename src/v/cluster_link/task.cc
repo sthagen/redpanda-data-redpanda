@@ -52,11 +52,41 @@ public:
         vlog(
           _task->logger().trace, "set_task_interval called with {}", interval);
         auto cur_timeout = _timer.get_timeout();
+        auto previous_interval = _task->_run_interval;
 
         // Re-arm the timer to run with the new interval, calculate the new
         // timepoint for when the timer should run
-        _timer.cancel();
-        _timer.arm((cur_timeout - _task->_run_interval) + interval);
+        // If the timer isn't armed, then we may be executing the task.  It
+        // will pick up the new interval once it finishes
+        if (_timer.armed()) {
+            auto delta = interval - previous_interval;
+            // Compute new timepoint only if it's safe
+            auto new_timepoint = [&delta, &cur_timeout]() {
+                auto now = ss::lowres_clock::now();
+                if (
+                  delta.count() >= 0
+                  && cur_timeout
+                       <= (ss::lowres_clock::time_point::max() - delta)) {
+                    return cur_timeout + delta;
+                }
+
+                if (
+                  delta.count() < 0
+                  && cur_timeout
+                       >= (ss::lowres_clock::time_point::min() - delta)) {
+                    return cur_timeout + delta;
+                }
+                // Clamp to now if overflow/underflow would occur when
+                // calculating new timeout
+                return now;
+            }();
+            // If the new timepoint is in the past (or negative), then set the
+            // new timepoint to now
+            if (new_timepoint < ss::lowres_clock::now()) {
+                new_timepoint = ss::lowres_clock::now();
+            }
+            _timer.rearm(new_timepoint);
+        }
     }
 
 private:
@@ -180,6 +210,11 @@ task::change_state(model::task_state new_state, ss::sstring reason) {
 
 void task::set_run_interval(ss::lowres_clock::duration interval) {
     vlog(logger().trace, "set_run_interval called with {}", interval);
+
+    if (interval == _run_interval) {
+        vlog(logger().trace, "Interval is unchanged, skipping update");
+        return;
+    }
 
     if (_task_runner) {
         _task_runner->set_task_interval(interval);

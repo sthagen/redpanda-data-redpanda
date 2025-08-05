@@ -97,6 +97,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cloud_storage/inventory/tests:common",
         "//src/v/cloud_storage_clients",
         "//src/v/cluster",

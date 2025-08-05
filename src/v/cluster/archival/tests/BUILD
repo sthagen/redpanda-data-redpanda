@@ -11,6 +11,7 @@ redpanda_test_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cloud_storage_clients",
         "//src/v/cluster",
         "//src/v/config",
@@ -58,6 +59,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cluster",
         "//src/v/config",
         "//src/v/http/tests:utils",
@@ -82,6 +84,7 @@ redpanda_cc_gtest(
     deps = [
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cloud_storage_clients",
         "//src/v/cluster",
         "//src/v/config",
@@ -110,6 +113,7 @@ redpanda_cc_btest(
     deps = [
         ":service_fixture",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cluster",
         "//src/v/model",
         "//src/v/random:generators",
@@ -136,6 +140,7 @@ redpanda_cc_btest(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cloud_storage/tests:common",
         "//src/v/cloud_storage_clients",
         "//src/v/cluster",

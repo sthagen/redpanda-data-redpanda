@@ -20,6 +20,7 @@ redpanda_cc_library(
         "frontend.h",
     ],
     implementation_deps = [
+        "//src/v/cloud_storage:types",
         "//src/v/cloud_topics:logger",
         "//src/v/cluster",
     ],
@@ -28,7 +29,6 @@ redpanda_cc_library(
     deps = [
         ":errc",
         "//src/v/base",
-        "//src/v/cloud_storage",
         "//src/v/cloud_topics:app",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/level_zero/common:extent_meta",

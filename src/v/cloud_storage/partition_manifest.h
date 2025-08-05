@@ -12,13 +12,13 @@
 
 #include "cloud_storage/base_manifest.h"
 #include "cloud_storage/fwd.h"
+#include "cloud_storage/segment_meta_cstore.h"
 #include "cloud_storage/types.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/record.h"
 #include "model/timestamp.h"
-#include "segment_meta_cstore.h"
 #include "serde/rw/envelope.h"
 #include "utils/tracking_allocator.h"
 

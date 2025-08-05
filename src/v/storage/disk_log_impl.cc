@@ -4426,7 +4426,7 @@ ss::future<> disk_log_impl::remove_kvstore_state(
       .discard_result();
 }
 
-double disk_log_impl::dirty_ratio() {
+double disk_log_impl::dirty_ratio() const {
     // Sanity check/safety hatch against negative values
     if (_dirty_segment_bytes < 0 || _closed_segment_bytes < 0) {
         vlog(
@@ -4489,7 +4489,7 @@ void disk_log_impl::subtract_segment_bytes(
     subtract_closed_segment_bytes(bytes);
 }
 
-void disk_log_impl::reset_dirty_and_closed_bytes() {
+void disk_log_impl::reset_dirty_and_closed_bytes() const {
     ssize_t dirty{0};
     ssize_t closed{0};
     for (const auto& seg : _segs) {
@@ -4573,7 +4573,7 @@ std::optional<model::offset> disk_log_impl::max_removed_offset() const {
     return internal::read_max_removed_offset(_kvstore, config().ntp());
 }
 
-bool disk_log_impl::needs_compaction() {
+bool disk_log_impl::needs_compaction() const {
     auto max_lag = config().max_compaction_lag_ms();
     const auto now = to_time_point(model::timestamp::now());
     const auto earliest_dirty_ts = earliest_dirty_segment_ts();

@@ -313,9 +313,7 @@ TEST_F_CORO(cluster_link_table_test, with_mirror_topics) {
       .name = name_t("link1"),
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{}};
-    link.state.set_mirror_topics(
-      {{test_topic,
-        testing::create_mirror_topic_metadata(mirror_state, test_topic)}});
+    testing::set_link_mirror_topics(link, test_topic, mirror_state, test_topic);
 
     ASSERT_NO_THROW_CORO(co_await _table.local().apply_update(
       testing::create_upsert_command(model::offset{1}, link.copy())));
@@ -342,17 +340,15 @@ TEST_F_CORO(cluster_link_table_test, with_multiple_links) {
       .name = name_t("link1"),
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{}};
-    link1.state.set_mirror_topics(
-      {{test_topic1,
-        testing::create_mirror_topic_metadata(mirror_state1, test_topic1)}});
+    testing::set_link_mirror_topics(
+      link1, test_topic1, mirror_state1, test_topic1);
 
     metadata link2{
       .name = name_t("link2"),
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{}};
-    link2.state.set_mirror_topics(
-      {{test_topic2,
-        testing::create_mirror_topic_metadata(mirror_state2, test_topic2)}});
+    testing::set_link_mirror_topics(
+      link2, test_topic2, mirror_state2, test_topic2);
 
     auto res = co_await _table.local().apply_update(
       testing::create_upsert_command(model::offset{1}, link1.copy()));
@@ -411,11 +407,14 @@ TEST_F_CORO(cluster_link_table_test, remove_mirror_topic) {
       .name = name_t("link1"),
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{}};
-    link.state.set_mirror_topics(
-      {{test_topic1,
-        testing::create_mirror_topic_metadata(mirror_state1, test_topic1)},
-       {test_topic2,
-        testing::create_mirror_topic_metadata(mirror_state2, test_topic2)}});
+    ::cluster_link::model::link_state::mirror_topics_t mirror_topics;
+    mirror_topics.emplace(
+      test_topic1,
+      testing::create_mirror_topic_metadata(mirror_state1, test_topic1));
+    mirror_topics.emplace(
+      test_topic2,
+      testing::create_mirror_topic_metadata(mirror_state2, test_topic2));
+    link.state.set_mirror_topics(std::move(mirror_topics));
 
     auto res = co_await _table.local().apply_update(
       testing::create_upsert_command(model::offset{1}, link.copy()));
@@ -456,17 +455,15 @@ TEST_F_CORO(cluster_link_table_test, duplicate_topic) {
       .name = name_t("link1"),
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{}};
-    link1.state.mirror_topics.insert(
-      {{test_topic,
-        testing::create_mirror_topic_metadata(mirror_state, test_topic)}});
+    testing::set_link_mirror_topics(
+      link1, test_topic, mirror_state, test_topic);
 
     metadata link2{
       .name = name_t("link2"),
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{}};
-    link2.state.mirror_topics.insert(
-      {{test_topic,
-        testing::create_mirror_topic_metadata(mirror_state, test_topic)}});
+    testing::set_link_mirror_topics(
+      link2, test_topic, mirror_state, test_topic);
 
     auto res = co_await _table.local().apply_update(
       testing::create_upsert_command(model::offset{1}, link1.copy()));

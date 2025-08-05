@@ -18,6 +18,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_io:remote",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:cache",
         "//src/v/cloud_storage_clients",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:cluster_services_interface",

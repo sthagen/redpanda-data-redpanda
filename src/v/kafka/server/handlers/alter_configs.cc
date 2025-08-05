@@ -19,6 +19,7 @@
 #include "kafka/protocol/schemata/alter_configs_response.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/handlers/configs/config_utils.h"
+#include "kafka/server/handlers/details/alter_config_utils.h"
 #include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/request_context.h"
 #include "kafka/server/response.h"

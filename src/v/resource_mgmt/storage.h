@@ -13,9 +13,11 @@
 
 #include "base/seastarx.h"
 #include "config/property.h"
+#include "container/chunked_vector.h"
 #include "raft/fundamental.h"
 #include "ssx/semaphore.h"
 #include "storage/node.h"
+#include "storage/types.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>

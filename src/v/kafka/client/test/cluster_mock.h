@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "cluster/topic_properties.h"
 #include "container/chunked_hash_map.h"
 #include "kafka/client/broker.h"
 #include "kafka/client/brokers.h"
@@ -80,6 +81,7 @@ struct topic_metadata {
       = kafka::topic_authorized_operations_not_set;
     model::topic_id topic_id;
     chunked_hash_map<model::partition_id, partition_metadata> partitions;
+    ::cluster::topic_properties topic_properties;
 };
 
 class cluster_mock {
@@ -106,6 +108,9 @@ public:
     ss::future<response_t> handle_api_versions_request(
       model::node_id node_id, request_t req, api_version version);
 
+    ss::future<response_t> handle_describe_configs_request(
+      model::node_id node_id, request_t req, api_version version);
+
     void set_supported_versions(
       model::node_id id, api_key key, api_version_range range) {
         _broker_api_versions[id].insert_or_assign(key, range);
@@ -124,6 +129,12 @@ public:
     }
 
     auto& get_topics() { return _topics; }
+
+    void set_controller_id(std::optional<model::node_id> id) {
+        _controller_id = id;
+    }
+
+    config::configuration& mock_config() { return _mock_config; }
 
 public:
     supported_versions default_supported_versions;
@@ -165,6 +176,9 @@ private:
       _broker_api_versions;
     chunked_hash_map<model::topic, topic_metadata> _topics;
 
+    config::configuration _mock_config;
+
+    // If unset, will use the node_id of the first broker in _brokers
     std::optional<model::node_id> _controller_id;
     prefix_logger _logger;
 };

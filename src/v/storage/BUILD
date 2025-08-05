@@ -373,6 +373,7 @@ redpanda_cc_library(
         ":batch_cache",
         ":chunk_cache",
         ":compaction",
+        ":disk",
         ":index_state",
         ":key_offset_map",
         ":logger",
@@ -471,5 +472,26 @@ redpanda_cc_library(
     include_prefix = "storage",
     deps = [
         "//src/v/metrics",
+    ],
+)
+
+redpanda_cc_library(
+    name = "disk",
+    srcs = [
+        "disk.cc",
+    ],
+    hdrs = [
+        "disk.h",
+    ],
+    implementation_deps = [
+        "//src/v/utils:human",
+        "@fmt",
+    ],
+    include_prefix = "storage",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/serde",
+        "@seastar",
     ],
 )

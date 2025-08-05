@@ -141,7 +141,7 @@ public:
     ssize_t dirty_segment_bytes() const final;
     ssize_t closed_segment_bytes() const final;
 
-    double dirty_ratio() final;
+    double dirty_ratio() const final;
 
     virtual std::optional<model::timestamp>
     earliest_dirty_segment_ts() const final;
@@ -151,7 +151,7 @@ public:
 
     virtual std::optional<model::offset> max_removed_offset() const final;
 
-    bool needs_compaction() final;
+    bool needs_compaction() const final;
 
 private:
     ss::shared_ptr<storage::log> _underlying_log;

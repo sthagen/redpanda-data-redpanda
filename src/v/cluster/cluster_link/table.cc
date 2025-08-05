@@ -336,7 +336,8 @@ table::add_mirror_topic(id_t id, const add_mirror_topic_cmd& cmd) {
         return errc::does_not_exist;
     }
 
-    _link_metadata[id].state.mirror_topics.insert({cmd.topic, cmd.metadata});
+    _link_metadata[id].state.mirror_topics.insert(
+      {cmd.topic, cmd.metadata.copy()});
     _topic_name_index.emplace(cmd.topic, id);
     run_callbacks(id);
     return errc::success;

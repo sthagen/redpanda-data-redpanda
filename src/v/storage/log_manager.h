@@ -23,6 +23,7 @@
 #include "model/metadata.h"
 #include "random/simple_time_jitter.h"
 #include "storage/batch_cache.h"
+#include "storage/disk.h"
 #include "storage/file_sanitizer_types.h"
 #include "storage/key_offset_map.h"
 #include "storage/log.h"

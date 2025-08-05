@@ -300,13 +300,20 @@ ss::future<errc> frontend::do_local_mutation(
 errc frontend::validate_mutation(const cluster_link_cmd& cmd) const {
     // Initially for DR, we will only support a single cluster link at a time.
     static constexpr size_t max_links = 1;
-    validator v{_table, max_links};
+    validator v{
+      _table,
+      max_links,
+      {"redpanda.remote.readreplica", "redpanda.remote.recovery"}};
     return v.validate_mutation(cmd);
 }
 
-frontend::validator::validator(table* table, size_t max_links)
+frontend::validator::validator(
+  table* table,
+  size_t max_links,
+  chunked_vector<ss::sstring> excluded_topic_properties)
   : _table(table)
-  , _max_links(max_links) {}
+  , _max_links(max_links)
+  , _excluded_topic_properties(std::move(excluded_topic_properties)) {}
 
 errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
     return ss::visit(
@@ -326,17 +333,22 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
                     cmd.value.name,
                     cmd.value.uuid,
                     meta.uuid);
-                  return errc::invalid_update;
+                  return errc::uuid_conflict;
               }
-              return validate_connection_config(
-                cmd.value.connection, errc::invalid_update);
+              auto ec = validate_connection_config(cmd.value.connection);
+              if (ec != errc::success) {
+                  return ec;
+              }
+
+              return validate_metadata_mirroring_config(
+                cmd.value.state.topic_metadata_mirroring_cfg);
           }
           // New item!
           if (cmd.value.name().empty()) {
               vlog(
                 cluster::clusterlog.warn,
                 "Attempting to create a cluster link without a name");
-              return errc::invalid_create;
+              return errc::link_name_invalid;
           }
           constexpr static size_t max_name_size = 128;
           if (cmd.value.name().size() > max_name_size) {
@@ -347,7 +359,7 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
                 "{} > {}",
                 cmd.value.name().size(),
                 max_name_size);
-              return errc::invalid_create;
+              return errc::link_name_invalid;
           }
           if (!std::ranges::all_of(cmd.value.name(), [](char c) {
                   return std::isalnum(c) || c == '.' || c == '-' || c == '_';
@@ -356,7 +368,7 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
                 cluster::clusterlog.warn,
                 "Attempting to create a cluster link with a name containing "
                 "invalid characters");
-              return errc::invalid_create;
+              return errc::link_name_invalid;
           }
           if (_table->size() >= _max_links) {
               vlog(
@@ -367,8 +379,13 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
               return errc::limit_exceeded;
           }
 
-          return validate_connection_config(
-            cmd.value.connection, errc::invalid_create);
+          auto ec = validate_connection_config(cmd.value.connection);
+          if (ec != errc::success) {
+              return ec;
+          }
+
+          return validate_metadata_mirroring_config(
+            cmd.value.state.topic_metadata_mirroring_cfg);
       },
       [this](const cluster::cluster_link_remove_cmd& cmd) {
           auto meta = _table->find_link_by_name(cmd.key);
@@ -437,13 +454,12 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
 }
 
 errc frontend::validator::validate_connection_config(
-  const ::cluster_link::model::connection_config& config,
-  cluster::cluster_link::errc error_code) const {
+  const ::cluster_link::model::connection_config& config) const {
     if (config.bootstrap_servers.empty()) {
         vlog(
           cluster::clusterlog.warn,
           "Attempting to create a cluster link without bootstrap servers");
-        return error_code;
+        return errc::bootstrap_servers_empty;
     }
 
     if (config.cert.has_value() != config.key.has_value()) {
@@ -451,7 +467,7 @@ errc frontend::validator::validate_connection_config(
           cluster::clusterlog.warn,
           "If providing a certificate or key, both must be provided or "
           "neither");
-        return error_code;
+        return errc::tls_configuration_invalid;
     }
 
     if (
@@ -461,7 +477,84 @@ errc frontend::validator::validate_connection_config(
           cluster::clusterlog.warn,
           "If providing a certificate or key, both must be file paths or "
           "both must be values");
-        return error_code;
+        return errc::tls_configuration_invalid;
+    }
+
+    return errc::success;
+}
+
+errc frontend::validator::validate_metadata_mirroring_config(
+  const ::cluster_link::model::topic_metadata_mirroring_config& config) const {
+    // Validates that the pattern:
+    // - is not empty
+    // - does not contain the wildcard character '*' unless it is the only
+    //   character in the pattern
+    // - the characters are valid UTF-8
+    // - wildcard only present in 'literal' patterns
+    const auto check_filter_pattern =
+      [](const ::cluster_link::model::resource_name_filter_pattern& p) {
+          if (p.pattern.empty()) {
+              vlog(cluster::clusterlog.info, "Filter pattern is empty");
+              return true;
+          }
+          if (
+            p.pattern.contains(
+              ::cluster_link::model::resource_name_filter_pattern::wildcard)
+            && p.pattern
+                 != ::cluster_link::model::resource_name_filter_pattern::
+                   wildcard) {
+              vlog(
+                cluster::clusterlog.info,
+                "Filter pattern is invalid: Contains '*'");
+              return true;
+          }
+          if (
+            p.pattern
+              == ::cluster_link::model::resource_name_filter_pattern::wildcard
+            && p.pattern_type
+                 != ::cluster_link::model::filter_pattern_type::literal) {
+              vlog(
+                cluster::clusterlog.info,
+                "Filter pattern is invalid: Wildcard '*' can only be used in "
+                "literal patterns");
+              return true;
+          }
+          if (
+            p.pattern
+              != ::cluster_link::model::resource_name_filter_pattern::wildcard
+            && !std::ranges::all_of(p.pattern, [](char c) {
+                   return std::isalnum(c) || c == '.' || c == '-' || c == '_';
+               })) {
+              vlog(
+                cluster::clusterlog.info,
+                "Filter pattern contains invalid characters");
+              return true;
+          }
+          if (
+            p.pattern.starts_with("_redpanda")
+            || p.pattern.starts_with("__redpanda")
+            || p.pattern == ::model::kafka_consumer_offsets_topic()) {
+              vlog(
+                cluster::clusterlog.info,
+                "Filter pattern filtering on invalid topic name: {}",
+                p.pattern);
+              return true;
+          }
+          return false;
+      };
+    if (std::ranges::any_of(config.topic_name_filters, check_filter_pattern)) {
+        return errc::topic_filter_invalid;
+    }
+    for (const auto& prop : config.topic_properties_to_mirror) {
+        if (
+          std::ranges::find(_excluded_topic_properties, prop)
+          != _excluded_topic_properties.end()) {
+            vlog(
+              cluster::clusterlog.info,
+              "Topic property '{}' is excluded from mirroring",
+              prop);
+            return errc::topic_property_excluded_from_mirroring;
+        }
     }
 
     return errc::success;

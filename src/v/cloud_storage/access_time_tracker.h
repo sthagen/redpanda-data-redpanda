@@ -12,12 +12,8 @@
 
 #include "absl/container/btree_map.h"
 #include "base/seastarx.h"
-#include "bytes/iobuf.h"
-#include "hashing/xx.h"
 #include "recursive_directory_walker.h"
 #include "seastar/core/iostream.hh"
-#include "serde/envelope.h"
-#include "utils/mutex.h"
 
 #include <seastar/core/future.hh>
 

@@ -28,6 +28,7 @@ namespace cluster_link::tests {
 using ::cluster::cluster_link::table;
 using kafka::data::rpc::partition_leader_cache;
 using kafka::data::rpc::partition_manager;
+using kafka::data::rpc::topic_metadata_cache;
 
 class link_test;
 namespace {
@@ -36,11 +37,14 @@ class test_link : public link {
 public:
     test_link(
       ::model::node_id self,
+      model::id_t link_id,
+      manager* manager,
       ss::lowres_clock::duration task_reconciler_interval,
       link_test* link_test,
       model::metadata metadata,
       partition_leader_cache* partition_leader_cache,
       partition_manager* partition_manager,
+      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection);
 
     ss::future<> start() override;
@@ -50,26 +54,32 @@ private:
     link_test* _link_test;
 };
 
-class test_link_factory : public link_factory {
+class link_test_factory : public link_factory {
 public:
-    test_link_factory(
+    link_test_factory(
       link_test* link_test, ss::lowres_clock::duration task_reconciler_interval)
       : _link_test(link_test)
       , _task_reconciler_interval(task_reconciler_interval) {}
 
     std::unique_ptr<link> create_link(
       ::model::node_id self,
+      model::id_t link_id,
+      manager* manager,
       model::metadata metadata,
       partition_leader_cache* partition_leader_cache,
       partition_manager* partition_manager,
+      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection) override {
         return std::make_unique<test_link>(
           self,
+          link_id,
+          manager,
           _task_reconciler_interval,
           _link_test,
           std::move(metadata),
           partition_leader_cache,
           partition_manager,
+          topic_metadata_cache,
           std::move(cluster_connection));
     }
 
@@ -166,8 +176,9 @@ public:
             _partition_leader_cache_impl.get()),
           std::make_unique<fake_partition_manager>(
             _partition_manager_proxy.get()),
+          std::make_unique<fake_topic_metadata_cache>(),
           std::make_unique<test_link_registry>(&_table.local()),
-          std::make_unique<test_link_factory>(this, 1s),
+          std::make_unique<link_test_factory>(this, 1s),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
           task_reconciler_interval);
     }
@@ -207,18 +218,24 @@ public:
 namespace {
 test_link::test_link(
   ::model::node_id self,
+  model::id_t link_id,
+  manager* manager,
   ss::lowres_clock::duration task_reconciler_interval,
   link_test* link_test,
   model::metadata metadata,
   partition_leader_cache* partition_leader_cache,
   partition_manager* partition_manager,
+  topic_metadata_cache* topic_metadata_cache,
   kafka::client::cluster cluster_connection)
   : link(
       self,
+      link_id,
+      manager,
       task_reconciler_interval,
       std::move(metadata),
       partition_leader_cache,
       partition_manager,
+      topic_metadata_cache,
       std::move(cluster_connection))
   , _link_test(link_test) {}
 
@@ -369,16 +386,22 @@ class evil_link_factory : public link_factory {
 public:
     std::unique_ptr<link> create_link(
       ::model::node_id self,
+      model::id_t link_id,
+      manager* manager,
       model::metadata metadata,
       partition_leader_cache* partition_leader_cache,
       partition_manager* partition_manager,
+      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection) override {
         return std::make_unique<evil_link>(
           self,
+          link_id,
+          manager,
           1s,
           std::move(metadata),
           partition_leader_cache,
           partition_manager,
+          topic_metadata_cache,
           std::move(cluster_connection));
     }
 };
@@ -396,6 +419,7 @@ public:
             _partition_leader_cache_impl.get()),
           std::make_unique<fake_partition_manager>(
             _partition_manager_proxy.get()),
+          std::make_unique<fake_topic_metadata_cache>(),
           std::make_unique<test_link_registry>(&_table.local()),
           std::move(elf),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),

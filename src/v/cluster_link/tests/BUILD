@@ -99,3 +99,17 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "source_topic_syncer_test",
+    timeout = "short",
+    srcs = [
+        "source_topic_syncer_test.cc",
+    ],
+    deps = [
+        ":test_deps",
+        "//src/v/cluster_link:source_topic_syncer",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

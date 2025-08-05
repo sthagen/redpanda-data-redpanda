@@ -16,6 +16,8 @@
 #include "container/chunked_vector.h"
 #include "json/istreamwrapper.h"
 #include "json/ostreamwrapper.h"
+#include "json/reader.h"
+#include "json/writer.h"
 #include "model/record.h"
 
 #include <rapidjson/error/en.h>

@@ -32,7 +32,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cloud_topics:app",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/frontend",

@@ -8,9 +8,10 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#include "cloud_storage/cache_service.h"
+
 #include "base/vassert.h"
 #include "base/vlog.h"
-#include "bytes/iostream.h"
 #include "cloud_storage/access_time_tracker.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/recursive_directory_walker.h"
@@ -18,7 +19,6 @@
 #include "re2/re2.h"
 #include "seastar/util/file.hh"
 #include "ssx/future-util.h"
-#include "ssx/sformat.h"
 #include "utils/human.h"
 
 #include <seastar/core/coroutine.hh>
@@ -29,8 +29,6 @@
 #include <seastar/core/sstring.hh>
 #include <seastar/coroutine/as_future.hh>
 #include <seastar/util/defer.hh>
-
-#include <cloud_storage/cache_service.h>
 
 #include <algorithm>
 #include <exception>

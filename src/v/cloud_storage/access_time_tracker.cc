@@ -12,7 +12,6 @@
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
-#include "base/units.h"
 #include "bytes/iobuf_parser.h"
 #include "bytes/iostream.h"
 #include "serde/peek.h"
@@ -29,7 +28,6 @@
 
 #include <exception>
 #include <ranges>
-#include <variant>
 
 namespace absl {
 

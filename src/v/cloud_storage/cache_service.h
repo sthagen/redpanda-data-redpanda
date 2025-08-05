@@ -18,7 +18,7 @@
 #include "config/configuration.h"
 #include "config/property.h"
 #include "ssx/semaphore.h"
-#include "storage/types.h"
+#include "storage/disk.h"
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/future.hh>

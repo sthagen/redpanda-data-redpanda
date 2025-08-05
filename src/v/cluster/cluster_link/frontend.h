@@ -87,19 +87,25 @@ public:
     /// Made public for testing purposes
     class validator {
     public:
-        explicit validator(table*, size_t max_links);
+        explicit validator(
+          table*,
+          size_t max_links,
+          chunked_vector<ss::sstring> excluded_topic_properties);
 
         cluster::cluster_link::errc
         validate_mutation(const cluster_link_cmd&) const;
 
     private:
         cluster::cluster_link::errc validate_connection_config(
-          const ::cluster_link::model::connection_config& config,
-          cluster::cluster_link::errc error_code) const;
+          const ::cluster_link::model::connection_config& config) const;
+        cluster::cluster_link::errc validate_metadata_mirroring_config(
+          const ::cluster_link::model::topic_metadata_mirroring_config& config)
+          const;
 
     private:
         table* _table;
         size_t _max_links;
+        chunked_vector<ss::sstring> _excluded_topic_properties;
     };
 
 private:

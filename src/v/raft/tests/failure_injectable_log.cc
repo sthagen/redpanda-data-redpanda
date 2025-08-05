@@ -265,7 +265,7 @@ ssize_t failure_injectable_log::closed_segment_bytes() const {
     return _underlying_log->closed_segment_bytes();
 }
 
-double failure_injectable_log::dirty_ratio() {
+double failure_injectable_log::dirty_ratio() const {
     return _underlying_log->dirty_ratio();
 }
 
@@ -284,7 +284,7 @@ failure_injectable_log::max_removed_offset() const {
     return _underlying_log->max_removed_offset();
 }
 
-bool failure_injectable_log::needs_compaction() {
+bool failure_injectable_log::needs_compaction() const {
     return _underlying_log->needs_compaction();
 }
 
