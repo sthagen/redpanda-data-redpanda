@@ -40,9 +40,9 @@ source_topic_syncer::source_topic_syncer(
   link* link, const model::metadata& config)
   : task(
       link,
-      config.state.topic_metadata_mirroring_cfg.task_interval,
+      config.configuration.topic_metadata_mirroring_cfg.task_interval,
       source_topic_syncer::task_name)
-  , _config(config.state.topic_metadata_mirroring_cfg.copy()) {}
+  , _config(config.configuration.topic_metadata_mirroring_cfg.copy()) {}
 
 task::is_locked_to_controller
 source_topic_syncer::locked_to_controller() const noexcept {
@@ -50,8 +50,9 @@ source_topic_syncer::locked_to_controller() const noexcept {
 }
 
 void source_topic_syncer::update_config(const model::metadata& config) {
-    _config = config.state.topic_metadata_mirroring_cfg.copy();
-    set_run_interval(config.state.topic_metadata_mirroring_cfg.task_interval);
+    _config = config.configuration.topic_metadata_mirroring_cfg.copy();
+    set_run_interval(
+      config.configuration.topic_metadata_mirroring_cfg.task_interval);
 }
 
 ss::future<> source_topic_syncer::run_impl() {

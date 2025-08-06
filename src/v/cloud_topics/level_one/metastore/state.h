@@ -229,4 +229,12 @@ struct state
     partition_state(const model::topic_id_partition&) const;
 };
 
+struct stm_snapshot
+  : public serde::
+      envelope<stm_snapshot, serde::version<0>, serde::compat_version<0>> {
+    state state;
+
+    auto serde_fields() { return std::tie(state); }
+};
+
 } // namespace experimental::cloud_topics::l1

@@ -130,6 +130,10 @@ public:
 
     ss::sharded<drain_manager>& get_drain_manager() { return _drain_manager; }
 
+    ss::sharded<raft::group_manager>& get_raft_manager() {
+        return _raft_manager;
+    }
+
     ss::sharded<partition_manager>& get_partition_manager() {
         return _partition_manager;
     }

@@ -428,7 +428,16 @@ public:
       : _input(std::move(input)) {}
 
     ss::future<result> read_next() final {
+        if (_saw_footer) {
+            // After the footer we have 4 bytes for the size of the footer, so
+            // we need to make sure that we don't try and interpret those bytes
+            // as a `data_type`.
+            co_return eof{};
+        }
         auto dt_buf = co_await _input.read_exactly(sizeof(data_type));
+        if (dt_buf.empty() && _input.eof()) {
+            co_return eof{};
+        }
         if (dt_buf.size() != sizeof(data_type)) {
             throw std::runtime_error(fmt::format(
               "expected {} bytes for data type, got: {}",
@@ -442,6 +451,7 @@ public:
         case data_type::partition_marker:
             co_return co_await read_next_serde<model::ntp>();
         case data_type::footer:
+            _saw_footer = true;
             co_return co_await read_next_serde<footer>();
         }
         throw std::runtime_error(fmt::format(
@@ -488,6 +498,7 @@ private:
     }
 
     ss::input_stream<char> _input;
+    bool _saw_footer = false;
 };
 
 } // namespace

@@ -417,6 +417,8 @@ std::ostream& operator<<(std::ostream& o, record_batch_type bt) {
         return o << "cluster_link";
     case record_batch_type::group_block:
         return o << "group_block";
+    case record_batch_type::l1_stm:
+        return o << "l1_stm";
     }
 
     return o << "batch_type::unknown{" << static_cast<int>(bt) << "}";

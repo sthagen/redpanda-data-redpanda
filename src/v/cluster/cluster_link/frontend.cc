@@ -341,7 +341,7 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
               }
 
               return validate_metadata_mirroring_config(
-                cmd.value.state.topic_metadata_mirroring_cfg);
+                cmd.value.configuration.topic_metadata_mirroring_cfg);
           }
           // New item!
           if (cmd.value.name().empty()) {
@@ -385,7 +385,7 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
           }
 
           return validate_metadata_mirroring_config(
-            cmd.value.state.topic_metadata_mirroring_cfg);
+            cmd.value.configuration.topic_metadata_mirroring_cfg);
       },
       [this](const cluster::cluster_link_remove_cmd& cmd) {
           auto meta = _table->find_link_by_name(cmd.key);

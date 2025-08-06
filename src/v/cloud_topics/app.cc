@@ -32,4 +32,8 @@ seastar::future<> app::stop() {
 
 ss::shared_ptr<data_plane_api> app::get_data_plane_api() { return _data_plane; }
 
+l1::domain_supervisor* app::get_l1_domain_supervisor() {
+    return _domain_supervisor.get();
+}
+
 } // namespace experimental::cloud_topics

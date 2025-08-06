@@ -372,22 +372,29 @@ namespace {
 testing::AssertionResult expect_read_results(
   std::unique_ptr<object_reader> reader,
   const std::vector<batches_by_ntp>& expected,
-  const footer& index) {
+  std::optional<std::reference_wrapper<footer>> object_footer,
+  bool expect_ntp_markers = true) {
     auto _ = ss::defer([&reader] { reader->close().get(); });
     for (const auto& [ntp, specs] : expected) {
-        auto partition = reader->read_next().get();
-        if (!std::holds_alternative<model::ntp>(partition)) {
-            return testing::AssertionFailure()
-                   << "Expected partition for ntp: " << ntp << ", but got "
-                   << partition.index();
-        }
-        if (std::get<model::ntp>(partition) != ntp) {
-            return testing::AssertionFailure()
-                   << "Expected partition for ntp: " << ntp
-                   << ", but got: " << std::get<model::ntp>(partition);
+        if (expect_ntp_markers) {
+            SCOPED_TRACE(fmt::format("reading: {}", ntp));
+            object_reader::result partition;
+            EXPECT_NO_THROW(partition = reader->read_next().get());
+            if (!std::holds_alternative<model::ntp>(partition)) {
+                return testing::AssertionFailure()
+                       << "Expected partition for ntp: " << ntp << ", but got "
+                       << partition.index();
+            }
+            if (std::get<model::ntp>(partition) != ntp) {
+                return testing::AssertionFailure()
+                       << "Expected partition for ntp: " << ntp
+                       << ", but got: " << std::get<model::ntp>(partition);
+            }
         }
         for (const auto& spec : specs) {
-            auto result = reader->read_next().get();
+            SCOPED_TRACE(fmt::format("reading batch @{}", spec.base_offset));
+            object_reader::result result;
+            EXPECT_NO_THROW(result = reader->read_next().get());
             if (!std::holds_alternative<model::record_batch>(result)) {
                 return testing::AssertionFailure()
                        << "Expected batch for offset range: "
@@ -411,17 +418,29 @@ testing::AssertionResult expect_read_results(
             }
         }
     }
-    auto result = reader->read_next().get();
-    if (!std::holds_alternative<footer>(result)) {
-        return testing::AssertionFailure()
-               << "Expected object index at the end, but got "
-               << result.index();
-    }
+    if (object_footer.has_value()) {
+        SCOPED_TRACE(fmt::format("reading footer"));
+        object_reader::result result;
+        EXPECT_NO_THROW(result = reader->read_next().get());
+        if (!std::holds_alternative<footer>(result)) {
+            return testing::AssertionFailure()
+                   << "Expected object index at the end, but got "
+                   << result.index();
+        }
 
-    if (std::get<footer>(result) != index) {
+        if (std::get<footer>(result) != object_footer.value()) {
+            return testing::AssertionFailure()
+                   << "Expected matching object index: "
+                   << fmt::format("{}", object_footer.value().get())
+                   << ", got: " << fmt::format("{}", std::get<footer>(result));
+        }
+    }
+    SCOPED_TRACE(fmt::format("reading eof"));
+    object_reader::result result;
+    EXPECT_NO_THROW(result = reader->read_next().get());
+    if (!std::holds_alternative<object_reader::eof>(result)) {
         return testing::AssertionFailure()
-               << "Expected matching object index: " << fmt::format("{}", index)
-               << ", got: " << fmt::format("{}", std::get<footer>(result));
+               << "Expected eof after the end, but got " << result.index();
     }
     return testing::AssertionSuccess();
 }
@@ -496,4 +515,61 @@ TEST(L1Objects, FullScan) {
     }
     EXPECT_TRUE(
       expect_read_results(make_reader(object), specs_by_ntp, info.index));
+}
+
+TEST(L1Objects, PartialScan) {
+    std::vector<batches_by_ntp> specs_by_ntp = {
+      {
+        .ntp = model::ntp{"test_ns", "test_topic", model::partition_id(0)},
+        .batches = {
+          {
+            .base_offset = 0_o,
+            .last_offset = 10_o,
+            .max_timestamp = model::timestamp{1000},
+          },
+          {
+            .base_offset = 11_o,
+            .last_offset = 20_o,
+            .max_timestamp = model::timestamp{2000},
+          },
+          {
+            .base_offset = 21_o,
+            .last_offset = 30_o,
+            .max_timestamp = model::timestamp{3000},
+          },
+        },
+      },
+      {
+        .ntp = model::ntp{"test_ns", "test_topic", model::partition_id(1)},
+        .batches = {
+          {
+            .base_offset = 99_o,
+            .last_offset = 100_o,
+            .max_timestamp = model::timestamp{1001},
+          },
+          {
+            .base_offset = 101_o,
+            .last_offset = 110_o,
+            .max_timestamp = model::timestamp{2001},
+          },
+          {
+            .base_offset = 120_o,
+            .last_offset = 130_o,
+            .max_timestamp = model::timestamp{3001},
+          },
+        },
+      },
+    };
+    auto [info, object] = make_object(specs_by_ntp);
+    for (const auto& spec : specs_by_ntp) {
+        auto it = info.index.partitions.find(spec.ntp);
+        ASSERT_NE(it, info.index.partitions.end());
+        auto reader = object_reader::create(make_iobuf_input_stream(
+          object.share(it->second.file_position, it->second.length)));
+        EXPECT_TRUE(expect_read_results(
+          std::move(reader),
+          {spec},
+          std::nullopt,
+          /*expect_ntp_markers=*/false));
+    }
 }

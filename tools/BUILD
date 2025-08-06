@@ -42,9 +42,11 @@ py_binary(
     args = [
         "-e $(rootpath //src/v/redpanda:redpanda)",
         "-o $(rootpath :minio)",
+        "--rpk $(rootpath //src/go/rpk/cmd/rpk)",
     ],
     data = [
         ":minio",
+        "//src/go/rpk/cmd/rpk",
         "//src/v/redpanda",
     ],
     visibility = ["//visibility:public"],

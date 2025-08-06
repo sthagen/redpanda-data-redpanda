@@ -201,7 +201,11 @@ public:
       = 0;
 
     // Returns metadata required to determine what to compact for the given
-    // partition. Below is pseudocode for sample usage:
+    // partition. Cleaned ranges with tombstones that were cleaned at or below
+    // tombstone_removal_upper_bound_ts are eligible to have tombstones
+    // entirely removed. These ranges will be returned in the response.
+    //
+    // Below is pseudocode for sample usage:
     //
     // offsets = co_await metastore.get_compaction_offsets( \
     //   partition, tombstone_removal_upper_bound_ts);
@@ -233,7 +237,9 @@ public:
     // co_await metastore.compact_objects( \
     //   objects, {{tp, {new_cleaned_ranges, removed_tombstones_ranges}}})
     virtual ss::future<std::expected<compaction_offsets_response, errc>>
-    get_compaction_offsets(const model::topic_id_partition&, model::timestamp)
+    get_compaction_offsets(
+      const model::topic_id_partition&,
+      model::timestamp tombstone_removal_upper_bound_ts)
       = 0;
 };
 

@@ -22,6 +22,8 @@
 #include "cloud_storage_clients/configuration.h"
 #include "cloud_topics/cluster_services.h"
 #include "cloud_topics/data_plane_impl.h"
+#include "cloud_topics/level_one/metastore/service.h"
+#include "cloud_topics/level_one/metastore/simple_stm.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_factory.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/archiver_manager.h"
@@ -142,6 +144,7 @@
 #include "rpc/rpc_utils.h"
 #include "security/audit/audit_log_manager.h"
 #include "ssx/abort_source.h"
+#include "ssx/sharded_service_container.h"
 #include "ssx/thread_worker.h"
 #include "storage/backlog_controller.h"
 #include "storage/chunk_cache.h"
@@ -279,13 +282,9 @@ static void set_auditing_kafka_client_defaults(
 }
 
 application::application(ss::sstring logger_name)
-  : _log(std::move(logger_name)) {};
+  : ssx::sharded_service_container(logger_name) {}
 
-application::~application() {
-    while (!_deferred.empty()) {
-        _deferred.pop_back();
-    }
-}
+application::~application() {}
 
 void application::shutdown() {
     storage.invoke_on_all(&storage::api::stop_cluster_uuid_waiters).get();
@@ -424,10 +423,7 @@ void application::shutdown() {
         });
     }
 
-    // Shut down services in reverse order to which they were registered.
-    while (!_deferred.empty()) {
-        _deferred.pop_back();
-    }
+    ssx::sharded_service_container::shutdown();
 }
 
 static void log_system_resources(
@@ -2169,6 +2165,18 @@ void application::wire_up_redpanda_services(
                 controller.get());
           }))
           .get();
+
+        construct_service(
+          l1_metastore_fe,
+          node_id,
+          &metadata_cache,
+          &controller->get_partition_leaders(),
+          &controller->get_shard_table(),
+          &_connection_cache,
+          ss::sharded_parameter([this] {
+              return cloud_topics_api.local().get_l1_domain_supervisor();
+          }))
+          .get();
     }
 
     // group membership
@@ -3118,6 +3126,8 @@ void application::start_runtime_services(
           if (config::shard_local_cfg().development_enable_cloud_topics()) {
               pm.register_factory<
                 experimental::cloud_topics::ctp_stm_factory>();
+              pm.register_factory<
+                experimental::cloud_topics::l1::stm_factory>();
           }
       })
       .get();
@@ -3337,6 +3347,13 @@ void application::start_runtime_services(
               sched_groups.cluster_sg(),
               smp_service_groups.cluster_smp_sg(),
               std::ref(_consumer_group_lag_metrics_frontend)));
+          if (config::shard_local_cfg().development_enable_cloud_topics()) {
+              runtime_services.push_back(
+                std::make_unique<experimental::cloud_topics::l1::rpc::service>(
+                  sched_groups.datalake_sg(),
+                  smp_service_groups.datalake_sg(),
+                  &l1_metastore_fe));
+          }
 
           s.add_services(std::move(runtime_services));
 

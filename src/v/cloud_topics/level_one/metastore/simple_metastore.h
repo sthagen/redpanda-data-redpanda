@@ -45,6 +45,7 @@ private:
 
 // Wrapper around state to implement the `metastore` interface.
 // Not replicated or persisted, used for tests only.
+class domain_manager;
 class simple_metastore : public metastore {
 public:
     std::unique_ptr<object_metadata_builder> object_builder() override;
@@ -79,6 +80,17 @@ public:
       const model::topic_id_partition&, model::timestamp) override;
 
 private:
+    friend class domain_manager;
+    static std::expected<offsets_response, errc>
+    get_offsets(const state&, const model::topic_id_partition&);
+    static std::expected<object_response, errc>
+    get_first_ge(const state&, const model::topic_id_partition&, kafka::offset);
+    static std::expected<object_response, errc> get_first_ge(
+      const state&, const model::topic_id_partition&, model::timestamp);
+    static std::expected<compaction_offsets_response, errc>
+    get_compaction_offsets(
+      const state&, const model::topic_id_partition&, model::timestamp);
+
     state state_;
 };
 

@@ -26,19 +26,18 @@ using model::resource_name_filter_pattern;
 namespace {
 model::metadata get_default_metadata() {
     model::link_state link_state;
-    link_state.topic_metadata_mirroring_cfg.task_interval = 1s;
-    link_state.topic_metadata_mirroring_cfg.topic_name_filters.emplace_back(
-      resource_name_filter_pattern{
-        .pattern_type = filter_pattern_type::literal,
-        .filter = filter_type::include,
-        .pattern = resource_name_filter_pattern::wildcard});
     model::metadata metadata{
       .name = model::name_t("test_link"),
       .uuid = model::uuid_t(::uuid_t::create()),
       .connection = model::
         connection_config{.bootstrap_servers = {net::unresolved_address("localhost", 9092)}},
       .state = std::move(link_state)};
-
+    metadata.configuration.topic_metadata_mirroring_cfg.task_interval = 1s;
+    metadata.configuration.topic_metadata_mirroring_cfg.topic_name_filters
+      .emplace_back(resource_name_filter_pattern{
+        .pattern_type = filter_pattern_type::literal,
+        .filter = filter_type::include,
+        .pattern = resource_name_filter_pattern::wildcard});
     return metadata;
 }
 } // namespace
@@ -166,8 +165,8 @@ TEST_F_CORO(source_topic_syncer_test, select_all_with_exclude) {
       kafka::topic_authorized_operations(0x508));
 
     auto md = get_default_metadata();
-    md.state.topic_metadata_mirroring_cfg.topic_name_filters.emplace_back(
-      resource_name_filter_pattern{
+    md.configuration.topic_metadata_mirroring_cfg.topic_name_filters
+      .emplace_back(resource_name_filter_pattern{
         .pattern_type = filter_pattern_type::literal,
         .filter = filter_type::exclude,
         .pattern = "excluded-topic"});

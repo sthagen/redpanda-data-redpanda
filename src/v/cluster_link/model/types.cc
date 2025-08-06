@@ -47,6 +47,22 @@ topic_metadata_mirroring_config topic_metadata_mirroring_config::copy() const {
     return copy;
 }
 
+consumer_groups_mirroring_config
+consumer_groups_mirroring_config::copy() const {
+    consumer_groups_mirroring_config copy;
+
+    copy.is_enabled = is_enabled;
+    copy.task_interval = task_interval;
+    copy.filters = filters.copy();
+    return copy;
+}
+
+link_configuration link_configuration::copy() const {
+    link_configuration copy;
+    copy.topic_metadata_mirroring_cfg = topic_metadata_mirroring_cfg.copy();
+    return copy;
+}
+
 void link_state::set_mirror_topics(const mirror_topics_t& topics) {
     mirror_topics.reserve(topics.size());
     for (const auto& [topic, state] : topics) {
@@ -65,7 +81,6 @@ link_state link_state::copy() const {
     for (const auto& [topic, state] : mirror_topics) {
         copy.mirror_topics.emplace(topic, state.copy());
     }
-    copy.topic_metadata_mirroring_cfg = topic_metadata_mirroring_cfg.copy();
     return copy;
 }
 
@@ -75,6 +90,7 @@ metadata metadata::copy() const {
     copy.uuid = uuid;
     copy.connection = connection;
     copy.state = state.copy();
+    copy.configuration = configuration.copy();
     return copy;
 }
 
@@ -103,7 +119,7 @@ auto fmt::formatter<cluster_link::model::scram_credentials>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{username={}, password=****, mechanism={}}}",
+      "{{username: {}, password: ****, mechanism: {}}}",
       c.username,
       c.mechanism);
 }
@@ -128,15 +144,15 @@ auto fmt::formatter<cluster_link::model::tls_file_or_value>::format(
     return ss::visit(
       t,
       [&ctx](const cluster_link::model::tls_file_path& p) {
-          return fmt::format_to(ctx.out(), "{{file={}}}", p());
+          return fmt::format_to(ctx.out(), "{{file: {}}}", p());
       },
       [this, &ctx](const cluster_link::model::tls_value& v) {
           if (_is_sensitive) {
-              return fmt::format_to(ctx.out(), "{{value=****}}");
+              return fmt::format_to(ctx.out(), "{{value: ****}}");
           }
           // If not sensitive, we can show the value
           // This is useful for debugging purposes.
-          return fmt::format_to(ctx.out(), "{{value={}}}", v());
+          return fmt::format_to(ctx.out(), "{{value: {}}}", v());
       });
 }
 
@@ -158,8 +174,8 @@ auto fmt::formatter<cluster_link::model::connection_config>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{bootstrap_servers={}, authn_config={}, cert={}, key={:s}, ca={}, "
-      "client_id={}}}",
+      "{{bootstrap_servers: {}, authn_config: {}, cert: {}, key: {:s}, ca: {}, "
+      "client_id: {}}}",
       c.bootstrap_servers,
       c.authn_config,
       c.cert,
@@ -182,9 +198,9 @@ auto fmt::formatter<cluster_link::model::mirror_topic_metadata>::format(
   format_context& ctx) const -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{state={}, source_topic_id={}, source_topic_name={}, "
-      "destination_topic_id={}, partition_count={}, replication_factor={}, "
-      "topic_configs={}}}",
+      "{{state: {}, source_topic_id: {}, source_topic_name: {}, "
+      "destination_topic_id: {}, partition_count: {}, replication_factor: {}, "
+      "topic_configs: {}}}",
       m.state,
       m.source_topic_id,
       m.source_topic_name,
@@ -246,10 +262,9 @@ auto fmt::formatter<cluster_link::model::link_state>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{paused: {}, mirror_topics: {}, auto_mirror_topic_task_config: {}}}",
+      "{{paused: {}, mirror_topics: {}}}",
       s.paused,
-      fmt::join(s.mirror_topics.begin(), s.mirror_topics.end(), ","),
-      s.topic_metadata_mirroring_cfg);
+      fmt::join(s.mirror_topics.begin(), s.mirror_topics.end(), ","));
 }
 
 auto fmt::formatter<cluster_link::model::metadata>::format(
@@ -257,7 +272,7 @@ auto fmt::formatter<cluster_link::model::metadata>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{name={}, uuid={}, connection={}, state={}}}",
+      "{{name: {}, uuid: {}, connection: {}, state: {}}}",
       m.name,
       m.uuid,
       m.connection,
@@ -268,14 +283,14 @@ auto fmt::formatter<cluster_link::model::add_mirror_topic_cmd>::format(
   const cluster_link::model::add_mirror_topic_cmd& m, format_context& ctx)
   -> decltype(ctx.out()) {
     return fmt::format_to(
-      ctx.out(), "{{topic={}, metadata={}}}", m.topic, m.metadata);
+      ctx.out(), "{{topic: {}, metadata: {}}}", m.topic, m.metadata);
 }
 
 auto fmt::formatter<cluster_link::model::update_mirror_topic_state_cmd>::format(
   const cluster_link::model::update_mirror_topic_state_cmd& m,
   format_context& ctx) -> decltype(ctx.out()) {
     return fmt::format_to(
-      ctx.out(), "{{topic={}, state={}}}", m.topic, m.state);
+      ctx.out(), "{{topic: {}, state: {}}}", m.topic, m.state);
 }
 
 auto fmt::formatter<cluster_link::model::task_status_report>::format(
@@ -283,7 +298,7 @@ auto fmt::formatter<cluster_link::model::task_status_report>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{task_name={}, task_state={}, task_state_reason={}}}",
+      "{{task_name: {}, task_state: {}, task_state_reason: {}}}",
       r.task_name,
       r.task_state,
       r.task_state_reason);
@@ -307,7 +322,7 @@ auto fmt::formatter<cluster_link::model::link_task_status_report>::format(
   format_context& ctx) const -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{link_name={}, task_status_reports={}}}",
+      "{{link_name: {}, task_status_reports: {}}}",
       r.link_name,
       fmt::join(
         r.task_status_reports.begin(), r.task_status_reports.end(), ","));
@@ -330,6 +345,15 @@ auto fmt::formatter<cluster_link::model::cluster_link_task_status_report>::
     format_context& ctx) const -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{link_reports={}}}",
+      "{{link_reports: {}}}",
       fmt::join(r.link_reports.begin(), r.link_reports.end(), ","));
+}
+
+auto fmt::formatter<cluster_link::model::link_configuration>::format(
+  const cluster_link::model::link_configuration& cfg, format_context& ctx) const
+  -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{topic_metadata_mirroring_cfg: {}}}",
+      cfg.topic_metadata_mirroring_cfg);
 }

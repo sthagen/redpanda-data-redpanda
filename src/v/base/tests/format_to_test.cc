@@ -1,0 +1,30 @@
+/*
+ * Copyright 2025 Redpanda Data, Inc.
+ *
+ * Use of this software is governed by the Business Source License
+ * included in the file licenses/BSL.md
+ *
+ * As of the Change Date specified in that file, in accordance with
+ * the Business Source License, use of this software will be governed
+ * by the Apache License, Version 2.0
+ */
+
+#include "base/format_to.h"
+
+#include <gtest/gtest.h>
+
+struct foo {
+    std::string a;
+    int32_t b;
+
+    fmt::iterator format_to(fmt::iterator it) const {
+        return fmt::format_to(it, "{{a: {}, b: {}}}", a, b);
+    }
+};
+
+static_assert(fmt::HasFormatToMethod<foo>);
+
+TEST(Formatter, FormatTo) {
+    foo f{.a = "bar", .b = 3};
+    EXPECT_EQ("hello: {a: bar, b: 3}", fmt::format("hello: {}", f));
+}

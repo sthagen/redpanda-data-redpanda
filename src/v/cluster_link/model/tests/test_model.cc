@@ -20,7 +20,7 @@ TEST(test_model, test_no_leak_private_data) {
       .username = "user", .password = "pass", .mechanism = "SCRAM-SHA-256"};
 
     EXPECT_EQ(
-      "{username=user, password=****, mechanism=SCRAM-SHA-256}",
+      "{username: user, password: ****, mechanism: SCRAM-SHA-256}",
       fmt::format("{}", creds));
 
     connection_config config_files{
@@ -32,10 +32,11 @@ TEST(test_model, test_no_leak_private_data) {
       .client_id = "client-id"};
 
     EXPECT_EQ(
-      "{bootstrap_servers=[{host: localhost, port: 9092}], "
-      "authn_config={username=user, password=****, mechanism=SCRAM-SHA-256}, "
-      "cert={file=cert.pem}, key={file=key.pem}, ca={file=ca.pem}, "
-      "client_id=client-id}",
+      "{bootstrap_servers: [{host: localhost, port: 9092}], "
+      "authn_config: {username: user, password: ****, mechanism: "
+      "SCRAM-SHA-256}, "
+      "cert: {file: cert.pem}, key: {file: key.pem}, ca: {file: ca.pem}, "
+      "client_id: client-id}",
       fmt::format("{}", config_files));
 
     connection_config config_values{
@@ -46,10 +47,11 @@ TEST(test_model, test_no_leak_private_data) {
       .ca = tls_value{"ca.pem"},
       .client_id = "client-id"};
     EXPECT_EQ(
-      "{bootstrap_servers=[{host: localhost, port: 9092}], "
-      "authn_config={username=user, password=****, mechanism=SCRAM-SHA-256}, "
-      "cert={value=cert.pem}, key={value=****}, ca={value=ca.pem}, "
-      "client_id=client-id}",
+      "{bootstrap_servers: [{host: localhost, port: 9092}], "
+      "authn_config: {username: user, password: ****, mechanism: "
+      "SCRAM-SHA-256}, "
+      "cert: {value: cert.pem}, key: {value: ****}, ca: {value: ca.pem}, "
+      "client_id: client-id}",
       fmt::format("{}", config_values));
 }
 } // namespace cluster_link::model::tests

@@ -68,6 +68,8 @@ class RedpandaConfig:
     cloud_storage_disable_tls: bool = True
     cloud_storage_backend: str = 'aws'
     iceberg_enabled: bool = False
+    enable_developmental_unrecoverable_data_corrupting_features: int = int(
+        time.time())
 
 
 @dataclasses.dataclass
@@ -184,6 +186,30 @@ class Redpanda:
         await self.process.wait()
 
 
+async def run_command(cmd):
+    proc = await asyncio.create_subprocess_shell(
+        cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+
+    stdout, stderr = await proc.communicate()
+
+    print(f"[{cmd!r} exited with {proc.returncode}]")
+    if stdout:
+        print(f"[{cmd!r}].[stdout]\n{stdout.decode()}")
+    if stderr:
+        print(f"[{cmd!r}].[stderr]\n{stderr.decode()}")
+
+    return proc.returncode == 0
+
+
+async def post_start_configure(rpk):
+    while True:
+        if await run_command(
+                f"{rpk} cluster config set development_enable_cloud_topics true"
+        ):
+            return
+        await asyncio.sleep(1)
+
+
 async def ensure_bucket_exists(cfg: RedpandaConfig):
     session = aioboto3.Session()
     client = session.client(
@@ -263,6 +289,10 @@ async def main():
                         "--minio_executable",
                         type=pathlib.Path,
                         help="path to minio executable",
+                        default=None)
+    parser.add_argument("--rpk",
+                        type=pathlib.Path,
+                        help="path to rpk executable",
                         default=None)
     args, extra_args = parser.parse_known_args()
 
@@ -365,6 +395,8 @@ async def main():
     nodes = [Redpanda(args.executable, cores, c, extra_args) for c in configs]
 
     redpanda_coros = [r.run() for r in nodes]
+    other_coros = [post_start_configure(args.rpk)]
+    all_coros = redpanda_coros + other_coros
 
     def stop():
         for n in nodes:
@@ -374,7 +406,7 @@ async def main():
 
     asyncio.get_event_loop().add_signal_handler(signal.SIGINT, stop)
 
-    await asyncio.gather(*redpanda_coros)
+    await asyncio.gather(*all_coros)
     if minio_task and minio:
         # send stop again. if redpanda shuts down but we didn't request the
         # shutdown then let's go ahead and tear down minio too so we exit

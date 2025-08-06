@@ -25,6 +25,7 @@ enum class errc : int16_t {
     timed_out,
     not_leader,
     concurrent_requests,
+    state_error,
 };
 
 struct add_objects_reply
@@ -40,10 +41,10 @@ struct add_objects_request
       serde::version<0>,
       serde::compat_version<0>> {
     using resp_t = add_objects_reply;
-    auto serde_fields() { return std::tie(update, metastore_partition); }
+    auto serde_fields() { return std::tie(metastore_partition, new_objects); }
 
-    add_objects_update update;
     model::partition_id metastore_partition;
+    chunked_vector<new_object> new_objects;
 };
 
 struct replace_objects_reply
@@ -61,10 +62,14 @@ struct replace_objects_request
       serde::version<0>,
       serde::compat_version<0>> {
     using resp_t = replace_objects_reply;
-    auto serde_fields() { return std::tie(update, metastore_partition); }
+    auto serde_fields() {
+        return std::tie(metastore_partition, new_objects, compaction_updates);
+    }
 
-    replace_objects_update update;
     model::partition_id metastore_partition;
+    chunked_vector<new_object> new_objects;
+    chunked_hash_map<model::topic_id_partition, compaction_state_update>
+      compaction_updates;
 };
 
 struct object_metadata
@@ -92,9 +97,10 @@ struct get_first_offset_ge_request
       serde::version<0>,
       serde::compat_version<0>> {
     using resp_t = get_first_offset_ge_reply;
-    auto serde_fields() { return std::tie(tp); }
+    auto serde_fields() { return std::tie(tp, o); }
 
     model::topic_id_partition tp;
+    kafka::offset o;
 };
 
 struct get_first_timestamp_ge_reply
@@ -113,9 +119,10 @@ struct get_first_timestamp_ge_request
       serde::version<0>,
       serde::compat_version<0>> {
     using resp_t = get_first_timestamp_ge_reply;
-    auto serde_fields() { return std::tie(tp); }
+    auto serde_fields() { return std::tie(tp, ts); }
 
     model::topic_id_partition tp;
+    model::timestamp ts;
 };
 
 struct get_offsets_reply
@@ -157,9 +164,16 @@ struct get_compaction_offsets_request
       serde::version<0>,
       serde::compat_version<0>> {
     using resp_t = get_compaction_offsets_reply;
-    auto serde_fields() { return std::tie(tp); }
+    auto serde_fields() {
+        return std::tie(tp, tombstone_removal_upper_bound_ts);
+    }
 
     model::topic_id_partition tp;
+
+    // Cleaned ranges with tombstones that were cleaned at or below this
+    // timestamp are eligible to have tombstones entirely removed. These ranges
+    // will be returned in the removable_tombstone_ranges field.
+    model::timestamp tombstone_removal_upper_bound_ts;
 };
 
 } //  namespace experimental::cloud_topics::l1::rpc

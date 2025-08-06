@@ -267,9 +267,52 @@ struct topic_metadata_mirroring_config
     topic_metadata_mirroring_config copy() const;
 };
 
+struct consumer_groups_mirroring_config
+  : serde::envelope<
+      consumer_groups_mirroring_config,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    /// Flag to indicate if the task is enabled or not
+    enabled_t is_enabled{enabled_t::yes};
+    ss::lowres_clock::duration task_interval{std::chrono::seconds(30)};
+    /// Filters
+    chunked_vector<resource_name_filter_pattern> filters;
+
+    friend bool operator==(
+      const consumer_groups_mirroring_config&,
+      const consumer_groups_mirroring_config&)
+      = default;
+
+    auto serde_fields() { return std::tie(is_enabled, task_interval, filters); }
+
+    consumer_groups_mirroring_config copy() const;
+};
+
+/**
+ * Configuration of a cluster link. Configuration changes are driven by the API
+ * and are a result of user actions.
+ */
+struct link_configuration
+  : serde::envelope<
+      link_configuration,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    /// Configuration for the auto mirror topic creation task
+    topic_metadata_mirroring_config topic_metadata_mirroring_cfg;
+
+    friend bool operator==(const link_configuration&, const link_configuration&)
+      = default;
+
+    auto serde_fields() { return std::tie(topic_metadata_mirroring_cfg); }
+
+    link_configuration copy() const;
+};
+/**
+ * Link state. The state is modified by the cluster link tasks and is
+ * persisted to the cluster link table.
+ */
 struct link_state
   : serde::envelope<link_state, serde::version<0>, serde::compat_version<0>> {
-    /// The set of topics that are being mirrored by this link and their state
     link_state() noexcept = default;
     link_state(link_state&&) noexcept = default;
     link_state(const link_state&) = delete;
@@ -285,17 +328,13 @@ struct link_state
       = chunked_hash_map<::model::topic, mirror_topic_metadata>;
     /// Map of topics that this link is mirroring and their state
     chunked_hash_map<::model::topic, mirror_topic_metadata> mirror_topics;
-    /// Configuration for the auto mirror topic creation task
-    topic_metadata_mirroring_config topic_metadata_mirroring_cfg;
 
     void set_mirror_topics(const mirror_topics_t& topics);
     void set_mirror_topics(mirror_topics_t&& topics);
 
     friend bool operator==(const link_state&, const link_state&) = default;
 
-    auto serde_fields() {
-        return std::tie(paused, mirror_topics, topic_metadata_mirroring_cfg);
-    }
+    auto serde_fields() { return std::tie(paused, mirror_topics); }
 
     link_state copy() const;
 };
@@ -309,10 +348,14 @@ struct metadata
     connection_config connection;
     /// The state of the link
     link_state state;
+    /// Configuration for the cluster link
+    link_configuration configuration;
 
     friend bool operator==(const metadata&, const metadata&) = default;
 
-    auto serde_fields() { return std::tie(name, uuid, connection, state); }
+    auto serde_fields() {
+        return std::tie(name, uuid, connection, state, configuration);
+    }
 
     metadata copy() const;
 };
@@ -636,5 +679,13 @@ struct fmt::formatter<cluster_link::model::cluster_link_task_status_report>
   : fmt::formatter<string_view> {
     auto format(
       const cluster_link::model::cluster_link_task_status_report& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::link_configuration>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::link_configuration& m,
       format_context& ctx) const -> decltype(ctx.out());
 };

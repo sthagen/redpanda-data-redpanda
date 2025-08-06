@@ -28,6 +28,20 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "sharded_service_container",
+    hdrs = [
+        "sharded_service_container.h",
+    ],
+    include_prefix = "ssx",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":watchdog",
+        "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "future_util",
     hdrs = [
         "future-util.h",

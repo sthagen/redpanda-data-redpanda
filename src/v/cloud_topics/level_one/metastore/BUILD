@@ -21,6 +21,8 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/cloud_topics:logger",
+        "//src/v/cloud_topics/level_one/domain:domain_manager",
+        "//src/v/cloud_topics/level_one/domain:domain_supervisor",
         "//src/v/hashing:murmur",
         "@fmt",
     ],
@@ -32,7 +34,6 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cluster",
         "//src/v/model",
-        "//src/v/raft",
         "//src/v/rpc",
         "@seastar",
     ],
@@ -92,6 +93,33 @@ redpanda_cc_library(
         ":state",
         "//src/v/base",
         "//src/v/cloud_topics/level_one/common:object_id",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "simple_stm",
+    srcs = [
+        "simple_stm.cc",
+    ],
+    hdrs = [
+        "simple_stm.h",
+    ],
+    implementation_deps = [
+        ":state_update",
+        "//src/v/cloud_topics:logger",
+        "//src/v/serde",
+        "//src/v/ssx:future_util",
+        "//src/v/utils:prefix_logger",
+    ],
+    include_prefix = "cloud_topics/level_one/metastore",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":state",
+        "//src/v/base",
+        "//src/v/cluster:state_machine_registry",
+        "//src/v/model",
+        "//src/v/raft",
         "@seastar",
     ],
 )

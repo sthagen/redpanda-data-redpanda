@@ -6,6 +6,7 @@ redpanda_cc_library(
         "vassert.cc",
     ],
     hdrs = [
+        "format_to.h",
         "likely.h",
         "oncore.h",
         "outcome.h",

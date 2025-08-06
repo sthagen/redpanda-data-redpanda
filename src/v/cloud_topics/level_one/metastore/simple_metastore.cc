@@ -95,13 +95,19 @@ simple_metastore::object_builder() {
 
 ss::future<std::expected<metastore::offsets_response, metastore::errc>>
 simple_metastore::get_offsets(const model::topic_id_partition& tpr) {
-    auto prt_ref = state_.partition_state(tpr);
+    co_return get_offsets(state_, tpr);
+}
+
+std::expected<metastore::offsets_response, metastore::errc>
+simple_metastore::get_offsets(
+  const state& state, const model::topic_id_partition& tpr) {
+    auto prt_ref = state.partition_state(tpr);
     if (!prt_ref.has_value()) {
         vlog(cd_log.debug, "Partition {} not tracked", tpr);
-        co_return std::unexpected(metastore::errc::missing_ntp);
+        return std::unexpected(metastore::errc::missing_ntp);
     }
     const auto& prt = prt_ref->get();
-    co_return offsets_response{
+    return offsets_response{
       .start_offset = prt.start_offset,
       .next_offset = prt.next_offset,
     };
@@ -167,43 +173,65 @@ simple_metastore::replace_objects(
 ss::future<std::expected<metastore::object_response, metastore::errc>>
 simple_metastore::get_first_ge(
   const model::topic_id_partition& tpr, kafka::offset o) {
-    auto prt_ref = state_.partition_state(tpr);
+    co_return get_first_ge(state_, tpr, o);
+}
+
+std::expected<metastore::object_response, metastore::errc>
+simple_metastore::get_first_ge(
+  const state& state, const model::topic_id_partition& tpr, kafka::offset o) {
+    auto prt_ref = state.partition_state(tpr);
     if (!prt_ref.has_value()) {
         vlog(cd_log.debug, "Partition {} not tracked", tpr);
-        co_return std::unexpected(metastore::errc::missing_ntp);
+        return std::unexpected(metastore::errc::missing_ntp);
     }
     auto& prt = prt_ref->get();
     auto it = std::ranges::lower_bound(
       prt.extents, o, std::less<>{}, &extent::last_offset);
     if (it != prt.extents.end()) {
-        auto footer_pos = state_.objects[it->oid].footer_pos;
-        co_return metastore::object_response{
+        auto object_it = state.objects.find(it->oid);
+        if (object_it == state.objects.end()) {
+            return std::unexpected(metastore::errc::out_of_range);
+        }
+        auto footer_pos = object_it->second.footer_pos;
+        return metastore::object_response{
           .oid = it->oid,
           .footer_pos = footer_pos,
         };
     }
-    co_return std::unexpected(metastore::errc::out_of_range);
+    return std::unexpected(metastore::errc::out_of_range);
 }
 
 ss::future<std::expected<metastore::object_response, metastore::errc>>
 simple_metastore::get_first_ge(
   const model::topic_id_partition& tpr, model::timestamp ts) {
-    auto prt_ref = state_.partition_state(tpr);
+    co_return get_first_ge(state_, tpr, ts);
+}
+
+std::expected<metastore::object_response, metastore::errc>
+simple_metastore::get_first_ge(
+  const state& state,
+  const model::topic_id_partition& tpr,
+  model::timestamp ts) {
+    auto prt_ref = state.partition_state(tpr);
     if (!prt_ref.has_value()) {
         vlog(cd_log.debug, "Partition {} not tracked", tpr);
-        co_return std::unexpected(metastore::errc::missing_ntp);
+        return std::unexpected(metastore::errc::missing_ntp);
     }
     auto& prt = prt_ref->get();
     for (const auto& obj : prt.extents) {
         if (obj.max_timestamp >= ts) {
-            auto footer_pos = state_.objects[obj.oid].footer_pos;
-            co_return metastore::object_response{
+            auto object_it = state.objects.find(obj.oid);
+            if (object_it == state.objects.end()) {
+                return std::unexpected(metastore::errc::out_of_range);
+            }
+            auto footer_pos = object_it->second.footer_pos;
+            return metastore::object_response{
               .oid = obj.oid,
               .footer_pos = footer_pos,
             };
         }
     }
-    co_return std::unexpected(metastore::errc::out_of_range);
+    return std::unexpected(metastore::errc::out_of_range);
 }
 
 ss::future<std::expected<void, metastore::errc>>
@@ -260,22 +288,30 @@ ss::future<
 simple_metastore::get_compaction_offsets(
   const model::topic_id_partition& tp,
   model::timestamp tombstone_removal_upper_bound_ts) {
-    auto prt_ref = state_.partition_state(tp);
+    co_return get_compaction_offsets(
+      state_, tp, tombstone_removal_upper_bound_ts);
+}
+std::expected<metastore::compaction_offsets_response, metastore::errc>
+simple_metastore::get_compaction_offsets(
+  const state& state,
+  const model::topic_id_partition& tp,
+  model::timestamp tombstone_removal_upper_bound_ts) {
+    auto prt_ref = state.partition_state(tp);
     if (!prt_ref.has_value()) {
         vlog(cd_log.debug, "Partition {} not tracked", tp);
-        co_return std::unexpected(metastore::errc::missing_ntp);
+        return std::unexpected(metastore::errc::missing_ntp);
     }
     auto& prt = prt_ref->get();
     compaction_offsets_response resp;
     if (prt.start_offset >= prt.next_offset) {
         // The log is empty, nothing to compact.
-        co_return resp;
+        return resp;
     }
     if (!prt.compaction_state.has_value()) {
         // Nothing has been compacted yet, the whole log is dirty.
         resp.dirty_ranges.insert(
           prt.start_offset, kafka::prev_offset(prt.next_offset));
-        co_return resp;
+        return resp;
     }
 
     // Iterate through the clean ranges to produce the dirty ranges.
@@ -303,7 +339,7 @@ simple_metastore::get_compaction_offsets(
               r.base_offset, r.last_offset);
         }
     }
-    co_return resp;
+    return resp;
 }
 
 } // namespace experimental::cloud_topics::l1

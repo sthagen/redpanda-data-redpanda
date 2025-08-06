@@ -9,6 +9,7 @@
  */
 
 #include "base/seastarx.h"
+#include "model/fundamental.h"
 
 #include <seastar/core/future.hh>
 
@@ -17,11 +18,10 @@ class controller;
 }
 
 namespace experimental::cloud_topics::l1 {
+class domain_manager;
 
-// The control plane of cloud topics is responsible for creating
-// domains.
-//
-// There is only a single control plane per node and it runs on shard 0.
+// Responsible for creating and managing domain managers on the leaders of the
+// L1 topic partitions.
 class domain_supervisor {
     class impl;
 
@@ -35,6 +35,15 @@ public:
 
     ss::future<> start();
     ss::future<> stop();
+
+    // Returns nullopt if the domain manager for the given L1 metastore NTP, if
+    // one exists (e.g. if it is currently leader and has processed the
+    // appropriate leadership notification).
+    ss::lw_shared_ptr<domain_manager> get(const model::ntp&) const;
+
+    // Creates the L1 metastore topic, returning false if there was an issue
+    // while creating.
+    ss::future<bool> maybe_create_metastore_topic();
 
 private:
     std::unique_ptr<impl> _impl;

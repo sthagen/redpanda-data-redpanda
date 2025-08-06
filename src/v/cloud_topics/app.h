@@ -36,6 +36,7 @@ public:
     seastar::future<> stop();
 
     ss::shared_ptr<data_plane_api> get_data_plane_api();
+    l1::domain_supervisor* get_l1_domain_supervisor();
 
     // TODO: add 'get_control_plane_api' etc
 

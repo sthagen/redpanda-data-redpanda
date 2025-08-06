@@ -289,6 +289,9 @@ public:
 // it can also represent the tail of an L1 object (see object_seeker for more).
 class object_reader {
 public:
+    // A marker struct that indicates we've reached the end of the file.
+    struct eof {};
+
     object_reader() = default;
     object_reader(const object_reader&) = delete;
     object_reader(object_reader&&) = delete;
@@ -317,7 +320,7 @@ public:
     // and we are about to start reading the next partition. If an footer
     // is returned, then we've reached the end of the file and the footer is
     // returned.
-    using result = std::variant<model::ntp, model::record_batch, footer>;
+    using result = std::variant<model::ntp, model::record_batch, footer, eof>;
 
     // Read the "next" item from the L1 object.
     //
