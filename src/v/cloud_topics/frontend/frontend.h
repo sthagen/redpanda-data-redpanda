@@ -29,7 +29,6 @@ class partition;
 
 namespace experimental::cloud_topics {
 class data_plane_api;
-class app;
 
 struct replica_info {
     model::node_id id;
@@ -84,10 +83,6 @@ public:
     explicit frontend(
       ss::lw_shared_ptr<cluster::partition> p,
       ss::shared_ptr<experimental::cloud_topics::data_plane_api> ct) noexcept;
-
-    explicit frontend(
-      ss::lw_shared_ptr<cluster::partition> p,
-      ss::sharded<experimental::cloud_topics::app>& ct_app) noexcept;
 
     /// Get current NTP
     const model::ntp& ntp() const;
@@ -156,7 +151,7 @@ private:
     bool cache_enabled() const;
 
     ss::lw_shared_ptr<cluster::partition> _partition;
-    ss::shared_ptr<experimental::cloud_topics::data_plane_api> _ct_api;
+    ss::shared_ptr<experimental::cloud_topics::data_plane_api> _data_plane;
 };
 
 } // namespace experimental::cloud_topics

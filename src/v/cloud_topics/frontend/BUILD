@@ -2,13 +2,17 @@ load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
     name = "errc",
-    srcs = [],
+    srcs = [
+        "errc.cc",
+    ],
     hdrs = [
         "errc.h",
     ],
     include_prefix = "cloud_topics/frontend",
     visibility = ["//visibility:public"],
-    deps = [],
+    deps = [
+        "@fmt",
+    ],
 )
 
 redpanda_cc_library(
@@ -29,7 +33,6 @@ redpanda_cc_library(
     deps = [
         ":errc",
         "//src/v/base",
-        "//src/v/cloud_topics:app",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
         "//src/v/cloud_topics/level_zero/reader",

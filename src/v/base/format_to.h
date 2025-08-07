@@ -12,6 +12,7 @@
 #pragma once
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 namespace fmt {
 
@@ -33,7 +34,7 @@ concept HasFormatToMethod = requires(const T& obj, iterator out) {
  *   int32_t b;
  *
  *   fmt::iterator format_to(fmt::iterator it) const {
- *     return fmt::print(it, "{{a: {}, b: {}}}", a, b)
+ *     return fmt::format_to(it, "{{a: {}, b: {}}}", a, b)
  *   }
  * };
  * ```
@@ -67,10 +68,17 @@ struct formatter<T> {
 
 } // namespace fmt
 
+namespace std {
 // For both googletest and for other external libraries that may use
 // `operator<<` to print stuff, give a blanket implementation that delegates to
 // the `format_to` method.
+//
+// We have to put this in the std namespace for overload resolution rules to be
+// able to find it for arbitrary T.
 template<fmt::HasFormatToMethod T>
-std::ostream& operator<<(std::ostream& os, const T& obj) {
-    return fmt::format_to(os, "{}", obj);
+// NOLINTNEXTLINE(*-dcl58-*)
+ostream& operator<<(ostream& os, const T& obj) {
+    fmt::print(os, "{}", obj);
+    return os;
 }
+} // namespace std

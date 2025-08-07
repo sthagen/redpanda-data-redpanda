@@ -29,7 +29,8 @@ redpanda_cc_library(
         "reconciler.h",
     ],
     implementation_deps = [
-        "//src/v/kafka/data:partition_proxy",
+        "//src/v/cloud_topics:data_plane_api",
+        "//src/v/cloud_topics/frontend",
     ],
     include_prefix = "cloud_topics/level_zero/reconciler",
     visibility = ["//visibility:public"],

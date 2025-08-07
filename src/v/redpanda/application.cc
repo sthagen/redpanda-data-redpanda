@@ -384,9 +384,9 @@ void application::shutdown() {
             return mgr.invoke_on_all(&datalake::credential_manager::stop);
         });
     }
-    if (cloud_topics_api.local_is_initialized()) {
+    if (cloud_topics_app) {
         shutdown_with_watchdog(
-          cloud_topics_api, [](auto& ct) { return ct.stop(); });
+          cloud_topics_app, [](auto& app) { return app->stop(); });
     }
     // Stop all partitions before destructing the subsystems (transaction
     // coordinator, etc). This interrupts ongoing replication requests,
@@ -1725,6 +1725,17 @@ void application::wire_up_redpanda_services(
     producer_manager.invoke_on_all(&cluster::tx::producer_state_manager::start)
       .get();
 
+    if (config::shard_local_cfg().development_enable_cloud_topics()) {
+        vassert(
+          archival_storage_enabled(),
+          "cloud topics currently requires archival storage to be enabled");
+
+        // Initialize the cloud topics app to be able to pass it around to the
+        // partition manager.
+        // NOTE: this only instantiates the app; underlying services are
+        // constructed separately once more of the subsystems are available.
+        construct_single_service(cloud_topics_app);
+    }
     syschecks::systemd_message("Adding partition manager").get();
     construct_service(
       partition_manager,
@@ -1750,7 +1761,7 @@ void application::wire_up_redpanda_services(
           return config::shard_local_cfg()
             .partition_manager_shutdown_watchdog_timeout.bind();
       }),
-      std::ref(cloud_topics_api))
+      cloud_topics_app ? cloud_topics_app->get_state() : nullptr)
       .get();
     vlog(_log.info, "Partition manager started");
     construct_service(
@@ -1949,6 +1960,10 @@ void application::wire_up_redpanda_services(
               return kafka::data::rpc::topic_creator::make_default(
                 controller.get());
           }),
+          ss::sharded_parameter([this] {
+              return kafka::data::rpc::topic_metadata_cache::make_default(
+                &metadata_cache);
+          }),
           &_connection_cache,
           &_kafka_data_rpc_service)
           .get();
@@ -2120,62 +2135,21 @@ void application::wire_up_redpanda_services(
       &shadow_index_cache,
       &partition_manager);
 
-    if (config::shard_local_cfg().development_enable_cloud_topics()) {
-        vassert(
-          archival_storage_enabled(),
-          "cloud topics currently requires archival storage to be enabled");
-
-        class real_cluster_services
-          : public experimental::cloud_topics::cluster_services {
-        public:
-            explicit real_cluster_services(
-              ss::sharded<cluster::cluster_epoch_service<>>* epoch_generator)
-              : _epoch_service(epoch_generator) {}
-
-            seastar::future<experimental::cloud_topics::cluster_epoch>
-            current_epoch(seastar::abort_source* as) override {
-                std::expected<int64_t, std::error_code> epoch
-                  = co_await _epoch_service->local().get_cached_epoch(as);
-                if (!epoch) {
-                    throw std::system_error(epoch.error());
-                }
-                co_return experimental::cloud_topics::cluster_epoch(
-                  epoch.value());
-            }
-
-        private:
-            ss::sharded<cluster::cluster_epoch_service<>>* _epoch_service;
-        };
-
-        construct_service(
-          cloud_topics_api,
-          ss::sharded_parameter([this, bucket] {
-              return experimental::cloud_topics::make_data_plane(
-                &partition_manager,
-                &cloud_io,
-                &shadow_index_cache,
-                bucket,
-                &storage,
-                std::make_unique<real_cluster_services>(
-                  &controller->get_cluster_epoch_generator()));
-          }),
-          ss::sharded_parameter([this, bucket] {
-              return std::make_unique<
-                experimental::cloud_topics::l1::domain_supervisor>(
-                controller.get());
-          }))
-          .get();
-
-        construct_service(
-          l1_metastore_fe,
-          node_id,
-          &metadata_cache,
-          &controller->get_partition_leaders(),
-          &controller->get_shard_table(),
-          &_connection_cache,
-          ss::sharded_parameter([this] {
-              return cloud_topics_api.local().get_l1_domain_supervisor();
-          }))
+    if (cloud_topics_app) {
+        syschecks::systemd_message("Starting cloud topics subsystems").get();
+        cloud_topics_app
+          ->construct(
+            node_id,
+            controller.get(),
+            &controller->get_partition_manager(),
+            &controller->get_partition_leaders(),
+            &controller->get_shard_table(),
+            &cloud_io,
+            &shadow_index_cache,
+            &metadata_cache,
+            &_connection_cache,
+            bucket,
+            &storage)
           .get();
     }
 
@@ -3347,12 +3321,14 @@ void application::start_runtime_services(
               sched_groups.cluster_sg(),
               smp_service_groups.cluster_smp_sg(),
               std::ref(_consumer_group_lag_metrics_frontend)));
-          if (config::shard_local_cfg().development_enable_cloud_topics()) {
+          if (
+            config::shard_local_cfg().development_enable_cloud_topics()
+            && cloud_topics_app) {
               runtime_services.push_back(
                 std::make_unique<experimental::cloud_topics::l1::rpc::service>(
                   sched_groups.datalake_sg(),
                   smp_service_groups.datalake_sg(),
-                  &l1_metastore_fe));
+                  cloud_topics_app->get_sharded_l1_metastore_fe()));
           }
 
           s.add_services(std::move(runtime_services));
@@ -3406,9 +3382,8 @@ void application::start_runtime_services(
         })
       .get();
 
-    if (cloud_storage_api.local_is_initialized()) {
-        cloud_topics_api.invoke_on_all([](auto& app) { return app.start(); })
-          .get();
+    if (cloud_topics_app) {
+        cloud_topics_app->start().get();
     }
 
     _debug_bundle_service.invoke_on_all(&debug_bundle::service::start).get();

@@ -33,8 +33,8 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "//src/v/cloud_storage:types",
-        "//src/v/cloud_topics:app",
         "//src/v/cloud_topics:data_plane_api",
+        "//src/v/cloud_topics:state_accessors",
         "//src/v/cloud_topics/frontend",
         "//src/v/cloud_topics/frontend:errc",
         "//src/v/cloud_topics/level_zero/reader",

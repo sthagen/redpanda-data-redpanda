@@ -1401,18 +1401,7 @@ class SchemaRegistryEndpoints(RedpandaTest):
 
         wait_until(has_config, 5)
 
-
-class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
-    """
-    Base class for testing schema registry against a redpanda cluster.
-
-    Inherit from this to run the tests.
-    """
-    def __init__(self, context, **kwargs):
-        super(SchemaRegistryTestMethods, self).__init__(context, **kwargs)
-
     def _push_to_schemas_topic(self, schemas):
-
         schema_topic = TopicSpec(name="_schemas",
                                  partition_count=1,
                                  replication_factor=1)
@@ -1440,6 +1429,16 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
             rpk.produce(topic="_schemas",
                         key=json.dumps(key),
                         msg=json.dumps(value))
+
+
+class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
+    """
+    Base class for testing schema registry against a redpanda cluster.
+
+    Inherit from this to run the tests.
+    """
+    def __init__(self, context, **kwargs):
+        super(SchemaRegistryTestMethods, self).__init__(context, **kwargs)
 
     @cluster(num_nodes=3)
     def test_schemas_types(self):
@@ -2662,349 +2661,6 @@ class SchemaRegistryTestMethods(SchemaRegistryEndpoints):
         self.logger.info(result_raw)
         assert result_raw.status_code == requests.codes.not_found
         assert result_raw.json()["error_code"] == 40402
-
-    @cluster(num_nodes=3)
-    def test_imported_schemas_with_dependencies_issues(self):
-        """
-        Verify SR behavior when importing schemas in the wrong order and missing dependencies
-        """
-        def assert_request_code(raw, expected, endpoint):
-            assert raw.status_code == expected, \
-                    f"Expected {expected} but got {raw.status_code}, "\
-                    f"for request '{endpoint}' with content: {raw.content}"
-
-        #Test setup: Simulate import of schemas by writting directly into the _schemas topic
-        #Note that trying to commit these schemas in this order, using POST subjects/{subject}/version
-        #would fail as schemas 'schema_b' and 'schema_d' have unmet dependencies
-        schemas = [
-            #schema_a has no dependencies
-            import_schemas["schema_a"],
-            #schema_c is dependent on schema_b, which is loaded later on
-            import_schemas["schema_c"],
-            #schema_b is dependent on schema_a, which is already loaded
-            import_schemas["schema_b"],
-            #schema_d is dependent on schema_e, which is not currently present
-            import_schemas["schema_d"],
-
-            #all schema_f are valid
-            import_schemas["schema_f_v1"],
-            import_schemas["schema_f_v3"],
-            import_schemas["schema_f_v5"],
-            #all schema_g depend on the equivalent schema f version
-            import_schemas["schema_g_v1"],
-            #Missing dependency - schema_f_v2
-            import_schemas["schema_g_v2"],
-            import_schemas["schema_g_v3"],
-            #Missing dependency - schema_f_v4
-            import_schemas["schema_g_v4"],
-
-            #dependency error deep in dep chain
-            #schema_i depends on schema_h which is missing
-            import_schemas["schema_i"],
-            #schema_j depends on schema_i
-            import_schemas["schema_j"],
-            #schema_k depends on schema_j
-            import_schemas["schema_k"],
-        ]
-
-        self._push_to_schemas_topic(schemas)
-
-        valid_entries = [
-            (1, "schema_a"),
-            (2, "schema_c"),
-            (3, "schema_b"),
-            (5, "schema_f_v1"),
-            (6, "schema_f_v3"),
-            (7, "schema_f_v5"),
-            (8, "schema_g_v1"),
-            (10, "schema_g_v3"),
-        ]
-        #These are schemas that having missing dependencies at startup
-        invalid_entries = [
-            (4, "schema_d"),
-            (9, "schema_g_v2"),
-            (11, "schema_g_v4"),
-            (12, "schema_i"),
-            (13, "schema_j"),
-            (14, "schema_k"),
-        ]
-
-        #Test /schemas/ids/{id}
-        def test_schemas_ids_id(id, expected_successful):
-            endpoint = f"GET schemas/ids/{id}"
-            result_raw = self.sr_client.request("GET",
-                                                f"schemas/ids/{id}",
-                                                headers=HTTP_GET_HEADERS)
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-
-                result = result_raw.json()["schema"].strip()
-                expected_result = schemas[id - 1]["sanitized"].strip()
-                #Currently, schemas are not sanitized through this endpoint
-                assert result == expected_result, \
-                        f"Expected:\n{result}\nGot:\n{expected_result}\n"\
-                        f"for request 'GET schemas/ids/{id}"
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        #All schemas should be retrievable by id.
-        for id, _ in valid_entries + invalid_entries:
-            test_schemas_ids_id(id, expected_successful=True)
-
-        #Test /schemas/ids/{id}/versions
-        def test_schemas_ids_id_versions(id, expected_successful):
-            endpoint = f"GET schemas/ids/{id}/versions"
-            result_raw = self.sr_client.request("GET",
-                                                f"schemas/ids/{id}/versions",
-                                                headers=HTTP_GET_HEADERS)
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        #Versions should be retrievable for all ids.
-        for id, _ in valid_entries + invalid_entries:
-            test_schemas_ids_id_versions(id, expected_successful=True)
-
-        #Test /schemas/ids/{id}/subjects
-        def test_schemas_ids_id_subjects(id, expected_successful):
-            endpoint = f"GET schemas/ids/{id}/subjects",
-            result_raw = self.sr_client.request("GET",
-                                                f"schemas/ids/{id}/subjects",
-                                                headers=HTTP_GET_HEADERS)
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        #Subjects should be retrievable for all ids.
-        for id, _ in valid_entries + invalid_entries:
-            test_schemas_ids_id_subjects(id, expected_successful=True)
-
-        #Test /subjects
-        result_raw = self.sr_client.request("GET",
-                                            f"subjects",
-                                            headers=HTTP_GET_HEADERS)
-        assert_request_code(result_raw, requests.codes.ok, "GET subjects")
-
-        #All subjects should be present, regardless if their schemas are valid or not
-        expected_subjects = set([
-            "schema_a", "schema_b", "schema_c", "schema_d", "schema_f",
-            "schema_g", "schema_i", "schema_j", "schema_k"
-        ])
-        subjects = set(result_raw.json())
-        assert subjects == expected_subjects, \
-            f"Expected {expected_subjects} but got {subjects}, "\
-            "for request 'GET subjects'"
-
-        def test_subjects_subject(entry, expected_code):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            schema_def = lookup_schema["schema"]
-            version = lookup_schema["version"]
-            references = lookup_schema[
-                "references"] if "references" in lookup_schema else []
-            result_raw = self.sr_client.post_subjects_subject(subject=subject,
-                                                              data=json.dumps({
-                                                                  "schema":
-                                                                  schema_def,
-                                                                  "schemaType":
-                                                                  "PROTOBUF",
-                                                                  "references":
-                                                                  references
-                                                              }))
-            endpoint = f"POST subjects/{subject}",
-            assert_request_code(result_raw, expected_code, endpoint)
-            if expected_code == requests.codes.ok:
-                result = result_raw.json()
-                assert result["version"] == version, \
-                        f"Expected version {version} but got {result['version']}, "\
-                        f"for request 'POST subjects/{subject}'"
-
-        #Test /subjects/{subject}
-        for _, s in valid_entries:
-            test_subjects_subject(s, expected_code=requests.codes.ok)
-
-        #These schemas should fail, as the *input* schema has an unsatisfied dependency
-        for _, s in invalid_entries:
-            test_subjects_subject(s, expected_code=422)
-
-        #Test /subjects/{subject}/versions/{version}
-        def test_subjects_subject_versions_version(entry, expected_successful):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            version = lookup_schema["version"]
-            expected_schema = lookup_schema["sanitized"].strip()
-            #references = lookup_schema["references"] if "references" in lookup_schema else []
-            result_raw = self.sr_client.get_subjects_subject_versions_version(
-                subject=subject, version=version)
-            endpoint = f"GET subjects/{subject}/versions/{version}"
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-
-                result = result_raw.json()["schema"].strip()
-                assert result == expected_schema, \
-                        f"Expected:\n{expected_schema}\nGot:\n{result}\nfor request "\
-                        f"'GET subjects/{subject}/versions/{version}'"
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        #All schemas should be retrievable through subject/version.
-        for _, s in valid_entries + invalid_entries:
-            test_subjects_subject_versions_version(s, expected_successful=True)
-
-        #Test /subjects/{subject}/versions/{version}/schema
-        def test_subjects_subject_versions_version_schema(
-                entry, expected_successful):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            version = lookup_schema["version"]
-            schema_def = lookup_schema["sanitized"].strip()
-            result_raw = self.sr_client.request(
-                "GET",
-                f"subjects/{subject}/versions/{version}/schema",
-                headers=HTTP_GET_HEADERS)
-
-            endpoint = f"GET subjects/{subject}/versions/{version}/schema"
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-
-                result = result_raw.content.decode().strip()
-                assert result == schema_def, \
-                        f"Expected:\n{schema_def}\nGot:\n{result}\n"\
-                        f"for request 'GET subjects/{subject}/versions/{version}/schema'"
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        #All schemas should be retrievable through subject/version.
-        for _, s in valid_entries + invalid_entries:
-            test_subjects_subject_versions_version_schema(
-                s, expected_successful=True)
-
-        #Test /subjects/{subject}/versions/{version}/referencedby
-        def test_referenced_by(entry, expected_result):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            version = lookup_schema["version"]
-            result_raw = self.sr_client.get_subjects_subject_versions_version_referenced_by(
-                subject, version)
-
-            endpoint = f"GET subjects/{subject}/versions/{version}/referencedby"
-            assert_request_code(result_raw, requests.codes.ok, endpoint)
-            result = result_raw.json()
-            assert result == expected_result, \
-                f"Expected {expected_result} but got {result}, " \
-                f"for request 'GET subjects/{subject}/versions/{version}/referencedby'"
-
-        test_referenced_by("schema_a", [3])
-        test_referenced_by("schema_b", [2])
-        test_referenced_by("schema_c", [])
-        test_referenced_by("schema_d", [])
-        test_referenced_by("schema_f_v1", [8])
-        test_referenced_by("schema_f_v3", [10])
-        test_referenced_by("schema_f_v5", [])
-        test_referenced_by("schema_g_v1", [])
-        test_referenced_by("schema_g_v2", [])
-        test_referenced_by("schema_g_v3", [])
-        test_referenced_by("schema_g_v4", [])
-
-        #This is the last of the endpoint to be checked, as it will change the state
-        #Test /subjects/{subject}/versions
-        def test_subjects_subject_versions(entry,
-                                           expected_successful,
-                                           expected_id=None):
-            lookup_schema = import_schemas[entry]
-            subject = lookup_schema["subject"]
-            schema_def = lookup_schema["schema"]
-            references = lookup_schema[
-                "references"] if "references" in lookup_schema else []
-            result_raw = self.sr_client.post_subjects_subject_versions(
-                subject=subject,
-                data=json.dumps({
-                    "schema": schema_def,
-                    "schemaType": "PROTOBUF",
-                    "references": references,
-                    "version": lookup_schema["version"]
-                }))
-            endpoint = f"POST subjects/{subject}/versions"
-            if expected_successful:
-                assert_request_code(result_raw, requests.codes.ok, endpoint)
-                result = result_raw.json()
-                assert result["id"] == expected_id, \
-                        f"Expected id {expected_id} but got {result['id']}, "\
-                        f"for request 'POST subjects/{subject}/versions'"
-            else:
-                assert_request_code(result_raw, 422, endpoint)
-
-        for id, s in valid_entries:
-            test_subjects_subject_versions(s,
-                                           expected_id=id,
-                                           expected_successful=True)
-
-        #These schemas should fail, as the *input* schema has an unsatisfied dependencies
-        for id, s in invalid_entries:
-            test_subjects_subject_versions(s,
-                                           expected_id=id,
-                                           expected_successful=False)
-
-        #Insert missing dependency, schema_e, and retry the failed schema_d requests
-        result_raw = self.sr_client.post_subjects_subject_versions(
-            subject="schema_e",
-            data=json.dumps({
-                "schema": schema_e_proto_def,
-                "schemaType": "PROTOBUF"
-            }))
-        assert_request_code(result_raw, requests.codes.ok,
-                            "POST subjects/schema_e/versions")
-
-        #Validate that schema_d is now accepted as a referee
-        test_referenced_by("schema_e", [4])
-
-        test_schemas_ids_id(4, expected_successful=True)
-        test_schemas_ids_id_versions(4, expected_successful=True)
-        test_schemas_ids_id_subjects(4, expected_successful=True)
-        #Lookup still fails cause schema_d is stored not in it's canonical form
-        test_subjects_subject("schema_d", expected_code=404)
-        #Validate that schema_d can now be posted anew.
-        #Note that a new version will be created, as the old one was invalid at
-        #startup and it was not in canonical form. Thus it cannot be found and a
-        #new version is created.
-        test_subjects_subject_versions("schema_d",
-                                       expected_id=16,
-                                       expected_successful=True)
-        #After pushing, schema_d is not stored by its canonical form
-        import_schemas["schema_d"]["sanitized"] = schema_d_proto_sanitized_def
-        test_subjects_subject_versions_version("schema_d",
-                                               expected_successful=True)
-        test_subjects_subject_versions_version_schema("schema_d",
-                                                      expected_successful=True)
-
-        #Add schema_g_v5. schema_g_v5 is valid, but schema_g_v4 and schema_g_v2 are not,
-        #so compatibility checks failed due to them.
-        test_subjects_subject_versions("schema_g_v5",
-                                       expected_successful=False)
-
-        #Fix problematic schemas by adding missing dependency for g_v2 and deleting g_v4.
-        test_subjects_subject_versions("schema_f_v2",
-                                       expected_id=17,
-                                       expected_successful=True)
-
-        result_raw = self.sr_client.delete_subject_version("schema_g",
-                                                           version=4)
-        assert_request_code(result_raw, requests.codes.ok,
-                            "DELETE subjects/schema_g/versions/4")
-
-        test_subjects_subject_versions("schema_g_v5",
-                                       expected_id=18,
-                                       expected_successful=True)
-
-        #Fix problematic dependency chain by adding base schema.
-        test_subjects_subject_versions("schema_h",
-                                       expected_id=19,
-                                       expected_successful=True)
-        test_schemas_ids_id(12, expected_successful=True)
-        test_schemas_ids_id(13, expected_successful=True)
-        test_schemas_ids_id(14, expected_successful=True)
 
     @cluster(num_nodes=3)
     def test_json(self):
@@ -4369,6 +4025,587 @@ class SchemaRegistryModeMutableTest(SchemaRegistryEndpoints):
         self.assert_equal(result_raw.json()["id"], 8)
         self.assert_equal(expected_ver_to_id[1], 4)
         expected_ver_to_id[1] = 8
+
+        self.logger.debug(
+            f"Finally, sanity check the expected set of schemas - expecting: {expected_ver_to_id=}"
+        )
+        rpk = self._get_rpk_tools()
+        resp = rpk.list_schemas([sub1])
+        got_ver_to_id = {int(elem["version"]): elem["id"] for elem in resp}
+        self.assert_equal(expected_ver_to_id, got_ver_to_id)
+
+    @cluster(num_nodes=3)
+    def test_schema_id_smaller_than_one(self):
+        sub = "test-subject-1"
+
+        self.logger.debug(
+            f"Enable IMPORT mode to allow posting with specific ids")
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        self.logger.debug("Post a schema with id=0 - expect schema_id=0")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            sub, data=json.dumps({
+                "id": 0,
+                "schema": schema1_def
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 0)
+
+        self.logger.debug("Post another schema with id=-1 - should fail")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            sub, data=json.dumps({
+                "id": -1,
+                "schema": schema2_def
+            }))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug("Enable READWRITE mode")
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "READWRITE"}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "READWRITE")
+
+        self.logger.debug(
+            "Post another schema with id=-1 (now in r/w mode) - should succeed"
+        )
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            sub, data=json.dumps({
+                "id": -1,
+                "schema": schema2_def
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 1)
+
+    @cluster(num_nodes=3)
+    def test_schema_id_exhausted(self):
+        sub = "test-subject-1"
+
+        self.logger.debug(
+            f"Enable IMPORT mode to allow posting specific versions")
+        result_raw = self.sr_client.set_mode(
+            data=json.dumps({"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        self.logger.debug("Post a schema with INT_MAX version")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            sub,
+            data=json.dumps({
+                "id": 1,
+                "version": 2147483647,
+                "schema": schema1_def
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 1)
+
+        self.logger.debug(
+            "Post another schema - expect version exhausted error")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            sub, data=json.dumps({
+                "id": 2,
+                "schema": schema2_def
+            }))
+        self.assert_equal(result_raw.status_code, 500)
+        self.assert_equal(result_raw.json()["message"],
+                          f"Versions exhausted for subject {sub}")
+
+    @cluster(num_nodes=3)
+    def test_imported_schemas_with_dependencies_issues(self):
+        """
+        Verify SR behavior when importing schemas in the wrong order and missing dependencies
+        """
+        def assert_request_code(raw, expected, endpoint):
+            assert raw.status_code == expected, \
+                    f"Expected {expected} but got {raw.status_code}, "\
+                    f"for request '{endpoint}' with content: {raw.content}"
+
+        #Test setup: Simulate import of schemas by writting directly into the _schemas topic
+        #Note that trying to commit these schemas in this order, using POST subjects/{subject}/version
+        #would fail as schemas 'schema_b' and 'schema_d' have unmet dependencies
+        schemas = [
+            #schema_a has no dependencies
+            import_schemas["schema_a"],
+            #schema_c is dependent on schema_b, which is loaded later on
+            import_schemas["schema_c"],
+            #schema_b is dependent on schema_a, which is already loaded
+            import_schemas["schema_b"],
+            #schema_d is dependent on schema_e, which is not currently present
+            import_schemas["schema_d"],
+
+            #all schema_f are valid
+            import_schemas["schema_f_v1"],
+            import_schemas["schema_f_v3"],
+            import_schemas["schema_f_v5"],
+            #all schema_g depend on the equivalent schema f version
+            import_schemas["schema_g_v1"],
+            #Missing dependency - schema_f_v2
+            import_schemas["schema_g_v2"],
+            import_schemas["schema_g_v3"],
+            #Missing dependency - schema_f_v4
+            import_schemas["schema_g_v4"],
+
+            #dependency error deep in dep chain
+            #schema_i depends on schema_h which is missing
+            import_schemas["schema_i"],
+            #schema_j depends on schema_i
+            import_schemas["schema_j"],
+            #schema_k depends on schema_j
+            import_schemas["schema_k"],
+        ]
+
+        self._push_to_schemas_topic(schemas)
+
+        valid_entries = [
+            (1, "schema_a"),
+            (2, "schema_c"),
+            (3, "schema_b"),
+            (5, "schema_f_v1"),
+            (6, "schema_f_v3"),
+            (7, "schema_f_v5"),
+            (8, "schema_g_v1"),
+            (10, "schema_g_v3"),
+        ]
+        #These are schemas that having missing dependencies at startup
+        invalid_entries = [
+            (4, "schema_d"),
+            (9, "schema_g_v2"),
+            (11, "schema_g_v4"),
+            (12, "schema_i"),
+            (13, "schema_j"),
+            (14, "schema_k"),
+        ]
+
+        #Test /schemas/ids/{id}
+        def test_schemas_ids_id(id, expected_successful):
+            endpoint = f"GET schemas/ids/{id}"
+            result_raw = self.sr_client.request("GET",
+                                                f"schemas/ids/{id}",
+                                                headers=HTTP_GET_HEADERS)
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+
+                result = result_raw.json()["schema"].strip()
+                expected_result = schemas[id - 1]["sanitized"].strip()
+                #Currently, schemas are not sanitized through this endpoint
+                assert result == expected_result, \
+                        f"Expected:\n{result}\nGot:\n{expected_result}\n"\
+                        f"for request 'GET schemas/ids/{id}"
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        #All schemas should be retrievable by id.
+        for id, _ in valid_entries + invalid_entries:
+            test_schemas_ids_id(id, expected_successful=True)
+
+        #Test /schemas/ids/{id}/versions
+        def test_schemas_ids_id_versions(id, expected_successful):
+            endpoint = f"GET schemas/ids/{id}/versions"
+            result_raw = self.sr_client.request("GET",
+                                                f"schemas/ids/{id}/versions",
+                                                headers=HTTP_GET_HEADERS)
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        #Versions should be retrievable for all ids.
+        for id, _ in valid_entries + invalid_entries:
+            test_schemas_ids_id_versions(id, expected_successful=True)
+
+        #Test /schemas/ids/{id}/subjects
+        def test_schemas_ids_id_subjects(id, expected_successful):
+            endpoint = f"GET schemas/ids/{id}/subjects",
+            result_raw = self.sr_client.request("GET",
+                                                f"schemas/ids/{id}/subjects",
+                                                headers=HTTP_GET_HEADERS)
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        #Subjects should be retrievable for all ids.
+        for id, _ in valid_entries + invalid_entries:
+            test_schemas_ids_id_subjects(id, expected_successful=True)
+
+        #Test /subjects
+        result_raw = self.sr_client.request("GET",
+                                            f"subjects",
+                                            headers=HTTP_GET_HEADERS)
+        assert_request_code(result_raw, requests.codes.ok, "GET subjects")
+
+        #All subjects should be present, regardless if their schemas are valid or not
+        expected_subjects = set([
+            "schema_a", "schema_b", "schema_c", "schema_d", "schema_f",
+            "schema_g", "schema_i", "schema_j", "schema_k"
+        ])
+        subjects = set(result_raw.json())
+        assert subjects == expected_subjects, \
+            f"Expected {expected_subjects} but got {subjects}, "\
+            "for request 'GET subjects'"
+
+        def test_subjects_subject(entry, expected_code):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            schema_def = lookup_schema["schema"]
+            version = lookup_schema["version"]
+            references = lookup_schema[
+                "references"] if "references" in lookup_schema else []
+            result_raw = self.sr_client.post_subjects_subject(subject=subject,
+                                                              data=json.dumps({
+                                                                  "schema":
+                                                                  schema_def,
+                                                                  "schemaType":
+                                                                  "PROTOBUF",
+                                                                  "references":
+                                                                  references
+                                                              }))
+            endpoint = f"POST subjects/{subject}",
+            assert_request_code(result_raw, expected_code, endpoint)
+            if expected_code == requests.codes.ok:
+                result = result_raw.json()
+                assert result["version"] == version, \
+                        f"Expected version {version} but got {result['version']}, "\
+                        f"for request 'POST subjects/{subject}'"
+
+        #Test /subjects/{subject}
+        for _, s in valid_entries:
+            test_subjects_subject(s, expected_code=requests.codes.ok)
+
+        #These schemas should fail, as the *input* schema has an unsatisfied dependency
+        for _, s in invalid_entries:
+            test_subjects_subject(s, expected_code=422)
+
+        #Test /subjects/{subject}/versions/{version}
+        def test_subjects_subject_versions_version(entry, expected_successful):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            version = lookup_schema["version"]
+            expected_schema = lookup_schema["sanitized"].strip()
+            #references = lookup_schema["references"] if "references" in lookup_schema else []
+            result_raw = self.sr_client.get_subjects_subject_versions_version(
+                subject=subject, version=version)
+            endpoint = f"GET subjects/{subject}/versions/{version}"
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+
+                result = result_raw.json()["schema"].strip()
+                assert result == expected_schema, \
+                        f"Expected:\n{expected_schema}\nGot:\n{result}\nfor request "\
+                        f"'GET subjects/{subject}/versions/{version}'"
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        #All schemas should be retrievable through subject/version.
+        for _, s in valid_entries + invalid_entries:
+            test_subjects_subject_versions_version(s, expected_successful=True)
+
+        #Test /subjects/{subject}/versions/{version}/schema
+        def test_subjects_subject_versions_version_schema(
+                entry, expected_successful):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            version = lookup_schema["version"]
+            schema_def = lookup_schema["sanitized"].strip()
+            result_raw = self.sr_client.request(
+                "GET",
+                f"subjects/{subject}/versions/{version}/schema",
+                headers=HTTP_GET_HEADERS)
+
+            endpoint = f"GET subjects/{subject}/versions/{version}/schema"
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+
+                result = result_raw.content.decode().strip()
+                assert result == schema_def, \
+                        f"Expected:\n{schema_def}\nGot:\n{result}\n"\
+                        f"for request 'GET subjects/{subject}/versions/{version}/schema'"
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        #All schemas should be retrievable through subject/version.
+        for _, s in valid_entries + invalid_entries:
+            test_subjects_subject_versions_version_schema(
+                s, expected_successful=True)
+
+        #Test /subjects/{subject}/versions/{version}/referencedby
+        def test_referenced_by(entry, expected_result):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            version = lookup_schema["version"]
+            result_raw = self.sr_client.get_subjects_subject_versions_version_referenced_by(
+                subject, version)
+
+            endpoint = f"GET subjects/{subject}/versions/{version}/referencedby"
+            assert_request_code(result_raw, requests.codes.ok, endpoint)
+            result = result_raw.json()
+            assert result == expected_result, \
+                f"Expected {expected_result} but got {result}, " \
+                f"for request 'GET subjects/{subject}/versions/{version}/referencedby'"
+
+        test_referenced_by("schema_a", [3])
+        test_referenced_by("schema_b", [2])
+        test_referenced_by("schema_c", [])
+        test_referenced_by("schema_d", [])
+        test_referenced_by("schema_f_v1", [8])
+        test_referenced_by("schema_f_v3", [10])
+        test_referenced_by("schema_f_v5", [])
+        test_referenced_by("schema_g_v1", [])
+        test_referenced_by("schema_g_v2", [])
+        test_referenced_by("schema_g_v3", [])
+        test_referenced_by("schema_g_v4", [])
+
+        #This is the last of the endpoint to be checked, as it will change the state
+        #Test /subjects/{subject}/versions
+        def test_subjects_subject_versions(entry,
+                                           expected_successful,
+                                           expected_id=None,
+                                           include_id=False):
+            lookup_schema = import_schemas[entry]
+            subject = lookup_schema["subject"]
+            schema_def = lookup_schema["schema"]
+            references = lookup_schema[
+                "references"] if "references" in lookup_schema else []
+            result_raw = self.sr_client.post_subjects_subject_versions(
+                subject=subject,
+                data=json.dumps({
+                    "schema": schema_def,
+                    "schemaType": "PROTOBUF",
+                    "references": references,
+                    "version": lookup_schema["version"],
+                    "id": expected_id if include_id else -1
+                }))
+            endpoint = f"POST subjects/{subject}/versions"
+            if expected_successful:
+                assert_request_code(result_raw, requests.codes.ok, endpoint)
+                result = result_raw.json()
+                assert result["id"] == expected_id, \
+                        f"Expected id {expected_id} but got {result['id']}, "\
+                        f"for request 'POST subjects/{subject}/versions'"
+            else:
+                assert_request_code(result_raw, 422, endpoint)
+
+        for id, s in valid_entries:
+            test_subjects_subject_versions(s,
+                                           expected_id=id,
+                                           expected_successful=True)
+
+        #These schemas should fail, as the *input* schema has an unsatisfied dependencies
+        for id, s in invalid_entries:
+            test_subjects_subject_versions(s,
+                                           expected_id=id,
+                                           expected_successful=False)
+
+        #Insert missing dependency, schema_e, and retry the failed schema_d requests
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject="schema_e",
+            data=json.dumps({
+                "schema": schema_e_proto_def,
+                "schemaType": "PROTOBUF"
+            }))
+        assert_request_code(result_raw, requests.codes.ok,
+                            "POST subjects/schema_e/versions")
+
+        #Validate that schema_d is now accepted as a referee
+        test_referenced_by("schema_e", [4])
+
+        test_schemas_ids_id(4, expected_successful=True)
+        test_schemas_ids_id_versions(4, expected_successful=True)
+        test_schemas_ids_id_subjects(4, expected_successful=True)
+        #Lookup still fails cause schema_d is stored not in it's canonical form
+        test_subjects_subject("schema_d", expected_code=404)
+
+        # Force enable IMPORT mode to allow re-posting a specific versions of schemas
+        result_raw = self.sr_client.set_mode(force=True,
+                                             data=json.dumps(
+                                                 {"mode": "IMPORT"}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+        #Validate that schema_d can now be posted anew.
+        #Note that a new version will be created, as the old one was invalid at
+        #startup and it was not in canonical form. Thus it cannot be found and a
+        #new version is created.
+        test_subjects_subject_versions("schema_d",
+                                       expected_id=16,
+                                       expected_successful=True,
+                                       include_id=True)
+        #After pushing, schema_d is not stored by its canonical form
+        import_schemas["schema_d"]["sanitized"] = schema_d_proto_sanitized_def
+        test_subjects_subject_versions_version("schema_d",
+                                               expected_successful=True)
+        test_subjects_subject_versions_version_schema("schema_d",
+                                                      expected_successful=True)
+
+        #Add schema_g_v5. schema_g_v5 is valid, but schema_g_v4 and schema_g_v2 are not,
+        #so compatibility checks failed due to them.
+        test_subjects_subject_versions("schema_g_v5",
+                                       expected_successful=False)
+
+        #Fix problematic schemas by adding missing dependency for g_v2 and deleting g_v4.
+        test_subjects_subject_versions("schema_f_v2",
+                                       expected_id=17,
+                                       expected_successful=True,
+                                       include_id=True)
+
+        result_raw = self.sr_client.delete_subject_version("schema_g",
+                                                           version=4)
+        assert_request_code(result_raw, requests.codes.ok,
+                            "DELETE subjects/schema_g/versions/4")
+
+        test_subjects_subject_versions("schema_g_v5",
+                                       expected_id=18,
+                                       expected_successful=True,
+                                       include_id=True)
+
+        #Fix problematic dependency chain by adding base schema.
+        test_subjects_subject_versions("schema_h",
+                                       expected_id=19,
+                                       expected_successful=True,
+                                       include_id=True)
+        test_schemas_ids_id(12, expected_successful=True)
+        test_schemas_ids_id(13, expected_successful=True)
+        test_schemas_ids_id(14, expected_successful=True)
+
+    @cluster(num_nodes=3)
+    @matrix(subject_scope=[False, True])
+    def test_readwrite_mode_id_behaviour(self, subject_scope):
+        """Test expected READWRITE mode behaviour when the id is specified when trying to register a schema"""
+        sub1 = "test-subject-1"
+        expected_ver_to_id = {}
+
+        if subject_scope:
+            self.logger.debug(f"Configure READWRITE mode for subject {sub1}")
+            # Overwrite a global-scoped IMPORT-mode to test that subject-level overwriting works
+            result_raw = self.sr_client.set_mode(
+                data=json.dumps({"mode": "IMPORT"}))
+            self.assert_equal(result_raw.status_code, 200)
+            self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+            result_raw = self.sr_client.set_mode_subject(
+                subject=sub1, data=json.dumps({"mode": "READWRITE"}))
+            self.assert_equal(result_raw.status_code, 200)
+            self.assert_equal(result_raw.json()["mode"], "READWRITE")
+        else:
+            self.logger.debug(f"Configure READWRITE mode for subject {sub1}")
+            # Noop
+
+        self.logger.debug(
+            "Post a schema for the first time while specifying an id - should fail"
+        )
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({
+                "schema": schema1_def,
+                "id": 1
+            }))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug("Post a schema without an id - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({"schema": schema1_def}))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 1)
+        expected_ver_to_id[1] = 1
+
+        self.logger.debug(
+            "Post the schema again with the same id - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({
+                "schema": schema1_def,
+                "id": 1
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 1)
+
+        self.logger.debug(
+            "Post the schema again with a different id - should fail")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1, data=json.dumps({
+                "schema": schema1_def,
+                "id": 2
+            }))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42205)
+
+        self.logger.debug(
+            f"Finally, sanity check the expected set of schemas - expecting: {expected_ver_to_id=}"
+        )
+        rpk = self._get_rpk_tools()
+        resp = rpk.list_schemas([sub1])
+        got_ver_to_id = {int(elem["version"]): elem["id"] for elem in resp}
+        self.assert_equal(expected_ver_to_id, got_ver_to_id)
+
+    @cluster(num_nodes=3)
+    @matrix(subject_scope=[False, True])
+    def test_readwrite_mode_version_behaviour(self, subject_scope):
+        """Test expected READWRITE mode behaviour when the version is specified when trying to register a schema"""
+        sub1 = "test-subject-1"
+        expected_ver_to_id = {}
+
+        if subject_scope:
+            self.logger.debug(f"Configure READWRITE mode for subject {sub1}")
+            # Overwrite a global-scoped IMPORT-mode to test that subject-level overwriting works
+            result_raw = self.sr_client.set_mode(
+                data=json.dumps({"mode": "IMPORT"}))
+            self.assert_equal(result_raw.status_code, 200)
+            self.assert_equal(result_raw.json()["mode"], "IMPORT")
+
+            result_raw = self.sr_client.set_mode_subject(
+                subject=sub1, data=json.dumps({"mode": "READWRITE"}))
+            self.assert_equal(result_raw.status_code, 200)
+            self.assert_equal(result_raw.json()["mode"], "READWRITE")
+        else:
+            self.logger.debug(f"Configure READWRITE mode for subject {sub1}")
+            # Noop
+
+        self.logger.debug(
+            "Post a schema with an arbitrary version - should fail")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1,
+            data=json.dumps({
+                "schema": schema1_def,
+                "version": 7
+            }))
+        self.assert_equal(result_raw.status_code, 422)
+        self.assert_equal(result_raw.json()["error_code"], 42201)
+
+        self.logger.debug(
+            "Post a schema with a max + 1 version - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1,
+            data=json.dumps({
+                "schema": schema1_def,
+                "version": 1
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 1)
+        expected_ver_to_id[1] = 1
+
+        self.logger.debug(
+            "Post the schema again with the same version - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1,
+            data=json.dumps({
+                "schema": schema1_def,
+                "version": 1
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 1)
+
+        self.logger.debug(
+            "Post the schema again with an arbitrary version - should succeed")
+        result_raw = self.sr_client.post_subjects_subject_versions(
+            subject=sub1,
+            data=json.dumps({
+                "schema": schema1_def,
+                "version": 9
+            }))
+        self.assert_equal(result_raw.status_code, 200)
+        self.assert_equal(result_raw.json()["id"], 1)
 
         self.logger.debug(
             f"Finally, sanity check the expected set of schemas - expecting: {expected_ver_to_id=}"

@@ -100,42 +100,58 @@ public:
 private:
     ss::future<> do_topic_reconciliation_loop() {
         while (!_as.abort_requested()) {
-            bool aborted = co_await loop_sleep();
+            co_await ensure_domains_topic();
+
+            bool aborted = co_await loop_sleep(10min);
             if (aborted) {
                 // If we were aborted, we exit the loop.
                 co_return;
             }
+        }
+    }
+
+    ss::future<> ensure_domains_topic() {
+        auto backoff = make_exponential_backoff_policy<ss::lowres_clock>(
+          1s, 10s);
+        while (!_as.abort_requested()) {
             if (_controller->get_topics_state().local().contains(
                   model::l1_metastore_nt)) {
-                co_await ensure_domains_replication_factor();
+                if (co_await ensure_domains_replication_factor()) {
+                    break;
+                }
             } else {
-                co_await create_domains_topic();
+                if (co_await create_domains_topic()) {
+                    break;
+                }
+            }
+            backoff.next_backoff();
+            if (co_await loop_sleep(backoff.current_backoff_duration())) {
+                break;
             }
         }
     }
 
-    ss::future<bool> loop_sleep() {
-        constexpr auto interval = 10min;
-        simple_time_jitter<ss::lowres_clock> jitter(interval);
+    ss::future<bool> loop_sleep(std::chrono::milliseconds duration) {
+        simple_time_jitter<ss::lowres_clock> jitter(duration);
         try {
             co_await ss::sleep_abortable<ss::lowres_clock>(
               jitter.next_duration(), _as);
-            co_return true;
+            co_return false;
         } catch (const ss::sleep_aborted& ex) {
             // do nothing, the caller will handle exiting properly.
             std::ignore = ex;
-            co_return false;
+            co_return true;
         }
     }
 
-    ss::future<> ensure_domains_replication_factor() {
+    ss::future<bool> ensure_domains_replication_factor() {
         auto tp_ns = model::l1_metastore_nt;
         auto rf = _controller->get_topics_state()
                     .local()
                     .get_topic_replication_factor(tp_ns);
         if (!rf) {
             vlog(cd_log.warn, "unable to find {} replication factor", tp_ns);
-            co_return;
+            co_return false;
         }
         auto target_rf = cluster::replication_factor(
           _controller->internal_topic_replication());
@@ -150,9 +166,11 @@ private:
               = cluster::incremental_update_operation::set;
             update.custom_properties.replication_factor.value = target_rf;
             co_await update_topic(std::move(update));
+            co_return false;
         } else {
             vlog(
               cd_log.trace, "replication factor for {} is already set", tp_ns);
+            co_return true;
         }
     }
 
@@ -215,7 +233,7 @@ private:
                            config::shard_local_cfg().create_topic_timeout_ms());
             vassert(res.size() == 1, "expected a single result");
             ec = res[0].ec;
-            co_return true;
+            // fall through to handle ec value
         } catch (const std::exception& ex) {
             vlog(cd_log.warn, "unable to create topic {}: {}", tp_ns, ex);
             ec = cluster::errc::topic_operation_error;

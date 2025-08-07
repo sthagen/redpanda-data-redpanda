@@ -9,6 +9,8 @@
  */
 #pragma once
 
+#include <fmt/format.h>
+
 namespace experimental::cloud_topics {
 // Frontend error codes
 enum class frontend_errc {
@@ -18,3 +20,10 @@ enum class frontend_errc {
     offset_out_of_range,
 };
 } // namespace experimental::cloud_topics
+template<>
+struct fmt::formatter<experimental::cloud_topics::frontend_errc>
+  : fmt::formatter<std::string_view> {
+    auto format(
+      const experimental::cloud_topics::frontend_errc&,
+      fmt::format_context& ctx) const -> decltype(ctx.out());
+};

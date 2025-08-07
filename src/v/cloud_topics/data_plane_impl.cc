@@ -17,11 +17,10 @@
 #include "cloud_topics/level_zero/batcher/batcher.h"
 #include "cloud_topics/level_zero/read_pipeline.h"
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
-#include "cloud_topics/level_zero/reconciler/reconciler.h"
 #include "cloud_topics/level_zero/throttler/throttler.h"
 #include "cloud_topics/level_zero/write_pipeline.h"
 #include "model/fundamental.h"
-#include "storage/types.h"
+#include "storage/api.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
@@ -35,14 +34,12 @@ class impl
   , public ss::enable_shared_from_this<impl> {
 public:
     impl(
-      seastar::sharded<cluster::partition_manager>* pm,
       seastar::sharded<cloud_io::remote>* io,
       seastar::sharded<cloud_storage::cache>* cache,
       cloud_storage_clients::bucket_name bucket,
       seastar::sharded<storage::api>* storage_api,
       std::unique_ptr<cluster_services> cluster_services)
       : _cluster_services(std::move(cluster_services))
-      , _reconciler(std::make_unique<reconciler::reconciler>(pm, io, bucket))
       , _write_pipeline(std::make_unique<l0::write_pipeline<>>())
       , _throttler(std::make_unique<throttler<>>(
           10_MiB /*TODO: fixme*/,
@@ -64,8 +61,6 @@ public:
     seastar::future<> start() override {
         // Batcher
         co_await _batch_cache->start();
-        // Reconciler
-        co_await _reconciler->start();
         // Write path
         co_await _throttler->start();
         co_await _batcher->start();
@@ -80,8 +75,6 @@ public:
         co_await _write_pipeline->stop();
         co_await _batcher->stop();
         co_await _throttler->stop();
-        //  Reconciler
-        co_await _reconciler->stop();
         // Batcher
         co_await _batch_cache->stop();
     }
@@ -121,7 +114,6 @@ public:
 
 private:
     std::unique_ptr<cluster_services> _cluster_services;
-    std::unique_ptr<reconciler::reconciler> _reconciler;
     // Write path
     std::unique_ptr<l0::write_pipeline<>> _write_pipeline;
     std::unique_ptr<throttler<>> _throttler;
@@ -134,14 +126,12 @@ private:
 };
 
 ss::shared_ptr<data_plane_api> make_data_plane(
-  ss::sharded<cluster::partition_manager>* partition_manager,
   ss::sharded<cloud_io::remote>* remote,
   ss::sharded<cloud_storage::cache>* cache,
   cloud_storage_clients::bucket_name bucket,
   ss::sharded<storage::api>* log_manager,
   std::unique_ptr<cluster_services> cluster_services) {
     return ss::make_shared<impl>(
-      partition_manager,
       remote,
       cache,
       std::move(bucket),

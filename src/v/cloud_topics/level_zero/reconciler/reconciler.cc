@@ -12,12 +12,12 @@
 
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
+#include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_one/common/object_utils.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
 #include "cluster/partition.h"
-#include "kafka/data/partition_proxy.h"
 #include "kafka/utils/txn_reader.h"
 #include "model/namespace.h"
 #include "random/generators.h"
@@ -36,6 +36,27 @@ bool is_cloud_partition(
   const ss::lw_shared_ptr<cluster::partition>& partition) {
     return partition->get_ntp_config().cloud_topic_enabled();
 }
+
+class aborted_transaction_tracker_impl
+  : public kafka::aborted_transaction_tracker {
+public:
+    aborted_transaction_tracker_impl(
+      experimental::cloud_topics::frontend* fe,
+      ss::lw_shared_ptr<const storage::offset_translator_state> translator)
+      : _fe(fe)
+      , _translator(std::move(translator)) {}
+
+    ss::future<std::vector<model::tx_range>>
+    compute_aborted_transactions(model::offset base, model::offset max) final {
+        return _fe->aborted_transactions(
+          model::offset_cast(base), model::offset_cast(max), _translator);
+    }
+
+private:
+    experimental::cloud_topics::frontend* _fe;
+    ss::lw_shared_ptr<const storage::offset_translator_state> _translator;
+};
+
 } // namespace
 
 namespace experimental::cloud_topics::reconciler {
@@ -43,9 +64,11 @@ namespace experimental::cloud_topics::reconciler {
 reconciler::reconciler(
   ss::sharded<cluster::partition_manager>* pm,
   ss::sharded<cloud_io::remote>* cloud_io,
+  ss::shared_ptr<data_plane_api> data_plane,
   std::optional<cloud_storage_clients::bucket_name> bucket)
   : _partition_manager(pm)
-  , _cloud_io(cloud_io) {
+  , _cloud_io(cloud_io)
+  , _data_plane(std::move(data_plane)) {
     if (bucket.has_value()) {
         _bucket = std::move(bucket.value());
     } else {
@@ -246,50 +269,53 @@ ss::future<> reconciler::commit_object(
 
 ss::future<model::record_batch_reader>
 reconciler::make_reader(const attached_partition& partition, size_t max_bytes) {
-    auto proxy = kafka::make_partition_proxy(partition->partition);
+    auto& cluster_partition = partition->partition;
+    frontend fe(partition->partition, _data_plane);
 
-    auto effective_start = co_await proxy.sync_effective_start();
-    if (effective_start.has_error()) {
+    auto effective_start = co_await fe.sync_effective_start(5s);
+    if (!effective_start.has_value()) {
         vlog(
           lg.info,
           "Error querying partition start offset ({}): {}",
-          proxy.ntp(),
+          cluster_partition->ntp(),
           effective_start.error());
         co_return model::make_empty_record_batch_reader();
     }
 
     kafka::offset start_offset = std::max(
-      model::offset_cast(effective_start.value()), partition->lro);
+      effective_start.value(), partition->lro);
 
-    auto maybe_lso = proxy.last_stable_offset();
-    if (maybe_lso.has_error()) {
+    auto maybe_lso = fe.last_stable_offset();
+    if (!maybe_lso.has_value()) {
         vlog(
           lg.info,
           "Error querying partition LSO ({}): {}",
-          proxy.ntp(),
+          cluster_partition->ntp(),
           maybe_lso.error());
         co_return model::make_empty_record_batch_reader();
     }
 
     // It's possible for LSO to be 0, which in this case the previous offset
     // is model::offset::min(), this is the same as the kafka fetch path.
-    auto max_offset = kafka::prev_offset(model::offset_cast(maybe_lso.value()));
+    auto max_offset = kafka::prev_offset(maybe_lso.value());
 
     if (max_offset < start_offset) {
         co_return model::make_empty_record_batch_reader();
     }
 
-    auto reader = co_await proxy.make_reader(storage::log_reader_config(
-      kafka::offset_cast(start_offset),
-      kafka::offset_cast(max_offset),
-      0,
-      max_bytes,
-      std::nullopt,
-      std::nullopt,
-      _as));
+    auto reader = co_await fe.make_reader(
+      storage::log_reader_config(
+        kafka::offset_cast(start_offset),
+        kafka::offset_cast(max_offset),
+        0,
+        max_bytes,
+        std::nullopt,
+        std::nullopt,
+        _as),
+      /*debounce_deadline=*/std::nullopt);
 
-    auto tracker = kafka::aborted_transaction_tracker::create_default(
-      &proxy, std::move(reader.ot_state));
+    auto tracker = std::make_unique<aborted_transaction_tracker_impl>(
+      &fe, std::move(reader.ot_state));
 
     co_return model::make_record_batch_reader<kafka::read_committed_reader>(
       std::move(tracker), std::move(reader.reader));

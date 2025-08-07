@@ -38,7 +38,6 @@ namespace experimental::cloud_topics {
 class cluster_services;
 
 ss::shared_ptr<data_plane_api> make_data_plane(
-  seastar::sharded<cluster::partition_manager>*,
   seastar::sharded<cloud_io::remote>*,
   seastar::sharded<cloud_storage::cache>*,
   cloud_storage_clients::bucket_name bucket,

@@ -203,6 +203,7 @@ public:
     kafka::server_app _kafka_server;
     ss::sharded<rpc::connection_cache> _connection_cache;
     ss::sharded<kafka::group_manager> _group_manager;
+    std::unique_ptr<experimental::cloud_topics::app> cloud_topics_app;
     ss::sharded<experimental::cloud_topics::app> cloud_topics_api;
     ss::sharded<experimental::cloud_topics::l1::frontend> l1_metastore_fe;
 

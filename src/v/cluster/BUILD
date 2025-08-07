@@ -683,6 +683,7 @@ redpanda_cc_library(
         "//src/v/cloud_storage:topic_mount_manifest_path",
         "//src/v/cloud_storage:types",
         "//src/v/cloud_storage_clients",
+        "//src/v/cloud_topics:state_accessors",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm_api",
         "//src/v/cluster_link/model",

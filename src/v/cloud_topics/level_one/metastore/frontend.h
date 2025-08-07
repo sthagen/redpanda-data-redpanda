@@ -51,7 +51,7 @@ public:
       ss::sharded<cluster::partition_leaders_table>*,
       ss::sharded<cluster::shard_table>*,
       ss::sharded<::rpc::connection_cache>*,
-      domain_supervisor*);
+      ss::sharded<domain_supervisor>*);
 
     ss::future<> stop();
 

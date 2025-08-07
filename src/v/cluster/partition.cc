@@ -53,9 +53,9 @@ partition::partition(
   ss::sharded<features::feature_table>& feature_table,
   ss::sharded<archival::upload_housekeeping_service>& upload_hks,
   std::optional<cloud_storage_clients::bucket_name> read_replica_bucket,
-  ss::sharded<experimental::cloud_topics::app>& ct_app)
+  ss::sharded<experimental::cloud_topics::state_accessors>* ct_state)
   : _raft(std::move(r))
-  , _cloud_topics_app(ct_app)
+  , _cloud_topics_state(ct_state)
   , _probe(std::make_unique<replicated_partition_probe>(*this))
   , _feature_table(feature_table)
   , _archival_conf(std::move(archival_conf))
@@ -1856,9 +1856,9 @@ ss::future<result<ssx::rwlock_unit>> partition::hold_writes_enabled() {
     co_return *std::move(maybe_units);
 }
 
-ss::sharded<experimental::cloud_topics::app>&
-partition::get_cloud_topics_data_api() noexcept {
-    return _cloud_topics_app;
+ss::sharded<experimental::cloud_topics::state_accessors>*
+partition::get_cloud_topics_state() noexcept {
+    return _cloud_topics_state;
 }
 
 } // namespace cluster

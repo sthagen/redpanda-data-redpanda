@@ -32,7 +32,7 @@
 
 namespace experimental::cloud_topics {
 class ctp_stm_api;
-class app;
+class state_accessors;
 }; // namespace experimental::cloud_topics
 
 namespace cluster {
@@ -58,7 +58,7 @@ public:
       ss::sharded<features::feature_table>&,
       ss::sharded<archival::upload_housekeeping_service>&,
       std::optional<cloud_storage_clients::bucket_name> read_replica_bucket,
-      ss::sharded<experimental::cloud_topics::app>& ct_app);
+      ss::sharded<experimental::cloud_topics::state_accessors>* ct_state);
 
     ~partition() = default;
 
@@ -403,8 +403,8 @@ public:
 
     // Returns a pointer to the data plane api if cloud topics is enabled for
     // this partition. Otherwise, nullopt is returned
-    ss::sharded<experimental::cloud_topics::app>&
-    get_cloud_topics_data_api() noexcept;
+    ss::sharded<experimental::cloud_topics::state_accessors>*
+    get_cloud_topics_state() noexcept;
 
 private:
     ss::future<>
@@ -432,7 +432,8 @@ private:
     ss::shared_ptr<archival_metadata_stm> _archival_meta_stm;
     ss::shared_ptr<partition_properties_stm> _partition_properties_stm;
     ss::shared_ptr<experimental::cloud_topics::ctp_stm_api> _ctp_stm_api;
-    ss::sharded<experimental::cloud_topics::app>& _cloud_topics_app;
+    ss::sharded<experimental::cloud_topics::state_accessors>*
+      _cloud_topics_state;
     ss::abort_source _as;
     partition_probe _probe;
     ss::sharded<features::feature_table>& _feature_table;

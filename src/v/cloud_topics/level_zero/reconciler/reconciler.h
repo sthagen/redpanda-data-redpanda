@@ -14,6 +14,7 @@
 #include "base/seastarx.h"
 #include "cloud_io/remote.h"
 #include "cloud_storage_clients/types.h"
+#include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
 #include "cluster/notification.h"
 #include "cluster/partition.h"
@@ -39,6 +40,7 @@ public:
     reconciler(
       ss::sharded<cluster::partition_manager>*,
       ss::sharded<cloud_io::remote>*,
+      ss::shared_ptr<data_plane_api>,
       std::optional<cloud_storage_clients::bucket_name> = std::nullopt);
 
     reconciler(const reconciler&) = delete;
@@ -148,6 +150,7 @@ private:
 private:
     ss::sharded<cluster::partition_manager>* _partition_manager;
     ss::sharded<cloud_io::remote>* _cloud_io;
+    ss::shared_ptr<experimental::cloud_topics::data_plane_api> _data_plane;
     cloud_storage_clients::bucket_name _bucket;
     ss::gate _gate;
     ss::abort_source _as;

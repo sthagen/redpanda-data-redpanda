@@ -10,21 +10,31 @@
 
 #pragma once
 
-#include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_one/domain/domain_supervisor.h"
+#include "cloud_topics/level_one/metastore/frontend.h"
+#include "cloud_topics/level_zero/reconciler/reconciler.h"
+#include "cloud_topics/state_accessors.h"
+#include "ssx/sharded_service_container.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/sharded.hh>
 
+namespace cloud_io {
+class remote;
+} // namespace cloud_io
+namespace cloud_storage {
+class cache;
+} // namespace cloud_storage
+namespace storage {
+class api;
+} // namespace storage
+
 namespace experimental::cloud_topics {
 
-// Simple container to use with seastar::sharded.
-// The seastar::sharded wants to know the size of the object at compile time.
-class app {
+class app : public ssx::sharded_service_container {
 public:
-    explicit app(
-      ss::shared_ptr<data_plane_api>, std::unique_ptr<l1::domain_supervisor>);
+    explicit app();
 
     app(const app&) = delete;
     app& operator=(const app&) = delete;
@@ -32,17 +42,34 @@ public:
     app& operator=(app&&) noexcept = delete;
     ~app() = default;
 
-    seastar::future<> start();
-    seastar::future<> stop();
+    ss::future<> construct(
+      model::node_id,
+      cluster::controller*,
+      ss::sharded<cluster::partition_manager>*,
+      ss::sharded<cluster::partition_leaders_table>*,
+      ss::sharded<cluster::shard_table>*,
+      ss::sharded<cloud_io::remote>*,
+      ss::sharded<cloud_storage::cache>*,
+      ss::sharded<cluster::metadata_cache>*,
+      ss::sharded<rpc::connection_cache>*,
+      cloud_storage_clients::bucket_name,
+      ss::sharded<storage::api>*);
 
-    ss::shared_ptr<data_plane_api> get_data_plane_api();
-    l1::domain_supervisor* get_l1_domain_supervisor();
+    ss::future<> start();
+
+    // Call stop on each sharded service and call their destructors.
+    ss::future<> stop();
+
+    ss::sharded<l1::frontend>* get_sharded_l1_metastore_fe();
+    ss::sharded<state_accessors>* get_state();
 
     // TODO: add 'get_control_plane_api' etc
 
 private:
-    ss::shared_ptr<data_plane_api> _data_plane;
-    std::unique_ptr<l1::domain_supervisor> _domain_supervisor;
+    ss::sharded<state_accessors> state;
+    ss::sharded<reconciler::reconciler> reconciler;
+    ss::sharded<l1::domain_supervisor> domain_supervisor;
+    ss::sharded<l1::frontend> l1_metastore_fe;
 };
 
 } // namespace experimental::cloud_topics

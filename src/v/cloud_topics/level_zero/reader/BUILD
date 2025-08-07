@@ -108,7 +108,6 @@ redpanda_cc_library(
         "reader.h",
     ],
     implementation_deps = [
-        "//src/v/cloud_topics:app",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics/level_zero/stm:placeholder",

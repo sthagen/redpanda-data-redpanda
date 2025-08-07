@@ -222,13 +222,13 @@ frontend::frontend(
   ss::sharded<cluster::partition_leaders_table>* leaders,
   ss::sharded<cluster::shard_table>* shards,
   ss::sharded<::rpc::connection_cache>* connections,
-  domain_supervisor* domain_supervisor)
+  ss::sharded<domain_supervisor>* domain_supervisor)
   : _self(self)
   , _metadata(metadata)
   , _leaders(leaders)
   , _shard_table(shards)
   , _connection_cache(connections)
-  , _domain_supervisor(domain_supervisor) {}
+  , _domain_supervisor(&domain_supervisor->local()) {}
 
 ss::future<> frontend::stop() { return _gate.close(); }
 
