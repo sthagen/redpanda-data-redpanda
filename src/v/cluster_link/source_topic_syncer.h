@@ -26,7 +26,7 @@ namespace cluster_link {
  * A separate reconciler task later processes these entries and applies them
  * to the destination cluster.
  */
-class source_topic_syncer : public task {
+class source_topic_syncer : public controller_locked_task {
 public:
     static constexpr auto task_name = "Source Topic Sync";
     static constexpr kafka::topic_authorized_operations required_permissions
@@ -38,8 +38,6 @@ public:
     source_topic_syncer& operator=(const source_topic_syncer&) = delete;
     source_topic_syncer& operator=(source_topic_syncer&&) = delete;
     ~source_topic_syncer() override = default;
-
-    is_locked_to_controller locked_to_controller() const noexcept override;
 
     void update_config(const model::metadata& config) override;
 

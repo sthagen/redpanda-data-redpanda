@@ -11,7 +11,9 @@
 
 #include "cluster_link/task.h"
 
+#include "cluster/controller_stm.h"
 #include "cluster_link/errc.h"
+#include "cluster_link/link.h"
 #include "cluster_link/logger.h"
 #include "ssx/future-util.h"
 
@@ -139,8 +141,8 @@ ss::future<result<void>> task::start() {
 ss::future<result<void>> task::stop() {
     vlog(logger().trace, "stop called");
     auto res = change_state(
-      model::task_state::not_running, ssx::sformat("{} has stopped", name()));
-    vassert(res.has_value(), "Failed to change state to not_running");
+      model::task_state::stopped, ssx::sformat("{} has stopped", name()));
+    vassert(res.has_value(), "Failed to change state to stopped");
     if (_task_runner) {
         co_await _task_runner->stop();
         _task_runner.reset();
@@ -159,7 +161,49 @@ ss::future<result<void>> task::pause() {
     co_return outcome::success();
 }
 
+/// Returns true if the task should be started on the current node shard
+bool task::should_start(
+  ss::shard_id shard, ::model::node_id current_node) const {
+    if (get_state() != model::task_state::stopped) {
+        return false;
+    }
+    return should_start_impl(shard, current_node);
+};
+
+/// Returns true if the task should be stopped on the current node shard
+bool task::should_stop(
+  ss::shard_id shard, ::model::node_id current_node) const {
+    if (get_state() == model::task_state::stopped) {
+        return false;
+    }
+    return should_stop_impl(shard, current_node);
+};
+
 const ss::sstring& task::name() const noexcept { return _name; }
+
+controller_locked_task::controller_locked_task(
+  link* link, ss::lowres_clock::duration run_interval, ss::sstring name)
+  : task(link, run_interval, std::move(name)) {}
+
+bool controller_locked_task::should_start_impl(
+  ss::shard_id shard, ::model::node_id current_node) const {
+    return is_controller_leader(shard, current_node);
+}
+
+bool controller_locked_task::should_stop_impl(
+  ss::shard_id shard, ::model::node_id current_node) const {
+    return !is_controller_leader(shard, current_node);
+}
+
+bool controller_locked_task::is_controller_leader(
+  ss::shard_id shard, ::model::node_id current_node) const {
+    if (shard != ::cluster::controller_stm_shard) {
+        return false;
+    }
+    auto leader = get_link()->get_partition_leader_cache().get_leader_node(
+      ::model::controller_ntp);
+    return leader == current_node;
+}
 
 task::notification_id task::register_for_updates(task_status_cb cb) {
     return _callbacks.register_cb(std::move(cb));
@@ -236,8 +280,8 @@ bool task::valid_previous_state(model::task_state st) const {
                || _state == model::task_state::faulted;
     case model::task_state::link_unavailable:
         return _state == model::task_state::active;
-    // Always valid to change to not_running, active or faulted
-    case model::task_state::not_running:
+    // Always valid to change to stopped, active or faulted
+    case model::task_state::stopped:
     case model::task_state::active:
     case model::task_state::faulted:
         return true;

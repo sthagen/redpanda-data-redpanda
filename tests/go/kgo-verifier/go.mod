@@ -5,16 +5,16 @@ go 1.23.8
 toolchain go1.23.11
 
 require (
-	github.com/google/uuid v1.1.1
+	github.com/google/uuid v1.6.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
-	github.com/sirupsen/logrus v1.8.1
-	github.com/stretchr/testify v1.7.0
+	github.com/sirupsen/logrus v1.9.3
+	github.com/stretchr/testify v1.10.0
 	github.com/twmb/franz-go v1.19.5
-	github.com/twmb/franz-go/pkg/kadm v0.0.0-20211116225244-e97ad6b8ef3e
+	github.com/twmb/franz-go/pkg/kadm v1.16.1
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2
 	github.com/vectorizedio/redpanda/src/go/rpk v0.0.0-20211217123319-86af7226d9f0
-	golang.org/x/sync v0.14.0
-	golang.org/x/time v0.2.0
+	golang.org/x/sync v0.16.0
+	golang.org/x/time v0.9.0
 )
 
 require (
@@ -42,5 +42,5 @@ require (
 	golang.org/x/text v0.25.0 // indirect
 	gopkg.in/ini.v1 v1.51.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

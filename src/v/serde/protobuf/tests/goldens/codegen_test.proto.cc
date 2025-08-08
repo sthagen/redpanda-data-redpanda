@@ -305,6 +305,15 @@ void well_known_protos::set_repeated_field_mask(chunked_vector<serde::pb::field_
 chunked_hash_map<ss::sstring, serde::pb::field_mask>& well_known_protos::get_field_mask_map() { return field_mask_map_; }
 const chunked_hash_map<ss::sstring, serde::pb::field_mask>& well_known_protos::get_field_mask_map() const { return field_mask_map_; }
 void well_known_protos::set_field_mask_map(chunked_hash_map<ss::sstring, serde::pb::field_mask>&& v) { field_mask_map_ = std::move(v); }
+absl::Time& well_known_protos::get_single_timestamp() { return single_timestamp_; }
+const absl::Time& well_known_protos::get_single_timestamp() const { return single_timestamp_; }
+void well_known_protos::set_single_timestamp(absl::Time&& v) { single_timestamp_ = std::move(v); }
+chunked_vector<absl::Time>& well_known_protos::get_repeated_timestamp() { return repeated_timestamp_; }
+const chunked_vector<absl::Time>& well_known_protos::get_repeated_timestamp() const { return repeated_timestamp_; }
+void well_known_protos::set_repeated_timestamp(chunked_vector<absl::Time>&& v) { repeated_timestamp_ = std::move(v); }
+chunked_hash_map<ss::sstring, absl::Time>& well_known_protos::get_timestamp_map() { return timestamp_map_; }
+const chunked_hash_map<ss::sstring, absl::Time>& well_known_protos::get_timestamp_map() const { return timestamp_map_; }
+void well_known_protos::set_timestamp_map(chunked_hash_map<ss::sstring, absl::Time>&& v) { timestamp_map_ = std::move(v); }
 seastar::future<> well_known_protos::from_proto(serde::pb::wire_format_parser* parser, well_known_protos* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -387,6 +396,46 @@ seastar::future<> well_known_protos::from_proto(serde::pb::wire_format_parser* p
         }
       }
       self->get_field_mask_map().insert_or_assign(std::move(entry.key), std::move(entry.value));
+      break;
+    }
+    case 7: { // single_timestamp
+      self->set_single_timestamp(parser->read_wellknown_timestamp<"example.WellKnownProtos.single_timestamp">(tag));
+      break;
+    }
+    case 8: { // repeated_timestamp
+      self->get_repeated_timestamp().push_back(parser->read_wellknown_timestamp<"example.WellKnownProtos.repeated_timestamp">(tag));
+      break;
+    }
+    case 9: { // timestamp_map
+      serde::pb::wire_format_parser entry_parser = parser->read_message<"example.WellKnownProtos.timestamp_map">(tag);
+      serde::pb::wire_format_parser* parser = &entry_parser;
+      struct map_entry {
+        ss::sstring key{};
+        absl::Time value{};
+        void set_key(ss::sstring&& k) { key = std::move(k); }
+        void set_value(absl::Time&& v) { value = std::move(v); }
+      };
+      map_entry entry;
+      {
+        map_entry* self = &entry;
+        while (parser->bytes_left() > 0) {
+          auto tag = parser->read_tag();
+          switch (tag.field_number) {
+          case 1: { // key
+            self->set_key(parser->read_string<"example.WellKnownProtos.TimestampMapEntry.key">(tag));
+            break;
+          }
+          case 2: { // value
+            self->set_value(parser->read_wellknown_timestamp<"example.WellKnownProtos.TimestampMapEntry.value">(tag));
+            break;
+          }
+          default:
+            parser->skip_unknown(tag);
+            break;
+          }
+        }
+      }
+      self->get_timestamp_map().insert_or_assign(std::move(entry.key), std::move(entry.value));
       break;
     }
     default:
@@ -477,6 +526,42 @@ seastar::future<iobuf> well_known_protos::to_proto() const {
     serde::pb::write_length(static_cast<int32_t>(buf.size_bytes()), &parent_buf);
     parent_buf.append(std::move(buf));
   }
+  {
+    // single_timestamp
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 7}, &buf);
+    iobuf msg_buf = serde::pb::wellknown::timestamp_to_proto(get_single_timestamp());
+    serde::pb::write_length(static_cast<int32_t>(msg_buf.size_bytes()), &buf);
+    buf.append(std::move(msg_buf));
+  }
+  // repeated_timestamp
+  for (const auto& e : get_repeated_timestamp()) {
+    iobuf msg_buf = serde::pb::wellknown::timestamp_to_proto(e);
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 8}, &buf);
+    serde::pb::write_length(static_cast<int32_t>(msg_buf.size_bytes()), &buf);
+    buf.append(std::move(msg_buf));
+  }
+  // timestamp_map
+  for (const auto& [key, value] : get_timestamp_map()) {
+    iobuf& parent_buf = buf;
+    iobuf buf;
+    auto get_key = [&key]() -> const ss::sstring& { return key; };
+    auto get_value = [&value]() -> const absl::Time& { return value; };
+    // key
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+    serde::pb::write_length(static_cast<int32_t>(get_key().size()), &buf);
+    buf.append(get_key().data(), get_key().size());
+    {
+      // value
+      serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 2}, &buf);
+      iobuf msg_buf = serde::pb::wellknown::timestamp_to_proto(get_value());
+      serde::pb::write_length(static_cast<int32_t>(msg_buf.size_bytes()), &buf);
+      buf.append(std::move(msg_buf));
+    }
+    // now write the entry submessage
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 9}, &parent_buf);
+    serde::pb::write_length(static_cast<int32_t>(buf.size_bytes()), &parent_buf);
+    parent_buf.append(std::move(buf));
+  }
   co_return buf;
 }
 seastar::future<iobuf> well_known_protos::to_json() const {
@@ -512,6 +597,21 @@ seastar::future<iobuf> well_known_protos::to_json() const {
     w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(value));
   }
   w.end_object();
+  w.key("singleTimestamp");
+  w.append_raw_json(serde::pb::json::wellknown::timestamp_to_json(get_single_timestamp()));
+  w.key("repeatedTimestamp");
+  w.begin_array();
+  for (const auto& e : get_repeated_timestamp()) {
+    w.append_raw_json(serde::pb::json::wellknown::timestamp_to_json(e));
+  }
+  w.end_array();
+  w.key("timestampMap");
+  w.begin_object();
+  for (const auto& [key, value] : get_timestamp_map()) {
+    w.key(key);
+    w.append_raw_json(serde::pb::json::wellknown::timestamp_to_json(value));
+  }
+  w.end_object();
   w.end_object();
   co_return std::move(w).finish();
 }
@@ -523,12 +623,18 @@ seastar::future<> well_known_protos::from_json(serde::pb::json::peekable_parser*
     {"field_mask_map", 6},
     {"repeatedDuration", 2},
     {"repeatedFieldMask", 5},
+    {"repeatedTimestamp", 8},
     {"repeated_duration", 2},
     {"repeated_field_mask", 5},
+    {"repeated_timestamp", 8},
     {"singleDuration", 1},
     {"singleFieldMask", 4},
+    {"singleTimestamp", 7},
     {"single_duration", 1},
     {"single_field_mask", 4},
+    {"single_timestamp", 7},
+    {"timestampMap", 9},
+    {"timestamp_map", 9},
   });
   auto entries = serde::pb::json::object_key_generator(parser);
   while (auto key = co_await entries()) {
@@ -617,6 +723,48 @@ seastar::future<> well_known_protos::from_json(serde::pb::json::peekable_parser*
           } else {
             auto v = co_await serde::pb::json::wellknown::field_mask_from_json(parser);
             self->get_field_mask_map().insert_or_assign(std::move(k), std::move(v));
+          }
+        }
+      }
+      break;
+    }
+    case 7: { // single_timestamp
+      if (co_await parser->peek() == serde::json::token::value_null) {
+        co_await parser->next();
+      } else {
+        auto v = co_await serde::pb::json::wellknown::timestamp_from_json(parser);
+        self->set_single_timestamp(std::move(v));
+      }
+      break;
+    }
+    case 8: { // repeated_timestamp
+      if (co_await parser->peek() == serde::json::token::value_null) {
+        co_await parser->next();
+      } else {
+        auto elements = serde::pb::json::array_element_generator(parser);
+        while (co_await elements()) {
+          if (co_await parser->peek() == serde::json::token::value_null) {
+            co_await parser->next();
+          } else {
+            auto v = co_await serde::pb::json::wellknown::timestamp_from_json(parser);
+            self->get_repeated_timestamp().push_back(std::move(v));
+          }
+        }
+      }
+      break;
+    }
+    case 9: { // timestamp_map
+      if (co_await parser->peek() == serde::json::token::value_null) {
+        co_await parser->next();
+      } else {
+        auto map_entries = serde::pb::json::object_key_generator(parser);
+        while (auto map_key = co_await map_entries()) {
+          auto k = serde::pb::json::transform_map_key<ss::sstring>(std::move(*map_key));
+          if (co_await parser->peek() == serde::json::token::value_null) {
+            co_await parser->next();
+          } else {
+            auto v = co_await serde::pb::json::wellknown::timestamp_from_json(parser);
+            self->get_timestamp_map().insert_or_assign(std::move(k), std::move(v));
           }
         }
       }

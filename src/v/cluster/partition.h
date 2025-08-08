@@ -401,8 +401,8 @@ public:
     // Acquire a shared lock for producing to the partition.
     ss::future<result<ssx::rwlock_unit>> hold_writes_enabled();
 
-    // Returns a pointer to the data plane api if cloud topics is enabled for
-    // this partition. Otherwise, nullopt is returned
+    // Returns a pointer to cloud topics state accessors if available on the
+    // cluster, or nullptr otherwise.
     ss::sharded<experimental::cloud_topics::state_accessors>*
     get_cloud_topics_state() noexcept;
 

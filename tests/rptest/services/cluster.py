@@ -7,6 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import dataclasses
 import functools
 from re import Pattern
 import time
@@ -226,7 +227,9 @@ def cluster(log_allow_list: LogAllowList | None = None,
                 if self.redpanda._si_settings is not None and not self.redpanda.si_settings.skip_end_of_test_scrubbing:
                     try:
                         self.redpanda.maybe_do_internal_scrub()
-                        self.redpanda.stop_and_scrub_object_storage()
+                        usage = self.redpanda.stop_and_scrub_object_storage()
+                        test_results[
+                            "object_storage_usage"] = dataclasses.asdict(usage)
                     except:
                         self.redpanda.cloud_storage_diagnostics()
                         raise

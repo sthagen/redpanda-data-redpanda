@@ -213,6 +213,15 @@ public:
   chunked_hash_map<ss::sstring, serde::pb::field_mask>& get_field_mask_map();
   const chunked_hash_map<ss::sstring, serde::pb::field_mask>& get_field_mask_map() const;
   void set_field_mask_map(chunked_hash_map<ss::sstring, serde::pb::field_mask>&& v);
+  absl::Time& get_single_timestamp();
+  const absl::Time& get_single_timestamp() const;
+  void set_single_timestamp(absl::Time&& v);
+  chunked_vector<absl::Time>& get_repeated_timestamp();
+  const chunked_vector<absl::Time>& get_repeated_timestamp() const;
+  void set_repeated_timestamp(chunked_vector<absl::Time>&& v);
+  chunked_hash_map<ss::sstring, absl::Time>& get_timestamp_map();
+  const chunked_hash_map<ss::sstring, absl::Time>& get_timestamp_map() const;
+  void set_timestamp_map(chunked_hash_map<ss::sstring, absl::Time>&& v);
 
 private:
   absl::Duration single_duration_;
@@ -221,6 +230,9 @@ private:
   serde::pb::field_mask single_field_mask_;
   chunked_vector<serde::pb::field_mask> repeated_field_mask_;
   chunked_hash_map<ss::sstring, serde::pb::field_mask> field_mask_map_;
+  absl::Time single_timestamp_;
+  chunked_vector<absl::Time> repeated_timestamp_;
+  chunked_hash_map<ss::sstring, absl::Time> timestamp_map_;
 };
 
 } // proto::example

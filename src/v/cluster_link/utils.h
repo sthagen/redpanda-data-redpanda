@@ -17,4 +17,5 @@
 namespace cluster_link {
 kafka::client::connection_configuration
 metadata_to_kafka_config(const model::metadata&);
-}
+
+} // namespace cluster_link

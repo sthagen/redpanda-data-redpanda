@@ -263,8 +263,19 @@ TEST(ProtobufCompat, Wellknown) {
       absl::Seconds(123456) + absl::Nanoseconds(789012));
     original.get_repeated_duration().emplace_back(
       absl::Seconds(123) + absl::Nanoseconds(789));
+    original.get_repeated_duration().emplace_back(
+      absl::Now() - absl::UnixEpoch());
+    original.get_repeated_duration().emplace_back(absl::Seconds(-1234));
     original.get_duration_map().insert(
       {"foo", absl::Seconds(1) + absl::Nanoseconds(7)});
+    original.set_single_timestamp(absl::Now());
+    original.get_repeated_timestamp().emplace_back(absl::UnixEpoch());
+    original.get_repeated_timestamp().emplace_back(
+      absl::Now() + absl::Minutes(123123));
+    original.get_repeated_timestamp().emplace_back(
+      absl::UnixEpoch() - absl::Minutes(12354324));
+    original.get_timestamp_map().insert(
+      {"foo", absl::Now() + absl::Nanoseconds(7)});
     original.set_single_field_mask(
       {.paths = {"foo_bar", "really.long_path.nested"}});
     original.get_repeated_field_mask().push_back(

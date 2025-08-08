@@ -124,6 +124,9 @@ iobuf duration_to_json(absl::Duration);
 ss::future<field_mask> field_mask_from_json(peekable_parser* parser);
 iobuf field_mask_to_json(const field_mask&);
 
+ss::future<absl::Time> timestamp_from_json(peekable_parser* parser);
+iobuf timestamp_to_json(absl::Time);
+
 } // namespace wellknown
 
 } // namespace serde::pb::json

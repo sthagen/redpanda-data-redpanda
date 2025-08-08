@@ -19,6 +19,7 @@
 #include "cluster/utils/partition_change_notifier_impl.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
+#include "ssx/when_all.h"
 #include "ssx/work_queue.h"
 
 #include <seastar/coroutine/as_future.hh>
@@ -76,8 +77,18 @@ public:
         _partition_notifications->unregister_partition_notifications(
           _partition_notifications_id);
         co_await _queue.shutdown();
+        chunked_vector<ss::future<std::monostate>> stop_futs;
+        stop_futs.reserve(_domains.size());
         for (auto& [_, domain_mgr] : _domains) {
-            co_await domain_mgr->stop_and_wait();
+            stop_futs.emplace_back(domain_mgr->stop_and_wait().then(
+              [] { return std::monostate{}; }));
+        }
+        auto res = co_await ss::coroutine::as_future(
+          ssx::when_all_succeed<chunked_vector<std::monostate>>(
+            std::move(stop_futs)));
+        if (res.failed()) {
+            auto ex = res.get_exception();
+            vlog(cd_log.error, "Error stopping domain managers: {}", ex);
         }
     }
 

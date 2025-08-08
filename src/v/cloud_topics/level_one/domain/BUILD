@@ -17,6 +17,7 @@ redpanda_cc_library(
         "//src/v/cluster/utils:partition_change_notifier_api",
         "//src/v/cluster/utils:partition_change_notifier_impl",
         "//src/v/model",
+        "//src/v/ssx:when_all",
         "//src/v/ssx:work_queue",
     ],
     include_prefix = "cloud_topics/level_one/domain",

@@ -49,6 +49,7 @@ proto_library(
         "//proto/redpanda/pbgen:options_proto",
         "@protobuf//:duration_proto",
         "@protobuf//:field_mask_proto",
+        "@protobuf//:timestamp_proto",
     ],
 )
 

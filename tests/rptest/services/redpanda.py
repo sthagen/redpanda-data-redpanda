@@ -88,10 +88,22 @@ MetricSample = collections.namedtuple(
 
 @dataclass
 class UsageStats:
-    bytes_read: int = 0
-    bytes_written: int = 0
+    disk_bytes_read: int = 0
+    disk_bytes_written: int = 0
     batches_read: int = 0
     batches_written: int = 0
+    internal_rpc_bytes_recv: int = 0
+    internal_rpc_bytes_sent: int = 0
+    # Number of PUT operations
+    cloud_storage_puts: int = 0
+    # Number of GET operations
+    cloud_storage_gets: int = 0
+
+
+@dataclass
+class CloudStorageUsage:
+    object_count: int = 0
+    total_bytes_stored: int = 0
 
 
 class CloudStorageCleanupStrategy(enum.Enum):
@@ -4226,25 +4238,31 @@ class RedpandaService(RedpandaServiceBase):
         def _metrics_sum(name: str) -> int:
             try:
                 samples = self.metrics_sample(name, [node])
-
                 if samples is None:
                     return 0
-
                 return sum(s.value for s in samples.samples)
             except Exception as e:
                 self.logger.warning(f"Cannot check metrics - {e}")
                 return 0
 
-        self._usage_stats.bytes_read += _metrics_sum(
+        self._usage_stats.disk_bytes_read += _metrics_sum(
             "vectorized_io_queue_total_read_bytes_total")
 
-        self._usage_stats.bytes_written += _metrics_sum(
+        self._usage_stats.disk_bytes_written += _metrics_sum(
             "vectorized_io_queue_total_write_bytes_total")
         self._usage_stats.batches_read += _metrics_sum(
             "vectorized_storage_log_batches_read")
 
         self._usage_stats.batches_written += _metrics_sum(
             "vectorized_storage_log_batches_written")
+        self._usage_stats.internal_rpc_bytes_sent += _metrics_sum(
+            "vectorized_internal_rpc_sent_bytes")
+        self._usage_stats.internal_rpc_bytes_recv += _metrics_sum(
+            "vectorized_internal_rpc_received_bytes")
+        self._usage_stats.cloud_storage_puts += _metrics_sum(
+            "vectorized_cloud_client_total_uploads")
+        self._usage_stats.cloud_storage_gets += _metrics_sum(
+            "vectorized_cloud_client_total_downloads")
 
     def stop_node(self, node, timeout=None, forced=False):
         # collect usage stats before the node is stopped, the usage stats
@@ -5163,9 +5181,10 @@ class RedpandaService(RedpandaServiceBase):
 
         return wait_until_result(check, timeout_sec=timeout_sec, backoff_sec=1)
 
-    def _get_object_storage_report(self,
-                                   tolerate_empty_object_storage=False,
-                                   timeout=300) -> dict[str, Any]:
+    def _get_object_storage_report(
+            self,
+            tolerate_empty_object_storage=False,
+            timeout=300) -> tuple[dict[str, Any], CloudStorageUsage]:
         """
         Uses rp-storage-tool to get the object storage report.
         If the cluster is running the tool could see some inconsistencies and report anomalies,
@@ -5224,7 +5243,11 @@ class RedpandaService(RedpandaServiceBase):
 
         bucket = self.si_settings.cloud_storage_bucket
         environment = ' '.join(f'{k}=\"{v}\"' for k, v in vars.items())
-        bucket_arity = sum(1 for _ in self.get_objects_from_si())
+        usage = CloudStorageUsage()
+        for obj in self.get_objects_from_si():
+            usage.object_count += 1
+            usage.total_bytes_stored += obj.content_length
+        bucket_arity = usage.object_count
         effective_timeout = min(max(bucket_arity * 5, 20), timeout)
         self.logger.info(
             f"num objects in the {bucket=}: {bucket_arity}, will apply {effective_timeout=}"
@@ -5253,7 +5276,7 @@ class RedpandaService(RedpandaServiceBase):
         else:
             self.logger.info(json.dumps(report, indent=2))
 
-        return report
+        return report, usage
 
     def raise_on_cloud_storage_inconsistencies(self,
                                                inconsistencies: list[str],
@@ -5262,7 +5285,7 @@ class RedpandaService(RedpandaServiceBase):
         like stop_and_scrub_object_storage, use rp-storage-tool to explicitly check for inconsistencies,
         but without stopping the cluster.
         """
-        report = self._get_object_storage_report(
+        report, _ = self._get_object_storage_report(
             tolerate_empty_object_storage=True, timeout=run_timeout)
         fatal_anomalies = set(k for k, v in report.items()
                               if len(v) > 0 and k in inconsistencies)
@@ -5274,7 +5297,8 @@ class RedpandaService(RedpandaServiceBase):
                 f"Object storage reports fatal anomalies of type {fatal_anomalies}"
             )
 
-    def stop_and_scrub_object_storage(self, run_timeout=300):
+    def stop_and_scrub_object_storage(self,
+                                      run_timeout=300) -> CloudStorageUsage:
         # Before stopping, ensure that all tiered storage partitions
         # have uploaded at least a manifest: we do not require that they
         # have uploaded until the head of their log, just that they have
@@ -5295,7 +5319,7 @@ class RedpandaService(RedpandaServiceBase):
         self.stop()
 
         scrub_timeout = max(run_timeout, self.cloud_storage_scrub_timeout_s)
-        report = self._get_object_storage_report(timeout=scrub_timeout)
+        report, usage = self._get_object_storage_report(timeout=scrub_timeout)
 
         # It is legal for tiered storage to leak objects under
         # certain circumstances: this will remain the case until
@@ -5325,7 +5349,7 @@ class RedpandaService(RedpandaServiceBase):
             # Tests may declare that they expect some anomalies, e.g. if they
             # intentionally damage the data.
             if self.si_settings.is_damage_expected(fatal_anomalies):
-                self.logger.warn(
+                self.logger.warning(
                     f"Tolerating anomalies in remote storage: {json.dumps(report, indent=2)}"
                 )
             else:
@@ -5335,6 +5359,7 @@ class RedpandaService(RedpandaServiceBase):
                 raise RuntimeError(
                     f"Object storage scrub detected fatal anomalies of type {fatal_anomalies}"
                 )
+        return usage
 
     def maybe_do_internal_scrub(self):
         if not self._si_settings:

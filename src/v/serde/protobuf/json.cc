@@ -411,6 +411,39 @@ iobuf field_mask_to_json(const field_mask& mask) {
     return std::move(w).finish();
 }
 
+ss::future<absl::Time> timestamp_from_json(peekable_parser* parser) {
+    co_await parser->next();
+    field_mask mask;
+    if (parser->token() == token::value_null) {
+        co_return absl::UnixEpoch();
+    }
+    ss::sstring encoded = read_string(parser);
+    if (encoded.empty()) {
+        co_return absl::UnixEpoch();
+    }
+    absl::Time t;
+    std::string err;
+    constexpr static std::string_view second_resolution_format_spec
+      = "%E4Y-%m-%d%ET%H:%M:%S%Ez";
+    if (absl::ParseTime(second_resolution_format_spec, encoded, &t, &err)) {
+        co_return t;
+    }
+    constexpr static std::string_view full_subsecond_format_spec
+      = "%E4Y-%m-%d%ET%H:%M:%E9S%Ez";
+    if (absl::ParseTime(full_subsecond_format_spec, encoded, &t, &err)) {
+        co_return t;
+    }
+    throw std::runtime_error(
+      fmt::format("invalid timestamp string: {}: {}", encoded, err));
+}
+
+iobuf timestamp_to_json(absl::Time t) {
+    serde::json::writer w;
+    constexpr static std::string_view format_spec = "%E4Y-%m-%d%ET%H:%M:%E9SZ";
+    w.string(absl::FormatTime(format_spec, t, absl::UTCTimeZone()));
+    return std::move(w).finish();
+}
+
 } // namespace wellknown
 
 } // namespace serde::pb::json

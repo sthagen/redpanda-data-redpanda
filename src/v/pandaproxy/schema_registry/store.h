@@ -31,21 +31,6 @@
 
 namespace pandaproxy::schema_registry {
 
-///\brief A mapping of version and schema id for a subject.
-struct subject_version_entry {
-    subject_version_entry(
-      schema_version version, schema_id id, is_deleted deleted)
-      : version{version}
-      , id{id}
-      , deleted(deleted) {}
-
-    schema_version version;
-    schema_id id;
-    is_deleted deleted{is_deleted::no};
-
-    std::vector<seq_marker> written_at;
-};
-
 namespace detail {
 
 template<typename T>
@@ -105,13 +90,11 @@ public:
 
     ///\brief Return the id of the schema, if it already exists.
     std::optional<schema_id> get_schema_id(const schema_definition& def) const {
-        const auto s_it = std::find_if(
-          _schemas.begin(), _schemas.end(), [&](const auto& s) {
-              const auto& entry = s.second;
-              return def == entry.definition;
-          });
-        return s_it == _schemas.end() ? std::optional<schema_id>{}
-                                      : s_it->first;
+        // Iterate in decreasing order to return the maximal matching id
+        auto rev = std::views::reverse(_schemas);
+        const auto s_it = std::ranges::find_if(
+          rev, [&](const auto& s) { return def == s.second.definition; });
+        return s_it == rev.end() ? std::optional<schema_id>{} : s_it->first;
     }
 
     ///\brief Return a list of subject-versions for the shema id.

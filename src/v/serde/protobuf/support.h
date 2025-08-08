@@ -279,6 +279,11 @@ public:
     }
 
     template<fixed_string full_name>
+    absl::Time read_wellknown_timestamp(tag t) {
+        return absl::UnixEpoch() + read_wellknown_duration<full_name>(t);
+    }
+
+    template<fixed_string full_name>
     field_mask read_wellknown_field_mask(tag t) {
         auto parser = read_message<full_name>(t);
         field_mask mask;
@@ -316,6 +321,10 @@ inline iobuf duration_to_proto(absl::Duration d) {
       static_cast<int32_t>((d % absl::Seconds(1)) / absl::Nanoseconds(1)),
       &buf);
     return buf;
+}
+
+inline iobuf timestamp_to_proto(absl::Time t) {
+    return duration_to_proto(t - absl::UnixEpoch());
 }
 
 inline iobuf field_mask_to_proto(const field_mask& mask) {

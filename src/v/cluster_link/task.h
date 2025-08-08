@@ -34,9 +34,6 @@ class task {
     class runner;
 
 public:
-    using is_locked_to_controller
-      = ss::bool_class<struct is_locked_to_controller_tag>;
-
     /// Creates a task with a specified run interval and name.  Also includes a
     /// pointer back to the owning link so the task has access to the link's
     /// cluster connection
@@ -57,8 +54,12 @@ public:
     ss::future<result<void>> pause();
     /// Returns the name of the task
     const ss::sstring& name() const noexcept;
-    /// Indicates if this task should only run on the controller node
-    virtual is_locked_to_controller locked_to_controller() const noexcept = 0;
+
+    /// Returns true if the task should be started on the current node shard
+    bool should_start(ss::shard_id shard, ::model::node_id current_node) const;
+
+    /// Returns true if the task should be stopped on the current node shard
+    bool should_stop(ss::shard_id shard, ::model::node_id current_node) const;
     /// Updates config of the task
     virtual void update_config(const model::metadata&) = 0;
 
@@ -86,6 +87,14 @@ public:
     model::task_status_report get_status_report() const;
 
 protected:
+    /// Returns true if the task should be started on the current node shard,
+    /// this is only called when the task state allows it to be started
+    virtual bool should_start_impl(ss::shard_id, ::model::node_id) const = 0;
+
+    /// Returns true if the task should be stopped on the current node shard,
+    /// this is only called when the task state allows it to be stopped
+    virtual bool should_stop_impl(ss::shard_id, ::model::node_id) const = 0;
+
     /// Used by the implementation to change the state of the task
     /// \return The previous state
     result<model::task_state> change_state(model::task_state, ss::sstring = "");
@@ -108,7 +117,7 @@ private:
     link* _link;
     ss::lowres_clock::duration _run_interval;
     task_status_cb _status_cb;
-    model::task_state _state{model::task_state::not_running};
+    model::task_state _state{model::task_state::stopped};
     ss::sstring _last_state_change_response;
 
     notification_list<task_status_cb, notification_id> _callbacks;
@@ -118,7 +127,23 @@ private:
 
     std::unique_ptr<runner> _task_runner{nullptr};
 };
+/**
+ * Task that is locked to the controller shard. Runs only when the current node
+ * is the controller leader.
+ */
+class controller_locked_task : public task {
+public:
+    controller_locked_task(
+      link* link, ss::lowres_clock::duration run_interval, ss::sstring name);
 
+protected:
+    /// Returns true if the task should be started on the current node shard
+    bool should_start_impl(ss::shard_id, ::model::node_id) const override;
+    /// Returns true if the task should be stopped on the current node shard
+    bool should_stop_impl(ss::shard_id, ::model::node_id) const override;
+
+    bool is_controller_leader(ss::shard_id, ::model::node_id) const;
+};
 class task_factory {
 public:
     task_factory() = default;

@@ -227,11 +227,6 @@ ss::future<std::optional<schema_id>> seq_writer::do_write_subject_version(
     const auto& sub = schema.schema.sub();
     co_await check_mutable(sub);
 
-    const auto mode = co_await _store.get_mode(sub, default_to_global::yes);
-    if (schema.id < 0 && mode != mode::read_write) {
-        throw as_exception(mode_not_readwrite(sub));
-    }
-
     // Check if store already contains this data: if
     // so, we do no I/O and return the schema ID.
     auto projected

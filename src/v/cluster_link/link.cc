@@ -75,43 +75,16 @@ ss::future<> link::start() {
       cllog.info, "Starting cluster link {} ({})", _config.name, _config.uuid);
     // Allow exception to propagate to the caller
     co_await _cluster_connection.start();
-
-    for (auto& [_, t] : _tasks) {
-        if (should_start_task(t.get())) {
-            vlog(
-              cllog.info,
-              "Starting task {} for cluster link {} ({})",
-              t->name(),
-              _config.name,
-              _config.uuid);
-            auto res = co_await start_task(t.get());
-            if (!res) {
-                vlog(
-                  cllog.error,
-                  "Failed to start task {}: {}",
-                  t->name(),
-                  res.assume_error().message());
-            }
-        } else {
-            vlog(
-              cllog.debug,
-              "Skipping task {} for cluster link {} ({})",
-              t->name(),
-              _config.name,
-              _config.uuid);
-        }
-    }
+    co_await run_task_reconciler();
     _task_reconciler.set_callback([this] {
         ssx::spawn_with_gate(_gate, [this] { return run_task_reconciler(); });
     });
     _task_reconciler.arm_periodic(_task_reconciler_interval);
-    _is_running = true;
 }
 
 ss::future<> link::stop() {
     vlog(
       cllog.info, "Stopping cluster link {} ({})", _config.name, _config.uuid);
-    _is_running = false;
     _task_reconciler.cancel();
     _as.request_abort();
     co_await _gate.close();
@@ -189,9 +162,9 @@ link::handle_on_leadership_change(::model::ntp ntp, ntp_leader is_ntp_leader) {
       ntp,
       is_ntp_leader);
 
-    if (ntp == ::model::controller_ntp) {
-        co_await handle_controller_leadership_change(is_ntp_leader);
-    }
+    // todo: add debouncing here so that we do not trigger multiple
+    // reconciliation loops at once.
+    co_await run_task_reconciler();
 }
 
 const model::metadata& link::config() const { return _config; }
@@ -236,99 +209,11 @@ kafka::client::cluster& link::get_cluster_connection() noexcept {
 }
 
 bool link::should_start_task(task* t) const {
-    if (t->get_state() != model::task_state::not_running) {
-        // Can only start tasks that are currently not running
-        return false;
-    }
-    if (t->locked_to_controller() == task::is_locked_to_controller::yes) {
-        auto controller_leader_node = _partition_leader_cache->get_leader_node(
-          ::model::controller_ntp);
-        if (!controller_leader_node || *controller_leader_node != _self) {
-            return false;
-        }
-        auto controller_leader_shard = _partition_manager->shard_owner(
-          ::model::controller_ntp);
-        return controller_leader_shard.has_value()
-               && *controller_leader_shard == ss::this_shard_id();
-    }
-    return true;
+    return t->should_start(ss::this_shard_id(), _self);
 }
 
 bool link::should_stop_task(task* t) const {
-    if (t->get_state() == model::task_state::not_running) {
-        // Can only stop tasks that are currently running
-        return false;
-    }
-    if (t->locked_to_controller() == task::is_locked_to_controller::yes) {
-        auto controller_leader_node = _partition_leader_cache->get_leader_node(
-          ::model::controller_ntp);
-        if (!controller_leader_node || *controller_leader_node != _self) {
-            return true;
-        }
-        auto controller_leader_shard = _partition_manager->shard_owner(
-          ::model::controller_ntp);
-        return !controller_leader_shard.has_value()
-               || *controller_leader_shard != ss::this_shard_id();
-    }
-    return false;
-}
-
-ss::future<>
-link::handle_controller_leadership_change(ntp_leader is_ntp_leader) {
-    vlog(
-      cllog.trace,
-      "Cluster link {} handling controller leadership change: {}",
-      _config.name,
-      is_ntp_leader);
-    // Lock the reconciler mutex here to ensure it doesn't run while we are
-    // handling controller leaderhip changes
-    auto fut = co_await ss::coroutine::as_future(
-      _task_reconciler_mutex.get_units(_as));
-    if (fut.failed()) {
-        // abort source triggered, exit early
-        co_return;
-    }
-    auto units = std::move(fut).get();
-
-    for (auto& [_, t] : _tasks) {
-        if (t->locked_to_controller() == task::is_locked_to_controller::no) {
-            continue;
-        }
-        if (
-          t->get_state() == model::task_state::not_running
-          && is_ntp_leader == ntp_leader::yes) {
-            vlog(
-              cllog.info,
-              "Starting task {} for cluster link {}",
-              t->name(),
-              _config.name);
-            auto res = co_await start_task(t.get());
-            if (!res) {
-                vlog(
-                  cllog.error,
-                  "Failed to start task {}: {}",
-                  t->name(),
-                  res.assume_error().message());
-            }
-        }
-        if (
-          t->get_state() != model::task_state::not_running
-          && is_ntp_leader == ntp_leader::no) {
-            vlog(
-              cllog.info,
-              "Stopping task {} for cluster link {}",
-              t->name(),
-              _config.name);
-            auto res = co_await stop_task(t.get());
-            if (!res) {
-                vlog(
-                  cllog.error,
-                  "Failed to stop task {}: {}",
-                  t->name(),
-                  res.assume_error().message());
-            }
-        }
-    }
+    return t->should_stop(ss::this_shard_id(), _self);
 }
 
 ss::future<> link::run_task_reconciler() {
@@ -344,7 +229,7 @@ ss::future<> link::run_task_reconciler() {
       cllog.trace, "Running task reconciler for cluster link {}", _config.name);
     // Iterate over all tasks and reconcile their state
     for (auto& [name, t] : _tasks) {
-        if (_is_running && should_start_task(t.get())) {
+        if (!_as.abort_requested() && should_start_task(t.get())) {
             vlog(
               cllog.info,
               "Reconciler starting task {} for cluster link {}",
@@ -412,7 +297,7 @@ ss::future<result<void>> link::do_register_task(std::unique_ptr<task> t) {
     });
     // If we register a task after the link has started, then check to see
     // if it should start and do so
-    if (_is_running && should_start_task(t.get())) {
+    if (!_as.abort_requested() && should_start_task(t.get())) {
         vlog(cllog.info, "Starting task {}", t->name());
         res = co_await start_task(t.get());
         if (!res) {

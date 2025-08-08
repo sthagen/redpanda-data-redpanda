@@ -3,6 +3,7 @@ syntax = "proto3";
 package example;
 
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 import "google/protobuf/field_mask.proto";
 import "proto/redpanda/pbgen/options.proto";
 
@@ -55,4 +56,7 @@ message WellKnownProtos {
     google.protobuf.FieldMask single_field_mask = 4;
     repeated google.protobuf.FieldMask repeated_field_mask = 5;
     map<string, google.protobuf.FieldMask> field_mask_map = 6;
+    google.protobuf.Timestamp single_timestamp = 7;
+    repeated google.protobuf.Timestamp repeated_timestamp = 8;
+    map<string, google.protobuf.Timestamp> timestamp_map = 9;
 }

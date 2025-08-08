@@ -38,16 +38,11 @@ bool has_required_permissions(
 
 source_topic_syncer::source_topic_syncer(
   link* link, const model::metadata& config)
-  : task(
+  : controller_locked_task(
       link,
       config.configuration.topic_metadata_mirroring_cfg.task_interval,
       source_topic_syncer::task_name)
   , _config(config.configuration.topic_metadata_mirroring_cfg.copy()) {}
-
-task::is_locked_to_controller
-source_topic_syncer::locked_to_controller() const noexcept {
-    return is_locked_to_controller::yes;
-}
 
 void source_topic_syncer::update_config(const model::metadata& config) {
     _config = config.configuration.topic_metadata_mirroring_cfg.copy();

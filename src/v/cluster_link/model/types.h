@@ -71,7 +71,7 @@ enum class task_state : uint8_t {
     /// task will continue to run at its set interval
     link_unavailable,
     /// The task is not configured to run
-    not_running,
+    stopped,
     /// The task has encountered an unexpected fault
     faulted,
 };
@@ -84,8 +84,8 @@ static constexpr std::string_view to_string_view(task_state st) {
         return "paused";
     case task_state::link_unavailable:
         return "link_unavailable";
-    case task_state::not_running:
-        return "not_running";
+    case task_state::stopped:
+        return "stopped";
     case task_state::faulted:
         return "faulted";
     }

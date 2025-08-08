@@ -40,9 +40,11 @@ public:
     explicit test_task(link* link, ss::lowres_clock::duration run_interval)
       : task(link, run_interval, name) {}
 
-    task::is_locked_to_controller
-    locked_to_controller() const noexcept override {
-        return task::is_locked_to_controller::no;
+    bool should_start_impl(ss::shard_id, ::model::node_id) const override {
+        return true;
+    }
+    bool should_stop_impl(ss::shard_id, ::model::node_id) const override {
+        return false;
     }
 
     void update_config(const model::metadata& meta) override {
@@ -94,13 +96,13 @@ private:
 TEST_F_CORO(test_task_fixture, test_task_run) {
     auto task = create_task();
     auto test_task_inst = dynamic_cast<test_task*>(task.get());
-    ASSERT_EQ_CORO(task->get_state(), model::task_state::not_running);
+    ASSERT_EQ_CORO(task->get_state(), model::task_state::stopped);
 
     auto res = co_await task->pause();
     EXPECT_FALSE(res.has_value())
-      << "Was able to pause task when in not_running state";
+      << "Was able to pause task when in stopped state";
     EXPECT_EQ(res.assume_error().code(), errc::invalid_task_state_change);
-    ASSERT_EQ_CORO(task->get_state(), model::task_state::not_running);
+    ASSERT_EQ_CORO(task->get_state(), model::task_state::stopped);
 
     res = co_await task->start();
     ASSERT_TRUE_CORO(res.has_value())
@@ -121,7 +123,7 @@ TEST_F_CORO(test_task_fixture, test_task_run) {
     res = co_await task->stop();
     ASSERT_TRUE_CORO(res.has_value())
       << "Failed to stop task: " << res.assume_error().message();
-    EXPECT_EQ(task->get_state(), model::task_state::not_running);
+    EXPECT_EQ(task->get_state(), model::task_state::stopped);
 }
 
 class test_task_started_fixture : public test_task_fixture {
@@ -190,8 +192,8 @@ TEST_F_CORO(test_task_started_fixture, test_change_run_interval) {
 }
 
 TEST_F_CORO(test_task_started_fixture, test_callbacks) {
-    model::task_state prev_state = model::task_state::not_running,
-                      cur_state = model::task_state::not_running;
+    model::task_state prev_state = model::task_state::stopped,
+                      cur_state = model::task_state::stopped;
     auto cb = [&](std::string_view name, task::state_change change) {
         prev_state = change.prev;
         cur_state = change.cur;
@@ -218,9 +220,11 @@ public:
     explicit evil_task(ss::lowres_clock::duration run_interval)
       : task(nullptr, run_interval, name) {}
 
-    task::is_locked_to_controller
-    locked_to_controller() const noexcept override {
-        return task::is_locked_to_controller::no;
+    bool should_start_impl(ss::shard_id, ::model::node_id) const override {
+        return true;
+    }
+    bool should_stop_impl(ss::shard_id, ::model::node_id) const override {
+        return false;
     }
 
     void update_config(const model::metadata&) override {}
@@ -251,9 +255,11 @@ public:
     explicit link_unavailable_task(ss::lowres_clock::duration run_interval)
       : task(nullptr, run_interval, name) {}
 
-    task::is_locked_to_controller
-    locked_to_controller() const noexcept override {
-        return task::is_locked_to_controller::no;
+    bool should_start_impl(ss::shard_id, ::model::node_id) const override {
+        return true;
+    }
+    bool should_stop_impl(ss::shard_id, ::model::node_id) const override {
+        return false;
     }
 
     void update_config(const model::metadata&) override {}

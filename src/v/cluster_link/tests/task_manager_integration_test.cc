@@ -47,47 +47,54 @@ void validate_report(
 class test_task : public task {
 public:
     static constexpr auto name = "test_task";
-    test_task(
-      link* link,
-      ss::lowres_clock::duration run_interval,
-      is_locked_to_controller is_locked)
-      : task(link, run_interval, name)
-      , _is_locked_to_controller(is_locked) {}
+    test_task(link* link, ss::lowres_clock::duration run_interval)
+      : task(link, run_interval, name) {}
 
-    task::is_locked_to_controller
-    locked_to_controller() const noexcept override {
-        return _is_locked_to_controller;
+    void update_config(const model::metadata&) override {}
+    bool should_start_impl(ss::shard_id, ::model::node_id) const override {
+        return true;
     }
+
+    bool should_stop_impl(ss::shard_id, ::model::node_id) const override {
+        return false;
+    }
+
+    ss::future<> run_impl() override { return ss::now(); }
+};
+
+class controller_locked_test_task : public controller_locked_task {
+public:
+    static constexpr auto name = "test_task";
+    controller_locked_test_task(
+      link* link, ss::lowres_clock::duration run_interval)
+      : controller_locked_task(link, run_interval, name) {}
 
     void update_config(const model::metadata&) override {}
 
     ss::future<> run_impl() override { return ss::now(); }
-
-private:
-    is_locked_to_controller _is_locked_to_controller
-      = is_locked_to_controller::no;
 };
 
 class test_task_factory : public task_factory {
 public:
-    explicit test_task_factory(
-      task::is_locked_to_controller is_locked_to_controller)
+    explicit test_task_factory(bool is_locked_to_controller)
       : _is_locked_to_controller(is_locked_to_controller) {}
     std::string_view created_task_name() const noexcept override {
         return test_task::name;
     }
 
     std::unique_ptr<task> create_task(link* link) override {
-        return std::make_unique<test_task>(
-          link, 100ms, _is_locked_to_controller);
+        if (_is_locked_to_controller) {
+            return std::make_unique<controller_locked_test_task>(link, 100ms);
+        }
+        return std::make_unique<test_task>(link, 100ms);
     }
 
 private:
-    task::is_locked_to_controller _is_locked_to_controller;
+    bool _is_locked_to_controller;
 };
 
 struct test_parameters {
-    task::is_locked_to_controller is_locked_to_controller;
+    bool is_locked_to_controller;
 
     friend std::ostream&
     operator<<(std::ostream& os, const test_parameters& tp) {
@@ -172,9 +179,8 @@ TEST_P(task_manager_integration_test, create_task_no_controller) {
       *report,
       link_name,
       test_task::name,
-      GetParam().is_locked_to_controller == task::is_locked_to_controller::yes
-        ? model::task_state::not_running
-        : model::task_state::active);
+      GetParam().is_locked_to_controller ? model::task_state::stopped
+                                         : model::task_state::active);
 }
 
 TEST_P(task_manager_integration_test, create_task_with_controller) {
@@ -242,14 +248,13 @@ TEST_P(task_manager_integration_test, controller_leadership_moved_on) {
       *report,
       link_name,
       test_task::name,
-      GetParam().is_locked_to_controller == task::is_locked_to_controller::yes
-        ? model::task_state::not_running
-        : model::task_state::active);
+      GetParam().is_locked_to_controller ? model::task_state::stopped
+                                         : model::task_state::active);
 
     // Register for a callback from the task to alert us if the task changes
     // state.  If the task is not locked to the controller, then no state change
     // should be reported, however if it is locked to the controller, then the
-    // state should change from not_running to active
+    // state should change from stopped to active
     ss::condition_variable cv;
 
     task::state_change change;
@@ -277,12 +282,10 @@ TEST_P(task_manager_integration_test, controller_leadership_moved_on) {
     fixture()->elect_leader(::model::controller_ntp, self(), std::nullopt);
     try {
         cv.wait(1s).get();
-        EXPECT_EQ(change.prev, model::task_state::not_running);
+        EXPECT_EQ(change.prev, model::task_state::stopped);
         EXPECT_EQ(change.cur, model::task_state::active);
     } catch (const ss::condition_variable_timed_out&) {
-        if (
-          GetParam().is_locked_to_controller
-          == task::is_locked_to_controller::yes) {
+        if (GetParam().is_locked_to_controller) {
             FAIL() << "Task should have started after controller leadership "
                       "moved to "
                       "this shard";
@@ -332,7 +335,7 @@ TEST_P(task_manager_integration_test, controller_leadership_move_off) {
     // Register for a callback from the task to alert us if the task changes
     // state.  If the task is not locked to the controller, then no state change
     // should be reported, however if it is locked to the controller, then the
-    // state should change from active to not_running
+    // state should change from active to stopped
     ss::condition_variable cv;
 
     task::state_change change;
@@ -362,11 +365,9 @@ TEST_P(task_manager_integration_test, controller_leadership_move_off) {
     try {
         cv.wait(1s).get();
         EXPECT_EQ(change.prev, model::task_state::active);
-        EXPECT_EQ(change.cur, model::task_state::not_running);
+        EXPECT_EQ(change.cur, model::task_state::stopped);
     } catch (const ss::condition_variable_timed_out&) {
-        if (
-          GetParam().is_locked_to_controller
-          == task::is_locked_to_controller::yes) {
+        if (GetParam().is_locked_to_controller) {
             FAIL() << "Task should have halted after controller leadership "
                       "moved to "
                       "this shard";
@@ -381,21 +382,15 @@ INSTANTIATE_TEST_SUITE_P(
   tracks_with_controller_leader,
   task_manager_integration_test,
   ::testing::Values(
-    test_parameters{
-      .is_locked_to_controller = task::is_locked_to_controller::yes},
-    test_parameters{
-      .is_locked_to_controller = task::is_locked_to_controller::no}));
+    test_parameters{.is_locked_to_controller = true},
+    test_parameters{.is_locked_to_controller = false}));
 
 /// Class that doesn't start/stop on the first try
-class evil_task : public task {
+class evil_task : public controller_locked_task {
 public:
     static constexpr auto name = "evil_task";
 
-    using task::task;
-
-    is_locked_to_controller locked_to_controller() const noexcept override {
-        return is_locked_to_controller::yes;
-    }
+    using controller_locked_task::controller_locked_task;
 
     void update_config(const model::metadata&) override {}
 
@@ -505,7 +500,7 @@ TEST_F_CORO(
 
     // Expect that the status report should not be running yet
     validate_report(
-      *report, link_name, evil_task::name, model::task_state::not_running);
+      *report, link_name, evil_task::name, model::task_state::stopped);
 
     // Await the task reconciler interval time (plus a fudge) to allow the loop
     // to run to start the task
@@ -543,7 +538,7 @@ TEST_F_CORO(
 
     // Expect that the status report should be running now
     validate_report(
-      *report, link_name, evil_task::name, model::task_state::not_running);
+      *report, link_name, evil_task::name, model::task_state::stopped);
 }
 
 TEST_F_CORO(
@@ -570,7 +565,7 @@ TEST_F_CORO(
 
     // Expect that the status report should not be running yet
     validate_report(
-      *report, link_name, evil_task::name, model::task_state::not_running);
+      *report, link_name, evil_task::name, model::task_state::stopped);
 
     fixture()->elect_leader(::model::controller_ntp, self(), std::nullopt);
 
@@ -617,7 +612,7 @@ TEST_F_CORO(
 
     // Expect that the status report should not be running yet
     validate_report(
-      *report, link_name, evil_task::name, model::task_state::not_running);
+      *report, link_name, evil_task::name, model::task_state::stopped);
 
     // Await the task reconciler interval time (plus a fudge) to allow the loop
     // to run to start the task
