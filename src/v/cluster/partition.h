@@ -26,7 +26,6 @@
 #include "storage/translating_reader.h"
 #include "storage/types.h"
 #include "utils/notification_list.h"
-#include "utils/rwlock.h"
 
 #include <seastar/core/shared_ptr.hh>
 
@@ -399,7 +398,7 @@ public:
     void mark_started() noexcept { _started = true; }
 
     // Acquire a shared lock for producing to the partition.
-    ss::future<result<ssx::rwlock_unit>> hold_writes_enabled();
+    ss::future<result<ss::rwlock::holder>> hold_writes_enabled();
 
     // Returns a pointer to cloud topics state accessors if available on the
     // cluster, or nullptr otherwise.
@@ -466,7 +465,7 @@ private:
 
     // acquire shared ("read") for produce,
     // exclusive ("write") for enabling/disabling writes
-    ssx::rwlock _produce_lock;
+    ss::rwlock _produce_lock;
 
     notification_list<flush_hook, partition_flush_hook_id> _flush_hooks;
     partition_flush_hook_id _archiver_flush_subscription

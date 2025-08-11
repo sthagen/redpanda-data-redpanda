@@ -35,7 +35,6 @@
 #include "raft/state_machine_manager.h"
 #include "ssx/when_all.h"
 #include "storage/ntp_config.h"
-#include "utils/rwlock.h"
 
 #include <seastar/core/shared_ptr_incomplete.hh>
 #include <seastar/coroutine/as_future.hh>
@@ -1150,7 +1149,7 @@ partition::transfer_leadership(raft::transfer_leadership_request req) {
     // Some state machines need a preparatory phase to efficiently transfer
     // leadership: invoke this, and hold the lock that they return until
     // the leadership transfer attempt is complete.
-    ss::basic_rwlock<>::holder stm_prepare_lock;
+    ss::rwlock::holder stm_prepare_lock;
     if (_rm_stm) {
         stm_prepare_lock = co_await _rm_stm->prepare_transfer_leadership();
     } else if (auto stm = tm_stm(); stm) {
@@ -1757,7 +1756,7 @@ consensus_ptr partition::raft() const { return _raft; }
 ss::future<result<model::offset>> partition::set_writes_disabled(
   partition_properties_stm::writes_disabled disable,
   model::timeout_clock::time_point deadline) {
-    ssx::rwlock::holder holder;
+    ss::rwlock::holder holder;
     auto lock_deadline = ss::semaphore::clock::now()
                          + ss::semaphore::clock::duration(
                            deadline - model::timeout_clock::now());
@@ -1836,8 +1835,8 @@ ss::future<errc> partition::flush_archiver() {
     }
 }
 
-ss::future<result<ssx::rwlock_unit>> partition::hold_writes_enabled() {
-    auto maybe_units = _produce_lock.attempt_read_lock();
+ss::future<result<ss::rwlock::holder>> partition::hold_writes_enabled() {
+    auto maybe_units = _produce_lock.try_hold_read_lock();
     if (!maybe_units) {
         co_return errc::resource_is_being_migrated;
     }

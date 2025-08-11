@@ -77,6 +77,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <chrono>
 #include <exception>
 #include <iterator>
@@ -1723,7 +1724,7 @@ ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
       [&e_ptr](std::string_view source, const std::exception_ptr& e) {
           auto flat = flatten_exception(e);
           e_ptr.reserve(e_ptr.size() + flat.size());
-          absl::c_transform(
+          std::ranges::transform(
             flat,
             std::back_inserter(e_ptr),
             [source](const std::exception_ptr& e) -> error_state {

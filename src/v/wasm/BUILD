@@ -229,7 +229,6 @@ redpanda_cc_library(
         "//src/v/utils:named_type",
         "//src/v/utils:to_string",
         "//src/v/wasm/parser",
-        "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/strings",
         "@crates//:wasmtime_c",

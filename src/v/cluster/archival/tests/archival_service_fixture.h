@@ -567,7 +567,8 @@ public:
         result<raft::replicate_result> res
           = partition->raft()
               ->replicate(
-                chunked_vector<model::record_batch>(std::move(batches)),
+                chunked_vector<model::record_batch>(
+                  std::from_range, std::move(batches) | std::views::as_rvalue),
                 raft::replicate_options(acks))
               .get();
 

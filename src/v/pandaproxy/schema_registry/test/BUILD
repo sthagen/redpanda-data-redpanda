@@ -22,7 +22,6 @@ redpanda_test_cc_library(
         "//src/v/json",
         "//src/v/pandaproxy/schema_registry:core",
         "//src/v/pandaproxy/test:utils",
-        "@abseil-cpp//absl/algorithm:container",
         "@boost//:beast",
     ],
 )
@@ -116,7 +115,6 @@ redpanda_cc_btest(
         "//src/v/pandaproxy/schema_registry:core",
         "//src/v/pandaproxy/schema_registry/test:compatibility_avro",
         "//src/v/test_utils:seastar_boost",
-        "@abseil-cpp//absl/algorithm:container",
         "@boost//:test",
         "@seastar//:testing",
     ],

@@ -1824,11 +1824,22 @@ class RpkTool:
 
         return self._run_registry(cmd)
 
-    def create_schema(self, subject, schema_path, references=None):
+    def create_schema(self,
+                      subject,
+                      schema_path,
+                      references=None,
+                      id=None,
+                      version=None):
         cmd = ["schema", "create", subject, "--schema", schema_path]
 
         if references is not None:
             cmd += ["--references", references]
+
+        if id is not None:
+            cmd += ["--id", str(id)]
+
+        if version is not None:
+            cmd += ["--schema-version", str(version)]
 
         return self._run_registry(cmd)
 

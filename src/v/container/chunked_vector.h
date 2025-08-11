@@ -108,25 +108,30 @@ public:
       : chunked_vector(elems.begin(), elems.end()) {}
 
     /**
-     * @brief Construct a new vector by moving from a given range
-     */
-    template<typename Range>
-    requires std::ranges::sized_range<Range>
-    explicit chunked_vector(Range range)
-      : chunked_vector() {
-        reserve(std::ranges::size(range));
-        std::move(range.begin(), range.end(), std::back_inserter(*this));
-    }
-
-    /**
-     * @brief Construct a new vector by copying from a const range
+     * @brief Construct a new vector from a range
+     *
+     * This constructor will copy or move from the range depending on the value
+     * category of the elements NOT the one of the range. I.e.
+     * `chunked_vector(std::move(src))` will not necessarily invoke move
+     * constructor on the elements of `src`. For example, an rvalue `std::span`
+     * is a non-owning view, and moving from its elements would be a bug.
+     * Similar for most of the standard library views.
+     *
+     * To ensure move semantics from the range elements, use
+     * `std::views::as_rvalue`.
+     *
+     * https://en.cppreference.com/w/cpp/ranges/as_rvalue_view.html
      */
     template<typename Range>
     requires(std::ranges::sized_range<Range>)
-    chunked_vector(std::from_range_t, const Range& range)
+    // NOLINTNEXTLINE(cppcoreguidelines-missing-std-forward)
+    chunked_vector(std::from_range_t, Range&& range)
       : chunked_vector() {
         reserve(std::ranges::size(range));
-        std::copy(range.begin(), range.end(), std::back_inserter(*this));
+        std::copy(
+          std::ranges::begin(range),
+          std::ranges::end(range),
+          std::back_inserter(*this));
     }
 
     chunked_vector& operator=(chunked_vector&& other) noexcept {

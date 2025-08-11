@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/algorithm/container.h"
 #include "cluster/security_frontend.h"
 #include "kafka/protocol/describe_user_scram_credentials.h"
 #include "kafka/protocol/types.h"
@@ -20,6 +19,8 @@
 #include "security/types.h"
 
 #include <seastar/core/sstring.hh>
+
+#include <algorithm>
 
 class describe_user_scram_credentials_fixture : public redpanda_thread_fixture {
 protected:
@@ -132,7 +133,7 @@ FIXTURE_TEST(
 
     const auto errors_in_acl_results =
       [](const std::vector<cluster::errc>& errs) {
-          return absl::c_any_of(errs, [](const cluster::errc& e) {
+          return std::ranges::any_of(errs, [](const cluster::errc& e) {
               return e != cluster::errc::success;
           });
       };

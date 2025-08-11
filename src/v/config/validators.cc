@@ -11,7 +11,6 @@
 
 #include "config/validators.h"
 
-#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_set.h"
 #include "config/configuration.h"
@@ -25,6 +24,7 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
 #include <array>
 #include <optional>
 #include <unordered_map>
@@ -90,14 +90,14 @@ validate_sasl_mechanisms(const std::vector<ss::sstring>& mechanisms) {
 
     // Validate results
     for (const auto& m : mechanisms) {
-        if (absl::c_none_of(
+        if (std::ranges::none_of(
               supported, [&m](const auto& s) { return s == m; })) {
             return ssx::sformat("'{}' is not a supported SASL mechanism", m);
         }
     }
 
     const auto contains = [&mechanisms](const std::string_view& s) {
-        return absl::c_find(mechanisms, s) != mechanisms.end();
+        return std::ranges::contains(mechanisms, s);
     };
 
     if (contains("PLAIN") && !contains("SCRAM")) {
@@ -114,7 +114,7 @@ validate_http_authn_mechanisms(const std::vector<ss::sstring>& mechanisms) {
 
     // Validate results
     for (const auto& m : mechanisms) {
-        if (absl::c_none_of(
+        if (std::ranges::none_of(
               supported, [&m](const auto& s) { return s == m; })) {
             return ssx::sformat(
               "'{}' is not a supported HTTP authentication mechanism", m);
@@ -124,13 +124,13 @@ validate_http_authn_mechanisms(const std::vector<ss::sstring>& mechanisms) {
 }
 
 bool oidc_is_enabled_http() {
-    return absl::c_any_of(
+    return std::ranges::any_of(
       config::shard_local_cfg().http_authentication(),
       [](const auto& m) { return m == "OIDC"; });
 }
 
 bool oidc_is_enabled_kafka() {
-    return absl::c_any_of(
+    return std::ranges::any_of(
       config::shard_local_cfg().sasl_mechanisms(),
       [](const auto& m) { return m == "OAUTHBEARER"; });
 }

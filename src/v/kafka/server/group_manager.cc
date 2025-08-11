@@ -65,7 +65,7 @@ group_manager::attached_partition::attached_partition(
   ss::lw_shared_ptr<cluster::partition> p)
   : loading(true)
   , partition(std::move(p)) {
-    catchup_lock = ss::make_lw_shared<ssx::rwlock>();
+    catchup_lock = ss::make_lw_shared<ss::rwlock>();
 }
 
 group_manager::attached_partition::~attached_partition() noexcept = default;
@@ -706,7 +706,7 @@ ss::future<result<model::offset>> group_manager::set_blocked_for_groups(
           co_ntp);
         co_return cluster::errc::partition_not_exists;
     }
-    auto maybe_holder = p->catchup_lock->attempt_read_lock();
+    auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
         vlog(
           cluster::txlog.trace,
@@ -962,7 +962,7 @@ ss::future<> group_manager::handle_partition_leader_change(
      * changes (infrequent event)
      */
     return p->catchup_lock->hold_write_lock().then(
-      [this, term, timeout, p](ss::basic_rwlock<>::holder unit) {
+      [this, term, timeout, p](ss::rwlock::holder unit) {
           return inject_noop(p->partition, timeout)
             .then([this, term, timeout, p](std::error_code error) {
                 if (error) {
@@ -1424,7 +1424,7 @@ group_manager::txn_offset_commit(txn_offset_commit_request&& r) {
         return ss::make_ready_future<txn_offset_commit_response>(
           txn_offset_commit_response(r, error_code::not_coordinator));
     }
-    auto maybe_holder = p->catchup_lock->attempt_read_lock();
+    auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
         // transaction operations can't run in parallel with loading
         // state from the log (happens once per term change)
@@ -1473,7 +1473,7 @@ group_manager::commit_tx(cluster::commit_group_tx_request&& r) {
         return ss::make_ready_future<cluster::commit_group_tx_reply>(
           make_commit_tx_reply(cluster::tx::errc::not_coordinator));
     }
-    auto maybe_holder = p->catchup_lock->attempt_read_lock();
+    auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
         // transaction operations can't run in parallel with loading
         // state from the log (happens once per term change)
@@ -1513,7 +1513,7 @@ group_manager::begin_tx(cluster::begin_group_tx_request&& r) {
         return ss::make_ready_future<cluster::begin_group_tx_reply>(
           make_begin_tx_reply(cluster::tx::errc::not_coordinator));
     }
-    auto maybe_holder = p->catchup_lock->attempt_read_lock();
+    auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
         // transaction operations can't run in parallel with loading
         // state from the log (happens once per term change)
@@ -1560,7 +1560,7 @@ group_manager::abort_tx(cluster::abort_group_tx_request&& r) {
         return ss::make_ready_future<cluster::abort_group_tx_reply>(
           make_abort_tx_reply(cluster::tx::errc::not_coordinator));
     }
-    auto maybe_holder = p->catchup_lock->attempt_read_lock();
+    auto maybe_holder = p->catchup_lock->try_hold_read_lock();
     if (!maybe_holder) {
         // transaction operations can't run in parallel with loading
         // state from the log (happens once per term change)

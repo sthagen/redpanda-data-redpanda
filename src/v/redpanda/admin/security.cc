@@ -34,6 +34,7 @@
 #include <seastar/http/url.hh>
 #include <seastar/json/json_elements.hh>
 
+#include <algorithm>
 #include <optional>
 #include <sstream>
 
@@ -226,7 +227,7 @@ parse_json_members_list(const json::Document& doc, std::string_view key) {
     std::vector<security::role_member> result;
     const auto& mem_arr = doc[key.data()].GetArray();
     result.reserve(mem_arr.Size());
-    absl::c_transform(
+    std::ranges::transform(
       mem_arr,
       std::back_inserter(result),
       [](const auto& p) -> security::role_member {
@@ -311,7 +312,7 @@ inline std::unique_ptr<ss::http::reply> make_json_response(
 
 bool parse_bool_nocase(ss::sstring param) {
     bool result = false;
-    absl::c_transform(param, param.begin(), ::tolower);
+    std::ranges::transform(param, param.begin(), ::tolower);
     std::istringstream(param) >> std::boolalpha >> result;
     return result;
 }
@@ -708,7 +709,8 @@ admin_server::update_role_members_handler(
     auto role_name = security::role_name(std::move(role_v));
     auto add = parse_json_members_list(doc, "add");
     auto remove = parse_json_members_list(doc, "remove");
-    if (absl::c_any_of(remove, [&add](auto m) { return add.contains(m); })) {
+    if (std::ranges::any_of(
+          remove, [&add](auto m) { return add.contains(m); })) {
         throw_role_exception(role_errc::member_list_conflict);
     }
 
@@ -730,12 +732,12 @@ admin_server::update_role_members_handler(
     j_res.role = role_name();
     j_res.created = false;
 
-    absl::c_for_each(add, [&curr_members, &j_res](const auto& a) {
+    std::ranges::for_each(add, [&curr_members, &j_res](const auto& a) {
         curr_members.insert(a);
         j_res.added.push(role_member_to_json(a));
     });
 
-    absl::c_for_each(remove, [&curr_members, &j_res](const auto& r) {
+    std::ranges::for_each(remove, [&curr_members, &j_res](const auto& r) {
         curr_members.erase(r);
         j_res.removed.push(role_member_to_json(r));
     });

@@ -9,7 +9,6 @@
 
 #include "storage/compaction_reducers.h"
 
-#include "absl/algorithm/container.h"
 #include "base/vlog.h"
 #include "compression/compression.h"
 #include "model/record.h"

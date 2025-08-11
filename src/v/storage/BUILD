@@ -439,7 +439,6 @@ redpanda_cc_library(
         "//src/v/utils:tracking_allocator",
         "//src/v/utils:tristate",
         "//src/v/utils:vint",
-        "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

@@ -112,7 +112,7 @@ group::group(
   kafka::group_id id,
   group_state s,
   config::configuration& conf,
-  ss::lw_shared_ptr<ssx::rwlock> catchup_lock,
+  ss::lw_shared_ptr<ss::rwlock> catchup_lock,
   ss::lw_shared_ptr<cluster::partition> partition,
   model::term_id term,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
@@ -145,7 +145,7 @@ group::group(
   kafka::group_id id,
   group_metadata_value& md,
   config::configuration& conf,
-  ss::lw_shared_ptr<ssx::rwlock> catchup_lock,
+  ss::lw_shared_ptr<ss::rwlock> catchup_lock,
   ss::lw_shared_ptr<cluster::partition> partition,
   model::term_id term,
   ss::sharded<cluster::tx_gateway_frontend>& tx_frontend,
@@ -328,7 +328,8 @@ void group::add_member_no_join(member_ptr member) {
           *member->group_instance_id(), member->id());
         if (!success) {
             throw std::runtime_error(fmt::format(
-              "group already contains member with group instance id: {}, group "
+              "group already contains member with group instance id: {}, "
+              "group "
               "state: {}",
               member,
               *this));
@@ -3259,7 +3260,7 @@ ss::future<> group::do_abort_old_txes() {
 }
 
 ss::future<cluster::tx::errc> group::abort_txes(bool expired_only) {
-    auto unit = _catchup_lock->attempt_read_lock();
+    auto unit = _catchup_lock->try_hold_read_lock();
     if (!unit) {
         vlog(
           _ctx_txlog.trace, "can't abort txes: coordinator_load_in_progress");
@@ -3437,7 +3438,8 @@ group::decode_consumer_subscriptions(iobuf data) {
               "consumer metadata contains negative topic name length {}", len));
         } else if (static_cast<size_t>(len) > max_topic_name_length) {
             throw std::out_of_range(fmt::format(
-              "consumer metadata contains topic name that exceeds maximum size "
+              "consumer metadata contains topic name that exceeds maximum "
+              "size "
               "{} > {}",
               len,
               max_topic_name_length));

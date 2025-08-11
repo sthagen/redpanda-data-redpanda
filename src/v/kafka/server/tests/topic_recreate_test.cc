@@ -276,7 +276,8 @@ FIXTURE_TEST(test_recreated_topic_does_not_lose_data, recreate_test_fixture) {
                       return p->raft()
                         ->replicate(
                           chunked_vector<model::record_batch>(
-                            std::move(batches)),
+                            std::from_range,
+                            std::move(batches) | std::views::as_rvalue),
                           raft::replicate_options(
                             raft::consistency_level::quorum_ack))
                         .then([p](auto) { return p->committed_offset(); });

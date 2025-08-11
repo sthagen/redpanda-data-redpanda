@@ -11,7 +11,6 @@
 
 #include "cluster/metrics_reporter.h"
 
-#include "absl/algorithm/container.h"
 #include "absl/container/node_hash_map.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
@@ -59,6 +58,7 @@
 #include <fmt/core.h>
 #include <sys/socket.h>
 
+#include <algorithm>
 #include <climits>
 #include <netdb.h>
 #include <stdexcept>

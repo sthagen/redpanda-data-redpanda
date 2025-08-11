@@ -22,6 +22,8 @@
 
 #include <seastar/core/sstring.hh>
 
+#include <algorithm>
+
 static ss::logger logger{"request_auth"};
 
 request_authenticator::request_authenticator(
@@ -79,7 +81,7 @@ request_auth_result request_authenticator::do_authenticate(
   const security::credential_store& cred_store,
   bool require_auth) {
     constexpr auto supports = [](std::string_view m) {
-        return absl::c_any_of(
+        return std::ranges::any_of(
           config::shard_local_cfg().http_authentication(),
           [m](const auto& mech) { return m == mech; });
     };

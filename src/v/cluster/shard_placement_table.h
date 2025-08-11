@@ -18,8 +18,8 @@
 #include "container/chunked_hash_map.h"
 #include "storage/fwd.h"
 #include "utils/mutex.h"
-#include "utils/rwlock.h"
 
+#include <seastar/core/rwlock.hh>
 #include <seastar/core/sharded.hh>
 
 namespace cluster {
@@ -298,7 +298,7 @@ private:
     ntp2state_t _states;
     // lock is needed to sync enabling persistence with shard-local
     // modifications.
-    ssx::rwlock _persistence_lock;
+    ss::rwlock _persistence_lock;
     bool _persistence_enabled = false;
     ss::shard_id _shard;
     storage::kvstore& _kvstore;

@@ -10,7 +10,6 @@
  */
 #include "wasmtime.h"
 
-#include "absl/algorithm/container.h"
 #include "absl/strings/escaping.h"
 #include "allocator.h"
 #include "base/type_traits.h"
@@ -53,6 +52,7 @@
 
 #include <fmt/ostream.h>
 
+#include <algorithm>
 #include <alloca.h>
 #include <csignal>
 #include <exception>
@@ -1659,7 +1659,7 @@ bool is_exported_memory(const parser::module_export& mod_export) {
 
 bool is_transform_abi_check_fn(const parser::module_import& mod_import) {
     constexpr std::array version = {1, 2};
-    return absl::c_any_of(version, [&mod_import](int version) {
+    return std::ranges::any_of(version, [&mod_import](int version) {
         return mod_import
                == parser::module_import{
                  .module_name = ss::sstring(transform_module::name),

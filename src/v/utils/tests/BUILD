@@ -317,22 +317,6 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_btest(
-    name = "rwlock_test",
-    timeout = "short",
-    srcs = [
-        "rwlock_test.cc",
-    ],
-    deps = [
-        "//src/v/base",
-        "//src/v/ssx:semaphore",
-        "//src/v/test_utils:seastar_boost",
-        "//src/v/utils:rwlock",
-        "@seastar",
-        "@seastar//:testing",
-    ],
-)
-
-redpanda_cc_btest(
     name = "token_bucket_test",
     timeout = "short",
     srcs = [

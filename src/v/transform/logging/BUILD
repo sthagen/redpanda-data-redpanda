@@ -69,6 +69,9 @@ redpanda_cc_library(
         "log_manager.h",
         "rpc_client.h",
     ],
+    implementation_deps = [
+        "@abseil-cpp//absl/algorithm:container",
+    ],
     include_prefix = "transform/logging",
     visibility = ["//visibility:public"],
     deps = [
@@ -93,7 +96,6 @@ redpanda_cc_library(
         "//src/v/utils:absl_sstring_hash",
         "//src/v/utils:human",
         "//src/v/utils:named_type",
-        "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/strings",

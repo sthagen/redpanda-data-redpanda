@@ -1813,10 +1813,11 @@ backend::get_topic_assignments(const model::topic_namespace& nt, const id id) {
                             const auto& assignment) {
                               return group_map.contains(assignment.id);
                           });
-        return std::move(filtered)
+        return std::move(filtered) | std::views::as_rvalue
                | std::ranges::to<chunked_vector<partition_assignment>>();
     } else {
-        return chunked_vector<partition_assignment>{std::move(assignments)};
+        return std::move(assignments) | std::views::as_rvalue
+               | std::ranges::to<chunked_vector<partition_assignment>>();
     }
 }
 

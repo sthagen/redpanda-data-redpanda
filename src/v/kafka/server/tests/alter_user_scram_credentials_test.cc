@@ -19,6 +19,8 @@
 #include "security/scram_credential.h"
 #include "security/types.h"
 
+#include <algorithm>
+
 class alter_user_scram_credentials_fixture : public redpanda_thread_fixture {
 protected:
     static constexpr auto user_name_256 = "test_user_256";
@@ -150,7 +152,7 @@ FIXTURE_TEST(
 
     const auto errors_in_acl_results =
       [](const std::vector<cluster::errc>& errs) {
-          return absl::c_any_of(errs, [](const cluster::errc& e) {
+          return std::ranges::any_of(errs, [](const cluster::errc& e) {
               return e != cluster::errc::success;
           });
       };

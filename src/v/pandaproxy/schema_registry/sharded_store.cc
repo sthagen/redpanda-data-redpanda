@@ -11,7 +11,6 @@
 
 #include "pandaproxy/schema_registry/sharded_store.h"
 
-#include "absl/algorithm/container.h"
 #include "base/vlog.h"
 #include "config/configuration.h"
 #include "container/chunked_vector.h"
@@ -36,6 +35,7 @@
 
 #include <fmt/core.h>
 
+#include <algorithm>
 #include <functional>
 #include <iterator>
 
@@ -369,7 +369,7 @@ sharded_store::get_schema_subjects(schema_id id, include_deleted inc_del) {
         return acc;
     };
     auto subs = co_await _store.map_reduce0(map, subjects{}, reduce);
-    absl::c_sort(subs);
+    std::ranges::sort(subs);
     co_return subs;
 }
 

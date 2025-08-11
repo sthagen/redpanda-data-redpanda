@@ -840,7 +840,7 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
               error_code::schema_invalid,
               error_code::schema_empty,
               error_code::schema_missing_reference};
-            return absl::c_any_of(
+            return std::ranges::any_of(
               errors, [ec](error_code e) { return ec == e; });
         };
         if (is_verbose && reportable(e.code())) {

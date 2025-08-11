@@ -37,12 +37,12 @@
 #include "raft/fwd.h"
 #include "raft/notification.h"
 #include "ssx/semaphore.h"
-#include "utils/rwlock.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
+#include <seastar/core/rwlock.hh>
 #include <seastar/core/sharded.hh>
 
 #include <system_error>
@@ -245,7 +245,7 @@ private:
         ssx::semaphore sem{1, "k/group-mgr"};
         ss::abort_source as;
         ss::lw_shared_ptr<cluster::partition> partition;
-        ss::lw_shared_ptr<ssx::rwlock> catchup_lock;
+        ss::lw_shared_ptr<ss::rwlock> catchup_lock;
         model::term_id term{-1};
         chunked_hash_set<kafka::group_id> blocked_groups;
 

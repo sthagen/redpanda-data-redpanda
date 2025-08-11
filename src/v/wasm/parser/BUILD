@@ -30,7 +30,6 @@ redpanda_cc_library(
         "//src/v/bytes",
         "//src/v/bytes:iobuf_parser",
         "//src/v/strings:utf8",
-        "@abseil-cpp//absl/algorithm:container",
         "@fmt",
     ],
     include_prefix = "wasm/parser",

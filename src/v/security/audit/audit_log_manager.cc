@@ -42,6 +42,7 @@
 #include <seastar/core/smp.hh>
 #include <seastar/coroutine/maybe_yield.hh>
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 
@@ -521,7 +522,7 @@ ss::future<> audit_client::produce(
                                          : ss::timer<>::time_point::max();
     auto reserved = co_await ss::get_units(_send_sem, total_size, timepoint);
 
-    absl::c_for_each(records, [&reserved](partition_batch& pb) {
+    std::ranges::for_each(records, [&reserved](partition_batch& pb) {
         try {
             pb.send_units.emplace(reserved.split(pb.batch.size_bytes()));
         } catch (const std::invalid_argument& e) {

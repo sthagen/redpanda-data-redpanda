@@ -727,7 +727,7 @@ void admin_server::rearm_log_level_timer() {
 }
 
 void admin_server::log_level_timer_handler() {
-    absl::c_for_each(_log_level_resets, [](auto& pr) {
+    std::ranges::for_each(_log_level_resets, [](auto& pr) {
         auto& [name, lr] = pr;
         if (lr.expires.has_value() && lr.expires <= ss::timer<>::clock::now()) {
             ss::global_logger_registry().set_logger_level(name, lr.level);

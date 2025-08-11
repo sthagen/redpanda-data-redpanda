@@ -169,7 +169,6 @@ redpanda_cc_library(
         "//src/v/utils:named_type",
         "//src/v/utils:to_string",
         "//src/v/version",
-        "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

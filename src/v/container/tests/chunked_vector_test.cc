@@ -23,6 +23,7 @@
 #include <initializer_list>
 #include <limits>
 #include <numeric>
+#include <ranges>
 #include <stdexcept>
 #include <type_traits>
 #include <vector>
@@ -554,8 +555,51 @@ TEST(ChunkedVector, FromRange) {
         buffer.push_back(i);
     }
 
-    auto vec = chunked_vector<int32_t>(buffer);
+    auto vec = chunked_vector<int32_t>(std::from_range, buffer);
     EXPECT_THAT(vec, ElementsAreArray(buffer));
+}
+
+struct move_only_t {
+    move_only_t() = default;
+    move_only_t(move_only_t&) = delete;
+    move_only_t& operator=(move_only_t&) = delete;
+    move_only_t(move_only_t&&) = default;
+    move_only_t& operator=(move_only_t&&) = default;
+    ~move_only_t() = default;
+};
+
+TEST(ChunkedVector, FromRangeMove) {
+    static_assert(
+      !(std::is_copy_constructible_v<move_only_t>
+        || std::is_copy_assignable_v<move_only_t>));
+
+    auto src = chunked_vector<move_only_t>();
+
+    // From ref.
+    auto vec = chunked_vector<move_only_t>(
+      std::from_range, src | std::views::as_rvalue);
+
+    // From temporary.
+    auto vec2 = chunked_vector<move_only_t>(
+      std::from_range, chunked_vector<move_only_t>() | std::views::as_rvalue);
+}
+
+TEST(ChunkedVector, FromRangeCopy) {
+    chunked_vector<int> src;
+    static_assert(!std::is_copy_constructible_v<decltype(src)>);
+    auto vec = chunked_vector<int>(std::from_range, src);
+}
+
+struct adl_range_t {
+    std::vector<int> data{1, 2, 3};
+};
+auto begin(const adl_range_t& r) { return r.data.begin(); }
+auto end(const adl_range_t& r) { return r.data.end(); }
+
+TEST(ChunkedVector, FromRangeADL) {
+    adl_range_t r;
+    auto vec = chunked_vector<int>(std::from_range, r);
+    EXPECT_THAT(vec, ElementsAreArray(r.data));
 }
 
 TEST(ChunkedVector, InPlaceSingleElement) {

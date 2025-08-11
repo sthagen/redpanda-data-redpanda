@@ -25,6 +25,7 @@
 
 #include <seastar/core/metrics.hh>
 
+#include <algorithm>
 #include <optional>
 #include <ranges>
 #include <utility>
@@ -115,7 +116,7 @@ public:
     get_schema_subjects(schema_id id, include_deleted inc_del) {
         chunked_vector<subject> subs;
         for (const auto& s : _subjects) {
-            if (absl::c_any_of(
+            if (std::ranges::any_of(
                   s.second.versions, [id, inc_del](const auto& vs) {
                       return vs.id == id && (inc_del || !vs.deleted);
                   })) {
@@ -174,7 +175,7 @@ public:
         res.reserve(_subjects.size());
         for (const auto& sub : _subjects) {
             if (inc_del || !sub.second.deleted) {
-                auto has_version = absl::c_any_of(
+                auto has_version = std::ranges::any_of(
                   sub.second.versions,
                   [inc_del](const auto& v) { return inc_del || !v.deleted; });
                 if (
@@ -189,8 +190,8 @@ public:
 
     ///\brief Return if there are subjects.
     bool has_subjects(include_deleted inc_del) const {
-        return absl::c_any_of(_subjects, [inc_del](const auto& sub) {
-            return absl::c_any_of(
+        return std::ranges::any_of(_subjects, [inc_del](const auto& sub) {
+            return std::ranges::any_of(
               sub.second.versions,
               [inc_del](const auto& v) { return inc_del || !v.deleted; });
         });
@@ -385,7 +386,7 @@ public:
     get_version_ids(const subject& sub, include_deleted inc_del) const {
         auto sub_it = BOOST_OUTCOME_TRYX(get_subject_iter(sub, inc_del));
         std::vector<subject_version_entry> res;
-        absl::c_copy_if(
+        std::ranges::copy_if(
           sub_it->second.versions,
           std::back_inserter(res),
           [inc_del](const subject_version_entry& e) {
@@ -400,7 +401,7 @@ public:
       const subject& sub, schema_id id, include_deleted inc_del) const {
         auto sub_it = BOOST_OUTCOME_TRYX(get_subject_iter(sub, inc_del));
         const auto& vs = sub_it->second.versions;
-        return absl::c_any_of(vs, [id, inc_del](const auto& entry) {
+        return std::ranges::any_of(vs, [id, inc_del](const auto& entry) {
             return entry.id == id && (inc_del || !entry.deleted);
         });
     }
@@ -431,8 +432,8 @@ public:
 
     bool subject_versions_has_any_of(
       const schema_id_set& ids, include_deleted inc_del) {
-        return absl::c_any_of(_subjects, [&ids, inc_del](const auto& s) {
-            return absl::c_any_of(
+        return std::ranges::any_of(_subjects, [&ids, inc_del](const auto& s) {
+            return std::ranges::any_of(
               s.second.versions, [&ids, &s, inc_del](const auto& v) {
                   return (inc_del || !s.second.deleted) && ids.contains(v.id);
               });

@@ -7,7 +7,6 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
-#include "absl/algorithm/container.h"
 #include "cluster/security_frontend.h"
 #include "kafka/client/transport.h"
 #include "kafka/protocol/create_topics.h"
@@ -23,6 +22,8 @@
 #include "test_utils/random_bytes.h"
 
 #include <boost/test/tools/old/interface.hpp>
+
+#include <algorithm>
 
 static const int32_t not_provided_authz_return = -2147483648;
 static const std::vector<security::acl_operation> default_cluster_auths = {
@@ -185,7 +186,7 @@ FIXTURE_TEST(metadata_v9_authz_acl, metadata_fixture) {
 
     const auto errors_in_acl_results =
       [](const std::vector<cluster::errc>& errs) {
-          return absl::c_any_of(errs, [](const cluster::errc& e) {
+          return std::ranges::any_of(errs, [](const cluster::errc& e) {
               return e != cluster::errc::success;
           });
       };

@@ -137,7 +137,8 @@ TEST_CORO(throttler_test, no_throttling) {
       .records = 10,
     };
     auto batches = chunked_vector<model::record_batch>(
-      co_await model::test::make_random_batches(spec));
+      std::from_range,
+      co_await model::test::make_random_batches(spec) | std::views::as_rvalue);
     size_t reader_size_bytes = get_serialized_size(batches);
 
     cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;
@@ -199,7 +200,8 @@ TEST_CORO(throttler_test, tput_limit_reached) {
       .records = 10,
     };
     auto batches = chunked_vector<model::record_batch>(
-      co_await model::test::make_random_batches(spec));
+      std::from_range,
+      co_await model::test::make_random_batches(spec) | std::views::as_rvalue);
     size_t reader_size_bytes = get_serialized_size(batches);
 
     cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;
@@ -271,7 +273,8 @@ TEST_CORO(throttler_test, tput_limit_reached_req_timed_out) {
       .records = 10,
     };
     auto batches = chunked_vector<model::record_batch>(
-      co_await model::test::make_random_batches(spec));
+      std::from_range,
+      co_await model::test::make_random_batches(spec) | std::views::as_rvalue);
     size_t reader_size_bytes = get_serialized_size(batches);
 
     cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;

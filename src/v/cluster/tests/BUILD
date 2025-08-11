@@ -1148,7 +1148,6 @@ redpanda_cc_btest(
         "//src/v/random:generators",
         "//src/v/security",
         "//src/v/test_utils:seastar_boost",
-        "@abseil-cpp//absl/algorithm:container",
         "@boost//:range",
         "@boost//:test",
     ],
