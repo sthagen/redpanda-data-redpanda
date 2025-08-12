@@ -34,7 +34,7 @@ namespace experimental::cloud_topics {
 
 class app : public ssx::sharded_service_container {
 public:
-    explicit app();
+    explicit app(ss::sstring logger_name = "cloud_topics::app");
 
     app(const app&) = delete;
     app& operator=(const app&) = delete;

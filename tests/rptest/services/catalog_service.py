@@ -12,12 +12,12 @@ from ducktape.services.service import Service
 from rptest.context import cloud_storage
 
 import abc
-from enum import StrEnum
+from enum import Enum
 
 from pyiceberg.catalog import load_catalog
 
 
-class CatalogType(StrEnum):
+class CatalogType(str, Enum):
     REST_JDBC = 'rest_jdbc'
     REST_HADOOP = 'rest_hadoop'
     POLARIS = 'polaris'

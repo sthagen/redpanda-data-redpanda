@@ -10,6 +10,7 @@
 #include "storage/segment_index.h"
 
 #include "base/vassert.h"
+#include "compaction/utils.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 #include "storage/index_state.h"
@@ -140,7 +141,7 @@ void segment_index::maybe_track(
           to_optional_model_timestamp(new_broker_ts),
           path().is_internal_topic()
             || hdr.type == model::record_batch_type::raft_data,
-          internal::is_filterable(hdr.type) ? hdr.record_count : 0)) {
+          compaction::is_filterable(hdr.type) ? hdr.record_count : 0)) {
         _acc = 0;
     }
     _needs_persistence = true;

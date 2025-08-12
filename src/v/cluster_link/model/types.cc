@@ -100,6 +100,19 @@ add_mirror_topic_cmd add_mirror_topic_cmd::copy() const {
     copy.metadata = metadata.copy();
     return copy;
 }
+
+update_mirror_topic_properties_cmd
+update_mirror_topic_properties_cmd::copy() const {
+    update_mirror_topic_properties_cmd copy;
+    copy.topic = topic;
+    copy.partition_count = partition_count;
+    copy.replication_factor = replication_factor;
+    copy.topic_configs.reserve(topic_configs.size());
+    for (const auto& [key, value] : topic_configs) {
+        copy.topic_configs.emplace(key, value);
+    }
+    return copy;
+}
 } // namespace cluster_link::model
 
 auto fmt::formatter<cluster_link::model::mirror_topic_state>::format(
@@ -291,6 +304,20 @@ auto fmt::formatter<cluster_link::model::update_mirror_topic_state_cmd>::format(
   format_context& ctx) -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(), "{{topic: {}, state: {}}}", m.topic, m.state);
+}
+
+auto fmt::formatter<cluster_link::model::update_mirror_topic_properties_cmd>::
+  format(
+    const cluster_link::model::update_mirror_topic_properties_cmd& m,
+    format_context& ctx) -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{topic={}, partition_count={}, replication_factor={}, "
+      "topic_configs={}}}",
+      m.topic,
+      m.partition_count,
+      m.replication_factor,
+      m.topic_configs);
 }
 
 auto fmt::formatter<cluster_link::model::task_status_report>::format(

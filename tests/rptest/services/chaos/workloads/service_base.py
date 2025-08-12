@@ -10,7 +10,7 @@
 import requests
 import sys
 import os
-from enum import StrEnum
+from enum import Enum
 from abc import ABC, abstractmethod
 import dataclasses
 
@@ -25,7 +25,7 @@ from rptest.util import wait_until
 from ..types import NoProgressError
 
 
-class NodeState(StrEnum):
+class NodeState(str, Enum):
     INITIALIZED = 'initialized'
     STARTED = 'started'
     STOPPED = 'stopped'

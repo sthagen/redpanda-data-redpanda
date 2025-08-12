@@ -2004,7 +2004,7 @@ TEST_F(storage_test_fixture, adjacent_segment_compaction_range_u32_bounds) {
       storage::segment::offset_tracker::dirty_offset_t{one_past_u32_max});
 
     ss::abort_source as;
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(), std::nullopt, std::nullopt, as);
     auto ranges = disk_log->find_adjacent_compaction_ranges(cfg);
     ASSERT_TRUE(!ranges.has_value());
@@ -5233,7 +5233,7 @@ TEST_F(storage_test_fixture, dirty_ratio) {
                                &as]() {
         // Perform sliding window compaction, which will fully cleanly compact
         // the log.
-        static const storage::compaction_config compact_cfg(
+        static const compaction::compaction_config compact_cfg(
           model::offset::max(), std::nullopt, std::nullopt, as);
         disk_log->sliding_window_compact(compact_cfg).get();
 
@@ -6282,7 +6282,7 @@ TEST_F(storage_test_fixture, find_sliding_ranges) {
             disk_log->force_roll().get();
         }
 
-        storage::compaction_config cfg(
+        compaction::compaction_config cfg(
           model::offset::max(), std::nullopt, std::nullopt, as);
 
         for (size_t i = 0; i < segment_fields.size(); ++i) {
@@ -6367,7 +6367,7 @@ TEST_F(storage_test_fixture, segment_cached_disk_usage_set_after_compaction) {
     add_segment_func();
 
     ss::abort_source as;
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(), std::nullopt, std::nullopt, as);
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
 

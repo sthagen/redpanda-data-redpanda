@@ -31,9 +31,6 @@ public:
       manager* manager,
       ss::lowres_clock::duration task_reconciler_interval,
       model::metadata config,
-      kafka::data::rpc::partition_leader_cache* partition_leader_cache,
-      kafka::data::rpc::partition_manager* partition_manager,
-      kafka::data::rpc::topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection);
     link(const link&) = delete;
     link(link&&) = delete;
@@ -73,22 +70,31 @@ public:
     ss::future<::cluster::cluster_link::errc>
     add_mirror_topic(model::add_mirror_topic_cmd cmd);
 
+    ss::future<::cluster::cluster_link::errc>
+    update_mirror_topic_state(model::update_mirror_topic_state_cmd cmd);
+
+    ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
+      model::update_mirror_topic_properties_cmd cmd);
+
     const model::metadata& get_config() const noexcept;
 
-    kafka::data::rpc::topic_metadata_cache*
-    get_topic_metadata_cache() const noexcept;
+    kafka::data::rpc::topic_metadata_cache& topic_metadata_cache() noexcept;
+
+    kafka::data::rpc::partition_leader_cache& partition_leader_cache() noexcept;
+
+    const kafka::data::rpc::partition_leader_cache&
+    partition_leader_cache() const noexcept;
+
+    kafka::data::rpc::partition_manager& partition_manager() noexcept;
+
+    const kafka::data::rpc::partition_manager&
+    partition_manager() const noexcept;
 
     kafka::client::cluster& get_cluster_connection() noexcept;
 
-    const kafka::data::rpc::partition_leader_cache&
-    get_partition_leader_cache() const noexcept {
-        return *_partition_leader_cache;
-    }
-
-    const kafka::data::rpc::partition_manager&
-    get_partition_manager() const noexcept {
-        return *_partition_manager;
-    }
+    std::optional<
+      chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
+    get_mirror_topics_for_link() const;
 
 private:
     bool should_start_task(task* t) const;
@@ -102,9 +108,6 @@ private:
     manager* _manager;
     chunked_hash_map<ss::sstring, std::unique_ptr<task>> _tasks;
     model::metadata _config;
-    kafka::data::rpc::partition_leader_cache* _partition_leader_cache;
-    kafka::data::rpc::partition_manager* _partition_manager;
-    kafka::data::rpc::topic_metadata_cache* _topic_metadata_cache;
     kafka::client::cluster _cluster_connection;
 
     notification_list<task_state_change_cb, task_state_notification_id>

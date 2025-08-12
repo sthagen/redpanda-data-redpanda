@@ -24,6 +24,8 @@
 
 #include <fmt/format.h>
 
+#include <limits>
+
 namespace experimental::cloud_topics::l1 {
 
 // clang-format off
@@ -303,14 +305,19 @@ public:
     //
     // Offset can be used to start at a particular batch, using the file
     // position recorded in a footer
-    static std::unique_ptr<object_reader> create(ss::file, size_t offset = 0);
+    static std::unique_ptr<object_reader> create(
+      ss::file,
+      size_t offset = 0,
+      size_t length = std::numeric_limits<size_t>::max());
 
     // Create an object_reader from a file path.
     //
     // Offset can be used to start at a particular batch, using the file
     // position recorded in a footer.
-    static ss::future<std::unique_ptr<object_reader>>
-    create(std::filesystem::path, size_t offset = 0);
+    static ss::future<std::unique_ptr<object_reader>> create(
+      std::filesystem::path,
+      size_t offset = 0,
+      size_t length = std::numeric_limits<size_t>::max());
 
     // Create an object_reader from a stream.
     static std::unique_ptr<object_reader> create(ss::input_stream<char>);

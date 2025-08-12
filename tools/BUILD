@@ -34,6 +34,9 @@ native_binary(
 #
 #     bazel run //tools:dev_cluster -- --nodes 1
 #
+# To specify cluster configuration:
+#
+#     bazel run //tools:dev_cluster -- --nodes 1 --no-use-minio --config-overrides '{"cloud_storage_enabled": true, "cloud_storage_secret_key": "<secret_key>", "cloud_storage_access_key": "<access_key>", "cloud_storage_region": "us-west-2", "cloud_storage_bucket": "my_bucket", "iceberg_enabled": true, "iceberg_catalog_type": "rest", "iceberg_rest_catalog_endpoint": "https://glue.us-west-2.amazonaws.com/iceberg", "iceberg_rest_catalog_authentication_mode": "aws_sigv4", "iceberg_rest_catalog_base_location": "s3://my_bucket/glue"}'
 py_binary(
     name = "dev_cluster",
     srcs = [

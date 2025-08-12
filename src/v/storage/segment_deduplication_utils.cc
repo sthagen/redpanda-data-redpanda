@@ -9,6 +9,8 @@
 
 #include "storage/segment_deduplication_utils.h"
 
+#include "compaction/key_offset_map.h"
+#include "compaction/utils.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 #include "model/timestamp.h"
@@ -16,7 +18,6 @@
 #include "storage/compaction_reducers.h"
 #include "storage/exceptions.h"
 #include "storage/index_state.h"
-#include "storage/key_offset_map.h"
 #include "storage/probe.h"
 #include "storage/scoped_file_tracker.h"
 #include "storage/segment.h"
@@ -36,7 +37,7 @@ namespace storage {
 
 namespace {
 ss::future<ss::stop_iteration> put_entry(
-  key_offset_map& map,
+  compaction::key_offset_map& map,
   const compacted_index::entry& idx_entry,
   bool& fully_indexed) {
     auto offset = idx_entry.offset + model::offset_delta(idx_entry.delta);
@@ -48,28 +49,12 @@ ss::future<ss::stop_iteration> put_entry(
     co_return ss::stop_iteration::yes;
 }
 
-ss::future<bool> is_latest_record_for_key(
-  const key_offset_map& map,
-  const model::record_batch& b,
-  const model::record& r) {
-    const auto o = b.base_offset() + model::offset_delta(r.offset_delta());
-    auto key_view = compaction_key{iobuf_to_bytes(r.key())};
-    auto key = enhance_key(
-      b.header().type, b.header().attrs.is_control(), key_view);
-    auto latest_offset_indexed = co_await map.get(key);
-    // If the map hasn't indexed the given key, we should keep the
-    // key.
-    if (!latest_offset_indexed.has_value()) {
-        co_return true;
-    }
-    // We should only keep the record if its offset is equal or higher than
-    // that indexed.
-    co_return o >= latest_offset_indexed.value();
-}
 } // anonymous namespace
 
 ss::future<bool> build_offset_map_for_segment(
-  const compaction_config& cfg, const segment& seg, key_offset_map& m) {
+  const compaction::compaction_config& cfg,
+  const segment& seg,
+  compaction::key_offset_map& m) {
     auto compaction_idx_path = seg.path().to_compacted_index();
     auto compaction_idx_file = co_await internal::make_reader_handle(
       compaction_idx_path, cfg.sanitizer_config);
@@ -101,12 +86,12 @@ ss::future<bool> build_offset_map_for_segment(
 }
 
 ss::future<model::offset> build_offset_map(
-  const compaction_config& cfg,
+  const compaction::compaction_config& cfg,
   const segment_set& segs,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
   storage_resources& resources,
   storage::probe& probe,
-  key_offset_map& m) {
+  compaction::key_offset_map& m) {
     if (segs.empty()) {
         throw std::runtime_error("No segments to build offset map");
     }
@@ -175,8 +160,8 @@ ss::future<model::offset> build_offset_map(
 }
 
 ss::future<index_state> deduplicate_segment(
-  const compaction_config& cfg,
-  const key_offset_map& map,
+  const compaction::compaction_config& cfg,
+  const compaction::key_offset_map& map,
   ss::lw_shared_ptr<storage::segment> seg,
   segment_appender& appender,
   compacted_index_writer& cmp_idx_writer,
@@ -204,7 +189,7 @@ ss::future<index_state> deduplicate_segment(
     auto is_latest_record = [&map](
                               const model::record_batch& b,
                               const model::record& r) -> ss::future<bool> {
-        return is_latest_record_for_key(map, b, r);
+        return compaction::is_latest_record_for_key(map, b, r);
     };
 
     const auto& ntp = seg->path().get_ntp();
@@ -295,9 +280,9 @@ ss::future<index_state> deduplicate_segment(
 }
 
 ss::future<bool> index_chunk_of_segment_for_map(
-  const compaction_config& compact_cfg,
+  const compaction::compaction_config& compact_cfg,
   ss::lw_shared_ptr<segment> seg,
-  key_offset_map& map,
+  compaction::key_offset_map& map,
   probe& pb,
   model::offset& last_indexed_offset) {
     if (seg->is_closed()) {
@@ -333,9 +318,9 @@ ss::future<bool> index_chunk_of_segment_for_map(
 }
 
 ss::future<bool> segment_needs_rewrite_with_offset_map(
-  const compaction_config& cfg,
+  const compaction::compaction_config& cfg,
   ss::lw_shared_ptr<segment> seg,
-  const key_offset_map& map) {
+  const compaction::key_offset_map& map) {
     auto compaction_idx_path = seg->path().to_compacted_index();
     // If the file doesn't exist for whatever reason, return true.
     // This could, for example, race with a truncation which removes the

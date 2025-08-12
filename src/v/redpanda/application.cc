@@ -1729,12 +1729,15 @@ void application::wire_up_redpanda_services(
         vassert(
           archival_storage_enabled(),
           "cloud topics currently requires archival storage to be enabled");
+        syschecks::systemd_message("Initializing cloud topics subsystems")
+          .get();
 
         // Initialize the cloud topics app to be able to pass it around to the
         // partition manager.
         // NOTE: this only instantiates the app; underlying services are
         // constructed separately once more of the subsystems are available.
-        construct_single_service(cloud_topics_app);
+        construct_single_service(
+          cloud_topics_app, fmt::format("{}/cloud_topics", _log.name()));
     }
     syschecks::systemd_message("Adding partition manager").get();
     construct_service(

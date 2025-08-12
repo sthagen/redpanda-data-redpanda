@@ -509,14 +509,14 @@ object_reader::create(ss::input_stream<char> input) {
 }
 
 ss::future<std::unique_ptr<object_reader>>
-object_reader::create(std::filesystem::path p, size_t offset) {
+object_reader::create(std::filesystem::path p, size_t offset, size_t length) {
     auto f = co_await ss::open_file_dma(p.native(), ss::open_flags::ro);
-    co_return create(ss::make_file_input_stream(std::move(f), offset));
+    co_return create(ss::make_file_input_stream(std::move(f), offset, length));
 }
 
 std::unique_ptr<object_reader>
-object_reader::create(ss::file f, size_t offset) {
-    return create(ss::make_file_input_stream(std::move(f), offset));
+object_reader::create(ss::file f, size_t offset, size_t length) {
+    return create(ss::make_file_input_stream(std::move(f), offset, length));
 }
 
 } // namespace experimental::cloud_topics::l1

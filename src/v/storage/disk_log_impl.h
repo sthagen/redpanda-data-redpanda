@@ -12,6 +12,7 @@
 #pragma once
 
 #include "absl/container/flat_hash_map.h"
+#include "compaction/fwd.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
 #include "storage/disk_log_appender.h"
@@ -214,7 +215,7 @@ public:
     // returns a contiguous range of segments. It is up to the caller to filter
     // out these already cleanly-compacted segments.
     segment_set find_sliding_range(
-      const compaction_config& cfg,
+      const compaction::compaction_config& cfg,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
     void
@@ -233,30 +234,30 @@ public:
 
     // Self compacts a segment.
     ss::future<compaction_result> segment_self_compact(
-      compaction_config,
+      compaction::compaction_config,
       ss::lw_shared_ptr<segment> seg,
       bool force_compaction = false);
 
     ss::future<> adjacent_merge_compact(
       segment_set& segments,
-      compaction_config,
+      compaction::compaction_config,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
     ss::future<bool> sliding_window_compact(
-      const compaction_config& cfg,
+      const compaction::compaction_config& cfg,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
     ss::future<> rewrite_segment_with_offset_map(
-      const compaction_config& cfg,
+      const compaction::compaction_config& cfg,
       ss::lw_shared_ptr<segment> seg,
-      key_offset_map& map,
+      compaction::key_offset_map& map,
       bool is_finished_window_compaction,
       bool is_clean_compacted);
 
     ss::future<bool> chunked_sliding_window_compact(
-      const compaction_config& cfg,
+      const compaction::compaction_config& cfg,
       const segment_set& segs,
-      key_offset_map& map);
+      compaction::key_offset_map& map);
 
     const auto& compaction_ratio() const { return _compaction_ratio; }
 
@@ -294,12 +295,12 @@ public:
     std::optional<
       chunked_vector<std::pair<segment_set::iterator, segment_set::iterator>>>
     find_adjacent_compaction_ranges(
-      const compaction_config& cfg,
+      const compaction::compaction_config& cfg,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
     ss::future<std::optional<chunked_vector<compaction_result>>>
     compact_adjacent_segment_ranges(
-      storage::compaction_config cfg,
+      compaction::compaction_config cfg,
       std::optional<model::offset> new_start_offset = std::nullopt);
 
     // Returns the timestamp of the earliest removable data in the log above
@@ -357,11 +358,12 @@ private:
     // operation.
     ss::future<compaction_result> do_compact_adjacent_segments(
       chunked_vector<ss::lw_shared_ptr<segment>>& segments,
-      storage::compaction_config cfg);
+      compaction::compaction_config cfg);
 
     ss::future<std::optional<model::offset>> do_gc(gc_config);
     ss::future<> do_compact(
-      compaction_config, std::optional<model::offset> new_start_offset);
+      compaction::compaction_config,
+      std::optional<model::offset> new_start_offset);
 
     ss::future<> remove_empty_segments();
 

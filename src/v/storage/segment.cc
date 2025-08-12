@@ -11,6 +11,7 @@
 
 #include "base/vassert.h"
 #include "base/vlog.h"
+#include "compaction/utils.h"
 #include "compression/compression.h"
 #include "config/configuration.h"
 #include "ssx/future-util.h"
@@ -505,7 +506,7 @@ ss::future<> segment::compaction_index_batch(const model::record_batch& b) {
         co_return;
     }
     // do not index not compactible batches
-    if (!internal::is_compactible(path().get_ntp(), b.header())) {
+    if (!compaction::is_compactible(path().get_ntp(), b.header())) {
         co_return;
     }
 

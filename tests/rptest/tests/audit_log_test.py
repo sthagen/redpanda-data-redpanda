@@ -9,7 +9,7 @@
 
 import confluent_kafka as ck
 from functools import partial, reduce
-from enum import StrEnum, Enum
+from enum import Enum
 import time
 import threading
 import json
@@ -56,7 +56,7 @@ from rptest.utils.schema_registry_utils import Mode, get_subjects, put_mode
 from urllib.parse import urlparse
 
 
-class AuthorizationMatch(StrEnum):
+class AuthorizationMatch(str, Enum):
     ACL = 'acl'
     RBAC = 'rbac'
 
@@ -103,7 +103,7 @@ class ClassUID(int, Enum):
     WEB_RESOURCE_ACCESS_ACTIVITY = 6004
 
 
-class AuditFailurePolicy(StrEnum):
+class AuditFailurePolicy(str, Enum):
     PERMIT = 'permit'
     REJECT = 'reject'
 

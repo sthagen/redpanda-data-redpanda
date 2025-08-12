@@ -29,7 +29,7 @@ from rptest.utils.mode_checks import cleanup_on_early_exit
 from rptest.utils.node_operations import NodeDecommissionWaiter
 from rptest.utils.mode_checks import skip_debug_mode
 from rptest.tests.redpanda_test import RedpandaTest
-from enum import StrEnum
+from enum import Enum
 import ducktape.errors
 
 TS_LOG_ALLOW_LIST = [
@@ -38,7 +38,7 @@ TS_LOG_ALLOW_LIST = [
 ]
 
 
-class TestMode(StrEnum):
+class TestMode(str, Enum):
     NO_TIRED_STORAGE = "no_tiered_storage"
     TIRED_STORAGE = "tiered_storage"
     FAST_MOVES = "tiered_storage_fast_moves"
@@ -414,7 +414,7 @@ class NodePoolMigrationTest(NodePoolMigrationTestBase):
         self.verify()
 
 
-class DisableTestMode(StrEnum):
+class DisableTestMode(str, Enum):
     DISABLE = "disable tiered storage"
     PAUSE = "pause uploads"
 

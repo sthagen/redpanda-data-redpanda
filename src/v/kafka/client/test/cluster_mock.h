@@ -122,6 +122,13 @@ public:
       size_t replication_factor,
       kafka::topic_authorized_operations authorized_operations
       = kafka::topic_authorized_operations_not_set);
+    void remove_topic(model::topic_view topic_name);
+
+    void set_topic_partition_count(
+      model::topic_view topic_name, int32_t partition_count);
+    void set_topic_replication_factor(model::topic_view topic_name, int16_t rf);
+    void set_topic_properties(
+      model::topic_view topic_name, ::cluster::topic_properties properties);
 
     std::vector<model::node_id> get_broker_ids() const {
         return std::ranges::views::keys(_brokers)

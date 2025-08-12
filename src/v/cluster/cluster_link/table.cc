@@ -30,7 +30,8 @@ static constexpr auto accepted_commands = cluster::make_commands_list<
   cluster::cluster_link_upsert_cmd,
   cluster::cluster_link_remove_cmd,
   cluster::cluster_link_add_mirror_topic_cmd,
-  cluster::cluster_link_update_mirror_topic_state_cmd>();
+  cluster::cluster_link_update_mirror_topic_state_cmd,
+  cluster::cluster_link_update_mirror_topic_properties_cmd>();
 
 table::map_t copy_links(const table::map_t& links) {
     table::map_t copy;
@@ -199,6 +200,12 @@ ss::future<std::error_code> table::apply_update(model::record_batch b) {
           [&table](
             const cluster::cluster_link_update_mirror_topic_state_cmd& state) {
               return table.update_mirror_topic_state(state.key, state.value);
+          },
+          [&table](
+            const cluster::cluster_link_update_mirror_topic_properties_cmd&
+              state) {
+              return table.update_mirror_topic_properties(
+                state.key, state.value);
           });
     });
     auto first_res = results.front();
@@ -371,6 +378,47 @@ cluster::cluster_link::errc table::update_mirror_topic_state(
       id);
 
     it->second.state = cmd.state;
+    run_callbacks(id);
+    return errc::success;
+}
+
+cluster::cluster_link::errc table::update_mirror_topic_properties(
+  ::cluster_link::model::id_t id,
+  const ::cluster_link::model::update_mirror_topic_properties_cmd& cmd) {
+    auto link_id = find_id_by_topic(cmd.topic);
+    if (!link_id) {
+        vlog(
+          cluster::clusterlog.warn,
+          "Unable to update mirror topic {} properties as it is not registered",
+          cmd.topic);
+        return errc::topic_not_being_mirrored;
+    } else if (link_id.value() != id) {
+        vlog(
+          cluster::clusterlog.warn,
+          "Unable to update mirror topic {} properties as it is registered to "
+          "link {}",
+          cmd.topic,
+          link_id.value());
+        return errc::topic_being_mirrored_by_other_link;
+    }
+
+    auto& link_meta = _link_metadata[link_id.value()];
+    auto it = link_meta.state.mirror_topics.find(cmd.topic);
+    vassert(
+      it != link_meta.state.mirror_topics.end(),
+      "Inconsistent topic index for {} expected to exist in metadata id {}",
+      cmd.topic,
+      id);
+
+    auto& md = it->second;
+    md.partition_count = cmd.partition_count;
+    md.replication_factor = cmd.replication_factor;
+    md.topic_configs.clear();
+    md.topic_configs.reserve(cmd.topic_configs.size());
+    // Copy the topic configs from the command
+    for (const auto& [key, value] : cmd.topic_configs) {
+        md.topic_configs.emplace(key, value);
+    }
     run_callbacks(id);
     return errc::success;
 }

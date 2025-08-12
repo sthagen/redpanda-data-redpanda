@@ -13,7 +13,7 @@ from collections.abc import Callable
 import pyhive
 from contextlib import contextmanager
 import json
-from enum import StrEnum, Enum
+from enum import Enum
 
 from confluent_kafka import avro
 from confluent_kafka.avro import AvroProducer
@@ -43,7 +43,7 @@ class TranslationContext:
     dlq: int = 0
 
 
-class ProducerType(StrEnum):
+class ProducerType(str, Enum):
     AVRO = 'avro'
     PROTO2 = 'proto2'
     PROTO3 = 'proto3'

@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "utils/named_type.h"
 #include "utils/uuid.h"
 
@@ -20,5 +21,14 @@ namespace experimental::cloud_topics::l1 {
 using object_id = named_type<uuid_t, struct l1_object_id_tag>;
 
 inline object_id create_object_id() { return object_id{uuid_t::create()}; }
+
+// An extent of a remote object, which is a pair of offset and size.
+struct object_extent {
+    object_id id;
+    size_t position = 0;
+    size_t size = 0;
+
+    fmt::iterator format_to(fmt::iterator it) const;
+};
 
 } // namespace experimental::cloud_topics::l1

@@ -178,8 +178,7 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
      * Thanks to that assumption we can simply reset all inflight state instead
      * of reverting to the previous last offset.
      */
-    auto stages = try_replicate_in_stages(
-      std::move(batches), timeout, std::move(as));
+    auto stages = try_replicate_in_stages(std::move(batches), as);
 
     auto enq = std::move(stages.request_enqueued).finally([u = std::move(u)] {
     });
@@ -241,16 +240,12 @@ kafka::offset write_at_offset_stm::expected_last_offset() const {
 
 raft::replicate_stages write_at_offset_stm::try_replicate_in_stages(
   chunked_vector<model::record_batch> batches,
-  model::timeout_clock::duration timeout,
   std::optional<std::reference_wrapper<ss::abort_source>> as) {
     try {
         return _raft->replicate_in_stages(
           _insync_term,
           std::move(batches),
-          raft::replicate_options(
-            raft::consistency_level::quorum_ack,
-            std::chrono::duration_cast<std::chrono::milliseconds>(timeout),
-            std::move(as)));
+          raft::replicate_options(raft::consistency_level::quorum_ack, as));
     } catch (...) {
         vlog(
           _log.warn,

@@ -46,6 +46,24 @@ public:
       model::add_mirror_topic_cmd,
       ::model::timeout_clock::time_point)
       = 0;
+
+    virtual ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
+      model::id_t,
+      model::update_mirror_topic_state_cmd,
+      ::model::timeout_clock::time_point)
+      = 0;
+
+    virtual ss::future<::cluster::cluster_link::errc>
+      update_mirror_topic_properties(
+        model::id_t,
+        model::update_mirror_topic_properties_cmd,
+        ::model::timeout_clock::time_point)
+      = 0;
+
+    virtual std::optional<chunked_hash_map<
+      ::model::topic,
+      ::cluster_link::model::mirror_topic_metadata>>
+    get_mirror_topics_for_link(model::id_t id) const = 0;
 };
 
 /**
@@ -66,9 +84,6 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata config,
-      kafka::data::rpc::partition_leader_cache* partition_leader_cache,
-      kafka::data::rpc::partition_manager* partition_manager,
-      kafka::data::rpc::topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection)
       = 0;
 };

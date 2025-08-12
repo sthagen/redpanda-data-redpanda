@@ -10,6 +10,7 @@
 #pragma once
 
 #include "cloud_storage_clients/types.h"
+#include "cloud_topics/level_one/common/object_id.h"
 
 namespace experimental::cloud_topics::l1 {
 
@@ -21,7 +22,7 @@ public:
     /*
      * Generate the path of a level-one object.
      */
-    static cloud_storage_clients::object_key level_one_path();
+    static cloud_storage_clients::object_key level_one_path(object_id);
 };
 
 } // namespace experimental::cloud_topics::l1

@@ -31,9 +31,6 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata metadata,
-      kafka::data::rpc::partition_leader_cache* leader_cache,
-      kafka::data::rpc::partition_manager* pm,
-      kafka::data::rpc::topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection) override {
         auto name = metadata.name;
         auto created_link = std::make_unique<link>(
@@ -42,9 +39,6 @@ public:
           manager,
           _task_reconciler_interval,
           std::move(metadata),
-          leader_cache,
-          pm,
-          topic_metadata_cache,
           std::move(cluster_connection));
 
         _links.emplace(std::move(name), created_link.get());
@@ -97,6 +91,54 @@ public:
 
         auto ec = co_await _table->apply_update(std::move(batch));
         co_return ec.value();
+    }
+
+    ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
+      model::id_t id,
+      model::update_mirror_topic_state_cmd cmd,
+      ::model::timeout_clock::time_point) override {
+        auto link = _table->find_link_by_id(id);
+        if (!link) {
+            co_return ::cluster::cluster_link::errc::does_not_exist;
+        }
+        auto batch = ::cluster::cluster_link::testing::
+          create_update_mirror_topic_state_command(id, std::move(cmd));
+
+        auto ec = co_await _table->apply_update(std::move(batch));
+        co_return ec.value();
+    }
+
+    ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
+      model::id_t id,
+      model::update_mirror_topic_properties_cmd cmd,
+      ::model::timeout_clock::time_point) override {
+        auto link = _table->find_link_by_id(id);
+        if (!link) {
+            co_return ::cluster::cluster_link::errc::does_not_exist;
+        }
+        auto batch = ::cluster::cluster_link::testing::
+          create_update_mirror_topic_properties_command(id, std::move(cmd));
+        auto ec = co_await _table->apply_update(std::move(batch));
+        co_return ec.value();
+    }
+
+    std::optional<chunked_hash_map<
+      ::model::topic,
+      ::cluster_link::model::mirror_topic_metadata>>
+    get_mirror_topics_for_link(model::id_t id) const override {
+        auto link = _table->find_link_by_id(id);
+        if (!link) {
+            return std::nullopt;
+        }
+        chunked_hash_map<
+          ::model::topic,
+          ::cluster_link::model::mirror_topic_metadata>
+          mirror_topics;
+        mirror_topics.reserve(link->get().state.mirror_topics.size());
+        for (const auto& [topic, metadata] : link->get().state.mirror_topics) {
+            mirror_topics.emplace(topic, metadata.copy());
+        }
+        return mirror_topics;
     }
 
 private:

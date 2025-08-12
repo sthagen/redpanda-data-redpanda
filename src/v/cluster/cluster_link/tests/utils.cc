@@ -48,6 +48,13 @@ model::record_batch create_update_mirror_topic_state_command(
     return cluster::serde_serialize_cmd(std::move(update_cmd));
 }
 
+model::record_batch create_update_mirror_topic_properties_command(
+  id_t id, ::cluster_link::model::update_mirror_topic_properties_cmd cmd) {
+    cluster::cluster_link_update_mirror_topic_properties_cmd update_cmd(
+      id, std::move(cmd));
+    return cluster::serde_serialize_cmd(std::move(update_cmd));
+}
+
 mirror_topic_metadata create_mirror_topic_metadata(
   mirror_topic_state state,
   ::model::topic source_topic_name,

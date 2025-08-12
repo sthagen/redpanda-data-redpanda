@@ -31,7 +31,7 @@ class topic_cache {
         chunked_hash_map<model::partition_id, partition_data> partitions;
         kafka::topic_authorized_operations authorized_operations
           = kafka::topic_authorized_operations_not_set;
-        size_t replication_factor;
+        int16_t replication_factor;
     };
 
     using topics_t = chunked_hash_map<model::topic, topic_data>;
@@ -57,9 +57,9 @@ public:
     std::optional<kafka::topic_authorized_operations>
     authorized_operations_for_topic(model::topic_view tp) const;
 
-    std::optional<size_t> partition_count(model::topic_view tp) const;
+    std::optional<int32_t> partition_count(model::topic_view tp) const;
 
-    std::optional<size_t> replication_factor(model::topic_view tp) const;
+    std::optional<int16_t> replication_factor(model::topic_view tp) const;
 
     const topics_t& cache() const noexcept;
 

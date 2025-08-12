@@ -19,6 +19,10 @@
 
 using namespace std::chrono_literals;
 
+using kafka::data::rpc::partition_leader_cache;
+using kafka::data::rpc::partition_manager;
+using kafka::data::rpc::topic_metadata_cache;
+
 namespace cluster_link {
 manager::manager(
   ::model::node_id self,
@@ -140,9 +144,6 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
               id,
               this,
               link_metadata.copy(),
-              _partition_leader_cache.get(),
-              _partition_manager.get(),
-              _topic_metadata_cache.get(),
               _cluster_factory->create_cluster(link_metadata));
             vassert(
               new_link, "Link factory returned a null link for id={}", id);
@@ -185,6 +186,26 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
               retry_delay, [this, id] { return handle_on_link_change(id); });
         }
     }
+}
+
+topic_metadata_cache& manager::topic_metadata_cache() noexcept {
+    return *_topic_metadata_cache;
+}
+
+partition_leader_cache& manager::partition_leader_cache() noexcept {
+    return *_partition_leader_cache;
+}
+
+const partition_leader_cache& manager::partition_leader_cache() const noexcept {
+    return *_partition_leader_cache;
+}
+
+partition_manager& manager::partition_manager() noexcept {
+    return *_partition_manager;
+}
+
+const partition_manager& manager::partition_manager() const noexcept {
+    return *_partition_manager;
 }
 
 ss::future<> manager::link_task_reconciler() {
@@ -245,6 +266,30 @@ ss::future<::cluster::cluster_link::errc> manager::add_mirror_topic(
       link_id,
       std::move(cmd),
       ::model::timeout_clock::now() + mirror_topic_timeout);
+}
+
+ss::future<::cluster::cluster_link::errc> manager::update_mirror_topic_state(
+  model::id_t link_id, model::update_mirror_topic_state_cmd cmd) {
+    static constexpr auto mirror_topic_timeout = 5s;
+    return _registry->update_mirror_topic_state(
+      link_id,
+      std::move(cmd),
+      ::model::timeout_clock::now() + mirror_topic_timeout);
+}
+
+ss::future<::cluster::cluster_link::errc>
+manager::update_mirror_topic_properties(
+  model::id_t link_id, model::update_mirror_topic_properties_cmd cmd) {
+    static constexpr auto mirror_topic_timeout = 5s;
+    return _registry->update_mirror_topic_properties(
+      link_id,
+      std::move(cmd),
+      ::model::timeout_clock::now() + mirror_topic_timeout);
+}
+
+std::optional<chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
+manager::get_mirror_topics_for_link(model::id_t id) const {
+    return _registry->get_mirror_topics_for_link(id);
 }
 
 model::cluster_link_task_status_report manager::get_task_status_report() const {

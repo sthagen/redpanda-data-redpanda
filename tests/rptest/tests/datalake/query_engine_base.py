@@ -9,10 +9,10 @@
 
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from enum import StrEnum
+from enum import Enum
 
 
-class QueryEngineType(StrEnum):
+class QueryEngineType(str, Enum):
     SPARK = 'spark'
     TRINO = 'trino'
     DATABRICKS_SQL = 'databricks_sql'

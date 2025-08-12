@@ -26,9 +26,6 @@ using namespace std::chrono_literals;
 namespace cluster_link::tests {
 
 using ::cluster::cluster_link::table;
-using kafka::data::rpc::partition_leader_cache;
-using kafka::data::rpc::partition_manager;
-using kafka::data::rpc::topic_metadata_cache;
 
 class link_test;
 namespace {
@@ -42,9 +39,6 @@ public:
       ss::lowres_clock::duration task_reconciler_interval,
       link_test* link_test,
       model::metadata metadata,
-      partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager,
-      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection);
 
     ss::future<> start() override;
@@ -66,9 +60,6 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata metadata,
-      partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager,
-      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection) override {
         return std::make_unique<test_link>(
           self,
@@ -77,9 +68,6 @@ public:
           _task_reconciler_interval,
           _link_test,
           std::move(metadata),
-          partition_leader_cache,
-          partition_manager,
-          topic_metadata_cache,
           std::move(cluster_connection));
     }
 
@@ -223,9 +211,6 @@ test_link::test_link(
   ss::lowres_clock::duration task_reconciler_interval,
   link_test* link_test,
   model::metadata metadata,
-  partition_leader_cache* partition_leader_cache,
-  partition_manager* partition_manager,
-  topic_metadata_cache* topic_metadata_cache,
   kafka::client::cluster cluster_connection)
   : link(
       self,
@@ -233,9 +218,6 @@ test_link::test_link(
       manager,
       task_reconciler_interval,
       std::move(metadata),
-      partition_leader_cache,
-      partition_manager,
-      topic_metadata_cache,
       std::move(cluster_connection))
   , _link_test(link_test) {}
 
@@ -389,9 +371,6 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata metadata,
-      partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager,
-      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection) override {
         return std::make_unique<evil_link>(
           self,
@@ -399,9 +378,6 @@ public:
           manager,
           1s,
           std::move(metadata),
-          partition_leader_cache,
-          partition_manager,
-          topic_metadata_cache,
           std::move(cluster_connection));
     }
 };

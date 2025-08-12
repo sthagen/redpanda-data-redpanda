@@ -11,6 +11,7 @@
 
 #include "cluster_link/source_topic_syncer.h"
 #include "cluster_link/tests/deps.h"
+#include "test_utils/async.h"
 #include "test_utils/test.h"
 
 #include <algorithm>
@@ -136,12 +137,17 @@ TEST_F_CORO(source_topic_syncer_test, select_all_filter) {
       kafka::topic_authorized_operations(0x508));
 
     // Allow auto topic sensor to run
-    co_await ss::sleep(2s);
+    RPTEST_REQUIRE_EVENTUALLY_CORO(5s, [this] {
+        auto link_metadata = fixture()->find_link_by_name(
+          model::name_t("test_link"));
+        auto& mirror_topics = link_metadata->get().state.mirror_topics;
+        auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
+        return mirror_topic_it != mirror_topics.end();
+    });
 
     link_metadata = fixture()->find_link_by_name(model::name_t("test_link"));
     auto& mirror_topics = link_metadata->get().state.mirror_topics;
     auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
-    ASSERT_NE_CORO(mirror_topic_it, mirror_topics.end());
     EXPECT_EQ(
       mirror_topic_it->second.source_topic_name, ::model::topic("test_topic"));
     EXPECT_EQ(mirror_topic_it->second.partition_count, 3);
@@ -174,13 +180,18 @@ TEST_F_CORO(source_topic_syncer_test, select_all_with_exclude) {
 
     // Allow auto topic sensor to run
     co_await ss::sleep(2s);
+    RPTEST_REQUIRE_EVENTUALLY_CORO(5s, [this] {
+        auto link_metadata = fixture()->find_link_by_name(
+          model::name_t("test_link"));
+        auto& mirror_topics = link_metadata->get().state.mirror_topics;
+        auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
+        return mirror_topic_it != mirror_topics.end();
+    });
 
     auto link_metadata = fixture()->find_link_by_name(
       model::name_t("test_link"));
     auto& mirror_topics = link_metadata->get().state.mirror_topics;
-    auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
-    ASSERT_NE_CORO(mirror_topic_it, mirror_topics.end());
-    mirror_topic_it = mirror_topics.find(::model::topic("excluded-topic"));
+    auto mirror_topic_it = mirror_topics.find(::model::topic("excluded-topic"));
     EXPECT_EQ(mirror_topic_it, mirror_topics.end())
       << "Excluded topic should not be mirrored";
 }
@@ -384,13 +395,19 @@ TEST_F_CORO(invalid_describe_configs_test, bad_describe_config_response) {
 
     // Allow auto topic sensor to run
     co_await ss::sleep(2s);
+    RPTEST_REQUIRE_EVENTUALLY_CORO(5s, [this] {
+        auto link_metadata = fixture()->find_link_by_name(
+          model::name_t("test_link"));
+        auto& mirror_topics = link_metadata->get().state.mirror_topics;
+        auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
+        return mirror_topic_it != mirror_topics.end();
+    });
 
     auto link_metadata = fixture()->find_link_by_name(
       model::name_t("test_link"));
     auto& mirror_topics = link_metadata->get().state.mirror_topics;
-    auto mirror_topic_it = mirror_topics.find(::model::topic("test_topic"));
-    ASSERT_NE_CORO(mirror_topic_it, mirror_topics.end());
-    mirror_topic_it = mirror_topics.find(::model::topic("not_requested_topic"));
+    auto mirror_topic_it = mirror_topics.find(
+      ::model::topic("not_requested_topic"));
     EXPECT_EQ(mirror_topic_it, mirror_topics.end())
       << "Excluded topic should not be mirrored";
 }

@@ -52,6 +52,28 @@ public:
         return _plf->add_mirror_topic(id, std::move(cmd), timeout);
     }
 
+    ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
+      model::id_t id,
+      model::update_mirror_topic_state_cmd cmd,
+      ::model::timeout_clock::time_point timeout) override {
+        return _plf->update_mirror_topic_state(id, std::move(cmd), timeout);
+    }
+
+    ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
+      model::id_t id,
+      model::update_mirror_topic_properties_cmd cmd,
+      ::model::timeout_clock::time_point timeout) override {
+        return _plf->update_mirror_topic_properties(
+          id, std::move(cmd), timeout);
+    }
+
+    std::optional<chunked_hash_map<
+      ::model::topic,
+      ::cluster_link::model::mirror_topic_metadata>>
+    get_mirror_topics_for_link(model::id_t id) const override {
+        return _plf->get_mirror_topics_for_link(id);
+    }
+
 private:
     frontend* _plf;
 };
@@ -64,9 +86,6 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata config,
-      partition_leader_cache* partition_leader_cache,
-      partition_manager* partition_manager,
-      topic_metadata_cache* topic_metadata_cache,
       kafka::client::cluster cluster_connection) override {
         return std::make_unique<link>(
           self,
@@ -74,9 +93,6 @@ public:
           manager,
           link_reconciler_period,
           std::move(config),
-          partition_leader_cache,
-          partition_manager,
-          topic_metadata_cache,
           std::move(cluster_connection));
     }
 };

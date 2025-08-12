@@ -12,14 +12,14 @@ from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.services.rpk_producer import RpkProducer
-from enum import StrEnum
+from enum import Enum
 from random import randint
 from rptest.services.metrics_check import MetricCheck
 from rptest.util import expect_exception, wait_until_result
 
 
 # no StrEnum support in test python version
-class WriteCachingMode(StrEnum):
+class WriteCachingMode(str, Enum):
     TRUE = "true"
     FALSE = "false"
     DISABLED = "disabled"

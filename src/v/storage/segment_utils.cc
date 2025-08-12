@@ -252,7 +252,7 @@ ss::future<size_t> copy_filtered_entries(
 
 static ss::future<size_t> do_write_clean_compacted_index(
   compacted_index_reader reader,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage_resources& resources) {
     const auto tmpname = std::filesystem::path(
       fmt::format("{}.staging", reader.path()));
@@ -270,7 +270,7 @@ static ss::future<size_t> do_write_clean_compacted_index(
 
 ss::future<size_t> write_clean_compacted_index(
   compacted_index_reader reader,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage_resources& resources) {
     // integrity verified in `do_detect_compaction_index_state`
     auto fut = co_await ss::coroutine::as_future(
@@ -293,8 +293,8 @@ ss::future<size_t> write_clean_compacted_index(
     co_return fut.get();
 }
 
-ss::future<compacted_index::recovery_state>
-do_detect_compaction_index_state(segment_full_path p, compaction_config cfg) {
+ss::future<compacted_index::recovery_state> do_detect_compaction_index_state(
+  segment_full_path p, compaction::compaction_config cfg) {
     using flags = compacted_index::footer_flags;
     return make_reader_handle(p, cfg.sanitizer_config)
       .then([cfg, p](ss::file f) {
@@ -330,15 +330,16 @@ do_detect_compaction_index_state(segment_full_path p, compaction_config cfg) {
       });
 }
 
-ss::future<compacted_index::recovery_state>
-detect_compaction_index_state(segment_full_path p, compaction_config cfg) {
-    return ss::file_exists(p.string()).then([p, cfg](bool exists) {
-        if (exists) {
-            return do_detect_compaction_index_state(p, cfg);
-        }
-        return ss::make_ready_future<compacted_index::recovery_state>(
-          compacted_index::recovery_state::index_missing);
-    });
+ss::future<compacted_index::recovery_state> detect_compaction_index_state(
+  segment_full_path p, compaction::compaction_config cfg) {
+    return ss::file_exists(p.string())
+      .then([p = std::move(p), cfg](bool exists) {
+          if (exists) {
+              return do_detect_compaction_index_state(p, cfg);
+          }
+          return ss::make_ready_future<compacted_index::recovery_state>(
+            compacted_index::recovery_state::index_missing);
+      });
 }
 
 ss::future<compacted_offset_list>
@@ -350,7 +351,7 @@ generate_compacted_list(model::offset o, compacted_index_reader reader) {
 
 ss::future<size_t> do_compact_segment_index(
   ss::lw_shared_ptr<segment> s,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage_resources& resources) {
     auto compacted_path = s->reader().path().to_compacted_index();
     vlog(gclog.trace, "compacting segment compaction index:{}", compacted_path);
@@ -364,7 +365,7 @@ ss::future<size_t> do_compact_segment_index(
 
 ss::future<storage::index_state> do_copy_segment_data(
   ss::lw_shared_ptr<segment> seg,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage::probe& pb,
   ss::rwlock::holder rw_lock_holder,
   storage_resources& resources,
@@ -525,7 +526,7 @@ ss::future<storage::index_state> do_copy_segment_data(
 
 model::record_batch_reader create_segment_full_reader(
   ss::lw_shared_ptr<storage::segment> s,
-  storage::compaction_config,
+  compaction::compaction_config,
   storage::probe& pb,
   ss::rwlock::holder h,
   std::optional<model::offset> start_offset) {
@@ -545,7 +546,7 @@ model::record_batch_reader create_segment_full_reader(
 ss::future<> do_swap_data_file_handles(
   std::filesystem::path compacted,
   ss::lw_shared_ptr<storage::segment> s,
-  storage::compaction_config cfg,
+  compaction::compaction_config cfg,
   probe& pb,
   std::optional<size_t> new_cmp_idx_size) {
     co_await s->reader().close();
@@ -584,7 +585,7 @@ ss::future<> do_swap_data_file_handles(
  */
 ss::future<compaction_result> do_self_compact_segment(
   ss::lw_shared_ptr<segment> s,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage::probe& pb,
   storage::readers_cache& readers_cache,
   storage_resources& resources,
@@ -665,8 +666,8 @@ ss::future<> build_compaction_index(
   model::record_batch_reader rdr,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
   chunked_vector<model::tx_range> aborted_txs,
-  segment_full_path p,
-  compaction_config cfg,
+  const segment_full_path& p,
+  compaction::compaction_config cfg,
   storage_resources& resources) {
     auto w = storage::make_file_backed_compacted_index(
       p, false, resources, cfg.sanitizer_config);
@@ -707,7 +708,7 @@ bool compacted_index_needs_rebuild(compacted_index::recovery_state state) {
 ss::future<> rebuild_compaction_index(
   ss::lw_shared_ptr<segment> s,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage::probe& pb,
   storage_resources& resources) {
     segment_full_path idx_path = s->path().to_compacted_index();
@@ -734,7 +735,7 @@ ss::future<> rebuild_compaction_index(
 ss::future<compacted_index::recovery_state> maybe_rebuild_compaction_index(
   ss::lw_shared_ptr<segment> s,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  const compaction_config& cfg,
+  const compaction::compaction_config& cfg,
   ss::rwlock::holder& read_holder,
   storage_resources& resources,
   storage::probe& pb) {
@@ -787,7 +788,7 @@ ss::future<compacted_index::recovery_state> maybe_rebuild_compaction_index(
 ss::future<compaction_result> self_compact_segment(
   ss::lw_shared_ptr<segment> s,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  const compaction_config& cfg,
+  const compaction::compaction_config& cfg,
   storage::probe& pb,
   storage::readers_cache& readers_cache,
   storage_resources& resources,
@@ -860,7 +861,7 @@ ss::future<std::tuple<
 make_concatenated_segment(
   segment_full_path path,
   chunked_vector<ss::lw_shared_ptr<segment>>& segments,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage_resources& resources,
   ss::sharded<features::feature_table>& feature_table) {
     // read locks on source segments
@@ -1072,7 +1073,7 @@ ss::future<> rewrite_concatenated_indicies(
 ss::future<> do_write_concatenated_compacted_index(
   std::filesystem::path target_path,
   chunked_vector<ss::lw_shared_ptr<segment>>& segments,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage_resources& resources) {
     return make_indices_readers(segments, cfg.sanitizer_config, cfg.asrc)
       .then([cfg, target_path = std::move(target_path), &resources](
@@ -1125,7 +1126,7 @@ ss::future<> do_write_concatenated_compacted_index(
 ss::future<> write_concatenated_compacted_index(
   std::filesystem::path target_path,
   chunked_vector<ss::lw_shared_ptr<segment>>& segments,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage_resources& resources) {
     if (segments.empty()) {
         return ss::now();
@@ -1137,7 +1138,7 @@ ss::future<> write_concatenated_compacted_index(
 ss::future<chunked_vector<ss::rwlock::holder>> transfer_segment(
   ss::lw_shared_ptr<segment> to,
   ss::lw_shared_ptr<segment> from,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   probe& probe,
   chunked_vector<ss::rwlock::holder> locks,
   std::optional<size_t> new_cmp_idx_size) {
@@ -1175,7 +1176,7 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
   ss::lw_shared_ptr<segment> target,
   chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage::probe& pb,
   storage::readers_cache& readers_cache,
   storage_resources& resources,
@@ -1368,7 +1369,7 @@ ss::future<bool> mark_segment_as_finished_window_compaction(
 }
 
 bool is_past_tombstone_delete_horizon(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg) {
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
     if (
       seg->has_clean_compact_timestamp()
       && cfg.tombstone_retention_ms.has_value()) {
@@ -1383,7 +1384,7 @@ bool is_past_tombstone_delete_horizon(
 }
 
 bool may_have_removable_tombstones(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg) {
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
     return seg->index().may_have_tombstone_records()
            && is_past_tombstone_delete_horizon(seg, cfg);
 }
@@ -1401,7 +1402,7 @@ ss::future<bool> mark_segment_as_finished_self_compaction(
 }
 
 bool is_past_transaction_batch_delete_horizon(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg) {
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
     if (seg->has_self_compact_timestamp() && cfg.tx_retention_ms.has_value()) {
         const auto now = model::to_time_point(model::timestamp::now());
         return (now
@@ -1414,7 +1415,7 @@ bool is_past_transaction_batch_delete_horizon(
 }
 
 bool has_removable_transaction_batches(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg) {
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg) {
     return seg->index().has_transaction_batches()
            && is_past_transaction_batch_delete_horizon(seg, cfg);
 }

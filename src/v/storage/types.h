@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "compaction/types.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
 #include "model/record.h"
@@ -18,7 +19,6 @@
 #include "model/timestamp.h"
 #include "storage/file_sanitizer_types.h"
 #include "storage/fwd.h"
-#include "storage/key_offset_map.h"
 #include "storage/scoped_file_tracker.h"
 
 #include <seastar/core/abort_source.hh>
@@ -437,77 +437,6 @@ struct gc_config {
     friend std::ostream& operator<<(std::ostream&, const gc_config&);
 };
 
-struct compaction_config {
-    compaction_config(
-      model::offset max_collect_offset,
-      std::optional<std::chrono::milliseconds> tombstone_ret_ms,
-      std::optional<std::chrono::milliseconds> tx_ret_ms,
-      ss::abort_source& as,
-      std::optional<ntp_sanitizer_config> san_cfg = std::nullopt,
-      std::optional<size_t> max_keys = std::nullopt,
-      std::chrono::milliseconds min_lag_ms = std::chrono::milliseconds{0},
-      hash_key_offset_map* key_map = nullptr,
-      scoped_file_tracker::set_t* to_clean = nullptr)
-      : max_removable_local_log_offset(max_collect_offset)
-      , tombstone_retention_ms(tombstone_ret_ms)
-      , tx_retention_ms(tx_ret_ms)
-      , sanitizer_config(std::move(san_cfg))
-      , key_offset_map_max_keys(max_keys)
-      , min_lag_ms(min_lag_ms)
-      , hash_key_map(key_map)
-      , files_to_cleanup(to_clean)
-      , asrc(&as) {}
-
-    // Cannot delete or compact past this offset (i.e. for unresolved txn
-    // records): that is, only offsets <= this may be compacted.
-    model::offset max_removable_local_log_offset;
-
-    // The retention time for tombstones. Tombstone removal occurs only for
-    // "clean" compacted segments past the tombstone deletion horizon timestamp,
-    // which is a segment's `clean_compact_timestamp + tombstone_retention_ms`.
-    // This means tombstones take at least two rounds of compaction to remove a
-    // tombstone: at least one pass to make a segment clean, and another pass
-    // some time after tombstone_retention_ms to remove tombstones.
-    //
-    // Tombstone removal is only supported for topics with remote writes
-    // disabled. As a result, this field will only have a value for compaction
-    // ran on non-archival topics.
-    std::optional<std::chrono::milliseconds> tombstone_retention_ms;
-
-    // The retention time for transactional markers. Tombstone removal occurs
-    // for self compacted segments past the transaction deletion horizon
-    // timestamp, which is a segment's self_compact_timestamp +
-    // tombstone_retention_ms. Similar to tombstone removal, there are two
-    // passes involved in removing transaction batches:
-    // 1. The first pass removes the `tx_fence` batch and unsets all the
-    // transactional bit in all raft data batch headers, and sets
-    // `self_compact_timestamp`.
-    // 2. The second pass removes the `commit/abort` control batch after the
-    // time horizon mentioned above is passed.
-    std::optional<std::chrono::milliseconds> tx_retention_ms;
-
-    // use proxy fileops with assertions and/or failure injection
-    std::optional<ntp_sanitizer_config> sanitizer_config;
-
-    // Limit the number of keys stored by a compaction's key-offset map.
-    std::optional<size_t> key_offset_map_max_keys;
-
-    // The value of min.compaction.lag.ms for this compaction.
-    std::chrono::milliseconds min_lag_ms;
-
-    // Hash key-offset map to reuse across compactions.
-    hash_key_offset_map* hash_key_map;
-
-    // Set of intermediary files added by compactions that need to be removed,
-    // e.g. because they were leftover from an aborted compaction.
-    scoped_file_tracker::set_t* files_to_cleanup;
-
-    // abort source for compaction task
-    ss::abort_source* asrc;
-
-    friend std::ostream& operator<<(std::ostream&, const compaction_config&);
-};
-
 /*
  * Compaction and garbage collection are two distinct processes with their own
  * configuration. However, the vast majority of the time they are invoked
@@ -524,7 +453,7 @@ struct housekeeping_config {
       std::chrono::milliseconds min_lag_ms,
       ss::abort_source& as,
       std::optional<ntp_sanitizer_config> san_cfg = std::nullopt,
-      hash_key_offset_map* key_map = nullptr)
+      compaction::hash_key_offset_map* key_map = nullptr)
       : compact(
           max_collect_offset,
           tombstone_retention_ms,
@@ -536,7 +465,7 @@ struct housekeeping_config {
           key_map)
       , gc(upper, max_bytes_in_log) {}
 
-    compaction_config compact;
+    compaction::compaction_config compact;
     gc_config gc;
 
     friend std::ostream& operator<<(std::ostream&, const housekeeping_config&);

@@ -12,6 +12,7 @@
 #include "absl/container/btree_map.h"
 #include "base/likely.h"
 #include "base/vlog.h"
+#include "compaction/key_offset_map.h"
 #include "config/configuration.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -25,7 +26,6 @@
 #include "storage/disk_log_impl.h"
 #include "storage/file_sanitizer.h"
 #include "storage/fs_utils.h"
-#include "storage/key_offset_map.h"
 #include "storage/kvstore.h"
 #include "storage/log.h"
 #include "storage/log_manager_probe.h"
@@ -288,7 +288,8 @@ log_manager::housekeeping_scan(model::timestamp collection_threshold) {
       && is_not_set(_logs_list.front().flags, bflags::compacted)) {
         auto compaction_mem_bytes
           = memory_groups().compaction_reserved_memory();
-        auto compaction_map = std::make_unique<hash_key_offset_map>();
+        auto compaction_map
+          = std::make_unique<compaction::hash_key_offset_map>();
         co_await compaction_map->initialize(compaction_mem_bytes);
         _compaction_hash_key_map = std::move(compaction_map);
     }

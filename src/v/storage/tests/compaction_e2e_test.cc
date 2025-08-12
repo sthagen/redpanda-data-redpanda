@@ -243,7 +243,7 @@ public:
       std::optional<size_t> max_keys = std::nullopt) {
         // Compact, allowing the map to grow as large as we need.
         ss::abort_source never_abort;
-        storage::compaction_config cfg(
+        compaction::compaction_config cfg(
           max_collect_offset,
           tombstone_ret_ms,
           std::nullopt,
@@ -265,7 +265,7 @@ public:
       std::optional<std::chrono::milliseconds> tombstone_ret_ms = std::nullopt,
       std::optional<size_t> max_keys = std::nullopt) {
         ss::abort_source never_abort;
-        storage::compaction_config cfg(
+        compaction::compaction_config cfg(
           max_collect_offset,
           tombstone_ret_ms,
           std::nullopt,
@@ -309,7 +309,7 @@ TEST_P(CompactionFixtureParamTest, TestDedupeOnePass) {
     // Compact, allowing the map to grow as large as we need.
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -381,7 +381,7 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPass) {
     // to compact everything.
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -516,7 +516,7 @@ TEST_F(CompactionFixtureTest, TestDedupeMultiPassAddedSegment) {
     // to compact everything.
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -613,7 +613,7 @@ TEST_P(CompactionFixtureBatchSizeParamTest, TestRecompactWithNewData) {
     // Compact everything in one go.
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -633,7 +633,7 @@ TEST_P(CompactionFixtureBatchSizeParamTest, TestRecompactWithNewData) {
 
     // But once we add more data, we become eligible for compaction again.
     generate_data(1, cardinality, records_per_segment).get();
-    storage::compaction_config new_cfg(
+    compaction::compaction_config new_cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -677,7 +677,7 @@ TEST_F(CompactionFixtureTest, TestCompactWithNonDataBatches) {
 
     auto before_compaction_count
       = disk_log.get_probe().get_segments_compacted();
-    storage::compaction_config new_cfg(
+    compaction::compaction_config new_cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -761,7 +761,7 @@ TEST_P(CompactionFilledReaderTest, ReadFilledGaps) {
 
     // Compaction should leave behind gaps, but those gaps should be filled
     // when reading.
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -816,7 +816,7 @@ TEST_F(CompactionFixtureTest, TestReadFilledGapsWithTerms) {
         }
     }
 
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       disk_log.segments().back()->offsets().get_base_offset(),
       std::nullopt,
       std::nullopt,
@@ -1573,7 +1573,7 @@ TEST_F(CompactionFixtureTest, TestSlidingWindowNoUnecessaryRewrites) {
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
     auto& segments = disk_log.segments();
 
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(), std::nullopt, std::nullopt, never_abort);
 
     for (auto& seg : segments) {
@@ -1679,7 +1679,7 @@ TEST_F(CompactionFixtureParamTest, TestSegmentConcatenation) {
     storage::segment_set filtered_seg_set(std::move(filtered_segs));
 
     ss::abort_source never_abort;
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(),
       std::nullopt,
       std::nullopt,
@@ -1720,7 +1720,7 @@ TEST_F(CompactionFixtureTest, TestAdjacentCompaction) {
 
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(),
       std::nullopt,
       std::nullopt,
@@ -1809,7 +1809,7 @@ TEST_F(CompactionFixtureTest, TestAdjacentCompactionMultipleRanges) {
 
     ss::abort_source never_abort;
     auto& disk_log = dynamic_cast<storage::disk_log_impl&>(*log);
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(),
       std::nullopt,
       std::nullopt,
@@ -1877,7 +1877,7 @@ TEST_F(
 
     auto do_adjacent_compact = [](const auto& l) {
         ss::abort_source never_abort;
-        storage::compaction_config cfg(
+        compaction::compaction_config cfg(
           model::offset::max(), std::nullopt, std::nullopt, never_abort);
 
         const auto closed_segment_filter = [](const auto& s) -> bool {
@@ -2096,7 +2096,7 @@ TEST_F(CompactionFixtureTest, TestBatchCacheResetAfterAdjacentMerge) {
       target_segs_v.begin(), target_segs_v.end()}};
 
     ss::abort_source never_abort;
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(), std::nullopt, std::nullopt, never_abort);
 
     // self compact everything up front so that it doesn't happen inline with

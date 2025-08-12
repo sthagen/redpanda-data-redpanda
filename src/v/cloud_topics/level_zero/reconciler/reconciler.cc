@@ -180,7 +180,7 @@ ss::future<> reconciler::reconcile() {
     if (!object.has_value()) {
         co_return;
     }
-    auto path = l1::object_path_factory::level_one_path();
+    auto path = l1::object_path_factory::level_one_path(l1::create_object_id());
     auto result = co_await upload_object(path, std::move(object->data));
     if (result != cloud_io::upload_result::success) {
         vlog(lg.info, "Failed to upload L1 object: {}", result);

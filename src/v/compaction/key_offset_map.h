@@ -6,18 +6,19 @@
 // As of the Change Date specified in that file, in accordance with
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
+
 #pragma once
 
 #include "absl/container/btree_map.h"
+#include "compaction/key.h"
 #include "container/chunked_vector.h"
 #include "hashing/secure.h"
 #include "model/fundamental.h"
-#include "storage/compaction.h"
 #include "utils/tracking_allocator.h"
 
 #include <seastar/core/future.hh>
 
-namespace storage {
+namespace compaction {
 
 /**
  * Map containing the latest offsets of each key.
@@ -37,13 +38,13 @@ public:
      * offset is larger than the existing offset associated with the key.
      */
     virtual seastar::future<bool>
-    put(const compaction_key& key, model::offset offset) = 0;
+    put(const compaction::compaction_key& key, model::offset offset) = 0;
 
     /**
      * Return the offset for the given \p key.
      */
     virtual seastar::future<std::optional<model::offset>>
-    get(const compaction_key& key) const = 0;
+    get(const compaction::compaction_key& key) const = 0;
 
     /**
      * Return the highest inserted offset.
@@ -83,10 +84,10 @@ public:
       std::optional<size_t> max_keys = std::nullopt);
 
     seastar::future<bool>
-    put(const compaction_key& key, model::offset offset) override;
+    put(const compaction::compaction_key& key, model::offset offset) override;
 
     seastar::future<std::optional<model::offset>>
-    get(const compaction_key& key) const override;
+    get(const compaction::compaction_key& key) const override;
 
     model::offset max_offset() const override;
 
@@ -97,8 +98,9 @@ public:
 
 private:
     ss::shared_ptr<util::mem_tracker> _memory_tracker;
-    util::mem_tracked::map_t<absl::btree_map, compaction_key, model::offset>
-      _map;
+    util::mem_tracked::
+      map_t<absl::btree_map, compaction::compaction_key, model::offset>
+        _map;
     model::offset _max_offset;
     size_t _max_keys;
 };
@@ -119,10 +121,10 @@ class hash_key_offset_map : public key_offset_map {
 
 public:
     seastar::future<std::optional<model::offset>>
-    get(const compaction_key& key) const override;
+    get(const compaction::compaction_key& key) const override;
 
     seastar::future<bool>
-    put(const compaction_key& key, model::offset offset) override;
+    put(const compaction::compaction_key& key, model::offset offset) override;
 
     model::offset max_offset() const override;
 
@@ -186,7 +188,7 @@ private:
      * hashing object which is reused to avoid reinitialization of OpenSSL
      * state.
      */
-    hash_type::digest_type hash_key(const compaction_key&) const;
+    hash_type::digest_type hash_key(const compaction::compaction_key&) const;
 
     mutable hash_type hasher_;
     using entries_t = chunked_vector<entry>;
@@ -199,4 +201,4 @@ private:
     mutable size_t probe_count_{0};
 };
 
-} // namespace storage
+} // namespace compaction

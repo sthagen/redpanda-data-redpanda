@@ -212,20 +212,6 @@ std::ostream& operator<<(std::ostream& os, const gc_config& cfg) {
     return os;
 }
 
-std::ostream& operator<<(std::ostream& o, const compaction_config& c) {
-    fmt::print(
-      o,
-      "{{max_removable_local_log_offset:{}, "
-      "should_sanitize:{}, "
-      "tombstone_retention_ms:{}, "
-      "tx_retention_ms:{}}}",
-      c.max_removable_local_log_offset,
-      c.sanitizer_config,
-      c.tombstone_retention_ms,
-      c.tx_retention_ms);
-    return o;
-}
-
 std::ostream& operator<<(std::ostream& os, const housekeeping_config& cfg) {
     fmt::print(os, "{{compact:{}, gc:{}}}", cfg.compact, cfg.gc);
     return os;

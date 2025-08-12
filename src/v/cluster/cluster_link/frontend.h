@@ -30,7 +30,8 @@ class frontend : public ss::peering_sharded_service<frontend> {
       cluster::cluster_link_upsert_cmd,
       cluster::cluster_link_remove_cmd,
       cluster::cluster_link_add_mirror_topic_cmd,
-      cluster::cluster_link_update_mirror_topic_state_cmd>;
+      cluster::cluster_link_update_mirror_topic_state_cmd,
+      cluster::cluster_link_update_mirror_topic_properties_cmd>;
 
 public:
     frontend(
@@ -57,6 +58,10 @@ public:
       ::cluster_link::model::id_t,
       ::cluster_link::model::update_mirror_topic_state_cmd,
       model::timeout_clock::time_point);
+    ss::future<errc> update_mirror_topic_properties(
+      ::cluster_link::model::id_t,
+      ::cluster_link::model::update_mirror_topic_properties_cmd,
+      model::timeout_clock::time_point);
 
     bool cluster_link_active() const;
 
@@ -70,6 +75,11 @@ public:
     find_link_by_name(const ::cluster_link::model::name_t& name) const;
 
     chunked_vector<::cluster_link::model::id_t> get_all_link_ids() const;
+
+    std::optional<chunked_hash_map<
+      ::model::topic,
+      ::cluster_link::model::mirror_topic_metadata>>
+    get_mirror_topics_for_link(::cluster_link::model::id_t id) const;
 
 private:
     ss::future<errc>

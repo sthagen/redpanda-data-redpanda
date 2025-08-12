@@ -7,7 +7,7 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from enum import StrEnum
+from enum import Enum
 import random
 import requests
 import time
@@ -20,7 +20,7 @@ HTTP_POST_HEADERS = {
 }
 
 
-class Mode(StrEnum):
+class Mode(str, Enum):
     READWRITE = "READWRITE"
     READONLY = "READONLY"
 

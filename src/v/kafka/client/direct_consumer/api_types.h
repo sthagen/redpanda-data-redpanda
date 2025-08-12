@@ -17,6 +17,8 @@
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
 #include "model/record.h"
+
+#include <seastar/util/bool_class.hh>
 namespace kafka::client {
 enum class offset_reset_policy : int8_t {
     // reset to the earliest offset
@@ -89,5 +91,8 @@ template<typename Element>
 using topic_partition_map = chunked_hash_map<
   model::topic,
   chunked_hash_map<model::partition_id, Element>>;
+
+using fetch_sessions_enabled
+  = ss::bool_class<struct fetch_sessions_enabled_tag>;
 
 } // namespace kafka::client

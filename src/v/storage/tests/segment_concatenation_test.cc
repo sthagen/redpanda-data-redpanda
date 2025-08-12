@@ -124,7 +124,7 @@ void concatenate_segments_from_log(
   ss::sharded<features::feature_table>& feature_table,
   storage::kvstore& kvs,
   bool maybe_compress) {
-    storage::compaction_config cfg(
+    compaction::compaction_config cfg(
       model::offset::max(), std::nullopt, std::nullopt, never_abort);
 
     const auto closed_segment_filter = [](const auto& s) -> bool {

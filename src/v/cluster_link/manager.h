@@ -66,6 +66,14 @@ public:
     /// Used to add a mirror topic to a cluster link
     ss::future<::cluster::cluster_link::errc>
     add_mirror_topic(model::id_t link_id, model::add_mirror_topic_cmd cmd);
+    ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
+      model::id_t link_id, model::update_mirror_topic_state_cmd cmd);
+    ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
+      model::id_t link_id, model::update_mirror_topic_properties_cmd cmd);
+
+    std::optional<
+      chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
+    get_mirror_topics_for_link(model::id_t id) const;
 
     /// Registers a task factory that will be used to create tasks when links
     /// are created
@@ -89,6 +97,18 @@ public:
     }
 
     model::cluster_link_task_status_report get_task_status_report() const;
+
+    kafka::data::rpc::topic_metadata_cache& topic_metadata_cache() noexcept;
+
+    kafka::data::rpc::partition_leader_cache& partition_leader_cache() noexcept;
+
+    const kafka::data::rpc::partition_leader_cache&
+    partition_leader_cache() const noexcept;
+
+    kafka::data::rpc::partition_manager& partition_manager() noexcept;
+
+    const kafka::data::rpc::partition_manager&
+    partition_manager() const noexcept;
 
 private:
     /// Called periodically to reconcile registered tasks on created links

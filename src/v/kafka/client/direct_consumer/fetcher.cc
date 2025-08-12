@@ -10,6 +10,8 @@
  */
 #include "kafka/client/direct_consumer/fetcher.h"
 
+#include "absl/container/flat_hash_set.h"
+#include "base/format_to.h"
 #include "kafka/client/direct_consumer/data_queue.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/client/errors.h"
@@ -17,17 +19,107 @@
 #include "ssx/future-util.h"
 
 #include <seastar/core/sleep.hh>
+#include <seastar/util/defer.hh>
+
+#include <fmt/format.h>
 
 namespace kafka::client {
 static constexpr model::node_id client_replica_id{-1};
 static constexpr std::chrono::milliseconds error_backoff(200);
 
+fetch_session_state::fetch_session_state(
+  model::node_id id,
+  prefix_logger& logger,
+  fetch_sessions_enabled sessions_enabled)
+  : _id(id)
+  , _logger(&logger)
+  , _fetch_sessions_enabled(sessions_enabled) {
+    reset();
+}
+
+void fetch_session_state::update_fetch_session(kafka::fetch_session_id id) {
+    auto deferred_log = ss::defer(
+      [this, prev_ss = session_state, prev_id = session_id] {
+          if (prev_id == session_id && prev_ss == session_state) {
+              return;
+          }
+          vlog(
+            _logger->trace,
+            "[broker: {}] {{session {}: {}}} -> {{session {}: {}}}",
+            _id,
+            prev_id,
+            prev_ss,
+            session_id,
+            session_state);
+      });
+    switch (session_state) {
+    case state::none:
+        reset();
+        return;
+    case state::need_full_fetch:
+        reset();
+        if (id != kafka::invalid_fetch_session_id) {
+            session_id = id;
+            session_state = state::incremental_fetch;
+            advance_epoch();
+        }
+        return;
+    case state::incremental_fetch:
+        if (id == kafka::invalid_fetch_session_id) {
+            reset();
+        } else if (id == session_id) {
+            session_state = state::incremental_fetch;
+            advance_epoch();
+        } else {
+            session_state = state::needs_close;
+            session_epoch = kafka::final_fetch_session_epoch;
+        }
+        return;
+    case state::needs_close:
+        if (id == kafka::invalid_fetch_session_id) {
+            reset();
+        } else {
+            session_state = state::needs_close;
+            session_epoch = kafka::final_fetch_session_epoch;
+        }
+        return;
+    }
+}
+
+void fetch_session_state::reset() {
+    session_id = kafka::invalid_fetch_session_id;
+    if (_fetch_sessions_enabled) {
+        session_epoch = kafka::initial_fetch_session_epoch;
+        session_state = state::need_full_fetch;
+    } else {
+        session_epoch = kafka::final_fetch_session_epoch;
+        session_state = state::none;
+    }
+}
+
+void fetch_session_state::toggle(fetch_sessions_enabled enable) {
+    if (enable == _fetch_sessions_enabled) {
+        return;
+    }
+    if (enable) {
+        session_state = state::need_full_fetch;
+    } else if (session_id != kafka::invalid_fetch_session_id) {
+        session_state = state::needs_close;
+    } else {
+        session_state = state::none;
+    }
+    _fetch_sessions_enabled = enable;
+    update_fetch_session(session_id);
+}
+
 data_queue& fetcher::queue() { return *_parent->_fetched_data_queue; }
 prefix_logger& fetcher::logger() { return _parent->_cluster->logger(); }
 
-fetcher::fetcher(direct_consumer* parent, model::node_id id)
+fetcher::fetcher(
+  direct_consumer* parent, model::node_id id, fetch_sessions_enabled sessions)
   : _parent(parent)
   , _id(id)
+  , _session_state(_id, logger(), sessions)
   , _state_lock("fetcher/state") {}
 
 void fetcher::start() {
@@ -52,7 +144,9 @@ ss::future<fetcher::partitions_with_epoch> fetcher::collect_partitions() {
         to_process.topic = topic;
 
         co_await ssx::async_for_each_counter(
-          cnt, partitions, [&to_process, &ret](auto& p_fs) {
+          cnt,
+          partitions,
+          [&to_process, &ret, inc = _session_state.incremental()](auto& p_fs) {
               partition_fetch_state& fetch_state = p_fs.second;
               ret.assignment_epochs[to_process.topic][fetch_state.partition_id]
                 = fetch_state.assignment_epoch;
@@ -61,7 +155,36 @@ ss::future<fetcher::partitions_with_epoch> fetcher::collect_partitions() {
                   return;
               }
 
+              constexpr auto should_skip =
+                [](const partition_fetch_state& fetch_state) {
+                    return !fetch_state.incremental_include
+                           && fetch_state.fetch_offset.value()
+                                >= fetch_state.high_watermark.value_or(
+                                  kafka::offset::min());
+                };
+
+              if (inc && should_skip(fetch_state)) {
+                  // session should be up to date, so we can omit this
+                  // partition from the request
+                  return;
+              }
               to_process.to_include_in_fetch.push_back(fetch_state);
+          });
+
+        if (!to_process.empty()) {
+            ret.partitions.push_back(std::move(to_process));
+        }
+    }
+
+    for (auto& [topic, partitions] : _partitions_to_forget) {
+        partitions_to_process to_process;
+        to_process.topic = topic;
+        ssx::async_counter cnt;
+        // TODO(oren): maybe the async isn't so necessary here and we can
+        // just copy straight across
+        co_await ssx::async_for_each_counter(
+          cnt, partitions, [&to_process](auto& p_fs) {
+              to_process.to_forget.push_back(p_fs.second);
           });
         if (!to_process.empty()) {
             ret.partitions.push_back(std::move(to_process));
@@ -71,45 +194,66 @@ ss::future<fetcher::partitions_with_epoch> fetcher::collect_partitions() {
     co_return ret;
 }
 
-ss::future<fetch_request>
-fetcher::make_fetch_request(chunked_vector<partitions_to_process> to_process) {
+ss::future<fetch_request> fetcher::make_fetch_request(
+  const chunked_vector<partitions_to_process>& to_process) {
     // TODO: handle api versions here
     // f.e. customize fetch request based on the version
     fetch_request req;
+
     req.data.replica_id = client_replica_id;
     req.data.isolation_level = _parent->_config.isolation_level;
     req.data.max_wait_ms = _parent->_config.max_wait_time;
     req.data.max_bytes = _parent->_config.max_fetch_size;
     req.data.min_bytes = _parent->_config.min_bytes;
 
-    // TODO: support incremental fetches, for now we always use full fetch
-    req.data.session_id = invalid_fetch_session_id;
-    req.data.session_epoch = final_fetch_session_epoch;
+    req.data.session_id = _session_state.session_id;
+    req.data.session_epoch = _session_state.session_epoch;
 
     ssx::async_counter cnt;
 
-    for (auto& topic_partitions : to_process) {
+    for (const auto& topic_partitions : to_process) {
         fetch_topic f_topic;
+        forgotten_topic r_topic;
 
-        if (topic_partitions.to_include_in_fetch.empty()) {
-            continue;
+        const auto& to_include = topic_partitions.to_include_in_fetch;
+        const auto& to_forget = topic_partitions.to_forget;
+
+        vassert(
+          to_include.empty() || to_forget.empty(),
+          "Entry should have either included or forgotten partitions");
+
+        if (!to_include.empty()) {
+            f_topic.topic = topic_partitions.topic;
+            f_topic.partitions.reserve(
+              topic_partitions.to_include_in_fetch.size());
+            co_await ssx::async_for_each_counter(
+              cnt,
+              topic_partitions.to_include_in_fetch,
+              [this, &f_topic](const partition_fetch_state& f_state) {
+                  fetch_partition f_partition;
+                  f_partition.partition = f_state.partition_id;
+                  f_partition.fetch_offset = kafka::offset_cast(
+                    *f_state.fetch_offset);
+                  f_partition.last_fetched_epoch = f_state.current_leader_epoch;
+                  f_partition.partition_max_bytes
+                    = _parent->_config.partition_max_bytes;
+                  f_topic.partitions.push_back(std::move(f_partition));
+              });
+            req.data.topics.push_back(std::move(f_topic));
         }
-        f_topic.topic = std::move(topic_partitions.topic);
-        f_topic.partitions.reserve(topic_partitions.to_include_in_fetch.size());
-        co_await ssx::async_for_each_counter(
-          cnt,
-          topic_partitions.to_include_in_fetch,
-          [this, &f_topic](const partition_fetch_state& f_state) {
-              fetch_partition f_partition;
-              f_partition.partition = f_state.partition_id;
-              f_partition.fetch_offset = kafka::offset_cast(
-                *f_state.fetch_offset);
-              f_partition.last_fetched_epoch = f_state.current_leader_epoch;
-              f_partition.partition_max_bytes
-                = _parent->_config.partition_max_bytes;
-              f_topic.partitions.push_back(std::move(f_partition));
-          });
-        req.data.topics.push_back(std::move(f_topic));
+
+        if (!to_forget.empty()) {
+            r_topic.topic = topic_partitions.topic;
+            r_topic.partitions.reserve(to_forget.size());
+            ssx::async_counter cnt;
+            co_await ssx::async_for_each_counter(
+              cnt, to_forget, [&r_topic](model::partition_id pid) {
+                  r_topic.partitions.push_back(pid);
+              });
+            if (_session_state.incremental()) {
+                req.data.forgotten_topics_data.push_back(std::move(r_topic));
+            }
+        }
     }
 
     co_return req;
@@ -129,6 +273,7 @@ bool fetcher::maybe_update_fetch_offset(
   const model::topic& topic,
   model::partition_id partition_id,
   kafka::offset last_received,
+  kafka::offset high_watermark,
   assignment_epoch assignment_epoch) {
     auto t_it = _partitions.find(topic);
     if (t_it == _partitions.end()) {
@@ -153,20 +298,26 @@ bool fetcher::maybe_update_fetch_offset(
 
     vlog(
       logger().trace,
-      "[broker: {}] Updating {}/{} fetch offset to {}",
+      "[broker: {}] Updating {}/{} fetch offset from {} to {} {{hwm: {}}}",
       _id,
       topic,
       partition_id,
-      kafka::next_offset(last_received));
+      p_it->second.fetch_offset,
+      kafka::next_offset(last_received),
+      high_watermark);
+    p_it->second.high_watermark = high_watermark;
     p_it->second.fetch_offset = kafka::next_offset(last_received);
+    // we updated the fetch offset, so we should sync to with the broker's
+    // fetch session on the next request
+    p_it->second.incremental_include = true;
+
     return true;
 }
 
 ss::future<> fetcher::do_fetch() {
     bool needs_backoff = false;
     try {
-        co_await _partitions_updated.wait(
-          [this] { return !_partitions.empty(); });
+        co_await _partitions_updated.wait([this] { return !is_idle(); });
 
         /**
          * Iterate once over all partitions that are assigned to the fetcher and
@@ -196,7 +347,7 @@ ss::future<> fetcher::do_fetch() {
         }
 
         auto req = co_await make_fetch_request(
-          std::move(partitions_with_epochs.partitions));
+          partitions_with_epochs.partitions);
 
         if (_as.abort_requested()) {
             // if the abort was requested, we should not dispatch the request
@@ -208,7 +359,9 @@ ss::future<> fetcher::do_fetch() {
         auto response = co_await _parent->_cluster->dispatch_to(
           _id, std::move(req), version);
         auto fetch_result = co_await process_fetch_response(
-          std::move(response), assignment_epochs);
+          std::move(response),
+          assignment_epochs,
+          partitions_with_epochs.partitions);
 
         if (fetch_result.has_error()) {
             if (is_retriable_error(fetch_result.error())) {
@@ -221,6 +374,7 @@ ss::future<> fetcher::do_fetch() {
         }
 
         auto fetch_result_value = std::move(fetch_result.value());
+        _session_state.update_fetch_session(fetch_result_value.session_id);
         if (fetch_result_value.needs_metadata_update) {
             // if we need to update metadata, we should do it
             // so that we can retry fetching the partitions later
@@ -272,7 +426,9 @@ fetcher::assignment_epoch fetcher::find_assignment_epoch(
 
 ss::future<kafka_result<fetcher::fetch_response_content>>
 fetcher::process_fetch_response(
-  fetch_response resp, const topic_partition_map<assignment_epoch>& epochs) {
+  fetch_response resp,
+  const topic_partition_map<assignment_epoch>& epochs,
+  const chunked_vector<partitions_to_process>& partitions) {
     if (resp.data.error_code != kafka::error_code::none) {
         co_return resp.data.error_code;
     }
@@ -280,7 +436,23 @@ fetcher::process_fetch_response(
     // offsets, we do not want this to interfere with assignment updates.
     auto lock = co_await _state_lock.get_units();
 
+    // For fetch session maintenance, the goal is to omit partitions from each
+    // fetch request whenever possible. The incremental_include flag controls
+    // whether a certain partition appears in the next fetch request, after
+    // which that partition should be omitted, assuming the fetch succeeds and
+    // no new data is returned for that partition.
+    //
+    // In general, a partition may be omitted from subsequent fetch requests iff
+    // it did not appear in the topic data in the current response. For this
+    // reason we flip the incremental_include for a partition based on whether
+    // that partition was included in the last request. This map tracks such
+    // partitions allowing us to leave the incremental_include flag ON in these
+    // cases.
+    chunked_hash_map<model::topic, absl::flat_hash_set<model::partition_id>>
+      dirty_partitions;
+
     fetch_response_content result;
+    result.session_id = kafka::fetch_session_id{resp.data.session_id};
     result.topics.reserve(resp.data.responses.size());
     for (auto& topic_response : resp.data.responses) {
         if (topic_response.partitions.empty()) {
@@ -319,6 +491,11 @@ fetcher::process_fetch_response(
                   topic_data.topic,
                   part_data.partition_id,
                   part_response.error_code);
+
+                // this partition errored, so any pending incremental fetches
+                // should be retried
+                dirty_partitions[topic_data.topic].insert(
+                  part_data.partition_id);
             } else {
                 part_data.high_watermark = model::offset_cast(
                   part_response.high_watermark);
@@ -345,12 +522,17 @@ fetcher::process_fetch_response(
                 part_data.data = co_await reader_to_chunked_vector(
                   std::move(part_response.records.value()));
 
-                maybe_update_fetch_offset(
+                bool updated_offset = maybe_update_fetch_offset(
                   topic_data.topic,
                   part_data.partition_id,
                   model::offset_cast(part_data.data.back().last_offset()),
+                  part_data.high_watermark,
                   find_assignment_epoch(
                     topic_data.topic, part_data.partition_id, epochs));
+                if (updated_offset) {
+                    dirty_partitions[topic_data.topic].insert(
+                      part_data.partition_id);
+                }
             }
             topic_data.partitions.push_back(std::move(part_data));
         }
@@ -359,6 +541,64 @@ fetcher::process_fetch_response(
             continue;
         }
         result.topics.push_back(std::move(topic_data));
+    }
+
+    // Clear incremental fetch state, skipping partitions that errored
+    // or just returned new data.
+    for (const auto& to_process : partitions) {
+        const auto& included = to_process.to_include_in_fetch;
+        const auto& forgotten = to_process.to_forget;
+        const auto& topic = to_process.topic;
+
+        // vassert to enforce invariant by construction. this is an
+        // implementation detail. if this assert fires, that means a change
+        // to collect_partitions will require a corresponding change to this
+        // loop body.
+        vassert(
+          included.empty() || forgotten.empty(),
+          "partitions_to_process should have either included or forgotten "
+          "partitions, not both");
+
+        if (!included.empty()) {
+            auto tp_it = _partitions.find(topic);
+            if (tp_it == _partitions.end()) {
+                continue;
+            }
+            auto errs_it = dirty_partitions.find(topic);
+            bool topic_err = errs_it != dirty_partitions.end();
+            auto& ps = tp_it->second;
+            for (const auto& p : included) {
+                bool partition_err = topic_err
+                                     && errs_it->second.contains(
+                                       p.partition_id);
+                auto p_it = ps.find(p.partition_id);
+                if (p_it != ps.end() && !partition_err) {
+                    p_it->second.incremental_include = false;
+                }
+            }
+        }
+
+        if (!forgotten.empty()) {
+            auto fgt_it = _partitions_to_forget.find(topic);
+            if (fgt_it == _partitions_to_forget.end()) {
+                continue;
+            }
+            auto& ps = fgt_it->second;
+            for (auto p_id : forgotten) {
+                if (auto p_it = ps.find(p_id); p_it != ps.end()) {
+                    vlog(
+                      logger().trace,
+                      "[broker: {}] Requested to forget {} in session {}",
+                      _id,
+                      model::topic_partition_view{topic, p_id},
+                      _session_state.session_id);
+                    ps.erase(p_it);
+                }
+            }
+            if (ps.empty()) {
+                _partitions_to_forget.erase(fgt_it);
+            }
+        }
     }
 
     co_return result;
@@ -481,6 +721,8 @@ ss::future<kafka::error_code> fetcher::maybe_initialise_fetch_offsets(
               partition_offset.partition_id,
               partition_offset.offset);
             p_it->second.fetch_offset = partition_offset.offset;
+            p_it->second.high_watermark.reset();
+            p_it->second.incremental_include = true;
         }
     }
 
@@ -546,8 +788,7 @@ fetcher::unassign_partition(model::topic_partition_view tp_v) {
       "[broker: {}] Removing partition: {} assignment",
       _id,
       tp_v);
-    // TODO: for fetch sessions we will need to mark partitions to deletion so
-    // they can be removed from the fetch session
+    _partitions_to_forget[tp_v.topic][tp_v.partition] = tp_v.partition;
     auto fetch_offset = p_it->second.fetch_offset;
     partitions.erase(p_it);
     if (partitions.empty()) {
@@ -557,6 +798,10 @@ fetcher::unassign_partition(model::topic_partition_view tp_v) {
 
     _partitions_updated.signal();
     co_return fetch_offset;
+}
+
+void fetcher::toggle_sessions(fetch_sessions_enabled v) {
+    _session_state.toggle(v);
 }
 
 ss::future<kafka_result<chunked_vector<topic_partition_offsets>>>
@@ -600,4 +845,37 @@ fetcher::do_list_offsets(list_offsets_request req) {
     }
 }
 
+fmt::iterator fetch_session_state::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{id: {}, epoch: {}, state: {}}}",
+      session_id,
+      session_epoch,
+      session_state);
+}
+
 } // namespace kafka::client
+
+namespace fmt {
+auto fmt::formatter<kafka::client::fetch_session_state::state>::format(
+  kafka::client::fetch_session_state::state s, format_context& ctx) const
+  -> format_context::iterator {
+    std::string_view result = "unknown";
+    switch (s) {
+        using enum kafka::client::fetch_session_state::state;
+    case none:
+        result = "fetch_session_state::state::none";
+        break;
+    case need_full_fetch:
+        result = "fetch_session_state::state::need_full_fetch";
+        break;
+    case incremental_fetch:
+        result = "fetch_session_state::state::incremental_fetch";
+        break;
+    case needs_close:
+        result = "fetch_session_state::state::needs_close";
+        break;
+    }
+    return formatter<std::string_view>::format(result, ctx);
+}
+} // namespace fmt

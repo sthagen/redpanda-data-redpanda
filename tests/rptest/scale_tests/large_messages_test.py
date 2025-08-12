@@ -8,7 +8,7 @@
 # by the Apache License, Version 2.0
 
 import concurrent.futures
-from enum import StrEnum
+from enum import Enum
 import math
 import numpy
 import time
@@ -28,7 +28,7 @@ from rptest.utils.scale_parameters import ScaleParameters
 from ducktape.mark import matrix
 
 
-class Mode(StrEnum):
+class Mode(str, Enum):
     TEN_TOPICS = 'TEN_TOPICS'
     MANY_PARTS = 'MANY_PARTS'
 

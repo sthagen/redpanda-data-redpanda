@@ -9,8 +9,12 @@
  * by the Apache License, Version 2.0
  */
 #include "kafka/client/cluster.h"
+#include "kafka/client/direct_consumer/api_types.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
+#include "kafka/client/direct_consumer/fetcher.h"
 #include "kafka/client/test/cluster_mock.h"
+#include "kafka/client/types.h"
+#include "kafka/protocol/types.h"
 #include "model/tests/random_batch.h"
 #include "test_utils/async.h"
 #include "test_utils/test.h"
@@ -618,4 +622,106 @@ TEST_F(consumer_test_mock, TestPartitionErrorPropagation) {
     ASSERT_EQ(
       expected_err.value()[0].partitions[0].error,
       kafka::error_code::unknown_server_error);
+}
+
+namespace {
+prefix_logger test_pfx_logger(test_log, "session-state");
+}
+
+TEST(fetch_session_state_test, test_disabled) {
+    // Test that fetch_session_state doesn't advance at all when disabled
+    using fss = fetch_session_state::state;
+
+    fetch_session_state state{
+      unknown_node_id, test_pfx_logger, fetch_sessions_enabled::no};
+    ASSERT_EQ(state.session_state, fss::none);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::final_fetch_session_epoch);
+
+    state.reset();
+    ASSERT_EQ(state.session_state, fss::none);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::final_fetch_session_epoch);
+
+    state.update_fetch_session(kafka::fetch_session_id{1});
+    ASSERT_EQ(state.session_state, fss::none);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::final_fetch_session_epoch);
+}
+
+TEST(fetch_session_state_test, test_toggle) {
+    // Tests binding to config property and the effect of toggling sessions.
+    using fss = fetch_session_state::state;
+
+    fetch_session_state state{
+      unknown_node_id, test_pfx_logger, fetch_sessions_enabled::no};
+    ASSERT_EQ(state.session_state, fss::none);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::final_fetch_session_epoch);
+
+    state.toggle(fetch_sessions_enabled::yes);
+
+    ASSERT_EQ(state.session_state, fss::need_full_fetch);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::initial_fetch_session_epoch);
+
+    state.toggle(fetch_sessions_enabled::no);
+
+    ASSERT_EQ(state.session_state, fss::none);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::final_fetch_session_epoch);
+
+    state.toggle(fetch_sessions_enabled::yes);
+
+    kafka::fetch_session_id id{1};
+
+    state.update_fetch_session(id);
+
+    state.toggle(fetch_sessions_enabled::no);
+
+    ASSERT_EQ(state.session_state, fss::needs_close);
+    ASSERT_EQ(state.session_id, id);
+    ASSERT_EQ(state.session_epoch, kafka::final_fetch_session_epoch);
+}
+
+TEST(fetch_session_state_test, test_state_transitions) {
+    using fss = fetch_session_state::state;
+
+    fetch_session_state state{
+      unknown_node_id, test_pfx_logger, fetch_sessions_enabled::yes};
+    ASSERT_EQ(state.session_state, fss::need_full_fetch);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::initial_fetch_session_epoch);
+
+    kafka::fetch_session_id id{1};
+
+    state.update_fetch_session(id);
+    ASSERT_EQ(state.session_state, fss::incremental_fetch);
+    ASSERT_EQ(state.session_id, id);
+    ASSERT_EQ(state.session_epoch, 1);
+
+    state.update_fetch_session(id);
+    ASSERT_EQ(state.session_state, fss::incremental_fetch);
+    ASSERT_EQ(state.session_id, id);
+    ASSERT_EQ(state.session_epoch, 2);
+
+    state.update_fetch_session(id);
+    ASSERT_EQ(state.session_state, fss::incremental_fetch);
+    ASSERT_EQ(state.session_id, id);
+    ASSERT_EQ(state.session_epoch, 3);
+
+    state.update_fetch_session(id + 1);
+    ASSERT_EQ(state.session_state, fss::needs_close);
+    ASSERT_EQ(state.session_id, id);
+    ASSERT_EQ(state.session_epoch, kafka::final_fetch_session_epoch);
+
+    state.update_fetch_session(kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_state, fss::need_full_fetch);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::initial_fetch_session_epoch);
+
+    state.update_fetch_session(kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_state, fss::need_full_fetch);
+    ASSERT_EQ(state.session_id, kafka::invalid_fetch_session_id);
+    ASSERT_EQ(state.session_epoch, kafka::initial_fetch_session_epoch);
 }

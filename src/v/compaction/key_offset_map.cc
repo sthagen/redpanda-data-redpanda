@@ -8,20 +8,21 @@
  * the Business Source License, use of this software will be governed
  * by the Apache License, Version 2.0
  */
-#include "storage/key_offset_map.h"
+#include "compaction/key_offset_map.h"
 
 #include "container/chunked_vector_async.h"
 
-namespace storage {
+namespace compaction {
 
 simple_key_offset_map::simple_key_offset_map(std::optional<size_t> max_keys)
   : _memory_tracker(ss::make_shared<util::mem_tracker>("simple_key_offset_map"))
-  , _map(util::mem_tracked::map<absl::btree_map, compaction_key, model::offset>(
-      _memory_tracker))
+  , _map(util::mem_tracked::
+           map<absl::btree_map, compaction::compaction_key, model::offset>(
+             _memory_tracker))
   , _max_keys(max_keys ? *max_keys : default_key_limit) {}
 
-seastar::future<bool>
-simple_key_offset_map::put(const compaction_key& key, model::offset o) {
+seastar::future<bool> simple_key_offset_map::put(
+  const compaction::compaction_key& key, model::offset o) {
     auto iter = _map.find(key);
     if (iter == _map.end()) {
         if (_map.size() >= _max_keys) {
@@ -36,7 +37,7 @@ simple_key_offset_map::put(const compaction_key& key, model::offset o) {
 }
 
 seastar::future<std::optional<model::offset>>
-simple_key_offset_map::get(const compaction_key& key) const {
+simple_key_offset_map::get(const compaction::compaction_key& key) const {
     auto iter = _map.find(key);
     if (iter == _map.end()) {
         return seastar::make_ready_future<std::optional<model::offset>>(
@@ -57,7 +58,7 @@ ss::future<> simple_key_offset_map::reset() {
 };
 
 seastar::future<std::optional<model::offset>>
-hash_key_offset_map::get(const compaction_key& key) const {
+hash_key_offset_map::get(const compaction::compaction_key& key) const {
     const auto hash = hash_key(key);
 
     // handle a non-normalized probe position
@@ -109,8 +110,8 @@ hash_key_offset_map::get(const compaction_key& key) const {
       std::nullopt);
 }
 
-seastar::future<bool>
-hash_key_offset_map::put(const compaction_key& key, model::offset offset) {
+seastar::future<bool> hash_key_offset_map::put(
+  const compaction::compaction_key& key, model::offset offset) {
     const auto hash = hash_key(key);
 
     const auto full = size_ >= capacity_;
@@ -255,7 +256,7 @@ hash_key_offset_map::probe::next() {
 }
 
 hash_key_offset_map::hash_type::digest_type
-hash_key_offset_map::hash_key(const compaction_key& key) const {
+hash_key_offset_map::hash_key(const compaction::compaction_key& key) const {
     try {
         hasher_.update(key);
         return hasher_.reset();
@@ -265,4 +266,4 @@ hash_key_offset_map::hash_key(const compaction_key& key) const {
     }
 }
 
-} // namespace storage
+} // namespace compaction

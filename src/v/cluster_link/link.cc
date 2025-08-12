@@ -56,17 +56,11 @@ link::link(
   manager* manager,
   ss::lowres_clock::duration task_reconciler_interval,
   model::metadata config,
-  partition_leader_cache* partition_leader_cache,
-  partition_manager* partition_manager,
-  topic_metadata_cache* topic_metadata_cache,
   kafka::client::cluster cluster_connection)
   : _self(self)
   , _link_id(link_id)
   , _manager(manager)
   , _config(std::move(config))
-  , _partition_leader_cache(partition_leader_cache)
-  , _partition_manager(partition_manager)
-  , _topic_metadata_cache(topic_metadata_cache)
   , _cluster_connection(std::move(cluster_connection))
   , _task_reconciler_interval(task_reconciler_interval) {}
 
@@ -198,14 +192,45 @@ link::add_mirror_topic(model::add_mirror_topic_cmd cmd) {
     return _manager->add_mirror_topic(_link_id, std::move(cmd));
 }
 
+ss::future<::cluster::cluster_link::errc>
+link::update_mirror_topic_state(model::update_mirror_topic_state_cmd cmd) {
+    return _manager->update_mirror_topic_state(_link_id, std::move(cmd));
+}
+
+ss::future<::cluster::cluster_link::errc> link::update_mirror_topic_properties(
+  model::update_mirror_topic_properties_cmd cmd) {
+    return _manager->update_mirror_topic_properties(_link_id, std::move(cmd));
+}
+
 const model::metadata& link::get_config() const noexcept { return _config; }
 
-topic_metadata_cache* link::get_topic_metadata_cache() const noexcept {
-    return _topic_metadata_cache;
+topic_metadata_cache& link::topic_metadata_cache() noexcept {
+    return _manager->topic_metadata_cache();
+}
+
+partition_leader_cache& link::partition_leader_cache() noexcept {
+    return _manager->partition_leader_cache();
+}
+
+const partition_leader_cache& link::partition_leader_cache() const noexcept {
+    return _manager->partition_leader_cache();
+}
+
+partition_manager& link::partition_manager() noexcept {
+    return _manager->partition_manager();
+}
+
+const partition_manager& link::partition_manager() const noexcept {
+    return _manager->partition_manager();
 }
 
 kafka::client::cluster& link::get_cluster_connection() noexcept {
     return _cluster_connection;
+}
+
+std::optional<chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
+link::get_mirror_topics_for_link() const {
+    return _manager->get_mirror_topics_for_link(_link_id);
 }
 
 bool link::should_start_task(task* t) const {

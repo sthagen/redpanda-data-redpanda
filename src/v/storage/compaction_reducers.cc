@@ -10,13 +10,14 @@
 #include "storage/compaction_reducers.h"
 
 #include "base/vlog.h"
+#include "compaction/key.h"
+#include "compaction/utils.h"
 #include "compression/compression.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "model/record_utils.h"
 #include "random/generators.h"
 #include "storage/compacted_index.h"
-#include "storage/compaction.h"
 #include "storage/index_state.h"
 #include "storage/logger.h"
 #include "storage/parser_utils.h"
@@ -148,7 +149,7 @@ model::record_batch copy_data_segment_reducer::make_placeholder_batch(
 ss::future<std::optional<model::record_batch>>
 copy_data_segment_reducer::filter(model::record_batch batch) {
     // do not filter non-removable batch types under any circumstances
-    if (!is_filterable(batch.header().type)) {
+    if (!compaction::is_filterable(batch.header().type)) {
         co_return std::move(batch);
     }
 
@@ -291,7 +292,8 @@ ss::future<ss::stop_iteration> copy_data_segment_reducer::filter_and_append(
     const auto records_to_remove = record_count_before
                                    - to_copy->record_count();
     _stats.records_discarded += records_to_remove;
-    bool compactible_batch = is_compactible(_ntp, to_copy.value().header());
+    bool compactible_batch = compaction::is_compactible(
+      _ntp, to_copy.value().header());
     if (!compactible_batch) {
         ++_stats.non_compactible_batches;
     }
@@ -427,7 +429,7 @@ bool tx_reducer::can_discard_consumer_offsets_batch(
     // committed data has already been rewritten as separate raft_data
     // batches, so no need to retain originally written group_prepare_tx
     // batches while the transaction is in progress.
-    return is_compactible_control_batch(_ntp, b.header().type);
+    return compaction::is_compactible_control_batch(_ntp, b.header().type);
 }
 
 ss::future<ss::stop_iteration> tx_reducer::operator()(model::record_batch&& b) {
@@ -458,7 +460,7 @@ ss::future<ss::stop_iteration> map_building_reducer::maybe_index_record_in_map(
     }
 
     auto key_view = iobuf_to_bytes(r.key());
-    auto key = enhance_key(type, is_control, key_view);
+    auto key = compaction::enhance_key(type, is_control, key_view);
     bool success = co_await _map->put(key, offset);
 
     if (success) {
@@ -473,7 +475,7 @@ ss::future<ss::stop_iteration>
 map_building_reducer::operator()(model::record_batch batch) {
     bool fully_indexed_batch = true;
     auto& header = batch.header();
-    if (!is_compactible(_ntp, header)) {
+    if (!compaction::is_compactible(_ntp, header)) {
         // There is no point to indexing records in uncompactible batches, since
         // their inclusion in the segment post compaction is irrespective of the
         // map state (see copy_data_segment_reducer::filter()).

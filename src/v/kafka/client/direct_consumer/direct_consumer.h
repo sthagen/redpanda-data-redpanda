@@ -61,6 +61,8 @@ public:
         // queue settings
         size_t max_buffered_bytes{10_MiB};
         size_t max_buffered_elements{10};
+        // fetch sessions enabled by default
+        fetch_sessions_enabled with_sessions{fetch_sessions_enabled::yes};
         friend std::ostream& operator<<(std::ostream&, const configuration&);
     };
 

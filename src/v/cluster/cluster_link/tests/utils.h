@@ -23,6 +23,9 @@ model::record_batch create_add_mirror_topic_command(
 model::record_batch create_update_mirror_topic_state_command(
   ::cluster_link::model::id_t,
   ::cluster_link::model::update_mirror_topic_state_cmd);
+model::record_batch create_update_mirror_topic_properties_command(
+  ::cluster_link::model::id_t,
+  ::cluster_link::model::update_mirror_topic_properties_cmd);
 
 ::cluster_link::model::mirror_topic_metadata create_mirror_topic_metadata(
   ::cluster_link::model::mirror_topic_state,

@@ -3537,6 +3537,38 @@ struct update_mirror_topic_state_response
     auto serde_fields() { return std::tie(ec); }
 };
 
+struct update_mirror_topic_properties_request
+  : serde::envelope<
+      update_mirror_topic_properties_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    ::cluster_link::model::id_t link_id;
+    ::cluster_link::model::update_mirror_topic_properties_cmd cmd;
+    model::timeout_clock::duration timeout{};
+
+    friend bool operator==(
+      const update_mirror_topic_properties_request&,
+      const update_mirror_topic_properties_request&)
+      = default;
+
+    auto serde_fields() { return std::tie(link_id, cmd, timeout); }
+};
+
+struct update_mirror_topic_properties_response
+  : serde::envelope<
+      update_mirror_topic_properties_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    cluster_link::errc ec{cluster_link::errc::success};
+
+    friend bool operator==(
+      const update_mirror_topic_properties_response&,
+      const update_mirror_topic_properties_response&)
+      = default;
+
+    auto serde_fields() { return std::tie(ec); }
+};
+
 // Request to get the current cluster epoch.
 struct get_current_cluster_epoch_request
   : serde::envelope<

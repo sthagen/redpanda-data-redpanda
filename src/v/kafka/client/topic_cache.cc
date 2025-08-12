@@ -89,7 +89,8 @@ topic_cache::authorized_operations_for_topic(model::topic_view tp) const {
     return topic_it->second.authorized_operations;
 }
 
-std::optional<size_t> topic_cache::partition_count(model::topic_view tp) const {
+std::optional<int32_t>
+topic_cache::partition_count(model::topic_view tp) const {
     auto topic_it = _topics.find(tp);
     if (topic_it == _topics.end()) {
         return std::nullopt;
@@ -97,7 +98,7 @@ std::optional<size_t> topic_cache::partition_count(model::topic_view tp) const {
     return topic_it->second.partitions.size();
 }
 
-std::optional<size_t>
+std::optional<int16_t>
 topic_cache::replication_factor(model::topic_view tp) const {
     auto topic_it = _topics.find(tp);
     if (topic_it == _topics.end()) {

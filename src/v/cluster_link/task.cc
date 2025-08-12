@@ -200,7 +200,7 @@ bool controller_locked_task::is_controller_leader(
     if (shard != ::cluster::controller_stm_shard) {
         return false;
     }
-    auto leader = get_link()->get_partition_leader_cache().get_leader_node(
+    auto leader = get_link()->partition_leader_cache().get_leader_node(
       ::model::controller_ntp);
     return leader == current_node;
 }

@@ -392,6 +392,118 @@ void cluster_mock::add_topic(
     _topics.emplace(topic_name, std::move(md));
 }
 
+void cluster_mock::remove_topic(model::topic_view topic_name) {
+    auto topics_it = _topics.find(topic_name);
+    if (topics_it == _topics.end()) {
+        throw std::invalid_argument(
+          fmt::format("Topic {} does not exist", topic_name));
+    }
+    _topics.erase(topics_it);
+}
+
+void cluster_mock::set_topic_partition_count(
+  model::topic_view topic_name, int32_t partition_count) {
+    auto topics_it = _topics.find(topic_name);
+    if (topics_it == _topics.end()) {
+        throw std::invalid_argument(
+          fmt::format("Topic {} does not exist", topic_name));
+    }
+
+    if (partition_count < 1) {
+        throw std::invalid_argument(fmt::format(
+          "Invalid partition count {} for topic {}",
+          partition_count,
+          topic_name));
+    }
+
+    if (
+      topics_it->second.partitions.size()
+      > static_cast<size_t>(partition_count)) {
+        throw std::invalid_argument(fmt::format(
+          "Cannot reduce partition count for topic {} from {} to {}",
+          topic_name,
+          topics_it->second.partitions.size(),
+          partition_count));
+    }
+
+    if (
+      topics_it->second.partitions.size()
+      == static_cast<size_t>(partition_count)) {
+        // No change needed
+        return;
+    }
+
+    auto rf = topics_it->second.partitions.begin()->second.replicas.size();
+
+    auto cluster_nodes = get_broker_ids();
+    std::ranges::sort(cluster_nodes);
+
+    for (auto p_id : std::views::iota(
+           topics_it->second.partitions.size(),
+           static_cast<size_t>(partition_count))) {
+        partition_metadata p_md{
+          .id = model::partition_id(p_id), .leader = model::node_id(-1)};
+        std::copy_n(
+          cluster_nodes.begin(), rf, std::back_inserter(p_md.replicas));
+        if (!p_md.replicas.empty()) {
+            p_md.leader = p_md.replicas[0];
+        }
+        p_md.leader_epoch = kafka::invalid_leader_epoch;
+        topics_it->second.partitions.emplace(
+          model::partition_id(p_id), std::move(p_md));
+    }
+}
+
+void cluster_mock::set_topic_replication_factor(
+  model::topic_view topic_name, int16_t rf) {
+    auto topics_it = _topics.find(topic_name);
+    if (topics_it == _topics.end()) {
+        throw std::invalid_argument(
+          fmt::format("Topic {} does not exist", topic_name));
+    }
+    if (rf < 1) {
+        throw std::invalid_argument(fmt::format(
+          "Invalid replication factor {} for topic {}", rf, topic_name));
+    }
+    if (static_cast<size_t>(rf) > _brokers.size()) {
+        throw std::invalid_argument(fmt::format(
+          "Replication factor {} exceeds available brokers for topic {}",
+          rf,
+          topic_name));
+    }
+
+    auto cur_rf = topics_it->second.partitions.begin()->second.replicas.size();
+    if (cur_rf == static_cast<size_t>(rf)) {
+        // No change needed
+        return;
+    }
+
+    auto cluster_nodes = get_broker_ids();
+    std::ranges::sort(cluster_nodes);
+    for (auto& [_, meta] : topics_it->second.partitions) {
+        if (cur_rf > static_cast<size_t>(rf)) {
+            // Reduce replication factor
+            meta.replicas.resize(static_cast<size_t>(rf));
+        } else {
+            auto diff = static_cast<size_t>(rf) - cur_rf;
+            std::copy_n(
+              cluster_nodes.begin() + cur_rf,
+              diff,
+              std::back_inserter(meta.replicas));
+        }
+    }
+}
+
+void cluster_mock::set_topic_properties(
+  model::topic_view topic_name, cluster::topic_properties properties) {
+    auto topics_it = _topics.find(topic_name);
+    if (topics_it == _topics.end()) {
+        throw std::invalid_argument(
+          fmt::format("Topic {} does not exist", topic_name));
+    }
+    topics_it->second.topic_properties = std::move(properties);
+}
+
 cluster_mock::cluster_mock()
   : _logger(kclog, "cluster-mock") {
     default_supported_versions[metadata_api::key] = {

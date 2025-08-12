@@ -43,8 +43,8 @@ private:
 };
 } // namespace
 
-app::app()
-  : ssx::sharded_service_container("cloud_topics::app") {}
+app::app(ss::sstring logger_name)
+  : ssx::sharded_service_container(std::move(logger_name)) {}
 
 ss::future<> app::construct(
   model::node_id self,

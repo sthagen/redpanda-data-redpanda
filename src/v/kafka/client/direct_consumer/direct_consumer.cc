@@ -44,6 +44,9 @@ void direct_consumer::update_configuration(configuration cfg) {
     _config = cfg;
     _fetched_data_queue->set_max_bytes(cfg.max_buffered_bytes);
     _fetched_data_queue->set_max_count(cfg.max_buffered_elements);
+    std::ranges::for_each(_broker_fetchers, [this](auto& pr) {
+        pr.second->toggle_sessions(_config.with_sessions);
+    });
 }
 
 ss::future<>
@@ -127,7 +130,8 @@ fetcher& direct_consumer::get_fetcher(model::node_id id) {
     auto it = _broker_fetchers.find(id);
     if (it == _broker_fetchers.end()) {
         vlog(_cluster->logger().debug, "Creating fetcher for broker: {}", id);
-        auto new_fetcher = std::make_unique<fetcher>(this, id);
+        auto new_fetcher = std::make_unique<fetcher>(
+          this, id, _config.with_sessions);
         try {
             new_fetcher->start();
             auto [it, _] = _broker_fetchers.emplace(id, std::move(new_fetcher));
@@ -233,14 +237,15 @@ operator<<(std::ostream& o, const direct_consumer::configuration& cfg) {
       o,
       "{{ max_fetch_size: {}, partition_max_bytes: {}, reset_policy: {}, "
       "max_wait_time: {}ms, isolation_level: {}, max_buffered_bytes: {}, "
-      "max_buffered_elements: {} }}",
+      "max_buffered_elements: {} , sessions_enabled: {}}}",
       cfg.max_fetch_size,
       cfg.partition_max_bytes,
       cfg.reset_policy,
       cfg.max_wait_time.count(),
       cfg.isolation_level,
       cfg.max_buffered_bytes,
-      cfg.max_buffered_elements);
+      cfg.max_buffered_elements,
+      cfg.with_sessions);
 
     return o;
 }

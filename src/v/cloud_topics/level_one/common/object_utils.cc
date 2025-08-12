@@ -10,14 +10,13 @@
 
 #include "cloud_topics/level_one/common/object_utils.h"
 
-#include "cloud_topics/level_one/common/object_id.h"
 #include "ssx/sformat.h"
 
 namespace experimental::cloud_topics::l1 {
 
-cloud_storage_clients::object_key object_path_factory::level_one_path() {
-    return cloud_storage_clients::object_key(
-      ssx::sformat("l1_v0_{}", create_object_id()));
+cloud_storage_clients::object_key
+object_path_factory::level_one_path(object_id id) {
+    return cloud_storage_clients::object_key(ssx::sformat("l1_v0_{}", id));
 }
 
 } // namespace experimental::cloud_topics::l1

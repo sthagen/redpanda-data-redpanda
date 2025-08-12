@@ -142,7 +142,6 @@ private:
 
     raft::replicate_stages try_replicate_in_stages(
       chunked_vector<model::record_batch>,
-      model::timeout_clock::duration timeout,
       std::optional<std::reference_wrapper<ss::abort_source>> as);
 
     kafka::offset expected_last_offset() const;

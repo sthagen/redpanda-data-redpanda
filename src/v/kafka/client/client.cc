@@ -206,6 +206,8 @@ ss::future<> client::mitigate_error(std::exception_ptr ex) {
                   vlog(_logger.warn, "system_error: {}", ex);
                   return ss::make_exception_future(ex);
               }
+          } catch (const ss::abort_requested_exception& ex) {
+              vlog(_logger.debug, "abort_requested_exception: {}", ex);
           } catch (const std::exception& ex) {
               // TODO(Ben): Probably vassert
               vlog(_logger.error, "unknown exception: {}", ex);

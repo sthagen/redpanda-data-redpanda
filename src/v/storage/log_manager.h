@@ -15,6 +15,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "base/seastarx.h"
 #include "base/units.h"
+#include "compaction/key_offset_map.h"
 #include "config/property.h"
 #include "container/chunked_hash_map.h"
 #include "container/intrusive_list_helpers.h"
@@ -25,7 +26,6 @@
 #include "storage/batch_cache.h"
 #include "storage/disk.h"
 #include "storage/file_sanitizer_types.h"
-#include "storage/key_offset_map.h"
 #include "storage/log.h"
 #include "storage/log_housekeeping_meta.h"
 #include "storage/ntp_config.h"
@@ -314,7 +314,7 @@ private:
 
     // Hash key-map to use across multiple compactions to reuse reserved memory
     // rather than reallocating repeatedly.
-    std::unique_ptr<hash_key_offset_map> _compaction_hash_key_map;
+    std::unique_ptr<compaction::hash_key_offset_map> _compaction_hash_key_map;
 
     // Metrics.
     std::unique_ptr<log_manager_probe> _probe;

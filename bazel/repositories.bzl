@@ -100,9 +100,9 @@ def data_dependency():
     http_archive(
         name = "libxml2",
         build_file = "//bazel/thirdparty:libxml2.BUILD",
-        sha256 = "e9aa61639c3e764622e20511a8bf8e223c658b4c54b6d2f9ded1db03f141842c",
-        strip_prefix = "libxml2-2491c632a44d8bbfa58ce84bc0c18a40cd1121be",
-        url = "https://vectorized-public.s3.us-west-2.amazonaws.com/dependencies/libxml2-2491c632a44d8bbfa58ce84bc0c18a40cd1121be.tar.gz",
+        sha256 = "f52638e4d67135c49f676d1c8fcc4f9f35afb7ec9bfb4aee743e2e86d56e006b",
+        strip_prefix = "libxml2-2.14.5",
+        url = "https://vectorized-public.s3.us-west-2.amazonaws.com/dependencies/libxml2-v2.14.5.tar.gz",
     )
 
     http_archive(
@@ -162,9 +162,9 @@ def data_dependency():
     http_archive(
         name = "seastar",
         build_file = "//bazel/thirdparty:seastar.BUILD",
-        sha256 = "616e419ed198b33a0907ab555e62bbba115e2aaebb72eda9a661f6a70b5a2a59",
-        strip_prefix = "seastar-f7a712e9b3bace919f50f52c4b5b3ff0079900fa",
-        url = "https://github.com/redpanda-data/seastar/archive/f7a712e9b3bace919f50f52c4b5b3ff0079900fa.tar.gz",
+        sha256 = "43068252bf6b1e952390ef00d8884de64599bdd07807793540ebdeb8e70ecba8",
+        strip_prefix = "seastar-1fea24e9863e9e5a88681bea3fbc7b8b76705856",
+        url = "https://github.com/redpanda-data/seastar/archive/1fea24e9863e9e5a88681bea3fbc7b8b76705856.tar.gz",
     )
 
     http_archive(

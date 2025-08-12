@@ -10,6 +10,8 @@
  */
 
 #pragma once
+#include "compaction/key_offset_map.h"
+#include "compaction/utils.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
 #include "storage/compacted_index.h"
@@ -43,7 +45,7 @@ namespace storage::internal {
 ss::future<compacted_index::recovery_state> maybe_rebuild_compaction_index(
   ss::lw_shared_ptr<segment> s,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  const compaction_config& cfg,
+  const compaction::compaction_config& cfg,
   ss::rwlock::holder& read_holder,
   storage_resources& resources,
   storage::probe& pb);
@@ -53,7 +55,7 @@ ss::future<compacted_index::recovery_state> maybe_rebuild_compaction_index(
 ss::future<compaction_result> self_compact_segment(
   ss::lw_shared_ptr<storage::segment>,
   ss::lw_shared_ptr<storage::stm_manager>,
-  const storage::compaction_config&,
+  const compaction::compaction_config&,
   storage::probe&,
   storage::readers_cache&,
   storage::storage_resources&,
@@ -66,7 +68,7 @@ ss::future<compaction_result> self_compact_segment(
 ss::future<> rebuild_compaction_index(
   ss::lw_shared_ptr<segment> s,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage::probe& pb,
   storage_resources& resources);
 
@@ -93,7 +95,7 @@ ss::future<std::tuple<
 make_concatenated_segment(
   segment_full_path,
   chunked_vector<ss::lw_shared_ptr<segment>>&,
-  compaction_config,
+  compaction::compaction_config,
   storage_resources& resources,
   ss::sharded<features::feature_table>& feature_table);
 
@@ -108,7 +110,7 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
   ss::lw_shared_ptr<segment> target,
   chunked_vector<ss::lw_shared_ptr<segment>>& segments,
   ss::lw_shared_ptr<storage::stm_manager> stm_manager,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   storage::probe& pb,
   storage::readers_cache& readers_cache,
   storage_resources& resources,
@@ -119,13 +121,13 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
 ss::future<> write_concatenated_compacted_index(
   std::filesystem::path,
   chunked_vector<ss::lw_shared_ptr<segment>>&,
-  compaction_config,
+  compaction::compaction_config,
   storage_resources& resources);
 
 ss::future<chunked_vector<ss::rwlock::holder>> transfer_segment(
   ss::lw_shared_ptr<segment> to,
   ss::lw_shared_ptr<segment> from,
-  compaction_config cfg,
+  compaction::compaction_config cfg,
   probe& probe,
   chunked_vector<ss::rwlock::holder>,
   std::optional<size_t> new_cmp_idx_size);
@@ -192,32 +194,32 @@ ss::future<size_t> copy_filtered_entries(
 /// Returns the size of the built compacted index in bytes.
 ss::future<size_t> write_clean_compacted_index(
   storage::compacted_index_reader,
-  storage::compaction_config,
+  compaction::compaction_config,
   storage_resources& resources);
 
 ss::future<compacted_offset_list>
   generate_compacted_list(model::offset, storage::compacted_index_reader);
 
-ss::future<bool>
-  detect_if_segment_already_compacted(std::filesystem::path, compaction_config);
+ss::future<bool> detect_if_segment_already_compacted(
+  std::filesystem::path, compaction::compaction_config);
 
 bool compacted_index_needs_rebuild(compacted_index::recovery_state state);
 
-ss::future<compacted_index::recovery_state>
-detect_compaction_index_state(segment_full_path p, compaction_config cfg);
+ss::future<compacted_index::recovery_state> detect_compaction_index_state(
+  segment_full_path p, compaction::compaction_config cfg);
 
 /// \brief creates a model::record_batch_reader from segment meta
 ///
 model::record_batch_reader create_segment_full_reader(
   ss::lw_shared_ptr<storage::segment>,
-  storage::compaction_config,
+  compaction::compaction_config,
   storage::probe&,
   ss::rwlock::holder,
   std::optional<model::offset> start_offset = std::nullopt);
 
 ss::future<storage::index_state> do_copy_segment_data(
   ss::lw_shared_ptr<storage::segment>,
-  storage::compaction_config,
+  compaction::compaction_config,
   storage::probe&,
   ss::rwlock::holder,
   storage_resources&,
@@ -226,7 +228,7 @@ ss::future<storage::index_state> do_copy_segment_data(
 ss::future<> do_swap_data_file_handles(
   std::filesystem::path compacted,
   ss::lw_shared_ptr<storage::segment>,
-  storage::compaction_config,
+  compaction::compaction_config,
   probe&,
   std::optional<size_t>);
 
@@ -254,56 +256,6 @@ struct clean_segment_value
     auto serde_fields() { return std::tie(segment_name); }
 };
 
-inline bool is_compactible_control_batch(
-  const model::ntp& ntp, const model::record_batch_type batch_type) {
-    // Control batches in consumer offsets are special compared to
-    // the ones in data partitions can be safely compacted away.
-    //
-    // tx_fence batches  in consumer offsets are special and should be
-    // compacted. They were used historically to mark the begin of a transaction
-    // but later switched to group_fence_tx.
-    return unlikely(
-             batch_type == model::record_batch_type::tx_fence
-             && model::is_consumer_offsets_topic(ntp))
-           || batch_type == model::record_batch_type::group_fence_tx
-           || batch_type == model::record_batch_type::group_prepare_tx
-           || batch_type == model::record_batch_type::group_abort_tx
-           || batch_type == model::record_batch_type::group_commit_tx;
-}
-
-// Returns `true` or `false` indicating whether the batch type of the header
-// passed contains records that may be removed by compaction- whether that is by
-// de-duplication, or by other logic, i.e we need to consider transactional
-// batch removal past `delete.retention.ms`. Batches which should NEVER be
-// removed from the log via compaction filtering include compaction placeholder
-// batches, as well as all batches that shift offset translation. These batches
-// shouldn't even be considered in `should_keep()`, they should be kept
-// unconditionally.
-inline bool is_filterable(model::record_batch_type t) {
-    if (t == model::record_batch_type::compaction_placeholder) {
-        return false;
-    }
-    static const auto filtered_types = model::offset_translator_batch_types();
-    auto n = std::count(filtered_types.begin(), filtered_types.end(), t);
-    return n == 0;
-}
-
-// Returns `true` or `false` indicating whether the batch type of the header
-// passed contains records that may be de-duplicated by compaction
-// (de-duplication refers to the removal of records performed _only_ due to
-// records with the same key existing for a later record in the log). This is a
-// more stringent condition than `is_filterable()`- this condition determines
-// whether records from a batch should be indexed in a .compaction_index file,
-// and whether only the latest record for a given key should be kept in
-// `should_keep()`.
-inline bool
-is_compactible(const model::ntp& ntp, const model::record_batch_header& h) {
-    if (h.attrs.is_control() && !is_compactible_control_batch(ntp, h.type)) {
-        return false;
-    }
-    return is_filterable(h.type);
-}
-
 offset_delta_time should_apply_delta_time_offset(
   ss::sharded<features::feature_table>& feature_table);
 
@@ -316,7 +268,7 @@ offset_delta_time should_apply_delta_time_offset(
 // the returned value is false, indicating that tombstone records in the segment
 // are not yet eligible for removal.
 bool is_past_tombstone_delete_horizon(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg);
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg);
 
 // Checks if a segment may have any tombstones currently eligible for deletion.
 //
@@ -326,13 +278,13 @@ bool is_past_tombstone_delete_horizon(
 // false-positives, since segments that have not yet gone through the compaction
 // process are assumed to potentially contain tombstones until proven otherwise.
 bool may_have_removable_tombstones(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg);
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg);
 
 bool is_past_transaction_batch_delete_horizon(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg);
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg);
 
 bool has_removable_transaction_batches(
-  ss::lw_shared_ptr<segment> seg, const compaction_config& cfg);
+  ss::lw_shared_ptr<segment> seg, const compaction::compaction_config& cfg);
 
 // Mark a segment as completed window compaction, and whether it is "clean" (in
 // which case the `clean_compact_timestamp` is set in the segment's index).
@@ -377,7 +329,7 @@ inline bool can_discard(
   const model::ntp& ntp,
   bool past_tombstone_delete_horizon) {
     // Compactible control batches are always removable
-    if (is_compactible_control_batch(ntp, b.header().type)) {
+    if (compaction::is_compactible_control_batch(ntp, b.header().type)) {
         return true;
     }
 
@@ -429,7 +381,7 @@ ss::future<bool> should_keep(
     }
 
     auto& header = b.header();
-    if (!is_compactible(ntp, header)) {
+    if (!compaction::is_compactible(ntp, header)) {
         if (header.attrs.is_control()) {
             has_tx_batches = true;
         }
