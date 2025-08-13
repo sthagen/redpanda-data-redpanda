@@ -9,7 +9,7 @@
  */
 
 #include "cloud_topics/errc.h"
-#include "cloud_topics/level_zero/read_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
 #include "cloud_topics/level_zero/reader/tests/materialized_extent_fixture.h"
 #include "container/chunked_vector.h"
@@ -58,7 +58,7 @@ TEST_F_CORO(materialized_extent_fixture, l0_fetch_handler_test) {
 
     cloud_topics::l0::read_pipeline<> pipeline;
 
-    cloud_topics::fetch_handler l0_fetch_handler(
+    cloud_topics::l0::fetch_handler l0_fetch_handler(
       pipeline.register_read_pipeline_stage(),
       cloud_storage_clients::bucket_name("foo"),
       &remote,

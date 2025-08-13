@@ -10,11 +10,11 @@
 
 #pragma once
 
-#include "cloud_topics/level_zero/base_pipeline.h"
-#include "cloud_topics/level_zero/circuit_breaker.h"
-#include "cloud_topics/level_zero/event_filter.h"
-#include "cloud_topics/level_zero/pipeline_stage.h"
-#include "cloud_topics/level_zero/read_request.h"
+#include "cloud_topics/level_zero/pipeline/base_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/circuit_breaker.h"
+#include "cloud_topics/level_zero/pipeline/event_filter.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/read_request.h"
 #include "model/record_batch_reader.h"
 #include "ssx/semaphore.h"
 #include "storage/types.h"

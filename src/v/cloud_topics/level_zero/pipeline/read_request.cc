@@ -8,9 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/read_request.h"
+#include "cloud_topics/level_zero/pipeline/read_request.h"
 
-#include "cloud_topics/level_zero/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/logger.h"
 #include "utils/retry_chain_node.h"
 

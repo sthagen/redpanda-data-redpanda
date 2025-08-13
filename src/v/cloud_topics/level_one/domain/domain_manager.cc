@@ -26,6 +26,18 @@ rpc::errc convert_stm_errc(simple_stm::errc e) {
         return rpc::errc::timed_out;
     }
 }
+rpc::errc convert_metastore_errc(metastore::errc e) {
+    switch (e) {
+    case metastore::errc::invalid_request:
+        return rpc::errc::concurrent_requests;
+    case metastore::errc::out_of_range:
+        return rpc::errc::out_of_range;
+    case metastore::errc::missing_ntp:
+        return rpc::errc::missing_ntp;
+    case metastore::errc::transport_error:
+        return rpc::errc::timed_out;
+    }
+}
 } // namespace
 
 ss::future<> domain_manager::stop_and_wait() {
@@ -185,7 +197,7 @@ domain_manager::get_first_offset_ge(rpc::get_first_offset_ge_request req) {
     auto get_res = simple_metastore::get_first_ge(stm_state, req.tp, req.o);
     if (!get_res.has_value()) {
         co_return rpc::get_first_offset_ge_reply{
-          .ec = rpc::errc::state_error,
+          .ec = convert_metastore_errc(get_res.error()),
         };
     }
     auto& obj = get_res.value();
@@ -217,7 +229,7 @@ domain_manager::get_first_timestamp_ge(
     auto get_res = simple_metastore::get_first_ge(stm_state, req.tp, req.ts);
     if (!get_res.has_value()) {
         co_return rpc::get_first_timestamp_ge_reply{
-          .ec = rpc::errc::state_error,
+          .ec = convert_metastore_errc(get_res.error()),
         };
     }
     auto& obj = get_res.value();
@@ -248,7 +260,7 @@ domain_manager::get_offsets(rpc::get_offsets_request req) {
     auto get_res = simple_metastore::get_offsets(stm_state, req.tp);
     if (!get_res.has_value()) {
         co_return rpc::get_offsets_reply{
-          .ec = rpc::errc::state_error,
+          .ec = convert_metastore_errc(get_res.error()),
         };
     }
     co_return rpc::get_offsets_reply{
@@ -278,7 +290,7 @@ domain_manager::get_compaction_offsets(
       stm_state, req.tp, req.tombstone_removal_upper_bound_ts);
     if (!get_res.has_value()) {
         co_return rpc::get_compaction_offsets_reply{
-          .ec = rpc::errc::state_error,
+          .ec = convert_metastore_errc(get_res.error()),
         };
     }
     co_return rpc::get_compaction_offsets_reply{

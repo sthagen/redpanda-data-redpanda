@@ -81,8 +81,7 @@ struct partition_info {
 class frontend final {
 public:
     explicit frontend(
-      ss::lw_shared_ptr<cluster::partition> p,
-      ss::shared_ptr<experimental::cloud_topics::data_plane_api> ct) noexcept;
+      ss::lw_shared_ptr<cluster::partition> p, data_plane_api* ct) noexcept;
 
     /// Get current NTP
     const model::ntp& ntp() const;
@@ -151,7 +150,7 @@ private:
     bool cache_enabled() const;
 
     ss::lw_shared_ptr<cluster::partition> _partition;
-    ss::shared_ptr<experimental::cloud_topics::data_plane_api> _data_plane;
+    data_plane_api* _data_plane;
 };
 
 } // namespace experimental::cloud_topics

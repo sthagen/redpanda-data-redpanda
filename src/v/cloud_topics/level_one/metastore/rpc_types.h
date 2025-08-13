@@ -25,7 +25,8 @@ enum class errc : int16_t {
     timed_out,
     not_leader,
     concurrent_requests,
-    state_error,
+    missing_ntp,
+    out_of_range,
 };
 
 struct add_objects_reply

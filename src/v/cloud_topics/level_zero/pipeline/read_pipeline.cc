@@ -8,12 +8,12 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/read_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 
 #include "base/units.h"
-#include "cloud_topics/level_zero/circuit_breaker.h"
-#include "cloud_topics/level_zero/event_filter.h"
-#include "cloud_topics/level_zero/read_request.h"
+#include "cloud_topics/level_zero/pipeline/circuit_breaker.h"
+#include "cloud_topics/level_zero/pipeline/event_filter.h"
+#include "cloud_topics/level_zero/pipeline/read_request.h"
 #include "cloud_topics/logger.h"
 #include "utils/human.h"
 

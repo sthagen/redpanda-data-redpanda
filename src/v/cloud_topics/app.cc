@@ -11,6 +11,7 @@
 #include "cloud_topics/app.h"
 
 #include "cloud_topics/cluster_services.h"
+#include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/data_plane_impl.h"
 #include "cluster/cluster_epoch_service.h"
 #include "cluster/controller.h"
@@ -20,31 +21,11 @@
 
 namespace experimental::cloud_topics {
 
-namespace {
-class real_cluster_services
-  : public experimental::cloud_topics::cluster_services {
-public:
-    explicit real_cluster_services(
-      ss::sharded<cluster::cluster_epoch_service<>>* epoch_generator)
-      : _epoch_service(epoch_generator) {}
-
-    seastar::future<experimental::cloud_topics::cluster_epoch>
-    current_epoch(seastar::abort_source* as) override {
-        std::expected<int64_t, std::error_code> epoch
-          = co_await _epoch_service->local().get_cached_epoch(as);
-        if (!epoch) {
-            throw std::system_error(epoch.error());
-        }
-        co_return experimental::cloud_topics::cluster_epoch(epoch.value());
-    }
-
-private:
-    ss::sharded<cluster::cluster_epoch_service<>>* _epoch_service;
-};
-} // namespace
-
 app::app(ss::sstring logger_name)
-  : ssx::sharded_service_container(std::move(logger_name)) {}
+  : ssx::sharded_service_container(logger_name)
+  , _logger_name(std::move(logger_name)) {}
+
+app::~app() = default;
 
 ss::future<> app::construct(
   model::node_id self,
@@ -58,23 +39,18 @@ ss::future<> app::construct(
   ss::sharded<rpc::connection_cache>* connection_cache,
   cloud_storage_clients::bucket_name bucket,
   ss::sharded<storage::api>* storage) {
-    co_await construct_service(
-      state,
-      ss::sharded_parameter([remote, cloud_cache, bucket, storage, controller] {
-          return experimental::cloud_topics::make_data_plane(
-            remote,
-            cloud_cache,
-            bucket,
-            storage,
-            std::make_unique<real_cluster_services>(
-              &controller->get_cluster_epoch_generator()));
-      }));
-    co_await construct_service(
-      reconciler,
-      partition_mgr,
+    data_plane = co_await make_data_plane(
+      ssx::sformat("{}::data_plane", _logger_name),
       remote,
-      ss::sharded_parameter([this] { return state.local().get_data_plane(); }),
-      bucket);
+      cloud_cache,
+      bucket,
+      storage,
+      &controller->get_cluster_epoch_generator());
+
+    co_await construct_service(state, data_plane.get());
+
+    co_await construct_service(
+      reconciler, partition_mgr, remote, data_plane.get(), bucket);
     co_await construct_service(domain_supervisor, controller);
     co_await construct_service(
       l1_metastore_fe,
@@ -87,7 +63,7 @@ ss::future<> app::construct(
 }
 
 ss::future<> app::start() {
-    co_await state.invoke_on_all([](auto& s) { return s.start(); });
+    co_await data_plane->start();
     co_await reconciler.invoke_on_all([](auto& r) { return r.start(); });
     co_await domain_supervisor.invoke_on_all(
       [](auto& ds) { return ds.start(); });
@@ -95,11 +71,16 @@ ss::future<> app::start() {
 
 ss::future<> app::stop() {
     ssx::sharded_service_container::shutdown();
+    co_await data_plane->stop();
     co_return;
 }
 
 ss::sharded<l1::frontend>* app::get_sharded_l1_metastore_fe() {
     return &l1_metastore_fe;
+}
+
+ss::sharded<l1::domain_supervisor>* app::get_sharded_l1_domain_supervisor() {
+    return &domain_supervisor;
 }
 
 ss::sharded<state_accessors>* app::get_state() { return &state; }

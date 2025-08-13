@@ -16,8 +16,9 @@
 #include "base/units.h"
 #include "bytes/iobuf.h"
 #include "cloud_topics/cluster_services.h"
-#include "cloud_topics/level_zero/pipeline_stage.h"
-#include "cloud_topics/level_zero/write_pipeline.h"
+#include "cloud_topics/level_zero/cluster_services_impl/cluster_services.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/types.h"
 #include "config/property.h"
 #include "model/fundamental.h"
@@ -36,9 +37,10 @@
 namespace cloud_io {
 template<typename Clock>
 class remote_api;
-}
+class remote;
+} // namespace cloud_io
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 struct batcher_result {
     uuid_t uuid;
@@ -64,10 +66,10 @@ class batcher {
 
 public:
     explicit batcher(
-      l0::write_pipeline<Clock>::stage stage,
+      write_pipeline<Clock>::stage stage,
       cloud_storage_clients::bucket_name bucket,
       cloud_io::remote_api<Clock>& remote_api,
-      cluster_services* cluster_services);
+      experimental::cloud_topics::cluster_services* cluster_services);
 
     ss::future<> start();
     ss::future<> stop();
@@ -98,7 +100,7 @@ private:
     /// \return size of the uploaded object or error code
     ss::future<result<size_t>> upload_object(object_id id, iobuf payload);
 
-    cluster_services* _cluster_services;
+    experimental::cloud_topics::cluster_services* _cluster_services;
     cloud_io::remote_api<Clock>& _remote;
     cloud_storage_clients::bucket_name _bucket;
     config::binding<std::chrono::milliseconds> _upload_timeout;
@@ -113,6 +115,6 @@ private:
     basic_retry_chain_node<Clock> _rtc;
     basic_retry_chain_logger<Clock> _logger;
 
-    l0::write_pipeline<Clock>::stage _stage;
+    write_pipeline<Clock>::stage _stage;
 };
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

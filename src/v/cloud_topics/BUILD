@@ -54,7 +54,7 @@ redpanda_cc_library(
     include_prefix = "cloud_topics",
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",
-        "//src/v/cloud_topics/level_zero/reader:__pkg__",
+        "//src/v/cloud_topics/level_zero/frontend_reader:__pkg__",
         "//src/v/cloud_topics/level_zero/reconciler:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
@@ -84,12 +84,15 @@ redpanda_cc_library(
     include_prefix = "cloud_topics",
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",
+        "//src/v/cloud_topics/level_one/metastore/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/reader:__pkg__",
         "//src/v/cloud_topics/level_zero/reconciler:__pkg__",
+        "//src/v/cloud_topics/tests:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
     ],
     deps = [
+        ":data_plane_api",
         "//src/v/base",
         "//src/v/cloud_topics:state_accessors",
         "//src/v/cloud_topics/level_one/domain:domain_supervisor",
@@ -121,11 +124,13 @@ redpanda_cc_library(
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/batch_cache",
         "//src/v/cloud_topics/level_zero/batcher",
+        "//src/v/cloud_topics/level_zero/cluster_services_impl",
         "//src/v/cloud_topics/level_zero/pipeline:read_pipeline",
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",
         "//src/v/cloud_topics/level_zero/reader:fetch_handler",
         "//src/v/cloud_topics/level_zero/throttler",
         "//src/v/model",
+        "//src/v/ssx:sharded_service_container",
         "//src/v/storage",
     ],
     include_prefix = "cloud_topics",
@@ -162,9 +167,6 @@ redpanda_cc_library(
     include_prefix = "cloud_topics",
     visibility = ["//visibility:public"],
     deps = [
-        ":data_plane_api",
-        "//src/v/base",
-        "@seastar",
     ],
 )
 

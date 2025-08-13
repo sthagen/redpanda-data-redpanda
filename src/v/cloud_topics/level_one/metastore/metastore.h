@@ -53,6 +53,10 @@ public:
         missing_ntp,
         invalid_request,
         out_of_range,
+
+        // Indicates an issue sending or receiving the request rather than a
+        // logical error. Expected that a retry may succeed.
+        transport_error,
     };
     struct object_metadata {
         struct ntp_metadata {
@@ -263,6 +267,9 @@ struct fmt::formatter<experimental::cloud_topics::l1::metastore::errc> final
         case out_of_range:
             return formatter<string_view>::format(
               "metastore::errc::out_of_range", ctx);
+        case transport_error:
+            return formatter<string_view>::format(
+              "metastore::errc::transport_error", ctx);
         }
     }
 };

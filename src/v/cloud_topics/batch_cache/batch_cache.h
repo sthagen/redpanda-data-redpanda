@@ -12,6 +12,7 @@
 
 #include "absl/container/btree_map.h"
 #include "model/fundamental.h"
+#include "storage/api.h"
 #include "storage/batch_cache.h"
 
 #include <chrono>
@@ -41,6 +42,11 @@ public:
     // The 'log_manager' could be 'nullptr' if caching is disabled
     explicit batch_cache(
       storage::log_manager* log_manager,
+      std::chrono::milliseconds gc_interval
+      = default_batch_cache_check_interval);
+
+    explicit batch_cache(
+      ss::sharded<storage::api>& log_manager,
       std::chrono::milliseconds gc_interval
       = default_batch_cache_check_interval);
 

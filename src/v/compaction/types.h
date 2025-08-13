@@ -89,8 +89,6 @@ struct compaction_config {
     // abort source for compaction task
     ss::abort_source* asrc;
 
-    mutable std::optional<model::offset> min_offset_fully_indexed;
-
     friend std::ostream& operator<<(std::ostream&, const compaction_config&);
 };
 

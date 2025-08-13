@@ -10,10 +10,10 @@
 
 #pragma once
 
-#include "cloud_topics/level_zero/base_pipeline.h"
-#include "cloud_topics/level_zero/event_filter.h"
-#include "cloud_topics/level_zero/pipeline_stage.h"
-#include "cloud_topics/level_zero/write_request.h"
+#include "cloud_topics/level_zero/pipeline/base_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/event_filter.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "ssx/semaphore.h"
 
 #include <seastar/core/abort_source.hh>

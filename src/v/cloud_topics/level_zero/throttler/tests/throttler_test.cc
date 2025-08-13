@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/level_zero/throttler/throttler.h"
 #include "container/chunked_circular_buffer.h"
 #include "model/namespace.h"
@@ -27,7 +27,7 @@ inline ss::logger test_log("throttler_gtest");
 namespace cloud_topics = experimental::cloud_topics;
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 struct throttler_metrics {
     size_t events_counter;
@@ -53,9 +53,9 @@ struct throttler_accessor {
         };
     }
 
-    cloud_topics::throttler<ss::manual_clock>* throttler;
+    throttler<ss::manual_clock>* throttler;
 };
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0
 
 namespace experimental::cloud_topics::l0 {
 struct write_pipeline_accessor {
@@ -151,9 +151,9 @@ TEST_CORO(throttler_test, no_throttling) {
       reader_size_bytes,
       tput_limit);
 
-    cloud_topics::throttler<ss::manual_clock> throttler(
+    cloud_topics::l0::throttler<ss::manual_clock> throttler(
       tput_limit, pipeline.register_write_pipeline_stage());
-    cloud_topics::throttler_accessor throttler_accessor{
+    cloud_topics::l0::throttler_accessor throttler_accessor{
       .throttler = &throttler,
     };
     cloud_topics::l0::write_pipeline_accessor pipeline_accessor{
@@ -214,9 +214,9 @@ TEST_CORO(throttler_test, tput_limit_reached) {
       reader_size_bytes,
       tput_limit);
 
-    cloud_topics::throttler<ss::manual_clock> throttler(
+    cloud_topics::l0::throttler<ss::manual_clock> throttler(
       tput_limit, pipeline.register_write_pipeline_stage());
-    cloud_topics::throttler_accessor throttler_accessor{
+    cloud_topics::l0::throttler_accessor throttler_accessor{
       .throttler = &throttler,
     };
     cloud_topics::l0::write_pipeline_accessor pipeline_accessor{
@@ -287,9 +287,9 @@ TEST_CORO(throttler_test, tput_limit_reached_req_timed_out) {
       reader_size_bytes,
       tput_limit);
 
-    cloud_topics::throttler<ss::manual_clock> throttler(
+    cloud_topics::l0::throttler<ss::manual_clock> throttler(
       tput_limit, pipeline.register_write_pipeline_stage());
-    cloud_topics::throttler_accessor throttler_accessor{
+    cloud_topics::l0::throttler_accessor throttler_accessor{
       .throttler = &throttler,
     };
     cloud_topics::l0::write_pipeline_accessor pipeline_accessor{
@@ -343,12 +343,12 @@ TEST_CORO(throttler_test, graceful_shutdown) {
 
     size_t tput_limit = 100;
 
-    cloud_topics::throttler<ss::manual_clock> throttler(
+    cloud_topics::l0::throttler<ss::manual_clock> throttler(
       tput_limit, pipeline.register_write_pipeline_stage());
 
     std::ignore = pipeline.register_write_pipeline_stage();
 
-    cloud_topics::throttler_accessor throttler_accessor{
+    cloud_topics::l0::throttler_accessor throttler_accessor{
       .throttler = &throttler,
     };
     cloud_topics::l0::write_pipeline_accessor pipeline_accessor{

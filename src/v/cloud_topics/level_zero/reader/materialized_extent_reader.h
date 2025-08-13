@@ -18,7 +18,7 @@
 
 #include <seastar/core/lowres_clock.hh>
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 /// Consume the 'underlying' reader that returns placeholders
 /// and materialize them by downloading from the cloud storage.
@@ -40,4 +40,4 @@ ss::future<chunked_vector<model::record_batch>> materialize_placeholders(
   retry_chain_node& rtc,
   retry_chain_logger& logger);
 
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

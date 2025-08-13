@@ -45,46 +45,6 @@ constexpr int16_t fixture_port_number = 7676;
 inline ss::logger arch_fixture_log("archival_service_fixture");
 } // namespace
 
-inline auto
-get_cloud_storage_configurations(std::string_view hosthame, uint16_t port) {
-    net::unresolved_address server_addr(ss::sstring(hosthame), port);
-    cloud_storage_clients::s3_configuration s3_conf;
-    s3_conf.uri = cloud_storage_clients::access_point_uri(hosthame);
-    s3_conf.access_key = cloud_roles::public_key_str("access-key");
-    s3_conf.secret_key = cloud_roles::private_key_str("secret-key");
-    s3_conf.region = cloud_roles::aws_region_name("us-east-1");
-    s3_conf.url_style = cloud_storage_clients::s3_url_style::virtual_host;
-    s3_conf._probe = ss::make_shared<cloud_storage_clients::client_probe>(
-      net::metrics_disabled::yes,
-      net::public_metrics_disabled::yes,
-      cloud_roles::aws_region_name{},
-      cloud_storage_clients::endpoint_url{});
-    s3_conf.server_addr = server_addr;
-
-    archival::configuration a_conf{
-      .cloud_storage_initial_backoff = config::mock_binding(100ms),
-      .segment_upload_timeout = config::mock_binding(1000ms),
-      .manifest_upload_timeout = config::mock_binding(1000ms),
-      .garbage_collect_timeout = config::mock_binding(1000ms),
-      .upload_loop_initial_backoff = config::mock_binding(100ms),
-      .upload_loop_max_backoff = config::mock_binding(5000ms)};
-    a_conf.bucket_name = cloud_storage_clients::bucket_name("test-bucket");
-    a_conf.ntp_metrics_disabled = archival::per_ntp_metrics_disabled::yes;
-    a_conf.svc_metrics_disabled = archival::service_metrics_disabled::yes;
-    a_conf.time_limit = std::nullopt;
-
-    cloud_storage::configuration c_conf;
-    c_conf.client_config = s3_conf;
-    c_conf.bucket_name = cloud_storage_clients::bucket_name("test-bucket");
-    c_conf.connection_limit = archival::connection_limit(2);
-    c_conf.cloud_credentials_source
-      = model::cloud_credentials_source::config_file;
-    return std::make_tuple(
-      std::move(s3_conf),
-      ss::make_lw_shared<archival::configuration>(std::move(a_conf)),
-      c_conf);
-}
-
 class archiver_cluster_fixture
   : public cluster_test_fixture
   , public http_imposter_fixture {

@@ -92,13 +92,13 @@ public:
     }
 };
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 struct batcher_accessor {
     ss::future<result<bool>> run_once() noexcept { return batcher->run_once(); }
 
-    cloud_topics::batcher<ss::manual_clock>* batcher;
+    cloud_topics::l0::batcher<ss::manual_clock>* batcher;
 };
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0
 
 namespace experimental::cloud_topics::l0 {
 struct write_pipeline_accessor {
@@ -137,12 +137,12 @@ TEST_CORO(batcher_test, single_write_request) {
     cloud_storage_clients::bucket_name bucket("foo");
     cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;
     static_cluster_services cluster_services;
-    cloud_topics::batcher<ss::manual_clock> batcher(
+    cloud_topics::l0::batcher<ss::manual_clock> batcher(
       pipeline.register_write_pipeline_stage(),
       bucket,
       mock,
       &cluster_services);
-    cloud_topics::batcher_accessor batcher_accessor{
+    cloud_topics::l0::batcher_accessor batcher_accessor{
       .batcher = &batcher,
     };
     cloud_topics::l0::write_pipeline_accessor pipeline_accessor{
@@ -187,12 +187,12 @@ TEST_CORO(batcher_test, many_write_requests) {
     cloud_storage_clients::bucket_name bucket("foo");
     cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;
     static_cluster_services cluster_services;
-    cloud_topics::batcher<ss::manual_clock> batcher(
+    cloud_topics::l0::batcher<ss::manual_clock> batcher(
       pipeline.register_write_pipeline_stage(),
       bucket,
       mock,
       &cluster_services);
-    cloud_topics::batcher_accessor batcher_accessor{
+    cloud_topics::l0::batcher_accessor batcher_accessor{
       .batcher = &batcher,
     };
     cloud_topics::l0::write_pipeline_accessor pipeline_accessor{
@@ -272,12 +272,12 @@ TEST_CORO(batcher_test, expired_write_request) {
     cloud_storage_clients::bucket_name bucket("foo");
     cloud_topics::l0::write_pipeline<ss::manual_clock> pipeline;
     static_cluster_services cluster_services;
-    cloud_topics::batcher<ss::manual_clock> batcher(
+    cloud_topics::l0::batcher<ss::manual_clock> batcher(
       pipeline.register_write_pipeline_stage(),
       bucket,
       mock,
       &cluster_services);
-    cloud_topics::batcher_accessor batcher_accessor{
+    cloud_topics::l0::batcher_accessor batcher_accessor{
       .batcher = &batcher,
     };
     cloud_topics::l0::write_pipeline_accessor pipeline_accessor{

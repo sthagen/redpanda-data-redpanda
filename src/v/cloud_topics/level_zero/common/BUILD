@@ -7,6 +7,7 @@ package(
         "//src/v/cloud_topics/frontend:__pkg__",
         "//src/v/cloud_topics/level_zero/batcher:__pkg__",
         "//src/v/cloud_topics/level_zero/batcher/tests:__pkg__",
+        "//src/v/cloud_topics/level_zero/frontend_reader:__pkg__",
         "//src/v/cloud_topics/level_zero/pipeline:__pkg__",
         "//src/v/cloud_topics/level_zero/pipeline/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/reader:__pkg__",

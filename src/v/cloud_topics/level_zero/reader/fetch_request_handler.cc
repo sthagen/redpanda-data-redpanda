@@ -11,8 +11,8 @@
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
 
 #include "base/unreachable.h"
-#include "cloud_topics/level_zero/event_filter.h"
-#include "cloud_topics/level_zero/read_request.h"
+#include "cloud_topics/level_zero/pipeline/event_filter.h"
+#include "cloud_topics/level_zero/pipeline/read_request.h"
 #include "cloud_topics/level_zero/reader/materialized_extent_reader.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
@@ -31,7 +31,7 @@
 
 #include <exception>
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 fetch_handler::fetch_handler(
   l0::read_pipeline<>::stage pipeline_stage,
@@ -174,4 +174,4 @@ ss::future<checked<bool, errc>> fetch_handler::process_requests() {
     co_return to_process.value().complete;
 }
 
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

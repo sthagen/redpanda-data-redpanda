@@ -12,15 +12,14 @@
 
 #include "absl/container/btree_map.h"
 #include "base/seastarx.h"
-#include "cloud_topics/cluster_services.h"
 #include "cloud_topics/errc.h"
-#include "cloud_topics/level_zero/write_request.h"
+#include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "cloud_topics/types.h"
 #include "container/chunked_vector.h"
 
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 /// List of extent_meta values that has to be propagated
 /// to the particular write request.
@@ -83,4 +82,4 @@ private:
     size_t _size_bytes{0};
 };
 
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

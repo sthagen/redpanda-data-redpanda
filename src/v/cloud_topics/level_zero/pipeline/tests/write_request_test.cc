@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/write_request.h"
+#include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "model/namespace.h"
 
 #include <seastar/core/manual_clock.hh>

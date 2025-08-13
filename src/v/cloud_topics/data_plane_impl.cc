@@ -14,12 +14,15 @@
 #include "cloud_storage/cache_service.h"
 #include "cloud_topics/batch_cache/batch_cache.h"
 #include "cloud_topics/cluster_services.h"
+#include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_zero/batcher/batcher.h"
-#include "cloud_topics/level_zero/read_pipeline.h"
+#include "cloud_topics/level_zero/cluster_services_impl/cluster_services.h"
+#include "cloud_topics/level_zero/pipeline/read_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/level_zero/reader/fetch_request_handler.h"
 #include "cloud_topics/level_zero/throttler/throttler.h"
-#include "cloud_topics/level_zero/write_pipeline.h"
 #include "model/fundamental.h"
+#include "ssx/sharded_service_container.h"
 #include "storage/api.h"
 
 #include <seastar/core/future.hh>
@@ -31,59 +34,75 @@ namespace experimental::cloud_topics {
 
 class impl
   : public data_plane_api
-  , public ss::enable_shared_from_this<impl> {
+  , public ssx::sharded_service_container {
 public:
-    impl(
+    explicit impl(ss::sstring logger_name)
+      : ssx::sharded_service_container(std::move(logger_name)) {}
+
+    ss::future<> construct(
       seastar::sharded<cloud_io::remote>* io,
       seastar::sharded<cloud_storage::cache>* cache,
       cloud_storage_clients::bucket_name bucket,
       seastar::sharded<storage::api>* storage_api,
-      std::unique_ptr<cluster_services> cluster_services)
-      : _cluster_services(std::move(cluster_services))
-      , _write_pipeline(std::make_unique<l0::write_pipeline<>>())
-      , _throttler(std::make_unique<throttler<>>(
-          10_MiB /*TODO: fixme*/,
-          _write_pipeline->register_write_pipeline_stage()))
-      , _batcher(std::make_unique<batcher<>>(
-          _write_pipeline->register_write_pipeline_stage(),
-          bucket,
-          io->local(),
-          _cluster_services.get()))
-      , _read_pipeline(std::make_unique<l0::read_pipeline<>>())
-      , _l0_resolver(std::make_unique<fetch_handler>(
-          _read_pipeline->register_read_pipeline_stage(),
-          bucket,
-          &io->local(),
-          &cache->local()))
-      , _batch_cache(
-          std::make_unique<batch_cache>(&storage_api->local().log_mgr())) {}
+      seastar::sharded<cluster::cluster_epoch_service<ss::lowres_clock>>*
+        cluster_services) {
+        co_await construct_service(
+          _cluster_services, std::ref(*cluster_services));
+
+        co_await construct_service(_write_pipeline);
+
+        co_await construct_service(
+          _throttler, 10_MiB, std::ref(_write_pipeline));
+
+        co_await construct_service(
+          _batcher,
+          ss::sharded_parameter([this] {
+              return _write_pipeline.local().register_write_pipeline_stage();
+          }),
+          ss::sharded_parameter([bucket] { return bucket; }),
+          ss::sharded_parameter([io] { return std::ref(io->local()); }),
+          ss::sharded_parameter([this] { return &_cluster_services.local(); }));
+
+        co_await construct_service(_read_pipeline);
+
+        co_await construct_service(
+          _fetch_handler,
+          ss::sharded_parameter([this] {
+              return _read_pipeline.local().register_read_pipeline_stage();
+          }),
+          ss::sharded_parameter([bucket] { return bucket; }),
+          ss::sharded_parameter([io] { return &io->local(); }),
+          ss::sharded_parameter([cache] { return &cache->local(); }));
+
+        co_await construct_service(
+          _batch_cache, ss::sharded_parameter([storage_api] {
+              return &storage_api->local().log_mgr();
+          }));
+    }
 
     seastar::future<> start() override {
-        // Batcher
-        co_await _batch_cache->start();
-        // Write path
-        co_await _throttler->start();
-        co_await _batcher->start();
-        // Read path
-        co_await _l0_resolver->start();
+        co_await _throttler.invoke_on_all([](auto& s) { return s.start(); });
+        co_await _batcher.invoke_on_all([](auto& s) { return s.start(); });
+        co_await _fetch_handler.invoke_on_all(
+          [](auto& s) { return s.start(); });
+        co_await _batch_cache.invoke_on_all([](auto& s) { return s.start(); });
     }
+
     seastar::future<> stop() override {
-        // Read path
-        co_await _read_pipeline->stop();
-        co_await _l0_resolver->stop();
-        // Write path
-        co_await _write_pipeline->stop();
-        co_await _batcher->stop();
-        co_await _throttler->stop();
-        // Batcher
-        co_await _batch_cache->stop();
+        co_await _write_pipeline.invoke_on_all(
+          [](auto& p) { return p.shutdown(); });
+        co_await _read_pipeline.invoke_on_all(
+          [](auto& p) { return p.shutdown(); });
+        co_await ss::async(
+          [this] { ssx::sharded_service_container::shutdown(); });
+        co_return;
     }
 
     ss::future<result<chunked_vector<extent_meta>>> write_and_debounce(
       model::ntp ntp,
       chunked_vector<model::record_batch> r,
       model::timeout_clock::time_point timeout) override {
-        return _write_pipeline->write_and_debounce(
+        return _write_pipeline.local().write_and_debounce(
           std::move(ntp), std::move(r), timeout);
     }
 
@@ -92,7 +111,7 @@ public:
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
       model::timeout_clock::time_point timeout) override {
-        auto res = co_await _read_pipeline->make_reader(
+        auto res = co_await _read_pipeline.local().make_reader(
           ntp,
           {.output_size_estimate = output_size_estimate,
            .meta = std::move(metadata)},
@@ -104,39 +123,42 @@ public:
     }
 
     void cache_put(const model::ntp& ntp, const model::record_batch& b) final {
-        _batch_cache->put(ntp, b);
+        _batch_cache.local().put(ntp, b);
     }
 
     std::optional<model::record_batch>
     cache_get(const model::ntp& ntp, model::offset o) final {
-        return _batch_cache->get(ntp, o);
+        return _batch_cache.local().get(ntp, o);
     }
 
 private:
-    std::unique_ptr<cluster_services> _cluster_services;
+    ss::sharded<l0::cluster_services> _cluster_services;
     // Write path
-    std::unique_ptr<l0::write_pipeline<>> _write_pipeline;
-    std::unique_ptr<throttler<>> _throttler;
-    std::unique_ptr<batcher<>> _batcher;
+    ss::sharded<l0::write_pipeline<>> _write_pipeline;
+    ss::sharded<l0::throttler<>> _throttler;
+    ss::sharded<l0::batcher<>> _batcher;
     // Read path
-    std::unique_ptr<l0::read_pipeline<>> _read_pipeline;
-    std::unique_ptr<fetch_handler> _l0_resolver;
+    ss::sharded<l0::read_pipeline<>> _read_pipeline;
+    ss::sharded<l0::fetch_handler> _fetch_handler;
     // Batch cache
-    std::unique_ptr<batch_cache> _batch_cache;
+    ss::sharded<batch_cache> _batch_cache;
 };
 
-ss::shared_ptr<data_plane_api> make_data_plane(
+ss::future<std::unique_ptr<data_plane_api>> make_data_plane(
+  ss::sstring logger_name,
   ss::sharded<cloud_io::remote>* remote,
   ss::sharded<cloud_storage::cache>* cache,
   cloud_storage_clients::bucket_name bucket,
   ss::sharded<storage::api>* log_manager,
-  std::unique_ptr<cluster_services> cluster_services) {
-    return ss::make_shared<impl>(
+  seastar::sharded<cluster::cluster_epoch_service<>>* cluster_services) {
+    auto p = std::make_unique<impl>(std::move(logger_name));
+    co_await p->construct(
       remote,
       cache,
       std::move(bucket),
       log_manager,
-      std::move(cluster_services));
+      std::ref(cluster_services));
+    co_return std::move(p);
 }
 
 } // namespace experimental::cloud_topics

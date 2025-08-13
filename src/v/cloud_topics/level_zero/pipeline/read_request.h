@@ -14,7 +14,7 @@
 #include "base/seastarx.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
-#include "cloud_topics/level_zero/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "container/chunked_vector.h"
 #include "container/intrusive_list_helpers.h"
 #include "model/record.h"

@@ -13,14 +13,14 @@
 #include "base/seastarx.h"
 #include "cloud_io/basic_cache_service_api.h"
 #include "cloud_io/remote.h"
-#include "cloud_topics/level_zero/read_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/read_pipeline.h"
 #include "model/fundamental.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 /// Read request handler.
 /// This component can process dl_placeholder batches.
@@ -55,4 +55,4 @@ private:
     ss::gate _gate;
     l0::read_pipeline<>::stage _pipeline_stage;
 };
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

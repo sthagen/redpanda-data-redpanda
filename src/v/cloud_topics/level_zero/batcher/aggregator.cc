@@ -10,13 +10,13 @@
 
 #include "cloud_topics/level_zero/batcher/aggregator.h"
 
-#include "cloud_topics/level_zero/serializer.h"
-#include "cloud_topics/level_zero/write_request.h"
+#include "cloud_topics/level_zero/pipeline/serializer.h"
+#include "cloud_topics/level_zero/pipeline/write_request.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/util/defer.hh>
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 template<class Clock>
 aggregator<Clock>::aggregator(object_id id)
@@ -167,4 +167,4 @@ size_t aggregator<Clock>::size_bytes() const noexcept {
 
 template class aggregator<ss::lowres_clock>;
 template class aggregator<ss::manual_clock>;
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

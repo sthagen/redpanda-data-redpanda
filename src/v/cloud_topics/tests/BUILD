@@ -1,4 +1,19 @@
-load("//bazel:test.bzl", "redpanda_cc_gtest")
+load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
+
+redpanda_test_cc_library(
+    name = "cluster_fixture",
+    hdrs = ["cluster_fixture.h"],
+    include_prefix = "cloud_topics/tests",
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/cloud_io/tests:s3_imposter",
+        "//src/v/cloud_topics:app",
+        "//src/v/cloud_topics/level_one/metastore:simple_stm",
+        "//src/v/cluster/tests:cluster_test_fixture",
+        "//src/v/model",
+        "//src/v/raft",
+    ],
+)
 
 redpanda_cc_gtest(
     name = "types_test",

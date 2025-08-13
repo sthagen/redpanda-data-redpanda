@@ -12,6 +12,7 @@
 
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
+#include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_one/common/object_utils.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
@@ -64,11 +65,11 @@ namespace experimental::cloud_topics::reconciler {
 reconciler::reconciler(
   ss::sharded<cluster::partition_manager>* pm,
   ss::sharded<cloud_io::remote>* cloud_io,
-  ss::shared_ptr<data_plane_api> data_plane,
+  data_plane_api* data_plane,
   std::optional<cloud_storage_clients::bucket_name> bucket)
   : _partition_manager(pm)
   , _cloud_io(cloud_io)
-  , _data_plane(std::move(data_plane)) {
+  , _data_plane(data_plane) {
     if (bucket.has_value()) {
         _bucket = std::move(bucket.value());
     } else {

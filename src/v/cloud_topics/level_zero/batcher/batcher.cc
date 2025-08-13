@@ -14,9 +14,9 @@
 #include "cloud_io/remote.h"
 #include "cloud_topics/errc.h"
 #include "cloud_topics/level_zero/batcher/aggregator.h"
-#include "cloud_topics/level_zero/event_filter.h"
-#include "cloud_topics/level_zero/serializer.h"
-#include "cloud_topics/level_zero/write_request.h"
+#include "cloud_topics/level_zero/pipeline/event_filter.h"
+#include "cloud_topics/level_zero/pipeline/serializer.h"
+#include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/object_utils.h"
 #include "cloud_topics/types.h"
@@ -32,14 +32,14 @@
 
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 template<class Clock>
 batcher<Clock>::batcher(
-  l0::write_pipeline<Clock>::stage stage,
+  write_pipeline<Clock>::stage stage,
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<Clock>& remote_api,
-  cluster_services* cluster_services)
+  experimental::cloud_topics::cluster_services* cluster_services)
   : _cluster_services(cluster_services)
   , _remote(remote_api)
   , _bucket(std::move(bucket))
@@ -252,4 +252,4 @@ ss::future<> batcher<Clock>::bg_controller_loop() {
 template class batcher<ss::lowres_clock>;
 template class batcher<ss::manual_clock>;
 
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

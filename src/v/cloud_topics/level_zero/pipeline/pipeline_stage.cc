@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 
 #include "base/vassert.h"
 

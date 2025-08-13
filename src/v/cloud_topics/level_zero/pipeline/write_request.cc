@@ -8,10 +8,10 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/write_request.h"
+#include "cloud_topics/level_zero/pipeline/write_request.h"
 
-#include "cloud_topics/level_zero/pipeline_stage.h"
-#include "cloud_topics/level_zero/serializer.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/serializer.h"
 #include "cloud_topics/logger.h"
 
 namespace experimental::cloud_topics::l0 {

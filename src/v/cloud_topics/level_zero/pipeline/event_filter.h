@@ -11,7 +11,7 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "cloud_topics/level_zero/pipeline_stage.h"
+#include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "container/intrusive_list_helpers.h"
 
 #include <seastar/core/expiring_fifo.hh>

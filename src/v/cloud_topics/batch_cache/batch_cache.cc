@@ -26,6 +26,10 @@ batch_cache::batch_cache(
   : _gc_interval(gc_interval)
   , _lm(log_manager) {}
 
+batch_cache::batch_cache(
+  ss::sharded<storage::api>& log_manager, std::chrono::milliseconds gc_interval)
+  : batch_cache(&log_manager.local().log_mgr(), gc_interval) {}
+
 ss::future<> batch_cache::start() {
     _cleanup_timer.set_callback([this] {
         auto gh = _gate.hold();

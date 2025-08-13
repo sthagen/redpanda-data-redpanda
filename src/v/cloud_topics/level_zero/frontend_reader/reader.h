@@ -65,7 +65,7 @@ public:
     level_zero_log_reader_impl(
       storage::log_reader_config& cfg,
       ss::lw_shared_ptr<cluster::partition> underlying,
-      ss::shared_ptr<experimental::cloud_topics::data_plane_api> ct_api);
+      data_plane_api* ct_api);
 
     bool is_end_of_stream() const final;
 
@@ -103,7 +103,7 @@ private:
     chunked_vector<model::record_batch> _batches;
     storage::log_reader_config _config;
     ss::lw_shared_ptr<cluster::partition> _underlying;
-    ss::shared_ptr<experimental::cloud_topics::data_plane_api> _ct_api;
+    data_plane_api* _ct_api;
 };
 
 } // namespace experimental::cloud_topics

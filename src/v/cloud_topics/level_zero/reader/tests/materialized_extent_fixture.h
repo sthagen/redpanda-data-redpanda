@@ -104,7 +104,7 @@ public:
     /// Create a list of batches that contain placeholders
     chunked_vector<model::record_batch> make_underlying();
 
-    static experimental::cloud_topics::materialized_extent
+    static experimental::cloud_topics::l0::materialized_extent
     make_materialized_extent(model::record_batch batch) {
         experimental::cloud_topics::extent_meta e{
           .base_offset = model::offset_cast(batch.base_offset()),
@@ -120,7 +120,7 @@ public:
         e.id = placeholder.id;
         e.first_byte_offset = placeholder.offset;
         e.byte_range_size = placeholder.size_bytes;
-        return experimental::cloud_topics::materialized_extent{
+        return experimental::cloud_topics::l0::materialized_extent{
           .meta = e,
         };
     }

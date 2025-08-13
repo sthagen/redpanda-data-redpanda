@@ -25,7 +25,7 @@
 #include <chrono>
 #include <exception>
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 /// Map error codes from one type to another
 template<class Src, class Dst>
@@ -301,4 +301,4 @@ ss::future<result<iobuf>> materialize_from_cloud_storage(
     co_return std::move(payload);
 }
 
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

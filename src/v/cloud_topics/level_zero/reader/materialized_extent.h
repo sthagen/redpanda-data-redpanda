@@ -24,7 +24,7 @@
 
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 // Materialized placeholder extent
 //
@@ -54,4 +54,4 @@ ss::future<result<bool>> materialize(
 // batch
 model::record_batch make_raft_data_batch(materialized_extent extent);
 
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

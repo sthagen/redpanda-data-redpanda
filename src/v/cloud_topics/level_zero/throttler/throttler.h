@@ -11,15 +11,16 @@
 #pragma once
 
 #include "base/seastarx.h"
-#include "cloud_topics/level_zero/write_pipeline.h"
-#include "cloud_topics/level_zero/write_request.h"
+#include "cloud_topics/level_zero/pipeline/write_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "utils/token_bucket.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/lowres_clock.hh>
+#include <seastar/core/sharded.hh>
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 struct throttler_accessor;
 
@@ -38,6 +39,8 @@ class throttler {
 public:
     // TODO: add config properties for limits
     explicit throttler(size_t tput_limit, l0::write_pipeline<Clock>::stage s);
+    explicit throttler(
+      size_t tput_limit, ss::sharded<l0::write_pipeline<Clock>>& pipeline);
 
     ss::future<> start();
     ss::future<> stop();
@@ -79,4 +82,4 @@ private:
     // Number of times the pipeline was throttled by tput
     size_t _throttle_by_tput{0};
 };
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

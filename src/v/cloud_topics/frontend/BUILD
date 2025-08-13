@@ -35,7 +35,7 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
-        "//src/v/cloud_topics/level_zero/reader",
+        "//src/v/cloud_topics/level_zero/frontend_reader",
         "//src/v/cloud_topics/level_zero/stm:placeholder",
         "//src/v/model",
         "//src/v/raft",

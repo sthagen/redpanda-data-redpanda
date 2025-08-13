@@ -9,7 +9,7 @@
  */
 
 #include "cloud_topics/level_zero/common/extent_meta.h"
-#include "cloud_topics/level_zero/write_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "container/chunked_circular_buffer.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"

@@ -27,7 +27,7 @@
 
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics {
+namespace experimental::cloud_topics::l0 {
 
 namespace {
 
@@ -87,4 +87,4 @@ ss::future<chunked_vector<model::record_batch>> materialize_placeholders(
     co_return std::move(results);
 }
 
-} // namespace experimental::cloud_topics
+} // namespace experimental::cloud_topics::l0

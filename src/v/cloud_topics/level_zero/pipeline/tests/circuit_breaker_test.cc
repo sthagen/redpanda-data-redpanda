@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/circuit_breaker.h"
+#include "cloud_topics/level_zero/pipeline/circuit_breaker.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/manual_clock.hh>

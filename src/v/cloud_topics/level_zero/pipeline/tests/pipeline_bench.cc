@@ -8,9 +8,9 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/event_filter.h"
-#include "cloud_topics/level_zero/read_pipeline.h"
-#include "cloud_topics/level_zero/write_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/event_filter.h"
+#include "cloud_topics/level_zero/pipeline/read_pipeline.h"
+#include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "model/namespace.h"
 #include "model/record_batch_reader.h"
 #include "random/generators.h"

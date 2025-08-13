@@ -7,7 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/level_zero/reader/reader.h"
+#include "cloud_topics/level_zero/frontend_reader/reader.h"
 
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
@@ -30,10 +30,10 @@ static constexpr size_t L0_max_bytes_per_metadata_fetch = 4_KiB;
 level_zero_log_reader_impl::level_zero_log_reader_impl(
   storage::log_reader_config& cfg,
   ss::lw_shared_ptr<cluster::partition> underlying,
-  ss::shared_ptr<experimental::cloud_topics::data_plane_api> ct_api)
+  data_plane_api* ct_api)
   : _config(cfg)
   , _underlying(std::move(underlying))
-  , _ct_api(std::move(ct_api)) {
+  , _ct_api(ct_api) {
     if (_config.max_bytes == 0) {
         _current = state::end_of_stream_state;
     }

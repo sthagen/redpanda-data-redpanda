@@ -15,6 +15,23 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_gtest(
+    name = "replicated_metastore_test",
+    timeout = "short",
+    srcs = [
+        "replicated_metastore_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/cloud_topics:app",
+        "//src/v/cloud_topics/level_one/metastore:replicated_metastore",
+        "//src/v/cloud_topics/tests:cluster_fixture",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "state_test",
     timeout = "short",
     srcs = [

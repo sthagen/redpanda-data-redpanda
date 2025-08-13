@@ -7,6 +7,7 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
+#pragma once
 
 #include "base/seastarx.h"
 #include "model/fundamental.h"

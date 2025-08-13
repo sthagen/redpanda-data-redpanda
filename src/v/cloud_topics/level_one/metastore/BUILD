@@ -58,6 +58,29 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "replicated_metastore",
+    srcs = [
+        "replicated_metastore.cc",
+    ],
+    hdrs = [
+        "replicated_metastore.h",
+    ],
+    implementation_deps = [
+        ":frontend",
+        ":rpc_types",
+        ":state_update",
+        "//src/v/cloud_topics:logger",
+    ],
+    include_prefix = "cloud_topics/level_one/metastore",
+    visibility = ["//visibility:public"],
+    deps = [
+        ":metastore",
+        "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "rpc_types",
     hdrs = [
         "rpc_types.h",
