@@ -12,105 +12,60 @@
 
 #include "model/fundamental.h"
 
-#include <algorithm>
-#include <iterator>
-
 namespace experimental::cloud_topics {
 
-dl_snapshot_id ctp_stm_state::start_snapshot(dl_version version) noexcept {
-    _version_invariant.set_last_snapshot_version(version);
-
-    auto id = dl_snapshot_id(version);
-    _snapshots.push_back(id);
-
-    return id;
+void ctp_stm_state::advance_max_seen_epoch(cluster_epoch epoch) noexcept {
+    _max_seen_epoch = std::max(
+      epoch, _max_seen_epoch.value_or(cluster_epoch{}));
 }
 
-bool ctp_stm_state::snapshot_exists(dl_snapshot_id id) const noexcept {
-    return std::binary_search(
-      _snapshots.begin(),
-      _snapshots.end(),
-      id,
-      [](const dl_snapshot_id& a, const dl_snapshot_id& b) {
-          return a.version < b.version;
-      });
+std::optional<kafka::offset>
+ctp_stm_state::get_last_reconciled_offset() const noexcept {
+    return _last_reconciled_offset;
 }
 
-std::optional<dl_snapshot_payload>
-ctp_stm_state::read_snapshot(dl_snapshot_id id) const {
-    auto it = std::find_if(
-      _snapshots.begin(), _snapshots.end(), [&id](const dl_snapshot_id& s) {
-          return s.version == id.version;
-      });
+std::optional<model::offset>
+ctp_stm_state::get_last_reconciled_log_offset() const noexcept {
+    return _last_reconciled_log_offset;
+}
 
-    // Snapshot not found.
-    if (it == _snapshots.end()) {
-        return std::nullopt;
+void ctp_stm_state::advance_epoch(cluster_epoch epoch) {
+    // The STM works on both leader and followers, on a leader the
+    // max_seen_epoch epoch is updated by the fencing mechanism.
+    // On the follower the max_seen_epoch epoch has to follow the max epoch.
+    _max_seen_epoch = std::max(
+      _max_seen_epoch.value_or(cluster_epoch{}), epoch);
+    // Register new epoch
+    _max_applied_epoch = std::max(
+      epoch, _max_applied_epoch.value_or(cluster_epoch{}));
+}
+
+void ctp_stm_state::advance_last_reconciled_offset(
+  kafka::offset new_last_reconciled_offset,
+  model::offset new_last_reconciled_log_offset) noexcept {
+    _last_reconciled_offset = std::max(
+      _last_reconciled_offset.value_or(kafka::offset{}),
+      new_last_reconciled_offset);
+    _last_reconciled_log_offset = std::max(
+      _last_reconciled_log_offset.value_or(model::offset{}),
+      new_last_reconciled_log_offset);
+}
+
+std::optional<cluster_epoch> ctp_stm_state::get_max_epoch() const noexcept {
+    return _max_applied_epoch;
+}
+
+std::optional<cluster_epoch>
+ctp_stm_state::get_max_seen_epoch() const noexcept {
+    return _max_seen_epoch;
+}
+
+model::offset ctp_stm_state::get_max_collectible_offset() const noexcept {
+    if (_last_reconciled_log_offset.has_value()) {
+        return _last_reconciled_log_offset.value();
     }
-
-    return dl_snapshot_payload{
-      .id = *it,
-    };
-}
-
-void ctp_stm_state::remove_snapshots_before(dl_version last_version_to_keep) {
-    if (_snapshots.empty()) {
-        throw std::runtime_error(fmt::format(
-          "Attempt to remove snapshots before version {} but no snapshots "
-          "exist",
-          last_version_to_keep));
-    }
-
-    // Find the first snapshot to keep. It is the first snapshot with a version
-    // equal or greater than the version to keep.
-    auto it = std::lower_bound(
-      _snapshots.begin(),
-      _snapshots.end(),
-      last_version_to_keep,
-      [](const dl_snapshot_id& a, dl_version b) { return a.version < b; });
-
-    if (it == _snapshots.begin()) {
-        // Short circuit if there are no snapshots to remove
-        return;
-    } else if (it == _snapshots.end()) {
-        throw std::runtime_error(fmt::format(
-          "Trying to remove snapshots before an non-existent snapshot",
-          last_version_to_keep));
-    } else {
-        _snapshots.erase(_snapshots.begin(), it);
-    }
-}
-
-ctp_stm_offsets& ctp_stm_state::get_offsets() noexcept { return _offsets; }
-
-const ctp_stm_offsets& ctp_stm_state::get_offsets() const noexcept {
-    return _offsets;
-}
-
-ctp_stm_state
-ctp_stm_state::get_state_at(model::offset snapshot_at) const noexcept {
-    ctp_stm_state result;
-
-    // Copy snapshots
-    std::copy_if(
-      _snapshots.begin(),
-      _snapshots.end(),
-      std::back_inserter(result._snapshots),
-      [snapshot_at](const dl_snapshot_id& o) noexcept {
-          return o.version() <= snapshot_at;
-      });
-
-    // Copy version invariant and offsets
-    if (!result._snapshots.empty()) {
-        // The snapshot versions can't go back
-        result._version_invariant.set_last_snapshot_version(
-          result._snapshots.back().version);
-    }
-
-    result._offsets.advance_last_reconciled_offset(
-      _offsets.get_last_reconciled_offset());
-
-    return result;
+    // Truncation is impossible without LRO
+    return model::offset::min();
 }
 
 } // namespace experimental::cloud_topics

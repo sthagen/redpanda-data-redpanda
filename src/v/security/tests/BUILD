@@ -6,7 +6,6 @@ redpanda_test_cc_library(
         "license_utils.h",
         "randoms.h",
     ],
-    include_prefix = "security/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/security",

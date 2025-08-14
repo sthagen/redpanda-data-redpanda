@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "bytes/iobuf.h"
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
@@ -26,6 +27,7 @@ namespace proto::example {
 class a;
 class b;
 class c;
+class super_duper_secret;
 class well_known_protos;
 
 // Test that enums that have prefixes in their values as recommended by protobuf
@@ -47,6 +49,7 @@ void enum_from_proto(iobuf_parser*, corpus*);
 // Returns the name of the enum value
 std::string_view enum_to_string(const corpus&);
 void enum_from_json(serde::pb::json::peekable_parser*, corpus*);
+int32_t format_as(corpus);
 
 enum class protobuf3_test : uint8_t {
   unspecified = 0,
@@ -59,6 +62,7 @@ void enum_from_proto(iobuf_parser*, protobuf3_test*);
 // Returns the name of the enum value
 std::string_view enum_to_string(const protobuf3_test&);
 void enum_from_json(serde::pb::json::peekable_parser*, protobuf3_test*);
+int32_t format_as(protobuf3_test);
 
 enum class proto3_test : uint8_t {
   unspecified = 0,
@@ -70,6 +74,7 @@ void enum_from_proto(iobuf_parser*, proto3_test*);
 // Returns the name of the enum value
 std::string_view enum_to_string(const proto3_test&);
 void enum_from_json(serde::pb::json::peekable_parser*, proto3_test*);
+int32_t format_as(proto3_test);
 
 class c {
 public:
@@ -80,7 +85,9 @@ public:
   c& operator=(c&&) noexcept;
   ~c() noexcept;
   
-  bool operator==(const c&) const;  
+  bool operator==(const c&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes example.C into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes example.C into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -109,7 +116,9 @@ public:
   a& operator=(a&&) noexcept;
   ~a() noexcept;
   
-  bool operator==(const a&) const;  
+  bool operator==(const a&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes example.A into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes example.A into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -142,7 +151,9 @@ public:
   b& operator=(b&&) noexcept;
   ~b() noexcept;
   
-  bool operator==(const b&) const;  
+  bool operator==(const b&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes example.B into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes example.B into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -170,6 +181,41 @@ private:
   a a_;
 };
 
+class super_duper_secret {
+public:
+  super_duper_secret() noexcept;
+  super_duper_secret(const super_duper_secret&) = delete;
+  super_duper_secret& operator=(const super_duper_secret&) = delete;
+  super_duper_secret(super_duper_secret&&) noexcept;
+  super_duper_secret& operator=(super_duper_secret&&) noexcept;
+  ~super_duper_secret() noexcept;
+  
+  bool operator==(const super_duper_secret&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
+  // Serializes example.SuperDuperSecret into a protocol buffer, in a way that will not cause stalls for large messages.
+  seastar::future<iobuf> to_proto() const;
+  // Serializes example.SuperDuperSecret into proto3 JSON, in a way that will not cause stalls for large messages.
+  seastar::future<iobuf> to_json() const;
+  // Deserializes example.SuperDuperSecret from a protocol buffer, in a way that will not cause stalls for large messages.
+  static seastar::future<super_duper_secret> from_proto(iobuf);
+  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
+  // Use the iobuf version instead.
+  static seastar::future<> from_proto(serde::pb::wire_format_parser*, super_duper_secret*);
+  // Deserializes example.SuperDuperSecret from json, in a way that will not cause stalls for large messages.
+  static seastar::future<super_duper_secret> from_json(iobuf);
+  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
+  // Use the iobuf version instead.
+  static seastar::future<> from_json(serde::pb::json::peekable_parser*, super_duper_secret*);
+  
+  ss::sstring& get_value();
+  const ss::sstring& get_value() const;
+  void set_value(ss::sstring&& v);
+
+private:
+  ss::sstring value_;
+};
+
 class well_known_protos {
 public:
   well_known_protos() noexcept;
@@ -179,7 +225,9 @@ public:
   well_known_protos& operator=(well_known_protos&&) noexcept;
   ~well_known_protos() noexcept;
   
-  bool operator==(const well_known_protos&) const;  
+  bool operator==(const well_known_protos&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes example.WellKnownProtos into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes example.WellKnownProtos into proto3 JSON, in a way that will not cause stalls for large messages.

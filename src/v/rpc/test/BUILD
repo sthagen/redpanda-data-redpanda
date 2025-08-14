@@ -8,7 +8,6 @@ redpanda_test_cc_library(
     hdrs = [
         "rpc_integration_fixture.h",
     ],
-    include_prefix = "rpc/test",
     deps = [
         "//src/v/base",
         "//src/v/config",
@@ -23,7 +22,6 @@ redpanda_test_cc_library(
     hdrs = [
         "test_types.h",
     ],
-    include_prefix = "rpc/test",
     deps = [
         "//src/v/bytes:iobuf",
         "@seastar",
@@ -164,7 +162,6 @@ redpanda_cc_library(
     hdrs = [
         "rpc_gen_types.h",
     ],
-    include_prefix = "rpc/test",
     deps = [
         "//src/v/base",
         "//src/v/reflection:adl",
@@ -180,7 +177,6 @@ redpanda_cc_rpc_library(
     name = "cycling_rpc",
     src = "cycling_service.json",
     out = "cycling_service.h",
-    include_prefix = "rpc/test",
     deps = [
         ":rpc_gen_types",
     ],
@@ -190,7 +186,6 @@ redpanda_cc_rpc_library(
     name = "echo_rpc",
     src = "echo_service.json",
     out = "echo_service.h",
-    include_prefix = "rpc/test",
     deps = [
         ":rpc_gen_types",
     ],
@@ -200,7 +195,6 @@ redpanda_cc_rpc_library(
     name = "echo_v2_rpc",
     src = "echo_v2_service.json",
     out = "echo_v2_service.h",
-    include_prefix = "rpc/test",
     deps = [
         ":rpc_gen_types",
     ],

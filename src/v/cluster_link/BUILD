@@ -8,7 +8,6 @@ redpanda_cc_library(
     hdrs = [
         "logger.h",
     ],
-    include_prefix = "cluster_link",
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
         "//src/v/base",
@@ -24,7 +23,6 @@ redpanda_cc_library(
     hdrs = [
         "errc.h",
     ],
-    include_prefix = "cluster_link",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -39,7 +37,6 @@ redpanda_cc_library(
     hdrs = [
         "utils.h",
     ],
-    include_prefix = "cluster_link",
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
         "//src/v/cluster_link/model",
@@ -62,7 +59,6 @@ redpanda_cc_library(
         "task.h",
         "types.h",
     ],
-    include_prefix = "cluster_link",
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
         ":errc",
@@ -92,7 +88,6 @@ redpanda_cc_library(
     hdrs = [
         "fwd.h",
     ],
-    include_prefix = "cluster_link",
     visibility = ["//visibility:public"],
 )
 
@@ -110,7 +105,6 @@ redpanda_cc_library(
         "//src/v/kafka/server:topic_config_utils",
         "@fmt",
     ],
-    include_prefix = "cluster_link",
     visibility = ["//src/v/cluster_link:__subpackages__"],
     deps = [
         ":impl",
@@ -132,7 +126,6 @@ redpanda_cc_library(
         ":source_topic_syncer",
         "//src/v/cluster_link/model",
     ],
-    include_prefix = "cluster_link",
     visibility = ["//visibility:public"],
     deps = [
         ":fwd",

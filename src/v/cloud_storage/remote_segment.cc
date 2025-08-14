@@ -764,6 +764,25 @@ bool remote_segment::is_state_materialized() const {
 }
 
 ss::future<> remote_segment::run_hydrate_bg() {
+    // The gate could potentially be closed before the background loop even has
+    // the chance to start.
+    if (_gate.is_closed()) {
+        // If any new download requests got queued up while we were downloading
+        // chunks before the gate closed, cancel them so that the gate close
+        // does not get stuck during segment stop.
+        if (!_chunk_waiters.empty()) {
+            vlog(
+              _ctxlog.debug,
+              "Cancelling {} pending chunk downloads during segment stop",
+              _chunk_waiters.size());
+            for (auto& w : _chunk_waiters) {
+                w.promise.set_exception(ss::gate_closed_exception{});
+            }
+        }
+        _hydration_loop_running = false;
+        co_return;
+    }
+
     ss::gate::holder guard(_gate);
 
     // Track whether we have seen our objects in the cache during the loop

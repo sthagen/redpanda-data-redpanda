@@ -34,7 +34,6 @@
 #include "security/audit/schemas/utils.h"
 #include "security/ephemeral_credential_store.h"
 #include "ssx/semaphore.h"
-#include "storage/parser_utils.h"
 #include "utils/retry.h"
 
 #include <seastar/core/loop.hh>

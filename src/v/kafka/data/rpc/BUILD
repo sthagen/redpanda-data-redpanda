@@ -4,7 +4,6 @@ load("//src/v/rpc:compiler.bzl", "redpanda_cc_rpc_library")
 redpanda_cc_rpc_library(
     name = "kafka_data_rpc",
     src = "rpc.json",
-    include_prefix = "kafka/data/rpc",
 )
 
 redpanda_cc_library(
@@ -24,7 +23,6 @@ redpanda_cc_library(
         "serde.h",
         "service.h",
     ],
-    include_prefix = "kafka/data/rpc",
     visibility = ["//visibility:public"],
     deps = [
         ":kafka_data_rpc",

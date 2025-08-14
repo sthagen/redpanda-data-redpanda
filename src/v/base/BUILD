@@ -21,7 +21,6 @@ redpanda_cc_library(
         "vassert-register.h",
         "vlog.h",
     ],
-    include_prefix = "base",
     visibility = ["//visibility:public"],
     deps = [
         "@boost//:outcome",

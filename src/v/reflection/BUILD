@@ -5,7 +5,6 @@ redpanda_cc_library(
     hdrs = [
         "arity.h",
     ],
-    include_prefix = "reflection",
     visibility = ["//visibility:public"],
 )
 
@@ -14,7 +13,6 @@ redpanda_cc_library(
     hdrs = [
         "to_tuple.h",
     ],
-    include_prefix = "reflection",
     visibility = ["//visibility:public"],
     deps = [
         ":arity",
@@ -26,7 +24,6 @@ redpanda_cc_library(
     hdrs = [
         "type_traits.h",
     ],
-    include_prefix = "reflection",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -47,7 +44,6 @@ redpanda_cc_library(
         "for_each_field.h",
         "seastar/circular_buffer.h",
     ],
-    include_prefix = "reflection",
     visibility = ["//visibility:public"],
     deps = [
         ":arity",

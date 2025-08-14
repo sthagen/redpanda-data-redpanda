@@ -6,7 +6,6 @@ redpanda_cc_library(
     hdrs = [
         "archival/run_quota.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/utils:named_type",
@@ -84,7 +83,6 @@ redpanda_cc_library(
     hdrs = [
         "version.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/utils:named_type",
@@ -96,7 +94,6 @@ redpanda_cc_library(
     hdrs = [
         "feature_update_action.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/serde",
@@ -111,7 +108,6 @@ redpanda_cc_library(
     hdrs = [
         "notification.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/utils:named_type",
@@ -123,7 +119,6 @@ redpanda_cc_library(
     hdrs = [
         "snapshot.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -135,7 +130,6 @@ redpanda_cc_library(
     hdrs = [
         "nt_revision.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/model",
@@ -156,7 +150,6 @@ redpanda_cc_library(
         "topic_configuration.h",
         "topic_properties.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cloud_storage:remote_label",
@@ -192,7 +185,6 @@ redpanda_cc_library(
         "cloud_metadata/offsets_uploader.h",
         "errc.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         ":cloud_metadata_offsets_recovery_router",
@@ -223,7 +215,6 @@ redpanda_cc_library(
     hdrs = [
         "scheduling/topic_memory_per_partition_default.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -241,7 +232,6 @@ redpanda_cc_library(
     hdrs = [
         "cloud_metadata/offsets_recovery_router.h",
     ],
-    include_prefix = "cluster",
     tags = ["noclangtidy"],
     visibility = ["//visibility:public"],
 )
@@ -251,7 +241,6 @@ redpanda_cc_library(
     hdrs = [
         "cloud_metadata/offsets_recovery_service.h",
     ],
-    include_prefix = "cluster",
     tags = ["noclangtidy"],
     visibility = ["//visibility:public"],
 )
@@ -261,7 +250,6 @@ redpanda_cc_library(
     hdrs = [
         "cloud_metadata/offsets_upload_router.h",
     ],
-    include_prefix = "cluster",
     tags = ["noclangtidy"],
     visibility = ["//visibility:public"],
 )
@@ -271,7 +259,6 @@ redpanda_cc_library(
     hdrs = [
         "state_machine_registry.h",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/raft",
@@ -652,7 +639,6 @@ redpanda_cc_library(
         "//src/v/ssx:work_queue",
         "//src/v/utils:backoff_policy",
     ],
-    include_prefix = "cluster",
     visibility = ["//visibility:public"],
     deps = [
         ":bootstrap_rpc",
@@ -744,7 +730,6 @@ redpanda_cc_library(
         "//src/v/ssx:when_all",
         "//src/v/storage",
         "//src/v/storage:disk",
-        "//src/v/storage:parser_utils",
         "//src/v/storage:record_batch_builder",
         "//src/v/storage:record_batch_utils",
         "//src/v/strings:string_switch",

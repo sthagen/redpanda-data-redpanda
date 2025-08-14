@@ -7,7 +7,6 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
     ],
-    include_prefix = "kafka/client/test",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/kafka/client",
@@ -24,7 +23,6 @@ redpanda_test_cc_library(
     implementation_deps = [
         "//src/v/random:generators",
     ],
-    include_prefix = "kafka/client/test",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/reflection:adl",
@@ -44,7 +42,6 @@ redpanda_test_cc_library(
         "//src/v/kafka/server:topic_config_utils",
         "//src/v/random:generators",
     ],
-    include_prefix = "kafka/client/test",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster:topic_configuration",

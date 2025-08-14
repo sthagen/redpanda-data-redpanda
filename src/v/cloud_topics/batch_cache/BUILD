@@ -13,7 +13,6 @@ redpanda_cc_library(
     hdrs = [
         "batch_cache.h",
     ],
-    include_prefix = "cloud_topics/batch_cache",
     deps = [
         "//src/v/base",
         "//src/v/bytes",

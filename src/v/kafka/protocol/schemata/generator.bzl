@@ -96,7 +96,6 @@ def generate_kafka_messages(name = "generate_kafka_messages"):
                 name = name,
                 srcs = [source],
                 hdrs = [header],
-                include_prefix = "kafka/protocol/schemata",
                 visibility = ["//visibility:public"],
                 deps = [
                     "//src/v/base",

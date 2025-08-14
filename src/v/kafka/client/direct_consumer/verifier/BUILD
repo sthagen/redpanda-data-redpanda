@@ -8,7 +8,6 @@ redpanda_cc_library(
     hdrs = [
         "application.h",
     ],
-    include_prefix = "kafka/client/direct_consumer/verifier",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

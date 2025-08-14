@@ -45,7 +45,11 @@ setup(
         'hypothesis==6.82',
         'jsonschema==4.10.0',
         'polaris.management@git+https://github.com/apache/polaris.git@1a6b3eb3963355f78c5ca916cc1d66ecd1493092#&subdirectory=regtests/client/python',
-        "pyiceberg==0.9.1",
+        # PyIceberg: Use an official release once the next major (1.0) is out.
+        #   Using a hash to unreleased version because we depend on new
+        #   pluggable authentication mechanism.
+        # "pyiceberg==0.9.1",
+        "pyiceberg@git+https://github.com/apache/iceberg-python@76a6451cd6863fe3d0e10d33da9b78af12e50111",
         "adlfs==2024.7.0",
         "pyarrow",
         "pandas",

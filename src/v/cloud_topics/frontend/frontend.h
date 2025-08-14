@@ -10,12 +10,15 @@
 #pragma once
 
 #include "cloud_topics/frontend/errc.h"
+#include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 #include "raft/types.h"
 #include "storage/translating_reader.h"
 #include "storage/types.h"
+#include "utils/retry_chain_node.h"
 
+#include <seastar/core/abort_source.hh>
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/sharded.hh>
 
@@ -29,6 +32,7 @@ class partition;
 
 namespace experimental::cloud_topics {
 class data_plane_api;
+class ctp_stm_api;
 
 struct replica_info {
     model::node_id id;
@@ -149,8 +153,11 @@ private:
 
     bool cache_enabled() const;
 
+    ss::abort_source _as;
+    retry_chain_node _rtc;
     ss::lw_shared_ptr<cluster::partition> _partition;
     data_plane_api* _data_plane;
+    ss::lw_shared_ptr<experimental::cloud_topics::ctp_stm_api> _ctp_stm_api;
 };
 
 } // namespace experimental::cloud_topics

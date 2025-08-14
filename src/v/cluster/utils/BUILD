@@ -5,7 +5,6 @@ redpanda_cc_library(
     hdrs = [
         "partition_change_notifier.h",
     ],
-    include_prefix = "cluster/utils",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster:notification",
@@ -23,7 +22,6 @@ redpanda_cc_library(
     hdrs = [
         "partition_change_notifier_impl.h",
     ],
-    include_prefix = "cluster/utils",
     visibility = ["//visibility:public"],
     deps = [
         ":partition_change_notifier_api",

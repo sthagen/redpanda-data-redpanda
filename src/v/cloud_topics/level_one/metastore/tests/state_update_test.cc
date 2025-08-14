@@ -172,11 +172,13 @@ TEST(StateUpdateTest, TestStartAfterZero) {
                     .build();
     state s;
     auto res = update.apply(s);
-    EXPECT_FALSE(res.has_value());
-    EXPECT_THAT(
-      res.error()(), testing::HasSubstr("Input object breaks partition"))
-      << res.error();
-    EXPECT_EQ(0, s.objects.size());
+    EXPECT_TRUE(res.has_value());
+
+    // The added object should be tracked as removed.
+    EXPECT_EQ(0, s.topic_to_state.size());
+    EXPECT_EQ(1, s.objects.size());
+    auto& added_obj = s.objects.at(oid1);
+    EXPECT_EQ(added_obj.removed_data_size, added_obj.total_data_size);
 }
 
 TEST(StateUpdateTest, TestDuplicateObject) {
@@ -214,17 +216,74 @@ TEST(StateUpdateTest, TestDuplicateAddMultipleUpdates) {
     auto res = update.apply(s);
     EXPECT_TRUE(res.has_value());
     EXPECT_EQ(3, s.topic_to_state.size());
+    for (const auto& [t, p_states] : s.topic_to_state) {
+        EXPECT_EQ(
+          1, p_states.pid_to_state.at(model::partition_id{0}).extents.size());
+    }
     EXPECT_EQ(1, s.objects.size());
 
     // Tweak the update to overlap with the one we just applied but with a
     // different object.
     update.new_objects[0].oid = oid2;
-    auto dupe_res = update.can_apply(s);
-    EXPECT_FALSE(dupe_res.has_value());
-    EXPECT_THAT(
-      dupe_res.error()(), testing::HasSubstr("Input object breaks partition"))
-      << dupe_res.error();
+    auto dupe_res = update.apply(s);
+    EXPECT_TRUE(dupe_res.has_value());
+    EXPECT_EQ(3, s.topic_to_state.size());
+    for (const auto& [t, p_states] : s.topic_to_state) {
+        // The tracked extents shouldn't change.
+        EXPECT_EQ(
+          1, p_states.pid_to_state.at(model::partition_id{0}).extents.size());
+    }
+    EXPECT_EQ(2, s.objects.size());
+    auto& dupe_obj = s.objects.at(oid2);
+    EXPECT_EQ(dupe_obj.removed_data_size, dupe_obj.total_data_size);
+}
+
+TEST(StateUpdateTest, TestOverlapSomePartitions) {
+    state s;
+    {
+        auto update = add_objects_builder()
+                        .add(new_obj_builder(oid1, 100)
+                               .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                               .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                               .build())
+                        .build();
+        auto res = update.apply(s);
+        EXPECT_TRUE(res.has_value());
+    }
+    EXPECT_EQ(2, s.topic_to_state.size());
+    for (const auto& [t, p_states] : s.topic_to_state) {
+        EXPECT_EQ(
+          1, p_states.pid_to_state.at(model::partition_id{0}).extents.size());
+    }
     EXPECT_EQ(1, s.objects.size());
+
+    // Now send a bogus range for one of the partitions, but a correct extent
+    // for another.
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid2, 100)
+                           .add(tidp_a, 1337_o, 1337_o, 1999_t, 0, 5)
+                           .add(tidp_b, 11_o, 20_o, 1999_t, 100, 199)
+                           .build())
+                    .build();
+    auto misaligned_res = update.apply(s);
+    EXPECT_TRUE(misaligned_res.has_value());
+    EXPECT_EQ(2, s.topic_to_state.size());
+
+    // The bad update shouldn't be applied.
+    auto p_a = s.partition_state(model::topic_id_partition::from(tidp_a));
+    ASSERT_TRUE(p_a.has_value());
+    EXPECT_EQ(1, p_a->get().extents.size());
+
+    // But the good update should be there.
+    auto p_b = s.partition_state(model::topic_id_partition::from(tidp_b));
+    ASSERT_TRUE(p_b.has_value());
+    EXPECT_EQ(2, p_b->get().extents.size());
+
+    // The accounting for the object should reflect this.
+    EXPECT_EQ(2, s.objects.size());
+    auto& dupe_obj = s.objects.at(oid2);
+    EXPECT_EQ(dupe_obj.removed_data_size, 5);
+    EXPECT_EQ(dupe_obj.total_data_size, 104);
 }
 
 namespace {

@@ -10,7 +10,6 @@ redpanda_cc_library(
         "filter_utils.h",
         "types.h",
     ],
-    include_prefix = "cluster_link/model",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/container:chunked_hash_map",

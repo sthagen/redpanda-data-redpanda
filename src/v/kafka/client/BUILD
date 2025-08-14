@@ -5,7 +5,6 @@ package(default_visibility = ["//src/v/kafka/client:__subpackages__"])
 redpanda_cc_library(
     name = "logger",
     hdrs = ["logger.h"],
-    include_prefix = "kafka/client",
     deps = [
         "//src/v/base",
         "//src/v/utils:truncating_logger",
@@ -16,7 +15,6 @@ redpanda_cc_library(
 redpanda_cc_library(
     name = "errors",
     hdrs = ["errors.h"],
-    include_prefix = "kafka/client",
     deps = [
         "//src/v/base",
         "//src/v/kafka/protocol",
@@ -26,7 +24,6 @@ redpanda_cc_library(
 redpanda_cc_library(
     name = "api_types",
     hdrs = ["api_types.h"],
-    include_prefix = "kafka/client",
     deps = [
         "//src/v/base",
         "//src/v/kafka/protocol:add_offsets_to_txn",
@@ -83,7 +80,6 @@ redpanda_cc_library(
     name = "configuration",
     srcs = ["configuration.cc"],
     hdrs = ["configuration.h"],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         ":logger",
@@ -99,7 +95,6 @@ redpanda_cc_library(
     name = "exceptions",
     srcs = [],
     hdrs = ["exceptions.h"],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         ":logger",
@@ -114,7 +109,6 @@ redpanda_cc_library(
     name = "config_utils",
     srcs = ["config_utils.cc"],
     hdrs = ["config_utils.h"],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         ":configuration",
@@ -130,7 +124,6 @@ redpanda_cc_library(
     name = "transport",
     srcs = ["transport.cc"],
     hdrs = ["transport.h"],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         ":logger",
@@ -172,7 +165,6 @@ redpanda_cc_library(
     name = "types",
     srcs = [],
     hdrs = ["types.h"],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -191,7 +183,6 @@ redpanda_cc_library(
         "broker.h",
         "brokers.h",
     ],
-    include_prefix = "kafka/client",
     deps = [
         ":api_types",
         ":configuration",
@@ -231,7 +222,6 @@ redpanda_cc_library(
     hdrs = [
         "partitioners.h",
     ],
-    include_prefix = "kafka/client",
     deps = [
         ":exceptions",
         ":types",
@@ -254,7 +244,6 @@ redpanda_cc_library(
     hdrs = [
         "topic_cache.h",
     ],
-    include_prefix = "kafka/client",
     deps = [
         ":exceptions",
         ":types",
@@ -272,7 +261,6 @@ redpanda_cc_library(
     name = "utils",
     srcs = [],
     hdrs = ["utils.h"],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         ":brokers",
@@ -307,7 +295,6 @@ redpanda_cc_library(
         "produce_partition.h",
         "producer.h",
     ],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         ":brokers",
@@ -378,7 +365,6 @@ redpanda_cc_library(
     name = "cluster",
     srcs = ["cluster.cc"],
     hdrs = ["cluster.h"],
-    include_prefix = "kafka/client",
     visibility = ["//visibility:public"],
     deps = [
         ":brokers",

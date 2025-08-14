@@ -15,7 +15,6 @@ from confluent_kafka.avro import AvroProducer
 from databricks.sql.types import Row
 from ducktape.mark import matrix
 from ducktape.mark._mark import Mark
-from pyiceberg.table import InspectTable
 
 from rptest.clients.rpk import RpkTool
 from rptest.context.databricks import DatabricksContext as DatabricksContext
@@ -406,13 +405,13 @@ class DatabricksTest(RedpandaTest):
                                         timeout=60)
 
             table = dl.catalog_client().load_table(table_name)
-            files_before = len(InspectTable(table).files())
+            files_before = len(table.inspect.files())
             self.logger.info(f"Files before optimization: {files_before}")
 
             query_engine = dl.query_engine(QueryEngineType.DATABRICKS_SQL)
             query_engine.optimize_parquet_files("redpanda", self.topic_name)
 
-            files_after = len(InspectTable(table.refresh()).files())
+            files_after = len(table.refresh().inspect.files())
             self.logger.info(
                 f"Files before optimization: {files_before}, after: {files_after}"
             )

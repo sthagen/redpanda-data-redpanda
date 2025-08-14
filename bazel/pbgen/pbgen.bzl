@@ -249,11 +249,12 @@ def redpanda_proto_library(name, protos, deps = [], **kwargs):
             "//src/v/serde/json:writer",
             "//src/v/serde/json:parser",
             "//src/v/bytes:iostream",
-            "//src/v/base",
+            "//src/v/utils:to_string",
             "//src/v/bytes:iobuf_parser",
             "@fmt",
         ],
         deps = [
+            "//src/v/base",
             "//src/v/bytes:iobuf",
             "//src/v/serde/protobuf:rpc",
             "//src/v/container:chunked_hash_map",

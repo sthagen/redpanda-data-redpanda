@@ -12,7 +12,6 @@ redpanda_cc_library(
     hdrs = [
         "logger.h",
     ],
-    include_prefix = "transform/logging",
     deps = [
         "//src/v/base",
         "@seastar",
@@ -30,7 +29,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/config",
     ],
-    include_prefix = "transform/logging",
     deps = [
         "//src/v/base",
         "//src/v/metrics",
@@ -46,7 +44,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/json",
     ],
-    include_prefix = "transform/logging",
     deps = [
         "//src/v/base",
         "//src/v/bytes:streambuf",
@@ -72,7 +69,6 @@ redpanda_cc_library(
     implementation_deps = [
         "@abseil-cpp//absl/algorithm:container",
     ],
-    include_prefix = "transform/logging",
     visibility = ["//visibility:public"],
     deps = [
         ":event",

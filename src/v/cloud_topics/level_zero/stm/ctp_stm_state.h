@@ -10,106 +10,114 @@
 
 #pragma once
 
-#include "cloud_topics/level_zero/stm/ctp_stm_offsets.h"
-#include "cloud_topics/level_zero/stm/dl_snapshot.h"
-#include "cloud_topics/level_zero/stm/dl_version.h"
+#include "cloud_topics/types.h"
+#include "model/fundamental.h"
 #include "serde/envelope.h"
 
 namespace experimental::cloud_topics {
 
-class dl_version_monotonic_invariant
-  : public serde::envelope<
-      dl_version_monotonic_invariant,
-      serde::version<0>,
-      serde::compat_version<0>> {
-public:
-    void set_version(dl_version version) noexcept {
-        // Greater or equal for `_last_version` is required to handle retries.
-        // Greater for `_last_snapshot_version` to avoid mutating an existing
-        // snapshot.
-        vassert(
-          version >= _last_version && version > _last_snapshot_version,
-          "Version can't go backwards. Current version: {}, new version: {}, "
-          "last snapshot version: {}",
-          _last_version,
-          version,
-          _last_snapshot_version);
-        _last_version = version;
-    }
-
-    void set_last_snapshot_version(dl_version version) noexcept {
-        // Greater or equal is required to handle retries.
-        vassert(
-          version >= _last_snapshot_version,
-          "Snapshot version can't go backwards. Current snapshot version: {}, "
-          "new snapshot version: {}",
-          _last_snapshot_version,
-          version);
-        set_version(version);
-        _last_snapshot_version = version;
-    }
-
-    auto serde_fields() {
-        return std::tie(_last_version, _last_snapshot_version);
-    }
-
-private:
-    dl_version _last_version;
-    dl_version _last_snapshot_version;
-};
-
-/// In-memory state of the data layout state machine (ctp_stm).
+/// In-memory state of the cloud-topics state machine (ctp_stm).
 ///
-/// Separating the state from the state machine allows the state to be
-/// checkpointed and restored independently of the state machine.
 class ctp_stm_state
   : public serde::
       envelope<ctp_stm_state, serde::version<0>, serde::compat_version<0>> {
     friend class ctp_stm_state_accessor;
 
 public:
-    /// Create a handle to a snapshot of the state at the current version.
-    /// The snapshot id can be used later to read snapshot contents.
-    dl_snapshot_id start_snapshot(dl_version version) noexcept;
+    ctp_stm_state() = default;
 
-    bool snapshot_exists(dl_snapshot_id id) const noexcept;
+    /// Advance the applied max epoch.
+    ///
+    /// The update is idempotent. The method is invoked by the ctp_stm
+    /// when the new placeholder batch is applied to the state.
+    ///
+    /// \note The advance_* methods are idempotent so the ctp_stm can
+    /// start from the recent state and apply older log entries to it.
+    /// This is needed to support the raft snapshotting mechanism. Raft
+    /// requires taking snapshot at particular offset. The problem is that
+    /// in order to provide this guarantee we need to be able to take the
+    /// snapshot at any offset. In order to be able to do that we need the
+    /// ctp_stm_state to be versioned. This will complicate the design and
+    /// increase memory requirements. The alternative is to avoid versioning and
+    /// rely on the idempotency. The snapshot can be based on any state with the
+    /// insync_offset greater or equal to the snapshot offset. All log records
+    /// can be applied to the state again without changing the state because of
+    /// the idempotency.
+    void advance_epoch(cluster_epoch epoch);
 
-    /// Snapshot of the state at the given version.
-    std::optional<dl_snapshot_payload> read_snapshot(dl_snapshot_id id) const;
+    /// This is invoked in the write path before the batch with new
+    /// epoch value is even replicated.
+    void advance_max_seen_epoch(cluster_epoch epoch) noexcept;
 
-    /// Remove all snapshots with version less than the given version.
-    void remove_snapshots_before(dl_version last_version_to_keep);
+    /// Find the maximum cluster epoch registered in the state.
+    std::optional<cluster_epoch> get_max_epoch() const noexcept;
 
-    /// Get collection of offsets maintained by the STM
-    ctp_stm_offsets& get_offsets() noexcept;
-    const ctp_stm_offsets& get_offsets() const noexcept;
+    /// Return the max_seen_epoch epoch.
+    ///
+    /// The max_seen_epoch epoch is the maximum epoch that is expected to be
+    /// registered in the state. It might be larger than the maximum epoch
+    /// if the placeholder that contains this epoch is being replicated or
+    /// not yet applied to the in-memory state.
+    ///
+    /// Once the max_seen_epoch epoch advances it's guaranteed that the cluster
+    /// epoch is at least equal to the max_seen_epoch epoch.
+    ///
+    /// \return max_seen_epoch epoch.
+    std::optional<cluster_epoch> get_max_seen_epoch() const noexcept;
+
+    /// Advance LRO and it's translated log offset counterpart.
+    void advance_last_reconciled_offset(
+      kafka::offset new_last_reconciled_offset,
+      model::offset new_last_reconciled_log_offset) noexcept;
+
+    /// Get last reconciled offset value
+    std::optional<kafka::offset> get_last_reconciled_offset() const noexcept;
+    std::optional<model::offset>
+    get_last_reconciled_log_offset() const noexcept;
 
     auto serde_fields() {
-        return std::tie(_snapshots, _version_invariant, _offsets);
+        return std::tie(
+          _max_applied_epoch,
+          _last_reconciled_offset,
+          _last_reconciled_log_offset);
     }
 
-    /// Create snapshot of the ctp_stm_state for Raft snapshotting mechanism.
-    /// The snapshot is just a copy of the ctp_stm_state that contains all
-    /// changes introduced at offset 'snapshot_at' and earlier.
+    /// Max collectible offset is defined by the LRO.
     ///
-    /// This 'snapshot' shouldn't be confused with the snapshot returned by
-    /// the 'read_snapshot' method. The 'dl_snapshot_payload' returned by it
-    /// is supposed to be uploaded to the cloud storage and consumed by the
-    /// recovery process. The 'ctp_stm_state' instance returned by this method
-    /// is supposed to be used to implement 'take_snapshot' method of the
-    /// 'ctp_stm' which returns Raft snapshot and is used during partition
-    /// movement.
-    ctp_stm_state get_state_at(model::offset snapshot_at) const noexcept;
+    /// The LRO is propagated using the advance_last_reconciled_offset
+    /// method. It accepts the new LRO and its translated log offset.
+    /// This translated log offset is used to determine the maximum
+    /// collectible offset.
+    ///
+    /// Before the LRO is set the maximum collectible offset is
+    /// set to min to prevent local log truncation.
+    ///
+    /// \return Max collectible offset.
+    model::offset get_max_collectible_offset() const noexcept;
 
 private:
-    // A list of snapshot handles that are currently open.
-    // The list is ordered by version in ascending order to efficiently find the
-    // oldest snapshot when running state garbage collection and to remove
-    // closed snapshots.
-    std::deque<dl_snapshot_id> _snapshots;
+    /// The max epoch after the current in flight requests are applied.
+    ///
+    /// This is required because of the pipelining of requests in the STM.
+    /// If present, we don't allow any replicated requests to have an epoch
+    /// that is lower than this value.
+    std::optional<cluster_epoch> _max_seen_epoch;
 
-    dl_version_monotonic_invariant _version_invariant;
-    ctp_stm_offsets _offsets;
+    /// The maximum epoch of applied batches to the STM.
+    ///
+    /// We enforce no epochs applied or replicated are less than this value.
+    std::optional<cluster_epoch> _max_applied_epoch;
+
+    /// The last offset that was uploaded to L1. This value may lag behind
+    /// the value stored in the L1 metastore, but should never be ahead of
+    /// what is stored in L1. Also known as LRO.
+    std::optional<kafka::offset> _last_reconciled_offset;
+
+    /// The LRO translated to the log offset.
+    ///
+    /// This is used to lookup the epoch that was last reconciled for
+    /// L0 GC.
+    std::optional<model::offset> _last_reconciled_log_offset;
 };
 
 }; // namespace experimental::cloud_topics

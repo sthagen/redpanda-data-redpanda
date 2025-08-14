@@ -20,7 +20,6 @@ redpanda_cc_library(
         "//src/v/ssx:when_all",
         "//src/v/ssx:work_queue",
     ],
-    include_prefix = "cloud_topics/level_one/domain",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -40,7 +39,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/cloud_topics:logger",
     ],
-    include_prefix = "cloud_topics/level_one/domain",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cloud_topics/level_one/metastore:rpc_types",

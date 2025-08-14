@@ -115,7 +115,6 @@ redpanda_cc_library(
         "api-doc/cluster_config.json.hh",
         "cluster_config_schema_util.h",
     ],
-    include_prefix = "redpanda/admin",
     visibility = ["//visibility:public"],
     deps = [
         ":cluster_config",
@@ -134,7 +133,6 @@ redpanda_cc_library(
     hdrs = [
         "data_migration_utils.h",
     ],
-    include_prefix = "redpanda/admin",
     visibility = ["//visibility:public"],
     deps = [
         ":migration",
@@ -189,7 +187,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/features:enterprise_feature_messages",
     ],
-    include_prefix = "redpanda/admin",
     visibility = ["//visibility:public"],
     deps = [
         ":broker",

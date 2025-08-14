@@ -13,7 +13,6 @@ redpanda_cc_library(
         "direct_consumer.h",
         "fetcher.h",
     ],
-    include_prefix = "kafka/client/direct_consumer",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

@@ -46,7 +46,6 @@ redpanda_cc_library(
         "//src/v/cluster:topic_memory_per_partition_default",
         "//src/v/datalake:partition_spec_parser",
     ],
-    include_prefix = "config",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

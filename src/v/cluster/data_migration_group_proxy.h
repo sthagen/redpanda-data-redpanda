@@ -27,7 +27,8 @@ class group_proxy {
 public:
     virtual ~group_proxy() = default;
 
-    virtual std::optional<model::ntp> ntp_for(const kafka::group_id& group) = 0;
+    virtual std::optional<model::partition_id>
+    partition_for(const kafka::group_id& group) = 0;
 
     virtual ss::future<result<model::offset>> set_blocked_for_groups(
       const model::ntp& co_ntp,

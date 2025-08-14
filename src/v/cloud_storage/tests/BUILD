@@ -14,7 +14,6 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
     ],
-    include_prefix = "cloud_storage/tests",
     deps = [
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/redpanda/tests:fixture",
@@ -33,7 +32,6 @@ redpanda_test_cc_library(
         "produce_utils.h",
         "util.h",
     ],
-    include_prefix = "cloud_storage/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

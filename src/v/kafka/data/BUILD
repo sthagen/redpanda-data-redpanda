@@ -28,7 +28,6 @@ redpanda_cc_library(
         "//src/v/cluster",
         "@boost//:numeric_conversion",
     ],
-    include_prefix = "kafka/data",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -65,7 +64,6 @@ redpanda_cc_library(
         "//src/v/utils:truncating_logger",
         "@abseil-cpp//absl/algorithm:container",
     ],
-    include_prefix = "kafka/data",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

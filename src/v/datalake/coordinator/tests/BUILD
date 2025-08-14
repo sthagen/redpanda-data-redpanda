@@ -8,7 +8,6 @@ redpanda_test_cc_library(
     hdrs = [
         "state_test_utils.h",
     ],
-    include_prefix = "datalake/coordinator/tests",
     deps = [
         "//src/v/container:chunked_vector",
         "//src/v/datalake/coordinator:file_committer",

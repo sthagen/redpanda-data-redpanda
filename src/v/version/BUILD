@@ -51,6 +51,5 @@ redpanda_cc_library(
     hdrs = [
         "version.h",
     ],
-    include_prefix = "version",
     visibility = ["//visibility:public"],
 )

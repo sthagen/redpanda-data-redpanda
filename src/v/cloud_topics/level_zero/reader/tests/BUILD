@@ -9,7 +9,6 @@ redpanda_test_cc_library(
         "materialized_extent_fixture.h",
         "mocks.h",
     ],
-    include_prefix = "cloud_topics/level_zero/reader/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

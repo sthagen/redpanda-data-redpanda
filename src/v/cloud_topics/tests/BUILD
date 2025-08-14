@@ -3,7 +3,6 @@ load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 redpanda_test_cc_library(
     name = "cluster_fixture",
     hdrs = ["cluster_fixture.h"],
-    include_prefix = "cloud_topics/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cloud_io/tests:s3_imposter",
@@ -12,19 +11,6 @@ redpanda_test_cc_library(
         "//src/v/cluster/tests:cluster_test_fixture",
         "//src/v/model",
         "//src/v/raft",
-    ],
-)
-
-redpanda_cc_gtest(
-    name = "types_test",
-    timeout = "short",
-    srcs = [
-        "types_test.cc",
-    ],
-    deps = [
-        "//src/v/cloud_topics:types",
-        "//src/v/test_utils:gtest",
-        "@googletest//:gtest",
     ],
 )
 
@@ -41,6 +27,7 @@ redpanda_cc_gtest(
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage_clients",
+        "//src/v/cloud_topics/level_zero/stm:ctp_stm",
         "//src/v/config",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",

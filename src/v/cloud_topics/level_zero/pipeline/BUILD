@@ -22,7 +22,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/storage:record_batch_utils",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
@@ -38,7 +37,6 @@ redpanda_cc_library(
     hdrs = [
         "circuit_breaker.h",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         "//src/v/base",
         "@seastar",
@@ -53,7 +51,6 @@ redpanda_cc_library(
     hdrs = [
         "pipeline_stage.h",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         "//src/v/base",
         "//src/v/utils:named_type",
@@ -71,7 +68,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/cloud_topics:logger",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         ":pipeline_stage",
         ":serializer",
@@ -96,7 +92,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/cloud_topics:logger",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         ":pipeline_stage",
         ":serializer",
@@ -116,7 +111,6 @@ redpanda_cc_library(
     hdrs = [
         "event_filter.h",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         ":pipeline_stage",
         "//src/v/base",
@@ -130,7 +124,6 @@ redpanda_cc_library(
     hdrs = [
         "base_pipeline.h",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         ":event_filter",
         ":pipeline_stage",
@@ -158,7 +151,6 @@ redpanda_cc_library(
         "//src/v/ssx:sformat",
         "//src/v/utils:human",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         ":base_pipeline",
         ":circuit_breaker",
@@ -194,7 +186,6 @@ redpanda_cc_library(
         "//src/v/ssx:sformat",
         "//src/v/utils:human",
     ],
-    include_prefix = "cloud_topics/level_zero/pipeline",
     deps = [
         ":base_pipeline",
         ":event_filter",

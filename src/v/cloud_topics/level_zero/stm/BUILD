@@ -9,8 +9,8 @@ redpanda_cc_library(
     hdrs = [
         "placeholder.h",
     ],
-    include_prefix = "cloud_topics/level_zero/stm",
     visibility = [
+        ":__subpackages__",
         "//src/v/cloud_topics/batch_cache:__pkg__",
         "//src/v/cloud_topics/frontend:__pkg__",
         "//src/v/cloud_topics/level_zero/frontend_reader:__pkg__",
@@ -30,7 +30,6 @@ redpanda_cc_library(
 redpanda_cc_library(
     name = "dl_version",
     hdrs = ["dl_version.h"],
-    include_prefix = "cloud_topics/level_zero/stm",
     deps = ["//src/v/utils:named_type"],
 )
 
@@ -45,7 +44,6 @@ redpanda_cc_library(
     implementation_deps = [
         "@fmt",
     ],
-    include_prefix = "cloud_topics/level_zero/stm",
     deps = [
         ":dl_version",
         "//src/v/container:chunked_vector",
@@ -54,21 +52,22 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
-    name = "ctp_stm_commands",
-    hdrs = ["ctp_stm_commands.h"],
-    include_prefix = "cloud_topics/level_zero/stm",
+    name = "types",
+    srcs = ["types.cc"],
+    hdrs = ["types.h"],
+    visibility = [":__subpackages__"],
     deps = [
-        ":dl_version",
-        "//src/v/serde",
+        "//src/v/model",
+        "@fmt",
+        "@seastar",
     ],
 )
 
 redpanda_cc_library(
-    name = "ctp_stm_offsets",
-    hdrs = ["ctp_stm_offsets.h"],
-    include_prefix = "cloud_topics/level_zero/stm",
+    name = "ctp_stm_commands",
+    hdrs = ["ctp_stm_commands.h"],
     deps = [
-        ":dl_version",
+        ":types",
         "//src/v/model",
         "//src/v/serde",
     ],
@@ -78,12 +77,8 @@ redpanda_cc_library(
     name = "ctp_stm_state",
     srcs = ["ctp_stm_state.cc"],
     hdrs = ["ctp_stm_state.h"],
-    include_prefix = "cloud_topics/level_zero/stm",
     deps = [
-        ":ctp_stm_offsets",
-        ":dl_snapshot",
-        ":dl_version",
-        "//src/v/container:chunked_vector",
+        "//src/v/cloud_topics:types",
         "//src/v/model",
         "//src/v/serde",
     ],
@@ -95,18 +90,22 @@ redpanda_cc_library(
     hdrs = ["ctp_stm.h"],
     implementation_deps = [
         ":ctp_stm_commands",
+        ":placeholder",
+        ":types",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
         "//src/v/cloud_topics:types",
         "//src/v/serde:map",
         "//src/v/serde:uuid",
         "//src/v/serde:vector",
+        "//src/v/storage",
     ],
-    include_prefix = "cloud_topics/level_zero/stm",
     visibility = ["//visibility:public"],
     deps = [
         ":ctp_stm_state",
+        ":types",
         "//src/v/raft",
+        "@seastar",
     ],
 )
 
@@ -117,18 +116,21 @@ redpanda_cc_library(
     implementation_deps = [
         ":ctp_stm",
         ":ctp_stm_commands",
+        ":types",
+        "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics:types",
         "//src/v/raft",
         "//src/v/serde:uuid",
         "//src/v/storage:record_batch_builder",
     ],
-    include_prefix = "cloud_topics/level_zero/stm",
     visibility = ["//visibility:public"],
     deps = [
         ":dl_snapshot",
         ":dl_version",
         "//src/v/base",
         "//src/v/model",
+        "//src/v/ssx:future_util",
+        "//src/v/utils:retry_chain_node",
         "@seastar",
     ],
 )
@@ -147,7 +149,6 @@ redpanda_cc_library(
         ":ctp_stm",
         "//src/v/cloud_topics:logger",
     ],
-    include_prefix = "cloud_topics/level_zero/stm",
     visibility = ["//visibility:public"],
     deps = ["//src/v/cluster:state_machine_registry"],
 )

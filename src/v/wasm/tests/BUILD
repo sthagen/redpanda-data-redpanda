@@ -3,7 +3,6 @@ load("//bazel:test.bzl", "redpanda_cc_bench", "redpanda_cc_gtest", "redpanda_tes
 redpanda_test_cc_library(
     name = "logger",
     hdrs = ["wasm_logger.h"],
-    include_prefix = "wasm/tests",
     deps = [
         "//src/v/base",
         "//src/v/wasm:wasi_logger",
@@ -15,7 +14,6 @@ redpanda_test_cc_library(
     name = "wasm_fixture",
     srcs = ["wasm_fixture.cc"],
     hdrs = ["wasm_fixture.h"],
-    include_prefix = "wasm/tests",
     deps = [
         ":logger",
         "//src/v/base",

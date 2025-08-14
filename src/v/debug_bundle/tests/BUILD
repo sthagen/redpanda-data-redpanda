@@ -51,6 +51,7 @@ redpanda_cc_gtest(
         "//src/v/random:generators",
         "//src/v/ssx:sformat",
         "//src/v/storage",
+        "//src/v/storage:file_sanitizer_types",
         "//src/v/storage:resources",
         "//src/v/test_utils:gtest",
         "//src/v/utils:file_io",

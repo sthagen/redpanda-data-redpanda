@@ -12,8 +12,8 @@
 #include "compaction/key_offset_map.h"
 #include "model/fundamental.h"
 #include "model/namespace.h"
+#include "model/record.h"
 #include "model/record_batch_types.h"
-#include "storage/parser_utils.h"
 
 namespace compaction {
 

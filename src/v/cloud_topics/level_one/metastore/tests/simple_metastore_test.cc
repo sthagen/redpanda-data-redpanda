@@ -124,6 +124,7 @@ TEST(SimpleMetastoreTest, TestGetMissingPartition) {
                    .build();
     auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
     ASSERT_TRUE(add_res.has_value()) << int(add_res.error());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     // We didn't add tid_c, so we should still get an error.
     get_res = m.get_first_ge(
@@ -157,6 +158,7 @@ TEST(SimpleMetastoreTest, TestAddWithGap) {
           = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
         auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
         ASSERT_TRUE(add_res.has_value()) << int(add_res.error());
+        ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
         auto offsets_res
           = m.get_offsets(model::topic_id_partition::from(tid_a)).get();
@@ -170,8 +172,8 @@ TEST(SimpleMetastoreTest, TestAddWithGap) {
         auto ometa
           = om_builder(oid2, 100).add(tid_a, 12_o, 20_o, 2000_t, 0, 99).build();
         auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
-        ASSERT_FALSE(add_res.has_value()) << int(add_res.error());
-        ASSERT_EQ(metastore::errc::invalid_request, add_res.error());
+        ASSERT_TRUE(add_res.has_value());
+        ASSERT_EQ(1, add_res.value().corrected_next_offsets.size());
 
         // The offsets should not be affected.
         auto offsets_res
@@ -183,9 +185,10 @@ TEST(SimpleMetastoreTest, TestAddWithGap) {
 
     // Now add the object right at the end, where it should be.
     auto ometa
-      = om_builder(oid2, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build();
+      = om_builder(oid3, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
     ASSERT_TRUE(add_res.has_value()) << int(add_res.error());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto offsets_res
       = m.get_offsets(model::topic_id_partition::from(tid_a)).get();
@@ -204,6 +207,7 @@ TEST(SimpleMetastoreTest, TestAddWithOverlap) {
                             std::move(ometa)))
                          .get();
         ASSERT_TRUE(add_res.has_value()) << int(add_res.error());
+        ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
     }
 
     {
@@ -214,16 +218,16 @@ TEST(SimpleMetastoreTest, TestAddWithOverlap) {
                           chunked_vector<metastore::object_metadata>::single(
                             std::move(ometa)))
                          .get();
-        ASSERT_FALSE(add_res.has_value()) << int(add_res.error());
-        ASSERT_EQ(metastore::errc::invalid_request, add_res.error());
+        ASSERT_TRUE(add_res.has_value());
+        ASSERT_EQ(1, add_res.value().corrected_next_offsets.size());
     }
     {
         // Add another object that fully overlaps with what exists.
         auto ometa
-          = om_builder(oid2, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+          = om_builder(oid3, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
         auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
-        ASSERT_FALSE(add_res.has_value()) << int(add_res.error());
-        ASSERT_EQ(metastore::errc::invalid_request, add_res.error());
+        ASSERT_TRUE(add_res.has_value());
+        ASSERT_EQ(1, add_res.value().corrected_next_offsets.size());
     }
 }
 
@@ -233,8 +237,8 @@ TEST(SimpleMetastoreTest, TestAddPastBeginning) {
     auto ometa
       = om_builder(oid1, 100).add(tid_a, 1_o, 10_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
-    ASSERT_FALSE(add_res.has_value()) << int(add_res.error());
-    ASSERT_EQ(metastore::errc::invalid_request, add_res.error());
+    ASSERT_TRUE(add_res.has_value());
+    ASSERT_EQ(1, add_res.value().corrected_next_offsets.size());
 }
 
 TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
@@ -248,6 +252,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
       om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 2000_t, 0, 99).build());
     auto add_res = m.add_objects(os).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto tpr = model::topic_id_partition::from(tid_a);
     for (const auto& o : std::views::iota(0, 11)) {
@@ -276,6 +281,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBelowStart) {
       = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto get_res = m.get_first_ge(
                       model::topic_id_partition::from(tid_a), kafka::offset{-1})
@@ -291,6 +297,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetOutOfRange) {
       = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto get_res = m.get_first_ge(
                       model::topic_id_partition::from(tid_a), kafka::offset{11})
@@ -310,6 +317,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
       om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 3999_t, 0, 99).build());
     auto add_res = m.add_objects(os).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto tpr = model::topic_id_partition::from(tid_a);
     for (const auto& t : {1000_t, 1999_t}) {
@@ -338,6 +346,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBelowStart) {
       = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto get_res
       = m.get_first_ge(model::topic_id_partition::from(tid_a), 999_t).get();
@@ -351,6 +360,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampOutOfRange) {
       = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(om_list_t::single(std::move(ometa))).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto get_res
       = m.get_first_ge(model::topic_id_partition::from(tid_a), 3000_t).get();
@@ -365,6 +375,7 @@ TEST(StateUpdateTest, TestReplaceBasic) {
       om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res = m.add_objects(os).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     om_list_t new_os;
     new_os.emplace_back(
@@ -445,6 +456,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
                       .build());
     auto add_res = m.add_objects(os).get();
     ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     // For one partition, replace the entire range. For another, replace part
     // of the range. As long as they're both aligned this should succeed.

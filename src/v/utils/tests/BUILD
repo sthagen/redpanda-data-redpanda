@@ -5,7 +5,6 @@ redpanda_test_cc_library(
     hdrs = [
         "randoms.h",
     ],
-    include_prefix = "utils/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/random:generators",

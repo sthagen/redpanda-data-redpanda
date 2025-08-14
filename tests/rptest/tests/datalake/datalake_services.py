@@ -12,8 +12,10 @@ from typing import Any, Literal, Optional
 from ducktape.utils.util import wait_until
 from rptest.clients.rpk import RpkTool, TopicSpec
 from rptest.context import databricks as databricks_ctx
+from rptest.context.gcp import GCPContext
 from rptest.services.apache_iceberg_catalog import IcebergRESTCatalog
 from rptest.services.databricks_workspace import DatabricksWorkspace
+from rptest.services.datalake.catalog.biglake import BiglakeMetastore
 from rptest.services.datalake.catalog.databricks_unity import DatabricksUnity
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
 from rptest.services.redpanda import RedpandaService
@@ -122,6 +124,15 @@ class DatalakeServices():
                 })
             else:
                 raise ValueError(f"Unsupported credentials type {type(creds)}")
+
+        if self.catalog_service.catalog_type() == CatalogType.BIGLAKE:
+            self.redpanda.add_extra_rp_conf({
+                # WIP: We're not yet writing to blms
+                "iceberg_catalog_type":
+                "object_storage",
+                "iceberg_rest_catalog_warehouse":
+                self.warehouse_name,
+            })
 
         self.redpanda.start(start_si=False)
 
@@ -373,6 +384,18 @@ class DatalakeServices():
                 self.test_ctx,
                 cloud_storage_bucket=self._cloud_storage_bucket,
                 warehouse_name=self.warehouse_name)
+        elif self._catalog_type == CatalogType.BIGLAKE:
+            # TODO: Do not allow callers to customize the warehouse name.
+            assert self.warehouse_name == CatalogService.DEFAULT_WAREHOUSE_NAME, \
+                "Unexpected customization of warehouse name in databricks unity test. We need to create one with a random name."
+
+            # Override.
+            # self.warehouse_name = f"gs://{self._cloud_storage_bucket}"
+
+            self.catalog_service = BiglakeMetastore(
+                self.test_ctx,
+                cloud_storage_bucket=self._cloud_storage_bucket,
+                gcp_context=GCPContext.from_context(self.test_ctx))
         else:
             raise NotImplementedError(
                 f"No catalog of type {self._catalog_type}")

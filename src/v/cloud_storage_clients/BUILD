@@ -27,7 +27,6 @@ redpanda_cc_library(
         "util.h",
         "xml_sax_parser.h",
     ],
-    include_prefix = "cloud_storage_clients",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

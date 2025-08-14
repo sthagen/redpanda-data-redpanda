@@ -15,6 +15,7 @@
 #include "cluster/types.h"
 #include "config/configuration.h"
 #include "kafka/protocol/errors.h"
+#include "model/batch_compression.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/timeout_clock.h"
@@ -29,7 +30,6 @@
 #include "pandaproxy/schema_registry/subject_name_strategy.h"
 #include "pandaproxy/schema_registry/types.h"
 #include "pandaproxy/schema_registry/validation_metrics.h"
-#include "storage/parser_utils.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>
@@ -333,8 +333,7 @@ public:
         std::optional<const model::record_batch> u;
         bool compressed = batch.compressed();
         if (compressed) {
-            u.emplace(
-              co_await storage::internal::decompress_batch(batch.copy()));
+            u.emplace(co_await model::decompress_batch(batch.copy()));
             _api->_schema_id_validation_probe.local().decompressed();
         }
 

@@ -9,10 +9,8 @@
  */
 
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
-#include "cloud_topics/level_zero/stm/dl_version.h"
-#include "gmock/gmock.h"
+#include "cloud_topics/types.h"
 #include "gtest/gtest.h"
-#include "random/generators.h"
 #include "test_utils/test.h"
 #include "utils/uuid.h"
 
@@ -21,107 +19,91 @@
 #include <algorithm>
 
 namespace ct = experimental::cloud_topics;
+namespace {
 
-class ct::ctp_stm_state_accessor {
-public:
-};
-
-using q = ct::ctp_stm_state_accessor;
-
-TEST(ctp_stm_state_death, start_snapshot) {
+TEST(ctp_stm_state_test, initial_state) {
     ct::ctp_stm_state state;
-
-    auto snapshot_id1 = state.start_snapshot(ct::dl_version(1));
-    ASSERT_EQ(snapshot_id1.version, ct::dl_version(1));
-
-    auto snapshot1 = state.read_snapshot(snapshot_id1);
-    ASSERT_TRUE(snapshot1.has_value());
-    ASSERT_EQ(snapshot1->id, snapshot_id1);
-
-    // This does not exist yet.
-    ASSERT_FALSE(
-      state.read_snapshot(ct::dl_snapshot_id(ct::dl_version(2))).has_value());
-
-    auto snapshot_id2 = state.start_snapshot(ct::dl_version(2));
-    ASSERT_EQ(snapshot_id2.version, ct::dl_version(2));
-
-    auto snapshot2 = state.read_snapshot(snapshot_id2);
-    ASSERT_TRUE(snapshot2.has_value());
-    ASSERT_EQ(snapshot2->id, snapshot_id2);
-
-    // Starting a snapshot without advancing the version should throw.
-    ASSERT_DEATH(
-      { state.start_snapshot(ct::dl_version(1)); },
-      "Snapshot version can't go backwards. Current snapshot version: 2, new "
-      "snapshot version: 1");
+    EXPECT_FALSE(state.get_max_epoch().has_value());
+    EXPECT_FALSE(state.get_max_seen_epoch().has_value());
+    EXPECT_FALSE(state.get_last_reconciled_offset().has_value());
+    EXPECT_FALSE(state.get_last_reconciled_log_offset().has_value());
+    EXPECT_EQ(state.get_max_collectible_offset(), model::offset::min());
 }
 
-TEST(ctp_stm_state, start_snapshot) {
+TEST(ctp_stm_state_test, advance_max_seen_epoch) {
     ct::ctp_stm_state state;
+    ct::cluster_epoch epoch1(10);
+    ct::cluster_epoch epoch2(20);
+    ct::cluster_epoch epoch3(5);
 
-    auto snapshot_id0 = state.start_snapshot(ct::dl_version(1));
+    state.advance_max_seen_epoch(epoch1);
+    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch1);
 
-    auto snapshot_id1 = state.start_snapshot(ct::dl_version(2));
+    state.advance_max_seen_epoch(epoch2);
+    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
 
-    auto snapshot_id2 = state.start_snapshot(ct::dl_version(3));
-
-    auto snapshot_id3 = state.start_snapshot(ct::dl_version(5));
-
-    auto snapshot0 = state.read_snapshot(snapshot_id0);
-    ASSERT_TRUE(snapshot0.has_value());
-    ASSERT_EQ(snapshot0->id, snapshot_id0);
-
-    auto snapshot1 = state.read_snapshot(snapshot_id1);
-    ASSERT_TRUE(snapshot1.has_value());
-    ASSERT_EQ(snapshot1->id, snapshot_id1);
-
-    auto snapshot2 = state.read_snapshot(snapshot_id2);
-    ASSERT_TRUE(snapshot2.has_value());
-    ASSERT_EQ(snapshot2->id, snapshot_id2);
-
-    auto snapshot3 = state.read_snapshot(snapshot_id3);
-    ASSERT_TRUE(snapshot3.has_value());
-    ASSERT_EQ(snapshot3->id, snapshot_id3);
+    // Should not go backwards
+    state.advance_max_seen_epoch(epoch3);
+    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
 }
 
-TEST(ctp_stm_state, remove_snapshots_before) {
+TEST(ctp_stm_state_test, advance_epoch) {
+    ct::ctp_stm_state state;
+    ct::cluster_epoch epoch1(15);
+    ct::cluster_epoch epoch2(25);
+    ct::cluster_epoch epoch3(10);
+
+    state.advance_epoch(epoch1);
+    EXPECT_EQ(state.get_max_epoch().value(), epoch1);
+    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch1);
+
+    state.advance_epoch(epoch2);
+    EXPECT_EQ(state.get_max_epoch().value(), epoch2);
+    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
+
+    // Should not go backwards
+    state.advance_epoch(epoch3);
+    EXPECT_EQ(state.get_max_epoch().value(), epoch2);
+    EXPECT_EQ(state.get_max_seen_epoch().value(), epoch2);
+}
+
+TEST(ctp_stm_state_test, advance_epoch_on_a_follower) {
+    // On a follower the max_seen_epoch should also be updated
+    ct::ctp_stm_state state;
+    ct::cluster_epoch advance_epoch(20);
+
+    state.advance_epoch(advance_epoch);
+
+    EXPECT_EQ(state.get_max_seen_epoch().value(), advance_epoch);
+    EXPECT_EQ(state.get_max_epoch().value(), advance_epoch);
+}
+
+TEST(ctp_stm_state_test, advance_last_reconciled_offset) {
+    ct::ctp_stm_state state;
+    kafka::offset kafka_offset1(100);
+    model::offset model_offset1(200);
+    // Out of order offsets
+    kafka::offset kafka_offset2(50);
+    model::offset model_offset2(100);
+
+    state.advance_last_reconciled_offset(kafka_offset1, model_offset1);
+    EXPECT_EQ(state.get_last_reconciled_offset().value(), kafka_offset1);
+    EXPECT_EQ(state.get_last_reconciled_log_offset().value(), model_offset1);
+
+    // Should not go backwards
+    state.advance_last_reconciled_offset(kafka_offset2, model_offset2);
+    EXPECT_EQ(state.get_last_reconciled_offset().value(), kafka_offset1);
+    EXPECT_EQ(state.get_last_reconciled_log_offset().value(), model_offset1);
+}
+
+TEST(ctp_stm_state_test, get_max_collectible_offset) {
     ct::ctp_stm_state state;
 
-    EXPECT_THAT(
-      [&]() { state.remove_snapshots_before(ct::dl_version(42)); },
-      ThrowsMessage<std::runtime_error>(
-        testing::HasSubstr("Attempt to remove snapshots before version 42 but "
-                           "no snapshots exist")));
+    EXPECT_EQ(state.get_max_collectible_offset(), model::offset::min());
 
-    auto snapshot_id0 = state.start_snapshot(ct::dl_version(1));
-
-    auto snapshot_id1 = state.start_snapshot(ct::dl_version(2));
-
-    auto snapshot_id2 = state.start_snapshot(ct::dl_version(3));
-
-    auto snapshot_id3 = state.start_snapshot(ct::dl_version(5));
-
-    // Test that operation is idempotent.
-    for (auto i = 0; i < 3; ++i) {
-        state.remove_snapshots_before(ct::dl_version(3));
-
-        ASSERT_FALSE(state.snapshot_exists(snapshot_id0));
-        ASSERT_FALSE(state.snapshot_exists(snapshot_id1));
-        ASSERT_TRUE(state.snapshot_exists(snapshot_id2));
-        ASSERT_TRUE(state.snapshot_exists(snapshot_id3));
-
-        // Retrying the an out-of-date version is an idempotent operation too.
-        state.remove_snapshots_before(ct::dl_version(2));
-    }
-
-    // It should be impossible to make a call like this because the contract
-    // with the callers is that they should first call `start_snapshot` and can
-    // call remove_snapshots_before only with the result of the `start_snapshot`
-    // call.
-    // In case this bug is introduced we want to throw an exception instead of
-    // failing silently.
-    EXPECT_THAT(
-      [&]() { state.remove_snapshots_before(ct::dl_version::max()); },
-      ThrowsMessage<std::runtime_error>(testing::HasSubstr(
-        "Trying to remove snapshots before an non-existent snapshot")));
+    model::offset log_offset(500);
+    state.advance_last_reconciled_offset(kafka::offset(300), log_offset);
+    EXPECT_EQ(state.get_max_collectible_offset(), log_offset);
 }
+
+} // anonymous namespace

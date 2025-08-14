@@ -12,8 +12,8 @@
 #include "base/vassert.h"
 #include "base/vlog.h"
 #include "compaction/utils.h"
-#include "compression/compression.h"
 #include "config/configuration.h"
+#include "model/batch_compression.h"
 #include "ssx/future-util.h"
 #include "storage/batch_cache.h"
 #include "storage/compacted_index_writer.h"
@@ -21,7 +21,6 @@
 #include "storage/fs_utils.h"
 #include "storage/fwd.h"
 #include "storage/logger.h"
-#include "storage/parser_utils.h"
 #include "storage/readers_cache.h"
 #include "storage/record_batch_utils.h"
 #include "storage/segment_set.h"
@@ -525,7 +524,7 @@ ss::future<> segment::compaction_index_batch(const model::record_batch& b) {
     // compacted topics, and/or avoiding huge batches on compacted topics.
     auto units = co_await _resources.get_compaction_compression_units();
 
-    auto decompressed = co_await internal::decompress_batch(b);
+    auto decompressed = co_await model::decompress_batch(b);
 
     co_return co_await do_compaction_index_batch(decompressed);
 }

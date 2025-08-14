@@ -11,7 +11,6 @@ redpanda_cc_library(
     hdrs = [
         "config.h",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -21,18 +20,13 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "parser_utils",
-    srcs = [
-        "parser_utils.cc",
-    ],
     hdrs = [
         "parser_utils.h",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf_parser",
-        "//src/v/compression",
         "//src/v/model",
         "@seastar",
     ],
@@ -46,7 +40,6 @@ redpanda_cc_library(
     hdrs = [
         "record_batch_builder.h",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         ":parser_utils",
@@ -67,7 +60,6 @@ redpanda_cc_library(
     hdrs = [
         "logger.h",
     ],
-    include_prefix = "storage",
     deps = [
         "//src/v/base",
         "@seastar",
@@ -95,7 +87,6 @@ redpanda_cc_library(
         "//src/v/utils:to_string",
         "@fmt",
     ],
-    include_prefix = "storage",
     deps = [
         "//src/v/bytes:iobuf",
         "//src/v/container:chunked_vector",
@@ -120,7 +111,6 @@ redpanda_cc_library(
         "//src/v/utils:to_string",
         "@fmt",
     ],
-    include_prefix = "storage",
     visibility = [
         "//src/v/cloud_topics/batch_cache:__pkg__",
         "//src/v/resource_mgmt/tests:__pkg__",
@@ -152,7 +142,6 @@ redpanda_cc_library(
         "//src/v/resource_mgmt:memory_groups",
         "@boost//:iterator",
     ],
-    include_prefix = "storage",
     visibility = [
         "//src/v/storage/tests:__pkg__",
         # TODO(bazel) chunk cache could probably be instantiated in
@@ -182,7 +171,6 @@ redpanda_cc_library(
         ":logger",
         "@seastar",
     ],
-    include_prefix = "storage",
     visibility = [
         "//src/v/cluster/archival/tests:__pkg__",
         "//src/v/cluster/tests:__pkg__",
@@ -208,7 +196,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/reflection:adl",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/bytes:iobuf",
@@ -230,7 +217,6 @@ redpanda_cc_library(
         "//src/v/reflection:adl",
         "@fmt",
     ],
-    include_prefix = "storage",
     deps = [
         ":chunk_cache",
         ":config",
@@ -255,7 +241,6 @@ redpanda_cc_library(
         "compaction_reducers.cc",
         "disk_log_appender.cc",
         "disk_log_impl.cc",
-        "file_sanitizer_types.cc",
         "fs_utils.cc",
         "kvstore.cc",
         "lock_manager.cc",
@@ -297,7 +282,6 @@ redpanda_cc_library(
         "exceptions.h",
         "failure_probes.h",
         "file_sanitizer.h",
-        "file_sanitizer_types.h",
         "fs_utils.h",
         "fwd.h",
         "kvstore.h",
@@ -335,12 +319,12 @@ redpanda_cc_library(
         ":log_manager_probe",
         "//src/v/syschecks",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         ":batch_cache",
         ":chunk_cache",
         ":disk",
+        ":file_sanitizer_types",
         ":index_state",
         ":logger",
         ":parser_utils",
@@ -373,6 +357,7 @@ redpanda_cc_library(
         "//src/v/json",
         "//src/v/metrics",
         "//src/v/model",
+        "//src/v/model:batch_compression",
         "//src/v/model:batch_utils",
         "//src/v/raft:fundamental",
         "//src/v/random:fast_prng",
@@ -441,7 +426,6 @@ redpanda_cc_library(
         "//src/v/strings:string_switch",
         "//src/v/utils:file_io",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/json",
@@ -456,7 +440,6 @@ redpanda_cc_library(
     hdrs = [
         "scoped_file_tracker.h",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         "@abseil-cpp//absl/container:btree",
@@ -475,7 +458,6 @@ redpanda_cc_library(
         "//src/v/config",
         "@seastar",
     ],
-    include_prefix = "storage",
     deps = [
         "//src/v/metrics",
     ],
@@ -493,7 +475,6 @@ redpanda_cc_library(
         "//src/v/utils:human",
         "@fmt",
     ],
-    include_prefix = "storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

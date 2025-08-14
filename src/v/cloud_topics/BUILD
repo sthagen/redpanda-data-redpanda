@@ -5,6 +5,7 @@ package(default_visibility = [
     "//src/v/cloud_topics/core:__pkg__",
     "//src/v/cloud_topics/core/tests:__pkg__",
     "//src/v/cloud_topics/frontend:__pkg__",
+    "//src/v/cloud_topics/frontend/tests:__pkg__",
     "//src/v/cloud_topics/level_zero:__subpackages__",
     "//src/v/cloud_topics/level_zero/throttler:__pkg__",
     "//src/v/cloud_topics/level_zero/throttler/tests:__pkg__",
@@ -20,7 +21,6 @@ redpanda_cc_library(
     hdrs = [
         "logger.h",
     ],
-    include_prefix = "cloud_topics",
     visibility = ["//visibility:public"],
     deps = [
         "@seastar",
@@ -36,7 +36,6 @@ redpanda_cc_library(
         "errc.h",
         "types.h",
     ],
-    include_prefix = "cloud_topics",
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/serde",
@@ -51,9 +50,9 @@ redpanda_cc_library(
     hdrs = [
         "data_plane_api.h",
     ],
-    include_prefix = "cloud_topics",
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",
+        "//src/v/cloud_topics/frontend/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/frontend_reader:__pkg__",
         "//src/v/cloud_topics/level_zero/reconciler:__pkg__",
         "//src/v/kafka/data:__pkg__",
@@ -81,9 +80,9 @@ redpanda_cc_library(
         ":cluster_services_interface",
         ":data_plane_impl",
     ],
-    include_prefix = "cloud_topics",
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",
+        "//src/v/cloud_topics/frontend/tests:__pkg__",
         "//src/v/cloud_topics/level_one/metastore/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/reader:__pkg__",
         "//src/v/cloud_topics/level_zero/reconciler:__pkg__",
@@ -133,7 +132,6 @@ redpanda_cc_library(
         "//src/v/ssx:sharded_service_container",
         "//src/v/storage",
     ],
-    include_prefix = "cloud_topics",
     visibility = ["//src/v/redpanda:__pkg__"],
     deps = [
         "@seastar",
@@ -148,7 +146,6 @@ redpanda_cc_library(
     hdrs = [
         "object_utils.h",
     ],
-    include_prefix = "cloud_topics",
     deps = [
         ":cluster_services_interface",
         ":types",
@@ -164,7 +161,6 @@ redpanda_cc_library(
     hdrs = [
         "state_accessors.h",
     ],
-    include_prefix = "cloud_topics",
     visibility = ["//visibility:public"],
     deps = [
     ],
@@ -175,7 +171,6 @@ redpanda_cc_library(
     hdrs = [
         "cluster_services.h",
     ],
-    include_prefix = "cloud_topics",
     visibility = ["//visibility:public"],
     deps = [
         ":types",
@@ -188,7 +183,6 @@ redpanda_cc_library(
     hdrs = [
         "ephemeral_cluster_services.h",
     ],
-    include_prefix = "cloud_topics",
     visibility = ["//visibility:public"],
     deps = [
         ":cluster_services_interface",

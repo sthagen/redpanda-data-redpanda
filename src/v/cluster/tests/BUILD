@@ -5,7 +5,6 @@ redpanda_test_cc_library(
     hdrs = [
         "randoms.h",
     ],
-    include_prefix = "cluster/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
@@ -19,7 +18,6 @@ redpanda_test_cc_library(
     hdrs = [
         "topic_properties_generator.h",
     ],
-    include_prefix = "cluster/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -33,7 +31,6 @@ redpanda_test_cc_library(
     hdrs = [
         "partition_allocator_fixture.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         "//src/v/base",
         "//src/v/cluster",
@@ -46,7 +43,6 @@ redpanda_test_cc_library(
         "cluster_test_fixture.h",
         "utils.h",
     ],
-    include_prefix = "cluster/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
@@ -67,7 +63,6 @@ redpanda_test_cc_library(
     hdrs = [
         "partition_balancer_planner_fixture.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         ":cluster_test_fixture",
     ],
@@ -78,7 +73,6 @@ redpanda_test_cc_library(
     hdrs = [
         "rebalancing_tests_fixture.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         ":cluster_test_fixture",
         "//src/v/container:chunked_circular_buffer",
@@ -90,7 +84,6 @@ redpanda_test_cc_library(
     hdrs = [
         "tx_compaction_utils.h",
     ],
-    include_prefix = "cluster/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
@@ -106,7 +99,6 @@ redpanda_test_cc_library(
     hdrs = [
         "rm_stm_test_fixture.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         "//src/v/cluster",
         "//src/v/raft/tests:simple_raft_fixture",
@@ -118,7 +110,6 @@ redpanda_test_cc_library(
     hdrs = [
         "utils.h",
     ],
-    include_prefix = "cluster/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
@@ -133,7 +124,6 @@ redpanda_test_cc_library(
         "leader_balancer_constraints_utils.h",
         "leader_balancer_test_utils.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         "//src/v/cluster",
     ],
@@ -144,7 +134,6 @@ redpanda_test_cc_library(
     hdrs = [
         "topic_table_fixture.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         ":utils",
         "//src/v/base",
@@ -177,7 +166,6 @@ redpanda_test_cc_library(
     hdrs = [
         "raft_fixture_retry_policy.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         "//src/v/cluster",
         "//src/v/raft",
@@ -761,7 +749,6 @@ redpanda_test_cc_library(
     hdrs = [
         "health_monitor_test_utils.h",
     ],
-    include_prefix = "cluster/tests",
     deps = [
         "//src/v/cluster",
     ],
@@ -1103,7 +1090,6 @@ redpanda_test_cc_library(
     hdrs = [
         "local_monitor_fixture.h",
     ],
-    include_prefix = "cluster/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",
@@ -1261,7 +1247,6 @@ redpanda_test_cc_library(
     hdrs = [
         "tx_compaction_utils.h",
     ],
-    include_prefix = "cluster/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",

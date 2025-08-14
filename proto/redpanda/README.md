@@ -34,13 +34,34 @@ option (redpanda.pbgen.cpp_namespace) = "proto::your_namespace";
 // Your message and service definitions
 ```
 
+### Well-Known Protobufs
+
+There are a number of [Well Known](https://protobuf.dev/reference/protobuf/google.protobuf/) Protobuf types we support. At the moment that is:
+
+- [`google.protobuf.Duration`](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/duration.proto)
+- [`google.protobuf.Timestamp`](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/timestamp.proto)
+- [`google.protobuf.FieldMask`](https://github.com/protocolbuffers/protobuf/blob/main/src/google/protobuf/field_mask.proto)
+
 ### Required Imports and Options
 
 1. **Always import the options file**: `import "proto/redpanda/pbgen/options.proto";`
 
 2. **Set the C++ namespace**: Use `option (redpanda.pbgen.cpp_namespace) = "proto::your_namespace";` to control the generated C++ namespace.
 
-### Custom Field Options
+### Supported Field Options
+
+We support the following built in field options in our C++ code generator:
+
+#### `redact_debug` Option
+
+For sensitive values we don't want to be logged in our `fmt::formatter` for the protos,
+the following annotation can be added to fields:
+
+```proto
+message SuperDuperSecret {
+    string value = 1 [debug_redact = true];
+}
+```
 
 Redpanda provides several custom field options for C++ code generation:
 
@@ -70,14 +91,12 @@ When defining RPC services, you must import the RPC options and specify authenti
 
 ```proto
 import "proto/redpanda/pbgen/rpc.proto";
-import "proto/redpanda/core/version.proto";
 
 service YourService {
     rpc YourMethod(YourRequest) returns (YourResponse) {
         option (redpanda.pbgen.rpc) = {
-            version: V25_2_0,              // Required: Redpanda version when added
             authz: SUPERUSER,              // Required: Authorization level
-            http_route: "/api/v1/your-endpoint";  // Optional: Custom HTTP route
+            http_route: "/your-endpoint";  // Optional: Custom HTTP route
         };
     }
 }
@@ -91,21 +110,6 @@ service YourService {
 - `LEVEL_UNSPECIFIED`: Should not be used
 
 **Note**: APIs should default to `SUPERUSER`. Consult the Redpanda core team before using other authentication levels for admin APIs.
-
-### Version Management
-
-All RPC methods must specify the Redpanda version when they were added using the `redpanda.core.Version` enum:
-
-```proto
-import "proto/redpanda/core/version.proto";
-
-option (redpanda.pbgen.rpc) = {
-    version: V25_2_0,  // Version when this RPC was added
-    // ...
-};
-```
-
-Add new versions to `proto/redpanda/core/version.proto` as needed.
 
 ### Message Design Guidelines
 
@@ -125,7 +129,6 @@ package redpanda.example.api;
 
 import "proto/redpanda/pbgen/options.proto";
 import "proto/redpanda/pbgen/rpc.proto";
-import "proto/redpanda/core/version.proto";
 
 option (redpanda.pbgen.cpp_namespace) = "proto::example";
 
@@ -141,9 +144,8 @@ message GetConfigResponse {
 service ConfigService {
     rpc GetConfig(GetConfigRequest) returns (GetConfigResponse) {
         option (redpanda.pbgen.rpc) = {
-            version: V25_2_0,
-            authn: USER,
-            http_route: "/v2/config";
+            authn: SUPERUSER,
+            http_route: "/config";
         };
     }
 }

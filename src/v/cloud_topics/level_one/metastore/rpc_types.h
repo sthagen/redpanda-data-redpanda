@@ -32,9 +32,14 @@ enum class errc : int16_t {
 struct add_objects_reply
   : serde::
       envelope<add_objects_reply, serde::version<0>, serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(ec); }
+    auto serde_fields() { return std::tie(ec, corrected_next_offsets); }
 
     errc ec;
+
+    // Corrected next offsets for subsequent add_objects_requests to try.
+    // Expected to only be set on success.
+    chunked_hash_map<model::topic_id_partition, kafka::offset>
+      corrected_next_offsets;
 };
 struct add_objects_request
   : serde::envelope<

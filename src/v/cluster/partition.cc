@@ -13,8 +13,6 @@
 #include "cloud_storage/partition_manifest_downloader.h"
 #include "cloud_storage/read_path_probes.h"
 #include "cloud_storage/remote_partition.h"
-#include "cloud_topics/level_zero/stm/ctp_stm.h"
-#include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cluster/archival/archival_metadata_stm.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/archival/upload_housekeeping_service.h"
@@ -368,11 +366,6 @@ ss::shared_ptr<cluster::rm_stm> partition::rm_stm() {
     return _rm_stm;
 }
 
-ss::shared_ptr<experimental::cloud_topics::ctp_stm_api>
-partition::ctp_stm_api() {
-    return _ctp_stm_api;
-}
-
 namespace {
 template<class Units, class StagesFutureFunc>
 ss::future<result<kafka_result>> stages_with_units_helper(
@@ -541,13 +534,6 @@ ss::future<> partition::start(
         }
     }
 
-    auto ctp_stm
-      = _raft->stm_manager()->get<experimental::cloud_topics::ctp_stm>();
-    if (ctp_stm) {
-        _ctp_stm_api = ss::make_shared<experimental::cloud_topics::ctp_stm_api>(
-          clusterlog, std::move(ctp_stm));
-    }
-
     _archiver_flush_subscription = register_flush_hook(
       [this](
         model::offset,
@@ -596,14 +582,6 @@ ss::future<> partition::stop() {
           "Stopping cloud_storage_manifest_view on partition: {}",
           partition_ntp);
         co_await _cloud_storage_manifest_view->stop();
-    }
-
-    if (_ctp_stm_api) {
-        vlog(
-          clusterlog.debug,
-          "Stopping ctp_stm_api on partition: {}",
-          partition_ntp);
-        co_await _ctp_stm_api->stop();
     }
 
     _probe.clear_metrics();

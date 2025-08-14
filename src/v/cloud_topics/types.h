@@ -20,11 +20,6 @@
 
 namespace experimental::cloud_topics {
 
-enum class ctp_stm_key {
-    start_snapshot = 1,
-    remove_snapshots_before_version = 2,
-};
-
 /// Offset in the cloud storage object
 using first_byte_offset_t = named_type<uint64_t, struct first_byte_offset_tag>;
 
@@ -33,6 +28,14 @@ using byte_range_size_t = named_type<uint64_t, struct byte_range_size_tag>;
 
 /// An epoch is a monotonically increasing value across the cluster.
 using cluster_epoch = named_type<int64_t, struct cloud_topics_epoch>;
+
+/// Return the previous cluster epoch value.
+inline constexpr cluster_epoch prev_cluster_epoch(cluster_epoch e) {
+    if (e <= cluster_epoch{0}) {
+        return cluster_epoch::min();
+    }
+    return cluster_epoch(e() - 1);
+}
 
 /// Is the identifier of a cloud topic object L0 object, it is a combination
 /// of a unique name (UUIDv4) and a cluster epoch.
@@ -60,14 +63,6 @@ enum class ctp_stm_object_ownership {
 };
 
 } // namespace experimental::cloud_topics
-
-template<>
-struct fmt::formatter<experimental::cloud_topics::ctp_stm_key>
-  : fmt::formatter<std::string_view> {
-    auto format(
-      experimental::cloud_topics::ctp_stm_key, fmt::format_context& ctx) const
-      -> decltype(ctx.out());
-};
 
 template<>
 struct fmt::formatter<experimental::cloud_topics::object_id>

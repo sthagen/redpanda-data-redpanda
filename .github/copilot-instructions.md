@@ -140,6 +140,13 @@ src/v/base/format_to.h.
 - Instead of long if-else chains for mapping string to values, use
   `string_switch` mechanism defined in
   [string_switch.h](./src/v/strings/string_switch.h).
+- Don't use `ss::parallel_for_each` with ranges that can grow large such as
+  partitions, topics or segments. Instead prefer `ss::max_concurrent_for_each` to
+  limit concurrency. Think about how much concurrency is needed to adequately hide
+  latency. See our
+  [docs](https://redpandadata.atlassian.net/wiki/x/AQBZTw#Managing-Concurrency-in-the-system)
+  for more background.
+
 
 ### C++ coding style
 

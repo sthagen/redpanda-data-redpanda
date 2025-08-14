@@ -229,7 +229,7 @@ replicated_metastore::get_offsets(const model::topic_id_partition& tidp) {
     co_return resp;
 }
 
-ss::future<std::expected<void, metastore::errc>>
+ss::future<std::expected<metastore::add_response, metastore::errc>>
 replicated_metastore::add_objects(
   std::unique_ptr<metastore::object_metadata_builder> builder) {
     auto replicated_builder = std::unique_ptr<replicated_object_builder>(
@@ -243,6 +243,7 @@ replicated_metastore::add_objects(
           objects_result.error());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
+    add_response resp;
     for (auto& [partition_id, partition_objects] : objects_result.value()) {
         rpc::add_objects_request req;
         req.metastore_partition = partition_id;
@@ -266,8 +267,11 @@ replicated_metastore::add_objects(
               int(reply.ec));
             co_return std::unexpected(rpc_to_meta_errc(reply.ec));
         }
+        for (const auto& [tp, o] : reply.corrected_next_offsets) {
+            resp.corrected_next_offsets[tp] = o;
+        }
     }
-    co_return std::expected<void, errc>{};
+    co_return resp;
 }
 
 ss::future<std::expected<void, metastore::errc>>

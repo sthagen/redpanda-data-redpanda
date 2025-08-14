@@ -113,7 +113,8 @@ simple_metastore::get_offsets(
     };
 }
 
-ss::future<std::expected<void, metastore::errc>> simple_metastore::add_objects(
+ss::future<std::expected<metastore::add_response, metastore::errc>>
+simple_metastore::add_objects(
   std::unique_ptr<metastore::object_metadata_builder> builder) {
     auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
     auto objects_res = simple_builder->release();
@@ -124,20 +125,25 @@ ss::future<std::expected<void, metastore::errc>> simple_metastore::add_objects(
     co_return co_await add_objects(objects_res.value());
 }
 
-ss::future<std::expected<void, metastore::errc>>
+ss::future<std::expected<metastore::add_response, metastore::errc>>
 simple_metastore::add_objects(const chunked_vector<object_metadata>& objects) {
     chunked_vector<new_object> new_objects;
     for (const auto& o : objects) {
         new_objects.emplace_back(make_new_object(o));
     }
-    auto update_res = add_objects_update::build(state_, std::move(new_objects));
+    add_response resp;
+    auto update_res = add_objects_update::build(
+      state_, std::move(new_objects), &resp.corrected_next_offsets);
     if (!update_res.has_value()) {
         vlog(cd_log.debug, "Object add failed: {}", update_res.error());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
     auto apply_res = update_res->apply(state_);
-    vassert(apply_res.has_value(), "Apply must succeed if can_apply() is true");
-    co_return std::expected<void, metastore::errc>{};
+    vassert(
+      apply_res.has_value(),
+      "Apply must succeed if can_apply() is true: {}",
+      apply_res.error());
+    co_return resp;
 }
 
 ss::future<std::expected<void, metastore::errc>>

@@ -31,7 +31,8 @@ public:
       group_manager& group_manager,
       group_initializer& group_initializer);
 
-    std::optional<model::ntp> ntp_for(const kafka::group_id& group) override;
+    std::optional<model::partition_id>
+    partition_for(const kafka::group_id& group) override;
 
     ss::future<result<model::offset>> set_blocked_for_groups(
       const model::ntp& co_ntp,

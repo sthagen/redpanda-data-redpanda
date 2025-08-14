@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "bytes/iobuf.h"
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
@@ -38,6 +39,7 @@ void enum_from_proto(iobuf_parser*, test_all_types_edition2023_nested_enum*);
 // Returns the name of the enum value
 std::string_view enum_to_string(const test_all_types_edition2023_nested_enum&);
 void enum_from_json(serde::pb::json::peekable_parser*, test_all_types_edition2023_nested_enum*);
+int32_t format_as(test_all_types_edition2023_nested_enum);
 
 enum class foreign_enum_edition2023 : uint8_t {
   foreign_foo = 0,
@@ -49,6 +51,7 @@ void enum_from_proto(iobuf_parser*, foreign_enum_edition2023*);
 // Returns the name of the enum value
 std::string_view enum_to_string(const foreign_enum_edition2023&);
 void enum_from_json(serde::pb::json::peekable_parser*, foreign_enum_edition2023*);
+int32_t format_as(foreign_enum_edition2023);
 
 class foreign_message_edition2023 {
 public:
@@ -59,7 +62,9 @@ public:
   foreign_message_edition2023& operator=(foreign_message_edition2023&&) noexcept;
   ~foreign_message_edition2023() noexcept;
   
-  bool operator==(const foreign_message_edition2023&) const;  
+  bool operator==(const foreign_message_edition2023&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -92,7 +97,9 @@ public:
   test_all_types_edition2023_group_like_type& operator=(test_all_types_edition2023_group_like_type&&) noexcept;
   ~test_all_types_edition2023_group_like_type() noexcept;
   
-  bool operator==(const test_all_types_edition2023_group_like_type&) const;  
+  bool operator==(const test_all_types_edition2023_group_like_type&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.GroupLikeType into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.GroupLikeType into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -127,7 +134,9 @@ public:
   test_all_types_edition2023_nested_message& operator=(test_all_types_edition2023_nested_message&&) noexcept;
   ~test_all_types_edition2023_nested_message() noexcept;
   
-  bool operator==(const test_all_types_edition2023_nested_message&) const;  
+  bool operator==(const test_all_types_edition2023_nested_message&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -163,7 +172,9 @@ public:
   test_all_types_edition2023& operator=(test_all_types_edition2023&&) noexcept;
   ~test_all_types_edition2023() noexcept;
   
-  bool operator==(const test_all_types_edition2023&) const;  
+  bool operator==(const test_all_types_edition2023&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023 into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023 into proto3 JSON, in a way that will not cause stalls for large messages.

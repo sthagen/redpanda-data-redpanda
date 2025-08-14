@@ -8,7 +8,6 @@ redpanda_test_cc_library(
     hdrs = [
         "test_schemas.h",
     ],
-    include_prefix = "iceberg/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/iceberg:datatypes",
@@ -23,7 +22,6 @@ redpanda_test_cc_library(
     hdrs = [
         "test_table_metadata.h",
     ],
-    include_prefix = "iceberg/tests",
 )
 
 redpanda_test_cc_library(
@@ -34,7 +32,6 @@ redpanda_test_cc_library(
     hdrs = [
         "value_generator.h",
     ],
-    include_prefix = "iceberg/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/iceberg:datatypes",

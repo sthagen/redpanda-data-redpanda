@@ -5,7 +5,6 @@ redpanda_cc_library(
     hdrs = [
         "fwd.h",
     ],
-    include_prefix = "compaction",
     visibility = ["//visibility:public"],
 )
 
@@ -17,7 +16,6 @@ redpanda_cc_library(
     hdrs = [
         "key.h",
     ],
-    include_prefix = "compaction",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/bytes",
@@ -33,7 +31,6 @@ redpanda_cc_library(
     hdrs = [
         "key_offset_map.h",
     ],
-    include_prefix = "compaction",
     visibility = ["//visibility:public"],
     deps = [
         ":key",
@@ -58,7 +55,6 @@ redpanda_cc_library(
         "//src/v/utils:to_string",
         "@fmt",
     ],
-    include_prefix = "compaction",
     visibility = ["//visibility:public"],
     deps = [
         ":key_offset_map",
@@ -78,12 +74,10 @@ redpanda_cc_library(
     hdrs = [
         "utils.h",
     ],
-    include_prefix = "compaction",
     visibility = ["//visibility:public"],
     deps = [
         ":key_offset_map",
         "//src/v/model",
-        "//src/v/storage:parser_utils",
         "@seastar",
     ],
 )

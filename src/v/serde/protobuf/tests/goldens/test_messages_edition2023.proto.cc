@@ -10,6 +10,7 @@
 #include "serde/protobuf/json.h"
 #include "serde/json/writer.h"
 #include "serde/json/parser.h"
+#include "utils/to_string.h"
 
 #include <algorithm>
 #include <fmt/format.h>
@@ -27,6 +28,9 @@ void test_all_types_edition2023_nested_message::set_a(int32_t v) { a_ = v; }
 std::unique_ptr<test_all_types_edition2023>& test_all_types_edition2023_nested_message::get_corecursive() { return corecursive_; }
 const std::unique_ptr<test_all_types_edition2023>& test_all_types_edition2023_nested_message::get_corecursive() const { return corecursive_; }
 void test_all_types_edition2023_nested_message::set_corecursive(std::unique_ptr<test_all_types_edition2023>&& v) { corecursive_ = std::move(v); }
+fmt::iterator test_all_types_edition2023_nested_message::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{a: {}, corecursive: {}}}", a_, corecursive_);
+}
 seastar::future<> test_all_types_edition2023_nested_message::from_proto(serde::pb::wire_format_parser* parser, test_all_types_edition2023_nested_message* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -137,6 +141,9 @@ int32_t test_all_types_edition2023_group_like_type::get_group_int32() const { re
 void test_all_types_edition2023_group_like_type::set_group_int32(int32_t v) { group_int32_ = v; }
 uint32_t test_all_types_edition2023_group_like_type::get_group_uint32() const { return group_uint32_; }
 void test_all_types_edition2023_group_like_type::set_group_uint32(uint32_t v) { group_uint32_ = v; }
+fmt::iterator test_all_types_edition2023_group_like_type::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{group_int32: {}, group_uint32: {}}}", group_int32_, group_uint32_);
+}
 seastar::future<> test_all_types_edition2023_group_like_type::from_proto(serde::pb::wire_format_parser* parser, test_all_types_edition2023_group_like_type* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -518,6 +525,9 @@ void test_all_types_edition2023::set_groupliketype(test_all_types_edition2023_gr
 test_all_types_edition2023_group_like_type& test_all_types_edition2023::get_delimited_field() { return delimited_field_; }
 const test_all_types_edition2023_group_like_type& test_all_types_edition2023::get_delimited_field() const { return delimited_field_; }
 void test_all_types_edition2023::set_delimited_field(test_all_types_edition2023_group_like_type&& v) { delimited_field_ = std::move(v); }
+fmt::iterator test_all_types_edition2023::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{optional_int32: {}, optional_int64: {}, optional_uint32: {}, optional_uint64: {}, optional_sint32: {}, optional_sint64: {}, optional_fixed32: {}, optional_fixed64: {}, optional_sfixed32: {}, optional_sfixed64: {}, optional_float: {}, optional_double: {}, optional_bool: {}, optional_string: {}, optional_bytes: {}, optional_nested_message: {}, optional_foreign_message: {}, optional_nested_enum: {}, optional_foreign_enum: {}, optional_string_piece: {}, optional_cord: {}, recursive_message: {}, repeated_int32: {}, repeated_int64: {}, repeated_uint32: {}, repeated_uint64: {}, repeated_sint32: {}, repeated_sint64: {}, repeated_fixed32: {}, repeated_fixed64: {}, repeated_sfixed32: {}, repeated_sfixed64: {}, repeated_float: {}, repeated_double: {}, repeated_bool: {}, repeated_string: {}, repeated_bytes: {}, repeated_nested_message: {}, repeated_foreign_message: {}, repeated_nested_enum: {}, repeated_foreign_enum: {}, repeated_string_piece: {}, repeated_cord: {}, packed_int32: {}, packed_int64: {}, packed_uint32: {}, packed_uint64: {}, packed_sint32: {}, packed_sint64: {}, packed_fixed32: {}, packed_fixed64: {}, packed_sfixed32: {}, packed_sfixed64: {}, packed_float: {}, packed_double: {}, packed_bool: {}, packed_nested_enum: {}, unpacked_int32: {}, unpacked_int64: {}, unpacked_uint32: {}, unpacked_uint64: {}, unpacked_sint32: {}, unpacked_sint64: {}, unpacked_fixed32: {}, unpacked_fixed64: {}, unpacked_sfixed32: {}, unpacked_sfixed64: {}, unpacked_float: {}, unpacked_double: {}, unpacked_bool: {}, unpacked_nested_enum: {}, map_int32_int32: {}, map_int64_int64: {}, map_uint32_uint32: {}, map_uint64_uint64: {}, map_sint32_sint32: {}, map_sint64_sint64: {}, map_fixed32_fixed32: {}, map_fixed64_fixed64: {}, map_sfixed32_sfixed32: {}, map_sfixed64_sfixed64: {}, map_int32_float: {}, map_int32_double: {}, map_bool_bool: {}, map_string_string: {}, map_string_bytes: {}, map_string_nested_message: {}, map_string_foreign_message: {}, map_string_nested_enum: {}, map_string_foreign_enum: {}, oneof_field: {}, groupliketype: {}, delimited_field: {}}}", optional_int32_, optional_int64_, optional_uint32_, optional_uint64_, optional_sint32_, optional_sint64_, optional_fixed32_, optional_fixed64_, optional_sfixed32_, optional_sfixed64_, optional_float_, optional_double_, optional_bool_, optional_string_, optional_bytes_, optional_nested_message_, optional_foreign_message_, optional_nested_enum_, optional_foreign_enum_, optional_string_piece_, optional_cord_, recursive_message_, repeated_int32_, repeated_int64_, repeated_uint32_, repeated_uint64_, repeated_sint32_, repeated_sint64_, repeated_fixed32_, repeated_fixed64_, repeated_sfixed32_, repeated_sfixed64_, repeated_float_, repeated_double_, repeated_bool_, repeated_string_, repeated_bytes_, repeated_nested_message_, repeated_foreign_message_, repeated_nested_enum_, repeated_foreign_enum_, repeated_string_piece_, repeated_cord_, packed_int32_, packed_int64_, packed_uint32_, packed_uint64_, packed_sint32_, packed_sint64_, packed_fixed32_, packed_fixed64_, packed_sfixed32_, packed_sfixed64_, packed_float_, packed_double_, packed_bool_, packed_nested_enum_, unpacked_int32_, unpacked_int64_, unpacked_uint32_, unpacked_uint64_, unpacked_sint32_, unpacked_sint64_, unpacked_fixed32_, unpacked_fixed64_, unpacked_sfixed32_, unpacked_sfixed64_, unpacked_float_, unpacked_double_, unpacked_bool_, unpacked_nested_enum_, map_int32_int32_, map_int64_int64_, map_uint32_uint32_, map_uint64_uint64_, map_sint32_sint32_, map_sint64_sint64_, map_fixed32_fixed32_, map_fixed64_fixed64_, map_sfixed32_sfixed32_, map_sfixed64_sfixed64_, map_int32_float_, map_int32_double_, map_bool_bool_, map_string_string_, map_string_bytes_, map_string_nested_message_, map_string_foreign_message_, map_string_nested_enum_, map_string_foreign_enum_, oneof_field_, groupliketype_, delimited_field_);
+}
 seastar::future<> test_all_types_edition2023::from_proto(serde::pb::wire_format_parser* parser, test_all_types_edition2023* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -4312,6 +4322,9 @@ foreign_message_edition2023::~foreign_message_edition2023() noexcept = default;
 bool foreign_message_edition2023::operator==(const foreign_message_edition2023&) const = default;
 int32_t foreign_message_edition2023::get_c() const { return c_; }
 void foreign_message_edition2023::set_c(int32_t v) { c_ = v; }
+fmt::iterator foreign_message_edition2023::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{c: {}}}", c_);
+}
 seastar::future<> foreign_message_edition2023::from_proto(serde::pb::wire_format_parser* parser, foreign_message_edition2023* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -4450,6 +4463,7 @@ void enum_from_json(serde::pb::json::peekable_parser* p, test_all_types_edition2
     throw std::runtime_error(fmt::format("unexpected json token for enum, got: {}", p->token()));
   }
 }
+int32_t format_as(test_all_types_edition2023_nested_enum e) { return std::to_underlying(e); }
 
 void enum_from_proto(iobuf_parser* p, foreign_enum_edition2023* e) {
   auto v = serde::pb::read_varint<int32_t, serde::pb::zigzag::no>(p);
@@ -4514,6 +4528,7 @@ void enum_from_json(serde::pb::json::peekable_parser* p, foreign_enum_edition202
     throw std::runtime_error(fmt::format("unexpected json token for enum, got: {}", p->token()));
   }
 }
+int32_t format_as(foreign_enum_edition2023 e) { return std::to_underlying(e); }
 
 } // protobuf_test_messages::editions
 // NOLINTEND(*-avoid-magic-numbers)

@@ -6,7 +6,6 @@ package(default_visibility = ["//src/v/raft:__subpackages__"])
 redpanda_cc_rpc_library(
     name = "raft_rpc",
     src = "raftgen.json",
-    include_prefix = "raft",
 )
 
 redpanda_cc_library(
@@ -14,7 +13,6 @@ redpanda_cc_library(
     hdrs = [
         "fundamental.h",
     ],
-    include_prefix = "raft",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -28,7 +26,6 @@ redpanda_cc_library(
     hdrs = [
         "broker_compat.h",
     ],
-    include_prefix = "raft",
     deps = [
         "//src/v/model",
         "//src/v/reflection:adl",
@@ -44,7 +41,6 @@ redpanda_cc_library(
     hdrs = [
         "voter_priority_tracker.h",
     ],
-    include_prefix = "raft",
     deps = [":fundamental"],
 )
 
@@ -122,7 +118,6 @@ redpanda_cc_library(
         "types.h",
         "vote_stm.h",
     ],
-    include_prefix = "raft",
     visibility = ["//visibility:public"],
     deps = [
         ":broker_compat",

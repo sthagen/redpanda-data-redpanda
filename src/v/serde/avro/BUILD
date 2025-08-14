@@ -8,7 +8,6 @@ redpanda_cc_library(
     hdrs = [
         "parser.h",
     ],
-    include_prefix = "serde/avro",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/bytes:iobuf",

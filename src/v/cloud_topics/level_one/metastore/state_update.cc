@@ -57,19 +57,22 @@ void new_object::collect_extents_by_tidp(sorted_extents_by_tidp_t* ret) const {
 }
 
 std::expected<add_objects_update, stm_update_error> add_objects_update::build(
-  const state& state, chunked_vector<new_object> objects) {
+  const state& state,
+  chunked_vector<new_object> objects,
+  chunked_hash_map<model::topic_id_partition, kafka::offset>* corrections) {
     add_objects_update update{
       .new_objects = std::move(objects),
     };
-    auto allowed = update.can_apply(state);
+    auto allowed = update.can_apply(state, corrections);
     if (!allowed.has_value()) {
         return std::unexpected(allowed.error());
     }
     return update;
 }
 
-std::expected<std::monostate, stm_update_error>
-add_objects_update::can_apply(const state& state) {
+std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
+  const state& state,
+  chunked_hash_map<model::topic_id_partition, kafka::offset>* corrections) {
     if (new_objects.empty()) {
         return std::unexpected(stm_update_error{"No objects requested"});
     }
@@ -82,6 +85,8 @@ add_objects_update::can_apply(const state& state) {
         o.collect_extents_by_tidp(&new_extents);
     }
 
+    chunked_hash_map<model::topic_id_partition, kafka::offset>
+      corrected_next_offsets;
     for (const auto& [tidp, extents] : new_extents) {
         // TODO: maybe we need some mount operation that adopts a partition log
         // and allows it to start a specific offset.
@@ -89,6 +94,13 @@ add_objects_update::can_apply(const state& state) {
         auto expected_next = p_state ? p_state->get().next_offset
                                      : kafka::offset{0};
 
+        if (extents.begin()->base_offset != expected_next) {
+            // If the start of the new extents for this partition aren't
+            // aligned, allow the operation to succeed, but the expectation is
+            // when applying, we'll "drop" these extents.
+            corrected_next_offsets[tidp] = expected_next;
+            continue;
+        }
         for (const auto& extent : extents) {
             if (extent.base_offset != expected_next) {
                 return std::unexpected(stm_update_error(fmt::format(
@@ -96,10 +108,13 @@ add_objects_update::can_apply(const state& state) {
                   "expected next: {}, actual: {}",
                   tidp,
                   expected_next,
-                  extent.base_offset)));
+                  extent.base_offset())));
             }
             expected_next = kafka::next_offset(extent.last_offset);
         }
+    }
+    if (corrections) {
+        *corrections = std::move(corrected_next_offsets);
     }
     return std::monostate{};
 }
@@ -110,9 +125,9 @@ add_objects_update::apply(state& state) {
     if (!allowed.has_value()) {
         return std::unexpected(allowed.error());
     }
-    new_object::sorted_extents_by_tidp_t extents_by_tpr;
+    new_object::sorted_extents_by_tidp_t extents_by_tp;
     for (const auto& o : new_objects) {
-        o.collect_extents_by_tidp(&extents_by_tpr);
+        o.collect_extents_by_tidp(&extents_by_tp);
         state.objects.emplace(
           o.oid,
           object_entry{
@@ -121,17 +136,31 @@ add_objects_update::apply(state& state) {
             .footer_pos = o.footer_pos,
           });
     }
-    for (const auto& [tidp, extents] : extents_by_tpr) {
-        auto& t_state = state.topic_to_state[tidp.topic_id];
-        auto& p_state = t_state.pid_to_state[tidp.partition];
-        for (const auto& e : extents) {
-            p_state.extents.emplace(e);
-        }
-        p_state.next_offset = kafka::next_offset(
-          p_state.extents.rbegin()->last_offset);
-
-        for (const auto& extent : extents) {
-            state.objects[extent.oid].total_data_size += extent.len;
+    for (const auto& [tidp, extents] : extents_by_tp) {
+        auto p_state = state.partition_state(tidp);
+        auto expected_next = p_state ? p_state->get().next_offset
+                                     : kafka::offset{0};
+        if (extents.begin()->base_offset == expected_next) {
+            auto& t_state = state.topic_to_state[tidp.topic_id];
+            auto& p_state = t_state.pid_to_state[tidp.partition];
+            // We've validated that all extents form a contiguous offset space.
+            // Accept them all.
+            for (const auto& e : extents) {
+                p_state.extents.emplace(e);
+            }
+            p_state.next_offset = kafka::next_offset(
+              p_state.extents.rbegin()->last_offset);
+            for (const auto& extent : extents) {
+                state.objects[extent.oid].total_data_size += extent.len;
+            }
+        } else {
+            // The incoming extents don't align with the next position. "Drop"
+            // them all.
+            for (const auto& extent : extents) {
+                auto& obj_entry = state.objects[extent.oid];
+                obj_entry.removed_data_size += extent.len;
+                obj_entry.total_data_size += extent.len;
+            }
         }
     }
     return std::monostate{};

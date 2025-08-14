@@ -19,12 +19,12 @@
 #include "datalake/tests/record_generator.h"
 #include "datalake/tests/test_data_writer.h"
 #include "datalake/tests/test_utils.h"
+#include "model/batch_compression.h"
 #include "model/compression.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "serde/avro/tests/data_generator.h"
 #include "serde/protobuf/tests/data_generator.h"
-#include "storage/parser_utils.h"
 
 #include <seastar/testing/perf_tests.hh>
 
@@ -408,7 +408,7 @@ private:
 
             auto batch = std::move(batch_builder).build();
             if (compression_type != model::compression::none) {
-                batch = co_await storage::internal::compress_batch(
+                batch = co_await model::compress_batch(
                   compression_type, std::move(batch));
             }
             ret.emplace_back(std::move(batch));

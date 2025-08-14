@@ -37,7 +37,6 @@ from urllib3.exceptions import MaxRetryError
 import yaml
 from ducktape.services.service import Service
 from ducktape.tests.test import TestContext
-from requests.adapters import HTTPAdapter
 from requests.exceptions import HTTPError
 from rptest.archival.s3_client import S3Client, S3AddressingStyle
 from rptest.archival.abs_client import ABSClient
@@ -50,6 +49,7 @@ from prometheus_client.parser import text_string_to_metric_families
 from prometheus_client.metrics_core import Metric
 from ducktape.errors import TimeoutError
 from ducktape.tests.test import TestContext
+from rptest.context.gcp import GCPContext
 from rptest.services.rpk_consumer import RpkConsumer
 
 from rptest.clients.helm import HelmTool
@@ -511,7 +511,6 @@ class SISettings:
     GLOBAL_S3_ACCESS_KEY = "s3_access_key"
     GLOBAL_S3_SECRET_KEY = "s3_secret_key"
     GLOBAL_S3_REGION_KEY = "s3_region"
-    GLOBAL_GCP_PROJECT_ID_KEY = "gcp_project_id"
     GLOBAL_USE_FIPS_S3_ENDPOINT = "use_fips_s3_endpoint"
     DEFAULT_USE_FIPS_S3_ENDPOINT = "OFF"
 
@@ -672,8 +671,6 @@ class SISettings:
 
         self._expected_damage_types = set()
 
-        self._gcp_token_cache = ExpiringValue[str]()
-
     def get_use_fips_s3_endpoint(self) -> bool:
         use_fips_option = self._context.globals.get(
             self.GLOBAL_USE_FIPS_S3_ENDPOINT,
@@ -743,8 +740,6 @@ class SISettings:
             self.GLOBAL_S3_SECRET_KEY, None)
         cloud_storage_region = test_context.globals.get(
             self.GLOBAL_S3_REGION_KEY, None)
-        cloud_storage_gcp_project_id = test_context.globals.get(
-            self.GLOBAL_GCP_PROJECT_ID_KEY, None)
 
         # Enable S3 if AWS creds were given at globals
         if cloud_storage_credentials_source == 'aws_instance_metadata' or cloud_storage_credentials_source == 'gcp_instance_metadata':
@@ -755,11 +750,14 @@ class SISettings:
             self.endpoint_url = None  # None so boto auto-gens the endpoint url
             if test_context.globals.get(self.GLOBAL_CLOUD_PROVIDER,
                                         'aws') == 'gcp':
+                self._gcp_context = GCPContext.from_context(test_context)
+
                 self.endpoint_url = 'https://storage.googleapis.com'
                 self.cloud_storage_signature_version = "unsigned"
                 self.before_call_headers = lambda: {
-                    "Authorization": f"Bearer {self.gcp_iam_token(logger)}",
-                    "x-goog-project-id": str(cloud_storage_gcp_project_id)
+                    "Authorization":
+                    f"Bearer {self._gcp_context.fetch_iam_token()}",
+                    "x-goog-project-id": str(self._gcp_context.project_id)
                 }
             self.cloud_storage_disable_tls = False  # SI will fail to create archivers if tls is disabled
             self.cloud_storage_region = cloud_storage_region
@@ -802,29 +800,6 @@ class SISettings:
             self._cloud_storage_bucket = new_bucket_name
         elif self.cloud_storage_type == CloudStorageType.ABS:
             self._cloud_storage_azure_container = new_bucket_name
-
-    def gcp_iam_token(self, logger) -> str:
-        token = self._gcp_token_cache.value()
-        if token is not None:
-            return token
-
-        logger.info('Getting gcp iam token')
-        s = requests.Session()
-        s.mount('http://169.254.169.254', HTTPAdapter(max_retries=5))
-        res = s.request(
-            "GET",
-            "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token",
-            headers={"Metadata-Flavor": "Google"})
-        res.raise_for_status()
-        logger.info(
-            f"Got gcp iam token expiring in {res.json()['expires_in']} seconds"
-        )
-        # GCP guarantees that tokens are valid for at least 5 minutes so it is
-        # safe to subtract 60 seconds and still assume a valid token.
-        self._gcp_token_cache.update(res.json()["access_token"],
-                                     expire_at=time.time() +
-                                     res.json()["expires_in"] - 60)
-        return res.json()["access_token"]
 
     # Call this to update the extra_rp_conf
     def update_rp_conf(self, conf) -> dict[str, Any]:

@@ -82,7 +82,6 @@ redpanda_test_cc_library(
     hdrs = [
         "bench_utils.h",
     ],
-    include_prefix = "container/tests",
     visibility = ["//visibility:private"],
     deps = [
         "//src/v/base",

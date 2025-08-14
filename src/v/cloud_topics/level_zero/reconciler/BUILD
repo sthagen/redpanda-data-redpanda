@@ -10,7 +10,6 @@ redpanda_cc_library(
     hdrs = [
         "range_batch_consumer.h",
     ],
-    include_prefix = "cloud_topics/level_zero/reconciler",
     deps = [
         "//src/v/base",
         "//src/v/bytes:iobuf",
@@ -32,7 +31,6 @@ redpanda_cc_library(
         "//src/v/cloud_topics:data_plane_api",
         "//src/v/cloud_topics/frontend",
     ],
-    include_prefix = "cloud_topics/level_zero/reconciler",
     visibility = ["//visibility:public"],
     deps = [
         ":range_batch_consumer",

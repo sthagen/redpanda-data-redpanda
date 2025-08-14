@@ -5,7 +5,6 @@ redpanda_cc_library(
     hdrs = [
         "deps.h",
     ],
-    include_prefix = "cluster_link/replication",
     visibility = ["__subpackages__"],
     deps = [
         "//src/v/container:chunked_hash_map",
@@ -23,7 +22,6 @@ redpanda_cc_library(
     hdrs = [
         "partition_replicator.h",
     ],
-    include_prefix = "cluster_link/replication",
     visibility = ["__subpackages__"],
     deps = [
         ":deps",
@@ -48,7 +46,6 @@ redpanda_cc_library(
     hdrs = [
         "link_replication_mgr.h",
     ],
-    include_prefix = "cluster_link/replication",
     visibility = ["//visibility:public"],
     deps = [
         ":deps",

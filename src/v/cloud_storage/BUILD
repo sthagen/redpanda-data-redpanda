@@ -5,7 +5,6 @@ redpanda_cc_library(
     hdrs = [
         "remote_label.h",
     ],
-    include_prefix = "cloud_storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/model",
@@ -22,7 +21,6 @@ redpanda_cc_library(
     hdrs = [
         "topic_mount_manifest_path.h",
     ],
-    include_prefix = "cloud_storage",
     visibility = [
         "//visibility:public",
     ],
@@ -125,7 +123,6 @@ redpanda_cc_library(
         "//src/v/json",
         "@rapidjson",
     ],
-    include_prefix = "cloud_storage",
     visibility = ["//visibility:public"],
     deps = [
         ":cache",
@@ -236,7 +233,6 @@ redpanda_cc_library(
         "@abseil-cpp//absl/container:btree",
         "@re2",
     ],
-    include_prefix = "cloud_storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -261,7 +257,6 @@ redpanda_cc_library(
     implementation_deps = [
         "//src/v/utils:to_string",
     ],
-    include_prefix = "cloud_storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -287,7 +282,6 @@ redpanda_cc_library(
         "//src/v/config",
         "@abseil-cpp//absl/container:btree",
     ],
-    include_prefix = "cloud_storage",
     visibility = [":__subpackages__"],
     deps = [
         ":types",
@@ -302,7 +296,6 @@ redpanda_cc_library(
     hdrs = [
         "logger.h",
     ],
-    include_prefix = "cloud_storage",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

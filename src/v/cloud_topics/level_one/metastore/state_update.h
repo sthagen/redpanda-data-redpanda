@@ -72,10 +72,14 @@ struct add_objects_update
     auto serde_fields() { return std::tie(new_objects); }
 
     static constexpr auto key{update_key::add_objects};
-    static std::expected<add_objects_update, stm_update_error>
-    build(const state&, chunked_vector<new_object>);
+    static std::expected<add_objects_update, stm_update_error> build(
+      const state&,
+      chunked_vector<new_object>,
+      chunked_hash_map<model::topic_id_partition, kafka::offset>* = nullptr);
 
-    std::expected<std::monostate, stm_update_error> can_apply(const state&);
+    std::expected<std::monostate, stm_update_error> can_apply(
+      const state&,
+      chunked_hash_map<model::topic_id_partition, kafka::offset>* = nullptr);
     std::expected<std::monostate, stm_update_error> apply(state&);
 
     chunked_vector<new_object> new_objects;

@@ -27,9 +27,9 @@ data_migration_group_proxy_impl::data_migration_group_proxy_impl(
   , _group_manager(group_manager)
   , _group_initializer(group_initializer) {}
 
-std::optional<model::ntp>
-data_migration_group_proxy_impl::ntp_for(const kafka::group_id& group) {
-    return _coordinator_ntp_mapper.ntp_for(group);
+std::optional<model::partition_id>
+data_migration_group_proxy_impl::partition_for(const kafka::group_id& group) {
+    return _coordinator_ntp_mapper.partition_for(group);
 }
 
 ss::future<result<model::offset>>

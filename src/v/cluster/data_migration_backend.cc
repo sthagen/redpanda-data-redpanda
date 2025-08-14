@@ -1370,10 +1370,10 @@ ss::future<> backend::reconcile_migration(
           metadata.migration);
 
         for (const auto& group : groups) {
-            auto ntp = _group_proxy.ntp_for(group);
-            vassert(ntp, "cannot get ntp for group {}", group);
-            auto pid = ntp->tp.partition;
-            auto [it, ins] = mrstate.partition_group_map->try_emplace(pid);
+            auto partition = _group_proxy.partition_for(group);
+            vassert(partition, "cannot get ntp for group {}", group);
+            auto [it, ins] = mrstate.partition_group_map->try_emplace(
+              *partition);
             it->second.push_back(group);
         }
     }

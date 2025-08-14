@@ -20,7 +20,6 @@ redpanda_cc_library(
         "//src/v/container:chunked_circular_buffer",
         "//src/v/storage:record_batch_builder",
     ],
-    include_prefix = "cloud_topics/level_zero/batcher",
     deps = [
         "//src/v/base",
         "//src/v/cloud_topics:cluster_services_interface",
@@ -51,7 +50,6 @@ redpanda_cc_library(
         "//src/v/ssx:sformat",
         "//src/v/utils:human",
     ],
-    include_prefix = "cloud_topics/level_zero/batcher",
     deps = [
         "//src/v/base",
         "//src/v/bytes",

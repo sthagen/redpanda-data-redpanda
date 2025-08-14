@@ -12,7 +12,6 @@ redpanda_cc_library(
     hdrs = [
         "cluster_services.h",
     ],
-    include_prefix = "cloud_topics/level_zero/cluster_services_impl",
     deps = [
         "//src/v/cloud_topics:cluster_services_interface",
         "//src/v/cluster",

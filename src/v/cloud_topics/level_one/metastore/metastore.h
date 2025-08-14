@@ -115,10 +115,23 @@ public:
     virtual ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) = 0;
 
-    // Adds the given objects to the metastore. If any are invalid, e.g.
-    // because they break an invariant of a partition's offset ranges, all
-    // objects are rejected.
-    virtual ss::future<std::expected<void, errc>>
+    struct add_response {
+        // The actual next offsets for any topic partitions whose input objects
+        // were not properly aligned in a given add request.
+        //
+        // Callers should treat this as the new source of truth for subsequent
+        // attempts to add objects for these partitions.
+        chunked_hash_map<model::topic_id_partition, kafka::offset>
+          corrected_next_offsets;
+    };
+    // If the input is invalid (e.g. unordered, empty, contains an object that
+    // already exists) an error is returned.
+    //
+    // If no error is returned, this means that the request was valid, though
+    // it does not imply that all extents were accepted by the metastore. The
+    // response should be examined to determine if subsequent add_objects()
+    // requests need to be re-aligned to a different offset.
+    virtual ss::future<std::expected<add_response, errc>>
       add_objects(std::unique_ptr<object_metadata_builder>) = 0;
 
     // Adds the given objects to the metastore, expecting that the new extents

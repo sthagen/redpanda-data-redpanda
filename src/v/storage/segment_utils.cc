@@ -39,7 +39,6 @@
 #include "storage/log_reader.h"
 #include "storage/logger.h"
 #include "storage/ntp_config.h"
-#include "storage/parser_utils.h"
 #include "storage/scoped_file_tracker.h"
 #include "storage/segment.h"
 #include "storage/types.h"

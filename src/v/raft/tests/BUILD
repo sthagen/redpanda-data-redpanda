@@ -5,7 +5,6 @@ redpanda_test_cc_library(
     hdrs = [
         "simple_raft_fixture.h",
     ],
-    include_prefix = "raft/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -26,7 +25,6 @@ redpanda_test_cc_library(
     hdrs = [
         "simple_record_fixture.h",
     ],
-    include_prefix = "raft/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -43,7 +41,6 @@ redpanda_test_cc_library(
     hdrs = [
         "raft_fixture_retry_policy.h",
     ],
-    include_prefix = "raft/tests",
     visibility = ["//visibility:public"],
     deps = [
         ":raft_fixture",
@@ -57,7 +54,6 @@ redpanda_test_cc_library(
     hdrs = [
         "failure_injectable_log.h",
     ],
-    include_prefix = "raft/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -73,7 +69,6 @@ redpanda_test_cc_library(
     hdrs = [
         "raft_fixture.h",
     ],
-    include_prefix = "raft/tests",
     visibility = ["//visibility:public"],
     deps = [
         ":failure_injectable_log",
@@ -103,7 +98,6 @@ redpanda_test_cc_library(
     name = "stm_raft_fixture",
     hdrs = [
     ],
-    include_prefix = "raft/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -516,7 +510,6 @@ redpanda_test_cc_library(
     hdrs = [
         "stm_test_fixture.h",
     ],
-    include_prefix = "raft/tests",
     visibility = ["//visibility:public"],
     deps = [
         ":raft_fixture",

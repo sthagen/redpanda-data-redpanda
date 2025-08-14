@@ -8,7 +8,6 @@ redpanda_test_cc_library(
     hdrs = [
         "deps.h",
     ],
-    include_prefix = "cluster_link/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/cluster",

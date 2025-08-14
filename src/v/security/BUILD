@@ -18,7 +18,6 @@ redpanda_cc_library(
         "oidc_principal_mapping.h",
         "oidc_url_parser.h",
     ],
-    include_prefix = "security",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -40,7 +39,6 @@ redpanda_cc_library(
     hdrs = [
         "license.h",
     ],
-    include_prefix = "security",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -66,7 +64,6 @@ redpanda_cc_library(
     hdrs = [
         "request_auth.h",
     ],
-    include_prefix = "security",
     visibility = ["//visibility:public"],
     deps = [
         ":security",
@@ -129,7 +126,6 @@ redpanda_cc_library(
         "scram_credential.h",
         "types.h",
     ],
-    include_prefix = "security",
     visibility = ["//visibility:public"],
     deps = [
         ":config",

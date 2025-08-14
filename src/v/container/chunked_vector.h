@@ -13,6 +13,9 @@
 #include "base/seastar_fwd.h"
 #include "base/vassert.h"
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include <bit>
 #include <cstddef>
 #include <initializer_list>
@@ -495,12 +498,9 @@ public:
         return v;
     }
 
-    friend std::ostream& operator<<(std::ostream& os, const chunked_vector& v) {
-        os << "[";
-        for (auto& e : v) {
-            os << e << ",";
-        }
-        os << "]";
+    friend std::ostream&
+    operator<<(std::ostream& os, const chunked_vector<T>& v) {
+        fmt::print(os, "[{}]", fmt::join(v, ","));
         return os;
     }
 

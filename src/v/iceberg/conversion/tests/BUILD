@@ -5,7 +5,6 @@ load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
 redpanda_test_cc_library(
     name = "gmock_iceberg_matchers",
     hdrs = ["gmock_iceberg_matchers.h"],
-    include_prefix = "iceberg/conversion/tests",
     deps = [
         "//src/v/iceberg:values",
         "@googletest//:gtest",
@@ -67,7 +66,6 @@ cc_proto_library(
 redpanda_test_cc_library(
     name = "proto_definitions_wrapper",
     hdrs = ["proto_definitions.h"],
-    include_prefix = "iceberg/conversion/tests",
     deps = [
         ":complex_cc_proto",
         ":not_supported_cc_proto",

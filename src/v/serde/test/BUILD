@@ -78,7 +78,6 @@ genrule(
 redpanda_test_cc_library(
     name = "generated_structs",
     hdrs = [":generated_structs.h"],
-    include_prefix = "serde/test",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/serde",

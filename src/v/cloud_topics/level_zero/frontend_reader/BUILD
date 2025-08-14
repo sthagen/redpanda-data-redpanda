@@ -20,7 +20,6 @@ redpanda_cc_library(
         "//src/v/cluster",
         "//src/v/config",
     ],
-    include_prefix = "cloud_topics/level_zero/frontend_reader",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

@@ -325,6 +325,12 @@ TEST(ProtobufCompat, Wellknown) {
                         .get()))
       << "JSON: " << libpb_serialized;
     EXPECT_EQ(original, deserialized)
-      << "Proto: " << iobuf_to_string(original.to_json().get())
-      << "\nDeserialized: " << iobuf_to_string(deserialized.to_json().get());
+      << "Proto: " << fmt::format("{}", original)
+      << "Deserialized: " << fmt::format("{}", deserialized);
+}
+
+TEST(ProtobufCompat, DebugRedact) {
+    proto::example::super_duper_secret secret;
+    secret.set_value("12345");
+    EXPECT_EQ("{value: <redacted>}", fmt::format("{}", secret));
 }

@@ -5,7 +5,6 @@ redpanda_test_cc_library(
     hdrs = [
         "avro_payloads.h",
     ],
-    include_prefix = "pandaproxy/schema_registry/test",
     deps = [
         "//src/v/pandaproxy/schema_registry:core",
     ],
@@ -16,7 +15,6 @@ redpanda_test_cc_library(
     hdrs = [
         "client_utils.h",
     ],
-    include_prefix = "pandaproxy/schema_registry/test",
     deps = [
         "//src/v/http",
         "//src/v/json",
@@ -31,7 +29,6 @@ redpanda_test_cc_library(
     hdrs = [
         "compatibility_avro.h",
     ],
-    include_prefix = "pandaproxy/schema_registry/test",
     deps = [
         "//src/v/pandaproxy/schema_registry:core",
     ],
@@ -42,7 +39,6 @@ redpanda_test_cc_library(
     hdrs = [
         "compatibility_protobuf.h",
     ],
-    include_prefix = "pandaproxy/schema_registry/test",
     deps = [
         "//src/v/pandaproxy/schema_registry:core",
     ],
@@ -53,7 +49,6 @@ redpanda_test_cc_library(
     hdrs = [
         "compatibility_common.h",
     ],
-    include_prefix = "pandaproxy/schema_registry/test",
     deps = [
         "//src/v/pandaproxy/schema_registry:core",
     ],
@@ -398,7 +393,6 @@ redpanda_test_cc_library(
     hdrs = [
         "random.h",
     ],
-    include_prefix = "pandaproxy/schema_registry/test",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/pandaproxy/schema_registry:subject_name_strategy",

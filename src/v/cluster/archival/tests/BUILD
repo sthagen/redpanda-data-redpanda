@@ -4,7 +4,6 @@ redpanda_test_cc_library(
     name = "service_fixture",
     srcs = ["service_fixture.cc"],
     hdrs = ["service_fixture.h"],
-    include_prefix = "cluster/archival/tests",
     visibility = ["//visibility:private"],
     deps = [
         "//src/v/base",
@@ -230,7 +229,6 @@ redpanda_cc_btest(
 redpanda_test_cc_library(
     name = "archival_service_fixture",
     hdrs = ["archival_service_fixture.h"],
-    include_prefix = "cluster/archival/tests",
     visibility = ["//visibility:public"],
     deps = [
         ":service_fixture",

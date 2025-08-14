@@ -8,7 +8,6 @@ redpanda_cc_library(
     hdrs = [
         "logger.h",
     ],
-    include_prefix = "transform",
     visibility = ["//src/v/transform:__subpackages__"],
     deps = [
         "//src/v/base",
@@ -24,7 +23,6 @@ redpanda_cc_library(
     hdrs = [
         "commit_batcher.h",
     ],
-    include_prefix = "transform",
     visibility = ["//src/v/transform:__subpackages__"],
     deps = [
         ":logger",
@@ -45,7 +43,6 @@ redpanda_cc_library(
     hdrs = [
         "transfer_queue.h",
     ],
-    include_prefix = "transform",
     visibility = ["//src/v/transform:__subpackages__"],
     deps = [
         ":memory_limiter",
@@ -62,7 +59,6 @@ redpanda_cc_library(
     hdrs = [
         "memory_limiter.h",
     ],
-    include_prefix = "transform",
     visibility = ["//src/v/transform:__subpackages__"],
     deps = [
         "//src/v/base",
@@ -76,7 +72,6 @@ redpanda_cc_library(
     hdrs = [
         "fwd.h",
     ],
-    include_prefix = "transform",
     visibility = ["//visibility:public"],
 )
 
@@ -97,16 +92,15 @@ redpanda_cc_library(
     implementation_deps = [
         ":logger",
         "//src/v/metrics",
+        "//src/v/model:batch_compression",
         "//src/v/random:time_jitter",
         "//src/v/rpc",
         "//src/v/ssx:future_util",
         "//src/v/ssx:sformat",
-        "//src/v/storage:parser_utils",
         "//src/v/utils:backoff_policy",
         "//src/v/utils:human",
         "@boost//:range",
     ],
-    include_prefix = "transform",
     visibility = ["//src/v/transform:__subpackages__"],
     deps = [
         ":commit_batcher",
@@ -152,7 +146,6 @@ redpanda_cc_library(
         "@abseil-cpp//absl/container:flat_hash_map",
         "@boost//:range",
     ],
-    include_prefix = "transform",
     visibility = ["//visibility:public"],
     deps = [
         ":fwd",

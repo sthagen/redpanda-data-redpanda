@@ -74,8 +74,9 @@ domain_manager::add_objects(rpc::add_objects_request req) {
     for (const auto& obj : req.new_objects) {
         added_oids.emplace(obj.oid);
     }
+    chunked_hash_map<model::topic_id_partition, kafka::offset> corrections;
     auto update_res = add_objects_update::build(
-      stm_state, std::move(req.new_objects));
+      stm_state, std::move(req.new_objects), &corrections);
     if (!update_res.has_value()) {
         vlog(
           cd_log.debug,
@@ -114,6 +115,7 @@ domain_manager::add_objects(rpc::add_objects_request req) {
     }
     co_return rpc::add_objects_reply{
       .ec = rpc::errc::ok,
+      .corrected_next_offsets = std::move(corrections),
     };
 }
 

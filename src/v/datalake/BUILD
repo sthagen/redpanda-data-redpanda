@@ -17,7 +17,6 @@ redpanda_cc_library(
         "//src/v/iceberg:schema",
         "//src/v/iceberg:transaction",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/iceberg:catalog",
@@ -32,7 +31,6 @@ redpanda_cc_library(
     hdrs = [
         "schema_identifier.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/pandaproxy/schema_registry:types",
@@ -46,7 +44,6 @@ redpanda_cc_library(
     hdrs = [
         "logger.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/base",
@@ -67,7 +64,6 @@ redpanda_cc_library(
         "//src/v/base",
         "//src/v/iceberg:struct_accessor",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":partition_key_path",
@@ -86,7 +82,6 @@ redpanda_cc_library(
         "errors.h",
         "fwd.h",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -105,7 +100,6 @@ redpanda_cc_library(
     implementation_deps = [
         "@fmt",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":base_types",
@@ -124,7 +118,6 @@ redpanda_cc_library(
     hdrs = [
         "credential_manager.h",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         ":logger",
@@ -150,7 +143,6 @@ redpanda_cc_library(
     hdrs = [
         "datalake_manager.h",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         ":backlog_controller",
@@ -202,7 +194,6 @@ redpanda_cc_library(
         "@fmt",
         "@seastar",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
@@ -218,7 +209,6 @@ redpanda_cc_library(
     hdrs = [
         "translation_task.h",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         ":cloud_data_io",
@@ -247,7 +237,6 @@ redpanda_cc_library(
     hdrs = [
         "table_definition.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/iceberg:schema",
@@ -262,7 +251,6 @@ redpanda_cc_library(
     hdrs = [
         "base_types.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/utils:named_type",
@@ -278,7 +266,6 @@ redpanda_cc_library(
     hdrs = [
         "cloud_data_io.h",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         ":base_types",
@@ -307,7 +294,6 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         "//src/v/pandaproxy/schema_registry:types",
@@ -331,11 +317,10 @@ redpanda_cc_library(
         ":table_id_provider",
         "//src/v/base",
         "//src/v/iceberg/conversion:conversion_outcome",
-        "//src/v/storage:parser_utils",
+        "//src/v/model:batch_compression",
         "//src/v/utils:lazy_abort_source",
         "//src/v/utils:prefix_logger",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":location",
@@ -373,7 +358,6 @@ redpanda_cc_library(
         "@avro",
         "@protobuf",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":schema_identifier",
@@ -411,7 +395,6 @@ redpanda_cc_library(
         "@protobuf",
         "@seastar",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":record_schema_resolver",
@@ -430,7 +413,6 @@ redpanda_cc_library(
     hdrs = [
         "local_parquet_file_writer.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":logger",
@@ -457,7 +439,6 @@ redpanda_cc_library(
         "//src/v/iceberg/conversion:values_parquet",
         "//src/v/version",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":writer",
@@ -476,7 +457,6 @@ redpanda_cc_library(
     hdrs = [
         "table_creator.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":schema_identifier",
@@ -488,7 +468,6 @@ redpanda_cc_library(
     hdrs = [
         "table_id_provider.h",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/iceberg:table_identifier",
@@ -501,7 +480,6 @@ redpanda_cc_library(
     hdrs = [
         "location.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":base_types",
@@ -518,7 +496,6 @@ redpanda_cc_library(
     hdrs = [
         "backlog_controller.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":logger",
@@ -538,7 +515,6 @@ redpanda_cc_library(
     hdrs = [
         "partition_key_path.h",
     ],
-    include_prefix = "datalake",
     visibility = [":__subpackages__"],
     deps = [
         ":base_types",
@@ -563,7 +539,6 @@ redpanda_cc_library(
     hdrs = [
         "datalake_usage_aggregator.h",
     ],
-    include_prefix = "datalake",
     visibility = ["//visibility:public"],
     deps = [
         ":logger",

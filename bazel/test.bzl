@@ -331,7 +331,6 @@ def redpanda_test_cc_library(
         defines = [],
         local_defines = [],
         visibility = None,
-        include_prefix = None,
         implementation_deps = [],
         deps = []):
     cc_library(
@@ -341,7 +340,7 @@ def redpanda_test_cc_library(
         defines = defines,
         local_defines = local_defines,
         visibility = visibility,
-        include_prefix = include_prefix,
+        include_prefix = native.package_name().removeprefix("src/v/"),
         implementation_deps = implementation_deps,
         deps = deps,
         copts = redpanda_copts(),

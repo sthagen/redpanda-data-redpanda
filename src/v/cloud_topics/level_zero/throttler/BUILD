@@ -19,7 +19,6 @@ redpanda_cc_library(
         "//src/v/ssx:sformat",
         "//src/v/utils:human",
     ],
-    include_prefix = "cloud_topics/level_zero/throttler",
     deps = [
         "//src/v/base",
         "//src/v/bytes",

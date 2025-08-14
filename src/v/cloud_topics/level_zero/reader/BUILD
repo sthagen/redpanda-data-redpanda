@@ -14,7 +14,6 @@ redpanda_cc_library(
     hdrs = [
         "materialized_extent.h",
     ],
-    include_prefix = "cloud_topics/level_zero/reader",
     deps = [
         "//src/v/base",
         "//src/v/bytes",
@@ -49,7 +48,6 @@ redpanda_cc_library(
     hdrs = [
         "materialized_extent_reader.h",
     ],
-    include_prefix = "cloud_topics/level_zero/reader",
     deps = [
         "//src/v/base",
         "//src/v/cloud_io:basic_cache_service_api",
@@ -77,7 +75,6 @@ redpanda_cc_library(
     hdrs = [
         "fetch_request_handler.h",
     ],
-    include_prefix = "cloud_topics/level_zero/reader",
     deps = [
         "//src/v/base",
         "//src/v/bytes",

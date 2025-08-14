@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "container/chunked_vector.h"
 
@@ -32,6 +33,7 @@ struct field_mask {
     chunked_vector<ss::sstring> paths;
 
     bool operator==(const field_mask& other) const = default;
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 } // namespace serde::pb

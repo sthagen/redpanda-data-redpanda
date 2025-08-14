@@ -30,7 +30,6 @@
 #include <seastar/core/shared_ptr.hh>
 
 namespace experimental::cloud_topics {
-class ctp_stm_api;
 class state_accessors;
 }; // namespace experimental::cloud_topics
 
@@ -214,8 +213,6 @@ public:
     get_offset_translator_state() const;
 
     ss::shared_ptr<cluster::rm_stm> rm_stm();
-
-    ss::shared_ptr<experimental::cloud_topics::ctp_stm_api> ctp_stm_api();
 
     size_t size_bytes() const;
 
@@ -430,7 +427,6 @@ private:
     ss::shared_ptr<cluster::rm_stm> _rm_stm;
     ss::shared_ptr<archival_metadata_stm> _archival_meta_stm;
     ss::shared_ptr<partition_properties_stm> _partition_properties_stm;
-    ss::shared_ptr<experimental::cloud_topics::ctp_stm_api> _ctp_stm_api;
     ss::sharded<experimental::cloud_topics::state_accessors>*
       _cloud_topics_state;
     ss::abort_source _as;

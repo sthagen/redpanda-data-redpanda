@@ -6,7 +6,6 @@ package(default_visibility = ["//src/v/cloud_topics/level_one:__subpackages__"])
 redpanda_cc_rpc_library(
     name = "generated_level_one_rpc",
     src = "rpc.json",
-    include_prefix = "cloud_topics/level_one/metastore",
 )
 
 redpanda_cc_library(
@@ -26,7 +25,6 @@ redpanda_cc_library(
         "//src/v/hashing:murmur",
         "@fmt",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     visibility = ["//visibility:public"],
     deps = [
         ":generated_level_one_rpc",
@@ -44,7 +42,6 @@ redpanda_cc_library(
     hdrs = [
         "metastore.h",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     visibility = ["//visibility:public"],
     deps = [
         ":offset_interval_set",
@@ -71,7 +68,6 @@ redpanda_cc_library(
         ":state_update",
         "//src/v/cloud_topics:logger",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     visibility = ["//visibility:public"],
     deps = [
         ":metastore",
@@ -85,7 +81,6 @@ redpanda_cc_library(
     hdrs = [
         "rpc_types.h",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     visibility = ["//visibility:public"],
     deps = [
         ":offset_interval_set",
@@ -109,7 +104,6 @@ redpanda_cc_library(
         ":state_update",
         "//src/v/cloud_topics:logger",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     visibility = ["//visibility:public"],
     deps = [
         ":metastore",
@@ -135,7 +129,6 @@ redpanda_cc_library(
         "//src/v/ssx:future_util",
         "//src/v/utils:prefix_logger",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     visibility = ["//visibility:public"],
     deps = [
         ":state",
@@ -155,7 +148,6 @@ redpanda_cc_library(
     hdrs = [
         "state.h",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     deps = [
         ":offset_interval_set",
         "//src/v/base",
@@ -181,7 +173,6 @@ redpanda_cc_library(
     hdrs = [
         "state_update.h",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     deps = [
         ":state",
         "//src/v/base",
@@ -200,7 +191,6 @@ redpanda_cc_library(
     hdrs = [
         "offset_interval_set.h",
     ],
-    include_prefix = "cloud_topics/level_one/metastore",
     deps = [
         "//src/v/container:chunked_vector",
         "//src/v/container:interval_set",

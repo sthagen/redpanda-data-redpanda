@@ -4,7 +4,6 @@ redpanda_test_cc_library(
     name = "testing",
     srcs = ["common.cc"],
     hdrs = ["common.h"],
-    include_prefix = "io/tests",
     visibility = ["//visibility:private"],
     deps = [
         "//src/v/base",

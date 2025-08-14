@@ -5,7 +5,6 @@ redpanda_cc_library(
     hdrs = [
         "leb128.h",
     ],
-    include_prefix = "wasm/parser",
     visibility = [
         "//src/v/wasm/parser:__pkg__",
         "//src/v/wasm/parser/tests:__pkg__",
@@ -32,7 +31,6 @@ redpanda_cc_library(
         "//src/v/strings:utf8",
         "@fmt",
     ],
-    include_prefix = "wasm/parser",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

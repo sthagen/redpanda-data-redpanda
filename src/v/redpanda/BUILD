@@ -11,7 +11,6 @@ redpanda_cc_library(
         "application.h",
         "monitor_unsafe.h",
     ],
-    include_prefix = "redpanda",
     visibility = ["//visibility:public"],
     deps = [
         ":cli_parser",
@@ -149,7 +148,6 @@ redpanda_cc_library(
     hdrs = [
         "cli_parser.h",
     ],
-    include_prefix = "redpanda",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

@@ -23,6 +23,7 @@ class CatalogType(str, Enum):
     POLARIS = 'polaris'
     NESSIE = 'nessie'
     DATABRICKS_UNITY = 'databricks_unity'
+    BIGLAKE = 'biglake'
 
 
 def catalog_type_to_config_string(catalog_type: CatalogType) -> str:

@@ -9,6 +9,7 @@
  */
 
 #include "cloud_io/tests/s3_imposter.h"
+#include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "config/configuration.h"
 #include "kafka/server/tests/list_offsets_utils.h"
 #include "kafka/server/tests/produce_consume_utils.h"
@@ -60,7 +61,11 @@ TEST_F(e2e_fixture, test_create_cloud_topic) {
     wait_for_leader(ntp).get();
 
     auto partition = app.partition_manager.local().get(ntp);
-    ASSERT_TRUE(partition->ctp_stm_api() != nullptr);
+    ASSERT_TRUE(
+      partition->raft()
+        ->stm_manager()
+        ->get<experimental::cloud_topics::ctp_stm>()
+      != nullptr);
 }
 
 TEST_F(e2e_fixture, test_l0_path) {

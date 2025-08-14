@@ -7,7 +7,6 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
     ],
-    include_prefix = "kafka/server/tests",
     deps = [
         "//src/v/kafka/protocol:describe_configs",
         "//src/v/kafka/server",
@@ -21,7 +20,6 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
     ],
-    include_prefix = "kafka/server/tests",
     deps = [
         "//src/v/cluster",
         "//src/v/redpanda/tests:fixture",
@@ -44,7 +42,6 @@ redpanda_test_cc_library(
     ],
     implementation_deps = [
     ],
-    include_prefix = "kafka/server/tests",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

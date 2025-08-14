@@ -7,7 +7,6 @@ redpanda_cc_library(
     hdrs = [
         "conversion_outcome.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/iceberg:values",
@@ -23,7 +22,6 @@ redpanda_cc_library(
     hdrs = [
         "protobuf_utils.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = [":__subpackages__"],
     deps = [
         "@protobuf",
@@ -38,7 +36,6 @@ redpanda_cc_library(
     hdrs = [
         "schema_avro.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -57,7 +54,6 @@ redpanda_cc_library(
     hdrs = [
         "schema_parquet.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/iceberg:datatypes",
@@ -73,7 +69,6 @@ redpanda_cc_library(
     hdrs = [
         "schema_protobuf.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -95,7 +90,6 @@ redpanda_cc_library(
         "//src/v/iceberg:avro_decimal",
         "//src/v/serde/avro",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -112,7 +106,6 @@ redpanda_cc_library(
     hdrs = [
         "values_parquet.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -130,7 +123,6 @@ redpanda_cc_library(
     hdrs = [
         "values_protobuf.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -161,7 +153,6 @@ redpanda_cc_library(
         "@fmt",
         "@seastar",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -177,7 +168,6 @@ redpanda_cc_library(
     hdrs = [
         "schema_json.h",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -199,7 +189,6 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf_parser",
         "//src/v/serde/json:parser",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",
@@ -222,7 +211,6 @@ redpanda_cc_library(
     implementation_deps = [
         "@abseil-cpp//absl/time",
     ],
-    include_prefix = "iceberg/conversion",
     visibility = ["//visibility:public"],
     deps = [
         ":conversion_outcome",

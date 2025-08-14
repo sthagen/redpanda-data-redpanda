@@ -7,7 +7,6 @@ redpanda_cc_library(
     hdrs = [
         "object_id.h",
     ],
-    include_prefix = "cloud_topics/level_one/common",
     deps = [
         "//src/v/base",
         "//src/v/utils:named_type",
@@ -23,7 +22,6 @@ redpanda_cc_library(
     hdrs = [
         "object_utils.h",
     ],
-    include_prefix = "cloud_topics/level_one/common",
     visibility = [
         "//src/v/cloud_topics/level_one:__subpackages__",
         "//src/v/cloud_topics/level_zero/reconciler:__subpackages__",
@@ -50,7 +48,6 @@ redpanda_cc_library(
         "//src/v/serde:vector",
         "//src/v/storage:record_batch_builder",
     ],
-    include_prefix = "cloud_topics/level_one/common",
     deps = [
         "//src/v/base",
         "//src/v/container:chunked_vector",
@@ -66,7 +63,6 @@ redpanda_cc_library(
     name = "abstract_io",
     srcs = ["abstract_io.cc"],
     hdrs = ["abstract_io.h"],
-    include_prefix = "cloud_topics/level_one/common",
     deps = [
         ":object_id",
         "//src/v/container:chunked_vector",
@@ -79,7 +75,6 @@ redpanda_cc_library(
     name = "file_io",
     srcs = ["file_io.cc"],
     hdrs = ["file_io.h"],
-    include_prefix = "cloud_topics/level_one/common",
     deps = [
         ":abstract_io",
         ":object_id",
@@ -98,7 +93,6 @@ redpanda_cc_library(
     name = "fake_io",
     srcs = ["fake_io.cc"],
     hdrs = ["fake_io.h"],
-    include_prefix = "cloud_topics/level_one/common",
     deps = [
         ":abstract_io",
         ":object_id",

@@ -10,6 +10,7 @@
 #include "serde/protobuf/json.h"
 #include "serde/json/writer.h"
 #include "serde/json/parser.h"
+#include "utils/to_string.h"
 
 #include <algorithm>
 #include <fmt/format.h>
@@ -25,6 +26,9 @@ bool a::operator==(const a&) const = default;
 c& a::get_c() { return c_; }
 const c& a::get_c() const { return c_; }
 void a::set_c(c&& v) { c_ = std::move(v); }
+fmt::iterator a::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{c: {}}}", c_);
+}
 seastar::future<> a::from_proto(serde::pb::wire_format_parser* parser, a* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -116,6 +120,9 @@ void b::set_c(c&& v) { c_ = std::move(v); }
 a& b::get_a() { return a_; }
 const a& b::get_a() const { return a_; }
 void b::set_a(a&& v) { a_ = std::move(v); }
+fmt::iterator b::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{c: {}, a: {}}}", c_, a_);
+}
 seastar::future<> b::from_proto(serde::pb::wire_format_parser* parser, b* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -228,6 +235,9 @@ c::c(c&&) noexcept = default;
 c& c::operator=(c&&) noexcept = default;
 c::~c() noexcept = default;
 bool c::operator==(const c&) const = default;
+fmt::iterator c::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{}}");
+}
 seastar::future<> c::from_proto(serde::pb::wire_format_parser* parser, c* self) {
   std::ignore = self;
   while (parser->bytes_left() > 0) {
@@ -282,6 +292,86 @@ seastar::future<c> c::from_json(iobuf data) {
   co_return self;
 }
 
+super_duper_secret::super_duper_secret() noexcept = default;
+super_duper_secret::super_duper_secret(super_duper_secret&&) noexcept = default;
+super_duper_secret& super_duper_secret::operator=(super_duper_secret&&) noexcept = default;
+super_duper_secret::~super_duper_secret() noexcept = default;
+bool super_duper_secret::operator==(const super_duper_secret&) const = default;
+ss::sstring& super_duper_secret::get_value() { return value_; }
+const ss::sstring& super_duper_secret::get_value() const { return value_; }
+void super_duper_secret::set_value(ss::sstring&& v) { value_ = std::move(v); }
+fmt::iterator super_duper_secret::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{value: {}}}", "<redacted>");
+}
+seastar::future<> super_duper_secret::from_proto(serde::pb::wire_format_parser* parser, super_duper_secret* self) {
+  while (parser->bytes_left() > 0) {
+    auto tag = parser->read_tag();
+    switch (tag.field_number) {
+    case 1: { // value
+      self->set_value(parser->read_string<"example.SuperDuperSecret.value">(tag));
+      break;
+    }
+    default:
+      parser->skip_unknown(tag);
+      break;
+    }
+  }
+  co_return;
+}
+seastar::future<super_duper_secret> super_duper_secret::from_proto(iobuf buf) {
+  super_duper_secret self;
+  serde::pb::wire_format_parser parser{std::move(buf)};
+  co_await from_proto(&parser, &self);
+  parser.check_empty();
+  co_return self;
+}
+seastar::future<iobuf> super_duper_secret::to_proto() const {
+  iobuf buf;
+  // value
+  serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+  serde::pb::write_length(static_cast<int32_t>(get_value().size()), &buf);
+  buf.append(get_value().data(), get_value().size());
+  co_return buf;
+}
+seastar::future<iobuf> super_duper_secret::to_json() const {
+  serde::json::writer w;
+  w.begin_object();
+  w.key("value");
+  w.string(get_value());
+  w.end_object();
+  co_return std::move(w).finish();
+}
+seastar::future<> super_duper_secret::from_json(serde::pb::json::peekable_parser* parser, super_duper_secret* self) {
+  constexpr static auto key_to_field_number = std::to_array<std::pair<std::string_view, int32_t>>({
+    {"value", 1},
+  });
+  auto entries = serde::pb::json::object_key_generator(parser);
+  while (auto key = co_await entries()) {
+    auto fields = std::ranges::equal_range(key_to_field_number, *key, std::less<>(), [](const auto& pair) { return pair.first; });
+    if (fields.empty()) {
+      co_await parser->skip_value();
+      continue;
+    }
+    switch (fields.front().second) {
+    case 1: { // value
+      co_await parser->next();
+      self->set_value(serde::pb::json::read_string(parser));
+      break;
+    }
+    default:
+      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+    }
+  }
+  co_return;
+}
+seastar::future<super_duper_secret> super_duper_secret::from_json(iobuf data) {
+  super_duper_secret self;
+  serde::pb::json::peekable_parser parser(std::move(data));
+  co_await from_json(&parser, &self);
+  co_await serde::pb::json::check_next_eof(&parser);
+  co_return self;
+}
+
 well_known_protos::well_known_protos() noexcept = default;
 well_known_protos::well_known_protos(well_known_protos&&) noexcept = default;
 well_known_protos& well_known_protos::operator=(well_known_protos&&) noexcept = default;
@@ -314,6 +404,9 @@ void well_known_protos::set_repeated_timestamp(chunked_vector<absl::Time>&& v) {
 chunked_hash_map<ss::sstring, absl::Time>& well_known_protos::get_timestamp_map() { return timestamp_map_; }
 const chunked_hash_map<ss::sstring, absl::Time>& well_known_protos::get_timestamp_map() const { return timestamp_map_; }
 void well_known_protos::set_timestamp_map(chunked_hash_map<ss::sstring, absl::Time>&& v) { timestamp_map_ = std::move(v); }
+fmt::iterator well_known_protos::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{single_duration: {}, repeated_duration: {}, duration_map: {}, single_field_mask: {}, repeated_field_mask: {}, field_mask_map: {}, single_timestamp: {}, repeated_timestamp: {}, timestamp_map: {}}}", single_duration_, repeated_duration_, duration_map_, single_field_mask_, repeated_field_mask_, field_mask_map_, single_timestamp_, repeated_timestamp_, timestamp_map_);
+}
 seastar::future<> well_known_protos::from_proto(serde::pb::wire_format_parser* parser, well_known_protos* self) {
   while (parser->bytes_left() > 0) {
     auto tag = parser->read_tag();
@@ -882,6 +975,7 @@ void enum_from_json(serde::pb::json::peekable_parser* p, corpus* e) {
     throw std::runtime_error(fmt::format("unexpected json token for enum, got: {}", p->token()));
   }
 }
+int32_t format_as(corpus e) { return std::to_underlying(e); }
 
 void enum_from_proto(iobuf_parser* p, protobuf3_test* e) {
   auto v = serde::pb::read_varint<int32_t, serde::pb::zigzag::no>(p);
@@ -947,6 +1041,7 @@ void enum_from_json(serde::pb::json::peekable_parser* p, protobuf3_test* e) {
     throw std::runtime_error(fmt::format("unexpected json token for enum, got: {}", p->token()));
   }
 }
+int32_t format_as(protobuf3_test e) { return std::to_underlying(e); }
 
 void enum_from_proto(iobuf_parser* p, proto3_test* e) {
   auto v = serde::pb::read_varint<int32_t, serde::pb::zigzag::no>(p);
@@ -1011,6 +1106,7 @@ void enum_from_json(serde::pb::json::peekable_parser* p, proto3_test* e) {
     throw std::runtime_error(fmt::format("unexpected json token for enum, got: {}", p->token()));
   }
 }
+int32_t format_as(proto3_test e) { return std::to_underlying(e); }
 
 } // proto::example
 // NOLINTEND(*-avoid-magic-numbers)

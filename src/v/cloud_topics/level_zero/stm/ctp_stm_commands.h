@@ -10,34 +10,37 @@
 
 #pragma once
 
-#include "cloud_topics/level_zero/stm/dl_version.h"
+#include "cloud_topics/level_zero/stm/types.h"
+#include "model/fundamental.h"
 #include "serde/envelope.h"
+
+#include <utility>
 
 namespace experimental::cloud_topics {
 
-struct start_snapshot_cmd
+using cmd_key = named_type<uint8_t, struct cmd_key_tag>;
+
+/// This command advances LRO (Last Reconciled Offset) in the ctp_stm.
+/// The command is replicated by the reconciler and is used to
+/// notify the ctp_stm about the new LRO. This is needed to ensure that
+/// the max_collectible_offset could be advanced and the local retention
+/// could be applied. It's also used in computation of the min epoch.
+struct advance_reconciled_offset_cmd
   : public serde::envelope<
-      start_snapshot_cmd,
+      advance_reconciled_offset_cmd,
       serde::version<0>,
       serde::compat_version<0>> {
-    start_snapshot_cmd() noexcept = default;
+    static constexpr cmd_key key = cmd_key(
+      std::to_underlying(ctp_stm_key::advance_reconciled_offset));
 
-    auto serde_fields() { return std::tie(); }
-};
+    advance_reconciled_offset_cmd() noexcept = default;
 
-struct remove_snapshots_before_version_cmd
-  : public serde::envelope<
-      remove_snapshots_before_version_cmd,
-      serde::version<0>,
-      serde::compat_version<0>> {
-    remove_snapshots_before_version_cmd() noexcept = default;
-    explicit remove_snapshots_before_version_cmd(
-      dl_version last_version_to_keep)
-      : last_version_to_keep(last_version_to_keep) {}
+    explicit advance_reconciled_offset_cmd(kafka::offset lro) noexcept
+      : last_reconciled_offset(lro) {}
 
-    auto serde_fields() { return std::tie(last_version_to_keep); }
+    auto serde_fields() { return std::tie(last_reconciled_offset); }
 
-    dl_version last_version_to_keep{};
+    kafka::offset last_reconciled_offset;
 };
 
 } // namespace experimental::cloud_topics

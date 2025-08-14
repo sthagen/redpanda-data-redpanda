@@ -103,7 +103,6 @@ redpanda_test_cc_library(
         "//src/v/test_utils:runfiles",
         "//src/v/utils:file_io",
     ],
-    include_prefix = "serde/json/tests",
     visibility = ["//visibility:private"],
     deps = [
         "//src/v/bytes:iobuf",
@@ -124,7 +123,6 @@ redpanda_test_cc_library(
         "@abseil-cpp//absl/strings",
         "@seastar",
     ],
-    include_prefix = "serde/json/tests",
     visibility = ["//visibility:private"],
     deps = [
         "//src/v/bytes:hash",
@@ -147,7 +145,6 @@ redpanda_test_cc_library(
         "//src/v/container:chunked_vector",
         "//src/v/serde/json:parser",
     ],
-    include_prefix = "serde/json/tests",
     visibility = ["//visibility:private"],
     deps = [
         ":dom",
@@ -195,7 +192,6 @@ redpanda_test_cc_library(
         "//src/v/serde/json:parser",
         "@rapidjson",
     ],
-    include_prefix = "serde/json/tests",
     visibility = ["//visibility:private"],
     deps = [
         ":dom",

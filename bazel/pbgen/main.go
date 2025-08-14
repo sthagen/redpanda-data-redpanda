@@ -150,6 +150,11 @@ func (b *codewriter) Reset() {
 
 // ----------------------------------------------------------
 
+func isDebugRedacted(f protoreflect.FieldDescriptor) bool {
+	opts := f.Options().(*descriptorpb.FieldOptions)
+	return opts.GetDebugRedact()
+}
+
 func isPtr(f protoreflect.FieldDescriptor) bool {
 	opts := f.Options().(*descriptorpb.FieldOptions)
 	if opts == nil {
@@ -322,6 +327,7 @@ func (g *headerGenerator) generateFile(w *codewriter) {
 		w.PreludePrintln()
 		w.PreludePrintln(`#pragma once`)
 		w.PreludePrintln()
+		w.PreludePrintln(`#include "base/format_to.h"`)
 		w.PreludePrintln(`#include "bytes/iobuf.h"`)
 		if g.needsChunkedHashMap {
 			w.PreludePrintln(`#include "container/chunked_hash_map.h"`)
@@ -448,6 +454,8 @@ func (g *headerGenerator) generateEnumSerde(msg protoreflect.EnumDescriptor, w *
 	w.Println("// Returns the name of the enum value")
 	w.Printf("std::string_view enum_to_string(const %s&);\n", cppName)
 	w.Printf("void enum_from_json(serde::pb::json::peekable_parser*, %s*);\n", cppName)
+	// TODO: When we've upgraded to libfmt 11 we can change this to return std::string_view
+	w.Printf("int32_t format_as(%s);\n", cppName)
 }
 
 func (g *headerGenerator) generateEnum(enum protoreflect.EnumDescriptor, w *codewriter) {
@@ -496,7 +504,8 @@ func (g *headerGenerator) generateMessage(msg protoreflect.MessageDescriptor, w 
 	w.Printf("%s& operator=(%s&&) noexcept;\n", typeName, typeName)
 	w.Printf("~%s() noexcept;\n", typeName)
 	w.Println()
-	w.Printf("bool operator==(const %s&) const;", typeName)
+	w.Printf("bool operator==(const %s&) const;\n", typeName)
+	w.Println("fmt::iterator format_to(fmt::iterator) const;")
 	w.Println()
 	w.Printf("// Serializes %s into a protocol buffer, in a way that will not cause stalls for large messages.\n", msg.FullName())
 	w.Println("seastar::future<iobuf> to_proto() const;")
@@ -607,6 +616,7 @@ func (g *implGenerator) generateFile(w *codewriter) {
 		w.PreludePrintln(`#include "serde/protobuf/json.h"`)
 		w.PreludePrintln(`#include "serde/json/writer.h"`)
 		w.PreludePrintln(`#include "serde/json/parser.h"`)
+		w.PreludePrintln(`#include "utils/to_string.h"`)
 		if g.needsRpcs {
 			w.PreludePrintln(`#include "bytes/iostream.h"`)
 			w.PreludePrintln(`#include "base/units.h"`)
@@ -638,6 +648,7 @@ func (g *implGenerator) generateFile(w *codewriter) {
 		g.generateEnumWrite(enum, w)
 		g.generateEnumToString(enum, w)
 		g.generateEnumFromJson(enum, w)
+		w.Printf("int32_t format_as(%s e) { return std::to_underlying(e); }\n", cppTypeName(enum))
 		w.Println()
 	}
 	for i := range g.file.Services().Len() {
@@ -1609,41 +1620,81 @@ func (g *implGenerator) generateMessageReadHelper(msg protoreflect.MessageDescri
 }
 
 func (g *implGenerator) generateMessage(msg protoreflect.MessageDescriptor, w *codewriter) {
-	typeName := cppTypeName(msg)
-	w.Printf("%s::%s() noexcept = default;\n", typeName, typeName)
-	w.Printf("%s::%s(%s&&) noexcept = default;\n", typeName, typeName, typeName)
-	w.Printf("%s& %s::operator=(%s&&) noexcept = default;\n", typeName, typeName, typeName)
-	w.Printf("%s::~%s() noexcept = default;\n", typeName, typeName)
-	w.Printf("bool %s::operator==(const %s&) const = default;\n", typeName, typeName)
+	parentType := cppTypeName(msg)
+	w.Printf("%s::%s() noexcept = default;\n", parentType, parentType)
+	w.Printf("%s::%s(%s&&) noexcept = default;\n", parentType, parentType, parentType)
+	w.Printf("%s& %s::operator=(%s&&) noexcept = default;\n", parentType, parentType, parentType)
+	w.Printf("%s::~%s() noexcept = default;\n", parentType, parentType)
+	w.Printf("bool %s::operator==(const %s&) const = default;\n", parentType, parentType)
+	type FmtField struct {
+		displayName string
+		argValue    string
+	}
+	fmtFields := []FmtField{}
 	oneofs := map[protoreflect.Name]bool{}
 	for i := range msg.Fields().Len() {
 		field := msg.Fields().Get(i)
-		typ, trivial := g.translateType(field)
+		fieldType, trivial := g.translateType(field)
 		if oneof := field.ContainingOneof(); oneof != nil {
 			if !oneofs[oneof.Name()] {
 				oneofs[oneof.Name()] = true
+				fmtFields = append(fmtFields, FmtField{
+					displayName: string(oneof.Name()),
+					argValue:    fmt.Sprintf("%s_", oneof.Name()),
+				})
 			}
 			idx := getOneofFieldVariantIndex(oneof, field)
-			w.Printf("bool %s::has_%s() const { return %s_.index() == %d; }\n", typeName, field.Name(), oneof.Name(), idx)
+			w.Printf("bool %s::has_%s() const { return %s_.index() == %d; }\n", parentType, field.Name(), oneof.Name(), idx)
 			if trivial {
-				w.Printf("%s %s::get_%s() const { return std::get<%d>(%s_); }\n", typ, typeName, field.Name(), idx, oneof.Name())
-				w.Printf("void %s::set_%s(%s v) { %s_.emplace<%d>(v); }\n", typeName, field.Name(), typ, oneof.Name(), idx)
+				w.Printf("%s %s::get_%s() const { return std::get<%d>(%s_); }\n", fieldType, parentType, field.Name(), idx, oneof.Name())
+				w.Printf("void %s::set_%s(%s v) { %s_.emplace<%d>(v); }\n", parentType, field.Name(), fieldType, oneof.Name(), idx)
 			} else {
-				w.Printf("%s& %s::get_%s() { return std::get<%d>(%s_); }\n", typ, typeName, field.Name(), idx, oneof.Name())
-				w.Printf("const %s& %s::get_%s() const { return std::get<%d>(%s_); }\n", typ, typeName, field.Name(), idx, oneof.Name())
-				w.Printf("void %s::set_%s(%s&& v) { %s_.emplace<%d>(std::move(v)); }\n", typeName, field.Name(), typ, oneof.Name(), idx)
+				w.Printf("%s& %s::get_%s() { return std::get<%d>(%s_); }\n", fieldType, parentType, field.Name(), idx, oneof.Name())
+				w.Printf("const %s& %s::get_%s() const { return std::get<%d>(%s_); }\n", fieldType, parentType, field.Name(), idx, oneof.Name())
+				w.Printf("void %s::set_%s(%s&& v) { %s_.emplace<%d>(std::move(v)); }\n", parentType, field.Name(), fieldType, oneof.Name(), idx)
 			}
 		} else {
+			argValue := fmt.Sprintf("%s_", field.Name())
+			if isDebugRedacted(field) {
+				argValue = `"<redacted>"`
+			}
+			fmtFields = append(fmtFields, FmtField{
+				displayName: string(field.Name()),
+				argValue:    argValue,
+			})
 			if trivial {
-				w.Printf("%s %s::get_%s() const { return %s_; }\n", typ, typeName, field.Name(), field.Name())
-				w.Printf("void %s::set_%s(%s v) { %s_ = v; }\n", typeName, field.Name(), typ, field.Name())
+				w.Printf("%s %s::get_%s() const { return %s_; }\n", fieldType, parentType, field.Name(), field.Name())
+				w.Printf("void %s::set_%s(%s v) { %s_ = v; }\n", parentType, field.Name(), fieldType, field.Name())
 			} else {
-				w.Printf("%s& %s::get_%s() { return %s_; }\n", typ, typeName, field.Name(), field.Name())
-				w.Printf("const %s& %s::get_%s() const { return %s_; }\n", typ, typeName, field.Name(), field.Name())
-				w.Printf("void %s::set_%s(%s&& v) { %s_ = std::move(v); }\n", typeName, field.Name(), typ, field.Name())
+				w.Printf("%s& %s::get_%s() { return %s_; }\n", fieldType, parentType, field.Name(), field.Name())
+				w.Printf("const %s& %s::get_%s() const { return %s_; }\n", fieldType, parentType, field.Name(), field.Name())
+				w.Printf("void %s::set_%s(%s&& v) { %s_ = std::move(v); }\n", parentType, field.Name(), fieldType, field.Name())
 			}
 		}
 	}
+	w.Printf("fmt::iterator %s::format_to(fmt::iterator it) const {\n", parentType)
+	defer w.Println("}")
+	w.Indent()
+	defer w.Dedent()
+	var fmtSpec strings.Builder
+	var fmtArgs strings.Builder
+	fmtSpec.WriteString("{{")
+	for i, f := range fmtFields {
+		if i > 0 {
+			fmtSpec.WriteString(", ")
+			fmtArgs.WriteString(", ")
+		}
+		fmtSpec.WriteString(f.displayName)
+		fmtSpec.WriteString(": {}")
+		fmtArgs.WriteString(f.argValue)
+	}
+	fmtSpec.WriteString("}}")
+	if len(fmtFields) == 0 {
+		w.Printf("return fmt::format_to(it, %q);\n", fmtSpec.String())
+	} else {
+		w.Printf("return fmt::format_to(it, %q, %s);\n", fmtSpec.String(), fmtArgs.String())
+	}
+
 }
 
 func (g *implGenerator) generateMessageRead(msg protoreflect.MessageDescriptor, w *codewriter) {

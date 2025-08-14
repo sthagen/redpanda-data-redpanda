@@ -4,7 +4,6 @@ load("//src/v/rpc:compiler.bzl", "redpanda_cc_rpc_library")
 redpanda_cc_rpc_library(
     name = "transform_rpc",
     src = "rpc.json",
-    include_prefix = "transform/rpc",
 )
 
 redpanda_cc_library(
@@ -23,7 +22,6 @@ redpanda_cc_library(
         "serde.h",
         "service.h",
     ],
-    include_prefix = "transform/rpc",
     visibility = ["//visibility:public"],
     deps = [
         ":transform_rpc",
