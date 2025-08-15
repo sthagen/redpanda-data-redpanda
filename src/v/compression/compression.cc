@@ -19,6 +19,8 @@
 
 #include <seastar/util/log.hh>
 
+#include <utility>
+
 namespace compression {
 
 /*
@@ -36,20 +38,16 @@ ss::logger complog{"compression"};
 
 iobuf compressor::compress(const iobuf& io, type t) {
     switch (t) {
-    case type::none:
-        throw std::runtime_error("compressor: nothing to compress for 'none'");
     case type::gzip:
         return internal::gzip_compressor::compress(io);
-    case type::snappy:
+    case type::java_snappy:
         return internal::snappy_java_compressor::compress(io);
     case type::lz4:
         return internal::lz4_frame_compressor::compress(io);
     case type::zstd:
         return internal::zstd_compressor::compress(io);
-    default:
-        vlog(complog.error, "Cannot compress type {}", t);
-        vassert(false, "Cannot compress type {}", t);
     }
+    vassert(false, "Unknown compression type {}", t);
 }
 iobuf compressor::uncompress(const iobuf& io, type t) {
     if (io.empty()) {
@@ -57,27 +55,20 @@ iobuf compressor::uncompress(const iobuf& io, type t) {
           fmt::format("Asked to decompress:{} an empty buffer:{}", (int)t, io));
     }
     switch (t) {
-    case type::none:
-        throw std::runtime_error(
-          "compressor: nothing to uncompress for 'none'");
     case type::gzip:
         return internal::gzip_compressor::uncompress(io);
-    case type::snappy:
+    case type::java_snappy:
         return internal::snappy_java_compressor::uncompress(io);
     case type::lz4:
         return internal::lz4_frame_compressor::uncompress(io);
     case type::zstd:
         return internal::zstd_compressor::uncompress(io);
-    default:
-        vassert(false, "Cannot uncompress type {}", t);
     }
+    vassert(false, "Unknown uncompression type {}", t);
 }
 
 ss::future<iobuf> stream_compressor::compress(iobuf io, type t) {
     switch (t) {
-    case type::none:
-        return ss::make_exception_future<iobuf>(
-          std::runtime_error("compressor: nothing to compress for 'none'"));
     case type::zstd:
         return compression::async_stream_zstd_instance().compress(
           std::move(io));
@@ -97,6 +88,20 @@ ss::future<iobuf> stream_compressor::uncompress(iobuf io, type t) {
     default:
         return ss::make_ready_future<iobuf>(compressor::uncompress(io, t));
     }
+}
+
+std::ostream& operator<<(std::ostream& os, const type& c) {
+    switch (c) {
+    case type::gzip:
+        return os << "gzip";
+    case type::java_snappy:
+        return os << "java_snappy";
+    case type::lz4:
+        return os << "lz4";
+    case type::zstd:
+        return os << "zstd";
+    }
+    return os << "compression::type::unknown(" << std::to_underlying(c) << ")";
 }
 
 } // namespace compression

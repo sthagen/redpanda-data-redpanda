@@ -356,19 +356,11 @@ model::record_batch transformed_data::make_batch(
 
     header.last_offset_delta = i - 1;
     header.record_count = i;
-    header.size_bytes = int32_t(
-      model::packed_record_batch_header_size + serialized_records.size_bytes());
-
-    auto batch = model::record_batch(
+    header.reset_size_checksum_metadata(serialized_records);
+    return model::record_batch(
       header,
       std::move(serialized_records),
       model::record_batch::tag_ctor_ng{});
-
-    // Recompute the crc
-    batch.header().crc = model::crc_record_batch(batch);
-    batch.header().header_crc = model::internal_header_only_crc(batch.header());
-
-    return batch;
 }
 
 transformed_data transformed_data::from_record(record r) {

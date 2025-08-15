@@ -120,7 +120,7 @@ public:
       cloud_storage_clients::bucket_name bucket,
       ss::gate& gate_root,
       retry_chain_node& parent,
-      storage::opt_abort_source_t as);
+      model::opt_abort_source_t as);
 
     partition_downloader(const partition_downloader&) = delete;
     partition_downloader(partition_downloader&&) = delete;
@@ -228,7 +228,7 @@ private:
     ss::gate& _gate;
     retry_chain_node _rtcnode;
     retry_chain_logger _ctxlog;
-    storage::opt_abort_source_t _as;
+    model::opt_abort_source_t _as;
 };
 
 } // namespace cloud_storage

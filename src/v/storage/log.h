@@ -88,7 +88,7 @@ public:
     virtual ss::future<> apply_segment_ms() = 0;
 
     virtual ss::future<model::record_batch_reader>
-      make_reader(log_reader_config) = 0;
+      make_reader(local_log_reader_config) = 0;
     virtual log_appender make_appender(log_append_config) = 0;
 
     // final operation. Invalid filesystem state after

@@ -13,6 +13,7 @@
 #include "cloud_storage/types.h"
 #include "cluster/partition.h"
 #include "cluster/rm_stm.h"
+#include "kafka/data/log_reader_config.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/server/errors.h"
 #include "logger.h"
@@ -27,6 +28,44 @@
 #include <seastar/core/future.hh>
 
 #include <optional>
+
+namespace {
+
+storage::local_log_reader_config kafka_to_local_log_reader_config(
+  kafka::log_reader_config cfg,
+  ss::lw_shared_ptr<const storage::offset_translator_state> ot_state) {
+    auto start_offset = ot_state->to_log_offset(
+      kafka::offset_cast(cfg.start_offset));
+    auto max_offset = ot_state->to_log_offset(
+      kafka::offset_cast(cfg.max_offset));
+
+    return storage::local_log_reader_config(
+      /*start_offset=*/start_offset,
+      /*max_offset=*/max_offset,
+      /*min_bytes=*/cfg.min_bytes,
+      /*max_bytes=*/cfg.max_bytes,
+      /*type_filter=*/std::nullopt,
+      /*first_timestamp=*/cfg.first_timestamp,
+      /*abort_source=*/cfg.abort_source,
+      /*client_address=*/cfg.client_address,
+      /*strict_max_bytes=*/cfg.strict_max_bytes);
+}
+
+cloud_storage::cloud_log_reader_config
+kafka_to_cloud_log_reader_config(kafka::log_reader_config cfg) {
+    return cloud_storage::cloud_log_reader_config(
+      /*start_offset=*/cfg.start_offset,
+      /*max_offset=*/cfg.max_offset,
+      /*min_bytes=*/cfg.min_bytes,
+      /*max_bytes=*/cfg.max_bytes,
+      /*type_filter=*/std::nullopt,
+      /*first_timestamp=*/cfg.first_timestamp,
+      /*abort_source=*/cfg.abort_source,
+      /*client_address=*/cfg.client_address,
+      /*strict_max_bytes=*/cfg.strict_max_bytes);
+}
+
+} // namespace
 
 namespace kafka {
 replicated_partition::replicated_partition(
@@ -165,7 +204,7 @@ kafka::leader_epoch replicated_partition::leader_epoch() const {
 
 // TODO: use previous translation speed up lookup
 ss::future<storage::translating_reader> replicated_partition::make_reader(
-  storage::log_reader_config cfg,
+  kafka::log_reader_config cfg,
   std::optional<model::timeout_clock::time_point> debounce_deadline) {
     if (
       _partition->is_read_replica_mode_enabled()
@@ -173,23 +212,26 @@ ss::future<storage::translating_reader> replicated_partition::make_reader(
         // No need to translate the offsets in this case since all fetch
         // requestS in read replica are served via remote_partition which
         // does its own translation.
-        co_return co_await _partition->make_cloud_reader(cfg);
+        auto config = kafka_to_cloud_log_reader_config(cfg);
+        co_return co_await _partition->make_cloud_reader(config);
     }
 
     if (
-      may_read_from_cloud(model::offset_cast(cfg.start_offset))
-      && cfg.start_offset >= _partition->start_cloud_offset()) {
-        cfg.type_filter = {model::record_batch_type::raft_data};
+      may_read_from_cloud(cfg.start_offset)
+      && cfg.start_offset
+           >= model::offset_cast(_partition->start_cloud_offset())) {
+        auto config = kafka_to_cloud_log_reader_config(cfg);
+        config.type_filter = {model::record_batch_type::raft_data};
         co_return co_await _partition->make_cloud_reader(
-          cfg, debounce_deadline);
+          config, debounce_deadline);
     }
 
-    cfg.start_offset = _translator->to_log_offset(cfg.start_offset);
-    cfg.max_offset = _translator->to_log_offset(cfg.max_offset);
-    cfg.type_filter = {model::record_batch_type::raft_data};
+    auto config = kafka_to_local_log_reader_config(cfg, _translator);
+    config.type_filter = {model::record_batch_type::raft_data};
+    config.translate_offsets = model::translate_offsets::yes;
 
-    cfg.translate_offsets = storage::translate_offsets::yes;
-    auto rdr = co_await _partition->make_reader(cfg, debounce_deadline);
+    auto rdr = co_await _partition->make_local_reader(
+      std::move(config), debounce_deadline);
     co_return storage::translating_reader(std::move(rdr), _translator);
 }
 

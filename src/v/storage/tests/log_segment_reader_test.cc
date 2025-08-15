@@ -82,7 +82,7 @@ TEST(reader_test, test_can_read_single_batch_smaller_offset) {
 }
 
 TEST(reader_test, test_can_read_single_batch_same_offset) {
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       model::offset(1),
       model::offset(1),
       0,
@@ -101,7 +101,7 @@ TEST(reader_test, test_can_read_single_batch_same_offset) {
 
 TEST(reader_test, test_can_read_multiple_batches) {
     auto batches = model::test::make_random_batches(model::offset(1)).get();
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.front().base_offset(),
       batches.back().last_offset(),
       0,
@@ -119,7 +119,7 @@ TEST(reader_test, test_can_read_multiple_batches) {
 
 TEST(reader_test, test_does_not_read_past_committed_offset_one_segment) {
     auto batches = model::test::make_random_batches(model::offset(2)).get();
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.back().last_offset() + model::offset(1),
       batches.back().last_offset() + model::offset(1),
       0,
@@ -137,7 +137,7 @@ TEST(reader_test, test_does_not_read_past_committed_offset_one_segment) {
 
 TEST(reader_test, test_does_not_read_past_committed_offset_multiple_segments) {
     auto batches = model::test::make_random_batches(model::offset(1), 2).get();
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.back().last_offset(),
       batches.back().last_offset(),
       0,
@@ -157,7 +157,7 @@ TEST(reader_test, test_does_not_read_past_committed_offset_multiple_segments) {
 
 TEST(reader_test, test_does_not_read_past_max_bytes) {
     auto batches = model::test::make_random_batches(model::offset(1), 2).get();
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.front().base_offset(),
       batches.front().last_offset(),
       0,
@@ -177,7 +177,7 @@ TEST(reader_test, test_does_not_read_past_max_bytes) {
 
 TEST(reader_test, test_reads_at_least_one_batch) {
     auto batches = model::test::make_random_batches(model::offset(1), 2).get();
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.front().base_offset(),
       batches.front().last_offset(),
       0,
@@ -197,7 +197,7 @@ TEST(reader_test, test_reads_at_least_one_batch) {
 
 TEST(reader_test, test_read_batch_range) {
     auto batches = model::test::make_random_batches(model::offset(0), 10).get();
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.front().base_offset(),
       batches.back().last_offset(),
       0,
@@ -224,7 +224,7 @@ TEST(reader_test, test_batch_type_filter) {
         batches[i].header().type = model::record_batch_type(i);
     }
 
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.front().base_offset(),
       batches.back().last_offset(),
       0,
@@ -244,7 +244,7 @@ TEST(reader_test, test_batch_type_filter) {
             type_filter = model::record_batch_type(type_wanted.value());
         }
 
-        auto config = log_reader_config(
+        auto config = local_log_reader_config(
           batches.front().base_offset(),
           batches.back().last_offset(),
           0,
@@ -282,7 +282,7 @@ TEST(reader_test, test_batch_type_filter) {
 
 TEST(reader_test, test_does_not_read_past_max_offset) {
     auto batches = model::test::make_random_batches(model::offset(1), 3).get();
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       batches.front().base_offset(),
       batches.back().last_offset(),
       0,
@@ -365,7 +365,7 @@ TEST(reader_test, test_ghost_read_with_index_overflow) {
 
     // Regression test: a bug previously meant that we would seek to an
     // incorrect offset and return the wrong batch.
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       model::offset{100},
       model::offset::max(),
       0,
@@ -416,7 +416,7 @@ TEST(reader_test, test_read_with_index_overflow_base) {
     // Regression test: a bug previously meant that we would seek to an
     // incorrect offset and return the wrong batch even when seeking at the
     // start of the segment.
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       s->offsets().get_base_offset(),
       model::offset::max(),
       0,

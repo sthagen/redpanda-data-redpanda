@@ -1,4 +1,3 @@
-
 /*
  * Copyright 2023 Redpanda Data, Inc.
  *
@@ -582,8 +581,7 @@ raft_node_instance::read_all_data_batches() {
 ss::future<ss::circular_buffer<model::record_batch>>
 raft_node_instance::read_batches_in_range(
   model::offset min, model::offset max) {
-    storage::log_reader_config cfg(min, max);
-
+    storage::local_log_reader_config cfg(min, max);
     auto rdr = co_await _raft->make_reader(cfg);
 
     auto batches = co_await model::consume_reader_to_memory(

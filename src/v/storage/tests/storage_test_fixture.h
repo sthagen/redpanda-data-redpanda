@@ -152,7 +152,7 @@ public:
     chunked_circular_buffer<model::record_batch> read_and_validate_all_batches(
       ss::shared_ptr<storage::log> log, model::offset max_offset) {
         auto lstats = log->offsets();
-        storage::log_reader_config cfg(lstats.start_offset, max_offset);
+        storage::local_log_reader_config cfg(lstats.start_offset, max_offset);
         auto reader = log->make_reader(std::move(cfg)).get();
         return reader.consume(batch_validating_consumer{}, model::no_timeout)
           .get();
@@ -251,7 +251,7 @@ public:
       ss::shared_ptr<storage::log> log,
       model::offset start,
       model::offset end) {
-        storage::log_reader_config cfg(start, end);
+        storage::local_log_reader_config cfg(start, end);
         tlog.info("read_range_to_vector: {}", cfg);
         auto reader = log->make_reader(std::move(cfg)).get();
         return std::move(reader)

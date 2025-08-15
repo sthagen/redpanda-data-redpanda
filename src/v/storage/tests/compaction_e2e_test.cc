@@ -734,7 +734,7 @@ TEST_P(CompactionFilledReaderTest, ReadFilledGaps) {
                                      : model::offset{random_generators::get_int(
                                          start_offset(), log_end_offset())};
 
-        storage::log_reader_config reader_cfg{
+        storage::local_log_reader_config reader_cfg{
           start_offset, end_offset, std::nullopt, std::nullopt};
         reader_cfg.fill_gaps = true;
         auto reader = disk_log.make_reader(reader_cfg).get();
@@ -800,7 +800,7 @@ TEST_F(CompactionFixtureTest, TestReadFilledGapsWithTerms) {
         raft->step_down("test").get();
         RPTEST_REQUIRE_EVENTUALLY(5s, [&] { return raft->is_leader(); });
     }
-    storage::log_reader_config reader_cfg{
+    storage::local_log_reader_config reader_cfg{
       model::offset(0), model::offset::max(), std::nullopt, std::nullopt};
     reader_cfg.fill_gaps = true;
 
@@ -1470,7 +1470,7 @@ TEST_P(
     do_segment_self_compact(segs[0], model::offset::max(), 1ms).get();
 
     {
-        auto seg_0_reader_cfg = storage::log_reader_config(
+        auto seg_0_reader_cfg = storage::local_log_reader_config(
           segs[0]->offsets().get_base_offset(), model::offset::max());
         auto seg_0_batches = model::consume_reader_to_memory(
                                log->make_reader(seg_0_reader_cfg).get(),
@@ -1653,7 +1653,7 @@ TEST_F(CompactionFixtureParamTest, TestSegmentConcatenation) {
       num_segments, cardinality, batches_per_segment, records_per_batch)
       .get();
 
-    auto reader_cfg = storage::log_reader_config(
+    auto reader_cfg = storage::local_log_reader_config(
       model::offset{0}, model::offset::max());
     auto pre_compact_batches = model::consume_reader_to_chunked_vector(
                                  log->make_reader(reader_cfg).get(),
@@ -1983,7 +1983,7 @@ TEST_F(
 
     // Read log with a log reader.
     auto make_log_reader = [&]() {
-        auto reader_cfg = storage::log_reader_config(
+        auto reader_cfg = storage::local_log_reader_config(
           model::offset{0}, model::offset::max());
 
         reader_cfg.skip_readers_cache = true;
@@ -2003,7 +2003,7 @@ TEST_F(
             if (seg->has_appender()) {
                 break;
             }
-            auto reader_cfg = storage::log_reader_config(
+            auto reader_cfg = storage::local_log_reader_config(
               model::offset{0}, model::offset::max());
 
             reader_cfg.skip_readers_cache = true;
@@ -2106,7 +2106,7 @@ TEST_F(CompactionFixtureTest, TestBatchCacheResetAfterAdjacentMerge) {
         disk_log.segment_self_compact(cfg, s).get();
     }
 
-    auto consume = [&disk_log](storage::log_reader_config cfg) {
+    auto consume = [&disk_log](storage::local_log_reader_config cfg) {
         return disk_log.make_reader(cfg)
           .then([](model::record_batch_reader reader) {
               return model::consume_reader_to_memory(
@@ -2120,7 +2120,7 @@ TEST_F(CompactionFixtureTest, TestBatchCacheResetAfterAdjacentMerge) {
     auto base = model::next_offset(first_seg.offsets().get_base_offset());
     auto end = first_seg.offsets().get_committed_offset();
 
-    storage::log_reader_config reader_cfg(base, end);
+    storage::local_log_reader_config reader_cfg(base, end);
     reader_cfg.skip_readers_cache = true;
 
     auto before_merge = consume(reader_cfg);

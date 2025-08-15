@@ -1753,7 +1753,7 @@ configuration::configuration()
       *this,
       "compaction_ctrl_update_interval_ms",
       "",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       30s)
   , compaction_ctrl_p_coeff(
       *this,
@@ -1761,38 +1761,38 @@ configuration::configuration()
       "Proportional coefficient for compaction PID controller. This must be "
       "negative, because the compaction backlog should decrease when the "
       "number of compaction shares increases.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       -12.5)
   , compaction_ctrl_i_coeff(
       *this,
       "compaction_ctrl_i_coeff",
       "Integral coefficient for compaction PID controller.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       0.0)
   , compaction_ctrl_d_coeff(
       *this,
       "compaction_ctrl_d_coeff",
       "Derivative coefficient for compaction PID controller.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       0.2)
   , compaction_ctrl_min_shares(
       *this,
       "compaction_ctrl_min_shares",
       "Minimum number of I/O and CPU shares that compaction process can use.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       10)
   , compaction_ctrl_max_shares(
       *this,
       "compaction_ctrl_max_shares",
       "Maximum number of I/O and CPU shares that compaction process can use.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1000)
   , compaction_ctrl_backlog_size(
       *this,
       "compaction_ctrl_backlog_size",
       "Target backlog size for compaction controller. If not set the max "
       "backlog size is configured to 80% of total disk space available.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::nullopt)
   , members_backend_retry_ms(
       *this,
@@ -2655,31 +2655,31 @@ configuration::configuration()
       *this,
       "cloud_storage_upload_ctrl_update_interval_ms",
       "",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       60s)
   , cloud_storage_upload_ctrl_p_coeff(
       *this,
       "cloud_storage_upload_ctrl_p_coeff",
       "proportional coefficient for upload PID controller",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       -2.0)
   , cloud_storage_upload_ctrl_d_coeff(
       *this,
       "cloud_storage_upload_ctrl_d_coeff",
       "derivative coefficient for upload PID controller.",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       0.0)
   , cloud_storage_upload_ctrl_min_shares(
       *this,
       "cloud_storage_upload_ctrl_min_shares",
       "minimum number of IO and CPU shares that archival upload can use",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       100)
   , cloud_storage_upload_ctrl_max_shares(
       *this,
       "cloud_storage_upload_ctrl_max_shares",
       "maximum number of IO and CPU shares that archival upload can use",
-      {.visibility = visibility::tunable},
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       1000)
   , retention_local_target_bytes_default(
       *this,

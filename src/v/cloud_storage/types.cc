@@ -297,4 +297,24 @@ std::ostream& operator<<(std::ostream& os, existence_check_type head) {
     }
 }
 
+fmt::iterator cloud_log_reader_config::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "start_offset:{}, max_offset:{}, min_bytes:{}, max_bytes:{}, "
+      "strict_max_bytes:{}, type_filter: {}, first_timestamp:{}, "
+      "bytes_consumed:{}, over_budget:{}, abortable:{}, "
+      "client_address:{}",
+      start_offset,
+      max_offset,
+      min_bytes,
+      max_bytes,
+      strict_max_bytes,
+      type_filter,
+      first_timestamp,
+      bytes_consumed,
+      over_budget,
+      abort_source.has_value(),
+      client_address);
+}
+
 } // namespace cloud_storage

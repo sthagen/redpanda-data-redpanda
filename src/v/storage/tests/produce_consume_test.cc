@@ -46,7 +46,7 @@ TEST(ProduceConsumeTest, produce_consume_concurrency) {
 
     auto consumer = ss::do_for_each(range.begin(), range.end(), [log](int) {
         auto lstats = log->offsets();
-        storage::log_reader_config rdr_cfg(
+        storage::local_log_reader_config rdr_cfg(
           lstats.dirty_offset < model::offset(0)
             ? lstats.dirty_offset
             : lstats.dirty_offset - model::offset(1),

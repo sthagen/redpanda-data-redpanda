@@ -9,10 +9,12 @@
 
 #include "storage/types.h"
 
+#include "base/format_to.h"
 #include "base/vlog.h"
 #include "storage/compacted_index.h"
 #include "storage/logger.h"
 #include "storage/ntp_config.h"
+#include "storage/offset_translator_state.h"
 #include "utils/human.h"
 
 #include <fmt/core.h>
@@ -45,35 +47,26 @@ std::optional<kafka::offset> stm_manager::lowest_pinned_data_offset() const {
     return result;
 }
 
-std::ostream& operator<<(std::ostream& o, const log_reader_config& cfg) {
-    o << "{start_offset:" << cfg.start_offset
-      << ", max_offset:" << cfg.max_offset << ", min_bytes:" << cfg.min_bytes
-      << ", max_bytes:" << cfg.max_bytes << ", type_filter:";
-    if (cfg.type_filter) {
-        o << *cfg.type_filter;
-    } else {
-        o << "nullopt";
-    }
-    o << ", first_timestamp:";
-    if (cfg.first_timestamp) {
-        o << *cfg.first_timestamp;
-    } else {
-        o << "nullopt";
-    }
-    o << ", bytes_consumed:" << cfg.bytes_consumed;
-    o << ", over_budget:" << cfg.over_budget;
-    o << ", strict_max_bytes:" << cfg.strict_max_bytes;
-    o << ", skip_batch_cache:" << cfg.skip_batch_cache;
-    o << ", abortable:" << cfg.abort_source.has_value();
-    o << ", aborted:"
-      << (cfg.abort_source.has_value()
-            ? cfg.abort_source.value().get().abort_requested()
-            : false);
-
-    if (cfg.client_address.has_value()) {
-        o << ", client_address:" << cfg.client_address.value();
-    }
-    return o << "}";
+fmt::iterator local_log_reader_config::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "start_offset:{}, max_offset:{}, min_bytes:{}, max_bytes:{}, "
+      "strict_max_bytes:{}, type_filter: {}, first_timestamp:{}, "
+      "bytes_consumed:{}, over_budget:{}, skip_batch_cache:{}, "
+      "skip_readers_cache:{}, abortable:{}, client_address:{}",
+      start_offset,
+      max_offset,
+      min_bytes,
+      max_bytes,
+      strict_max_bytes,
+      type_filter,
+      first_timestamp,
+      bytes_consumed,
+      over_budget,
+      skip_batch_cache,
+      skip_readers_cache,
+      abort_source.has_value(),
+      client_address);
 }
 
 std::ostream& operator<<(std::ostream& o, const append_result& a) {

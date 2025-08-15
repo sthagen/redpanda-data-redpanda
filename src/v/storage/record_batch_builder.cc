@@ -9,7 +9,7 @@
 
 #include "storage/record_batch_builder.h"
 
-#include "compression/compression.h"
+#include "model/batch_compression.h"
 #include "model/record.h"
 #include "model/record_utils.h"
 #include "model/timeout_clock.h"
@@ -60,16 +60,12 @@ model::record_batch record_batch_builder::build() && {
     if (!_timestamp) {
         _timestamp = model::timestamp::now();
     }
-
-    auto header = build_header();
-
-    if (_compression != model::compression::none) {
-        _records = compression::compressor::compress(_records, _compression);
-    }
-
-    header.reset_size_checksum_metadata(_records);
-    return model::record_batch(
-      header, std::move(_records), model::record_batch::tag_ctor_ng{});
+    return model::compress_batch_sync(
+      _compression,
+      model::record_batch(
+        build_header(),
+        std::move(_records),
+        model::record_batch::tag_ctor_ng{}));
 }
 
 ss::future<model::record_batch> record_batch_builder::build_async() && {
@@ -77,26 +73,22 @@ ss::future<model::record_batch> record_batch_builder::build_async() && {
         _timestamp = model::timestamp::now();
     }
 
-    auto header = build_header();
-
-    if (_compression != model::compression::none) {
-        _records = co_await compression::stream_compressor::compress(
-          std::move(_records), _compression);
-    }
-
-    header.reset_size_checksum_metadata(_records);
-
-    co_return model::record_batch(
-      header, std::move(_records), model::record_batch::tag_ctor_ng{});
+    co_return co_await model::compress_batch(
+      _compression,
+      model::record_batch(
+        build_header(),
+        std::move(_records),
+        model::record_batch::tag_ctor_ng{}));
 }
 
 model::record_batch_header record_batch_builder::build_header() const {
     model::record_batch_header header = {
-      .size_bytes = 0,
+      .size_bytes = static_cast<int32_t>(
+        model::packed_record_batch_header_size + _records.size_bytes()),
       .base_offset = _base_offset,
       .type = _batch_type,
       .crc = 0, // crc computed later
-      .attrs = model::record_batch_attributes{} |= _compression,
+      .attrs = model::record_batch_attributes{},
       .last_offset_delta = _offset_delta - 1,
       .first_timestamp = *_timestamp,
       .max_timestamp = *_timestamp,
@@ -106,15 +98,12 @@ model::record_batch_header record_batch_builder::build_header() const {
       .record_count = _offset_delta,
       .ctx = model::record_batch_header::context(
         model::term_id(0), ss::this_shard_id())};
-
     if (_is_control_type) {
         header.attrs.set_control_type();
     }
-
     if (_transactional_type) {
         header.attrs.set_transactional_type();
     }
-
     return header;
 }
 

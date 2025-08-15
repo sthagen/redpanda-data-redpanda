@@ -180,7 +180,7 @@ struct fetch_config {
     std::optional<model::rack_id> consumer_rack_id;
     std::optional<std::reference_wrapper<ssx::sharded_abort_source>>
       abort_source;
-    std::optional<model::client_address_t> client_address;
+    model::opt_client_address_t client_address;
 
     friend std::ostream& operator<<(std::ostream& o, const fetch_config& cfg) {
         fmt::print(

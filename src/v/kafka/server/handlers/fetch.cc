@@ -89,19 +89,18 @@ static ss::future<read_result> read_from_partition(
         co_return read_result(start_o, hw, lso);
     }
 
-    storage::log_reader_config reader_config(
-      config.start_offset,
-      config.max_offset,
+    kafka::log_reader_config reader_config(
+      model::offset_cast(config.start_offset),
+      model::offset_cast(config.max_offset),
       0,
       config.max_bytes,
       std::nullopt,
-      std::nullopt,
       config.abort_source.has_value()
         ? config.abort_source.value().get().local()
-        : storage::opt_abort_source_t{},
-      config.client_address);
+        : model::opt_abort_source_t{},
+      config.client_address,
+      config.strict_max_bytes);
 
-    reader_config.strict_max_bytes = config.strict_max_bytes;
     auto rdr = co_await part.make_reader(reader_config);
     std::exception_ptr e;
     std::unique_ptr<iobuf> data;

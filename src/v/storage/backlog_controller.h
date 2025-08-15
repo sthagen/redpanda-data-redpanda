@@ -9,6 +9,7 @@
 
 #pragma once
 #include "base/seastarx.h"
+#include "config/property.h"
 #include "metrics/metrics.h"
 
 #include <seastar/core/gate.hh>
@@ -19,27 +20,27 @@
 namespace storage {
 struct backlog_controller_config {
     backlog_controller_config(
-      double proportional_coeff,
-      double integral_coeff,
-      double derivative_coeff,
+      config::binding<double> proportional_coeff,
+      config::binding<double> integral_coeff,
+      config::binding<double> derivative_coeff,
       int64_t normalization_factor,
-      int64_t setpoint,
+      std::function<int64_t()> sp_function,
       int initial_shares,
-      std::chrono::milliseconds sampling_interval,
+      config::binding<std::chrono::milliseconds> sampling_interval,
       ss::scheduling_group sg,
-      int min_shares,
-      int max_shares);
+      config::binding<int16_t> min_shares,
+      config::binding<int16_t> max_shares);
 
-    double proportional_coeff;
-    double integral_coeff;
-    double derivative_coeff;
+    config::binding<double> proportional_coeff;
+    config::binding<double> integral_coeff;
+    config::binding<double> derivative_coeff;
     int64_t normalization_factor;
-    int64_t setpoint;
+    std::function<int64_t()> setpoint_cb;
     int initial_shares;
-    std::chrono::milliseconds sampling_interval;
+    config::binding<std::chrono::milliseconds> sampling_interval;
     ss::scheduling_group scheduling_group;
-    int min_shares;
-    int max_shares;
+    config::binding<int16_t> min_shares;
+    config::binding<int16_t> max_shares;
 };
 /**
  * Backlog controller is PID controller implementation to manage amount of
@@ -91,7 +92,6 @@ public:
     backlog_controller(
       std::unique_ptr<sampler>, ss::logger&, backlog_controller_config);
 
-    void update_setpoint(int64_t);
     ss::future<> start();
     ss::future<> stop();
 
@@ -105,22 +105,14 @@ private:
 
     std::unique_ptr<sampler> _sampler;
     ss::logger& _log;
-    double _proportional_coeff; // controller 'gain' -  proportional coefficient
-    double _integral_coeff;     // integral part coefficient
-    double _derivative_coeff;   // derivative part coefficient
-    int64_t _norm;
-    std::chrono::milliseconds _sampling_interval;
     ss::timer<> _sampling_timer;
-    // controlled resources
-    ss::scheduling_group _scheduling_group;
     // state
+    int _current_shares;
     int64_t _current_backlog{0};
     int64_t _prev_error{0};
     int64_t _error_integral{0};
-    int64_t _setpoint;
-    int _current_shares;
-    int _min_shares;
-    int _max_shares;
+    // configuration
+    backlog_controller_config _cfg;
     ss::gate _gate;
     metrics::internal_metric_groups _metrics;
 };

@@ -12,6 +12,7 @@
 #include "kafka/server/rm_group_frontend.h"
 #include "model/tests/randoms.h"
 #include "redpanda/tests/fixture.h"
+#include "storage/types.h"
 #include "test_utils/scoped_config.h"
 #include "test_utils/test.h"
 
@@ -114,7 +115,7 @@ struct group_manager_fixture
 
         RPTEST_REQUIRE_EVENTUALLY_CORO(10s, [log] {
             auto lstats = log->offsets();
-            storage::log_reader_config cfg(
+            auto cfg = storage::local_log_reader_config(
               lstats.start_offset, lstats.committed_offset);
             return log->make_reader(std::move(cfg)).then([](auto reader) {
                 return std::move(reader).for_each_ref(
@@ -394,7 +395,7 @@ ss::future<> run_workload(
     };
 
     auto lstats = log->offsets();
-    storage::log_reader_config cfg(
+    auto cfg = storage::local_log_reader_config(
       lstats.start_offset, lstats.committed_offset);
     auto reader = co_await log->make_reader(cfg);
     co_await reader.for_each_ref(batch_validator{}, model::no_timeout);

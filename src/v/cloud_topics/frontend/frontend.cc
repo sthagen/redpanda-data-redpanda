@@ -282,7 +282,7 @@ model::term_id frontend::leader_epoch() const {
 }
 
 ss::future<storage::translating_reader> frontend::make_reader(
-  storage::log_reader_config cfg,
+  cloud_topic_log_reader_config cfg,
   std::optional<model::timeout_clock::time_point>) {
     vassert(_data_plane != nullptr, "cloud topics api not initialized");
 

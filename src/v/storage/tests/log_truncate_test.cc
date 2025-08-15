@@ -210,7 +210,7 @@ TEST_F(storage_test_fixture, truncate_before_read) {
         append_random_batches(log, 1, model::term_id(i));
         log->flush().get();
     }
-    storage::log_reader_config cfg(
+    storage::local_log_reader_config cfg(
       model::offset(0), model::model_limits<model::offset>::max());
 
     // first create the reader

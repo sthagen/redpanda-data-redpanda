@@ -254,7 +254,7 @@ void materialized_resources::register_segment(materialized_segment_state& s) {
 namespace {
 
 ss::future<ssx::semaphore_units> get_units_abortable(
-  adjustable_semaphore& sem, ssize_t units, storage::opt_abort_source_t as) {
+  adjustable_semaphore& sem, ssize_t units, model::opt_abort_source_t as) {
     return as.has_value() ? sem.get_units(units, as.value())
                           : sem.get_units(units);
 }
@@ -262,8 +262,7 @@ ss::future<ssx::semaphore_units> get_units_abortable(
 } // namespace
 
 ss::future<segment_reader_units>
-materialized_resources::get_segment_reader_units(
-  storage::opt_abort_source_t as) {
+materialized_resources::get_segment_reader_units(model::opt_abort_source_t as) {
     // Estimate segment reader memory requirements
     auto size_bytes = projected_remote_segment_reader_memory_usage();
     if (_mem_units.available_units() <= size_bytes) {
@@ -281,7 +280,7 @@ materialized_resources::get_segment_reader_units(
 
 ss::future<ssx::semaphore_units>
 materialized_resources::get_partition_reader_units(
-  storage::opt_abort_source_t as) {
+  model::opt_abort_source_t as) {
     auto sz = projected_remote_partition_reader_memory_usage();
     if (_mem_units.available_units() <= sz) {
         // Update metrics counter if we are trying to acquire units while
@@ -293,7 +292,7 @@ materialized_resources::get_partition_reader_units(
 }
 
 ss::future<segment_units>
-materialized_resources::get_segment_units(storage::opt_abort_source_t as) {
+materialized_resources::get_segment_units(model::opt_abort_source_t as) {
     auto sz = projected_remote_segment_memory_usage();
     if (_mem_units.available_units() <= sz) {
         // Update metrics counter if we are trying to acquire units while

@@ -29,8 +29,17 @@ model::record_batch decompress_batch_sync(model::record_batch&&);
 /// \throw std::runtime_error If provided batch is not compressed
 model::record_batch maybe_decompress_batch_sync(const model::record_batch&);
 
-/// \brief batch compression
+// Compress the batch according to the specified compression type.
+//
+// *Always* recomputes the batch CRC and metadata, even if the batch
+// is not compressed.
 ss::future<model::record_batch>
   compress_batch(model::compression, model::record_batch);
+
+// The same as above, but synchronous.
+//
+// Only use in test code.
+model::record_batch
+  compress_batch_sync(model::compression, model::record_batch);
 
 } // namespace model

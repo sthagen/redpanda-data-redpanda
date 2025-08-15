@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "base/seastarx.h"
+#include "config/property.h"
 #include "storage/backlog_controller.h"
 #include "test_utils/async.h"
 
@@ -50,11 +51,24 @@ public:
          * min shares = 10
          * max shares = 800
          */
+        auto mb = [](auto v) { return config::mock_binding(std::move(v)); };
+        auto sp = []() { return 20; };
         auto cfg = storage::backlog_controller_config(
-          -1.0, 0.4, 0.2, 1, 20, 100, 10ms, sg, 10, 800);
+          mb(-1.0),
+          mb(0.4),
+          mb(0.2),
+          1,
+          std::move(sp),
+          100,
+          mb(10ms),
+          sg,
+          mb(int16_t{10}),
+          mb(int16_t{800}));
 
         ctrl = std::make_unique<storage::backlog_controller>(
-          std::make_unique<simple_backlog_sampler>(backlog), ctrl_logger, cfg);
+          std::make_unique<simple_backlog_sampler>(backlog),
+          ctrl_logger,
+          std::move(cfg));
     }
 
     ~backlog_controller_fixture() { ctrl->stop().get(); }

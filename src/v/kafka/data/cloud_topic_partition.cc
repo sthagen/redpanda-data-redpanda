@@ -14,6 +14,7 @@
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_zero/frontend_reader/reader.h"
+#include "cloud_topics/log_reader_config.h"
 #include "cluster/partition.h"
 #include "cluster/rm_stm.h"
 #include "cluster/types.h"
@@ -42,6 +43,24 @@
 #include <iterator>
 #include <optional>
 #include <system_error>
+
+namespace {
+
+experimental::cloud_topics::cloud_topic_log_reader_config
+kafka_to_cloud_topic_log_reader_config(kafka::log_reader_config cfg) {
+    return experimental::cloud_topics::cloud_topic_log_reader_config(
+      /*start_offset=*/cfg.start_offset,
+      /*max_offset=*/cfg.max_offset,
+      /*min_bytes=*/cfg.min_bytes,
+      /*max_bytes=*/cfg.max_bytes,
+      /*type_filter=*/std::nullopt,
+      /*first_timestamp=*/cfg.first_timestamp,
+      /*abort_source=*/cfg.abort_source,
+      /*client_address=*/cfg.client_address,
+      /*strict_max_bytes=*/cfg.strict_max_bytes);
+}
+
+} // namespace
 
 namespace kafka {
 
@@ -119,9 +138,10 @@ kafka::leader_epoch cloud_topic_partition::leader_epoch() const {
 }
 
 ss::future<storage::translating_reader> cloud_topic_partition::make_reader(
-  storage::log_reader_config cfg,
+  kafka::log_reader_config cfg,
   std::optional<model::timeout_clock::time_point> deadline) {
-    return _fe->make_reader(cfg, deadline);
+    auto config = kafka_to_cloud_topic_log_reader_config(cfg);
+    return _fe->make_reader(config, deadline);
 }
 
 ss::future<std::vector<cluster::tx::tx_range>>

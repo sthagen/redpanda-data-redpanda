@@ -282,24 +282,22 @@ ss::future<ss::stop_iteration> copy_data_segment_reducer::filter_and_append(
     ++_stats.batches_processed;
     using stop_t = ss::stop_iteration;
     const auto record_count_before = b.record_count();
-    auto to_copy = co_await filter(std::move(b));
-    if (to_copy == std::nullopt) {
+    auto maybe_batch = co_await filter(std::move(b));
+    if (maybe_batch == std::nullopt) {
         ++_stats.batches_discarded;
         _stats.records_discarded += record_count_before;
         co_return stop_t::no;
     }
-    const auto records_to_remove = record_count_before
-                                   - to_copy->record_count();
+    auto batch = std::move(maybe_batch.value());
+    const auto records_to_remove = record_count_before - batch.record_count();
     _stats.records_discarded += records_to_remove;
-    bool compactible_batch = compaction::is_compactible(
-      _ntp, to_copy.value().header());
+    bool compactible_batch = compaction::is_compactible(_ntp, batch.header());
     if (!compactible_batch) {
         ++_stats.non_compactible_batches;
     }
     if (_compacted_idx && compactible_batch) {
         co_await model::for_each_record(
-          to_copy.value(),
-          [&batch = to_copy.value(), this](const model::record& r) {
+          batch, [&batch, this](const model::record& r) {
               auto& hdr = batch.header();
               return _compacted_idx->index(
                 hdr.type,
@@ -309,8 +307,9 @@ ss::future<ss::stop_iteration> copy_data_segment_reducer::filter_and_append(
                 r.offset_delta());
           });
     }
-    auto batch = co_await model::compress_batch(
-      original, std::move(to_copy.value()));
+    if (original != model::compression::none) {
+        batch = co_await model::compress_batch(original, std::move(batch));
+    }
     const auto start_pos = _appender->file_byte_offset();
     const auto header_size = batch.header().size_bytes;
     _acc += header_size;

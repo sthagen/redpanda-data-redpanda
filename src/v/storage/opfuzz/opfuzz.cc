@@ -230,7 +230,7 @@ struct truncate_op final : opfuzz::op {
     const char* name() const final { return "truncate"; }
     ss::future<> invoke(opfuzz::op_context ctx) final {
         auto lstats = ctx.log->offsets();
-        storage::log_reader_config cfg(
+        storage::local_log_reader_config cfg(
           lstats.start_offset, lstats.dirty_offset);
         vlog(
           fuzzlogger.info,
@@ -306,7 +306,7 @@ struct truncate_prefix_op final : opfuzz::op {
     const char* name() const final { return "truncate_prefix"; }
     ss::future<> invoke(opfuzz::op_context ctx) final {
         auto lstats = ctx.log->offsets();
-        storage::log_reader_config cfg(
+        storage::local_log_reader_config cfg(
           lstats.start_offset, lstats.dirty_offset);
         vlog(
           fuzzlogger.info,
@@ -436,7 +436,7 @@ struct read_op final : opfuzz::op {
             end = lstats.start_offset;
         }
 
-        storage::log_reader_config cfg(start, end);
+        storage::local_log_reader_config cfg(start, end);
         vlog(
           fuzzlogger.info,
           "[{}] - Read [{},{}] - {}",

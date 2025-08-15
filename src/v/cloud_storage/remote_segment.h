@@ -103,7 +103,7 @@ public:
       kafka::offset start,
       kafka::offset end,
       std::optional<model::timestamp>,
-      storage::opt_abort_source_t as);
+      model::opt_abort_source_t as);
 
     /// Hydrates the segment, index or tx-range depending on segment meta
     /// version, returning a future that the caller can use to wait for the
@@ -117,7 +117,7 @@ public:
     /// to old mode where the full segment is hydrated. For v3 or higher
     /// versions, the actual segment data is hydrated by the data source
     /// implementation, but the index is still required to be present first.
-    ss::future<> hydrate(storage::opt_abort_source_t as = std::nullopt);
+    ss::future<> hydrate(model::opt_abort_source_t as = std::nullopt);
 
     /// Hydrate a part of a segment, identified by the given range. The range
     /// can contain data for multiple contiguous chunks, in which case multiple
@@ -372,7 +372,7 @@ class remote_segment_batch_reader final {
 public:
     remote_segment_batch_reader(
       ss::lw_shared_ptr<remote_segment>,
-      const storage::log_reader_config& config,
+      const cloud_storage::cloud_log_reader_config& config,
       partition_probe& probe,
       ts_read_path_probe& ts_probe,
       ssx::semaphore_units) noexcept;
@@ -396,8 +396,10 @@ public:
 
     ss::future<> stop();
 
-    const storage::log_reader_config& config() const { return _config; }
-    storage::log_reader_config& config() { return _config; }
+    const cloud_storage::cloud_log_reader_config& config() const {
+        return _config;
+    }
+    cloud_storage::cloud_log_reader_config& config() { return _config; }
 
     /// Get max offset (redpanda offset)
     model::offset max_rp_offset() const { return _seg->get_max_rp_offset(); }
@@ -441,7 +443,7 @@ private:
     size_t produce(model::record_batch batch);
 
     ss::lw_shared_ptr<remote_segment> _seg;
-    storage::log_reader_config _config;
+    cloud_storage::cloud_log_reader_config _config;
     partition_probe& _probe;
     ts_read_path_probe& _ts_probe;
     chunked_circular_buffer<model::record_batch> _ringbuf;

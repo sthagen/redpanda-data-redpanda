@@ -99,9 +99,9 @@ use_repo(non_module_dependencies, "aarch64_sysroot")
 bazel_dep(name = "toolchains_llvm", version = "1.3.0")
 archive_override(
     module_name = "toolchains_llvm",
-    integrity = "sha256-1KZZFCJdurOKmsTGOqlh+QtE+WIzAtCSHqXSV4XrWS8=",
-    strip_prefix = "toolchains_llvm-c0f336b4a7f96443ee476fbc3130b2d78c762871",
-    urls = ["https://github.com/bazel-contrib/toolchains_llvm/archive/c0f336b4a7f96443ee476fbc3130b2d78c762871.tar.gz"],
+    integrity = "sha256-uX1B8p+idMPln1PCR+Glr+5iXZnvDx6h1h0miiPzWQA=",
+    strip_prefix = "toolchains_llvm-d103be73bce9a804ebc4e57637fbaf9d6f23e682",
+    urls = ["https://github.com/bazel-contrib/toolchains_llvm/archive/d103be73bce9a804ebc4e57637fbaf9d6f23e682.tar.gz"],
 )
 
 # ====================================
@@ -202,6 +202,7 @@ COMPILERS = {
             targets = ["linux-aarch64"],
         ),
         use_repo(llvm, "{version}_llvm_toolchain".format(version = major_version)),
+        use_repo(llvm, "{version}_llvm_toolchain_llvm".format(version = major_version)),
         register_toolchains("@{version}_llvm_toolchain//:all".format(version = major_version)),
     )
     for (major_version, compiler) in COMPILERS.items()

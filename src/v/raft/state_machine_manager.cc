@@ -534,7 +534,8 @@ ss::future<> state_machine_manager::try_apply_in_foreground() {
          * Use default priority for now, it is going to be unified with apply
          * scheduling group soon
          */
-        storage::log_reader_config config(_next, _raft->committed_offset());
+        auto config = storage::local_log_reader_config(
+          _next, _raft->committed_offset());
 
         model::record_batch_reader reader = co_await _raft->make_reader(config);
 
@@ -662,7 +663,7 @@ ss::future<> state_machine_manager::background_apply_fiber(
             }
             continue;
         }
-        storage::log_reader_config config(
+        auto config = storage::local_log_reader_config(
           entry->stm->next(), model::prev_offset(_next));
 
         vlog(

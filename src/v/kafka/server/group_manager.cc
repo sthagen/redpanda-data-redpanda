@@ -42,6 +42,7 @@
 #include "raft/fundamental.h"
 #include "ssx/async_algorithm.h"
 #include "ssx/future-util.h"
+#include "storage/types.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/coroutine.hh>
@@ -981,7 +982,7 @@ ss::future<> group_manager::handle_partition_leader_change(
                  * should be ready to transparently take advantage of
                  * key-based compaction in the future.
                  */
-                storage::log_reader_config reader_config(
+                storage::local_log_reader_config reader_config(
                   p->partition->raft_start_offset(),
                   model::model_limits<model::offset>::max(),
                   0,
@@ -999,7 +1000,7 @@ ss::future<> group_manager::handle_partition_leader_change(
                   expected_to_read,
                   p->partition->log()->offsets(),
                   p->partition->raft()->meta());
-                return p->partition->make_reader(reader_config)
+                return p->partition->make_local_reader(std::move(reader_config))
                   .then([this, term, p, timeout, expected_to_read](
                           model::record_batch_reader reader) {
                       return std::move(reader)

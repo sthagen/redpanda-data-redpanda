@@ -184,8 +184,8 @@ public:
         // It's possible to have the local log was truncated due to delete
         // records, retention, etc. In this event, simply resume from the start
         // of the log.
-        model::offset start_offset = std::max(
-          result.value(), kafka::offset_cast(offset));
+        kafka::offset start_offset = std::max(
+          model::offset_cast(result.value()), offset);
         // Clamp reads to only committed transactions.
         auto maybe_lso = _partition.last_stable_offset();
         if (!maybe_lso) {
@@ -194,7 +194,8 @@ public:
         }
         // It's possible for LSO to be 0, which in this case the previous offset
         // is model::offset::min(), this is the same as the kafka fetch path.
-        model::offset max_offset = model::prev_offset(maybe_lso.value());
+        kafka::offset max_offset = model::offset_cast(
+          model::prev_offset(maybe_lso.value()));
         // If the max offset is less than the start, it's always going to be an
         // empty read, short circuit here.
         if (max_offset < start_offset) {
@@ -206,13 +207,12 @@ public:
         // transform subsystem.
         constexpr static size_t max_bytes = 128_KiB;
         auto translater = co_await _partition.make_reader(
-          storage::log_reader_config(
+          kafka::log_reader_config(
             /*start_offset=*/start_offset,
             /*max_offset=*/max_offset,
             /*min_bytes=*/0,
             /*max_bytes=*/max_bytes,
-            /*type_filter=*/std::nullopt, // Overridden by partition
-            /*time=*/std::nullopt,        // Not doing a timequery
+            /*time=*/std::nullopt, // Not doing a timequery
             /*as=*/*as));
 
         // NOTE: It's a very important property that the source always outlives

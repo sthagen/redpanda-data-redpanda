@@ -189,3 +189,19 @@ redpanda_cc_library(
         "@seastar",
     ],
 )
+
+redpanda_cc_library(
+    name = "log_reader_config",
+    srcs = [
+        "log_reader_config.cc",
+    ],
+    hdrs = [
+        "log_reader_config.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/model",
+        "//src/v/utils:to_string",
+    ],
+)

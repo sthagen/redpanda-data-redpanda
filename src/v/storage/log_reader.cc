@@ -169,7 +169,7 @@ void skipping_consumer::print(std::ostream& os) const {
 }
 
 log_segment_batch_reader::log_segment_batch_reader(
-  segment& seg, log_reader_config& config, probe& p) noexcept
+  segment& seg, local_log_reader_config& config, probe& p) noexcept
   : _seg(seg)
   , _config(config)
   , _probe(p) {}
@@ -267,12 +267,12 @@ log_segment_batch_reader::read_some(model::timeout_clock::time_point timeout) {
 
 log_reader::log_reader(
   std::unique_ptr<lock_manager::lease> l,
-  log_reader_config config,
+  local_log_reader_config config,
   probe& probe,
   ss::lw_shared_ptr<const storage::offset_translator_state> tr) noexcept
   : _lease(std::move(l))
-  , _iterator({})                // overwritten in reset() below
-  , _config(empty_reader_config) // overwritten in reset() below
+  , _iterator({})                      // overwritten in reset() below
+  , _config(empty_local_reader_config) // overwritten in reset() below
   , _probe(probe)
   , _translator(std::move(tr)) {
     // we lean on reset_config for most of the initialization as much as so that
@@ -500,13 +500,13 @@ std::optional<log_reader::private_flags> log_reader::get_flags() const {
       .was_cached = _was_cached};
 };
 
-void log_reader::reset_config(log_reader_config cfg) {
+void log_reader::reset_config(local_log_reader_config cfg) {
     reset(
       cfg, {_iterator.current_reader_seg, std::move(_iterator.reader)}, true);
 };
 
 void log_reader::reset(
-  log_reader_config cfg, iterator_pair itr, bool cache_hit) {
+  local_log_reader_config cfg, iterator_pair itr, bool cache_hit) {
     _config = cfg;
     _iterator = std::move(itr);
     _expected_next = _config.fill_gaps

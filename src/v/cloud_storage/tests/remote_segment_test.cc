@@ -227,8 +227,7 @@ FIXTURE_TEST(
     BOOST_REQUIRE(upl_res == upload_result::success);
     m.add(meta);
 
-    storage::log_reader_config reader_config(
-      model::offset(1), model::offset(1));
+    cloud_log_reader_config reader_config(kafka::offset(1), kafka::offset(1));
 
     partition_probe probe(manifest_ntp);
     auto& ts_probe = api.local().materialized().get_read_path_probe();
@@ -334,7 +333,8 @@ void test_remote_segment_batch_reader(
     model::offset begin = headers.at(ix_begin).base_offset;
     model::offset end = headers.at(ix_end).last_offset();
 
-    storage::log_reader_config reader_config(begin, end);
+    cloud_log_reader_config reader_config(
+      model::offset_cast(begin), model::offset_cast(end));
     reader_config.max_bytes = std::numeric_limits<size_t>::max();
 
     partition_probe probe(manifest_ntp);
@@ -462,13 +462,11 @@ FIXTURE_TEST(
       probe,
       ts_probe);
 
+    auto start_offset = model::offset_cast(headers.at(0).base_offset);
+    auto max_offset = model::offset_cast(headers.at(0).last_offset());
+    cloud_log_reader_config reader_config(start_offset, max_offset);
     remote_segment_batch_reader reader(
-      segment,
-      storage::log_reader_config(
-        headers.at(0).base_offset, headers.at(0).last_offset()),
-      probe,
-      ts_probe,
-      ssx::semaphore_units());
+      segment, reader_config, probe, ts_probe, ssx::semaphore_units());
     storage::offset_translator_state ot_state(m.get_ntp());
 
     auto s = reader.read_some(model::no_timeout, ot_state).get();
@@ -484,10 +482,11 @@ FIXTURE_TEST(
     BOOST_REQUIRE(offsets.at(0) == headers.at(0).base_offset);
     BOOST_REQUIRE(
       reader.config().start_offset
-      == headers.at(0).last_offset() + model::offset{1});
+      == model::offset_cast(headers.at(0).last_offset() + model::offset{1}));
 
     // Update config and retry read
-    reader.config().max_offset = headers.at(1).last_offset();
+    reader.config().max_offset = model::offset_cast(
+      headers.at(1).last_offset());
     auto t = reader.read_some(model::no_timeout, ot_state).get();
     for (const auto& batch : t.value()) {
         // should only recv one batch

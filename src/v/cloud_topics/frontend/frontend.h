@@ -11,6 +11,7 @@
 
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
+#include "cloud_topics/log_reader_config.h"
 #include "model/fundamental.h"
 #include "model/timeout_clock.h"
 #include "raft/types.h"
@@ -122,7 +123,7 @@ public:
       model::batch_identity, model::record_batch, raft::replicate_options);
 
     ss::future<storage::translating_reader> make_reader(
-      storage::log_reader_config cfg,
+      cloud_topic_log_reader_config cfg,
       std::optional<model::timeout_clock::time_point>);
 
     ss::future<std::vector<model::tx_range>> aborted_transactions(

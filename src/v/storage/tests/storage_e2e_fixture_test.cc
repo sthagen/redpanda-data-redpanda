@@ -131,7 +131,7 @@ FIXTURE_TEST(test_concurrent_log_eviction_and_append, storage_e2e_fixture) {
     auto read = [&] {
         auto lstats = log->offsets();
         return log
-          ->make_reader(storage::log_reader_config(
+          ->make_reader(storage::local_log_reader_config(
             lstats.start_offset, model::offset::max()))
           .then([](auto reader) {
               return ss::sleep(std::chrono::milliseconds(

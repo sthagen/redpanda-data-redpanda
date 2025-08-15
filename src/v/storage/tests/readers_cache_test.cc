@@ -70,7 +70,8 @@ struct readers_cache_test_fixture : seastar_test {
           segment_set(std::move(segments)));
         return std::make_unique<log_reader>(
           std::move(lease),
-          storage::log_reader_config(model::offset(0), model::offset::max()),
+          storage::local_log_reader_config(
+            model::offset(0), model::offset::max()),
           probe,
           nullptr);
     }

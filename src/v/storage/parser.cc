@@ -273,7 +273,7 @@ public:
       ss::input_stream<char> input,
       ss::output_stream<char> output,
       record_batch_transform_predicate pred,
-      opt_abort_source_t as)
+      model::opt_abort_source_t as)
       : _input(std::move(input))
       , _output(std::move(output))
       , _pred(std::move(pred))
@@ -363,14 +363,14 @@ public:
     ss::output_stream<char> _output;
     record_batch_transform_predicate _pred;
     model::record_batch_header _header{};
-    opt_abort_source_t _as;
+    model::opt_abort_source_t _as;
 };
 
 ss::future<result<size_t>> transform_stream(
   ss::input_stream<char> in,
   ss::output_stream<char> out,
   record_batch_transform_predicate pred,
-  opt_abort_source_t as) {
+  model::opt_abort_source_t as) {
     copy_helper helper(std::move(in), std::move(out), std::move(pred), as);
     co_return co_await helper.run().finally(
       [&helper] { return helper.close(); });

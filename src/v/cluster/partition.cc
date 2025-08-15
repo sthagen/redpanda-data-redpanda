@@ -328,7 +328,7 @@ model::offset partition::next_cloud_offset() const {
 }
 
 ss::future<storage::translating_reader> partition::make_cloud_reader(
-  storage::log_reader_config config,
+  cloud_storage::cloud_log_reader_config config,
   std::optional<model::timeout_clock::time_point> deadline) {
     vassert(
       cloud_data_available(),
@@ -1606,8 +1606,8 @@ partition::remote_partition() const {
     return _cloud_storage_partition;
 }
 
-ss::future<model::record_batch_reader> partition::make_reader(
-  storage::log_reader_config config,
+ss::future<model::record_batch_reader> partition::make_local_reader(
+  storage::local_log_reader_config config,
   std::optional<model::timeout_clock::time_point> debounce_deadline) {
     return _raft->make_reader(std::move(config), debounce_deadline);
 }

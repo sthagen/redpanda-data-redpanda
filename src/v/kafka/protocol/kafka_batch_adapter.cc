@@ -204,6 +204,26 @@ iobuf kafka_batch_adapter::adapt(iobuf&& kbatch) {
     return remainder;
 }
 
+namespace {
+::compression::type to_compression_type(model::compression c) {
+    switch (c) {
+    case model::compression::gzip:
+        return ::compression::type::gzip;
+    case model::compression::snappy:
+        return ::compression::type::java_snappy;
+    case model::compression::lz4:
+        return ::compression::type::lz4;
+    case model::compression::zstd:
+        return ::compression::type::zstd;
+    case model::compression::none:
+    case model::compression::count:
+    case model::compression::producer:
+        break;
+    }
+    throw std::runtime_error(fmt::format("Unknown compression type: {}", c));
+}
+} // namespace
+
 /*
  * Handle a MessageSet. For each uncompressed message the message data is
  * accumulated in the new-style redpanda batch format. Compressed messages
@@ -274,7 +294,7 @@ void kafka_batch_adapter::convert_message_set(
         }
 
         auto batch_data = compression::compressor::uncompress(
-          *batch->value, batch->compression());
+          *batch->value, to_compression_type(batch->compression()));
 
         convert_message_set(builder, std::move(batch_data), true);
     }

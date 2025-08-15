@@ -308,7 +308,7 @@ collect_base_offsets(ss::shared_ptr<storage::log> log) {
         std::vector<model::offset> res;
     };
 
-    auto r = co_await log->make_reader(storage::log_reader_config(
+    auto r = co_await log->make_reader(storage::local_log_reader_config(
       log->offsets().start_offset, log->offsets().dirty_offset));
     co_return co_await r.for_each_ref(consumer{}, model::no_timeout);
 }

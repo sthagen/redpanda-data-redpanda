@@ -16,6 +16,26 @@
 
 namespace model {
 
+namespace {
+::compression::type to_compression_type(model::compression c) {
+    switch (c) {
+    case model::compression::gzip:
+        return ::compression::type::gzip;
+    case model::compression::snappy:
+        return ::compression::type::java_snappy;
+    case model::compression::lz4:
+        return ::compression::type::lz4;
+    case model::compression::zstd:
+        return ::compression::type::zstd;
+    case model::compression::none:
+    case model::compression::count:
+    case model::compression::producer:
+        break;
+    }
+    throw std::runtime_error(fmt::format("Unknown compression type: {}", c));
+}
+} // namespace
+
 ss::future<model::record_batch> decompress_batch(model::record_batch&& b) {
     return ss::futurize_invoke(decompress_batch_sync, std::move(b));
 }
@@ -40,7 +60,7 @@ model::record_batch maybe_decompress_batch_sync(const model::record_batch& b) {
           b.header()));
     }
     iobuf body_buf = ::compression::compressor::uncompress(
-      b.data(), b.header().attrs.compression());
+      b.data(), to_compression_type(b.header().attrs.compression()));
     // must remove compression first!
     auto h = b.header();
     h.attrs.remove_compression();
@@ -58,17 +78,40 @@ compress_batch(model::compression c, model::record_batch b) {
           "Asked to compress a batch with `none` compression, but header "
           "metadata is incorrect: {}",
           b.header());
+        b.header().reset_size_checksum_metadata(b.data());
         co_return b;
     }
-    auto h = b.header();
+    model::record_batch_header h = b.header();
     auto payload = co_await ::compression::stream_compressor::compress(
-      std::move(b).release_data(), c);
+      std::move(b).release_data(), to_compression_type(c));
     // compression bit must be set first!
     h.attrs |= c;
     h.reset_size_checksum_metadata(payload);
     auto batch = model::record_batch(
       h, std::move(payload), model::record_batch::tag_ctor_ng{});
     co_return batch;
+}
+
+model::record_batch
+compress_batch_sync(model::compression c, model::record_batch b) {
+    if (c == model::compression::none) {
+        vassert(
+          b.header().attrs.compression() == model::compression::none,
+          "Asked to compress a batch with `none` compression, but header "
+          "metadata is incorrect: {}",
+          b.header());
+        b.header().reset_size_checksum_metadata(b.data());
+        return b;
+    }
+    model::record_batch_header h = b.header();
+    auto payload = ::compression::compressor::compress(
+      std::move(b).release_data(), to_compression_type(c));
+    // compression bit must be set first!
+    h.attrs |= c;
+    h.reset_size_checksum_metadata(payload);
+    auto batch = model::record_batch(
+      h, std::move(payload), model::record_batch::tag_ctor_ng{});
+    return batch;
 }
 
 } // namespace model

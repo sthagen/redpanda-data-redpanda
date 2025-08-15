@@ -305,9 +305,9 @@ reconciler::make_reader(const attached_partition& partition, size_t max_bytes) {
     }
 
     auto reader = co_await fe.make_reader(
-      storage::log_reader_config(
-        kafka::offset_cast(start_offset),
-        kafka::offset_cast(max_offset),
+      cloud_topic_log_reader_config(
+        start_offset,
+        max_offset,
         0,
         max_bytes,
         std::nullopt,

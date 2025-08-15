@@ -43,7 +43,7 @@ ss::future<> failure_injectable_log::apply_segment_ms() {
 };
 
 ss::future<model::record_batch_reader>
-failure_injectable_log::make_reader(storage::log_reader_config cfg) {
+failure_injectable_log::make_reader(storage::local_log_reader_config cfg) {
     return _underlying_log->make_reader(cfg);
 }
 namespace {

@@ -36,7 +36,7 @@ upload_controller::upload_controller(
   : _ctrl(
       std::make_unique<upload_backlog_sampler>(partition_manager),
       upload_ctrl_log,
-      cfg) {
+      std::move(cfg)) {
     _ctrl.setup_metrics("archival:upload");
 }
 

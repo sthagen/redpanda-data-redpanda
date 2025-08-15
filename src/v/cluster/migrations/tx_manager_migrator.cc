@@ -213,11 +213,11 @@ ss::future<tx_manager_read_reply> tx_manager_read_handler::do_read(
     if (!partition) {
         co_return tx_manager_read_reply(errc::partition_not_exists);
     }
-    storage::log_reader_config reader_cfg(
-      std::max(offset, partition->raft_start_offset()), model::offset::max());
     // read up to 128 KiB
+    auto reader_cfg = storage::local_log_reader_config(
+      std::max(offset, partition->raft_start_offset()), model::offset::max());
     reader_cfg.max_bytes = 128_KiB;
-    auto reader = co_await partition->make_reader(std::move(reader_cfg));
+    auto reader = co_await partition->make_local_reader(std::move(reader_cfg));
 
     auto batches = co_await model::consume_reader_to_chunked_vector(
       std::move(reader), model::no_timeout);

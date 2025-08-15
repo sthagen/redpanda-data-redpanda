@@ -16,6 +16,7 @@
 #include "cluster/tests/utils.h"
 #include "cluster/types.h"
 #include "container/chunked_circular_buffer.h"
+#include "storage/types.h"
 
 using batches_ptr_t = ss::lw_shared_ptr<batches_t>;
 using foreign_batches_t = ss::foreign_ptr<batches_ptr_t>;
@@ -145,8 +146,9 @@ public:
                            model::timeout_clock::now() + 2s, std::move(f))
                     .then([&pm, ntp](result<raft::replicate_result>) {
                         auto p = pm.get(ntp);
-                        return p->make_reader(storage::log_reader_config(
-                          model::offset(0), p->committed_offset()));
+                        return p->make_local_reader(
+                          storage::local_log_reader_config(
+                            model::offset(0), p->committed_offset()));
                     })
                     .then([](model::record_batch_reader r) {
                         return model::consume_reader_to_memory(

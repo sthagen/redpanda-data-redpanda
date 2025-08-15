@@ -502,6 +502,13 @@ std::ostream& operator<<(std::ostream&, const shadow_indexing_mode&);
 
 using client_address_t = ss::socket_address;
 
+using opt_abort_source_t
+  = std::optional<std::reference_wrapper<ss::abort_source>>;
+
+using opt_client_address_t = std::optional<client_address_t>;
+
+using translate_offsets = ss::bool_class<struct translate_tag>;
+
 enum class fips_mode_flag : uint8_t {
     // FIPS mode disabled
     disabled = 0,

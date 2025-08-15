@@ -118,7 +118,8 @@ public:
     std::optional<model::offset> max_eligible_for_compacted_reupload_offset(
       model::offset first = model::offset{0}) const final;
 
-    ss::future<model::record_batch_reader> make_reader(log_reader_config) final;
+    ss::future<model::record_batch_reader>
+      make_reader(local_log_reader_config) final;
     ss::future<model::record_batch_reader> make_reader(timequery_config);
     // External synchronization: only one append can be performed at a time.
     log_appender make_appender(log_append_config cfg) final;
@@ -337,10 +338,10 @@ private:
     friend std::ostream& operator<<(std::ostream& o, const disk_log_impl& d);
 
     ss::future<model::record_batch_reader>
-      make_unchecked_reader(log_reader_config);
+      make_unchecked_reader(local_log_reader_config);
 
     ss::future<model::record_batch_reader>
-      make_cached_reader(log_reader_config);
+      make_cached_reader(local_log_reader_config);
 
     model::offset read_start_offset() const;
 

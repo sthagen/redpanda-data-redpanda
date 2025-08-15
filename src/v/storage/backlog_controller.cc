@@ -10,6 +10,7 @@
 
 #include "base/vlog.h"
 #include "config/configuration.h"
+#include "config/property.h"
 #include "metrics/prometheus_sanitize.h"
 #include "ssx/future-util.h"
 #include "ssx/sformat.h"
@@ -23,21 +24,21 @@
 namespace storage {
 
 backlog_controller_config::backlog_controller_config(
-  double kp,
-  double ki,
-  double kd,
+  config::binding<double> kp,
+  config::binding<double> ki,
+  config::binding<double> kd,
   int64_t normalization_factor,
-  int64_t sp,
+  std::function<int64_t()> sp_function,
   int initial_shares,
-  std::chrono::milliseconds interval,
+  config::binding<std::chrono::milliseconds> interval,
   ss::scheduling_group sg,
-  int min,
-  int max)
+  config::binding<int16_t> min,
+  config::binding<int16_t> max)
   : proportional_coeff(kp)
   , integral_coeff(ki)
   , derivative_coeff(kd)
   , normalization_factor(normalization_factor)
-  , setpoint(sp)
+  , setpoint_cb(std::move(sp_function))
   , initial_shares(initial_shares)
   , sampling_interval(interval)
   , scheduling_group(sg)
@@ -50,35 +51,33 @@ backlog_controller::backlog_controller(
   backlog_controller_config cfg)
   : _sampler(std::move(sampler))
   , _log(logger)
-  , _proportional_coeff(cfg.proportional_coeff)
-  , _integral_coeff(cfg.integral_coeff)
-  , _derivative_coeff(cfg.derivative_coeff)
-  , _norm(cfg.normalization_factor)
-  , _sampling_interval(cfg.sampling_interval)
-  , _scheduling_group(cfg.scheduling_group)
-  , _setpoint(cfg.setpoint / _norm)
   , _current_shares(cfg.initial_shares)
-  , _min_shares(cfg.min_shares)
-  , _max_shares(cfg.max_shares) {}
+  , _cfg(std::move(cfg)) {}
 
 ss::future<> backlog_controller::start() {
-    _current_backlog = co_await _sampler->sample_backlog() / _norm;
-    _prev_error = _setpoint - _current_backlog;
+    auto norm = _cfg.normalization_factor;
+    auto setpoint = _cfg.setpoint_cb() / norm;
+    _current_backlog = co_await _sampler->sample_backlog() / norm;
+
+    _prev_error = setpoint - _current_backlog;
     _sampling_timer.set_callback([this] {
         ssx::spawn_with_gate(_gate, [this] {
             return update().then([this] {
                 if (!_gate.is_closed()) {
-                    _sampling_timer.arm(_sampling_interval);
+                    _sampling_timer.arm(_cfg.sampling_interval());
                 }
             });
         });
     });
-    _sampling_timer.arm(_sampling_interval);
-}
+    _sampling_timer.arm(_cfg.sampling_interval());
 
-void backlog_controller::update_setpoint(int64_t v) {
-    vlog(_log.info, "new setpoint value: {}", v);
-    _setpoint = v;
+    // Rearm sampling timer on interval change.
+    _cfg.sampling_interval.watch([this] {
+        if (_sampling_timer.armed()) {
+            _sampling_timer.cancel();
+            _sampling_timer.arm(_cfg.sampling_interval());
+        }
+    });
 }
 
 ss::future<> backlog_controller::stop() {
@@ -87,29 +86,34 @@ ss::future<> backlog_controller::stop() {
 }
 
 ss::future<> backlog_controller::update() {
-    _current_backlog = co_await _sampler->sample_backlog() / _norm;
-    auto current_err = _setpoint - _current_backlog;
+    auto norm = _cfg.normalization_factor;
+    auto setpoint = _cfg.setpoint_cb() / norm;
+    _current_backlog = co_await _sampler->sample_backlog() / norm;
+
+    auto current_err = setpoint - _current_backlog;
 
     static constexpr int64_t max_error = std::numeric_limits<int32_t>::max();
     _error_integral = std::clamp(
       _error_integral + current_err, -max_error, max_error);
 
     auto update = static_cast<double>(current_err);
-    if (_integral_coeff != 0.00) {
-        update += _integral_coeff * static_cast<double>(_error_integral);
+    if (_cfg.integral_coeff() != 0.00) {
+        update += _cfg.integral_coeff() * static_cast<double>(_error_integral);
     }
-    if (_derivative_coeff != 0.00) {
-        update += _derivative_coeff
+    if (_cfg.derivative_coeff() != 0.00) {
+        update += _cfg.derivative_coeff()
                   * static_cast<double>(current_err - _prev_error);
     }
-    update *= _proportional_coeff;
+    update *= _cfg.proportional_coeff();
     _current_shares = std::clamp(
-      static_cast<int>(update), _min_shares, _max_shares);
+      static_cast<int>(update),
+      static_cast<int>(_cfg.min_shares()),
+      static_cast<int>(_cfg.max_shares()));
     vlog(
       _log.trace,
       "state update: {{setpoint: {}, current_backlog: {}, current_error: {}, "
       "prev_error: {}, shares_update: {}, current_share: {} }}",
-      _setpoint,
+      setpoint,
       _current_backlog,
       current_err,
       _prev_error,
@@ -124,7 +128,7 @@ ss::future<> backlog_controller::update() {
 
 ss::future<> backlog_controller::set() {
     vlog(_log.debug, "updating shares {}", _current_shares);
-    _scheduling_group.set_shares(static_cast<float>(_current_shares));
+    _cfg.scheduling_group.set_shares(static_cast<float>(_current_shares));
     co_return;
 }
 

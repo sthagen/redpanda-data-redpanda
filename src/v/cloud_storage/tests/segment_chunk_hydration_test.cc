@@ -15,6 +15,7 @@
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/remote_segment.h"
 #include "cloud_storage/tests/cloud_storage_fixture.h"
+#include "cloud_storage/types.h"
 #include "container/chunked_circular_buffer.h"
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"
@@ -434,8 +435,8 @@ FIXTURE_TEST(test_chunk_multiple_readers, cloud_storage_fixture) {
 
     storage::offset_translator_state ot_state(m.get_ntp());
 
-    storage::log_reader_config reader_config(
-      model::offset{1}, model::offset{1000000});
+    cloud_log_reader_config reader_config(
+      kafka::offset{1}, kafka::offset{1000000});
     reader_config.max_bytes = std::numeric_limits<size_t>::max();
 
     std::vector<std::unique_ptr<remote_segment_batch_reader>> readers{};

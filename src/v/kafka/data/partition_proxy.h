@@ -12,6 +12,7 @@
 
 #include "base/outcome.h"
 #include "cluster/fwd.h"
+#include "kafka/data/log_reader_config.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
@@ -65,7 +66,7 @@ public:
         virtual ss::future<error_code>
           prefix_truncate(model::offset, ss::lowres_clock::time_point) = 0;
         virtual ss::future<storage::translating_reader> make_reader(
-          storage::log_reader_config,
+          kafka::log_reader_config,
           std::optional<model::timeout_clock::time_point>)
           = 0;
         virtual ss::future<std::optional<storage::timequery_result>>
@@ -136,7 +137,7 @@ public:
     }
 
     ss::future<storage::translating_reader> make_reader(
-      storage::log_reader_config cfg,
+      kafka::log_reader_config cfg,
       std::optional<model::timeout_clock::time_point> debounce_deadline
       = std::nullopt) {
         return _impl->make_reader(cfg, debounce_deadline);

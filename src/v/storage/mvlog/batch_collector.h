@@ -27,7 +27,7 @@ namespace storage::experimental::mvlog {
 class batch_collector {
 public:
     batch_collector(
-      const log_reader_config& cfg,
+      const local_log_reader_config& cfg,
       model::term_id initial_term,
       size_t max_buffer_size = default_max_buffer_size)
       : cfg_(cfg)
@@ -61,7 +61,7 @@ private:
     bool should_skip(const model::record_batch_header&) const noexcept;
 
     // Reader config with which to collect records.
-    const log_reader_config& cfg_;
+    const local_log_reader_config& cfg_;
 
     // Soft max of the size in bytes `batches_` is allowed to grow before
     // `add_batch()` returns `reader_outcome::buffer_full`.

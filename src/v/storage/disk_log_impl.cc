@@ -129,7 +129,7 @@ public:
     single_segment_reader(
       ss::lw_shared_ptr<segment> seg,
       ss::rwlock::holder seg_read_lock,
-      log_reader_config reader_cfg,
+      local_log_reader_config reader_cfg,
       probe& pb)
       : _seg(seg)
       , _seg_read_lock(std::move(seg_read_lock))
@@ -165,7 +165,7 @@ public:
 private:
     ss::lw_shared_ptr<segment> _seg;
     ss::rwlock::holder _seg_read_lock;
-    log_reader_config _config;
+    local_log_reader_config _config;
     log_segment_batch_reader _rdr;
     bool _is_end_of_stream{false};
 };
@@ -2308,7 +2308,7 @@ ss::future<> disk_log_impl::apply_segment_ms() {
 }
 
 ss::future<model::record_batch_reader>
-disk_log_impl::make_unchecked_reader(log_reader_config config) {
+disk_log_impl::make_unchecked_reader(local_log_reader_config config) {
     vassert(!_closed, "make_reader on closed log - {}", *this);
     return _lock_mngr.range_lock(config).then(
       [this, cfg = config](std::unique_ptr<lock_manager::lease> lease) {
@@ -2318,7 +2318,7 @@ disk_log_impl::make_unchecked_reader(log_reader_config config) {
 }
 
 ss::future<model::record_batch_reader>
-disk_log_impl::make_cached_reader(log_reader_config config) {
+disk_log_impl::make_cached_reader(local_log_reader_config config) {
     vassert(!_closed, "make_reader on closed log - {}", *this);
 
     auto rdr = _readers_cache->get_reader(config);
@@ -2413,7 +2413,7 @@ auto disk_log_impl::get_file_offset(
 
     auto reader_start_offset = index_entry.offset;
 
-    storage::log_reader_config reader_cfg(reader_start_offset, target);
+    storage::local_log_reader_config reader_cfg(reader_start_offset, target);
 
     reader_cfg.skip_batch_cache = true;
     reader_cfg.skip_readers_cache = true;
@@ -3013,7 +3013,7 @@ disk_log_impl::max_eligible_for_compacted_reupload_offset(
 }
 
 ss::future<model::record_batch_reader>
-disk_log_impl::make_reader(log_reader_config config) {
+disk_log_impl::make_reader(local_log_reader_config config) {
     vassert(!_closed, "make_reader on closed log - {}", *this);
     if (config.start_offset < _start_offset) {
         return ss::make_exception_future<model::record_batch_reader>(
@@ -3077,7 +3077,7 @@ disk_log_impl::make_reader(timequery_config config) {
             cfg.time,
             _start_offset);
 
-          log_reader_config config(
+          local_log_reader_config config(
             start_offset,
             cfg.max_offset,
             0,
@@ -3468,7 +3468,7 @@ ss::future<> disk_log_impl::do_truncate(
     // starting offset. this is needed because we really do want to read
     // all the data in the segment to find the correct physical offset.
     auto reader = co_await make_unchecked_reader(
-      log_reader_config(start, model::offset::max()));
+      local_log_reader_config(start, model::offset::max()));
     auto phs = co_await std::move(reader).consume(
       internal::offset_to_filepos_consumer(
         start, cfg.base_offset, initial_size, initial_timestamp),

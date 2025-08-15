@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "base/format_to.h"
 #include "compaction/types.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
@@ -211,11 +212,6 @@ struct append_result {
     friend std::ostream& operator<<(std::ostream& o, const append_result&);
 };
 
-using opt_abort_source_t
-  = std::optional<std::reference_wrapper<ss::abort_source>>;
-
-using opt_client_address_t = std::optional<model::client_address_t>;
-
 /// A timequery configuration specifies the range of offsets to search for a
 /// record with a timestamp equal to or greater than the specified time.
 struct timequery_config {
@@ -224,8 +220,8 @@ struct timequery_config {
       model::timestamp t,
       model::offset max_offset,
       std::optional<model::record_batch_type> type_filter,
-      opt_abort_source_t as = std::nullopt,
-      opt_client_address_t client_addr = std::nullopt) noexcept
+      model::opt_abort_source_t as = std::nullopt,
+      model::opt_client_address_t client_addr = std::nullopt) noexcept
       : min_offset(min_offset)
       , time(t)
       , max_offset(max_offset)
@@ -236,8 +232,8 @@ struct timequery_config {
     model::timestamp time;
     model::offset max_offset;
     std::optional<model::record_batch_type> type_filter;
-    opt_abort_source_t abort_source;
-    opt_client_address_t client_address;
+    model::opt_abort_source_t abort_source;
+    model::opt_client_address_t client_address;
 
     friend std::ostream& operator<<(std::ostream& o, const timequery_config&);
 };
@@ -294,10 +290,8 @@ struct truncate_prefix_config {
     operator<<(std::ostream&, const truncate_prefix_config&);
 };
 
-using translate_offsets = ss::bool_class<struct translate_tag>;
-
 /**
- * Log reader configuration.
+ * Log reader configuration. Operates on Raft offsets.
  *
  * The default reader configuration will read all batch types. To filter batches
  * by type add the types of interest to the type_filter set.
@@ -323,12 +317,53 @@ using translate_offsets = ss::bool_class<struct translate_tag>;
  *           |                                        |
  * The reader will actually return whole batches: [10, 14], [15, 15], [16, 22].
  */
-struct log_reader_config {
+struct local_log_reader_config {
+    local_log_reader_config(
+      model::offset start_offset,
+      model::offset max_offset,
+      size_t min_bytes,
+      size_t max_bytes,
+      std::optional<model::record_batch_type> type_filter,
+      std::optional<model::timestamp> time,
+      model::opt_abort_source_t as,
+      model::opt_client_address_t client_addr = std::nullopt,
+      bool strict_max_bytes = false)
+      : start_offset(start_offset)
+      , max_offset(max_offset)
+      , min_bytes(min_bytes)
+      , max_bytes(max_bytes)
+      , type_filter(type_filter)
+      , first_timestamp(time)
+      , abort_source(as)
+      , client_address(std::move(client_addr))
+      , strict_max_bytes(strict_max_bytes) {}
+
+    /**
+     * Read offsets [start, end].
+     */
+    local_log_reader_config(
+      model::offset start_offset,
+      model::offset max_offset,
+      model::opt_abort_source_t as = std::nullopt,
+      model::opt_client_address_t client_addr = std::nullopt)
+      : local_log_reader_config(
+          start_offset,
+          max_offset,
+          0,
+          std::numeric_limits<size_t>::max(),
+          std::nullopt,
+          std::nullopt,
+          as,
+          std::move(client_addr),
+          false) {}
+
     model::offset start_offset;
     model::offset max_offset;
     size_t min_bytes;
     size_t max_bytes;
 
+    // Batch type to filter for (i.e specified type will be the only one
+    // observed in read).
     std::optional<model::record_batch_type> type_filter;
 
     /// \brief gurantees first_timestamp >= record_batch.first_timestamp
@@ -336,26 +371,25 @@ struct log_reader_config {
     std::optional<model::timestamp> first_timestamp;
 
     /// abort source for read operations
-    opt_abort_source_t abort_source;
+    model::opt_abort_source_t abort_source;
 
-    // used by log reader
+    model::opt_client_address_t client_address;
+
+    // Tracks number of consumed bytes in lower level readers
     size_t bytes_consumed{0};
 
-    // skipping consumer sets this bit if a read would cause max_bytes to be
-    // violated.  its used to signal to the log reader that even though consumed
-    // bytes hasn't reached max bytes that reading should still stop.
+    // Used to signal to the log reader that consumed bytes has exceeded
+    // max_bytes and that reading should stop
     bool over_budget{false};
 
-    // do not let the reader go over budget even when that means that the reader
-    // will return no batches.
+    // do not let the lower level readers go over budget even when that means
+    // that the reader will return no batches.
     bool strict_max_bytes{false};
 
     // allow cache reads, but skip lru promotion and cache insertions on miss.
     // use this option when a reader shouldn't perturb the cache (e.g.
     // historical read-once workloads like compaction).
     bool skip_batch_cache{false};
-
-    opt_client_address_t client_address;
 
     // do not reuse cached readers. if this field is set to true the make_reader
     // method will proceed with creating a new reader without checking the
@@ -377,52 +411,14 @@ struct log_reader_config {
     // NOTE: the translation refers only to the returned batches, not to the
     // input min/max offset bounds. Callers are expected to account for inputs
     // separately.
-    translate_offsets translate_offsets{false};
+    model::translate_offsets translate_offsets{false};
 
-    std::optional<ss::semaphore::clock::time_point> read_lock_deadline{};
-
-    log_reader_config(
-      model::offset start_offset,
-      model::offset max_offset,
-      size_t min_bytes,
-      size_t max_bytes,
-      std::optional<model::record_batch_type> type_filter,
-      std::optional<model::timestamp> time,
-      opt_abort_source_t as,
-      opt_client_address_t client_addr = std::nullopt)
-      : start_offset(start_offset)
-      , max_offset(max_offset)
-      , min_bytes(min_bytes)
-      , max_bytes(max_bytes)
-      , type_filter(type_filter)
-      , first_timestamp(time)
-      , abort_source(as)
-      , client_address(std::move(client_addr)) {}
-
-    /**
-     * Read offsets [start, end].
-     */
-    log_reader_config(
-      model::offset start_offset,
-      model::offset max_offset,
-      opt_abort_source_t as = std::nullopt,
-      opt_client_address_t client_addr = std::nullopt)
-      : log_reader_config(
-          start_offset,
-          max_offset,
-          0,
-          std::numeric_limits<size_t>::max(),
-          std::nullopt,
-          std::nullopt,
-          as,
-          std::move(client_addr)) {}
-
-    friend std::ostream& operator<<(std::ostream& o, const log_reader_config&);
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 // Empty, invalid reader config which is sometimes useful as a placeholder
-// since log_reader_config doesn't have a default constructor.
-static const log_reader_config empty_reader_config{{}, {}};
+// since local_log_reader_config doesn't have a default constructor.
+inline const local_log_reader_config empty_local_reader_config{{}, {}};
 
 struct gc_config {
     gc_config(model::timestamp upper, std::optional<size_t> max_bytes_in_log)

@@ -161,7 +161,7 @@ partition_downloader::partition_downloader(
   cloud_storage_clients::bucket_name bucket,
   ss::gate& gate_root,
   retry_chain_node& parent,
-  storage::opt_abort_source_t as)
+  model::opt_abort_source_t as)
   : _ntpc(ntpc)
   , _remote_path_provider(path_provider)
   , _bucket(std::move(bucket))

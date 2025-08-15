@@ -73,12 +73,12 @@ public:
 
     /// Create a reader
     ///
-    /// Note that config.start_offset and config.max_offset are kafka offsets.
-    /// All offset translation is done internally. The returned record batch
-    /// reader will produce batches with kafka offsets and the config will be
-    /// updated using kafka offsets.
+    /// Note that config.start_offset and config.max_offset are kafka
+    /// offsets. All offset translation is done internally. The returned record
+    /// batch reader will produce batches with kafka offsets and the config will
+    /// be updated using kafka offsets.
     ss::future<storage::translating_reader> make_reader(
-      storage::log_reader_config config,
+      cloud_storage::cloud_log_reader_config config,
       std::optional<model::timeout_clock::time_point> deadline = std::nullopt);
 
     static size_t reader_mem_use_estimate() noexcept;
@@ -172,7 +172,7 @@ private:
     /// \param offset_key is an key of the segment state in the _segments
     /// \param st is a segment state referenced by offset_key
     std::unique_ptr<remote_segment_batch_reader> borrow_segment_reader(
-      storage::log_reader_config config,
+      cloud_storage::cloud_log_reader_config config,
       kafka::offset offset_key,
       materialized_segment_ptr& st);
 
@@ -197,7 +197,7 @@ private:
     /// reader.
     borrow_result_t borrow_next_segment_reader(
       const partition_manifest& manifest,
-      storage::log_reader_config config,
+      cloud_storage::cloud_log_reader_config config,
       segment_units segment_unit,
       segment_reader_units segment_reader_unit,
       model::offset hint = {});

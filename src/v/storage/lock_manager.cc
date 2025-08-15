@@ -86,7 +86,7 @@ lock_manager::range_lock(const timequery_config& cfg) {
 }
 
 ss::future<std::unique_ptr<lock_manager::lease>>
-lock_manager::range_lock(const log_reader_config& cfg) {
+lock_manager::range_lock(const local_log_reader_config& cfg) {
     segment_set::underlying_t tmp;
     std::copy_if(
       _set.lower_bound(cfg.start_offset),
@@ -96,9 +96,7 @@ lock_manager::range_lock(const log_reader_config& cfg) {
           // must be base offset
           return s->offsets().get_base_offset() <= cfg.max_offset;
       });
-    return range(
-      std::move(tmp),
-      cfg.read_lock_deadline.value_or(ss::semaphore::clock::time_point::max()));
+    return range(std::move(tmp));
 }
 
 std::ostream& operator<<(std::ostream& o, const lock_manager::lease& l) {

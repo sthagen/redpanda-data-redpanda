@@ -299,7 +299,7 @@ public:
     replicate_stages replicate_in_stages(
       model::term_id, model::record_batch, replicate_options);
     ss::future<model::record_batch_reader> make_reader(
-      storage::log_reader_config,
+      storage::local_log_reader_config,
       std::optional<clock_type::time_point> = std::nullopt);
 
     model::offset get_latest_configuration_offset() const;
@@ -709,7 +709,7 @@ private:
     void maybe_promote_to_voter(vnode);
 
     ss::future<model::record_batch_reader>
-      do_make_reader(storage::log_reader_config);
+      do_make_reader(storage::local_log_reader_config);
 
     bytes last_applied_key() const {
         return raft::details::serialize_group_key(

@@ -595,6 +595,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/cloud_storage/tests:common",
         "//src/v/model",
         "//src/v/test_utils:seastar_boost",
@@ -740,6 +741,7 @@ redpanda_cc_btest(
         "//src/v/bytes:iostream",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
+        "//src/v/cloud_storage:types",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/test_utils:scoped_config",
         "//src/v/test_utils:seastar_boost",

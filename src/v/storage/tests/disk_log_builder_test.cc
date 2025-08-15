@@ -198,7 +198,7 @@ TEST_F(log_builder_fixture, iterator_invalidation) {
       | add_segment(3)
       | add_random_batch(3, 1, maybe_compress_batches::yes, data);
 
-    auto data_batches = b.consume(log_reader_config(
+    auto data_batches = b.consume(local_log_reader_config(
                                     model::offset(0),
                                     model::model_limits<model::offset>::max(),
                                     0,
@@ -207,7 +207,7 @@ TEST_F(log_builder_fixture, iterator_invalidation) {
                                     std::nullopt,
                                     std::nullopt))
                           .get();
-    auto config_batches = b.consume(log_reader_config(
+    auto config_batches = b.consume(local_log_reader_config(
                                       model::offset(0),
                                       model::model_limits<model::offset>::max(),
                                       0,

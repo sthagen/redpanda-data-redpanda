@@ -307,7 +307,7 @@ TEST_F_CORO(state_machine_fixture, test_recovery_from_snapshot) {
       10s, [](raft_node_instance& node) {
           auto committed = node.raft()->committed_offset();
           return node.raft()
-            ->make_reader(storage::log_reader_config(
+            ->make_reader(storage::local_log_reader_config(
               node.raft()->start_offset(),
               model::offset(random_generators::get_int(
                 node.raft()->start_offset()(), committed()))))
@@ -380,7 +380,7 @@ TEST_F_CORO(
       10s, [](raft_node_instance& node) {
           auto committed = node.raft()->committed_offset();
           return node.raft()
-            ->make_reader(storage::log_reader_config(
+            ->make_reader(storage::local_log_reader_config(
               node.raft()->start_offset(),
               model::offset(random_generators::get_int(
                 node.raft()->start_offset()(), committed()))))
@@ -421,8 +421,9 @@ TEST_F_CORO(
 
     simple_kv::state_t partial_expected_state;
 
-    auto rdr = co_await new_node.raft()->make_reader(storage::log_reader_config(
-      model::next_offset(snapshot_offset), committed_offset));
+    auto rdr = co_await new_node.raft()->make_reader(
+      storage::local_log_reader_config(
+        model::next_offset(snapshot_offset), committed_offset));
 
     auto batches = co_await model::consume_reader_to_memory(
       std::move(rdr), model::no_timeout);

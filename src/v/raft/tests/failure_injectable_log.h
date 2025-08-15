@@ -9,6 +9,7 @@
 #pragma once
 #include "storage/log.h"
 #include "storage/offset_translator_state.h"
+#include "storage/types.h"
 
 namespace raft {
 
@@ -45,7 +46,7 @@ public:
     ss::future<> apply_segment_ms() final;
 
     ss::future<model::record_batch_reader>
-      make_reader(storage::log_reader_config) final;
+      make_reader(storage::local_log_reader_config) final;
 
     storage::log_appender make_appender(storage::log_append_config) final;
 

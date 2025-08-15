@@ -110,11 +110,9 @@ public:
         throw std::runtime_error("unimplemented");
     }
     ss::future<storage::translating_reader> make_reader(
-      storage::log_reader_config config,
+      kafka::log_reader_config config,
       std::optional<model::timeout_clock::time_point>) final {
-        if (
-          config.first_timestamp.has_value()
-          || config.type_filter.has_value()) {
+        if (config.first_timestamp.has_value()) {
             throw std::runtime_error("unimplemented");
         }
         model::record_batch_reader::data_t read_batches;
@@ -122,11 +120,12 @@ public:
             if (b.ntp != _ntp) {
                 continue;
             }
-            if (b.batch.base_offset() < config.start_offset) {
+            if (
+              b.batch.base_offset() < kafka::offset_cast(config.start_offset)) {
                 continue;
             }
             read_batches.push_back(b.batch.copy());
-            if (b.batch.last_offset() > config.max_offset) {
+            if (b.batch.last_offset() > kafka::offset_cast(config.max_offset)) {
                 break;
             }
         }

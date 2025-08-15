@@ -38,7 +38,7 @@ public:
     offset_translator(
       model::offset_delta initial_delta,
       ss::lw_shared_ptr<storage::offset_translator_state> ot_state,
-      storage::opt_abort_source_t as = std::nullopt)
+      model::opt_abort_source_t as = std::nullopt)
       : _initial_delta(initial_delta)
       , _ot_state(ot_state)
       , _as(as) {}
@@ -57,7 +57,7 @@ public:
 private:
     model::offset_delta _initial_delta;
     ss::lw_shared_ptr<storage::offset_translator_state> _ot_state;
-    storage::opt_abort_source_t _as;
+    model::opt_abort_source_t _as;
 };
 
 } // namespace cloud_storage

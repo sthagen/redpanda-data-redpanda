@@ -242,7 +242,7 @@ ss::future<
   std::optional<std::tuple<chunked_vector<model::record_batch>, size_t>>>
 recovery_stm::read_range_for_recovery(
   model::offset start_offset, bool is_learner, size_t read_size) {
-    storage::log_reader_config cfg(
+    storage::local_log_reader_config cfg(
       start_offset,
       model::offset::max(),
       1,

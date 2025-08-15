@@ -76,10 +76,10 @@ struct WriteAtOffsetStmFixture
     };
 
     ss::future<bool> validate_node_offsets(raft_node_instance& node) {
-        storage::log_reader_config r_cfg(
+        storage::local_log_reader_config r_cfg(
           node.raft()->start_offset(), model::offset::max());
-        r_cfg.translate_offsets = storage::translate_offsets::yes;
-        auto rdr = co_await node.raft()->make_reader(r_cfg);
+        r_cfg.translate_offsets = model::translate_offsets::yes;
+        auto rdr = co_await node.raft()->make_reader(std::move(r_cfg));
 
         co_return co_await rdr.for_each_ref(
           offset_validating_consumer{}, model::no_timeout);

@@ -10,8 +10,8 @@
 #pragma once
 
 #include "cloud_topics/level_zero/common/extent_meta.h"
+#include "cloud_topics/log_reader_config.h"
 #include "model/record_batch_reader.h"
-#include "storage/log_reader.h"
 
 namespace cluster {
 class partition;
@@ -63,7 +63,7 @@ back to 'empty' state.
 class level_zero_log_reader_impl : public model::record_batch_reader::impl {
 public:
     level_zero_log_reader_impl(
-      storage::log_reader_config& cfg,
+      cloud_topic_log_reader_config& cfg,
       ss::lw_shared_ptr<cluster::partition> underlying,
       data_plane_api* ct_api);
 
@@ -101,7 +101,7 @@ private:
     chunked_circular_buffer<experimental::cloud_topics::extent_meta> _meta;
     chunked_circular_buffer<model::record_batch_header> _headers;
     chunked_vector<model::record_batch> _batches;
-    storage::log_reader_config _config;
+    cloud_topic_log_reader_config _config;
     ss::lw_shared_ptr<cluster::partition> _underlying;
     data_plane_api* _ct_api;
 };

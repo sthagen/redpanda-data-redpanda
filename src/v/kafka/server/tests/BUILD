@@ -738,6 +738,7 @@ redpanda_cc_gtest(
         "//src/v/model/tests:random",
         "//src/v/raft",
         "//src/v/redpanda/tests:fixture",
+        "//src/v/storage",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:scoped_config",
         "@googletest//:gtest",
@@ -793,6 +794,7 @@ redpanda_cc_gtest(
     cpu = 1,
     deps = [
         "//src/v/config",
+        "//src/v/kafka/data:log_reader_config",
         "//src/v/kafka/server:write_at_offset_stm",
         "//src/v/model/tests:random",
         "//src/v/raft",

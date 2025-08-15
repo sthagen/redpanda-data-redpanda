@@ -19,6 +19,7 @@ redpanda_test_cc_library(
         "//src/v/compression",
         "//src/v/container:chunked_circular_buffer",
         "//src/v/model",
+        "//src/v/model:batch_compression",
         "//src/v/random:generators",
         "//src/v/test_utils:random",
         "//src/v/test_utils:random_bytes",

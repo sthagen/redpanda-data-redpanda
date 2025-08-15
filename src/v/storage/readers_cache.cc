@@ -101,7 +101,7 @@ bool readers_cache::intersects_with_locked_range(
 }
 
 std::optional<model::record_batch_reader>
-readers_cache::get_reader(const log_reader_config& cfg) {
+readers_cache::get_reader(const local_log_reader_config& cfg) {
     if (_gate.is_closed()) {
         return std::nullopt;
     }

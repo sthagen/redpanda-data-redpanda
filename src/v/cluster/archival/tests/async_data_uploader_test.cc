@@ -196,8 +196,8 @@ public:
     log_map get_log_map() {
         log_map res;
         auto co = get_test_partition()->committed_offset();
-        storage::log_reader_config cfg(model::offset(0), co);
-        auto rdr = get_test_partition()->make_reader(cfg).get();
+        auto cfg = storage::local_log_reader_config(model::offset(0), co);
+        auto rdr = get_test_partition()->make_local_reader(cfg).get();
 
         class consumer {
         public:
@@ -330,10 +330,10 @@ public:
               s.get()->file_size(),
               s.get()->offsets());
         }
-        storage::log_reader_config reader_cfg(range.base, range.last);
-        reader_cfg.skip_batch_cache = true;
+        auto cfg = storage::local_log_reader_config(range.base, range.last);
+        cfg.skip_batch_cache = true;
 
-        auto reader = partition->make_reader(reader_cfg).get();
+        auto reader = partition->make_local_reader(cfg).get();
 
         iobuf actual;
         auto out_s = make_iobuf_ref_output_stream(actual);

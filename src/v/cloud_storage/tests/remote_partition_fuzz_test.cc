@@ -15,6 +15,7 @@
 #include "cloud_storage/download_exception.h"
 #include "cloud_storage/tests/cloud_storage_fixture.h"
 #include "cloud_storage/tests/util.h"
+#include "cloud_storage/types.h"
 #include "model/record_batch_types.h"
 
 #include <seastar/core/lowres_clock.hh>
@@ -68,7 +69,8 @@ scan_remote_partition_incrementally_with_reuploads(
 
     std::vector<model::record_batch_header> headers;
 
-    storage::log_reader_config reader_config(base, max);
+    cloud_log_reader_config reader_config(
+      model::offset_cast(base), model::offset_cast(max));
 
     // starting max_bytes
     constexpr size_t max_bytes_limit = 4_KiB;
@@ -174,7 +176,7 @@ scan_remote_partition_incrementally_with_reuploads(
 
     int num_fetches = 0;
     while (next < max) {
-        reader_config.start_offset = next;
+        reader_config.start_offset = model::offset_cast(next);
         reader_config.max_bytes = random_generators::get_int(
           max_bytes_limit - 1);
         drop_reupload_flag();
@@ -425,7 +427,7 @@ namespace {
 
 ss::future<> scan_until_close(
   ss::shared_ptr<remote_partition> partition,
-  storage::log_reader_config reader_config,
+  cloud_log_reader_config reader_config,
   ss::gate& g) {
     test_log.info("starting scan_until_close");
     auto _ = ss::defer([] { test_log.info("exiting scan_until_close"); });
@@ -474,7 +476,9 @@ FIXTURE_TEST(test_scan_while_shutting_down, cloud_storage_fixture) {
     test_log.info("starting scan op");
     ss::gate g;
     auto scan_future = scan_until_close(
-      partition, storage::log_reader_config(base, model::offset::max()), g);
+      partition,
+      cloud_log_reader_config(model::offset_cast(base), kafka::offset::max()),
+      g);
     auto close_fut
       = ss::maybe_yield()
           .then([] { return ss::maybe_yield(); })

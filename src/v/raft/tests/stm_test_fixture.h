@@ -135,7 +135,7 @@ public:
         }
 
         auto rdr = co_await raft_node.raft()->make_reader(
-          storage::log_reader_config(start_offset, last_included_offset));
+          storage::local_log_reader_config(start_offset, last_included_offset));
 
         auto batches = co_await model::consume_reader_to_memory(
           std::move(rdr), default_timeout());

@@ -11,10 +11,12 @@
 #pragma once
 
 #include "absl/container/node_hash_set.h"
+#include "base/format_to.h"
 #include "base/seastarx.h"
 #include "cloud_io/io_result.h"
 #include "cloud_io/transfer_details.h"
 #include "model/fundamental.h"
+#include "model/record_batch_types.h"
 #include "model/timestamp.h"
 #include "ssx/semaphore.h"
 #include "utils/named_type.h"
@@ -428,6 +430,79 @@ struct download_request {
     download_type type;
     iobuf& payload;
     bool expect_missing{false};
+};
+
+// Operates on Kafka offsets.
+struct cloud_log_reader_config {
+    cloud_log_reader_config(
+      kafka::offset start_offset,
+      kafka::offset max_offset,
+      size_t min_bytes,
+      size_t max_bytes,
+      std::optional<model::record_batch_type> type_filter,
+      std::optional<model::timestamp> time,
+      model::opt_abort_source_t as,
+      model::opt_client_address_t client_addr = std::nullopt,
+      bool strict_max_bytes = false)
+      : start_offset(start_offset)
+      , max_offset(max_offset)
+      , min_bytes(min_bytes)
+      , max_bytes(max_bytes)
+      , type_filter(type_filter)
+      , first_timestamp(time)
+      , abort_source(as)
+      , client_address(std::move(client_addr))
+      , strict_max_bytes(strict_max_bytes) {}
+
+    /**
+     * Read offsets [start, end].
+     */
+    cloud_log_reader_config(
+      kafka::offset start_offset,
+      kafka::offset max_offset,
+      model::opt_abort_source_t as = std::nullopt,
+      model::opt_client_address_t client_addr = std::nullopt)
+      : cloud_log_reader_config(
+          start_offset,
+          max_offset,
+          0,
+          std::numeric_limits<size_t>::max(),
+          std::nullopt,
+          std::nullopt,
+          as,
+          std::move(client_addr),
+          false) {}
+
+    kafka::offset start_offset;
+    kafka::offset max_offset;
+    size_t min_bytes;
+    size_t max_bytes;
+
+    // Batch type to filter for (i.e specified type will be the only one
+    // observed in read).
+    std::optional<model::record_batch_type> type_filter;
+
+    /// \brief guarantees first_timestamp >= record_batch.first_timestamp
+    /// it is the std::lower_bound
+    std::optional<model::timestamp> first_timestamp;
+
+    /// abort source for read operations
+    model::opt_abort_source_t abort_source;
+
+    model::opt_client_address_t client_address;
+
+    // Tracks number of consumed bytes in lower level readers
+    size_t bytes_consumed{0};
+
+    // Used to signal to the log reader that consumed bytes has exceeded
+    // max_bytes and that reading should stop.
+    bool over_budget{false};
+
+    // do not let the lower level readers go over budget even when that means
+    // that the reader will return no batches.
+    bool strict_max_bytes{false};
+
+    fmt::iterator format_to(fmt::iterator it) const;
 };
 
 } // namespace cloud_storage

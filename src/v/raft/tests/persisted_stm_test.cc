@@ -256,7 +256,7 @@ public:
         }
 
         auto rdr = co_await raft_node.raft()->make_reader(
-          storage::log_reader_config(start_offset, last_included_offset));
+          storage::local_log_reader_config(start_offset, last_included_offset));
 
         auto batches = co_await model::consume_reader_to_memory(
           std::move(rdr), default_timeout());
@@ -447,7 +447,7 @@ struct persisted_stm_test_fixture : state_machine_fixture {
           10s, [](raft_node_instance& node) {
               auto committed = node.raft()->committed_offset();
               return node.raft()
-                ->make_reader(storage::log_reader_config(
+                ->make_reader(storage::local_log_reader_config(
                   node.raft()->start_offset(),
                   model::offset(random_generators::get_int(
                     node.raft()->start_offset()(), committed()))))

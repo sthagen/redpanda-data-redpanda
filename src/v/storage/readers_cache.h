@@ -78,7 +78,7 @@ public:
     explicit readers_cache(
       model::ntp, std::chrono::milliseconds, config::binding<size_t>);
     std::optional<model::record_batch_reader>
-    get_reader(const log_reader_config&);
+    get_reader(const local_log_reader_config&);
 
     model::record_batch_reader put(std::unique_ptr<log_reader> reader);
 

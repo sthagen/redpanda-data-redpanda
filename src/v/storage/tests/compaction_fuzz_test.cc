@@ -167,7 +167,7 @@ ss::future<ot_state> arrange_and_compact(
         error = std::current_exception();
     }
     auto reader = co_await b1.get_disk_log_impl().make_reader(
-      storage::log_reader_config(model::offset{0}, model::offset::max()));
+      storage::local_log_reader_config(model::offset{0}, model::offset::max()));
     ot_state st{};
     co_await std::move(reader).consume(
       ot_state_consumer{.st = &st}, model::no_timeout);

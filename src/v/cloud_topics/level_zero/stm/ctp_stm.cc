@@ -116,7 +116,7 @@ ss::future<std::optional<cluster_epoch>> ctp_stm::get_inactive_epoch() {
     // this command will be the last in the log and this will make the committed
     // offset to be greater than the LRO log translated offset.
 
-    storage::log_reader_config cfg(
+    storage::local_log_reader_config cfg(
       model::next_offset(lro),
       co,
       0,

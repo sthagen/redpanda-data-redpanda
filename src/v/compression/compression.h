@@ -11,10 +11,20 @@
 
 #pragma once
 #include "bytes/iobuf.h"
-#include "model/compression.h"
+
 namespace compression {
 
-using type = model::compression;
+enum class type : uint8_t {
+    gzip,
+    // NOTE: This is *NOT* standard snappy compression. It uses the java-snappy
+    // framing compression which is fundamentally not compatible with upstream
+    // google snappy
+    java_snappy,
+    lz4,
+    zstd,
+};
+std::ostream& operator<<(std::ostream& os, const type& c);
+
 // a very simple compressor. Exposes virtually no knobs and uses
 // the defaults for all compressors. In the future, we can make these
 // a virtual interface so we can instantiate them

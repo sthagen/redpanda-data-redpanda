@@ -10,6 +10,7 @@
  */
 #pragma once
 
+#include "kafka/data/log_reader_config.h"
 #include "kafka/data/partition_proxy.h"
 #include "kafka/protocol/errors.h"
 #include "model/fundamental.h"
@@ -75,7 +76,7 @@ public:
       raft::replicate_options) final;
 
     ss::future<storage::translating_reader> make_reader(
-      storage::log_reader_config cfg,
+      kafka::log_reader_config cfg,
       std::optional<model::timeout_clock::time_point>) final;
 
     ss::future<std::vector<model::tx_range>> aborted_transactions(

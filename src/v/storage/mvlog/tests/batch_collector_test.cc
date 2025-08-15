@@ -48,7 +48,8 @@ model::record_batch_header make_batch_header(
 } // anonymous namespace
 
 TEST(BatchCollectorTest, TestDataDecreasesOffset) {
-    storage::log_reader_config cfg(model::offset{0}, model::offset::max());
+    storage::local_log_reader_config cfg(
+      model::offset{0}, model::offset::max());
     batch_collector collector(cfg, model::term_id{0});
     auto res = collector.add_batch(
       make_batch_header(model::offset{0}, model::offset{10}), iobuf{});
@@ -78,7 +79,8 @@ TEST(BatchCollectorTest, TestDataDecreasesOffset) {
 }
 
 TEST(BatchCollectorTest, TestInvariantsAfterRelease) {
-    storage::log_reader_config cfg(model::offset{0}, model::offset::max());
+    storage::local_log_reader_config cfg(
+      model::offset{0}, model::offset::max());
     batch_collector collector(cfg, model::term_id{1});
     auto res = collector.add_batch(
       make_batch_header(model::offset{0}, model::offset{10}), iobuf{});
@@ -102,7 +104,8 @@ TEST(BatchCollectorTest, TestInvariantsAfterRelease) {
 
 TEST(BatchCollectorTest, TestDataTooLow) {
     for (int i = 0; i <= 10; i++) {
-        storage::log_reader_config cfg(model::offset{11}, model::offset::max());
+        storage::local_log_reader_config cfg(
+          model::offset{11}, model::offset::max());
         batch_collector collector(cfg, model::term_id{0});
 
         // All the data is below the reader start offset, so we should skip.
@@ -121,7 +124,7 @@ TEST(BatchCollectorTest, TestDataTooLow) {
 }
 
 TEST(BatchCollectorTest, TestDataTooHigh) {
-    storage::log_reader_config cfg(model::offset{0}, model::offset{9});
+    storage::local_log_reader_config cfg(model::offset{0}, model::offset{9});
     {
         batch_collector collector(cfg, model::term_id{0});
         // We should be able to collect right at the upper edge of the range.
@@ -141,7 +144,7 @@ TEST(BatchCollectorTest, TestDataTooHigh) {
 }
 
 TEST(BatchCollectorTest, TestTypeFilter) {
-    storage::log_reader_config cfg(model::offset{0}, model::offset{11});
+    storage::local_log_reader_config cfg(model::offset{0}, model::offset{11});
     cfg.type_filter = model::record_batch_type::raft_configuration;
     batch_collector collector(cfg, model::term_id{0});
     auto res = collector.add_batch(
@@ -176,7 +179,8 @@ TEST(BatchCollectorTest, TestTypeFilter) {
 }
 
 TEST(BatchCollectorTest, TestSetTerm) {
-    storage::log_reader_config cfg(model::offset{0}, model::offset::max());
+    storage::local_log_reader_config cfg(
+      model::offset{0}, model::offset::max());
     batch_collector collector(cfg, model::term_id{1});
     // Moving the term backwards should fail.
     {
@@ -237,7 +241,8 @@ TEST(BatchCollectorTest, TestSetTerm) {
 }
 
 TEST(BatchCollectorTest, TestFilledBuffer) {
-    storage::log_reader_config cfg(model::offset{0}, model::offset::max());
+    storage::local_log_reader_config cfg(
+      model::offset{0}, model::offset::max());
 
     // Create a collector that signals fullness at 2 empty batches.
     batch_collector collector(

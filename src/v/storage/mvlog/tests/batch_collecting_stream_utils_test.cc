@@ -48,7 +48,7 @@ TEST(BatchCollectingStreamTest, TestBasicStream) {
         buf.append(std::move(entry_body_buf));
     }
 
-    log_reader_config cfg{model::offset{0}, model::offset::max()};
+    local_log_reader_config cfg{model::offset{0}, model::offset::max()};
     batch_collector collector(cfg, model::term_id{1}, 128_MiB);
     entry_stream entries(make_iobuf_input_stream(std::move(buf)));
 

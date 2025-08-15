@@ -43,7 +43,7 @@ struct materialized_segment_state {
     /// Borrow reader or make a new one.
     /// In either case return a reader.
     std::unique_ptr<remote_segment_batch_reader> borrow_reader(
-      const storage::log_reader_config& cfg,
+      const cloud_storage::cloud_log_reader_config& cfg,
       retry_chain_logger& ctxlog,
       partition_probe& probe,
       ts_read_path_probe& ts_probe,

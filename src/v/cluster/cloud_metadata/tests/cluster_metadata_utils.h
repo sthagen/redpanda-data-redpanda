@@ -66,7 +66,7 @@ inline topic_properties non_remote_topic_properties() {
 // recorded in its log.
 inline ss::future<std::vector<cluster::recovery_stage>>
 read_recovery_stages(cluster::partition& controller_prt) {
-    storage::log_reader_config reader_config(
+    storage::local_log_reader_config reader_config(
       model::offset(0),
       controller_prt.raft()->committed_offset(),
       0,
@@ -75,7 +75,7 @@ read_recovery_stages(cluster::partition& controller_prt) {
       std::nullopt,
       std::nullopt,
       std::nullopt);
-    auto reader = controller_prt.make_reader(reader_config).get();
+    auto reader = controller_prt.make_local_reader(reader_config).get();
     auto batches = co_await model::consume_reader_to_memory(
       std::move(reader), model::timeout_clock::time_point::max());
     std::vector<cluster::recovery_stage> stages;

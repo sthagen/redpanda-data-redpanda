@@ -15,6 +15,7 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/cloud_topics:data_plane_api",
+        "//src/v/cloud_topics:log_reader_config",
         "//src/v/cloud_topics:logger",
         "//src/v/cloud_topics/level_zero/stm:placeholder",
         "//src/v/cluster",

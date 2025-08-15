@@ -24,6 +24,7 @@
 #include "storage/log_manager.h"
 #include "storage/record_batch_utils.h"
 #include "storage/tests/utils/disk_log_builder.h"
+#include "storage/types.h"
 #include "test_utils/archival.h"
 #include "test_utils/tmp_dir.h"
 
@@ -2084,7 +2085,7 @@ SEASTAR_THREAD_TEST_CASE(test_new_segment_upload_fuzz) {
 
     // Consume the log to find all batch boundaries
     auto reader = b.get_disk_log_impl()
-                    .make_reader(storage::log_reader_config(
+                    .make_reader(storage::local_log_reader_config(
                       model::offset{0}, model::offset{last_offset}))
                     .get();
 

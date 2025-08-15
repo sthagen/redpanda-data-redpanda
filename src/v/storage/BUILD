@@ -47,6 +47,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/compression",
         "//src/v/model",
+        "//src/v/model:batch_compression",
         "//src/v/utils:vint",
         "@seastar",
     ],

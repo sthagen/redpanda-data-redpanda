@@ -235,11 +235,11 @@ ss::future<result<void>> segment_upload::initialize(
       range);
     // Create a log reader config to scan the uploaded offset
     // range. We should skip the batch cache.
-    storage::log_reader_config reader_cfg(range.base, range.last);
+    auto reader_cfg = storage::local_log_reader_config(range.base, range.last);
     reader_cfg.skip_batch_cache = true;
     reader_cfg.skip_readers_cache = true;
     vlog(_ctxlog.debug, "Creating log reader, config: {}", reader_cfg);
-    auto reader = co_await _part->make_reader(reader_cfg);
+    auto reader = co_await _part->make_local_reader(reader_cfg);
     _stream = make_reader_input_stream(
       _ntp,
       std::move(reader),
@@ -259,12 +259,12 @@ ss::future<result<void>> segment_upload::initialize(
     _params = params.value();
     // Create a log reader config to scan the uploaded offset
     // range. We should skip the batch cache.
-    storage::log_reader_config reader_cfg(
+    auto reader_cfg = storage::local_log_reader_config(
       params.value().offsets.base, params.value().offsets.last);
     reader_cfg.skip_batch_cache = true;
     reader_cfg.skip_readers_cache = true;
     vlog(_ctxlog.debug, "Creating log reader, config: {}", reader_cfg);
-    auto reader = co_await _part->make_reader(reader_cfg);
+    auto reader = co_await _part->make_local_reader(reader_cfg);
     _stream = make_reader_input_stream(
       _ntp,
       std::move(reader),

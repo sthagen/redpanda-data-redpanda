@@ -145,7 +145,7 @@ ss::future<configuration_bootstrap_state> read_bootstrap_state(
     // TODO(agallego, michal) - iterate the log in reverse
     // as an optimization
     auto lstats = log->offsets();
-    auto rcfg = storage::log_reader_config(
+    auto rcfg = storage::local_log_reader_config(
       start_offset, lstats.dirty_offset, as);
     auto cfg_state = std::make_unique<configuration_bootstrap_state>();
     return log->make_reader(rcfg).then(

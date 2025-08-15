@@ -687,6 +687,7 @@ redpanda_cc_library(
         "//src/v/hashing:xx",
         "//src/v/http",
         "//src/v/json",
+        "//src/v/kafka/data:log_reader_config",
         "//src/v/kafka/protocol",
         "//src/v/metrics",
         "//src/v/model",

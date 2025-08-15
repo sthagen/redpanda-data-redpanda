@@ -537,7 +537,7 @@ public:
 
         // Read data back starting from the last offset
         auto reader = partition
-                        ->make_reader(storage::log_reader_config(
+                        ->make_local_reader(storage::local_log_reader_config(
                           model::offset{0}, last_offset))
                         .get();
 

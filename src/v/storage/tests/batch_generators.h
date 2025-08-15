@@ -15,6 +15,7 @@
 #include "compression/compression.h"
 #include "container/chunked_circular_buffer.h"
 #include "hashing/crc32c.h"
+#include "model/batch_compression.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/record_utils.h"
@@ -98,8 +99,6 @@ struct linear_int_kv_batch_generator {
             header.base_sequence = spec.base_sequence;
         }
 
-        auto size = model::packed_record_batch_header_size;
-        model::record_batch::records_type records;
         auto rs = model::record_batch::uncompressed_records();
         rs.reserve(spec.count);
 
@@ -108,31 +107,23 @@ struct linear_int_kv_batch_generator {
               model::test::make_random_record(i, reflection::to_iobuf(idx)));
         }
 
-        if (header.attrs.compression() != model::compression::none) {
-            iobuf body;
-            for (auto& r : rs) {
-                model::append_record_to_buffer(body, r);
-            }
-            rs.clear();
-            records = ::compression::compressor::compress(
-              body, header.attrs.compression());
-            size += std::get<iobuf>(records).size_bytes();
-        } else {
-            for (auto& r : rs) {
-                size += r.size_bytes();
-                size += vint::vint_size(r.size_bytes());
-            }
-            records = std::move(rs);
+        iobuf body;
+        for (auto& r : rs) {
+            model::append_record_to_buffer(body, r);
         }
+        rs.clear();
         // TODO: expose term setting
         header.ctx = model::record_batch_header::context(
           model::term_id(0), ss::this_shard_id());
-        header.size_bytes = size;
-        auto batch = model::record_batch(header, std::move(records));
+        header.size_bytes = static_cast<int32_t>(
+          model::packed_record_batch_header_size + body.size_bytes());
+        auto batch = model::record_batch(
+          header, std::move(body), model::record_batch::tag_ctor_ng{});
         batch.header().crc = model::crc_record_batch(batch);
         batch.header().header_crc = model::internal_header_only_crc(
           batch.header());
-        return batch;
+        return model::compress_batch_sync(
+          header.attrs.compression(), std::move(batch));
     }
 
     chunked_circular_buffer<model::record_batch>

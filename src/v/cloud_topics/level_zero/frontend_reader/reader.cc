@@ -14,7 +14,6 @@
 #include "cloud_topics/logger.h"
 #include "cluster/partition.h"
 #include "config/configuration.h"
-#include "model/fundamental.h"
 #include "model/timeout_clock.h"
 
 #include <chrono>
@@ -28,7 +27,7 @@ namespace experimental::cloud_topics {
 static constexpr size_t L0_max_bytes_per_metadata_fetch = 4_KiB;
 
 level_zero_log_reader_impl::level_zero_log_reader_impl(
-  storage::log_reader_config& cfg,
+  cloud_topic_log_reader_config& cfg,
   ss::lw_shared_ptr<cluster::partition> underlying,
   data_plane_api* ct_api)
   : _config(cfg)
@@ -84,17 +83,19 @@ level_zero_log_reader_impl::do_load_slice(
 
 std::optional<chunked_circular_buffer<model::record_batch>>
 level_zero_log_reader_impl::maybe_load_slices_from_cache() {
-    if (_config.skip_batch_cache) {
+    if (_config.skip_cache) {
         return std::nullopt;
     }
-    auto last_offset = _underlying->get_offset_translator_state()
-                         ->from_log_offset(_underlying->committed_offset());
+    auto last_offset = model::offset_cast(
+      _underlying->get_offset_translator_state()->from_log_offset(
+        _underlying->committed_offset()));
     chunked_circular_buffer<model::record_batch> ret;
     size_t materialized_bytes = 0;
     auto current = _config.start_offset;
     while (materialized_bytes < _config.max_bytes
            && current < _config.max_offset && current <= last_offset) {
-        auto batch = _ct_api->cache_get(_underlying->ntp(), current);
+        auto batch = _ct_api->cache_get(
+          _underlying->ntp(), kafka::offset_cast(current));
         size_t batch_size = 0;
         if (!batch.has_value()) {
             // We hit a gap in the cache and have to download objects
@@ -119,14 +120,15 @@ level_zero_log_reader_impl::maybe_load_slices_from_cache() {
             break;
         }
         vassert(
-          batch->base_offset() == current,
+          batch->base_offset() == kafka::offset_cast(current),
           "Unexpected base offset {} vs {}",
           batch->base_offset(),
           current);
         ret.push_back(std::move(batch.value()));
         materialized_bytes += batch_size;
         // Invariant: it's guaranteed that the 'ret' is not empty.
-        current = model::next_offset(ret.back().last_offset());
+        current = model::offset_cast(
+          model::next_offset(ret.back().last_offset()));
     }
     _config.start_offset = current;
     if (
@@ -161,11 +163,20 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
     try {
         // Fetch metadata from the _underlying
         auto ot_state = _underlying->get_offset_translator_state();
-        storage::log_reader_config cfg(_config);
-        cfg.start_offset = ot_state->to_log_offset(cfg.start_offset);
-        cfg.max_offset = ot_state->to_log_offset(cfg.max_offset);
-        cfg.translate_offsets = storage::translate_offsets::yes;
-        cfg.type_filter = {model::record_batch_type::dl_placeholder};
+        auto start_offset = ot_state->to_log_offset(
+          kafka::offset_cast(_config.start_offset));
+        auto max_offset = ot_state->to_log_offset(
+          kafka::offset_cast(_config.max_offset));
+        storage::local_log_reader_config cfg(
+          start_offset,
+          max_offset,
+          _config.min_bytes,
+          _config.max_bytes,
+          {model::record_batch_type::dl_placeholder},
+          _config.first_timestamp,
+          _config.abort_source,
+          _config.client_address);
+        cfg.translate_offsets = model::translate_offsets::yes;
         // This parameter defines how many bytes we want to fetch
         // from the underlying partition in one go.
         // The L0 meta batches are small, so we can fetch a lot of them in a
@@ -176,7 +187,7 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
         // to fetch L0 meta batches first and then parse them.
         cfg.max_bytes = L0_max_bytes_per_metadata_fetch;
 
-        auto reader = co_await _underlying->make_reader(cfg);
+        auto reader = co_await _underlying->make_local_reader(cfg);
         auto placeholders = co_await model::consume_reader_to_chunked_vector(
           std::move(reader), deadline);
 
@@ -366,7 +377,7 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
 }
 
 bool level_zero_log_reader_impl::cache_enabled() const {
-    if (_config.skip_batch_cache) {
+    if (_config.skip_cache) {
         return false;
     }
     if (!_underlying->log()->config().cache_enabled()) {
@@ -387,7 +398,8 @@ void level_zero_log_reader_impl::consume_materialized_batches(
       _meta.size());
     std::move(_batches.begin(), _batches.end(), std::back_inserter(*dest));
     _batches.clear();
-    _config.start_offset = model::next_offset(dest->back().last_offset());
+    _config.start_offset = model::offset_cast(
+      model::next_offset(dest->back().last_offset()));
     _current = _meta.empty() ? state::empty_state : state::ready_state;
 }
 

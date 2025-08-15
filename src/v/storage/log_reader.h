@@ -91,7 +91,7 @@ public:
     static constexpr size_t max_buffer_size = 32 * 1024; // 32KB
 
     log_segment_batch_reader(
-      segment&, log_reader_config& config, probe& p) noexcept;
+      segment&, local_log_reader_config& config, probe& p) noexcept;
     log_segment_batch_reader(log_segment_batch_reader&&) noexcept = default;
     log_segment_batch_reader& operator=(log_segment_batch_reader&&) noexcept
       = delete;
@@ -120,7 +120,7 @@ private:
     };
 
     segment& _seg;
-    log_reader_config& _config;
+    local_log_reader_config& _config;
     probe& _probe;
 
     std::unique_ptr<continuous_batch_parser> _iterator;
@@ -142,7 +142,7 @@ public:
 
     log_reader(
       std::unique_ptr<lock_manager::lease>,
-      log_reader_config,
+      local_log_reader_config,
       probe&,
       ss::lw_shared_ptr<const storage::offset_translator_state>) noexcept;
 
@@ -177,7 +177,7 @@ public:
      *
      * Resetting a reader also sets its "was cached" attribute to true.
      */
-    void reset_config(log_reader_config cfg);
+    void reset_config(local_log_reader_config cfg);
 
     /**
      * Return next read request lower bound. i.e. lowest offset that can be read
@@ -249,14 +249,14 @@ private:
     // Reset the internal state of the reader, using the given config and
     // the given segment set iterator. This method is shared between the
     // constructor and the reader cache hit path (which calls reset_config()).
-    void reset(log_reader_config, iterator_pair, bool cache_hit);
+    void reset(local_log_reader_config, iterator_pair, bool cache_hit);
 
     std::unique_ptr<lock_manager::lease> _lease;
     iterator_pair _iterator;
 
     // NOTE: this is not a const config, and is updated to reflect its
     // progression.
-    log_reader_config _config;
+    local_log_reader_config _config;
 
     // The base offset of the previous batch processed.
     model::offset _last_base;

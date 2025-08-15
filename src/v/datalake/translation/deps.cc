@@ -367,11 +367,10 @@ public:
             co_return std::nullopt;
         }
         auto log_reader = co_await _partition_proxy->make_reader(
-          {kafka::offset_cast(begin_offset),
-           kafka::offset_cast(max_translatable_offset.value()),
+          {begin_offset,
+           max_translatable_offset.value(),
            0,
            std::numeric_limits<size_t>::max(),
-           std::nullopt,
            std::nullopt,
            as});
         auto tracker = kafka::aborted_transaction_tracker::create_default(

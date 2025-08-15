@@ -158,7 +158,7 @@ ss::future<> state_machine::apply() {
                * with the raft semantics (i.e. what is applied must be comitted)
                * we have to limit reading to the committed offset.
                */
-              storage::log_reader_config config(
+              storage::local_log_reader_config config(
                 _next, _raft->committed_offset());
               return _raft->make_reader(config);
           });

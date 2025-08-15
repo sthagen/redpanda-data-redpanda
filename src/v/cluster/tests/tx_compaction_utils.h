@@ -13,6 +13,7 @@
 #include "cluster/rm_stm.h"
 #include "storage/segment.h"
 #include "storage/tests/batch_generators.h"
+#include "storage/types.h"
 #include "test_utils/async.h"
 #include "test_utils/randoms.h"
 #include "test_utils/test_macros.h"
@@ -129,7 +130,7 @@ public:
     ss::future<>
     validate(ss::shared_ptr<storage::log> log, int expected_fences) {
         auto lstats = log->offsets();
-        storage::log_reader_config cfg(
+        auto cfg = storage::local_log_reader_config(
           lstats.start_offset, lstats.committed_offset);
         auto reader = co_await log->make_reader(cfg);
         auto batches = co_await copy_to_mem(reader);

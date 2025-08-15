@@ -1,8 +1,7 @@
-
-
 #include "kafka/client/cluster.h"
 #include "kafka/protocol/produce.h"
 #include "redpanda/tests/fixture.h"
+#include "storage/types.h"
 #include "test_utils/test.h"
 
 #include <gtest/gtest.h>
@@ -143,10 +142,11 @@ model::record_batch test_batch(int i) {
 
 ss::future<chunked_vector<model::record_batch>>
 read_partition_data(ss::lw_shared_ptr<::cluster::partition> p) {
-    storage::log_reader_config r_cfg(model::offset(0), model::offset::max());
-    r_cfg.translate_offsets = storage::translate_offsets::yes;
+    storage::local_log_reader_config r_cfg(
+      model::offset(0), model::offset::max());
+    r_cfg.translate_offsets = model::translate_offsets::yes;
     r_cfg.type_filter = model::record_batch_type::raft_data;
-    auto r = co_await p->make_reader(std::move(r_cfg));
+    auto r = co_await p->make_local_reader(std::move(r_cfg));
 
     co_return co_await model::consume_reader_to_chunked_vector(
       std::move(r), model::no_timeout);

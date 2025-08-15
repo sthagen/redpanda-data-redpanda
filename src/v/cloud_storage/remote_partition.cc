@@ -100,7 +100,7 @@ remote_partition::iterator remote_partition::get_or_materialize_segment(
 
 remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
   const partition_manifest& manifest,
-  storage::log_reader_config config,
+  cloud_storage::cloud_log_reader_config config,
   segment_units segment_unit,
   segment_reader_units segment_reader_unit,
   model::offset hint) {
@@ -116,7 +116,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
     // - The config.start_offset matches the base_offset - delta_offset of
     //   the next segment.
 
-    auto ko = model::offset_cast(config.start_offset);
+    auto ko = config.start_offset;
     // Two level lookup:
     // - find segment meta based on kafka offset
     //   this allow us to avoid any ambiguity in case if the segment
@@ -146,9 +146,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
                 // the scan range.
                 auto so = manifest.get_start_kafka_offset().value_or(
                   kafka::offset::min());
-                if (
-                  model::offset_cast(config.start_offset) < so
-                  && model::offset_cast(config.max_offset) > so) {
+                if (config.start_offset < so && config.max_offset > so) {
                     mit = manifest.begin();
                 }
             }
@@ -246,7 +244,7 @@ public:
         vlog(_ctxlog.trace, "Constructing reader {}", ntp);
     }
 
-    ss::future<> start(storage::log_reader_config config) {
+    ss::future<> start(cloud_storage::cloud_log_reader_config config) {
         if (config.abort_source) {
             vlog(_ctxlog.debug, "abort_source is set");
             _partition_reader_as = config.abort_source;
@@ -471,13 +469,13 @@ public:
                 if (_first_produced_offset == model::offset{} && !d.empty()) {
                     _first_produced_offset = d.front().base_offset();
                 } else {
-                    auto current_ko = _ot_state->from_log_offset(
-                      _seg_reader->current_rp_offset());
+                    auto current_ko = model::offset_cast(
+                      _ot_state->from_log_offset(
+                        _seg_reader->current_rp_offset()));
                     vlog(
                       _ctxlog.debug,
                       "No results, current rp offset: {}, current kafka "
-                      "offset: {}, max rp offset: "
-                      "{}",
+                      "offset: {}, max rp offset: {}",
                       _seg_reader->current_rp_offset(),
                       current_ko,
                       _seg_reader->config().max_offset);
@@ -550,7 +548,7 @@ private:
         }
     }
 
-    ss::future<> init_cursor(storage::log_reader_config config) {
+    ss::future<> init_cursor(cloud_storage::cloud_log_reader_config config) {
         auto segment_unit = co_await _partition->materialized()
                               .get_segment_units(config.abort_source);
         auto segment_reader_unit
@@ -560,13 +558,11 @@ private:
         async_view_search_query_t query;
         if (config.first_timestamp.has_value()) {
             query = async_view_timestamp_query(
-              model::offset_cast(config.start_offset),
+              config.start_offset,
               config.first_timestamp.value(),
-              model::offset_cast(config.max_offset));
+              config.max_offset);
         } else {
-            // NOTE: config.start_offset actually contains kafka offset
-            // stored using model::offset type.
-            query = model::offset_cast(config.start_offset);
+            query = config.start_offset;
         }
         // Find manifest that contains requested offset or timestamp
         auto cur = co_await _partition->_manifest_view->get_cursor(query);
@@ -661,7 +657,7 @@ private:
     // Initialize object using remote_partition as a source
     void initialize_reader_state(
       const partition_manifest& manifest,
-      const storage::log_reader_config& config,
+      const cloud_storage::cloud_log_reader_config& config,
       segment_units segment_unit,
       segment_reader_units segment_reader_unit) {
         vlog(
@@ -691,7 +687,7 @@ private:
 
     remote_partition::borrow_result_t find_cached_reader(
       const partition_manifest& manifest,
-      const storage::log_reader_config& config,
+      const cloud_storage::cloud_log_reader_config& config,
       segment_units segment_unit,
       segment_reader_units segment_reader_unit) {
         if (!_partition || _partition->_manifest_view->stm_manifest().empty()) {
@@ -909,7 +905,7 @@ private:
     /// Cancellation subscription
     ss::abort_source::subscription _as_sub;
     /// Reference to the abort source of the partition reader
-    storage::opt_abort_source_t _partition_reader_as;
+    model::opt_abort_source_t _partition_reader_as;
     /// Guard for the partition gate
     ss::gate::holder _gate_guard;
     model::offset _next_segment_base_offset{};
@@ -1223,7 +1219,7 @@ size_t remote_partition::reader_mem_use_estimate() noexcept {
 }
 
 ss::future<storage::translating_reader> remote_partition::make_reader(
-  storage::log_reader_config config,
+  cloud_storage::cloud_log_reader_config config,
   std::optional<model::timeout_clock::time_point> deadline) {
     std::ignore = deadline;
     vlog(
@@ -1261,13 +1257,14 @@ remote_partition::timequery(storage::timequery_config cfg) {
     }
 
     auto start_offset = std::max(
-      cfg.min_offset,
-      kafka::offset_cast(stm_manifest.full_log_start_kafka_offset().value()));
+      model::offset_cast(cfg.min_offset),
+      stm_manifest.full_log_start_kafka_offset().value());
+    auto max_offset = model::offset_cast(cfg.max_offset);
 
     // Synthesize a log_reader_config from our timequery_config
-    storage::log_reader_config config(
+    cloud_log_reader_config config(
       start_offset,
-      cfg.max_offset,
+      max_offset,
       0,
       2048, // We just need one record batch
       cfg.type_filter,

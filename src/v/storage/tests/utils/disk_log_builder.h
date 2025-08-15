@@ -47,8 +47,8 @@ inline log_config log_builder_config() {
       random_dir(), 100_MiB, storage::make_sanitized_file_config());
 }
 
-inline log_reader_config reader_config() {
-    return log_reader_config{
+inline local_log_reader_config reader_config() {
+    return local_log_reader_config{
       model::offset(0), model::model_limits<model::offset>::max()};
 }
 
@@ -343,7 +343,7 @@ public:
 
     // Read interface
     // Default consume
-    auto consume(log_reader_config config = reader_config()) {
+    auto consume(local_log_reader_config config = reader_config()) {
         return _log->make_reader(config).then(
           [](model::record_batch_reader reader) {
               return model::consume_reader_to_memory(
@@ -354,14 +354,14 @@ public:
     // Consumer with config
     template<typename Consumer>
     requires model::BatchReaderConsumer<Consumer>
-    auto consume(log_reader_config config = reader_config()) {
+    auto consume(local_log_reader_config config = reader_config()) {
         return consume_impl(Consumer{}, std::move(config));
     }
 
     // Non default constructable Consumer with config
     template<typename Consumer>
     requires model::BatchReaderConsumer<Consumer>
-    auto consume(Consumer c, log_reader_config config = reader_config()) {
+    auto consume(Consumer c, local_log_reader_config config = reader_config()) {
         return consume_impl(std::move(c), std::move(config));
     }
 
@@ -388,7 +388,7 @@ public:
 
 private:
     template<typename Consumer>
-    auto consume_impl(Consumer c, log_reader_config config) {
+    auto consume_impl(Consumer c, local_log_reader_config config) {
         return _log->make_reader(config).then(
           [c = std::move(c)](model::record_batch_reader reader) mutable {
               return std::move(reader).consume(std::move(c), model::no_timeout);

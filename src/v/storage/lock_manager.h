@@ -41,7 +41,8 @@ public:
     };
 
     ss::future<std::unique_ptr<lease>> range_lock(const timequery_config& cfg);
-    ss::future<std::unique_ptr<lease>> range_lock(const log_reader_config& cfg);
+    ss::future<std::unique_ptr<lease>>
+    range_lock(const local_log_reader_config& cfg);
 
 private:
     segment_set& _set;

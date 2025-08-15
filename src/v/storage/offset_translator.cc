@@ -167,7 +167,7 @@ ss::future<> offset_translator::start(must_reset reset) {
 }
 
 ss::future<> offset_translator::sync_with_log(
-  storage::log& log, storage::opt_abort_source_t as) {
+  storage::log& log, model::opt_abort_source_t as) {
     if (_filtered_types.empty()) {
         co_return;
     }
@@ -200,7 +200,7 @@ ss::future<> offset_translator::sync_with_log(
       _highest_known_offset,
       log_offsets.dirty_offset);
 
-    auto reader_cfg = storage::log_reader_config(
+    auto reader_cfg = storage::local_log_reader_config(
       start_offset, log_offsets.dirty_offset, as);
     auto reader = co_await log.make_reader(reader_cfg);
 

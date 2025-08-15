@@ -11,6 +11,7 @@
 #include "cloud_storage/tests/util.h"
 
 #include "cloud_storage/partition_manifest_downloader.h"
+#include "cloud_storage/types.h"
 #include "model/record.h"
 #include "model/record_batch_types.h"
 #include "utils/stream_provider.h"
@@ -684,8 +685,8 @@ std::vector<model::record_batch_header> scan_remote_partition_incrementally(
 
     std::vector<model::record_batch_header> headers;
 
-    storage::log_reader_config reader_config(base, max);
-
+    cloud_log_reader_config reader_config(
+      model::offset_cast(base), model::offset_cast(max));
     // starting max_bytes
     constexpr size_t max_bytes_limit = 4_KiB;
     reader_config.max_bytes = maybe_max_bytes != 0 ? maybe_max_bytes
@@ -695,7 +696,7 @@ std::vector<model::record_batch_header> scan_remote_partition_incrementally(
 
     int num_fetches = 0;
     while (next < max) {
-        reader_config.start_offset = next;
+        reader_config.start_offset = model::offset_cast(next);
         if (maybe_max_bytes == 0) {
             reader_config.max_bytes = random_generators::get_int(
               max_bytes_limit - 1);
@@ -747,7 +748,8 @@ std::vector<model::record_batch_header> scan_remote_partition(
           .cloud_storage_max_segment_readers_per_shard.set_value(
             maybe_max_readers);
     }
-    storage::log_reader_config reader_config(base, max);
+    cloud_log_reader_config reader_config(
+      model::offset_cast(base), model::offset_cast(max));
 
     auto manifest = hydrate_manifest(
       imposter.api.local(), imposter.bucket_name);
@@ -808,7 +810,9 @@ scan_result scan_remote_partition(
     }
     auto manifest = hydrate_manifest(
       imposter.api.local(), imposter.bucket_name);
-    storage::log_reader_config reader_config(min, max);
+
+    cloud_log_reader_config reader_config(
+      model::offset_cast(min), model::offset_cast(max));
     reader_config.first_timestamp = timestamp;
 
     partition_probe probe(manifest.get_ntp());
@@ -895,8 +899,8 @@ scan_remote_partition_incrementally_with_closest_lso(
 
     std::vector<model::record_batch_header> headers;
 
-    storage::log_reader_config reader_config(base, model::next_offset(base));
-
+    cloud_log_reader_config reader_config(
+      model::offset_cast(base), model::offset_cast(model::next_offset(base)));
     // starting max_bytes
     reader_config.max_bytes = 1;
 
@@ -904,8 +908,8 @@ scan_remote_partition_incrementally_with_closest_lso(
 
     int num_fetches = 0;
     while (next < max) {
-        reader_config.start_offset = next;
-        reader_config.max_offset = model::next_offset(next);
+        reader_config.start_offset = model::offset_cast(next);
+        reader_config.max_offset = model::offset_cast(model::next_offset(next));
         vlog(test_util_log.info, "reader_config {}", reader_config);
         auto reader = partition->make_reader(reader_config).get().reader;
         auto headers_read

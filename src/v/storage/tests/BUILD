@@ -329,6 +329,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/base",
+        "//src/v/config",
         "//src/v/storage",
         "//src/v/test_utils:gtest",
         "@googletest//:gtest",

@@ -12,6 +12,7 @@
 #include "transform/rpc/service.h"
 
 #include "cluster/types.h"
+#include "kafka/data/log_reader_config.h"
 #include "kafka/data/partition_proxy.h"
 #include "logger.h"
 #include "model/ktp.h"
@@ -235,13 +236,11 @@ local_service::load_wasm_binary(
       *shard,
       model::wasm_binaries_internal_ntp,
       [this, offset, timeout](kafka::partition_proxy* partition) mutable {
-          storage::log_reader_config reader_config(
-            /*start_offset=*/offset,
-            /*max_offset=*/offset,
+          kafka::log_reader_config reader_config(
+            /*start_offset=*/model::offset_cast(offset),
+            /*max_offset=*/model::offset_cast(offset),
             /*min_bytes=*/0,
             /*max_bytes=*/1,
-
-            /*type_filter=*/std::nullopt,
             /*time=*/std::nullopt,
             /*as=*/std::nullopt);
           return partition->make_reader(reader_config)

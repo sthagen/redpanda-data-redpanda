@@ -1092,7 +1092,7 @@ TEST_F(storage_test_fixture, append_concurrent_with_prefix_truncate) {
     auto read = [&] {
         auto lstats = log->offsets();
         return log
-          ->make_reader(storage::log_reader_config(
+          ->make_reader(storage::local_log_reader_config(
             lstats.start_offset, model::offset::max()))
           .then([](auto reader) {
               return ss::sleep(std::chrono::milliseconds(
@@ -2117,7 +2117,7 @@ TEST_F(storage_test_fixture, reader_reusability_test_parser_header) {
     append_exactly(log, 1, 128_KiB).get();
     log->flush().get();
 
-    storage::log_reader_config reader_cfg(
+    storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::model_limits<model::offset>::max(),
       0,
@@ -2330,7 +2330,7 @@ TEST_F(storage_test_fixture, disposing_in_use_reader) {
     }
     log->flush().get();
     // read only up to 4096 bytes, this way a reader will still be in a cache
-    storage::log_reader_config reader_cfg(
+    storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::offset::max(),
       0,
@@ -2606,7 +2606,7 @@ TEST_F(storage_test_fixture, reader_prevents_log_shutdown) {
     append_exactly(log, 5, 128).get();
 
     // drain whole log with reader so it is not reusable anymore.
-    storage::log_reader_config reader_cfg(
+    storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::model_limits<model::offset>::max(),
       0,
@@ -2704,7 +2704,7 @@ absl::
   flat_hash_map<std::tuple<model::record_batch_type, bool, ss::sstring>, int>
   compact_in_memory(ss::shared_ptr<storage::log> log) {
     auto rdr = log
-                 ->make_reader(storage::log_reader_config(
+                 ->make_reader(storage::local_log_reader_config(
                    model::offset(0), model::offset::max()))
                  .get();
 
@@ -2854,7 +2854,7 @@ TEST_F(storage_test_fixture, read_write_truncate) {
           if (offset.dirty_offset == model::offset{}) {
               return ss::now();
           }
-          storage::log_reader_config cfg(
+          storage::local_log_reader_config cfg(
             std::max(model::offset(0), offset.dirty_offset - model::offset(10)),
             cnt % 2 == 0 ? offset.dirty_offset - model::offset(2)
                          : offset.dirty_offset);
@@ -3096,7 +3096,7 @@ TEST_F(storage_test_fixture, compaction_non_raft_batches_regression_test) {
     };
 
     auto print_batch_info = [](ss::shared_ptr<storage::log> log) {
-        storage::log_reader_config reader_cfg(
+        storage::local_log_reader_config reader_cfg(
           model::offset(0), model::offset::max());
         auto reader = log->make_reader(reader_cfg).get();
         std::move(reader)
@@ -3342,7 +3342,7 @@ TEST_F(storage_test_fixture, compaction_truncation_corner_cases) {
 
 static storage::log_gap_analysis analyze(storage::log& log) {
     // TODO factor out common constant
-    storage::log_reader_config reader_cfg(
+    storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::model_limits<model::offset>::max(),
       0,
@@ -3976,7 +3976,7 @@ TEST_F(storage_test_fixture, issue_8091) {
               return ss::now();
           }
           auto offset = log->offsets();
-          storage::log_reader_config cfg(
+          storage::local_log_reader_config cfg(
             last_truncate - model::offset(1), offset.dirty_offset);
           cfg.type_filter = model::record_batch_type::raft_data;
 
@@ -4135,7 +4135,7 @@ TEST_F(storage_test_fixture, reader_reusability_max_bytes) {
               .get();
             log->flush().get();
 
-            storage::log_reader_config reader_cfg(
+            storage::local_log_reader_config reader_cfg(
               model::offset(0),
               model::model_limits<model::offset>::max(),
               0,
@@ -4293,7 +4293,7 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
         log->force_roll().get();
     }
 
-    storage::log_reader_config reader_cfg(
+    storage::local_log_reader_config reader_cfg(
       model::offset(0), model::offset::max());
     auto reader = log->make_reader(reader_cfg).get();
 
@@ -4333,7 +4333,7 @@ TEST_F(storage_test_fixture, test_offset_range_size) {
 
         // Validate using the segment reader
         size_t consumed_size = 0;
-        storage::log_reader_config reader_cfg(base, result->last_offset);
+        storage::local_log_reader_config reader_cfg(base, result->last_offset);
         reader_cfg.skip_readers_cache = true;
         reader_cfg.skip_batch_cache = true;
         auto log_rdr = log->make_reader(std::move(reader_cfg)).get();
@@ -4405,7 +4405,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
         log->force_roll().get();
     }
 
-    storage::log_reader_config reader_cfg(
+    storage::local_log_reader_config reader_cfg(
       model::offset(0), model::offset::max());
     auto reader = log->make_reader(reader_cfg).get();
     auto acc = std::move(reader)
@@ -4451,7 +4451,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2) {
 
         // Validate using the segment reader
         size_t consumed_size = 0;
-        storage::log_reader_config reader_cfg(base, result->last_offset);
+        storage::local_log_reader_config reader_cfg(base, result->last_offset);
         reader_cfg.skip_readers_cache = true;
         reader_cfg.skip_batch_cache = true;
         auto log_rdr = log->make_reader(std::move(reader_cfg)).get();
@@ -4602,7 +4602,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
     // changes
 
     // Read non-compacted version
-    storage::log_reader_config nc_reader_cfg(
+    storage::local_log_reader_config nc_reader_cfg(
       model::offset(0), model::offset::max());
     auto nc_reader = log->make_reader(nc_reader_cfg).get();
 
@@ -4626,7 +4626,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
     log->housekeeping(h_cfg).get();
 
     // Read compacted version
-    storage::log_reader_config c_reader_cfg(
+    storage::local_log_reader_config c_reader_cfg(
       model::offset(0), model::offset::max());
     auto c_reader = log->make_reader(c_reader_cfg).get();
     auto c_acc = std::move(c_reader)
@@ -4713,7 +4713,8 @@ TEST_F(storage_test_fixture, test_offset_range_size_compacted) {
         ASSERT_EQ(last, result->last_offset);
 
         size_t consumed_size = 0;
-        storage::log_reader_config c_reader_cfg(base, result->last_offset);
+        storage::local_log_reader_config c_reader_cfg(
+          base, result->last_offset);
         c_reader_cfg.skip_readers_cache = true;
         c_reader_cfg.skip_batch_cache = true;
         auto c_log_rdr = log->make_reader(std::move(c_reader_cfg)).get();
@@ -4794,7 +4795,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
     // changes
 
     // Read non-compacted version
-    storage::log_reader_config nc_reader_cfg(
+    storage::local_log_reader_config nc_reader_cfg(
       model::offset(0), model::offset::max());
     auto nc_reader = log->make_reader(nc_reader_cfg).get();
 
@@ -4818,7 +4819,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
     log->housekeeping(h_cfg).get();
 
     // Read compacted version
-    storage::log_reader_config c_reader_cfg(
+    storage::local_log_reader_config c_reader_cfg(
       model::offset(0), model::offset::max());
     auto c_reader = log->make_reader(c_reader_cfg).get();
 
@@ -4898,7 +4899,7 @@ TEST_F(storage_test_fixture, test_offset_range_size2_compacted) {
 
         size_t expected_size = 0;
 
-        storage::log_reader_config c_reader_cfg(base, last_offset);
+        storage::local_log_reader_config c_reader_cfg(base, last_offset);
         c_reader_cfg.skip_readers_cache = true;
         c_reader_cfg.skip_batch_cache = true;
         auto c_log_rdr = log->make_reader(std::move(c_reader_cfg)).get();
@@ -5120,7 +5121,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_incremental) {
         sc.max_size += max_step_size + sc.target;
     }
 
-    storage::log_reader_config reader_cfg(
+    storage::local_log_reader_config reader_cfg(
       model::offset(0), model::offset::max());
     auto reader = log->make_reader(reader_cfg).get();
 
@@ -5166,7 +5167,7 @@ TEST_F(storage_test_fixture, test_offset_range_size_incremental) {
             batch_size_accumulator acc{};
             acc.size_bytes = &measured_size;
 
-            storage::log_reader_config reader_cfg(base, res->last_offset);
+            storage::local_log_reader_config reader_cfg(base, res->last_offset);
             reader_cfg.skip_readers_cache = true;
             reader_cfg.skip_batch_cache = true;
             auto reader = log->make_reader(reader_cfg).get();
