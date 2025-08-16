@@ -63,9 +63,10 @@ create_inbound_topics(std::vector<std::string_view> topics) {
     chunked_vector<cluster::data_migrations::inbound_topic> ret;
     ret.reserve(topics.size());
     for (auto& t : topics) {
-        ret.push_back(cluster::data_migrations::inbound_topic{
-          .source_topic_name = model::topic_namespace(
-            model::kafka_namespace, model::topic(t))});
+        ret.push_back(
+          cluster::data_migrations::inbound_topic{
+            .source_topic_name = model::topic_namespace(
+              model::kafka_namespace, model::topic(t))});
     }
     return ret;
 }
@@ -87,8 +88,9 @@ struct data_migration_table_fixture : public seastar_test {
           true);
 
         co_await resources.start();
-        co_await topics.start(ss::sharded_parameter(
-          [this] { return std::ref(resources.local()); }));
+        co_await topics.start(ss::sharded_parameter([this] {
+            return std::ref(resources.local());
+        }));
         table = std::make_unique<cluster::data_migrations::migrations_table>(
           resources, topics, true);
         table->register_notification([this](cluster::data_migrations::id id) {
@@ -208,8 +210,9 @@ struct data_migration_table_fixture : public seastar_test {
         expected_states) {
         for (auto& expected : expected_states) {
             EXPECT_EQ(
-              resources.local().get_topic_state(model::topic_namespace(
-                model::kafka_namespace, model::topic(expected.first))),
+              resources.local().get_topic_state(
+                model::topic_namespace(
+                  model::kafka_namespace, model::topic(expected.first))),
               expected.second);
         }
     }

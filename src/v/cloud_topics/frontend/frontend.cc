@@ -656,22 +656,24 @@ frontend::get_partition_info() const {
     };
 
     for (const auto& follower_metric : followers.value()) {
-        ret.replicas.push_back(replica_info{
-          .id = follower_metric.id,
-          .high_watermark = kafka::next_offset(
-            clamped_translate(follower_metric.match_index)),
-          .log_end_offset = kafka::next_offset(
-            clamped_translate(follower_metric.dirty_log_index)),
-          .is_alive = follower_metric.is_live,
-        });
+        ret.replicas.push_back(
+          replica_info{
+            .id = follower_metric.id,
+            .high_watermark = kafka::next_offset(
+              clamped_translate(follower_metric.match_index)),
+            .log_end_offset = kafka::next_offset(
+              clamped_translate(follower_metric.dirty_log_index)),
+            .is_alive = follower_metric.is_live,
+          });
     }
 
-    ret.replicas.push_back(replica_info{
-      .id = _partition->raft()->self().id(),
-      .high_watermark = high_watermark(),
-      .log_end_offset = get_log_end_offset(*_partition),
-      .is_alive = true,
-    });
+    ret.replicas.push_back(
+      replica_info{
+        .id = _partition->raft()->self().id(),
+        .high_watermark = high_watermark(),
+        .log_end_offset = get_log_end_offset(*_partition),
+        .is_alive = true,
+      });
 
     return {std::move(ret)};
 }

@@ -126,14 +126,15 @@ public:
         std::optional<snapshot_id> parent;
         for (size_t i = 0; i < num_snapshots; ++i) {
             const auto id = use_next_snap_id();
-            table_snaps.emplace_back(snapshot{
-              .id = id,
-              .parent_snapshot_id = parent,
-              .timestamp_ms = model::timestamp{timestamp},
-              .summary = {.operation = snapshot_operation::append},
-              .manifest_list_path = uri(fmt::format("s3://snap-{}", id())),
-              .schema_id = std::nullopt,
-            });
+            table_snaps.emplace_back(
+              snapshot{
+                .id = id,
+                .parent_snapshot_id = parent,
+                .timestamp_ms = model::timestamp{timestamp},
+                .summary = {.operation = snapshot_operation::append},
+                .manifest_list_path = uri(fmt::format("s3://snap-{}", id())),
+                .schema_id = std::nullopt,
+              });
             parent = id;
         }
         return table_snaps.back().id;

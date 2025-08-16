@@ -158,8 +158,9 @@ size_t find_zstd_size(const iobuf& x) {
     auto zstd_size = ZSTD_getFrameContentSize(
       static_cast<const void*>(sz_arr.data()), x.size_bytes());
     if (zstd_size == ZSTD_CONTENTSIZE_ERROR) {
-        throw std::runtime_error(fmt::format(
-          "Cannot decompress. Not compressed by zstd. iobuf:{}", x));
+        throw std::runtime_error(
+          fmt::format(
+            "Cannot decompress. Not compressed by zstd. iobuf:{}", x));
     }
     if (
       zstd_size == ZSTD_CONTENTSIZE_UNKNOWN || (!x.empty() && zstd_size == 0)) {

@@ -33,8 +33,9 @@ void shard_placement_table_probe::setup_metrics() {
         sm::make_gauge(
           "partitions_to_reconcile",
           [this] { return _to_reconcile; },
-          sm::description("Number of partitions needing reconciliation of "
-                          "shard-local state")),
+          sm::description(
+            "Number of partitions needing reconciliation of "
+            "shard-local state")),
         sm::make_gauge(
           "remade_partitions",
           [this] { return _remade_partitions; },

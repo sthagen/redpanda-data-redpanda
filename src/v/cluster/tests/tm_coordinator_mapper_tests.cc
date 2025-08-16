@@ -18,8 +18,9 @@
 void check_hash_range_distribuiton(int32_t partitions_amount) {
     cluster::tx_hash_ranges_set hash_ranges{};
     for (int i = 0; i < partitions_amount; ++i) {
-        hash_ranges.ranges.push_back(cluster::default_hash_range(
-          model::partition_id(i), partitions_amount));
+        hash_ranges.ranges.push_back(
+          cluster::default_hash_range(
+            model::partition_id(i), partitions_amount));
     }
     BOOST_REQUIRE_EQUAL(hash_ranges.ranges[0].first, cluster::tx_id_hash(0));
     for (int i = 0; i < partitions_amount - 1; ++i) {
@@ -70,8 +71,9 @@ void check_get_partition_from_default_distribution(int32_t partitions_amount) {
 
     cluster::tx_hash_ranges_set hash_ranges{};
     for (int i = 0; i < partitions_amount; ++i) {
-        hash_ranges.ranges.push_back(cluster::default_hash_range(
-          model::partition_id(i), partitions_amount));
+        hash_ranges.ranges.push_back(
+          cluster::default_hash_range(
+            model::partition_id(i), partitions_amount));
     }
 
     for (int i = 0; i < partitions_amount; ++i) {

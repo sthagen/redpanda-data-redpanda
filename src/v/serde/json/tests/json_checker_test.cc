@@ -26,8 +26,9 @@ ss::future<> run_json_test(
   const std::string& directory,
   const std::string& test_case,
   std::optional<parser_config> config = std::nullopt) {
-    auto test_case_path = test_utils::get_runfile_path(fmt::format(
-      "src/v/serde/json/tests/testdata/{}/{}", directory, test_case));
+    auto test_case_path = test_utils::get_runfile_path(
+      fmt::format(
+        "src/v/serde/json/tests/testdata/{}/{}", directory, test_case));
 
     auto contents = co_await read_fully(test_case_path);
     auto parser = serde::json::parser(

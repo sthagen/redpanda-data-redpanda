@@ -61,9 +61,10 @@ to_iceberg_ir(std::string_view json_str) {
     doc.Parse(json_str.data(), json_str.size());
 
     if (doc.HasParseError()) {
-        return conversion_exception(fmt::format(
-          "Failed to parse JSON schema: {}",
-          rapidjson::GetParseError_En(doc.GetParseError())));
+        return conversion_exception(
+          fmt::format(
+            "Failed to parse JSON schema: {}",
+            rapidjson::GetParseError_En(doc.GetParseError())));
     }
 
     try {
@@ -91,9 +92,10 @@ ss::future<value_outcome>
 to_iceberg_value(std::string_view json_schema_str, std::string_view json_str) {
     auto iceberg_ir_res = to_iceberg_ir(json_schema_str);
     if (iceberg_ir_res.has_error()) {
-        co_return value_conversion_exception(fmt::format(
-          "Failed to convert JSON schema to IR: {}",
-          iceberg_ir_res.error().what()));
+        co_return value_conversion_exception(
+          fmt::format(
+            "Failed to convert JSON schema to IR: {}",
+            iceberg_ir_res.error().what()));
     }
 
     co_return co_await iceberg::deserialize_json(
@@ -377,8 +379,9 @@ TEST(JsonSchema, Nested2) {
     {
         EXPECT_TRUE(
           result.value().fields[5]->required == iceberg::field_required::no);
-        EXPECT_TRUE(std::holds_alternative<iceberg::list_type>(
-          result.value().fields[5]->type));
+        EXPECT_TRUE(
+          std::holds_alternative<iceberg::list_type>(
+            result.value().fields[5]->type));
 
         if (std::holds_alternative<iceberg::list_type>(
               result.value().fields[5]->type)) {
@@ -387,13 +390,18 @@ TEST(JsonSchema, Nested2) {
                                 .element_field;
 
             auto key6_struct = iceberg::struct_type{};
-            key6_struct.fields.push_back(iceberg::nested_field::create(
-              0, "key1", iceberg::field_required::no, iceberg::string_type{}));
-            key6_struct.fields.push_back(iceberg::nested_field::create(
-              0,
-              "key2",
-              iceberg::field_required::no,
-              iceberg::timestamptz_type{}));
+            key6_struct.fields.push_back(
+              iceberg::nested_field::create(
+                0,
+                "key1",
+                iceberg::field_required::no,
+                iceberg::string_type{}));
+            key6_struct.fields.push_back(
+              iceberg::nested_field::create(
+                0,
+                "key2",
+                iceberg::field_required::no,
+                iceberg::timestamptz_type{}));
 
             EXPECT_TRUE(field_matches(
               item_type,
@@ -1232,8 +1240,9 @@ TEST_CORO(IcebergValues, TruncatedInputs) {
     })";
 
     for (size_t i = 0; i < input.size(); ++i) {
-        SCOPED_TRACE(fmt::format(
-          "Testing truncated input at position {} of {}", i, input.size()));
+        SCOPED_TRACE(
+          fmt::format(
+            "Testing truncated input at position {} of {}", i, input.size()));
 
         // Truncate the input string
         auto truncated_input = input.substr(0, i);

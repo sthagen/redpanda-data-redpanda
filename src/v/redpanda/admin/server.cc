@@ -240,9 +240,10 @@ model::ntp admin_server::parse_ntp_from_request(
         partition = model::partition_id(
           std::stoi(param.get_decoded_param("partition")));
     } catch (...) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "Partition id must be an integer: {}",
-          param.get_decoded_param("partition")));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "Partition id must be an integer: {}",
+            param.get_decoded_param("partition")));
     }
 
     if (partition() < 0) {
@@ -917,8 +918,9 @@ model::node_id admin_server::parse_broker_id(const ss::http::request& req) {
         return model::node_id(
           boost::lexical_cast<model::node_id::type>(req.get_path_param("id")));
     } catch (...) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "Broker id: {}, must be an integer", req.get_path_param("id")));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "Broker id: {}, must be an integer", req.get_path_param("id")));
     }
 }
 
@@ -1084,10 +1086,11 @@ ss::future<> admin_server::throw_on_error(
             throw ss::httpd::not_found_exception(
               fmt::format("broker with id {} not found", id));
         case cluster::errc::invalid_node_operation:
-            throw ss::httpd::bad_request_exception(fmt::format(
-              "can not update broker {} state, invalid state transition "
-              "requested",
-              id));
+            throw ss::httpd::bad_request_exception(
+              fmt::format(
+                "can not update broker {} state, invalid state transition "
+                "requested",
+                id));
         case cluster::errc::timeout:
             throw ss::httpd::base_exception(
               fmt::format("Timeout: {}", ec.message()),
@@ -1130,12 +1133,13 @@ ss::future<> admin_server::throw_on_error(
                   .data_transforms_per_core_memory_reservation.value()
                 / config::shard_local_cfg()
                     .data_transforms_per_function_memory_limit.value();
-            throw ss::httpd::bad_request_exception(ss::format(
-              "The limit of transforms has been reached ({}), more "
-              "memory must be configured via {}",
-              max_transforms,
-              config::shard_local_cfg()
-                .data_transforms_per_core_memory_reservation.name()));
+            throw ss::httpd::bad_request_exception(
+              ss::format(
+                "The limit of transforms has been reached ({}), more "
+                "memory must be configured via {}",
+                max_transforms,
+                config::shard_local_cfg()
+                  .data_transforms_per_core_memory_reservation.name()));
         }
         case cluster::errc::invalid_data_migration_state:
         case cluster::errc::data_migration_already_exists:
@@ -1379,8 +1383,10 @@ void admin_server::register_config_routes() {
               writer.String(name);
               if (include_levels) {
                   writer.Key("level");
-                  writer.String(fmt::format(
-                    "{}", ss::global_logger_registry().get_logger_level(name)));
+                  writer.String(
+                    fmt::format(
+                      "{}",
+                      ss::global_logger_registry().get_logger_level(name)));
               }
               writer.EndObject();
           }
@@ -1395,9 +1401,10 @@ void admin_server::register_config_routes() {
           ss::httpd::config_json::get_log_level_response rsp{};
           ss::sstring name = req->get_path_param("name");
           if (name == "") {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Invalid parameter 'name' got {{{}}}",
-                req->get_path_param("name")));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Invalid parameter 'name' got {{{}}}",
+                  req->get_path_param("name")));
           }
           validate_no_control(name, string_conversion_exception{"name"});
 
@@ -1405,8 +1412,9 @@ void admin_server::register_config_routes() {
           try {
               cur_level = ss::global_logger_registry().get_logger_level(name);
           } catch (const std::out_of_range&) {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Cannot set log level: unknown logger {{{}}}", name));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Cannot set log level: unknown logger {{{}}}", name));
           }
 
           rsp.name = name;
@@ -1435,9 +1443,10 @@ void admin_server::register_config_routes() {
           ss::httpd::config_json::set_log_level_response rsp{};
           ss::sstring name = req->get_path_param("name");
           if (name == "") {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Invalid parameter 'name' got {{{}}}",
-                req->get_path_param("name")));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Invalid parameter 'name' got {{{}}}",
+                  req->get_path_param("name")));
           }
           validate_no_control(name, string_conversion_exception{"name"});
 
@@ -1446,8 +1455,9 @@ void admin_server::register_config_routes() {
           try {
               cur_level = ss::global_logger_registry().get_logger_level(name);
           } catch (const std::out_of_range&) {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Cannot set log level: unknown logger {{{}}}", name));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Cannot set log level: unknown logger {{{}}}", name));
           }
 
           rsp.name = name;
@@ -1459,10 +1469,11 @@ void admin_server::register_config_routes() {
               new_level = boost::lexical_cast<ss::log_level>(
                 req->get_query_param("level"));
           } catch (const boost::bad_lexical_cast& e) {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Cannot set log level for {{{}}}: unknown level {{{}}}",
-                name,
-                req->get_query_param("level")));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Cannot set log level for {{{}}}: unknown level {{{}}}",
+                  name,
+                  req->get_query_param("level")));
           }
 
           rsp.new_level = ss::to_sstring(new_level);
@@ -1474,11 +1485,12 @@ void admin_server::register_config_routes() {
                   expires = std::chrono::seconds(
                     boost::lexical_cast<unsigned int>(e));
               } catch (const boost::bad_lexical_cast& e) {
-                  throw ss::httpd::bad_param_exception(fmt::format(
-                    "Cannot set log level for {{{}}}: invalid expires value "
-                    "{{{}}}",
-                    name,
-                    e));
+                  throw ss::httpd::bad_param_exception(
+                    fmt::format(
+                      "Cannot set log level for {{{}}}: invalid expires value "
+                      "{{{}}}",
+                      name,
+                      e));
               }
           }
 
@@ -1583,9 +1595,10 @@ json::validator make_cluster_config_validator() {
     return json::validator(schema);
 }
 
-ss::sstring
-join_properties(const std::vector<std::reference_wrapper<
-                  const config::property<std::optional<ss::sstring>>>>& props) {
+ss::sstring join_properties(
+  const std::vector<
+    std::reference_wrapper<const config::property<std::optional<ss::sstring>>>>&
+    props) {
     ss::sstring result = "";
     for (size_t idx = 0; const auto& prop : props) {
         if (idx == props.size() - 1) {
@@ -2089,9 +2102,10 @@ admin_server::raft_transfer_leadership_handler(
     try {
         group_id = raft::group_id(std::stoll(req->get_path_param("group_id")));
     } catch (...) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "Raft group id must be an integer: {}",
-          req->get_path_param("group_id")));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "Raft group id must be an integer: {}",
+            req->get_path_param("group_id")));
     }
 
     if (group_id() < 0) {
@@ -2969,12 +2983,13 @@ void admin_server::register_hbadger_routes() {
                   finjector::shard_local_badger().set_termination(m, p);
               });
           } else {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Type parameter has to be one of "
-                "['{}','{}','{}']",
-                delay_type,
-                exception_type,
-                terminate_type));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Type parameter has to be one of "
+                  "['{}','{}','{}']",
+                  delay_type,
+                  exception_type,
+                  terminate_type));
           }
 
           return f.then(
@@ -3063,10 +3078,11 @@ admin_server::self_test_start_handler(std::unique_ptr<ss::http::request> req) {
                 rapidjson::StringBuffer buffer;
                 rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
                 element.Accept(writer);
-                r.unparsed_checks.push_back(cluster::unparsed_check{
-                  .test_type = test_type,
-                  .test_json = ss::sstring{
-                    buffer.GetString(), buffer.GetSize()}});
+                r.unparsed_checks.push_back(
+                  cluster::unparsed_check{
+                    .test_type = test_type,
+                    .test_json = ss::sstring{
+                      buffer.GetString(), buffer.GetSize()}});
             }
             cluster::parse_self_test_checks(r);
         } else {
@@ -3363,8 +3379,9 @@ admin_server::get_partition_balancer_status_handler(
     ret.partitions_pending_force_recovery_count
       = overview.partitions_pending_force_recovery_count;
     for (const auto& ntp : overview.partitions_pending_force_recovery_sample) {
-        ret.partitions_pending_force_recovery_sample.push(fmt::format(
-          "{}/{}/{}", ntp.ns(), ntp.tp.topic(), ntp.tp.partition()));
+        ret.partitions_pending_force_recovery_sample.push(
+          fmt::format(
+            "{}/{}/{}", ntp.ns(), ntp.tp.topic(), ntp.tp.partition()));
     }
 
     co_return ss::json::json_return_type(ret);
@@ -3696,9 +3713,10 @@ admin_server::get_cluster_partitions_handler(
         co_await ss::coroutine::maybe_yield();
     }
 
-    co_return ss::json::json_return_type(ss::json::stream_range_as_array(
-      lw_shared_container{std::move(partitions)},
-      [](const auto& p) { return p.to_json(); }));
+    co_return ss::json::json_return_type(
+      ss::json::stream_range_as_array(
+        lw_shared_container{std::move(partitions)},
+        [](const auto& p) { return p.to_json(); }));
 }
 
 ss::future<ss::json::json_return_type>
@@ -3748,9 +3766,10 @@ admin_server::get_cluster_partitions_topic_handler(
         collect_shards_from_health_report(ns_tp, partitions, hr_result.value());
     }
 
-    co_return ss::json::json_return_type(ss::json::stream_range_as_array(
-      lw_shared_container{std::move(partitions)},
-      [](const auto& kv) { return kv.second.to_json(); }));
+    co_return ss::json::json_return_type(
+      ss::json::stream_range_as_array(
+        lw_shared_container{std::move(partitions)},
+        [](const auto& kv) { return kv.second.to_json(); }));
 }
 
 void admin_server::register_cluster_routes() {
@@ -3783,12 +3802,20 @@ void admin_server::register_cluster_routes() {
                   = health_overview.under_replicated_count;
 
                 for (auto& ntp : health_overview.leaderless_partitions) {
-                    ret.leaderless_partitions.push(fmt::format(
-                      "{}/{}/{}", ntp.ns(), ntp.tp.topic(), ntp.tp.partition));
+                    ret.leaderless_partitions.push(
+                      fmt::format(
+                        "{}/{}/{}",
+                        ntp.ns(),
+                        ntp.tp.topic(),
+                        ntp.tp.partition));
                 }
                 for (auto& ntp : health_overview.under_replicated_partitions) {
-                    ret.under_replicated_partitions.push(fmt::format(
-                      "{}/{}/{}", ntp.ns(), ntp.tp.topic(), ntp.tp.partition));
+                    ret.under_replicated_partitions.push(
+                      fmt::format(
+                        "{}/{}/{}",
+                        ntp.ns(),
+                        ntp.tp.topic(),
+                        ntp.tp.partition));
                 }
                 if (health_overview.controller_id) {
                     ret.controller_id = health_overview.controller_id.value();
@@ -3933,10 +3960,11 @@ admin_server::unsafe_reset_metadata(
 
     const auto shard = _shard_table.local().shard_for(ntp);
     if (!shard) {
-        throw ss::httpd::not_found_exception(fmt::format(
-          "{} could not be found on the node. Perhaps it has been moved "
-          "during the redirect.",
-          ntp));
+        throw ss::httpd::not_found_exception(
+          fmt::format(
+            "{} could not be found on the node. Perhaps it has been moved "
+            "during the redirect.",
+            ntp));
     }
 
     try {
@@ -4405,10 +4433,11 @@ admin_server::get_partition_cloud_storage_status(
 
     const auto shard = _shard_table.local().shard_for(ntp);
     if (!shard) {
-        throw ss::httpd::not_found_exception(fmt::format(
-          "{} could not be found on the node. Perhaps it has been moved "
-          "during the redirect.",
-          ntp));
+        throw ss::httpd::not_found_exception(
+          fmt::format(
+            "{} could not be found on the node. Perhaps it has been moved "
+            "during the redirect.",
+            ntp));
     }
 
     auto status = co_await _partition_manager.invoke_on(
@@ -4473,9 +4502,10 @@ admin_server::delete_cloud_storage_lifecycle(
         revision = model::initial_revision_id(
           std::stoll(req->get_path_param("revision")));
     } catch (...) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "Revision id must be an integer: {}",
-          req->get_path_param("revision")));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "Revision id must be an integer: {}",
+            req->get_path_param("revision")));
     }
 
     auto& tp_frontend = _controller->get_topics_frontend();
@@ -4528,8 +4558,11 @@ ss::future<std::unique_ptr<ss::http::reply>> admin_server::get_manifest(
 
     const auto shard = _shard_table.local().shard_for(ntp);
     if (!shard) {
-        throw ss::httpd::not_found_exception(fmt::format(
-          "Could not find {} on node {}", ntp, config::node().node_id.value()));
+        throw ss::httpd::not_found_exception(
+          fmt::format(
+            "Could not find {} on node {}",
+            ntp,
+            config::node().node_id.value()));
     }
 
     co_return co_await _partition_manager.invoke_on(
@@ -4593,10 +4626,11 @@ admin_server::get_cloud_storage_anomalies(
     }
     const auto shard = _shard_table.local().shard_for(ntp);
     if (!shard) {
-        throw ss::httpd::not_found_exception(fmt::format(
-          "{} could not be found on the node. Perhaps it has been moved "
-          "during the redirect.",
-          ntp));
+        throw ss::httpd::not_found_exception(
+          fmt::format(
+            "{} could not be found on the node. Perhaps it has been moved "
+            "during the redirect.",
+            ntp));
     }
 
     cloud_storage::remote_path_provider path_provider(
@@ -4616,8 +4650,9 @@ admin_server::get_cloud_storage_anomalies(
       });
 
     if (!status) {
-        throw ss::httpd::not_found_exception(fmt::format(
-          "Cloud partition {} could not be found on shard {}.", ntp, *shard));
+        throw ss::httpd::not_found_exception(
+          fmt::format(
+            "Cloud partition {} could not be found on shard {}.", ntp, *shard));
     }
 
     co_return map_anomalies_to_json(path_provider, ntp, *initial_rev, *status);
@@ -4639,10 +4674,11 @@ admin_server::unsafe_reset_metadata_from_cloud(
 
     const auto shard = _shard_table.local().shard_for(ntp);
     if (!shard) {
-        throw ss::httpd::not_found_exception(fmt::format(
-          "{} could not be found on the node. Perhaps it has been moved "
-          "during the redirect.",
-          ntp));
+        throw ss::httpd::not_found_exception(
+          fmt::format(
+            "{} could not be found on the node. Perhaps it has been moved "
+            "during the redirect.",
+            ntp));
     }
 
     bool force = get_boolean_query_param(*request, "force");
@@ -4678,10 +4714,11 @@ admin_server::reset_scrubbing_metadata(std::unique_ptr<ss::http::request> req) {
 
     const auto shard = _shard_table.local().shard_for(ntp);
     if (!shard) {
-        throw ss::httpd::not_found_exception(fmt::format(
-          "{} could not be found on the node. Perhaps it has been moved "
-          "during the redirect.",
-          ntp));
+        throw ss::httpd::not_found_exception(
+          fmt::format(
+            "{} could not be found on the node. Perhaps it has been moved "
+            "during the redirect.",
+            ntp));
     }
 
     auto status = co_await _partition_manager.invoke_on(
@@ -4816,9 +4853,10 @@ template<typename service_t>
 ss::future<>
 try_service_restart(service_t* svc, std::string_view service_str_view) {
     if (svc == nullptr) {
-        throw ss::httpd::server_error_exception(fmt::format(
-          "{} is undefined. Is it set in the .yaml config file?",
-          service_str_view));
+        throw ss::httpd::server_error_exception(
+          fmt::format(
+            "{} is undefined. Is it set in the .yaml config file?",
+            service_str_view));
     }
 
     try {

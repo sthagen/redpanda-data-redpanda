@@ -28,11 +28,13 @@ template<typename T, typename ValueT>
 value_outcome
 convert_primitive(T v, avro::Type expected_type, const avro::NodePtr& node) {
     if (node->type() != expected_type) {
-        return value_conversion_exception(fmt::format(
-          "Schema mismatch detected expected type {} got {}, current node: {}",
-          expected_type,
-          node->type(),
-          node));
+        return value_conversion_exception(
+          fmt::format(
+            "Schema mismatch detected expected type {} got {}, current node: "
+            "{}",
+            expected_type,
+            node->type(),
+            node));
     }
     return ValueT{std::move(v)};
 }
@@ -147,9 +149,10 @@ struct parsed_msg_visitor {
         const auto value_node = node->leafAt(1);
         for (auto& [k, v] : parsed_map.entries) {
             if (key_node->type() != avro::AVRO_STRING) {
-                co_return value_conversion_exception(fmt::format(
-                  "Map key type mismatch. Expected string, got {}",
-                  key_node->type()));
+                co_return value_conversion_exception(
+                  fmt::format(
+                    "Map key type mismatch. Expected string, got {}",
+                    key_node->type()));
             }
             // Avro map keys are always stings, use primitive visitor directly
             auto key_result = primitive_visitor{key_node}(std::move(k));
@@ -265,8 +268,9 @@ deserialize_avro(iobuf buffer, avro::ValidSchema schema) {
         co_return co_await avro_parsed_to_value(
           std::move(parsed), schema.root());
     } catch (...) {
-        co_return value_outcome{value_conversion_exception(fmt::format(
-          "Error parsing avro message - {}", std::current_exception()))};
+        co_return value_outcome{value_conversion_exception(
+          fmt::format(
+            "Error parsing avro message - {}", std::current_exception()))};
     }
 }
 

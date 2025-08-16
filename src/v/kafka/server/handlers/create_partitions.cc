@@ -159,11 +159,12 @@ ss::future<response_ptr> create_partitions_handler::handle(
 
     if (ctx.recovery_mode_enabled()) {
         for (const auto& t : request.data.topics) {
-            resp.data.results.push_back(create_partitions_topic_result{
-              .name = t.name,
-              .error_code = error_code::policy_violation,
-              .error_message = "Forbidden in recovery mode",
-            });
+            resp.data.results.push_back(
+              create_partitions_topic_result{
+                .name = t.name,
+                .error_code = error_code::policy_violation,
+                .error_message = "Forbidden in recovery mode",
+              });
         }
 
         co_return co_await ctx.respond(std::move(resp));
@@ -218,8 +219,9 @@ ss::future<response_ptr> create_partitions_handler::handle(
       "Partition count must be greater then current number of partitions",
       [&ctx](const create_partitions_topic& tp) {
           return tp.count > ctx.metadata_cache()
-                              .get_topic_cfg(model::topic_namespace_view(
-                                model::kafka_namespace, tp.name))
+                              .get_topic_cfg(
+                                model::topic_namespace_view(
+                                  model::kafka_namespace, tp.name))
                               ->partition_count;
       });
 

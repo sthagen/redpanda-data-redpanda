@@ -58,8 +58,9 @@ void setup_and_validate_list_call(
         t::Eq(std::nullopt)))
       .Times(1)
       .WillOnce(
-        t::Return(ss::make_ready_future<cst::cloud_storage_api::list_result>(
-          std::move(result))));
+        t::Return(
+          ss::make_ready_future<cst::cloud_storage_api::list_result>(
+            std::move(result))));
 }
 
 TEST(FindLatestReport, NoReportsExist) {
@@ -136,21 +137,28 @@ void run_test(csi::MockRemote& remote, retry_chain_node& parent, T... ts) {
         t::Ref(parent),
         t::Eq(cst::existence_check_type::object)))
       .Times(1)
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::notfound)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::notfound)));
 
     // The next latest date does have a checksum file, so it becomes the result
     EXPECT_CALL(
       remote,
       object_exists(
         t::Eq(bucket),
-        t::Eq(fmt::format(
-          "{}{}manifest.checksum", list_prefix, latest_date_which_has_report)),
+        t::Eq(
+          fmt::format(
+            "{}{}manifest.checksum",
+            list_prefix,
+            latest_date_which_has_report)),
         t::Ref(parent),
         t::Eq(cst::existence_check_type::object)))
       .Times(1)
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::success)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::success)));
 
     // Return a valid manifest on being called
     EXPECT_CALL(remote, download_object(t::_))
@@ -204,8 +212,10 @@ test_manifest_parse(std::string_view manifest) {
 
     EXPECT_CALL(remote, object_exists(t::_, t::_, t::_, t::_))
       .Times(1)
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::success)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::success)));
 
     auto return_manifest = [&manifest](auto r) {
         r.payload.append(manifest.data(), manifest.size());

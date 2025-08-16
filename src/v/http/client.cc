@@ -157,11 +157,12 @@ ss::future<client::request_response_t> client::make_request(
           }
           // Set keepalive after connection is established and we have a
           // connected socket.
-          set_keepalive_parameters(ss::net::tcp_keepalive_params{
-            .idle = tcp_keepalive_idle,
-            .interval = tcp_keepalive_interval,
-            .count = tcp_keepalive_probes,
-          });
+          set_keepalive_parameters(
+            ss::net::tcp_keepalive_params{
+              .idle = tcp_keepalive_idle,
+              .interval = tcp_keepalive_interval,
+              .count = tcp_keepalive_probes,
+            });
           set_keepalive(true);
           return ss::make_ready_future<request_response_t>(
             std::make_tuple(req, res));

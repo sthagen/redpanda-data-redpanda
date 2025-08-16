@@ -55,8 +55,9 @@ public:
         }
         incremental_xxhash64 inc;
         inc.update(group);
-        return model::partition_id(static_cast<model::partition_id::type>(
-          jump_consistent_hash(inc.digest(), cfg->partition_count)));
+        return model::partition_id(
+          static_cast<model::partition_id::type>(
+            jump_consistent_hash(inc.digest(), cfg->partition_count)));
     }
 
     bool topic_exists() const {

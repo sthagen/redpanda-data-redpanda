@@ -52,11 +52,12 @@ partition_allocator::partition_allocator(
   config::binding<uint32_t> partitions_reserve_shard0,
   config::binding<std::vector<ss::sstring>> internal_kafka_topics,
   config::binding<bool> enable_rack_awareness)
-  : _state(std::make_unique<allocation_state>(
-      feature_table.local(),
-      partitions_per_shard,
-      partitions_reserve_shard0,
-      internal_kafka_topics))
+  : _state(
+      std::make_unique<allocation_state>(
+        feature_table.local(),
+        partitions_per_shard,
+        partitions_reserve_shard0,
+        internal_kafka_topics))
   , _members(members)
   , _feature_table(feature_table.local())
   , _fds_per_partition(std::move(fds_per_partition))
@@ -415,15 +416,16 @@ partition_allocator::do_allocate(allocation_request request) {
           ntp,
           p_constraints);
 
-        allocations.push_back(allocation_info{
-          .partition = allocated_partition(
-            std::move(ntp),
-            std::move(p_constraints.existing_replicas),
-            *_state),
-          .constraints = std::move(effective_constraints),
-          .replication_factor = p_constraints.replication_factor,
-          .existing_group = p_constraints.existing_group,
-        });
+        allocations.push_back(
+          allocation_info{
+            .partition = allocated_partition(
+              std::move(ntp),
+              std::move(p_constraints.existing_replicas),
+              *_state),
+            .constraints = std::move(effective_constraints),
+            .replication_factor = p_constraints.replication_factor,
+            .existing_group = p_constraints.existing_group,
+          });
 
         co_await ss::coroutine::maybe_yield();
     }

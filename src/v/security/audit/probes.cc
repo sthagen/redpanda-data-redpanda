@@ -32,16 +32,18 @@ void audit_probe::setup_metrics(std::function<double()> get_usage_ratio) {
               sm::make_counter(
                 "last_event_timestamp_seconds",
                 [this] { return _last_event.time_since_epoch() / 1s; },
-                sm::description("Timestamp of last successful publish on the "
-                                "audit log (seconds since epoch)"))
+                sm::description(
+                  "Timestamp of last successful publish on the "
+                  "audit log (seconds since epoch)"))
                 .aggregate(aggregate_labels));
         }
         defs.emplace_back(
           sm::make_counter(
             "errors_total",
             [this] { return _audit_error_count; },
-            sm::description("Running count of errors in creating/publishing "
-                            "audit event log entries"))
+            sm::description(
+              "Running count of errors in creating/publishing "
+              "audit event log entries"))
             .aggregate(aggregate_labels));
         return defs;
     };
@@ -51,10 +53,11 @@ void audit_probe::setup_metrics(std::function<double()> get_usage_ratio) {
     if (!config::shard_local_cfg().disable_metrics()) {
         auto defs = setup_common.template
                     operator()<ss::metrics::impl::metric_definition_impl>({});
-        defs.emplace_back(sm::make_gauge(
-          "buffer_usage_ratio",
-          [fn = std::move(get_usage_ratio)] { return fn(); },
-          sm::description("Audit event buffer usage ratio.")));
+        defs.emplace_back(
+          sm::make_gauge(
+            "buffer_usage_ratio",
+            [fn = std::move(get_usage_ratio)] { return fn(); },
+            sm::description("Audit event buffer usage ratio.")));
 
         _metrics.add_group(group_name, defs, {}, {sm::shard_label});
     }

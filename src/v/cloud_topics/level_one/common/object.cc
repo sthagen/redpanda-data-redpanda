@@ -267,10 +267,11 @@ footer footer::copy() const {
 
 ss::future<std::variant<footer, size_t>> footer::read(iobuf buf) {
     if (buf.size_bytes() < sizeof(uint32_t)) {
-        throw std::runtime_error(fmt::format(
-          "expected at least {} bytes in footer, got: {}",
-          sizeof(uint32_t),
-          buf.size_bytes()));
+        throw std::runtime_error(
+          fmt::format(
+            "expected at least {} bytes in footer, got: {}",
+            sizeof(uint32_t),
+            buf.size_bytes()));
     }
     iobuf_const_parser parser(buf);
     auto footer_size
@@ -281,16 +282,18 @@ ss::future<std::variant<footer, size_t>> footer::read(iobuf buf) {
         auto dt = static_cast<data_type>(
           p.consume_type<std::underlying_type_t<data_type>>());
         if (dt != data_type::footer) {
-            throw std::runtime_error(fmt::format(
-              "expected footer data type, got: {}", std::to_underlying(dt)));
+            throw std::runtime_error(
+              fmt::format(
+                "expected footer data type, got: {}", std::to_underlying(dt)));
         }
         auto size = p.consume_type<uint32_t>();
         if (size != p.bytes_left()) {
-            throw std::runtime_error(fmt::format(
-              "expected footer size to match the remaining bytes, "
-              "got: {}, expected: {}",
-              p.bytes_left(),
-              size));
+            throw std::runtime_error(
+              fmt::format(
+                "expected footer size to match the remaining bytes, "
+                "got: {}, expected: {}",
+                p.bytes_left(),
+                size));
         }
         co_return co_await serde::read_async<footer>(p);
     }
@@ -346,10 +349,11 @@ public:
               ? _current_partition.file_position
               : _current_partition.indexes.back().file_position;
         if ((_offset - last_index_write_position) >= _opts.indexing_frequency) {
-            _current_partition.indexes.push_back(footer::partition::index_entry{
-              .file_position = _offset,
-              .kafka_offset = model::offset_cast(batch.header().base_offset),
-              .max_timestamp = _current_partition.max_timestamp});
+            _current_partition.indexes.push_back(
+              footer::partition::index_entry{
+                .file_position = _offset,
+                .kafka_offset = model::offset_cast(batch.header().base_offset),
+                .max_timestamp = _current_partition.max_timestamp});
         }
         co_await write_batch_to_stream(std::move(batch));
     }
@@ -439,10 +443,11 @@ public:
             co_return eof{};
         }
         if (dt_buf.size() != sizeof(data_type)) {
-            throw std::runtime_error(fmt::format(
-              "expected {} bytes for data type, got: {}",
-              sizeof(data_type),
-              dt_buf.size()));
+            throw std::runtime_error(
+              fmt::format(
+                "expected {} bytes for data type, got: {}",
+                sizeof(data_type),
+                dt_buf.size()));
         }
         auto dt = from_bytes<data_type>(dt_buf.get());
         switch (dt) {
@@ -454,8 +459,9 @@ public:
             _saw_footer = true;
             co_return co_await read_next_serde<footer>();
         }
-        throw std::runtime_error(fmt::format(
-          "unknown data type in object: {}", std::to_underlying(dt)));
+        throw std::runtime_error(
+          fmt::format(
+            "unknown data type in object: {}", std::to_underlying(dt)));
     }
 
     ss::future<> close() final { return _input.close(); }
@@ -466,10 +472,11 @@ private:
         ss::temporary_buffer<char> size_prefix_buf
           = co_await _input.read_exactly(sizeof(uint32_t));
         if (size_prefix_buf.size() != sizeof(uint32_t)) {
-            throw std::runtime_error(fmt::format(
-              "expected {} bytes, got {}",
-              sizeof(uint32_t),
-              size_prefix_buf.size()));
+            throw std::runtime_error(
+              fmt::format(
+                "expected {} bytes, got {}",
+                sizeof(uint32_t),
+                size_prefix_buf.size()));
         }
         auto size = from_bytes<uint32_t>(size_prefix_buf.get());
         auto buf = co_await read_iobuf_exactly(_input, size);
@@ -481,8 +488,11 @@ private:
         ss::temporary_buffer<char> hdr_buf = co_await _input.read_exactly(
           batch_header_size);
         if (hdr_buf.size() != batch_header_size) {
-            throw std::runtime_error(fmt::format(
-              "expected {} bytes, got {}", batch_header_size, hdr_buf.size()));
+            throw std::runtime_error(
+              fmt::format(
+                "expected {} bytes, got {}",
+                batch_header_size,
+                hdr_buf.size()));
         }
         model::record_batch_header hdr;
         for_each_batch_header_field(hdr, [&hdr_buf](auto& field) {

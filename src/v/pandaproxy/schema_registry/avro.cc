@@ -594,9 +594,10 @@ make_avro_schema_definition(schema_getter& store, subject_schema schema) {
         ex = e;
     }
     co_return ss::coroutine::exception(
-      std::make_exception_ptr(as_exception(error_info{
-        error_code::schema_invalid,
-        fmt::format("Invalid schema {}", ex->what())})));
+      std::make_exception_ptr(as_exception(
+        error_info{
+          error_code::schema_invalid,
+          fmt::format("Invalid schema {}", ex->what())})));
 }
 
 result<schema_definition>

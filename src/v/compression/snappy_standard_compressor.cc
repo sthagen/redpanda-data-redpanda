@@ -111,9 +111,10 @@ size_t snappy_standard_compressor::get_uncompressed_length(const iobuf& b) {
     snappy_iobuf_source src(b);
     uint32_t output_size = 0;
     if (unlikely(!::snappy::GetUncompressedLength(&src, &output_size))) {
-        throw std::runtime_error(fmt::format(
-          "Could not find uncompressed size from input buffer of size: {}",
-          b.size_bytes()));
+        throw std::runtime_error(
+          fmt::format(
+            "Could not find uncompressed size from input buffer of size: {}",
+            b.size_bytes()));
     }
     return output_size;
 }
@@ -147,10 +148,11 @@ void snappy_standard_compressor::uncompress_append(
 
     snappy_iobuf_source src(input);
     if (!::snappy::RawUncompressToIOVec(&src, iovecs.data(), iovecs.size())) {
-        throw std::runtime_error(fmt::format(
-          "snappy: Could not decompress input size: {}, to output size:{}",
-          input.size_bytes(),
-          output_size));
+        throw std::runtime_error(
+          fmt::format(
+            "snappy: Could not decompress input size: {}, to output size:{}",
+            input.size_bytes(),
+            output_size));
     }
 
     for (auto& buf : bufs) {

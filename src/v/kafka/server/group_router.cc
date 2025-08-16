@@ -209,10 +209,11 @@ group_router::delete_groups(chunked_vector<group_id> groups) {
             groups_by_shard[m->second].emplace_back(
               std::make_pair(std::move(m->first), std::move(group)));
         } else {
-            results.push_back(deletable_group_result{
-              .group_id = std::move(group),
-              .error_code = error_code::not_coordinator,
-            });
+            results.push_back(
+              deletable_group_result{
+                .group_id = std::move(group),
+                .error_code = error_code::not_coordinator,
+              });
         }
     }
 

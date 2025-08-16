@@ -22,8 +22,9 @@ consumer_runner::consumer_runner(
   connection_configuration connection_configuration,
   direct_consumer::configuration consumer_cfg)
   : _id(connection_configuration.get_client_id())
-  , _cluster(std::make_unique<kafka::client::cluster>(
-      std::move(connection_configuration))) {
+  , _cluster(
+      std::make_unique<kafka::client::cluster>(
+        std::move(connection_configuration))) {
     _consumer = std::make_unique<kafka::client::direct_consumer>(
       *_cluster, consumer_cfg);
 }
@@ -179,8 +180,9 @@ verifier_service_impl::assign_partitions(
   verifier::assign_partitions_request req) {
     auto it = _consumers.find(kafka::client_id(req.get_client_id()));
     if (it == _consumers.end()) {
-        throw serde::pb::rpc::not_found_exception(ssx::sformat(
-          "Consumer with client ID {} not found", req.get_client_id()));
+        throw serde::pb::rpc::not_found_exception(
+          ssx::sformat(
+            "Consumer with client ID {} not found", req.get_client_id()));
     }
     auto& runner = it->second;
     chunked_vector<topic_assignment> assignments;
@@ -209,8 +211,9 @@ ss::future<verifier::api_response> verifier_service_impl::unassign_partitions(
   verifier::unassign_partitions_request req) {
     auto it = _consumers.find(kafka::client_id(req.get_client_id()));
     if (it == _consumers.end()) {
-        throw serde::pb::rpc::not_found_exception(ssx::sformat(
-          "Consumer with client ID {} not found", req.get_client_id()));
+        throw serde::pb::rpc::not_found_exception(
+          ssx::sformat(
+            "Consumer with client ID {} not found", req.get_client_id()));
     }
     auto& runner = it->second;
     chunked_vector<model::topic_partition> topic_partitions;
@@ -234,8 +237,9 @@ verifier_service_impl::get_consumer_state(
     auto it = _consumers.find(client_id);
     if (it == _consumers.end()) {
         // Consumer not found - return empty response with client_id
-        throw serde::pb::rpc::not_found_exception(ssx::sformat(
-          "Consumer with client ID {} not found", req.get_client_id()));
+        throw serde::pb::rpc::not_found_exception(
+          ssx::sformat(
+            "Consumer with client ID {} not found", req.get_client_id()));
     }
 
     auto& runner = it->second;

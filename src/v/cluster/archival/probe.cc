@@ -78,8 +78,9 @@ void ntp_level_probe::setup_ntp_metrics(const model::ntp& ntp) {
         sm::make_gauge(
           "compacted_replaced_bytes",
           [this] { return _compacted_replaced_bytes; },
-          sm::description("Bytes replaced due to compaction since this replica "
-                          "become leader for this partition"),
+          sm::description(
+            "Bytes replaced due to compaction since this replica "
+            "become leader for this partition"),
           labels),
       },
       {},
@@ -147,8 +148,9 @@ void ntp_level_probe::setup_public_metrics(const model::ntp& ntp) {
                       + _stm->manifest().replaced_segments_count();
            },
            segments_pending_deletion_refresh_rate),
-         sm::description("Total number of segments pending deletion from the "
-                         "cloud for the topic"),
+         sm::description(
+           "Total number of segments pending deletion from the "
+           "cloud for the topic"),
          labels)
          .aggregate(aggregate_labels),
        sm::make_gauge(
@@ -250,8 +252,9 @@ upload_housekeeping_probe::upload_housekeeping_probe() {
         sm::make_gauge(
           "metadata_syncs",
           [this] { return _metadata_syncs; },
-          sm::description("Number of archival configuration updates performed "
-                          "by all housekeeping jobs"))
+          sm::description(
+            "Number of archival configuration updates performed "
+            "by all housekeeping jobs"))
           .aggregate(aggregate_labels),
       });
 }

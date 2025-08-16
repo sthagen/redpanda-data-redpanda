@@ -92,20 +92,22 @@ TEST(SchemaAvroSerialization, TestSimpleFields) {
 
 TEST(SchemaAvroSerialization, TestListFields) {
     struct_type type;
-    type.fields.emplace_back(nested_field::create(
-      0,
-      "foo",
-      field_required::no,
-      list_type::create(1, field_required::yes, int_type())));
-    type.fields.emplace_back(nested_field::create(
-      2,
-      "bar",
-      field_required::yes,
-      list_type::create(
-        3,
+    type.fields.emplace_back(
+      nested_field::create(
+        0,
+        "foo",
+        field_required::no,
+        list_type::create(1, field_required::yes, int_type())));
+    type.fields.emplace_back(
+      nested_field::create(
+        2,
+        "bar",
         field_required::yes,
-        map_type::create(
-          4, int_type(), 5, field_required::no, string_type()))));
+        list_type::create(
+          3,
+          field_required::yes,
+          map_type::create(
+            4, int_type(), 5, field_required::no, string_type()))));
     schema s{
       .schema_struct = std::move(type),
       .schema_id = schema::id_t{0},
@@ -181,8 +183,9 @@ TEST(SchemaAvroSerialization, TestStruct) {
       nested_field::create(1, "foo", field_required::yes, int_type()));
     subtype.fields.emplace_back(
       nested_field::create(2, "bar", field_required::no, int_type()));
-    type.fields.emplace_back(nested_field::create(
-      3, "substruct", field_required::no, std::move(subtype)));
+    type.fields.emplace_back(
+      nested_field::create(
+        3, "substruct", field_required::no, std::move(subtype)));
     schema s{
       .schema_struct = std::move(type),
       .schema_id = schema::id_t{0},
@@ -240,10 +243,12 @@ TEST(SchemaAvroSerialization, TestStruct) {
 
 TEST(SchemaAvroSerialization, TestStructInvalidFieldNames) {
     struct_type type;
-    type.fields.emplace_back(nested_field::create(
-      0, "42_starts_with_digit", field_required::yes, int_type()));
-    type.fields.emplace_back(nested_field::create(
-      0, "42.also.has.dots", field_required::yes, int_type()));
+    type.fields.emplace_back(
+      nested_field::create(
+        0, "42_starts_with_digit", field_required::yes, int_type()));
+    type.fields.emplace_back(
+      nested_field::create(
+        0, "42.also.has.dots", field_required::yes, int_type()));
 
     // Note: Encoding this type of characters is inconsistent between Redpanda,
     // Java Iceberg, and Python Iceberg.
@@ -288,21 +293,23 @@ TEST(SchemaAvroSerialization, TestStructInvalidFieldNames) {
 
 TEST(SchemaAvroSerialization, TestMap) {
     struct_type type;
-    type.fields.emplace_back(nested_field::create(
-      0,
-      "intmap",
-      field_required::yes,
-      map_type::create(1, int_type(), 2, field_required::no, int_type())));
-    type.fields.emplace_back(nested_field::create(
-      3,
-      "listmap",
-      field_required::yes,
-      map_type::create(
-        4,
-        list_type::create(5, field_required::no, int_type()),
-        6,
-        field_required::no,
-        string_type())));
+    type.fields.emplace_back(
+      nested_field::create(
+        0,
+        "intmap",
+        field_required::yes,
+        map_type::create(1, int_type(), 2, field_required::no, int_type())));
+    type.fields.emplace_back(
+      nested_field::create(
+        3,
+        "listmap",
+        field_required::yes,
+        map_type::create(
+          4,
+          list_type::create(5, field_required::no, int_type()),
+          6,
+          field_required::no,
+          string_type())));
     schema s{
       .schema_struct = std::move(type),
       .schema_id = schema::id_t{0},
@@ -453,14 +460,16 @@ TEST(SchemaAvroSerialization, TestNestedSchema) {
 
 TEST(SchemaAvroSerialization, TestLogicalTypes) {
     struct_type type;
-    type.fields.emplace_back(nested_field::create(
-      0, "decimal", field_required::yes, decimal_type{8, 0}));
+    type.fields.emplace_back(
+      nested_field::create(
+        0, "decimal", field_required::yes, decimal_type{8, 0}));
     type.fields.emplace_back(
       nested_field::create(1, "date", field_required::yes, date_type{}));
     type.fields.emplace_back(
       nested_field::create(2, "time", field_required::yes, time_type{}));
-    type.fields.emplace_back(nested_field::create(
-      3, "timestamp", field_required::yes, timestamp_type{}));
+    type.fields.emplace_back(
+      nested_field::create(
+        3, "timestamp", field_required::yes, timestamp_type{}));
     type.fields.emplace_back(
       nested_field::create(4, "uuid", field_required::yes, uuid_type{}));
 

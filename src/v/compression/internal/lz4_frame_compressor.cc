@@ -282,11 +282,12 @@ iobuf lz4_frame_compressor::uncompress(const iobuf& input) {
     }
 
     if (unlikely(read_total < src_size)) {
-        throw std::runtime_error(fmt::format(
-          "lz4 error. could not consume all input bytes in decompression. "
-          "Input:{}, consumed:{}",
-          src_size,
-          read_total));
+        throw std::runtime_error(
+          fmt::format(
+            "lz4 error. could not consume all input bytes in decompression. "
+            "Input:{}, consumed:{}",
+            src_size,
+            read_total));
     }
 
     if (write_this_chunk > 0) {

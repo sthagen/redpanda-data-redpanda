@@ -47,11 +47,12 @@ void index_schema(schema_element& root) {
         auto [path, rep_level, def_level, element] = std::move(to_visit.back());
         to_visit.pop_back();
         if (element->path.size() != 1) {
-            throw std::invalid_argument(fmt::format(
-              "unindexed schemas should only have a single path "
-              "element, which is that node's name. Indexing will "
-              "populate the full path, got element with path: {}",
-              fmt::join(element->path, "/")));
+            throw std::invalid_argument(
+              fmt::format(
+                "unindexed schemas should only have a single path "
+                "element, which is that node's name. Indexing will "
+                "populate the full path, got element with path: {}",
+                fmt::join(element->path, "/")));
         }
         std::ranges::move(element->path, std::back_inserter(path));
         element->path = std::move(path);

@@ -1389,8 +1389,9 @@ struct consume_to_store {
         case topic_key_type::schema: {
             std::optional<schema_value> val;
             if (!record.value().empty()) {
-                val.emplace(from_json_iobuf<schema_value_handler<>>(
-                  record.release_value()));
+                val.emplace(
+                  from_json_iobuf<schema_value_handler<>>(
+                    record.release_value()));
             }
             co_await apply(
               offset,
@@ -1425,8 +1426,9 @@ struct consume_to_store {
         case topic_key_type::delete_subject: {
             std::optional<delete_subject_value> val;
             if (!record.value().empty()) {
-                val.emplace(from_json_iobuf<delete_subject_value_handler<>>(
-                  record.release_value()));
+                val.emplace(
+                  from_json_iobuf<delete_subject_value_handler<>>(
+                    record.release_value()));
             }
 
             co_await apply(

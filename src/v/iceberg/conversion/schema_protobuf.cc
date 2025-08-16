@@ -48,20 +48,23 @@ field_outcome success(const pb::FieldDescriptor& fd, iceberg::field_type ft) {
 struct_outcome struct_from_protobuf(
   const pb::Descriptor& msg, proto_descriptors_stack& stack) {
     if (is_recursive_type(msg, stack)) {
-        return conversion_exception(fmt::format(
-          "Protocol buffer field not supported - recursive type detected, type "
-          "hierarchy: {}, current type: {}",
-          fmt::join(
-            std::ranges::views::transform(stack, &pb::Descriptor::full_name),
-            ", "),
-          msg.DebugString()));
+        return conversion_exception(
+          fmt::format(
+            "Protocol buffer field not supported - recursive type detected, "
+            "type "
+            "hierarchy: {}, current type: {}",
+            fmt::join(
+              std::ranges::views::transform(stack, &pb::Descriptor::full_name),
+              ", "),
+            msg.DebugString()));
     }
     if (stack.size() > max_recursion_depth) {
-        return conversion_exception(fmt::format(
-          "Protocol buffer field {} not supported - max nested depth of {} "
-          "reached",
-          msg.DebugString(),
-          max_recursion_depth));
+        return conversion_exception(
+          fmt::format(
+            "Protocol buffer field {} not supported - max nested depth of {} "
+            "reached",
+            msg.DebugString(),
+            max_recursion_depth));
     }
 
     stack.push_back(&msg);
@@ -146,10 +149,11 @@ field_outcome from_protobuf(
     case pb::FieldDescriptor::TYPE_STRING:
         return success(fd, iceberg::string_type{});
     case pb::FieldDescriptor::TYPE_GROUP:
-        return conversion_exception(fmt::format(
-          "Protocol buffer field {} type {} not supported",
-          fd.DebugString(),
-          fd.type_name()));
+        return conversion_exception(
+          fmt::format(
+            "Protocol buffer field {} type {} not supported",
+            fd.DebugString(),
+            fd.type_name()));
     case pb::FieldDescriptor::TYPE_MESSAGE: {
         auto msg_t = fd.message_type();
         // special case for handling google.protobuf.Timestamp

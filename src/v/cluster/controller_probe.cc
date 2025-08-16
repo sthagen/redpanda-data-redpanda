@@ -154,8 +154,9 @@ void controller_probe::setup_metrics() {
                     now_ts - manifest.upload_time_since_epoch);
                   return int64_t{age_s.count()};
               },
-              sm::description("Age in seconds of the latest "
-                              "cluster_metadata_manifest uploaded"))
+              sm::description(
+                "Age in seconds of the latest "
+                "cluster_metadata_manifest uploaded"))
               .aggregate({sm::shard_label}),
           });
     }

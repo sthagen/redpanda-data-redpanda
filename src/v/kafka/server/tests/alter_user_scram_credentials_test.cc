@@ -63,13 +63,14 @@ FIXTURE_TEST(
     authn_kafka_client(client, user_name_256, password_256);
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{user_name_512},
-      .mechanism = kafka::scram_mechanism::scram_sha_512,
-      .iterations = security::scram_sha512::min_iterations,
-      .salt = creds_512.salt(),
-      .salted_password = salted_password_512,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{user_name_512},
+        .mechanism = kafka::scram_mechanism::scram_sha_512,
+        .iterations = security::scram_sha512::min_iterations,
+        .salt = creds_512.salt(),
+        .salted_password = salted_password_512,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
@@ -93,13 +94,14 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{user_name_256},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-      .iterations = security::scram_sha256::min_iterations,
-      .salt = creds_256.salt(),
-      .salted_password = salted_password_256,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{user_name_256},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+        .iterations = security::scram_sha256::min_iterations,
+        .salt = creds_256.salt(),
+        .salted_password = salted_password_256,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(!resp.data.errored());
@@ -167,13 +169,14 @@ FIXTURE_TEST(
       client, user_name_256, password_256);
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{user_name_512},
-      .mechanism = kafka::scram_mechanism::scram_sha_512,
-      .iterations = security::scram_sha512::min_iterations,
-      .salt = creds_512.salt(),
-      .salted_password = salted_password_512,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{user_name_512},
+        .mechanism = kafka::scram_mechanism::scram_sha_512,
+        .iterations = security::scram_sha512::min_iterations,
+        .salt = creds_512.salt(),
+        .salted_password = salted_password_512,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(!resp.data.errored());
@@ -210,9 +213,10 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{user_name_256},
-      .mechanism = kafka::scram_mechanism::scram_sha_256});
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{user_name_256},
+        .mechanism = kafka::scram_mechanism::scram_sha_256});
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(!resp.data.errored());
@@ -233,9 +237,10 @@ FIXTURE_TEST(
     auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     kafka::alter_user_scram_credentials_request req;
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{"nonexistant_user"},
-      .mechanism = kafka::scram_mechanism::scram_sha_256});
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{"nonexistant_user"},
+        .mechanism = kafka::scram_mechanism::scram_sha_256});
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
@@ -259,9 +264,10 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{user_name_256},
-      .mechanism = kafka::scram_mechanism::scram_sha_512});
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{user_name_256},
+        .mechanism = kafka::scram_mechanism::scram_sha_512});
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
@@ -287,13 +293,14 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{user_name_256},
-      .mechanism = kafka::scram_mechanism::scram_sha_512,
-      .iterations = security::scram_sha512::min_iterations,
-      .salt = creds_512.salt(),
-      .salted_password = salted_password_512,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{user_name_256},
+        .mechanism = kafka::scram_mechanism::scram_sha_512,
+        .iterations = security::scram_sha512::min_iterations,
+        .salt = creds_512.salt(),
+        .salted_password = salted_password_512,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(!resp.data.errored());
@@ -319,10 +326,11 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{""},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{""},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
@@ -345,10 +353,11 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"=="},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"=="},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
@@ -371,10 +380,11 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{""},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-    });
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{""},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
@@ -397,31 +407,36 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test1"},
-      .mechanism = kafka::scram_mechanism::unknown,
-    });
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test2"},
-      .mechanism = (kafka::scram_mechanism)(
-        (int8_t)kafka::scram_mechanism::scram_sha_512 + 1),
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test1"},
+        .mechanism = kafka::scram_mechanism::unknown,
+      });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test2"},
+        .mechanism
+        = (kafka::scram_mechanism)((int8_t)kafka::scram_mechanism::scram_sha_512
+                                   + 1),
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
     BOOST_REQUIRE_EQUAL(resp.data.results.size(), 2);
     chunked_vector<kafka::alter_user_scram_credentials_result> check;
     check.reserve(2);
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test1"},
-      .error_code = kafka::error_code::unsupported_sasl_mechanism,
-      .error_message = "Unknown SCRAM mechanism",
-    });
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test2"},
-      .error_code = kafka::error_code::unsupported_sasl_mechanism,
-      .error_message = "Unknown SCRAM mechanism",
-    });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test1"},
+        .error_code = kafka::error_code::unsupported_sasl_mechanism,
+        .error_message = "Unknown SCRAM mechanism",
+      });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test2"},
+        .error_code = kafka::error_code::unsupported_sasl_mechanism,
+        .error_message = "Unknown SCRAM mechanism",
+      });
 
     std::ranges::sort(
       check, {}, &kafka::alter_user_scram_credentials_result::user);
@@ -440,31 +455,36 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{"test1"},
-      .mechanism = kafka::scram_mechanism::unknown,
-    });
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{"test2"},
-      .mechanism = (kafka::scram_mechanism)(
-        (int8_t)kafka::scram_mechanism::scram_sha_512 + 1),
-    });
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{"test1"},
+        .mechanism = kafka::scram_mechanism::unknown,
+      });
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{"test2"},
+        .mechanism
+        = (kafka::scram_mechanism)((int8_t)kafka::scram_mechanism::scram_sha_512
+                                   + 1),
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
     BOOST_REQUIRE_EQUAL(resp.data.results.size(), 2);
     chunked_vector<kafka::alter_user_scram_credentials_result> check;
     check.reserve(2);
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test1"},
-      .error_code = kafka::error_code::unsupported_sasl_mechanism,
-      .error_message = "Unknown SCRAM mechanism",
-    });
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test2"},
-      .error_code = kafka::error_code::unsupported_sasl_mechanism,
-      .error_message = "Unknown SCRAM mechanism",
-    });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test1"},
+        .error_code = kafka::error_code::unsupported_sasl_mechanism,
+        .error_message = "Unknown SCRAM mechanism",
+      });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test2"},
+        .error_code = kafka::error_code::unsupported_sasl_mechanism,
+        .error_message = "Unknown SCRAM mechanism",
+      });
 
     std::ranges::sort(
       check, {}, &kafka::alter_user_scram_credentials_result::user);
@@ -484,26 +504,30 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test1"},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-      .iterations = security::scram_sha256::min_iterations - 1,
-    });
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test2"},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-      .iterations = max_iterations + 1,
-    });
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test3"},
-      .mechanism = kafka::scram_mechanism::scram_sha_512,
-      .iterations = security::scram_sha512::min_iterations - 1,
-    });
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test4"},
-      .mechanism = kafka::scram_mechanism::scram_sha_512,
-      .iterations = max_iterations + 1,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test1"},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+        .iterations = security::scram_sha256::min_iterations - 1,
+      });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test2"},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+        .iterations = max_iterations + 1,
+      });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test3"},
+        .mechanism = kafka::scram_mechanism::scram_sha_512,
+        .iterations = security::scram_sha512::min_iterations - 1,
+      });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test4"},
+        .mechanism = kafka::scram_mechanism::scram_sha_512,
+        .iterations = max_iterations + 1,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());
@@ -511,26 +535,30 @@ FIXTURE_TEST(
 
     chunked_vector<kafka::alter_user_scram_credentials_result> check;
     check.reserve(4);
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test1"},
-      .error_code = kafka::error_code::unacceptable_credential,
-      .error_message = "Too few iterations",
-    });
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test2"},
-      .error_code = kafka::error_code::unacceptable_credential,
-      .error_message = "Too many iterations",
-    });
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test3"},
-      .error_code = kafka::error_code::unacceptable_credential,
-      .error_message = "Too few iterations",
-    });
-    check.emplace_back(kafka::alter_user_scram_credentials_result{
-      .user = kafka::scram_user_name{"test4"},
-      .error_code = kafka::error_code::unacceptable_credential,
-      .error_message = "Too many iterations",
-    });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test1"},
+        .error_code = kafka::error_code::unacceptable_credential,
+        .error_message = "Too few iterations",
+      });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test2"},
+        .error_code = kafka::error_code::unacceptable_credential,
+        .error_message = "Too many iterations",
+      });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test3"},
+        .error_code = kafka::error_code::unacceptable_credential,
+        .error_message = "Too few iterations",
+      });
+    check.emplace_back(
+      kafka::alter_user_scram_credentials_result{
+        .user = kafka::scram_user_name{"test4"},
+        .error_code = kafka::error_code::unacceptable_credential,
+        .error_message = "Too many iterations",
+      });
 
     std::ranges::sort(
       check, {}, &kafka::alter_user_scram_credentials_result::user);
@@ -549,24 +577,28 @@ FIXTURE_TEST(
     client.connect().get();
 
     kafka::alter_user_scram_credentials_request req;
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test1"},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-      .iterations = security::scram_sha256::min_iterations,
-    });
-    req.data.upsertions.emplace_back(kafka::scram_credential_upsertion{
-      .name = kafka::scram_user_name{"test1"},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-      .iterations = security::scram_sha256::min_iterations,
-    });
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{"test1"},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-    });
-    req.data.deletions.emplace_back(kafka::scram_credential_deletion{
-      .name = kafka::scram_user_name{"test1"},
-      .mechanism = kafka::scram_mechanism::scram_sha_256,
-    });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test1"},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+        .iterations = security::scram_sha256::min_iterations,
+      });
+    req.data.upsertions.emplace_back(
+      kafka::scram_credential_upsertion{
+        .name = kafka::scram_user_name{"test1"},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+        .iterations = security::scram_sha256::min_iterations,
+      });
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{"test1"},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+      });
+    req.data.deletions.emplace_back(
+      kafka::scram_credential_deletion{
+        .name = kafka::scram_user_name{"test1"},
+        .mechanism = kafka::scram_mechanism::scram_sha_256,
+      });
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_REQUIRE(resp.data.errored());

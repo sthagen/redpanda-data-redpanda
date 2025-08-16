@@ -493,11 +493,12 @@ FIXTURE_TEST(test_local_recovery, offsets_recovery_fixture) {
     info("Clearing cluster...");
     restart(should_wipe::yes);
     make_partitions(1).get();
-    BOOST_REQUIRE(kafka::try_create_consumer_group_topic(
-                    app.coordinator_ntp_mapper.local(),
-                    app.controller->get_topics_frontend().local(),
-                    1)
-                    .get());
+    BOOST_REQUIRE(
+      kafka::try_create_consumer_group_topic(
+        app.coordinator_ntp_mapper.local(),
+        app.controller->get_topics_frontend().local(),
+        1)
+        .get());
 
     // Wait for the group_manager to report healthy (but empty).
     absl::flat_hash_map<model::ntp, size_t> empty_group_map;
@@ -551,11 +552,12 @@ FIXTURE_TEST(
     // Wipe the cluster and restore the groups from the snapshot.
     restart(should_wipe::yes);
     make_partitions(1).get();
-    BOOST_REQUIRE(kafka::try_create_consumer_group_topic(
-                    app.coordinator_ntp_mapper.local(),
-                    app.controller->get_topics_frontend().local(),
-                    1)
-                    .get());
+    BOOST_REQUIRE(
+      kafka::try_create_consumer_group_topic(
+        app.coordinator_ntp_mapper.local(),
+        app.controller->get_topics_frontend().local(),
+        1)
+        .get());
 
     // Wait for the group_manager to report healthy (but empty).
     absl::flat_hash_map<model::ntp, size_t> empty_group_map;

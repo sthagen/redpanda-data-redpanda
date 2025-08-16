@@ -154,8 +154,9 @@ checked<iceberg::struct_value, file_committer::errc> build_partition_key_struct(
         const auto& field_bytes = f.partition_key.at(i);
         if (field_bytes) {
             try {
-                pk.fields.push_back(iceberg::value_from_bytes(
-                  field_type->type, field_bytes.value()));
+                pk.fields.push_back(
+                  iceberg::value_from_bytes(
+                    field_type->type, field_bytes.value()));
             } catch (const std::invalid_argument& e) {
                 vlog(
                   datalake_log.error,
@@ -297,11 +298,12 @@ public:
                   = f.partition_spec_id >= 0
                       ? iceberg::partition_spec::id_t{f.partition_spec_id}
                       : table_.default_spec_id;
-                icb_files_.push_back(iceberg::file_to_append{
-                  .file = std::move(file),
-                  .schema_id = schema_id,
-                  .partition_spec_id = pspec_id,
-                });
+                icb_files_.push_back(
+                  iceberg::file_to_append{
+                    .file = std::move(file),
+                    .schema_id = schema_id,
+                    .partition_spec_id = pspec_id,
+                  });
             }
         }
 

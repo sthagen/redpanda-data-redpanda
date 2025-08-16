@@ -331,11 +331,12 @@ ss::future<iobuf> serialize_testcase(size_t test_case) {
             co_await w.write_row(std::get<group_value>(std::move(value)));
         }
         co_await w.close();
-        co_return json(testcase{
-          .schema = dremel_paper_schema(),
-          .rows = dremel_paper_values(),
-          .parquet_file = std::move(file),
-        });
+        co_return json(
+          testcase{
+            .schema = dremel_paper_schema(),
+            .rows = dremel_paper_values(),
+            .parquet_file = std::move(file),
+          });
     }
     iobuf file;
     writer w(
@@ -359,11 +360,12 @@ ss::future<iobuf> serialize_testcase(size_t test_case) {
         }
     }
     co_await w.close();
-    co_return json(testcase{
-      .schema = all_types_schema(),
-      .rows = std::move(rows),
-      .parquet_file = std::move(file),
-    });
+    co_return json(
+      testcase{
+        .schema = all_types_schema(),
+        .rows = std::move(rows),
+        .parquet_file = std::move(file),
+      });
 }
 // NOLINTEND(*magic-number*)
 

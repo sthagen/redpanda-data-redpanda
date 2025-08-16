@@ -392,8 +392,9 @@ void append_entries_queue::setup_internal_metrics() {
       {sm::make_gauge(
          "inflight_requests",
          [this] { return inflight_requests(); },
-         sm::description("Number of append entries requests that were sent to "
-                         "the target node and are awaiting responses."),
+         sm::description(
+           "Number of append entries requests that were sent to "
+           "the target node and are awaiting responses."),
          {target_node_id_label}),
        sm::make_gauge(
          "buffered_bytes",

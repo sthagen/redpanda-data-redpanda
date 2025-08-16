@@ -605,8 +605,9 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
     ASSERT_FALSE(replace_res.has_value());
     EXPECT_THAT(
       std::string(replace_res.error()()),
-      testing::ContainsRegex("Cleaned range for .+ does not match requested "
-                             "new extents' last_offset"));
+      testing::ContainsRegex(
+        "Cleaned range for .+ does not match requested "
+        "new extents' last_offset"));
 }
 
 TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
@@ -731,8 +732,9 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
     ASSERT_FALSE(replace_res.has_value());
     EXPECT_THAT(
       std::string(replace_res.error()()),
-      testing::ContainsRegex("Cleaned range for .+ has tombstones and overlaps "
-                             "with an existing cleaned range with tombstones"));
+      testing::ContainsRegex(
+        "Cleaned range for .+ has tombstones and overlaps "
+        "with an existing cleaned range with tombstones"));
 }
 
 TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
@@ -757,6 +759,7 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
     ASSERT_FALSE(replace_res.has_value());
     EXPECT_THAT(
       std::string(replace_res.error()()),
-      testing::ContainsRegex("Tombstone-removed range .+ for .+ is not tracked "
-                             "as having tombstones"));
+      testing::ContainsRegex(
+        "Tombstone-removed range .+ for .+ is not tracked "
+        "as having tombstones"));
 }

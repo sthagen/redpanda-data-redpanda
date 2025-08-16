@@ -24,27 +24,33 @@ BOOST_AUTO_TEST_CASE(test_is_disconnect_error) {
     auto not_a_de = std::system_error(
       std::make_error_code(std::errc::is_a_directory));
 
-    BOOST_CHECK(net::is_disconnect_exception(std::make_exception_ptr(is_a_de))
-                  .has_value());
+    BOOST_CHECK(
+      net::is_disconnect_exception(std::make_exception_ptr(is_a_de))
+        .has_value());
 
     BOOST_CHECK(!net::is_disconnect_exception(std::make_exception_ptr(not_a_de))
                    .has_value());
 
     BOOST_CHECK(
       net::is_disconnect_exception(
-        std::make_exception_ptr(ss::nested_exception(
-          std::make_exception_ptr(is_a_de), std::make_exception_ptr(not_a_de))))
+        std::make_exception_ptr(
+          ss::nested_exception(
+            std::make_exception_ptr(is_a_de),
+            std::make_exception_ptr(not_a_de))))
         .has_value());
 
     BOOST_CHECK(
       net::is_disconnect_exception(
-        std::make_exception_ptr(ss::nested_exception(
-          std::make_exception_ptr(not_a_de), std::make_exception_ptr(is_a_de))))
+        std::make_exception_ptr(
+          ss::nested_exception(
+            std::make_exception_ptr(not_a_de),
+            std::make_exception_ptr(is_a_de))))
         .has_value());
 
     BOOST_CHECK(!net::is_disconnect_exception(
-                   std::make_exception_ptr(ss::nested_exception(
-                     std::make_exception_ptr(not_a_de),
-                     std::make_exception_ptr(not_a_de))))
+                   std::make_exception_ptr(
+                     ss::nested_exception(
+                       std::make_exception_ptr(not_a_de),
+                       std::make_exception_ptr(not_a_de))))
                    .has_value());
 }

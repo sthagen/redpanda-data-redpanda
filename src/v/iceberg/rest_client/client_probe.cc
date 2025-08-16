@@ -72,8 +72,9 @@ void client_probe::setup_public_metrics(
         sm::make_gauge(
           "active_requests",
           [this] { return get_active_requests(); },
-          sm::description("Number of active HTTP requests at the moment "
-                          "(includes PUT and GET)"),
+          sm::description(
+            "Number of active HTTP requests at the moment "
+            "(includes PUT and GET)"),
           labels)
           .aggregate({sm::shard_label}),
         sm::make_counter(
@@ -128,8 +129,9 @@ void client_probe::setup_public_metrics(
         sm::make_counter(
           "num_create_namespace_requests_failed",
           [this] { return num_create_namespace_requests_failed; },
-          sm::description("Number of requests sent to the create_namespace "
-                          "endpoint that failed"),
+          sm::description(
+            "Number of requests sent to the create_namespace "
+            "endpoint that failed"),
           labels)
           .aggregate({sm::shard_label}),
         sm::make_counter(
@@ -177,29 +179,33 @@ void client_probe::setup_public_metrics(
         sm::make_counter(
           "num_commit_table_update_requests",
           [this] { return num_commit_table_update_requests; },
-          sm::description("Total number of requests sent to the "
-                          "commit_table_update endpoint"),
+          sm::description(
+            "Total number of requests sent to the "
+            "commit_table_update endpoint"),
           labels)
           .aggregate({sm::shard_label}),
         sm::make_counter(
           "num_commit_table_update_requests_failed",
           [this] { return num_commit_table_update_requests_failed; },
-          sm::description("Number of requests sent to the commit_table_update "
-                          "endpoint that failed"),
+          sm::description(
+            "Number of requests sent to the commit_table_update "
+            "endpoint that failed"),
           labels)
           .aggregate({sm::shard_label}),
         sm::make_counter(
           "num_get_config_requests",
           [this] { return num_get_config_requests; },
-          sm::description("Total number of requests sent to the "
-                          "config endpoint"),
+          sm::description(
+            "Total number of requests sent to the "
+            "config endpoint"),
           labels)
           .aggregate({sm::shard_label}),
         sm::make_counter(
           "num_get_config_requests_failed",
           [this] { return num_get_config_requests_failed; },
-          sm::description("Number of requests sent to the config "
-                          "endpoint that failed"),
+          sm::description(
+            "Number of requests sent to the config "
+            "endpoint that failed"),
           labels)
           .aggregate({sm::shard_label}),
       });

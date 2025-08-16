@@ -38,9 +38,10 @@ std::istream& operator>>(std::istream& is, config::node_id_override& v) {
 
     if (!re2::RE2::FullMatch(
           s, pattern, &curr, &uuid, &id, &ignore_existing_node_id)) {
-        throw std::runtime_error(fmt::format(
-          R"(Formatting error: '{}', must be of form '<uuid>:<uuid>:<id>[/ignore_existing_node_id]?')",
-          s));
+        throw std::runtime_error(
+          fmt::format(
+            R"(Formatting error: '{}', must be of form '<uuid>:<uuid>:<id>[/ignore_existing_node_id]?')",
+            s));
     }
 
     v.key = boost::lexical_cast<model::node_uuid>(curr);

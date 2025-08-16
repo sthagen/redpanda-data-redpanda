@@ -16,8 +16,8 @@ using namespace kafka; // NOLINT
 
 #define roundtrip_test(value, type_cast, read_method)                          \
     {                                                                          \
-        BOOST_TEST_CHECKPOINT("write<" #type_cast "> :: read<" #read_method    \
-                              ">");                                            \
+        BOOST_TEST_CHECKPOINT(                                                 \
+          "write<" #type_cast "> :: read<" #read_method ">");                  \
         auto val = value;                                                      \
         auto out = iobuf();                                                    \
         kafka::protocol::encoder w(out);                                       \

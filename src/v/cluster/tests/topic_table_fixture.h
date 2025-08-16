@@ -37,8 +37,9 @@ struct topic_table_fixture {
     topic_table_fixture() {
         migrated_resources.start().get();
         table
-          .start(ss::sharded_parameter(
-            [this] { return std::ref(migrated_resources.local()); }))
+          .start(ss::sharded_parameter([this] {
+              return std::ref(migrated_resources.local());
+          }))
           .get();
         members.start_single().get();
         features.start().get();

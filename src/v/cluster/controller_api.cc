@@ -363,13 +363,14 @@ controller_api::get_partitions_reconfiguration_state(
                   = operation.recovery_state->local_size;
                 for (auto& [id, recovery_state] :
                      operation.recovery_state->replicas) {
-                    state.replicas.push_back(replica_bytes{
-                      .node = id,
-                      .bytes_left = recovery_state.bytes_left,
-                      .bytes_transferred = state.current_partition_size
-                                           - recovery_state.bytes_left,
-                      .offset = recovery_state.last_offset,
-                    });
+                    state.replicas.push_back(
+                      replica_bytes{
+                        .node = id,
+                        .bytes_left = recovery_state.bytes_left,
+                        .bytes_transferred = state.current_partition_size
+                                             - recovery_state.bytes_left,
+                        .offset = recovery_state.last_offset,
+                      });
                 }
             }
         }

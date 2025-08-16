@@ -59,10 +59,11 @@ kafka_produce_transport::produce(
     for (auto& data_resp : resp.data.responses) {
         for (auto& prt_resp : data_resp.partitions) {
             if (prt_resp.error_code != kafka::error_code::none) {
-                throw std::runtime_error(fmt::format(
-                  "produce error: {}, message:{}",
-                  prt_resp.error_code,
-                  prt_resp.error_message));
+                throw std::runtime_error(
+                  fmt::format(
+                    "produce error: {}, message:{}",
+                    prt_resp.error_code,
+                    prt_resp.error_message));
             }
             ret.emplace(prt_resp.partition_index, prt_resp.base_offset);
         }
@@ -81,16 +82,18 @@ ss::future<model::offset> kafka_produce_transport::produce_to_partition(
     auto ret_m = co_await produce(
       topic_name, std::move(m), ts, compression_type);
     if (ret_m.size() != 1) {
-        throw std::runtime_error(fmt::format(
-          "unexpected produce results {}/{}: {} results",
-          topic_name(),
-          pid(),
-          ret_m.size()));
+        throw std::runtime_error(
+          fmt::format(
+            "unexpected produce results {}/{}: {} results",
+            topic_name(),
+            pid(),
+            ret_m.size()));
     }
     auto it = ret_m.find(pid);
     if (it == ret_m.end()) {
-        throw std::runtime_error(fmt::format(
-          "produce result missing partition {}/{}", topic_name(), pid()));
+        throw std::runtime_error(
+          fmt::format(
+            "produce result missing partition {}/{}", topic_name(), pid()));
     }
     co_return it->second;
 }
@@ -169,8 +172,9 @@ ss::future<pid_to_kvs_map_t> kafka_consume_transport::consume(
           topic.topic);
         for (auto& partition : topic.partitions) {
             if (partition.error_code != kafka::error_code::none) {
-                throw std::runtime_error(fmt::format(
-                  "fetch partition error: {}", partition.error_code));
+                throw std::runtime_error(
+                  fmt::format(
+                    "fetch partition error: {}", partition.error_code));
             }
             vlog(
               test_log.trace,
@@ -232,8 +236,9 @@ ss::future<std::vector<kv_t>> kafka_consume_transport::consume_from_partition(
     }
     auto it = m.find(pid);
     if (it == m.end()) {
-        throw std::runtime_error(fmt::format(
-          "fetch result missing partition {}/{}", topic_name(), pid()));
+        throw std::runtime_error(
+          fmt::format(
+            "fetch result missing partition {}/{}", topic_name(), pid()));
     }
     co_return it->second;
 }

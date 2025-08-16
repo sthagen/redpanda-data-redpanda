@@ -178,8 +178,9 @@ debug_bundle::result<T> from_json(const json::Value& v) {
                 return std::move(r).value();
             }
         }
-        return parse_error(": expected partition_selection "
-                           "'{namespace}/[topic]/[partitions...]'");
+        return parse_error(
+          ": expected partition_selection "
+          "'{namespace}/[topic]/[partitions...]'");
     } else if constexpr (detail::is_specialization_of_v<T, std::vector>) {
         if (v.IsArray()) {
             using V = T::value_type;
@@ -346,8 +347,9 @@ debug_bundle::result<T> from_json(const json::Value& v) {
 template<typename T>
 debug_bundle::result<T> from_json(
   const json::Document::ConstObject& p, std::string_view f, bool required) {
-    auto it = p.FindMember(json::Document::StringRefType{
-      f.data(), static_cast<json::SizeType>(f.length())});
+    auto it = p.FindMember(
+      json::Document::StringRefType{
+        f.data(), static_cast<json::SizeType>(f.length())});
     if (required && it == p.MemberEnd()) {
         return debug_bundle::error_info{
           debug_bundle::error_code::invalid_parameters,

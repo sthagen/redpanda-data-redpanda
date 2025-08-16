@@ -443,8 +443,9 @@ ss::future<> remote_broker::do_authenticate_scram(
       server_first.salt(),
       server_first.iterations());
 
-    client_final.set_proof(ScramAlgo::client_proof(
-      salted_password, client_first, server_first, client_final));
+    client_final.set_proof(
+      ScramAlgo::client_proof(
+        salted_password, client_first, server_first, client_final));
 
     const auto server_final = co_await send_scram_client_final(client_final);
 

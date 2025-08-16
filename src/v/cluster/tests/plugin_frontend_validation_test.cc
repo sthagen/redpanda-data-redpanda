@@ -92,10 +92,11 @@ public:
           /*replication_factor=*/1);
         topic_cfg.properties.read_replica = config.read_replica;
         std::vector<model::broker_shard> broker_shards;
-        broker_shards.push_back(model::broker_shard{
-          .node_id = model::node_id(1),
-          .shard = 0,
-        });
+        broker_shards.push_back(
+          model::broker_shard{
+            .node_id = model::node_id(1),
+            .shard = 0,
+          });
         ss::chunked_fifo<partition_assignment> partition_assignments;
         for (int i = 1; i <= config.partition_count; ++i) {
             partition_assignments.push_back(partition_assignment(

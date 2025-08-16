@@ -81,9 +81,11 @@ from_json(const json::Value& key, const json::Value& value) {
           std::string_view{it->value.GetString(), it->value.GetStringLength()});
 
         if (!batch_type.has_value()) {
-            throw std::runtime_error(fmt::format(
-              "JSON failure injection config specifies invalid batch type: {}",
-              key.GetString()));
+            throw std::runtime_error(
+              fmt::format(
+                "JSON failure injection config specifies invalid batch type: "
+                "{}",
+                key.GetString()));
         }
 
         op_config.batch_type = batch_type;

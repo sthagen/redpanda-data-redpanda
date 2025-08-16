@@ -91,35 +91,6 @@ enum class describe_configs_source : int8_t {
     // DYNAMIC_BROKER_LOGGER_CONFIG((byte) 6);
 };
 
-/**
- * Immutable UUID, represents a 128 bit value of the variant 2 (Leach-Salz)
- * version 4 UUID type. Conversions to/from string will expect or perform a b64
- * encoding/decoding
- */
-class uuid {
-public:
-    static constexpr auto length = 16;
-    using underlying_t = std::array<uint8_t, length>;
-
-    uuid() = default;
-
-    static uuid from_string(std::string_view encoded);
-
-    explicit uuid(const underlying_t& uuid)
-      : _uuid(uuid) {}
-
-    bytes_view view() const { return {_uuid.data(), _uuid.size()}; }
-
-    ss::sstring to_string() const;
-
-    friend bool operator==(const uuid&, const uuid&) = default;
-
-    friend std::ostream& operator<<(std::ostream& os, const uuid& u);
-
-private:
-    underlying_t _uuid{};
-};
-
 /// Types for tags and tagged fields
 /// These structures are used for encoding / decoding flexible requests
 /// Additional metadata is allowed to be stored in this dynamic structure

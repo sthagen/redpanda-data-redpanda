@@ -454,8 +454,9 @@ ss::future<> async_manifest_view::run_bg_loop() {
                     front.promise.set_value(std::ref(_stm_manifest));
                     continue;
                 }
-                if (!_manifest_cache.contains(std::make_tuple(
-                      get_ntp(), front.search_vec.base_offset))) {
+                if (!_manifest_cache.contains(
+                      std::make_tuple(
+                        get_ntp(), front.search_vec.base_offset))) {
                     // Manifest is not cached and has to be hydrated and/or
                     // materialized.
                     vlog(

@@ -54,14 +54,15 @@ public:
       model::timestamp last_t,
       size_t first_pos,
       size_t last_pos) {
-        out.ntp_metas.emplace_back(metastore::object_metadata::ntp_metadata{
-          .tidp = model::topic_id_partition::from(tpr_str),
-          .base_offset = base_o,
-          .last_offset = last_o,
-          .max_timestamp = last_t,
-          .pos = first_pos,
-          .size = last_pos - first_pos,
-        });
+        out.ntp_metas.emplace_back(
+          metastore::object_metadata::ntp_metadata{
+            .tidp = model::topic_id_partition::from(tpr_str),
+            .base_offset = base_o,
+            .last_offset = last_o,
+            .max_timestamp = last_t,
+            .pos = first_pos,
+            .size = last_pos - first_pos,
+          });
         return *this;
     }
     metastore::object_metadata build() { return std::move(out); }

@@ -32,8 +32,9 @@ void helper_asserts_false() {
 TEST(AssertInHelper, AssertInHelperThrows) {
     try {
         helper_asserts_false();
-        fail_test("Expected exception to be thrown above and this line to not "
-                  "be executed.");
+        fail_test(
+          "Expected exception to be thrown above and this line to not "
+          "be executed.");
     } catch (const testing::AssertionException& e) {
         if (strstr(e.what(), "Expected failure. Aye aye!") == nullptr) {
             fail_test(

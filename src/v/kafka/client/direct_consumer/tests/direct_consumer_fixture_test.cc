@@ -219,8 +219,9 @@ public:
 
     void maybe_toggle_fetch_sessions() {
         if (GetParam() == session_config::toggle_sessions) {
-            consumer->update_configuration(direct_consumer::configuration{
-              .with_sessions = fetch_sessions_enabled::yes});
+            consumer->update_configuration(
+              direct_consumer::configuration{
+                .with_sessions = fetch_sessions_enabled::yes});
         }
     }
 };
@@ -640,8 +641,9 @@ class fetch_session_fixture
 public:
     void wait_for_leadership() {
         for (auto i : std::views::iota(0, n_partitions)) {
-            get_partition_leader(model::ntp{
-              model::kafka_namespace, topic, model::partition_id{i}});
+            get_partition_leader(
+              model::ntp{
+                model::kafka_namespace, topic, model::partition_id{i}});
         }
     }
 
@@ -675,9 +677,10 @@ public:
         cluster->stop().get();
     }
 
-    void validate_sessions(std::function<void(
-                             const model::topic_partition&,
-                             const std::vector<model::offset>&)> validator) {
+    void validate_sessions(
+      std::function<
+        void(const model::topic_partition&, const std::vector<model::offset>&)>
+        validator) {
         for (const auto& [node, cap] : _capture.captured) {
             for (const auto& [sid, reqs] : cap.sessions) {
                 ASSERT_NE(sid, kafka::invalid_fetch_session_id);

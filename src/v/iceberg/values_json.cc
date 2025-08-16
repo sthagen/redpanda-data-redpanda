@@ -32,8 +32,9 @@ using namespace iceberg;
 std::string_view
 parse_string_view(const json::Value& data, std::string_view context = "") {
     if (!data.IsString()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected JSON string for {}, got {}", context, data.GetType()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected JSON string for {}, got {}", context, data.GetType()));
     }
     return std::string_view{data.GetString(), data.GetStringLength()};
 }
@@ -52,10 +53,11 @@ iobuf hex_str_to_iobuf(std::string_view str) {
           sub.data(), sub.data() + sub.size(), x, 16);
 
         if (ec != std::errc{}) {
-            throw std::invalid_argument(fmt::format(
-              "Failed to parse hex byte '{}' - ec: '{}'",
-              sub,
-              std::make_error_code(ec)));
+            throw std::invalid_argument(
+              fmt::format(
+                "Failed to parse hex byte '{}' - ec: '{}'",
+                sub,
+                std::make_error_code(ec)));
         }
 
         b.push_back(static_cast<uint8_t>(x));
@@ -74,26 +76,31 @@ sv_to_time_point(std::string_view fmt, std::string_view str) {
     std::tm tm{};
     is >> std::get_time(&tm, fmt.data());
     if (is.fail()) {
-        throw std::invalid_argument(fmt::format(
-          "Failed to parse date string '{}', expected format '{}'", str, fmt));
+        throw std::invalid_argument(
+          fmt::format(
+            "Failed to parse date string '{}', expected format '{}'",
+            str,
+            fmt));
     }
     return absl::ToChronoTime(absl::FromTM(tm, absl::UTCTimeZone()));
 }
 
 std::chrono::microseconds sv_to_us(std::string_view u_str) {
     if (u_str.size() != 6) {
-        throw std::invalid_argument(fmt::format(
-          "Expected 6-digit microsecond resolution, got '{}'", u_str));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected 6-digit microsecond resolution, got '{}'", u_str));
     }
     int us_raw{};
     auto [ptr, ec] = std::from_chars(
       u_str.data(), u_str.data() + u_str.size(), us_raw);
 
     if (ec != std::errc{}) {
-        throw std::invalid_argument(fmt::format(
-          "Failed to parse microseconds: '{}' - ec: {}",
-          u_str,
-          std::make_error_code(ec)));
+        throw std::invalid_argument(
+          fmt::format(
+            "Failed to parse microseconds: '{}' - ec: {}",
+            u_str,
+            std::make_error_code(ec)));
     }
     return std::chrono::microseconds{us_raw};
 }
@@ -156,8 +163,9 @@ struct primitive_value_parsing_visitor {
         auto str = parse_string_view(data_, "time_value");
         std::vector<std::string_view> split = absl::StrSplit(str, '.');
         if (split.size() != 2) {
-            throw std::invalid_argument(fmt::format(
-              "Expected fractional part for time_value, got '{}'", str));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected fractional part for time_value, got '{}'", str));
         }
         auto t_str = split[0];
         auto u_str = split[1];
@@ -171,8 +179,9 @@ struct primitive_value_parsing_visitor {
         auto str = parse_string_view(data_, "timestamp_value");
         std::vector<std::string_view> split = absl::StrSplit(str, '.');
         if (split.size() != 2) {
-            throw std::invalid_argument(fmt::format(
-              "Expected fractional part for timestamp_value, got '{}'", str));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected fractional part for timestamp_value, got '{}'", str));
         }
         auto t_str = split[0];
         auto u_str = split[1];
@@ -185,15 +194,18 @@ struct primitive_value_parsing_visitor {
         auto str = parse_string_view(data_, "timestamptz_value");
         std::vector<std::string_view> split = absl::StrSplit(str, '.');
         if (split.size() != 2) {
-            throw std::invalid_argument(fmt::format(
-              "Expected fractional part for timestamptz_value, got '{}'", str));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected fractional part for timestamptz_value, got '{}'",
+                str));
         }
         auto t_str = split[0];
         auto rest = split[1];
         split = absl::StrSplit(rest, '+');
         if (split.size() != 2) {
-            throw std::invalid_argument(fmt::format(
-              "Expected offset part for timestamptz_value, got '{}'", str));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected offset part for timestamptz_value, got '{}'", str));
         }
         auto u_str = split[0];
         auto us_sub_sec = sv_to_us(u_str);
@@ -207,11 +219,12 @@ struct primitive_value_parsing_visitor {
     value operator()(const fixed_type& t) {
         auto str = parse_string_view(data_, "fixed_value");
         if (t.length * 2 != str.size()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected {} hex digits for {}: got {}",
-              t.length * 2,
-              t,
-              str.size()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected {} hex digits for {}: got {}",
+                t.length * 2,
+                t,
+                str.size()));
         }
         return fixed_value{hex_str_to_iobuf(str)};
     }
@@ -258,11 +271,12 @@ struct primitive_value_parsing_visitor {
         auto json_precision = int_part.size() + frac_part.size();
 
         if (json_precision > t.precision) {
-            throw std::invalid_argument(fmt::format(
-              "Expected at most {}-byte precision for {}, got {}",
-              t.precision,
-              t,
-              json_precision));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected at most {}-byte precision for {}, got {}",
+                t.precision,
+                t,
+                json_precision));
         }
 
         absl::int128 integral{0};
@@ -315,10 +329,11 @@ struct value_parsing_visitor {
         }
         auto obj = data_.GetObject();
         if (t.fields.size() != obj.MemberCount()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected JSON object with {} members, got {}",
-              t.fields.size(),
-              obj.MemberCount()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected JSON object with {} members, got {}",
+                t.fields.size(),
+                obj.MemberCount()));
         }
 
         auto v = std::make_unique<struct_value>();
@@ -343,11 +358,12 @@ struct value_parsing_visitor {
         const auto& keys_arr = parse_required_array(data_, "keys");
         const auto& values_arr = parse_required_array(data_, "values");
         if (keys_arr.Size() != values_arr.Size()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected complete key-value mapping, got {} keys and {} "
-              "values",
-              keys_arr.Size(),
-              values_arr.Size()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected complete key-value mapping, got {} keys and {} "
+                "values",
+                keys_arr.Size(),
+                values_arr.Size()));
         }
 
         auto v = std::make_unique<map_value>();
@@ -464,8 +480,9 @@ struct rjson_visitor {
     void
     operator()(const iceberg::fixed_value& v, const iceberg::fixed_type& t) {
         if (auto sz = v.val.size_bytes(); sz > t.length) {
-            throw std::invalid_argument(fmt::format(
-              "Expected fixed_value of type {} but got {}B", t, sz));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected fixed_value of type {} but got {}B", t, sz));
         }
         w.String(to_hex(iobuf_to_bytes(v.val)));
     }
@@ -500,11 +517,13 @@ struct rjson_visitor {
                              | std::views::drop_while(
                                [](const char c) { return c == '0'; });
         auto fractional_part = truncated | std::views::drop(p - s);
-        w.String(fmt::format(
-          "{}{}.{}",
-          is_neg ? "-" : "",
-          std::string_view{&integral_part.front(), integral_part.size()},
-          std::string_view{&fractional_part.front(), fractional_part.size()}));
+        w.String(
+          fmt::format(
+            "{}{}.{}",
+            is_neg ? "-" : "",
+            std::string_view{&integral_part.front(), integral_part.size()},
+            std::string_view{
+              &fractional_part.front(), fractional_part.size()}));
     }
 
     void operator()(
@@ -554,8 +573,9 @@ struct rjson_visitor {
 
     template<typename V, typename T>
     void operator()(const V& v, const T& t) {
-        throw std::invalid_argument(fmt::format(
-          "JSON serde type mismatch for value {}, got type {}", v, t));
+        throw std::invalid_argument(
+          fmt::format(
+            "JSON serde type mismatch for value {}, got type {}", v, t));
     }
 
 private:
@@ -573,8 +593,9 @@ void value_to_json(
   const iceberg::struct_value& s,
   const iceberg::struct_type& t) {
     if (s.fields.size() != t.fields.size()) {
-        throw std::invalid_argument(fmt::format(
-          "Wrong number of fields for struct_value {} of type {}", s, t));
+        throw std::invalid_argument(
+          fmt::format(
+            "Wrong number of fields for struct_value {} of type {}", s, t));
     }
     w.StartObject();
 
@@ -583,8 +604,9 @@ void value_to_json(
           const auto& v_field = s.fields[i];
           const auto& t_field = t.fields[i];
           if (t_field == nullptr) {
-              throw std::invalid_argument(fmt::format(
-                "Found null nested field in struct type for value {}", s));
+              throw std::invalid_argument(
+                fmt::format(
+                  "Found null nested field in struct type for value {}", s));
           }
           w.Key(fmt::to_string(t_field->id));
           if (v_field.has_value()) {
@@ -592,8 +614,9 @@ void value_to_json(
           } else if (!t_field->required) {
               w.Null();
           } else {
-              throw std::invalid_argument(fmt::format(
-                "Found null value for required field {}", t_field->name));
+              throw std::invalid_argument(
+                fmt::format(
+                  "Found null value for required field {}", t_field->name));
           }
       });
 
@@ -643,8 +666,10 @@ void value_to_json(
         } else if (!t.value_field->required) {
             w.Null();
         } else {
-            throw std::invalid_argument(fmt::format(
-              "Found null value for required map value for key '{}'", kv.key));
+            throw std::invalid_argument(
+              fmt::format(
+                "Found null value for required map value for key '{}'",
+                kv.key));
         }
     }
     w.EndArray();

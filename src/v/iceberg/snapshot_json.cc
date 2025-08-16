@@ -79,18 +79,20 @@ snapshot parse_snapshot(const json::Value& v) {
     }
     const auto& summary_json = parse_required(v, "summary");
     if (!summary_json.IsObject()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected JSON object to parse field 'summary', found: {}",
-          summary_json.GetType()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected JSON object to parse field 'summary', found: {}",
+            summary_json.GetType()));
     }
     std::optional<snapshot_operation> operation;
     absl::btree_map<ss::sstring, ss::sstring> other_map;
     for (const auto& m : summary_json.GetObject()) {
         if (!m.name.IsString() || !m.value.IsString()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected 'summary' field to be a string map, found: {} => {}",
-              m.name.GetType(),
-              m.value.GetType()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected 'summary' field to be a string map, found: {} => {}",
+                m.name.GetType(),
+                m.value.GetType()));
         }
         const auto& val_str = m.value.GetString();
         // Pull out the 'operation' field specifically, as it's a required

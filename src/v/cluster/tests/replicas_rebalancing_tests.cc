@@ -76,8 +76,9 @@ void wait_for_all_partition_moves_to_finish(
                                  return std::all_of(
                                    states.begin(),
                                    states.end(),
-                                   [](const cluster::ntp_reconciliation_state&
-                                        st) {
+                                   [](
+                                     const cluster::ntp_reconciliation_state&
+                                       st) {
                                        return st.status()
                                               == cluster::
                                                 reconciliation_status::done;

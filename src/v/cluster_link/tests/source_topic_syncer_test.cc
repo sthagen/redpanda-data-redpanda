@@ -35,10 +35,11 @@ model::metadata get_default_metadata() {
       .state = std::move(link_state)};
     metadata.configuration.topic_metadata_mirroring_cfg.task_interval = 1s;
     metadata.configuration.topic_metadata_mirroring_cfg.topic_name_filters
-      .emplace_back(resource_name_filter_pattern{
-        .pattern_type = filter_pattern_type::literal,
-        .filter = filter_type::include,
-        .pattern = resource_name_filter_pattern::wildcard});
+      .emplace_back(
+        resource_name_filter_pattern{
+          .pattern_type = filter_pattern_type::literal,
+          .filter = filter_type::include,
+          .pattern = resource_name_filter_pattern::wildcard});
     return metadata;
 }
 } // namespace
@@ -172,10 +173,11 @@ TEST_F_CORO(source_topic_syncer_test, select_all_with_exclude) {
 
     auto md = get_default_metadata();
     md.configuration.topic_metadata_mirroring_cfg.topic_name_filters
-      .emplace_back(resource_name_filter_pattern{
-        .pattern_type = filter_pattern_type::literal,
-        .filter = filter_type::exclude,
-        .pattern = "excluded-topic"});
+      .emplace_back(
+        resource_name_filter_pattern{
+          .pattern_type = filter_pattern_type::literal,
+          .filter = filter_type::exclude,
+          .pattern = "excluded-topic"});
     co_await fixture()->upsert_link(std::move(md));
 
     // Allow auto topic sensor to run
@@ -278,8 +280,9 @@ TEST_F_CORO(source_topic_syncer_test, no_controller_present) {
 }
 
 TEST_F_CORO(source_topic_syncer_test, topic_exists) {
-    fixture()->set_topic_config(cluster::topic_configuration(
-      ::model::kafka_namespace, ::model::topic{"test_topic"}, 3, 3));
+    fixture()->set_topic_config(
+      cluster::topic_configuration(
+        ::model::kafka_namespace, ::model::topic{"test_topic"}, 3, 3));
     fixture()->get_cluster_mock().add_topic(
       ::model::topic("test_topic"),
       3,
@@ -371,19 +374,22 @@ protected:
 TEST_F_CORO(invalid_describe_configs_test, bad_describe_config_response) {
     co_await fixture()->upsert_link(get_default_metadata());
 
-    _describe_configs_results.emplace_back(kafka::describe_configs_result{
-      .error_code = kafka::error_code::topic_authorization_failed});
+    _describe_configs_results.emplace_back(
+      kafka::describe_configs_result{
+        .error_code = kafka::error_code::topic_authorization_failed});
 
-    _describe_configs_results.emplace_back(kafka::describe_configs_result{
-      .error_code = kafka::error_code::none,
-      .resource_type = kafka::config_resource_type::broker,
-    });
+    _describe_configs_results.emplace_back(
+      kafka::describe_configs_result{
+        .error_code = kafka::error_code::none,
+        .resource_type = kafka::config_resource_type::broker,
+      });
 
-    _describe_configs_results.emplace_back(kafka::describe_configs_result{
-      .error_code = kafka::error_code::none,
-      .resource_type = kafka::config_resource_type::topic,
-      .resource_name = "not_requested_topic",
-    });
+    _describe_configs_results.emplace_back(
+      kafka::describe_configs_result{
+        .error_code = kafka::error_code::none,
+        .resource_type = kafka::config_resource_type::topic,
+        .resource_name = "not_requested_topic",
+      });
 
     fixture()->get_cluster_mock().add_topic(
       ::model::topic("test_topic"),

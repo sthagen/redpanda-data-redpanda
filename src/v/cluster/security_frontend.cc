@@ -292,10 +292,11 @@ ss::future<std::vector<delete_acls_result>> security_frontend::do_delete_acls(
     if (err == errc::success) {
         res.reserve(removed_bindings.size());
         for (auto& bindings : removed_bindings) {
-            res.push_back(delete_acls_result{
-              .error = errc::success,
-              .bindings = std::move(bindings),
-            });
+            res.push_back(
+              delete_acls_result{
+                .error = errc::success,
+                .bindings = std::move(bindings),
+              });
         }
         co_return res;
     }

@@ -212,13 +212,15 @@ bool convert<config::tls_config>::decode(
     } else {
         std::optional<config::key_cert_container> container;
         if (node["key_file"]) {
-            container.emplace(config::key_cert{
-              to_absolute(node["key_file"].as<ss::sstring>()),
-              to_absolute(node["cert_file"].as<ss::sstring>())});
+            container.emplace(
+              config::key_cert{
+                to_absolute(node["key_file"].as<ss::sstring>()),
+                to_absolute(node["cert_file"].as<ss::sstring>())});
         } else if (node["p12_file"]) {
-            container.emplace(config::p12_container{
-              to_absolute(node["p12_file"].as<ss::sstring>()),
-              node["p12_password"].as<ss::sstring>()});
+            container.emplace(
+              config::p12_container{
+                to_absolute(node["p12_file"].as<ss::sstring>()),
+                node["p12_password"].as<ss::sstring>()});
         }
         rhs = config::tls_config(
           enabled,

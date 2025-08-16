@@ -144,9 +144,10 @@ public:
         auto new_ars = create_resource_details(std::move(additional_resources));
         auto crud = op_to_crud(auth_result.operation);
         auto actor = result_to_actor(auth_result);
-        new_ars.emplace_back(resource_detail{
-          .name = auth_result.resource_name,
-          .type = fmt::format("{}", auth_result.resource_type)});
+        new_ars.emplace_back(
+          resource_detail{
+            .name = auth_result.resource_name,
+            .type = fmt::format("{}", auth_result.resource_type)});
 
         return {
           crud,

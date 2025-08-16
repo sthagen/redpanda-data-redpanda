@@ -74,8 +74,9 @@ public:
     bytes_span<> finish(bytes_span<> sig) {
         auto len = sig.size();
         if (len != size()) {
-            throw exception(fmt::format(
-              "Invalid signature buffer length: {} != {}", len, size()));
+            throw exception(
+              fmt::format(
+                "Invalid signature buffer length: {} != {}", len, size()));
         }
         return finish_no_check(sig);
     }
@@ -89,8 +90,9 @@ public:
     bytes_span<> reset(bytes_span<> sig) {
         auto len = sig.size();
         if (len != size()) {
-            throw exception(fmt::format(
-              "Invalid signature buffer length: {} != {}", len, size()));
+            throw exception(
+              fmt::format(
+                "Invalid signature buffer length: {} != {}", len, size()));
         }
         finish_no_check(sig);
         if (1 != EVP_MAC_init(_mac_ctx.get(), nullptr, 0, nullptr)) {

@@ -137,11 +137,12 @@ ss::future<error_outcome> uploader::upload_next_metadata(
           if (synced_term == _raft0->term()) {
               return std::nullopt;
           }
-          return std::make_optional(fmt::format(
-            "lost leadership or term changed: synced term {} vs "
-            "current term {}",
-            synced_term,
-            _raft0->term()));
+          return std::make_optional(
+            fmt::format(
+              "lost leadership or term changed: synced term {} vs "
+              "current term {}",
+              synced_term,
+              _raft0->term()));
       },
     };
 

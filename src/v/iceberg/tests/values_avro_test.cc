@@ -57,11 +57,12 @@ TEST(ValuesAvroTest, TestRandomVals) {
 
 TEST(ValuesAvroTest, TestDecimal) {
     struct_type st;
-    st.fields.push_back(nested_field::create(
-      0,
-      "decimal_val",
-      field_required::yes,
-      decimal_type{.precision = 10, .scale = 2}));
+    st.fields.push_back(
+      nested_field::create(
+        0,
+        "decimal_val",
+        field_required::yes,
+        decimal_type{.precision = 10, .scale = 2}));
 
     field_type schema_field{std::move(st)};
 

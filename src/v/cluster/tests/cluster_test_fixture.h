@@ -35,7 +35,7 @@ requires std::predicate<Pred>
 void wait_for(model::timeout_clock::duration timeout, Pred&& p) {
     with_timeout(
       model::timeout_clock::now() + timeout,
-      do_until(
+      ss::do_until(
         [p = std::forward<Pred>(p)] { return p(); },
         [] { return ss::sleep(std::chrono::milliseconds(400)); }))
       .get();
@@ -365,8 +365,9 @@ public:
         auto new_leader_id = model::node_id{
           ++current_leader_id % static_cast<int>(_instances.size())};
         return partition
-          ->transfer_leadership(raft::transfer_leadership_request{
-            .group = partition->group(), .target = new_leader_id})
+          ->transfer_leadership(
+            raft::transfer_leadership_request{
+              .group = partition->group(), .target = new_leader_id})
           .discard_result();
     }
 

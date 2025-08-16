@@ -26,10 +26,11 @@ cluster::topic_status make_topic_status(size_t id, size_t num_partitions) {
         if (i % 3 == 0) { // leaders
             if (i % 30) { // 10% of leaders to have faulty partitions
                 part_status.under_replicated_replicas.emplace(2);
-                part_status.followers_stats.emplace(cluster::followers_stats{
-                  .in_sync = 2,
-                  .out_of_sync = {model::node_id(1), model::node_id(2)},
-                  .down = {model::node_id(3), model::node_id(4)}});
+                part_status.followers_stats.emplace(
+                  cluster::followers_stats{
+                    .in_sync = 2,
+                    .out_of_sync = {model::node_id(1), model::node_id(2)},
+                    .down = {model::node_id(3), model::node_id(4)}});
             } else {
                 part_status.under_replicated_replicas.emplace(0);
                 part_status.followers_stats.emplace();

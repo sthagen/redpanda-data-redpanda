@@ -89,8 +89,9 @@ default_retry_policy::should_retry(http::downloaded_response response) const {
       0, std::min(max_msg_size, response.body.size_bytes()))};
     std::stringstream s;
     s << is.istream().rdbuf();
-    return tl::unexpected(failure{
-      .can_be_retried = can_be_retried, .err = status, .err_msg = s.str()});
+    return tl::unexpected(
+      failure{
+        .can_be_retried = can_be_retried, .err = status, .err_msg = s.str()});
 }
 
 failure default_retry_policy::should_retry(std::exception_ptr ex) const {
@@ -120,11 +121,12 @@ failure default_retry_policy::should_retry(std::exception_ptr ex) const {
           || is_abort_or_gate_close_exception(nested.outer)) {
             return aborted(fmt::format("{}", std::current_exception()));
         };
-        return unretriable(fmt::format(
-          "{} [outer: {}, inner: {}]",
-          nested.what(),
-          nested.outer,
-          nested.inner));
+        return unretriable(
+          fmt::format(
+            "{} [outer: {}, inner: {}]",
+            nested.what(),
+            nested.outer,
+            nested.inner));
     } catch (...) {
         return unretriable(fmt::format("{}", std::current_exception()));
     }

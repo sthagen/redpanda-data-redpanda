@@ -112,8 +112,9 @@ constexpr static size_t max_numeric_string_size = 128;
 ss::sstring linearize_iobuf(iobuf b) {
     constexpr static size_t max_allocation_size = 128_KiB;
     if (b.size_bytes() > max_allocation_size) {
-        throw std::runtime_error(fmt::format(
-          "string too big: {} > {}", b.size_bytes(), max_allocation_size));
+        throw std::runtime_error(
+          fmt::format(
+            "string too big: {} > {}", b.size_bytes(), max_allocation_size));
     }
     ss::sstring result{ss::sstring::initialized_later{}, b.size_bytes()};
     char* dest = result.data();
@@ -126,8 +127,11 @@ ss::sstring linearize_iobuf(iobuf b) {
 template<typename T>
 T iobuf_to_number(iobuf b) {
     if (b.size_bytes() > max_numeric_string_size) {
-        throw std::runtime_error(fmt::format(
-          "number too big: {} > {}", b.size_bytes(), max_numeric_string_size));
+        throw std::runtime_error(
+          fmt::format(
+            "number too big: {} > {}",
+            b.size_bytes(),
+            max_numeric_string_size));
     }
     auto str = linearize_iobuf(std::move(b));
     T result{};
@@ -176,8 +180,9 @@ bool transform_map_key(iobuf key_string) {
         return false;
     } else {
         constexpr size_t hexdump_size = 32;
-        throw std::runtime_error(fmt::format(
-          "expected boolean, got: {}", key_string.hexdump(hexdump_size)));
+        throw std::runtime_error(
+          fmt::format(
+            "expected boolean, got: {}", key_string.hexdump(hexdump_size)));
     }
 }
 
@@ -345,8 +350,9 @@ iobuf duration_to_json(absl::Duration d) {
         digits -= 3;
     }
     absl::string_view sign = ((secs < 0) || (nanos < 0)) ? "-" : "";
-    return iobuf::from(absl::StrFormat(
-      R"("%s%d.%.*ds")", sign, std::abs(secs), digits, frac_seconds));
+    return iobuf::from(
+      absl::StrFormat(
+        R"("%s%d.%.*ds")", sign, std::abs(secs), digits, frac_seconds));
 }
 
 namespace {

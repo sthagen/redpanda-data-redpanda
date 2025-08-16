@@ -82,11 +82,12 @@ FIXTURE_TEST(test_fetch_session_basic_operations, fixture) {
         req.partitions[0].partition = model::partition_id(
           random_generators::get_int(i * 10, ((i + 1) * 10) - 1));
 
-        expected.push_back(tpo{
-          model::ktp{
-            model::topic(req.topic),
-            model::partition_id(req.partitions[0].partition)},
-          model::offset(req.partitions[0].fetch_offset)});
+        expected.push_back(
+          tpo{
+            model::ktp{
+              model::topic(req.topic),
+              model::partition_id(req.partitions[0].partition)},
+            model::offset(req.partitions[0].fetch_offset)});
         session.partitions().emplace(
           kafka::fetch_session_partition(req.topic, req.partitions[0]));
     }

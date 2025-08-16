@@ -31,10 +31,11 @@ oauth_token parse_oauth_token(const json::Document& doc) {
 
     if (!(token_type == "bearer" || token_type == "mac"
           || token_type == "n_a")) {
-        throw std::invalid_argument(fmt::format(
-          "Unexpected oauth_token.token_type value {}. It must be one of the "
-          "bearer, mac or N_A",
-          token_type));
+        throw std::invalid_argument(
+          fmt::format(
+            "Unexpected oauth_token.token_type value {}. It must be one of the "
+            "bearer, mac or N_A",
+            token_type));
     }
     ret.token_type = std::move(token_type);
     ret.scope = parse_optional_str(doc, "scope");

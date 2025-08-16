@@ -177,8 +177,9 @@ partition_validator::do_validate_manifest_metadata() {
         // missing spillover manifest are not as problematic as missing
         // segments, but still require manual intervention to fix the
         // manifest for a correct operation
-        op_logger_.error("manifest metadata check: missing spillover "
-                         "manifests, validation not ok");
+        op_logger_.error(
+          "manifest metadata check: missing spillover "
+          "manifests, validation not ok");
         co_return validation_result::anomaly_detected;
     }
 
@@ -201,12 +202,14 @@ partition_validator::do_validate_manifest_metadata() {
       };
 
     if (std::ranges::any_of(segment_anomalies, is_fatal_anomaly)) {
-        op_logger_.error("manifest metadata check: fatal segment "
-                         "anomalies, validation not ok");
+        op_logger_.error(
+          "manifest metadata check: fatal segment "
+          "anomalies, validation not ok");
         co_return validation_result::anomaly_detected;
     } else {
-        op_logger_.warn("manifest metadata check: minor segment anomalies, "
-                        "validation ok");
+        op_logger_.warn(
+          "manifest metadata check: minor segment anomalies, "
+          "validation ok");
         co_return validation_result::passed;
     }
 }

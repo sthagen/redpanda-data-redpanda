@@ -506,8 +506,9 @@ TEST_F(WriteAtOffsetStmFixture, test_failed_replication) {
     // machine state after leadership change
     node(new_leader_id)
       .raft()
-      ->transfer_leadership(raft::transfer_leadership_request{
-        .group = leader.raft()->group(), .target = leader_id, .timeout = 10s})
+      ->transfer_leadership(
+        raft::transfer_leadership_request{
+          .group = leader.raft()->group(), .target = leader_id, .timeout = 10s})
       .get();
     // Go back to batches with previous expected offsets
     auto new_batches = generate_batches(

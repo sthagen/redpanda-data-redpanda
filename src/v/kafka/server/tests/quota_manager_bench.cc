@@ -98,45 +98,51 @@ future<size_t> run_tc(throughput_test_case tc) {
 struct throughput_group {};
 
 PERF_TEST_CN(throughput_group, test_quota_manager_on_unlimited_shared) {
-    return run_tc(throughput_test_case{
-      .fetch_tp = std::numeric_limits<uint32_t>::max(),
-      .use_unique = false,
-    });
+    return run_tc(
+      throughput_test_case{
+        .fetch_tp = std::numeric_limits<uint32_t>::max(),
+        .use_unique = false,
+      });
 }
 
 PERF_TEST_CN(throughput_group, test_quota_manager_on_unlimited_unique) {
-    return run_tc(throughput_test_case{
-      .fetch_tp = std::numeric_limits<uint32_t>::max(),
-      .use_unique = true,
-    });
+    return run_tc(
+      throughput_test_case{
+        .fetch_tp = std::numeric_limits<uint32_t>::max(),
+        .use_unique = true,
+      });
 }
 
 PERF_TEST_CN(throughput_group, test_quota_manager_on_limited_shared) {
-    return run_tc(throughput_test_case{
-      .fetch_tp = 1000,
-      .use_unique = false,
-    });
+    return run_tc(
+      throughput_test_case{
+        .fetch_tp = 1000,
+        .use_unique = false,
+      });
 }
 
 PERF_TEST_CN(throughput_group, test_quota_manager_on_limited_unique) {
-    return run_tc(throughput_test_case{
-      .fetch_tp = 1000,
-      .use_unique = true,
-    });
+    return run_tc(
+      throughput_test_case{
+        .fetch_tp = 1000,
+        .use_unique = true,
+      });
 }
 
 PERF_TEST_CN(throughput_group, test_quota_manager_off_shared) {
-    return run_tc(throughput_test_case{
-      .fetch_tp = std::nullopt,
-      .use_unique = false,
-    });
+    return run_tc(
+      throughput_test_case{
+        .fetch_tp = std::nullopt,
+        .use_unique = false,
+      });
 }
 
 PERF_TEST_CN(throughput_group, test_quota_manager_off_unique) {
-    return run_tc(throughput_test_case{
-      .fetch_tp = std::nullopt,
-      .use_unique = true,
-    });
+    return run_tc(
+      throughput_test_case{
+        .fetch_tp = std::nullopt,
+        .use_unique = true,
+      });
 }
 
 struct latency_test_case {
@@ -232,238 +238,264 @@ future<size_t> run_latency_test(latency_test_case tc) {
 struct latency_group {};
 
 PERF_TEST_CN(latency_group, existing_client_produce_100_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 100,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 100,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_fetch_100_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 100,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 100,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_produce_100_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 100,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 100,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_fetch_100_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 100,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 100,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_produce_1000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 1000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 1000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_fetch_1000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 1000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 1000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_produce_1000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 1000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 1000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_fetch_1000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 1000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 1000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_produce_10000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 10000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 10000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_fetch_10000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 10000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 10000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_produce_10000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 10000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 10000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_fetch_10000_others) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 10000,
-      .on_shard_0 = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 10000,
+        .on_shard_0 = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_produce_100_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 100,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 100,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_fetch_100_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 100,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 100,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_produce_100_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 100,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 100,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_fetch_100_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 100,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 100,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_produce_1000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 1000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 1000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_fetch_1000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 1000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 1000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_produce_1000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 1000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 1000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_fetch_1000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 1000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 1000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_produce_10000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 10000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 10000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, existing_client_fetch_10000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = false,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 10000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = false,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 10000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_produce_10000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 10000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 10000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, new_client_fetch_10000_others_not_shard_0) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 10000,
-      .on_shard_0 = false,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 10000,
+        .on_shard_0 = false,
+      });
 }
 
 PERF_TEST_CN(latency_group, default_configs_produce_worst) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = true,
-      .n_other_clients = 0,
-      .on_shard_0 = false,
-      .no_quotas = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = true,
+        .n_other_clients = 0,
+        .on_shard_0 = false,
+        .no_quotas = true,
+      });
 }
 
 PERF_TEST_CN(latency_group, default_configs_fetch_worst) {
-    return run_latency_test(latency_test_case{
-      .is_new_client = true,
-      .is_produce_not_fetch = false,
-      .n_other_clients = 0,
-      .on_shard_0 = false,
-      .no_quotas = true,
-    });
+    return run_latency_test(
+      latency_test_case{
+        .is_new_client = true,
+        .is_produce_not_fetch = false,
+        .n_other_clients = 0,
+        .on_shard_0 = false,
+        .no_quotas = true,
+      });
 }
 } // namespace kafka

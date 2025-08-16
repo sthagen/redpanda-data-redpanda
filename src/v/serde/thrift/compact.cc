@@ -89,10 +89,11 @@ iobuf encode_binary(iobuf b) {
         throw std::invalid_argument("encoded thrift binary value too big");
     }
     auto len = unsigned_vint::to_bytes(b.size_bytes());
-    b.prepend(ss::temporary_buffer<char>(
-      // NOLINTNEXTLINE(*reinterpret-cast*)
-      reinterpret_cast<const char*>(len.data()),
-      len.size()));
+    b.prepend(
+      ss::temporary_buffer<char>(
+        // NOLINTNEXTLINE(*reinterpret-cast*)
+        reinterpret_cast<const char*>(len.data()),
+        len.size()));
     return b;
 }
 

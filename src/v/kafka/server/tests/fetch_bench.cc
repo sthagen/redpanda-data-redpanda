@@ -131,8 +131,9 @@ struct fetch_bench_fixture : redpanda_thread_fixture {
 
         std::vector<std::unique_ptr<kafka::op_context>> octxs;
         for (int i = 0; i < cfg.num_fetches + 1; i++) {
-            octxs.emplace_back(std::make_unique<kafka::op_context>(
-              make_rctx(), ss::default_smp_service_group()));
+            octxs.emplace_back(
+              std::make_unique<kafka::op_context>(
+                make_rctx(), ss::default_smp_service_group()));
         }
 
         // Do a single fetch outside of the measured region first to ensure

@@ -165,13 +165,14 @@ TEST_F(log_builder_fixture, timequery_multiple_messages_per_batch) {
          ts += records_per_batch) {
         b
           | add_batch(
-            model::test::make_random_batch(model::test::record_batch_spec{
-              .offset = model::offset(ts),
-              .allow_compression = true,
-              .count = records_per_batch,
-              .timestamp = model::timestamp(ts),
-              .all_records_have_same_timestamp = true,
-            }));
+            model::test::make_random_batch(
+              model::test::record_batch_spec{
+                .offset = model::offset(ts),
+                .allow_compression = true,
+                .count = records_per_batch,
+                .timestamp = model::timestamp(ts),
+                .all_records_have_same_timestamp = true,
+              }));
     }
 
     // Half have different timestamps.

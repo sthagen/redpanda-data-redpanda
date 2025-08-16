@@ -311,8 +311,9 @@ struct cluster_health_report
         for (auto i = 0U; i < sz; ++i) {
             auto r = co_await read_async_nested<node_health_report_serde>(
               in, h._bytes_left_limit);
-            node_reports.emplace_back(ss::make_lw_shared<node_health_report>(
-              std::move(r).to_in_memory()));
+            node_reports.emplace_back(
+              ss::make_lw_shared<node_health_report>(
+                std::move(r).to_in_memory()));
         }
         bytes_in_cloud_storage = read_nested<std::optional<size_t>>(
           in, h._bytes_left_limit);
@@ -348,8 +349,9 @@ struct cluster_health_report
         for (auto i = 0U; i < sz; ++i) {
             auto r = read_nested<node_health_report_serde>(
               in, h._bytes_left_limit);
-            node_reports.emplace_back(ss::make_lw_shared<node_health_report>(
-              std::move(r).to_in_memory()));
+            node_reports.emplace_back(
+              ss::make_lw_shared<node_health_report>(
+                std::move(r).to_in_memory()));
         }
         bytes_in_cloud_storage = read_nested<std::optional<size_t>>(
           in, h._bytes_left_limit);

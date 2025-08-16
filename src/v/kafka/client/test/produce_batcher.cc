@@ -53,14 +53,16 @@ struct produce_batcher_context {
     }
     auto handle_response(kafka::error_code error = kafka::error_code::none) {
         auto batch = kc::consume_front(broker_batches);
-        batcher.handle_response(kafka::produce_response::partition{
-          .partition_index{partition_id},
-          .error_code = error,
-          .base_offset{
-            error == kafka::error_code::none ? batch.first : model::offset{-1}},
-          .log_append_time_ms{model::timestamp{0}},
-          .log_start_offset{model::offset{-1}},
-        });
+        batcher.handle_response(
+          kafka::produce_response::partition{
+            .partition_index{partition_id},
+            .error_code = error,
+            .base_offset{
+              error == kafka::error_code::none ? batch.first
+                                               : model::offset{-1}},
+            .log_append_time_ms{model::timestamp{0}},
+            .log_start_offset{model::offset{-1}},
+          });
         return batch.second.record_count();
     }
     ss::future<std::vector<kafka::produce_response::partition>>

@@ -649,22 +649,24 @@ ss::future<> archival_metadata_stm::make_snapshot(
     auto segments = segments_from_manifest(m);
     auto replaced = replaced_segments_from_manifest(m);
     auto spillover = spillover_from_manifest(m);
-    iobuf snap_data = serde::to_iobuf(snapshot{
-      .segments = std::move(segments),
-      .replaced = std::move(replaced),
-      .start_offset = m.get_start_offset().value_or(model::offset{}),
-      .last_offset = m.get_last_offset(),
-      .last_uploaded_compacted_offset = m.get_last_uploaded_compacted_offset(),
-      .dirty = state_dirty::clean,
-      .archive_start_offset = m.get_archive_start_offset(),
-      .archive_start_offset_delta = m.get_archive_start_offset_delta(),
-      .archive_clean_offset = m.get_archive_clean_offset(),
-      .archive_size_bytes = m.archive_size_bytes(),
-      .start_kafka_offset = m.get_start_kafka_offset_override(),
-      .spillover_manifests = std::move(spillover),
-      .highest_producer_id = m.highest_producer_id(),
-      .applied_offset = insync_offset,
-    });
+    iobuf snap_data = serde::to_iobuf(
+      snapshot{
+        .segments = std::move(segments),
+        .replaced = std::move(replaced),
+        .start_offset = m.get_start_offset().value_or(model::offset{}),
+        .last_offset = m.get_last_offset(),
+        .last_uploaded_compacted_offset
+        = m.get_last_uploaded_compacted_offset(),
+        .dirty = state_dirty::clean,
+        .archive_start_offset = m.get_archive_start_offset(),
+        .archive_start_offset_delta = m.get_archive_start_offset_delta(),
+        .archive_clean_offset = m.get_archive_clean_offset(),
+        .archive_size_bytes = m.archive_size_bytes(),
+        .start_kafka_offset = m.get_start_kafka_offset_override(),
+        .spillover_manifests = std::move(spillover),
+        .highest_producer_id = m.highest_producer_id(),
+        .applied_offset = insync_offset,
+      });
 
     auto snapshot = raft::stm_snapshot::create(
       0, insync_offset, std::move(snap_data));
@@ -693,8 +695,9 @@ archival_metadata_stm::archival_metadata_stm(
   : raft::persisted_stm<>(archival_stm_snapshot, logger, raft)
   , _logger(logger, ssx::sformat("ntp: {}", raft->ntp()))
   , _mem_tracker(ss::make_shared<util::mem_tracker>(raft->ntp().path()))
-  , _manifest(ss::make_shared<cloud_storage::partition_manifest>(
-      raft->ntp(), raft->log_config().get_remote_revision(), _mem_tracker))
+  , _manifest(
+      ss::make_shared<cloud_storage::partition_manifest>(
+        raft->ntp(), raft->log_config().get_remote_revision(), _mem_tracker))
   , _cloud_storage_api(remote)
   , _feature_table(ft)
   , _remote_path_provider(
@@ -910,8 +913,9 @@ ss::future<std::error_code> archival_metadata_stm::do_replicate_commands(
         // Explicitly step down if we're still leader and force callers to
         // re-sync in a new term with a new leader.
         if (_raft->is_leader() && _raft->term() == current_term) {
-            co_await _raft->step_down(ssx::sformat(
-              "failed to replicate archival batch in term {}", current_term));
+            co_await _raft->step_down(
+              ssx::sformat(
+                "failed to replicate archival batch in term {}", current_term));
         }
         co_return result.error();
     }
@@ -924,8 +928,9 @@ ss::future<std::error_code> archival_metadata_stm::do_replicate_commands(
         }
 
         if (_raft->is_leader() && _raft->term() == current_term) {
-            co_await _raft->step_down(ssx::sformat(
-              "failed to replicate archival batch in term {}", current_term));
+            co_await _raft->step_down(
+              ssx::sformat(
+                "failed to replicate archival batch in term {}", current_term));
         }
         co_return errc::replication_error;
     }
@@ -1051,12 +1056,14 @@ ss::future<> archival_metadata_stm::do_apply(const model::record_batch& b) {
 
                 switch (key) {
                 case add_segment_cmd::key:
-                    apply_add_segment(serde::from_iobuf<add_segment_cmd::value>(
-                      r.release_value()));
+                    apply_add_segment(
+                      serde::from_iobuf<add_segment_cmd::value>(
+                        r.release_value()));
                     break;
                 case truncate_cmd::key:
-                    apply_truncate(serde::from_iobuf<truncate_cmd::value>(
-                      r.release_value()));
+                    apply_truncate(
+                      serde::from_iobuf<truncate_cmd::value>(
+                        r.release_value()));
                     break;
                 case update_start_offset_cmd::key:
                     apply_update_start_offset(
@@ -1067,8 +1074,9 @@ ss::future<> archival_metadata_stm::do_apply(const model::record_batch& b) {
                     apply_cleanup_metadata();
                     break;
                 case mark_clean_cmd::key:
-                    apply_mark_clean(serde::from_iobuf<mark_clean_cmd::value>(
-                      r.release_value()));
+                    apply_mark_clean(
+                      serde::from_iobuf<mark_clean_cmd::value>(
+                        r.release_value()));
                     break;
                 case truncate_archive_init_cmd::key:
                     apply_truncate_archive_init(
@@ -1288,27 +1296,29 @@ archival_metadata_stm::take_local_snapshot(ssx::semaphore_units apply_units) {
     auto segments = segments_from_manifest(*_manifest);
     auto replaced = replaced_segments_from_manifest(*_manifest);
     auto spillover = spillover_from_manifest(*_manifest);
-    iobuf snap_data = serde::to_iobuf(snapshot{
-      .segments = std::move(segments),
-      .replaced = std::move(replaced),
-      .start_offset = _manifest->get_start_offset().value_or(model::offset()),
-      .last_offset = _manifest->get_last_offset(),
-      .last_uploaded_compacted_offset
-      = _manifest->get_last_uploaded_compacted_offset(),
-      .dirty = get_dirty(),
-      .archive_start_offset = _manifest->get_archive_start_offset(),
-      .archive_start_offset_delta = _manifest->get_archive_start_offset_delta(),
-      .archive_clean_offset = _manifest->get_archive_clean_offset(),
-      .archive_size_bytes = _manifest->archive_size_bytes(),
-      .start_kafka_offset = _manifest->get_start_kafka_offset_override(),
-      .spillover_manifests = std::move(spillover),
-      .last_partition_scrub = _manifest->last_partition_scrub(),
-      .last_scrubbed_offset = _manifest->last_scrubbed_offset(),
-      .detected_anomalies = _manifest->detected_anomalies(),
-      .highest_producer_id = _manifest->highest_producer_id(),
-      .applied_offset = _manifest->get_applied_offset(),
-      .last_clean_at = _last_clean_at,
-      .last_dirty_at = _last_dirty_at});
+    iobuf snap_data = serde::to_iobuf(
+      snapshot{
+        .segments = std::move(segments),
+        .replaced = std::move(replaced),
+        .start_offset = _manifest->get_start_offset().value_or(model::offset()),
+        .last_offset = _manifest->get_last_offset(),
+        .last_uploaded_compacted_offset
+        = _manifest->get_last_uploaded_compacted_offset(),
+        .dirty = get_dirty(),
+        .archive_start_offset = _manifest->get_archive_start_offset(),
+        .archive_start_offset_delta
+        = _manifest->get_archive_start_offset_delta(),
+        .archive_clean_offset = _manifest->get_archive_clean_offset(),
+        .archive_size_bytes = _manifest->archive_size_bytes(),
+        .start_kafka_offset = _manifest->get_start_kafka_offset_override(),
+        .spillover_manifests = std::move(spillover),
+        .last_partition_scrub = _manifest->last_partition_scrub(),
+        .last_scrubbed_offset = _manifest->last_scrubbed_offset(),
+        .detected_anomalies = _manifest->detected_anomalies(),
+        .highest_producer_id = _manifest->highest_producer_id(),
+        .applied_offset = _manifest->get_applied_offset(),
+        .last_clean_at = _last_clean_at,
+        .last_dirty_at = _last_dirty_at});
     auto snapshot_offset = last_applied_offset();
     apply_units.return_all();
 

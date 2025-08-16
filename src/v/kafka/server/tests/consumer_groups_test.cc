@@ -42,8 +42,9 @@ join_group_request make_join_group_request(
     req.data.member_id = kafka::member_id(std::move(member_id));
     req.data.protocol_type = kafka::protocol_type(std::move(protocol_type));
     for (auto& p : protocols) {
-        req.data.protocols.push_back(join_group_request_protocol{
-          .name = protocol_name(std::move(p)), .metadata = bytes{}});
+        req.data.protocols.push_back(
+          join_group_request_protocol{
+            .name = protocol_name(std::move(p)), .metadata = bytes{}});
     }
     req.data.session_timeout_ms = 10s;
     return req;
@@ -270,10 +271,11 @@ FIXTURE_TEST(conditional_retention_test, consumer_offsets_fixture) {
           = client.dispatch(std::move(req), kafka::api_version(7)).get();
         BOOST_REQUIRE(!resp.data.errored());
     }
-    auto part = app.partition_manager.local().get(model::ntp{
-      model::kafka_namespace,
-      model::kafka_consumer_offsets_topic,
-      model::partition_id{0}});
+    auto part = app.partition_manager.local().get(
+      model::ntp{
+        model::kafka_namespace,
+        model::kafka_consumer_offsets_topic,
+        model::partition_id{0}});
     BOOST_REQUIRE(part);
     auto log = part->log();
     storage::ntp_config::default_overrides ov;

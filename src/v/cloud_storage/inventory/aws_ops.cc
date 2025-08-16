@@ -144,8 +144,9 @@ aws_ops::aws_ops(
   ss::sstring inventory_prefix)
   : _bucket(std::move(bucket))
   , _inventory_config_id(std::move(inventory_config_id))
-  , _inventory_key(cloud_storage_clients::object_key{
-      fmt::format("?inventory&id={}", _inventory_config_id())})
+  , _inventory_key(
+      cloud_storage_clients::object_key{
+        fmt::format("?inventory&id={}", _inventory_config_id())})
   , _prefix(std::move(inventory_prefix)) {}
 
 ss::future<op_result<void>> aws_ops::create_inventory_configuration(

@@ -167,11 +167,12 @@ TEST_F(storage_test_fixture, test_truncate_middle_of_old_segment) {
     auto lstats = log->offsets();
     ASSERT_EQ(lstats.committed_offset, all_batches.back().last_offset());
     ASSERT_EQ(lstats.dirty_offset, all_batches.back().last_offset());
-    ASSERT_TRUE(std::equal(
-      all_batches.begin(),
-      all_batches.end(),
-      final_batches.begin(),
-      final_batches.end()));
+    ASSERT_TRUE(
+      std::equal(
+        all_batches.begin(),
+        all_batches.end(),
+        final_batches.begin(),
+        final_batches.end()));
 }
 
 TEST_F(storage_test_fixture, truncate_whole_log_and_then_again) {
@@ -280,13 +281,14 @@ TEST_F(storage_test_fixture, test_truncate_last_single_record_batch) {
       model::term_id(0),
       [](std::optional<model::timestamp> ts = std::nullopt) {
           chunked_circular_buffer<model::record_batch> ret;
-          ret.push_back(model::test::make_random_batch(
-            model::offset(0),
-            1,
-            true,
-            model::record_batch_type::raft_data,
-            std::nullopt,
-            ts));
+          ret.push_back(
+            model::test::make_random_batch(
+              model::offset(0),
+              1,
+              true,
+              model::record_batch_type::raft_data,
+              std::nullopt,
+              ts));
           return ret;
       });
     log->flush().get();
@@ -322,8 +324,9 @@ TEST_F(
     overrides->segment_size = 1024;
 
     auto log = mgr
-                 .manage(storage::ntp_config(
-                   ntp, mgr.config().base_dir, std::move(overrides)))
+                 .manage(
+                   storage::ntp_config(
+                     ntp, mgr.config().base_dir, std::move(overrides)))
                  .get();
     append_random_batches(log, 10, model::term_id(0));
     append_random_batches(log, 10, model::term_id(0));
@@ -486,8 +489,9 @@ TEST_F(storage_test_fixture, test_concurrent_prefix_truncate_and_gc) {
     overrides->segment_size = 1024;
 
     auto log = mgr
-                 .manage(storage::ntp_config(
-                   ntp, mgr.config().base_dir, std::move(overrides)))
+                 .manage(
+                   storage::ntp_config(
+                     ntp, mgr.config().base_dir, std::move(overrides)))
                  .get();
 
     append_random_batches(log, 10, model::term_id(0));
@@ -536,8 +540,9 @@ TEST_F(storage_test_fixture, test_concurrent_truncate_and_compaction) {
     overrides->cleanup_policy_bitflags
       = model::cleanup_policy_bitflags::compaction;
     auto log = mgr
-                 .manage(storage::ntp_config(
-                   ntp, mgr.config().base_dir, std::move(overrides)))
+                 .manage(
+                   storage::ntp_config(
+                     ntp, mgr.config().base_dir, std::move(overrides)))
                  .get();
     for (int seg = 0; seg < 2; seg++) {
         for (int i = 0; i < 5; i++) {

@@ -19,8 +19,9 @@ void apply_validator(
     try {
         json::validate(validator, doc);
     } catch (const json::json_validation_error& err) {
-        throw ss::httpd::bad_request_exception(fmt::format(
-          "JSON request body does not conform to schema: {}", err.what()));
+        throw ss::httpd::bad_request_exception(
+          fmt::format(
+            "JSON request body does not conform to schema: {}", err.what()));
     }
 }
 

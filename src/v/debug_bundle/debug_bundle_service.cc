@@ -599,8 +599,9 @@ result<std::vector<ss::sstring>> service::build_rpk_arguments(
                 ssx::sformat("{}={}", username_variable, creds.username));
               rv.emplace_back(
                 ssx::sformat("{}={}", password_variable, creds.password));
-              rv.emplace_back(ssx::sformat(
-                "{}={}", sasl_mechanism_variable, creds.mechanism));
+              rv.emplace_back(
+                ssx::sformat(
+                  "{}={}", sasl_mechanism_variable, creds.mechanism));
           });
     }
     if (params.controller_logs_size_limit_bytes.has_value()) {
@@ -610,8 +611,9 @@ result<std::vector<ss::sstring>> service::build_rpk_arguments(
     }
     if (params.cpu_profiler_wait_seconds.has_value()) {
         rv.emplace_back(cpu_profiler_wait_variable);
-        rv.emplace_back(ssx::sformat(
-          "{}s", params.cpu_profiler_wait_seconds.value().count()));
+        rv.emplace_back(
+          ssx::sformat(
+            "{}s", params.cpu_profiler_wait_seconds.value().count()));
     }
     if (params.logs_since.has_value()) {
         rv.emplace_back(logs_since_variable);
@@ -647,10 +649,11 @@ result<std::vector<ss::sstring>> service::build_rpk_arguments(
           ssx::sformat("{}={}", tls_enabled_variable, *params.tls_enabled));
     }
     if (params.tls_insecure_skip_verify.has_value()) {
-        rv.emplace_back(ssx::sformat(
-          "{}={}",
-          tls_insecure_skip_verify_variable,
-          *params.tls_insecure_skip_verify));
+        rv.emplace_back(
+          ssx::sformat(
+            "{}={}",
+            tls_insecure_skip_verify_variable,
+            *params.tls_insecure_skip_verify));
     }
     if (params.k8s_namespace.has_value()) {
         rv.emplace_back(k8s_namespace_variable);

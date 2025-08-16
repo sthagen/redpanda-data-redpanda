@@ -13,6 +13,7 @@
 
 #include "hashing/murmur.h"
 #include "kafka/client/exceptions.h"
+#include "kafka/client/utils.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/metadata.h"
 #include "random/generators.h"
@@ -113,8 +114,12 @@ partitioner default_partitioner(model::partition_id initial) {
 void partitioners_cache::apply_metadata(const metadata_response_data& data) {
     chunked_hash_set<model::topic> metadata_topics;
     for (const auto& t : data.topics) {
-        metadata_topics.emplace(t.name);
-        auto it = _partitioners.find(t.name);
+        static_assert(
+          api_version_for(metadata_request::api_type::key) < api_version(12),
+          "topic::name is nullable in v12+");
+        const auto& t_name = *t.name;
+        metadata_topics.emplace(t_name);
+        auto it = _partitioners.find(t_name);
         if (
           it != _partitioners.end()
           && it->second.partition_count == t.partitions.size()) {
@@ -127,7 +132,7 @@ void partitioners_cache::apply_metadata(const metadata_response_data& data) {
           random_generators::get_int<model::partition_id::type>(
             t.partitions.size())};
 
-        _partitioners[t.name] = entry{
+        _partitioners[t_name] = entry{
           .partition_count = t.partitions.size(),
           .partitioner = default_partitioner(initial_partition_id)};
     }

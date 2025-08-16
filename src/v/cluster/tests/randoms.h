@@ -41,9 +41,10 @@ inline local_state random_local_state() {
 namespace cluster {
 
 inline errc random_failed_errc() {
-    return errc(random_generators::get_int<int16_t>(
-      static_cast<int16_t>(errc::notification_wait_timeout),
-      static_cast<int16_t>(errc::unknown_update_interruption_error)));
+    return errc(
+      random_generators::get_int<int16_t>(
+        static_cast<int16_t>(errc::notification_wait_timeout),
+        static_cast<int16_t>(errc::unknown_update_interruption_error)));
 }
 
 inline node_state random_node_state() {

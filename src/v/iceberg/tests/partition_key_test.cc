@@ -35,12 +35,13 @@ field_type nested_type_with_timestamp(
 partition_spec make_ts_partition_spec(int32_t source_field_id) {
     partition_spec spec;
     spec.spec_id = partition_spec::id_t{0};
-    spec.fields.emplace_back(partition_field{
-      .source_id = nested_field::id_t{source_field_id},
-      .field_id = partition_field::id_t{1000},
-      .name = "hour",
-      .transform = hour_transform{},
-    });
+    spec.fields.emplace_back(
+      partition_field{
+        .source_id = nested_field::id_t{source_field_id},
+        .field_id = partition_field::id_t{1000},
+        .name = "hour",
+        .transform = hour_transform{},
+      });
     return spec;
 }
 

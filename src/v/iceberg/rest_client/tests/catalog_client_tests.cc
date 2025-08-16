@@ -255,9 +255,10 @@ TEST(token_tests, handle_bad_json) {
                   Eq(boost::beast::http::verb::post))),
               _,
               _))
-            .WillOnce(Return(ss::make_ready_future<http::downloaded_response>(
-              http::downloaded_response{
-                .status = bh::status::ok, .body = iobuf::from(R"J({)J")})));
+            .WillOnce(Return(
+              ss::make_ready_future<http::downloaded_response>(
+                http::downloaded_response{
+                  .status = bh::status::ok, .body = iobuf::from(R"J({)J")})));
       }),
       endpoint,
       mock_credential_manager,
@@ -286,9 +287,10 @@ TEST(token_tests, handle_non_retriable_http_status) {
                   Eq(boost::beast::http::verb::post))),
               _,
               _))
-            .WillOnce(Return(ss::make_ready_future<http::downloaded_response>(
-              http::downloaded_response{
-                .status = bh::status::bad_request, .body = iobuf()})));
+            .WillOnce(Return(
+              ss::make_ready_future<http::downloaded_response>(
+                http::downloaded_response{
+                  .status = bh::status::bad_request, .body = iobuf()})));
       }),
       endpoint,
       mock_credential_manager,
@@ -318,15 +320,16 @@ TEST(token_tests, handle_retriable_http_status) {
                   Eq(boost::beast::http::verb::post))),
               _,
               _))
-            .WillOnce(Return(ss::make_ready_future<http::downloaded_response>(
-              http::downloaded_response{
-                .status = bh::status::gateway_timeout, .body = iobuf()})))
-            .WillOnce(Return(ss::make_ready_future<
-                             http::
-                               downloaded_response>(http::downloaded_response{
-              .status = bh::status::ok,
-              .body = iobuf::from(
-                R"J({"access_token": "token","token_type": "bearer", "expires_in": 1})J")})));
+            .WillOnce(Return(
+              ss::make_ready_future<http::downloaded_response>(
+                http::downloaded_response{
+                  .status = bh::status::gateway_timeout, .body = iobuf()})))
+            .WillOnce(Return(
+              ss::make_ready_future<
+                http::downloaded_response>(http::downloaded_response{
+                .status = bh::status::ok,
+                .body = iobuf::from(
+                  R"J({"access_token": "token","token_type": "bearer", "expires_in": 1})J")})));
       }),
       endpoint,
       mock_credential_manager,

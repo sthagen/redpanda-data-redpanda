@@ -42,8 +42,11 @@ ss::future<> topic_id_migrator::do_mutate() {
 
     for (const auto& topic_res : res) {
         if (topic_res.ec != cluster::errc::success) {
-            throw std::runtime_error(fmt::format(
-              "Failed to update topic {}: {}", topic_res.tp_ns, topic_res.ec));
+            throw std::runtime_error(
+              fmt::format(
+                "Failed to update topic {}: {}",
+                topic_res.tp_ns,
+                topic_res.ec));
         }
     }
 

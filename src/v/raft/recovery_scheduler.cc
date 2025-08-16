@@ -372,22 +372,25 @@ void recovery_scheduler_base::setup_metrics() {
           sm::make_gauge(
             "partitions_to_recover",
             [this] { return _active.size() + _pending.size(); },
-            sm::description("Number of partition replicas that have to "
-                            "recover for this node."))
+            sm::description(
+              "Number of partition replicas that have to "
+              "recover for this node."))
             .aggregate(aggregate_labels));
         defs.emplace_back(
           sm::make_gauge(
             "partitions_active",
             [this] { return _active.size(); },
-            sm::description("Number of partition replicas are currently "
-                            "recovering on this node."))
+            sm::description(
+              "Number of partition replicas are currently "
+              "recovering on this node."))
             .aggregate(aggregate_labels));
         defs.emplace_back(
           sm::make_gauge(
             "offsets_pending",
             [this] { return _offsets_pending; },
-            sm::description("Sum of offsets that partitions on this node "
-                            "need to recover."))
+            sm::description(
+              "Sum of offsets that partitions on this node "
+              "need to recover."))
             .aggregate(aggregate_labels));
 
         return defs;

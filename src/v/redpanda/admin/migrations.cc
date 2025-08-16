@@ -53,8 +53,9 @@ ss::httpd::migration_json::namespaced_topic to_admin_type(
     ss::httpd::migration_json::namespaced_topic ret;
     ret.ns = tp_ns.ns;
     ret.topic = cloud_storage_location
-                  ? ss::sstring(fmt::format(
-                      "{}/{}", tp_ns.tp, cloud_storage_location->hint))
+                  ? ss::sstring(
+                      fmt::format(
+                        "{}/{}", tp_ns.tp, cloud_storage_location->hint))
                   : tp_ns.tp;
     return ret;
 }
@@ -105,10 +106,11 @@ to_admin_type(const cluster::data_migrations::outbound_migration& odm) {
           || odm.topic_locations.size() == odm.topics.size())) {
         // topic_locations should be either empty (written by pre-v25.2
         // redpanda) or have the same size as topics
-        throw std::runtime_error(fmt::format(
-          "unexpected migration topic locations size: {}, expected: {}",
-          odm.topic_locations.size(),
-          odm.topics.size()));
+        throw std::runtime_error(
+          fmt::format(
+            "unexpected migration topic locations size: {}, expected: {}",
+            odm.topic_locations.size(),
+            odm.topics.size()));
     }
 
     for (size_t i = 0; i < odm.topics.size(); ++i) {

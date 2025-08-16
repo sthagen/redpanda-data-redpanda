@@ -84,11 +84,12 @@ model::record_batch_header kafka_batch_adapter::read_header(iobuf_parser& in) {
     const size_t total_bytes_consumed = in.bytes_consumed()
                                         - initial_bytes_consumed;
     if (unlikely(total_bytes_consumed != internal::kafka_header_size)) {
-        throw std::runtime_error(fmt::format(
-          "Invalid kafka header parsing. Must consume exactly:{}, but "
-          "consumed:{}",
-          internal::kafka_header_size,
-          total_bytes_consumed));
+        throw std::runtime_error(
+          fmt::format(
+            "Invalid kafka header parsing. Must consume exactly:{}, but "
+            "consumed:{}",
+            internal::kafka_header_size,
+            total_bytes_consumed));
     }
     header.ctx.owner_shard = ss::this_shard_id();
     return header;

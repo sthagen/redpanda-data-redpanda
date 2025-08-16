@@ -9,6 +9,8 @@
 
 #include "kafka/client/assignment_plans.h"
 
+#include "kafka/client/utils.h"
+#include "kafka/protocol/metadata.h"
 #include "kafka/protocol/wire.h"
 
 namespace kafka::client {
@@ -73,7 +75,11 @@ assignments assignment_range::plan(
                 ++p_end;
                 --rem;
             }
-            auto& rtm = assignments[*mem_it][t.name];
+            static_assert(
+              api_version_for(metadata_request::api_type::key)
+                < api_version(12),
+              "topic::name is nullable in v12+");
+            auto& rtm = assignments[*mem_it][*t.name];
             rtm.reserve(std::distance(p_begin, p_end));
             std::transform(
               p_begin, p_end, std::back_inserter(rtm), [](auto& p) {

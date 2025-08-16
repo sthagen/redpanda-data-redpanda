@@ -278,20 +278,22 @@ TEST_F_CORO(coordinator_stm_fixture, test_snapshots) {
         auto committed_offsets = last_committed_offsets(
           {tp_ns.tp, model::partition_id{pid}});
         vlog(logger().info, "committed offsets: {}", committed_offsets);
-        ASSERT_TRUE_CORO(std::equal(
-          committed_offsets.begin() + 1,
-          committed_offsets.end(),
-          committed_offsets.begin()))
+        ASSERT_TRUE_CORO(
+          std::equal(
+            committed_offsets.begin() + 1,
+            committed_offsets.end(),
+            committed_offsets.begin()))
           << "Topic state mismatch across replicas for partition: " << pid
           << ", offsets: " << committed_offsets;
     }
 
     auto bytes_processed = total_bytes_processed(tp_ns.tp);
     vlog(logger().info, "bytes processed: {}", bytes_processed);
-    ASSERT_TRUE_CORO(std::equal(
-      bytes_processed.begin() + 1,
-      bytes_processed.end(),
-      bytes_processed.begin()))
+    ASSERT_TRUE_CORO(
+      std::equal(
+        bytes_processed.begin() + 1,
+        bytes_processed.end(),
+        bytes_processed.begin()))
       << "Topic state mismatch across replicas for partition: " << tp_ns.tp
       << ", bytes processed: " << bytes_processed;
 }

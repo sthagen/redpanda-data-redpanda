@@ -216,9 +216,11 @@ SEASTAR_THREAD_TEST_CASE(test_binary_protobuf) {
 
     BOOST_REQUIRE_NO_THROW(
       store.store
-        .make_valid_schema(pps::subject_schema{
-          pps::subject{"com.redpanda.Payload.proto"},
-          pps::schema_definition{base64_raw_proto, pps::schema_type::protobuf}})
+        .make_valid_schema(
+          pps::subject_schema{
+            pps::subject{"com.redpanda.Payload.proto"},
+            pps::schema_definition{
+              base64_raw_proto, pps::schema_type::protobuf}})
         .get());
 }
 
@@ -234,10 +236,11 @@ SEASTAR_THREAD_TEST_CASE(test_invalid_binary_protobuf) {
 
     BOOST_REQUIRE_EXCEPTION(
       store.store
-        .make_valid_schema(pps::subject_schema{
-          pps::subject{"com.redpanda.Payload.proto"},
-          pps::schema_definition{
-            broken_base64_raw_proto, pps::schema_type::protobuf}})
+        .make_valid_schema(
+          pps::subject_schema{
+            pps::subject{"com.redpanda.Payload.proto"},
+            pps::schema_definition{
+              broken_base64_raw_proto, pps::schema_type::protobuf}})
         .get(),
       pps::exception,
       [](const pps::exception& e) {

@@ -355,8 +355,9 @@ ss::future<writer_error> record_multiplexer::flush_writers() {
     if (_error && !is_recoverable_error(_error.value())) {
         co_return *_error;
     }
-    auto result = co_await ss::coroutine::as_future(ss::max_concurrent_for_each(
-      _writers, 10, [](auto& entry) { return entry.second->flush(); }));
+    auto result = co_await ss::coroutine::as_future(
+      ss::max_concurrent_for_each(
+        _writers, 10, [](auto& entry) { return entry.second->flush(); }));
     if (result.failed()) {
         vlog(_log.warn, "Error flushing writers: {}", result.get_exception());
         _error = writer_error::flush_error;

@@ -113,20 +113,23 @@ cgroups:
     // Specify any throupghput limit
     BOOST_TEST(
       !cfg
-         .read_yaml(YAML::Load(
-           R"(cgroups: [{name: n, client_id: c, throughput_limit_node_in_bps: 0}])"s))
+         .read_yaml(
+           YAML::Load(
+             R"(cgroups: [{name: n, client_id: c, throughput_limit_node_in_bps: 0}])"s))
          .empty());
     BOOST_TEST(
       !cfg
-         .read_yaml(YAML::Load(
-           R"(cgroups: [{name: n, client_id: c, throughput_limit_node_out_bps: 100}])"s))
+         .read_yaml(
+           YAML::Load(
+             R"(cgroups: [{name: n, client_id: c, throughput_limit_node_out_bps: 100}])"s))
          .empty());
 
     // Duplicate group names other than unnamed
-    BOOST_TEST(cfg
-                 .read_yaml(YAML::Load(
-                   R"(cgroups: [{name: developers}, {name: developers}])"s))
-                 .empty());
+    BOOST_TEST(
+      cfg
+        .read_yaml(
+          YAML::Load(R"(cgroups: [{name: developers}, {name: developers}])"s))
+        .empty());
     BOOST_TEST(
       validate_throughput_control_groups(
         cfg.cgroups().cbegin(), cfg.cgroups().cend())

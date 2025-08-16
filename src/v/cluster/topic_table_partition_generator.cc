@@ -34,11 +34,12 @@ ss::future<std::optional<topic_table_partition_generator::generator_type_t>>
 topic_table_partition_generator::next_batch() {
     const auto current_revision_id = _topic_table.local().topics_map_revision();
     if (current_revision_id != _stable_revision_id) {
-        throw topic_table_partition_generator_exception(fmt::format(
-          "Last applied revision id moved from {} to {} whilst "
-          "the generator was active",
-          _stable_revision_id,
-          current_revision_id));
+        throw topic_table_partition_generator_exception(
+          fmt::format(
+            "Last applied revision id moved from {} to {} whilst "
+            "the generator was active",
+            _stable_revision_id,
+            current_revision_id));
     }
 
     if (_exhausted) {

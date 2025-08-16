@@ -582,8 +582,9 @@ service::service(
   : _config(config)
   , _client_config(client_config)
   , _mem_sem(max_memory, "pproxy/schema-svc")
-  , _inflight_sem(config::shard_local_cfg()
-                    .max_in_flight_schema_registry_requests_per_shard())
+  , _inflight_sem(
+      config::shard_local_cfg()
+        .max_in_flight_schema_registry_requests_per_shard())
   , _inflight_config_binding(
       config::shard_local_cfg()
         .max_in_flight_schema_registry_requests_per_shard.bind())

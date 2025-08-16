@@ -51,8 +51,10 @@ void serialize_json_string(Iter it, Iter end, iobuf* buf) {
             if (escape) {
                 buf->append(std::to_array({'\\', escape}));
             } else if (c <= max_ascii_control_char) {
-                buf->append_str(absl::StrCat(
-                  "\\u", absl::Hex(static_cast<uint32_t>(c), absl::kZeroPad4)));
+                buf->append_str(
+                  absl::StrCat(
+                    "\\u",
+                    absl::Hex(static_cast<uint32_t>(c), absl::kZeroPad4)));
             } else {
                 // Normal ASCII character, no escaping needed
                 buf->append(std::to_array({c}));
@@ -119,11 +121,12 @@ void serialize_json_string(Iter it, Iter end, iobuf* buf) {
             // Encode as surrogate pair
             uint32_t hi = 0xD800 + ((codepoint - 0x10000) >> 10u);
             uint32_t lo = 0xDC00 + ((codepoint - 0x10000) & 0x3FFu);
-            buf->append_str(absl::StrCat(
-              "\\u",
-              absl::Hex(hi, absl::kZeroPad4),
-              "\\u",
-              absl::Hex(lo, absl::kZeroPad4)));
+            buf->append_str(
+              absl::StrCat(
+                "\\u",
+                absl::Hex(hi, absl::kZeroPad4),
+                "\\u",
+                absl::Hex(lo, absl::kZeroPad4)));
         } else {
             // BMP character, encode directly
             buf->append_str(

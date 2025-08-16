@@ -212,11 +212,12 @@ FIXTURE_TEST(test_short_lived_aws_credentials, fixture) {
 
     when()
       .request(cloud_role_tests::aws_creds_url)
-      .then_reply_with(fmt::format(
-        fmt::runtime(response),
+      .then_reply_with(
         fmt::format(
-          "{:%Y-%m-%dT%H:%M:%SZ}",
-          fmt::gmtime(std::chrono::system_clock::now() + 5s))));
+          fmt::runtime(response),
+          fmt::format(
+            "{:%Y-%m-%dT%H:%M:%SZ}",
+            fmt::gmtime(std::chrono::system_clock::now() + 5s))));
 
     listen();
 
@@ -321,11 +322,12 @@ FIXTURE_TEST(test_short_lived_sts_credentials, fixture) {
     when()
       .request("/")
       .with_method(ss::httpd::POST)
-      .then_reply_with(fmt::format(
-        fmt::runtime(sts_creds),
+      .then_reply_with(
         fmt::format(
-          "{:%Y-%m-%dT%H:%M:%SZ}",
-          fmt::gmtime(std::chrono::system_clock::now() + 5s))));
+          fmt::runtime(sts_creds),
+          fmt::format(
+            "{:%Y-%m-%dT%H:%M:%SZ}",
+            fmt::gmtime(std::chrono::system_clock::now() + 5s))));
 
     listen();
 
@@ -664,15 +666,16 @@ FIXTURE_TEST(test_abs_aks_credentials, fixture) {
     when()
       .request(endpoint)
       .with_method(ss::httpd::POST)
-      .then_reply_with(ssx::sformat(
-        R"json(
+      .then_reply_with(
+        ssx::sformat(
+          R"json(
 {{
   "token_type": "Bearer",
   "expires_in": 5,
   "access_token": "{}"
 }}
       )json",
-        token_value));
+          token_value));
     listen();
 
     // save resulting credentials here
@@ -756,14 +759,15 @@ FIXTURE_TEST(test_abs_aks_credentials_missing_fields, fixture) {
     when()
       .request(endpoint)
       .with_method(ss::httpd::POST)
-      .then_reply_with(ssx::sformat(
-        R"json(
+      .then_reply_with(
+        ssx::sformat(
+          R"json(
 {{
   "token_type": "Bearer",
   "access_token": "{}"
 }}
       )json",
-        token_value));
+          token_value));
     listen();
 
     // save credentials here (expected to remain empty)
@@ -817,8 +821,9 @@ FIXTURE_TEST(test_abs_vm_credentials, fixture) {
     when()
       .request(endpoint)
       .with_method(ss::httpd::GET)
-      .then_reply_with(ssx::sformat(
-        R"json(
+      .then_reply_with(
+        ssx::sformat(
+          R"json(
 {{
   "token_type": "Bearer",
   "expires_in": "5",
@@ -829,7 +834,7 @@ FIXTURE_TEST(test_abs_vm_credentials, fixture) {
   "resource": "https://storage.azure.com/"
 }}
       )json",
-        token_value));
+          token_value));
     listen();
 
     // save resulting credentials here

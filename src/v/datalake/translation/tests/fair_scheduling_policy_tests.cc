@@ -98,8 +98,9 @@ INSTANTIATE_TEST_SUITE_P(
     testing::Values(1_MiB),          // translator throughput/s
     testing::Values(10ms)            // scheduler time slice
     ),
-  [](const testing::TestParamInfo<
-     fair_scheduling_policy_fixture_parameterized::ParamType>& info) {
+  [](
+    const testing::TestParamInfo<
+      fair_scheduling_policy_fixture_parameterized::ParamType>& info) {
       auto& params = info.param;
       return fmt::format(
         "translators_{}_parallel_{}_mem_{}_bs_{}_tput_{}_slice_{}",

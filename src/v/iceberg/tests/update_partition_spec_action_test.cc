@@ -59,9 +59,10 @@ TEST_F(UpdatePartitionSpecActionTest, TestAddSpec) {
 
     {
         // add a simple spec
-        auto res = tx.set_partition_spec(unresolved_partition_spec{
-                                           .fields = fields.copy(),
-                                         })
+        auto res = tx.set_partition_spec(
+                       unresolved_partition_spec{
+                         .fields = fields.copy(),
+                       })
                      .get();
         ASSERT_FALSE(res.has_error());
         ASSERT_EQ(tx.table().partition_specs.size(), 2);
@@ -76,9 +77,10 @@ TEST_F(UpdatePartitionSpecActionTest, TestAddSpec) {
 
     {
         // adding exactly the same spec is a no-op
-        auto res = tx.set_partition_spec(unresolved_partition_spec{
-                                           .fields = fields.copy(),
-                                         })
+        auto res = tx.set_partition_spec(
+                       unresolved_partition_spec{
+                         .fields = fields.copy(),
+                       })
                      .get();
         ASSERT_FALSE(res.has_error());
         ASSERT_EQ(tx.table().partition_specs.size(), 2);
@@ -87,14 +89,16 @@ TEST_F(UpdatePartitionSpecActionTest, TestAddSpec) {
 
     {
         // adding a field
-        fields.push_back(field{
-          .source_name = {"foo"},
-          .transform = identity_transform{},
-          .name = "field2",
-        });
-        auto res = tx.set_partition_spec(unresolved_partition_spec{
-                                           .fields = fields.copy(),
-                                         })
+        fields.push_back(
+          field{
+            .source_name = {"foo"},
+            .transform = identity_transform{},
+            .name = "field2",
+          });
+        auto res = tx.set_partition_spec(
+                       unresolved_partition_spec{
+                         .fields = fields.copy(),
+                       })
                      .get();
         ASSERT_FALSE(res.has_error());
         ASSERT_EQ(tx.table().partition_specs.size(), 3);
@@ -112,9 +116,10 @@ TEST_F(UpdatePartitionSpecActionTest, TestAddSpec) {
     {
         // removing a field
         fields = chunked_vector<field>(std::next(fields.begin()), fields.end());
-        auto res = tx.set_partition_spec(unresolved_partition_spec{
-                                           .fields = fields.copy(),
-                                         })
+        auto res = tx.set_partition_spec(
+                       unresolved_partition_spec{
+                         .fields = fields.copy(),
+                       })
                      .get();
         ASSERT_FALSE(res.has_error());
         ASSERT_EQ(tx.table().partition_specs.size(), 4);
@@ -129,19 +134,22 @@ TEST_F(UpdatePartitionSpecActionTest, TestAddSpec) {
 
     {
         // re-adding the same field (id must match the old one)
-        fields.push_back(field{
-          .source_name = {"bar"},
-          .transform = bucket_transform{.n = 16},
-          .name = "field1",
-        });
-        fields.push_back(field{
-          .source_name = {"baz"},
-          .transform = identity_transform{},
-          .name = "field3",
-        });
-        auto res = tx.set_partition_spec(unresolved_partition_spec{
-                                           .fields = fields.copy(),
-                                         })
+        fields.push_back(
+          field{
+            .source_name = {"bar"},
+            .transform = bucket_transform{.n = 16},
+            .name = "field1",
+          });
+        fields.push_back(
+          field{
+            .source_name = {"baz"},
+            .transform = identity_transform{},
+            .name = "field3",
+          });
+        auto res = tx.set_partition_spec(
+                       unresolved_partition_spec{
+                         .fields = fields.copy(),
+                       })
                      .get();
         ASSERT_FALSE(res.has_error());
         ASSERT_EQ(tx.table().partition_specs.size(), 5);
@@ -163,14 +171,16 @@ TEST_F(UpdatePartitionSpecActionTest, TestAddSpec) {
         ASSERT_EQ(tx.table().default_spec_id, 0);
 
         fields.clear();
-        fields.push_back(field{
-          .source_name = {"person", "age"},
-          .transform = bucket_transform{.n = 16},
-          .name = "field4",
-        });
-        res = tx.set_partition_spec(unresolved_partition_spec{
-                                      .fields = fields.copy(),
-                                    })
+        fields.push_back(
+          field{
+            .source_name = {"person", "age"},
+            .transform = bucket_transform{.n = 16},
+            .name = "field4",
+          });
+        res = tx.set_partition_spec(
+                  unresolved_partition_spec{
+                    .fields = fields.copy(),
+                  })
                 .get();
         ASSERT_FALSE(res.has_error());
         ASSERT_EQ(tx.table().partition_specs.size(), 6);

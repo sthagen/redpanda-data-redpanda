@@ -360,8 +360,9 @@ private:
 
         auto reg_res = co_await _record_gen.register_avro_schema(name, schema);
         if (reg_res.has_error()) [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "failed to register avro schema: {}", reg_res.error()));
+            throw std::runtime_error(
+              fmt::format(
+                "failed to register avro schema: {}", reg_res.error()));
         }
     }
 
@@ -375,8 +376,9 @@ private:
         auto reg_res = co_await _record_gen.register_protobuf_schema(
           name, schema);
         if (reg_res.has_error()) [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "failed to register protobuf schema: {}", reg_res.error()));
+            throw std::runtime_error(
+              fmt::format(
+                "failed to register protobuf schema: {}", reg_res.error()));
         }
     }
 

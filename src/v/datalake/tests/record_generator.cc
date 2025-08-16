@@ -35,8 +35,8 @@ ss::future<
 record_generator::register_avro_schema(
   std::string_view name, std::string_view schema) {
     using namespace pandaproxy::schema_registry;
-    auto id_fut = co_await ss::coroutine::as_future(
-      _sr->create_schema(subject_schema{
+    auto id_fut = co_await ss::coroutine::as_future(_sr->create_schema(
+      subject_schema{
         subject{"foo"}, schema_definition{schema, schema_type::avro}}));
     if (id_fut.failed()) {
         co_return error{fmt::format(
@@ -54,8 +54,8 @@ ss::future<checked<std::nullopt_t, record_generator::error>>
 record_generator::register_protobuf_schema(
   std::string_view name, std::string_view schema) {
     using namespace pandaproxy::schema_registry;
-    auto id = co_await ss::coroutine::as_future(
-      _sr->create_schema(subject_schema{
+    auto id = co_await ss::coroutine::as_future(_sr->create_schema(
+      subject_schema{
         subject{"foo"}, schema_definition{schema, schema_type::protobuf}}));
     if (id.failed()) {
         co_return error{fmt::format(
@@ -111,19 +111,20 @@ record_generator::add_random_protobuf_record(
     }
 
     auto protobuf_def = schema_def
-                          ->visit(ss::make_visitor(
-                            [](const avro_schema_definition&)
-                              -> std::optional<protobuf_schema_definition> {
-                                return std::nullopt;
-                            },
-                            [](const protobuf_schema_definition& pb_def)
-                              -> std::optional<protobuf_schema_definition> {
-                                return {pb_def};
-                            },
-                            [](const json_schema_definition&)
-                              -> std::optional<protobuf_schema_definition> {
-                                return std::nullopt;
-                            }))
+                          ->visit(
+                            ss::make_visitor(
+                              [](const avro_schema_definition&)
+                                -> std::optional<protobuf_schema_definition> {
+                                  return std::nullopt;
+                              },
+                              [](const protobuf_schema_definition& pb_def)
+                                -> std::optional<protobuf_schema_definition> {
+                                  return {pb_def};
+                              },
+                              [](const json_schema_definition&)
+                                -> std::optional<protobuf_schema_definition> {
+                                  return std::nullopt;
+                              }))
                           .value();
     auto md_res = pandaproxy::schema_registry::descriptor(
       protobuf_def, message_index);

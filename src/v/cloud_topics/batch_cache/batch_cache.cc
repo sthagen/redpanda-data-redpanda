@@ -55,9 +55,11 @@ void batch_cache::put(const model::ntp& ntp, const model::record_batch& b) {
         if (!cache_ix.has_value()) {
             return;
         }
-        auto [new_it, ok] = _index.insert(std::make_pair(
-          ntp,
-          std::make_unique<storage::batch_cache_index>(std::move(*cache_ix))));
+        auto [new_it, ok] = _index.insert(
+          std::make_pair(
+            ntp,
+            std::make_unique<storage::batch_cache_index>(
+              std::move(*cache_ix))));
         if (ok) {
             it = new_it;
         } else {

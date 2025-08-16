@@ -91,16 +91,18 @@ public:
               checked<typename RequestT::api_type::response_type, errc> res) {
                 if (res.has_error()) {
                     if (res.error() == errc::disconnected) {
-                        throw kafka_request_disconnected_exception(fmt::format(
-                          "Broker {}:{} transport disconnected",
-                          server_address().host(),
-                          server_address().port()));
+                        throw kafka_request_disconnected_exception(
+                          fmt::format(
+                            "Broker {}:{} transport disconnected",
+                            server_address().host(),
+                            server_address().port()));
                     } else if (res.error() == errc::timeout) {
-                        throw kafka_request_disconnected_exception(fmt::format(
-                          "Broker {}:{} request of type {} timed out",
-                          server_address().host(),
-                          server_address().port(),
-                          RequestT::api_type::name));
+                        throw kafka_request_disconnected_exception(
+                          fmt::format(
+                            "Broker {}:{} request of type {} timed out",
+                            server_address().host(),
+                            server_address().port(),
+                            RequestT::api_type::name));
                     }
                 }
 

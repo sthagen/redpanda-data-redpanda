@@ -322,17 +322,19 @@ make_segments(const partition_manifest& manifest) {
         std::vector<batch_t> all_batches;
         for (long i = 0; i < num_records; i++) {
             if (i < num_config_records) {
-                all_batches.push_back(batch_t{
-                  .num_records = 1,
-                  .type = model::record_batch_type::archival_metadata,
-                  .record_sizes = {random_generators::get_int(10UL, 200UL)},
-                });
+                all_batches.push_back(
+                  batch_t{
+                    .num_records = 1,
+                    .type = model::record_batch_type::archival_metadata,
+                    .record_sizes = {random_generators::get_int(10UL, 200UL)},
+                  });
             } else {
-                all_batches.push_back(batch_t{
-                  .num_records = 1,
-                  .type = model::record_batch_type::raft_data,
-                  .record_sizes = {random_generators::get_int(10UL, 200UL)},
-                });
+                all_batches.push_back(
+                  batch_t{
+                    .num_records = 1,
+                    .type = model::record_batch_type::raft_data,
+                    .record_sizes = {random_generators::get_int(10UL, 200UL)},
+                  });
             }
         }
         std::random_device dev;
@@ -433,17 +435,19 @@ std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
     for (const auto& s : segments) {
         auto url = m.generate_segment_path(
           *m.get(s.base_offset), path_provider);
-        results.push_back(cloud_storage_fixture::expectation{
-          .url = url().string(), .body = s.bytes});
+        results.push_back(
+          cloud_storage_fixture::expectation{
+            .url = url().string(), .body = s.bytes});
     }
     auto serialized = [&] {
         auto s_data = m.serialize().get();
         auto buf = s_data.stream.read_exactly(s_data.size_bytes).get();
         return ss::sstring(buf.begin(), buf.end());
     };
-    results.push_back(cloud_storage_fixture::expectation{
-      .url = m.get_manifest_path(path_provider)().string(),
-      .body = serialized()});
+    results.push_back(
+      cloud_storage_fixture::expectation{
+        .url = m.get_manifest_path(path_provider)().string(),
+        .body = serialized()});
     std::stringstream ostr;
     m.serialize_json(ostr);
     vlog(
@@ -495,8 +499,9 @@ std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
                 + model::offset(s.num_config_records - s.delta_offset_overlap);
         auto url = m.generate_segment_path(
           *m.get(meta.base_offset), path_provider);
-        results.push_back(cloud_storage_fixture::expectation{
-          .url = url().string(), .body = body});
+        results.push_back(
+          cloud_storage_fixture::expectation{
+            .url = url().string(), .body = body});
     }
     m.advance_insync_offset(m.get_last_offset());
     auto serialized = [&] {
@@ -504,9 +509,10 @@ std::vector<cloud_storage_fixture::expectation> make_imposter_expectations(
         auto buf = s_data.stream.read_exactly(s_data.size_bytes).get();
         return ss::sstring(buf.begin(), buf.end());
     };
-    results.push_back(cloud_storage_fixture::expectation{
-      .url = m.get_manifest_path(path_provider)().string(),
-      .body = serialized()});
+    results.push_back(
+      cloud_storage_fixture::expectation{
+        .url = m.get_manifest_path(path_provider)().string(),
+        .body = serialized()});
     std::ostringstream ostr;
     m.serialize_json(ostr);
 
@@ -1030,29 +1036,33 @@ void topic_manifest_serialize_v1_json(
     // - key is not null - optional has value
     w.Key("compression");
     if (m._topic_config->properties.compression.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *m._topic_config->properties.compression));
+        w.String(
+          boost::lexical_cast<std::string>(
+            *m._topic_config->properties.compression));
     } else {
         w.Null();
     }
     w.Key("cleanup_policy_bitflags");
     if (m._topic_config->properties.cleanup_policy_bitflags.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *m._topic_config->properties.cleanup_policy_bitflags));
+        w.String(
+          boost::lexical_cast<std::string>(
+            *m._topic_config->properties.cleanup_policy_bitflags));
     } else {
         w.Null();
     }
     w.Key("compaction_strategy");
     if (m._topic_config->properties.compaction_strategy.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *m._topic_config->properties.compaction_strategy));
+        w.String(
+          boost::lexical_cast<std::string>(
+            *m._topic_config->properties.compaction_strategy));
     } else {
         w.Null();
     }
     w.Key("timestamp_type");
     if (m._topic_config->properties.timestamp_type.has_value()) {
-        w.String(boost::lexical_cast<std::string>(
-          *m._topic_config->properties.timestamp_type));
+        w.String(
+          boost::lexical_cast<std::string>(
+            *m._topic_config->properties.timestamp_type));
     } else {
         w.Null();
     }
@@ -1091,8 +1101,9 @@ void topic_manifest_serialize_v1_json(
     // of redpanda
     if (m._topic_config->properties.mpx_virtual_cluster_id) {
         w.Key("virtual_cluster_id");
-        w.String(fmt::format(
-          "{}", m._topic_config->properties.mpx_virtual_cluster_id.value()));
+        w.String(
+          fmt::format(
+            "{}", m._topic_config->properties.mpx_virtual_cluster_id.value()));
     }
     w.EndObject();
 }

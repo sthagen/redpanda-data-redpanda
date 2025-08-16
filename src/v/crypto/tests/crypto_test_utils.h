@@ -23,9 +23,10 @@ inline bytes convert_from_hex(const std::string& val) {
 }
 
 inline std::string_view bytes_view_to_string_view(bytes_view v) {
-    return {// NOLINTNEXTLINE
-            reinterpret_cast<const std::string_view::value_type*>(v.data()),
-            v.size()};
+    return {
+      // NOLINTNEXTLINE
+      reinterpret_cast<const std::string_view::value_type*>(v.data()),
+      v.size()};
 }
 
 inline std::span<char> bytes_span_to_char_span(bytes_span<> v) {

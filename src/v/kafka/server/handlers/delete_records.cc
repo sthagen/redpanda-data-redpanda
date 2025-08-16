@@ -37,10 +37,11 @@ chunked_vector<delete_records_partition_result>
 make_partition_errors(const delete_records_topic& t, error_code ec) {
     chunked_vector<delete_records_partition_result> r;
     for (const auto& p : t.partitions) {
-        r.push_back(delete_records_partition_result{
-          .partition_index = p.partition_index,
-          .low_watermark = invalid_low_watermark,
-          .error_code = ec});
+        r.push_back(
+          delete_records_partition_result{
+            .partition_index = p.partition_index,
+            .low_watermark = invalid_low_watermark,
+            .error_code = ec});
     }
     return r;
 }
@@ -225,9 +226,10 @@ delete_records_handler::handle(request_context ctx, ss::smp_service_group) {
           /// may happen in the inner for loop below.
           auto topic_level_errors = validate_at_topic_level(ctx, topic);
           if (!topic_level_errors.empty()) {
-              response.data.topics.push_back(delete_records_topic_result{
-                .name = topic.name,
-                .partitions = std::move(topic_level_errors)});
+              response.data.topics.push_back(
+                delete_records_topic_result{
+                  .name = topic.name,
+                  .partitions = std::move(topic_level_errors)});
               return;
           }
 
@@ -283,8 +285,9 @@ delete_records_handler::handle(request_context ctx, ss::smp_service_group) {
 
     /// Map to kafka response type
     for (auto& [topic, partition_results] : group_by_topic) {
-        response.data.topics.push_back(delete_records_topic_result{
-          .name = topic, .partitions = std::move(partition_results)});
+        response.data.topics.push_back(
+          delete_records_topic_result{
+            .name = topic, .partitions = std::move(partition_results)});
     }
     co_return co_await ctx.respond(std::move(response));
 }

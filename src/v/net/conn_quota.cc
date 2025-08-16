@@ -264,11 +264,12 @@ conn_quota::get_home_allowance(ss::net::inet_address addr) {
               "Creating default home_allowance for {} (limit {})",
               addr,
               _cfg.max_connections_per_ip().value());
-            auto [iter, created] = ip_home.insert(std::make_pair(
-              addr,
-              ss::make_lw_shared<home_allowance>(
-                _cfg.max_connections_per_ip().value(),
-                _cfg.max_connections_per_ip().value())));
+            auto [iter, created] = ip_home.insert(
+              std::make_pair(
+                addr,
+                ss::make_lw_shared<home_allowance>(
+                  _cfg.max_connections_per_ip().value(),
+                  _cfg.max_connections_per_ip().value())));
             return iter->second;
         }
     }
@@ -528,8 +529,10 @@ void conn_quota::apply_overrides() {
               _log->trace,
               "Populating override home_allowance for {}",
               i.first);
-            ip_home.insert(std::make_pair(
-              i.first, ss::make_lw_shared<home_allowance>(i.second, i.second)));
+            ip_home.insert(
+              std::make_pair(
+                i.first,
+                ss::make_lw_shared<home_allowance>(i.second, i.second)));
         }
     }
 

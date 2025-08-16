@@ -114,9 +114,11 @@ public:
             if (_prev[ix] == consume_result::accept_batch) {
                 fut.emplace_back(c->consume_batch_end());
             } else {
-                fut.emplace_back(ss::make_ready_future<stop_parser>(
-                  _prev[ix] == consume_result::stop_parser ? stop_parser::yes
-                                                           : stop_parser::no));
+                fut.emplace_back(
+                  ss::make_ready_future<stop_parser>(
+                    _prev[ix] == consume_result::stop_parser
+                      ? stop_parser::yes
+                      : stop_parser::no));
             }
             ix++;
         }

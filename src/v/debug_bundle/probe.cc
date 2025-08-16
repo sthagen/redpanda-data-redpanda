@@ -34,15 +34,17 @@ void probe::setup_metrics() {
           sm::make_gauge(
             "last_successful_bundle_timestamp_seconds",
             [this] { return _last_successful_bundle.time_since_epoch() / 1s; },
-            sm::description("Timestamp of last successful debug bundle "
-                            "generation (seconds since epoch)"))
+            sm::description(
+              "Timestamp of last successful debug bundle "
+              "generation (seconds since epoch)"))
             .aggregate({}));
         defs.emplace_back(
           sm::make_gauge(
             "last_failed_bundle_timestamp_seconds",
             [this] { return _last_failed_bundle.time_since_epoch() / 1s; },
-            sm::description("Timestamp of last failed debug bundle "
-                            "generation (seconds since epoch)"))
+            sm::description(
+              "Timestamp of last failed debug bundle "
+              "generation (seconds since epoch)"))
             .aggregate({}));
         defs.emplace_back(
           sm::make_counter(

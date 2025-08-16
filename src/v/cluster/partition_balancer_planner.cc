@@ -1152,8 +1152,9 @@ partition_balancer_planner::request_context::for_each_replica_random_order(
                   : a.replicas;
 
             for (const auto& bs : ntp_replicas) {
-                replicas.push_back(item{
-                  .tp_ns = &t.first, .assignment = &a, .node = bs.node_id});
+                replicas.push_back(
+                  item{
+                    .tp_ns = &t.first, .assignment = &a, .node = bs.node_id});
             }
             co_await maybe_yield();
             state().topics().check_topics_map_stable(start_rev);
@@ -1887,10 +1888,11 @@ partition_balancer_planner::get_full_node_actions(request_context& ctx) {
 
                           const auto* full_node = find_full_node(r.node_id);
                           if (full_node) {
-                              full_node_replicas.push_back(full_node_replica{
-                                .node_id = r.node_id,
-                                .final_used_ratio
-                                = full_node->final_used_ratio()});
+                              full_node_replicas.push_back(
+                                full_node_replica{
+                                  .node_id = r.node_id,
+                                  .final_used_ratio
+                                  = full_node->final_used_ratio()});
                           }
                       }
 
@@ -2133,18 +2135,20 @@ void partition_balancer_planner::request_context::collect_actions(
   partition_balancer_planner::plan_data& result) {
     result.reassignments.reserve(_reassignments.size());
     for (auto& [ntp, reallocated_meta] : _reassignments) {
-        result.reassignments.push_back(ntp_reassignment{
-          .ntp = ntp,
-          .allocated = std::move(reallocated_meta.partition),
-          .reconfiguration_policy = reallocated_meta.reconfiguration_policy,
-          .type = ntp_reassignment_type::regular});
+        result.reassignments.push_back(
+          ntp_reassignment{
+            .ntp = ntp,
+            .allocated = std::move(reallocated_meta.partition),
+            .reconfiguration_policy = reallocated_meta.reconfiguration_policy,
+            .type = ntp_reassignment_type::regular});
     }
 
     for (auto& [ntp, reallocated] : _force_reassignments) {
-        result.reassignments.push_back(ntp_reassignment{
-          .ntp = ntp,
-          .allocated = std::move(reallocated),
-          .type = ntp_reassignment_type::force});
+        result.reassignments.push_back(
+          ntp_reassignment{
+            .ntp = ntp,
+            .allocated = std::move(reallocated),
+            .type = ntp_reassignment_type::force});
     }
 
     result.failed_actions_count = _failed_actions_count;

@@ -39,8 +39,10 @@ void voter_priority_tracker::reset_voter_priority_override() {
 void voter_priority_tracker::on_leader_election(size_t replica_count) {
     auto node_count = std::max<size_t>(replica_count, 1);
 
-    _target_priority = voter_priority(std::max<voter_priority::type>(
-      (_target_priority / node_count) * (node_count - 1), min_voter_priority));
+    _target_priority = voter_priority(
+      std::max<voter_priority::type>(
+        (_target_priority / node_count) * (node_count - 1),
+        min_voter_priority));
 }
 
 void voter_priority_tracker::on_successful_leader_election() {

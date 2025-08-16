@@ -217,9 +217,9 @@ public:
 
     /// Must be called on assignment_shard_id. Requires external synchronization
     /// i.e. the assumption is that there are no concurrent set_target() calls.
-    ss::future<>
-      for_each_ntp(ss::noncopyable_function<void(
-                     const model::ntp&, const shard_placement_target&)>) const;
+    ss::future<> for_each_ntp(
+      ss::noncopyable_function<
+        void(const model::ntp&, const shard_placement_target&)>) const;
 
     std::optional<placement_state> state_on_this_shard(const model::ntp&) const;
 

@@ -137,9 +137,10 @@ read_log_file(ss::sstring base_dir, model::ntp file_ntp) {
               = mgr.manage(storage::ntp_config(file_ntp, mgr.config().base_dir))
                   .then([](ss::shared_ptr<storage::log> log) mutable {
                       return log
-                        ->make_reader(storage::local_log_reader_config(
-                          model::offset(0),
-                          model::model_limits<model::offset>::max()))
+                        ->make_reader(
+                          storage::local_log_reader_config(
+                            model::offset(0),
+                            model::model_limits<model::offset>::max()))
                         .then([](model::record_batch_reader reader) {
                             return std::move(reader).consume(
                               to_vector_consumer(), model::no_timeout);

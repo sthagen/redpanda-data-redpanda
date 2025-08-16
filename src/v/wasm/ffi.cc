@@ -79,8 +79,9 @@ size_t append_integer(bytes tmp, T v, array<uint8_t> output) {
     // We create _tmp to be `vint::max_length` so this will always fit.
     size_t amt = vint::serialize(int64_t(v), tmp.data());
     if (amt > output.size()) {
-        throw std::out_of_range(ss::format(
-          "ffi::array buffer too small {} > {}", amt, output.size()));
+        throw std::out_of_range(
+          ss::format(
+            "ffi::array buffer too small {} > {}", amt, output.size()));
     }
     std::copy_n(tmp.data(), amt, output.data());
     return amt;
@@ -106,11 +107,12 @@ void writer::append_byte(uint8_t v) {
 void writer::ensure_size(size_t size) {
     auto remainder = slice_remainder();
     if (size > remainder.size()) {
-        throw std::out_of_range(ss::format(
-          "ffi::array buffer too small {} > {}, total: {}",
-          size,
-          remainder.size(),
-          _output.size()));
+        throw std::out_of_range(
+          ss::format(
+            "ffi::array buffer too small {} > {}, total: {}",
+            size,
+            remainder.size(),
+            _output.size()));
     }
 }
 array<uint8_t> writer::slice_remainder() { return _output.subspan(_offset); }
@@ -123,11 +125,12 @@ ss::sstring reader::read_string(size_t size) {
 std::string_view reader::read_string_view(size_t size) {
     auto r = slice_remainder();
     if (r.size() < size) {
-        throw std::out_of_range(ss::format(
-          "ffi::array buffer too small {} > {}, total: {}",
-          size,
-          r.size(),
-          _input.size()));
+        throw std::out_of_range(
+          ss::format(
+            "ffi::array buffer too small {} > {}, total: {}",
+            size,
+            r.size(),
+            _input.size()));
     }
     auto sv = array_as_string_view(slice_remainder()).substr(0, size);
     _offset += size;
@@ -136,11 +139,12 @@ std::string_view reader::read_string_view(size_t size) {
 iobuf reader::read_iobuf(size_t size) {
     auto r = slice_remainder();
     if (r.size() < size) {
-        throw std::out_of_range(ss::format(
-          "ffi::array buffer too small {} > {}, total: {}",
-          size,
-          r.size(),
-          _input.size()));
+        throw std::out_of_range(
+          ss::format(
+            "ffi::array buffer too small {} > {}, total: {}",
+            size,
+            r.size(),
+            _input.size()));
     }
     iobuf b;
     b.append(r.data(), size);

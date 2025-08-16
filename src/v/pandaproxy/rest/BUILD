@@ -15,6 +15,9 @@ redpanda_cc_library(
         "handlers.h",
         "proxy.h",
     ],
+    implementation_deps = [
+        "//src/v/kafka/client:utils",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",

@@ -198,8 +198,9 @@ TEST_F(
 TEST_F(controller_snapshot_reconciliation_fixture, test_reconcile_users) {
     cluster::controller_snapshot snap;
     auto& security_snap = snap.security;
-    security_snap.user_credentials.emplace_back(cluster::user_and_credential{
-      security::credential_user{"userguy"}, security::scram_credential{}});
+    security_snap.user_credentials.emplace_back(
+      cluster::user_and_credential{
+        security::credential_user{"userguy"}, security::scram_credential{}});
 
     auto actions = reconciler.get_actions(snap);
     ASSERT_TRUE(

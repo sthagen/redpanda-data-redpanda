@@ -95,11 +95,12 @@ public:
         return do_with_client(
                  [tp, count](kafka::client::transport& client) mutable {
                      chunked_vector<kafka::create_partitions_topic> topics;
-                     topics.emplace_back(kafka::create_partitions_topic{
-                       .name = tp,
-                       .count = count,
-                       .assignments = std::nullopt,
-                       .unknown_tags = {}});
+                     topics.emplace_back(
+                       kafka::create_partitions_topic{
+                         .name = tp,
+                         .count = count,
+                         .assignments = std::nullopt,
+                         .unknown_tags = {}});
                      return client.dispatch(
                        kafka::create_partitions_request{
                          .data{

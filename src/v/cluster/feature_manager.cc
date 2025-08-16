@@ -506,8 +506,9 @@ feature_manager::replicate_feature_update_cmd(feature_update_cmd_data data) {
         co_return;
     } else if (err) {
         // Raise exception to trigger backoff+retry
-        throw std::runtime_error(fmt::format(
-          "Error storing cluster version {}: {}", new_version, err));
+        throw std::runtime_error(
+          fmt::format(
+            "Error storing cluster version {}: {}", new_version, err));
     }
 }
 
@@ -631,9 +632,10 @@ ss::future<> feature_manager::do_maybe_update_active_version() {
           "Auto-activating feature {} (logical version {})",
           spec.get().name,
           max_version);
-        data.actions.push_back(cluster::feature_update_action{
-          .feature_name = ss::sstring(spec.get().name),
-          .action = feature_update_action::action_t::activate});
+        data.actions.push_back(
+          cluster::feature_update_action{
+            .feature_name = ss::sstring(spec.get().name),
+            .action = feature_update_action::action_t::activate});
     }
 
     co_await replicate_feature_update_cmd(std::move(data));
@@ -660,9 +662,10 @@ ss::future<> feature_manager::do_maybe_activate_features() {
               "Activating feature {} (logical version {})",
               spec.get().name,
               _feature_table.local().get_active_version());
-            data.actions.push_back(cluster::feature_update_action{
-              .feature_name = ss::sstring(spec.get().name),
-              .action = feature_update_action::action_t::activate});
+            data.actions.push_back(
+              cluster::feature_update_action{
+                .feature_name = ss::sstring(spec.get().name),
+                .action = feature_update_action::action_t::activate});
         }
 
         co_await replicate_feature_update_cmd(std::move(data));

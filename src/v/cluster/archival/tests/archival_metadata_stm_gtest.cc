@@ -165,11 +165,12 @@ TEST_F_CORO(archival_metadata_stm_gtest_fixture, test_archival_stm_happy_path) {
     co_await start();
 
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     co_await wait_for_leader(10s);
 
@@ -221,11 +222,12 @@ TEST_F_CORO(
     ss::abort_source never_abort;
 
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     co_await start();
 
@@ -274,11 +276,12 @@ TEST_F_CORO(
       });
 
     m.clear();
-    m.push_back(segment_meta{
-      .base_offset = model::offset(100),
-      .committed_offset = model::offset(199),
-      .archiver_term = model::term_id(2),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(100),
+        .committed_offset = model::offset(199),
+        .archiver_term = model::term_id(2),
+        .segment_term = model::term_id(1)});
 
     auto slow_replication_fut = with_leader(
       10s,
@@ -366,11 +369,12 @@ TEST_F_CORO(
     ss::abort_source never_abort;
 
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     co_await start();
 
@@ -419,11 +423,12 @@ TEST_F_CORO(
       });
 
     m.clear();
-    m.push_back(segment_meta{
-      .base_offset = model::offset(100),
-      .committed_offset = model::offset(199),
-      .archiver_term = model::term_id(2),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(100),
+        .committed_offset = model::offset(199),
+        .archiver_term = model::term_id(2),
+        .segment_term = model::term_id(1)});
 
     ss::abort_source replication_abort_source;
     auto slow_replication_fut = with_leader(
@@ -511,11 +516,12 @@ TEST_F_CORO(
     co_await start();
 
     std::vector<cloud_storage::segment_meta> good_segment;
-    good_segment.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    good_segment.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     co_await wait_for_leader(10s);
     auto timeout = 30s;
@@ -559,11 +565,12 @@ TEST_F_CORO(
 
     // Attempt to replicate incorrect record batch
     std::vector<cloud_storage::segment_meta> poisoned_segment;
-    poisoned_segment.push_back(segment_meta{
-      .base_offset = model::offset(101),
-      .committed_offset = model::offset(999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    poisoned_segment.push_back(
+      segment_meta{
+        .base_offset = model::offset(101),
+        .committed_offset = model::offset(999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     repl_err = co_await get_leader_stm()
                  .batch_start(deadline, never_abort)
@@ -576,11 +583,12 @@ TEST_F_CORO(
 
     // Check that it still works with consistent updates
     good_segment.clear();
-    good_segment.push_back(segment_meta{
-      .base_offset = model::offset(100),
-      .committed_offset = model::offset(999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    good_segment.push_back(
+      segment_meta{
+        .base_offset = model::offset(100),
+        .committed_offset = model::offset(999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     repl_err = co_await get_leader_stm()
                  .batch_start(deadline, never_abort)
@@ -603,11 +611,12 @@ TEST_F_CORO(
     co_await start();
 
     std::vector<cloud_storage::segment_meta> good_segment;
-    good_segment.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    good_segment.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     co_await wait_for_leader(10s);
 
@@ -640,11 +649,12 @@ TEST_F_CORO(
     ASSERT_TRUE_CORO(applied_offset > model::offset(0));
 
     good_segment.clear();
-    good_segment.push_back(segment_meta{
-      .base_offset = model::offset(100),
-      .committed_offset = model::offset(199),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    good_segment.push_back(
+      segment_meta{
+        .base_offset = model::offset(100),
+        .committed_offset = model::offset(199),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     repl_err = co_await get_leader_stm()
                  .batch_start(deadline, never_abort)
@@ -656,11 +666,12 @@ TEST_F_CORO(
     // Emulate concurrency violation
     applied_offset = model::offset{0};
     good_segment.clear();
-    good_segment.push_back(segment_meta{
-      .base_offset = model::offset(200),
-      .committed_offset = model::offset(299),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    good_segment.push_back(
+      segment_meta{
+        .base_offset = model::offset(200),
+        .committed_offset = model::offset(299),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     repl_err = co_await get_leader_stm()
                  .batch_start(deadline, never_abort)

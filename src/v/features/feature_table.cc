@@ -280,8 +280,9 @@ public:
               [&ft = _parent]() {
                   return calculate_expiry_metric(ft.get_license());
               },
-              sm::description("Number of seconds remaining until the "
-                              "Enterprise license expires"))
+              sm::description(
+                "Number of seconds remaining until the "
+                "Enterprise license expires"))
               .aggregate({sm::shard_label}),
           });
     }
@@ -775,10 +776,11 @@ feature_table::decode_version_fence(model::record_batch batch) {
     auto& rec = records.front();
     auto key = serde::from_iobuf<ss::sstring>(rec.release_key());
     if (key != version_fence_batch_key) {
-        throw std::runtime_error(fmt::format(
-          "Version fence batch does not contain expected key {}: found {}",
-          version_fence_batch_key,
-          key));
+        throw std::runtime_error(
+          fmt::format(
+            "Version fence batch does not contain expected key {}: found {}",
+            version_fence_batch_key,
+            key));
     }
     return serde::from_iobuf<version_fence>(rec.release_value());
 }

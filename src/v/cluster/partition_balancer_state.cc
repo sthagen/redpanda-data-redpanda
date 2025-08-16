@@ -156,8 +156,9 @@ void partition_balancer_state::probe::setup_metrics(
         sm::make_gauge(
           "num_with_broken_rack_constraint",
           [this] { return _parent.ntps_with_broken_rack_constraint().size(); },
-          sm::description("Number of partitions that don't satisfy the rack "
-                          "awareness constraint"))
+          sm::description(
+            "Number of partitions that don't satisfy the rack "
+            "awareness constraint"))
           .aggregate({sm::shard_label}),
       });
 }

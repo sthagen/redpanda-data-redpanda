@@ -59,11 +59,12 @@ raft::heartbeat_request_v2 random_request() {
 }
 
 raft::reply_result random_reply_status() {
-    return random_generators::random_choice(std::vector<raft::reply_result>{
-      raft::reply_result::success,
-      raft::reply_result::failure,
-      raft::reply_result::follower_busy,
-      raft::reply_result::group_unavailable});
+    return random_generators::random_choice(
+      std::vector<raft::reply_result>{
+        raft::reply_result::success,
+        raft::reply_result::failure,
+        raft::reply_result::follower_busy,
+        raft::reply_result::group_unavailable});
 }
 
 raft::heartbeat_reply_v2 random_reply() {

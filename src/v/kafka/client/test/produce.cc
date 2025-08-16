@@ -13,6 +13,7 @@
 #include "kafka/client/configuration.h"
 #include "kafka/client/test/fixture.h"
 #include "kafka/client/test/utils.h"
+#include "kafka/client/utils.h"
 #include "kafka/protocol/errors.h"
 #include "kafka/protocol/metadata.h"
 #include "model/fundamental.h"
@@ -51,7 +52,11 @@ FIXTURE_TEST(produce_reconnect, kafka_client_fixture) {
     info("Client.dispatch metadata");
     auto res = client.dispatch(make_list_topics_req()).get();
     BOOST_REQUIRE_EQUAL(res.data.topics.size(), 1);
-    BOOST_REQUIRE_EQUAL(res.data.topics[0].name(), "t");
+    static_assert(
+      kafka::client::api_version_for(kafka::metadata_request::api_type::key)
+        < kafka::api_version(12),
+      "topic::name is nullable in v12+");
+    BOOST_REQUIRE_EQUAL((*res.data.topics[0].name)(), "t");
 
     client.set_batch_record_count(3);
     client.set_batch_size_bytes(1024);

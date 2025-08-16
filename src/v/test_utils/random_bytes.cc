@@ -49,8 +49,9 @@ iobuf fragmented_iobuf(std::string_view str, int n_fragments) {
     auto cur = str.begin();
     for (auto fragment_len : fragment_lengths) {
         // force add a new fragment
-        res.append(std::make_unique<details::io_fragment>(
-          ss::temporary_buffer<char>(cur, fragment_len)));
+        res.append(
+          std::make_unique<details::io_fragment>(
+            ss::temporary_buffer<char>(cur, fragment_len)));
         cur += fragment_len;
     }
     return res;

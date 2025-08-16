@@ -84,8 +84,8 @@ ss::future<> compacted_index_chunk_reader::verify_integrity() {
                  })
           .then([this](uint32_t crcsum) {
               if (_footer->crc != crcsum) {
-                  return ss::make_exception_future<>(
-                    std::runtime_error(fmt::format(
+                  return ss::make_exception_future<>(std::runtime_error(
+                    fmt::format(
                       "Invalid file checksum. Expected: {}, but got:{} - {}",
                       _footer->crc,
                       crcsum,
@@ -110,10 +110,11 @@ compacted_index_chunk_reader::load_footer() {
     size_t file_size = stat.st_size;
 
     if (file_size < compacted_index::footer_v1::footer_size) {
-        throw std::runtime_error(fmt::format(
-          "Cannot read footer: file {} size is too small ({} bytes)",
-          path(),
-          file_size));
+        throw std::runtime_error(
+          fmt::format(
+            "Cannot read footer: file {} size is too small ({} bytes)",
+            path(),
+            file_size));
     }
 
     size_t footer_buf_size = std::min(
@@ -130,10 +131,11 @@ compacted_index_chunk_reader::load_footer() {
     iobuf buf = co_await read_iobuf_exactly(in, footer_buf_size);
 
     if (buf.size_bytes() != footer_buf_size) {
-        throw std::runtime_error(fmt::format(
-          "could not read enough bytes to parse footer. read:{}, expected:{}",
-          buf.size_bytes(),
-          footer_buf_size));
+        throw std::runtime_error(
+          fmt::format(
+            "could not read enough bytes to parse footer. read:{}, expected:{}",
+            buf.size_bytes(),
+            footer_buf_size));
     }
 
     storage::compacted_index::footer footer;
@@ -233,11 +235,12 @@ compacted_index_chunk_reader::load_slice(model::timeout_clock::time_point t) {
                            auto bytes = p.read_bytes(p.bytes_left());
                            auto key = compaction::compaction_key(
                              std::move(bytes));
-                           slice.push_back(compacted_index::entry(
-                             compacted_index::entry_type(type),
-                             std::move(key),
-                             model::offset(offset),
-                             delta));
+                           slice.push_back(
+                             compacted_index::entry(
+                               compacted_index::entry_type(type),
+                               std::move(key),
+                               model::offset(offset),
+                               delta));
                        });
                  })
           .then([&slice] {

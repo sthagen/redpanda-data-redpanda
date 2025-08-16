@@ -99,19 +99,21 @@ SEASTAR_THREAD_TEST_CASE(test_overrides_decode_errors) {
                                                   "    new_id: {}\n";
 
     BOOST_CHECK_THROW(
-      read_from_yaml(fmt::format(
-        entry_fmt,
-        model::node_uuid{uuid_t::create()},
-        23 /* does not parse to uuid */,
-        model::node_id{0})),
+      read_from_yaml(
+        fmt::format(
+          entry_fmt,
+          model::node_uuid{uuid_t::create()},
+          23 /* does not parse to uuid */,
+          model::node_id{0})),
       YAML::TypedBadConversion<model::node_uuid>);
 
     BOOST_CHECK_THROW(
-      read_from_yaml(fmt::format(
-        entry_fmt,
-        model::node_uuid{uuid_t::create()},
-        model::node_uuid{uuid_t::create()},
-        model::node_uuid{uuid_t::create()} /* does not parse to node ID */)),
+      read_from_yaml(
+        fmt::format(
+          entry_fmt,
+          model::node_uuid{uuid_t::create()},
+          model::node_uuid{uuid_t::create()},
+          model::node_uuid{uuid_t::create()} /* does not parse to node ID */)),
       YAML::TypedBadConversion<model::node_id::type>);
 
     static constexpr std::string_view entry_fmt_ignore_existing_node_id
@@ -122,30 +124,33 @@ SEASTAR_THREAD_TEST_CASE(test_overrides_decode_errors) {
         "    ignore_existing_node_id: {}\n";
 
     BOOST_CHECK_THROW(
-      read_from_yaml(fmt::format(
-        entry_fmt_ignore_existing_node_id,
-        model::node_uuid{uuid_t::create()},
-        model::node_uuid{uuid_t::create()},
-        model::node_id{0},
-        "eslaf" /* that's not a bool */)),
+      read_from_yaml(
+        fmt::format(
+          entry_fmt_ignore_existing_node_id,
+          model::node_uuid{uuid_t::create()},
+          model::node_uuid{uuid_t::create()},
+          model::node_id{0},
+          "eslaf" /* that's not a bool */)),
       YAML::TypedBadConversion<bool>);
 
     BOOST_CHECK_THROW(
-      read_from_yaml(fmt::format(
-        "node_id_overrides:\n"
-        "  - current_uuid: {}\n"
-        "    new_uuid: {}\n" /* missing new_id field */,
-        model::node_uuid{uuid_t::create()},
-        model::node_uuid{uuid_t::create()})),
+      read_from_yaml(
+        fmt::format(
+          "node_id_overrides:\n"
+          "  - current_uuid: {}\n"
+          "    new_uuid: {}\n" /* missing new_id field */,
+          model::node_uuid{uuid_t::create()},
+          model::node_uuid{uuid_t::create()})),
       YAML::TypedBadConversion<config::node_id_override>);
 
     BOOST_CHECK_THROW(
-      read_from_yaml(fmt::format(
-        "node_id_overrides:\n"
-        "  - current_uuid: {}\n"
-        "    new_id: {}\n" /* missing new_uuid field */,
-        model::node_uuid{uuid_t::create()},
-        model::node_id{0})),
+      read_from_yaml(
+        fmt::format(
+          "node_id_overrides:\n"
+          "  - current_uuid: {}\n"
+          "    new_id: {}\n" /* missing new_uuid field */,
+          model::node_uuid{uuid_t::create()},
+          model::node_id{0})),
       YAML::TypedBadConversion<config::node_id_override>);
 }
 

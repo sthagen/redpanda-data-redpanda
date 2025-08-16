@@ -199,9 +199,10 @@ BOOST_AUTO_TEST_CASE(test_invalid_index) {
     BOOST_REQUIRE_NO_THROW(
       auto mapper = gssapi_principal_mapper(
         config::mock_binding(std::vector<ss::sstring>{rules}));
-      BOOST_REQUIRE_NO_THROW(auto name = gssapi_name::parse(TEST_NAME).value();
-                             auto result = mapper.apply(DEFAULT_REALM, name);
-                             BOOST_REQUIRE(!result.has_value());););
+      BOOST_REQUIRE_NO_THROW(
+        auto name = gssapi_name::parse(TEST_NAME).value();
+        auto result = mapper.apply(DEFAULT_REALM, name);
+        BOOST_REQUIRE(!result.has_value());););
 }
 
 BOOST_AUTO_TEST_CASE(test_only_primary) {
@@ -212,13 +213,14 @@ BOOST_AUTO_TEST_CASE(test_only_primary) {
     BOOST_REQUIRE_NO_THROW(
       auto mapper = gssapi_principal_mapper(
         config::mock_binding(std::vector<ss::sstring>{rules}));
-      BOOST_REQUIRE_NO_THROW(auto name = gssapi_name::parse(TEST_NAME).value();
-                             BOOST_REQUIRE(name.host_name().empty());
-                             BOOST_REQUIRE(name.realm().empty());
-                             BOOST_REQUIRE_EQUAL(TEST_NAME, name.primary());
-                             auto result = mapper.apply(DEFAULT_REALM, name);
-                             BOOST_REQUIRE(result.has_value());
-                             BOOST_REQUIRE_EQUAL(TEST_NAME, *result);););
+      BOOST_REQUIRE_NO_THROW(
+        auto name = gssapi_name::parse(TEST_NAME).value();
+        BOOST_REQUIRE(name.host_name().empty());
+        BOOST_REQUIRE(name.realm().empty());
+        BOOST_REQUIRE_EQUAL(TEST_NAME, name.primary());
+        auto result = mapper.apply(DEFAULT_REALM, name);
+        BOOST_REQUIRE(result.has_value());
+        BOOST_REQUIRE_EQUAL(TEST_NAME, *result);););
 }
 
 struct gssapi_default_mapper_record {

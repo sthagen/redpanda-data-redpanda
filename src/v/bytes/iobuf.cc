@@ -85,10 +85,11 @@ iobuf iobuf::share(size_t pos, size_t len) {
 
 iobuf iobuf::tail(size_t size) {
     if (size > _size) [[unlikely]] {
-        throw std::out_of_range(fmt::format(
-          "iobuf::tail requested size {} larger than iobuf size {}",
-          size,
-          _size));
+        throw std::out_of_range(
+          fmt::format(
+            "iobuf::tail requested size {} larger than iobuf size {}",
+            size,
+            _size));
     }
     iobuf out;
     for (auto it = rbegin(); it != rend() && size > 0; ++it) {

@@ -48,9 +48,10 @@ FIXTURE_TEST(test_nonexistent_topic, metadata_fixture) {
 
     auto resp
       = client
-          .fetch_metadata(kafka::metadata_request{
-            .data
-            = {.topics = {{kafka::metadata_request_topic{.name = model::topic("non-existent")}}}, .allow_auto_topic_creation = false}})
+          .fetch_metadata(
+            kafka::metadata_request{
+              .data
+              = {.topics = {{kafka::metadata_request_topic{.name = model::topic("non-existent")}}}, .allow_auto_topic_creation = false}})
           .get();
     BOOST_REQUIRE_EQUAL(resp.data.topics.size(), 1);
     BOOST_REQUIRE_EQUAL(
@@ -104,18 +105,20 @@ FIXTURE_TEST(test_authz_response, metadata_fixture) {
     BOOST_REQUIRE(!errors_in_acl_results(acl_result));
 
     auto client = make_client();
-    client.set_credentials(kc::sasl_configuration{
-      .mechanism = ss::sstring{"SCRAM-SHA-256"},
-      .username = username,
-      .password = password});
+    client.set_credentials(
+      kc::sasl_configuration{
+        .mechanism = ss::sstring{"SCRAM-SHA-256"},
+        .username = username,
+        .password = password});
     client.connect().get();
     auto stop_client = ss::defer([&client]() { client.stop().get(); });
 
     auto resp
       = client
-          .fetch_metadata(kafka::metadata_request{
-            .data
-            = {.topics = {{{.name = test_topic.tp}}}, .allow_auto_topic_creation = false, .include_cluster_authorized_operations = true, .include_topic_authorized_operations = true}})
+          .fetch_metadata(
+            kafka::metadata_request{
+              .data
+              = {.topics = {{{.name = test_topic.tp}}}, .allow_auto_topic_creation = false, .include_cluster_authorized_operations = true, .include_topic_authorized_operations = true}})
           .get();
 
     constexpr auto expected_cluster_authorized_operations

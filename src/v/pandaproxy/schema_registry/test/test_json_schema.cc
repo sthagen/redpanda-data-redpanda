@@ -2198,11 +2198,12 @@ SEASTAR_THREAD_TEST_CASE(test_compatibility_check) {
           .get();
     };
     for (const auto& data : compatibility_test_cases) {
-        BOOST_TEST_CONTEXT(fmt::format(
-          "reader: {}, writer: {}, is compatible: {}",
-          data.reader_schema,
-          data.writer_schema,
-          data.compat_result.empty())) {
+        BOOST_TEST_CONTEXT(
+          fmt::format(
+            "reader: {}, writer: {}, is compatible: {}",
+            data.reader_schema,
+            data.writer_schema,
+            data.compat_result.empty())) {
             try {
                 // sanity check that each schema is compatible with itself
                 BOOST_CHECK_MESSAGE(
@@ -2455,11 +2456,13 @@ SEASTAR_THREAD_TEST_CASE(test_refs_fixing) {
 }
 )"_json;
 
-    BOOST_TEST_CONTEXT(fmt::format(
-      "input_schema:\n{}\n\nexpected_schema:\n{}\n\nprocessed_schema:\n{}\n\n",
-      jsoncons::pretty_print(input_schema),
-      jsoncons::pretty_print(expected_schema),
-      jsoncons::pretty_print(processed_schema))) {
+    BOOST_TEST_CONTEXT(
+      fmt::format(
+        "input_schema:\n{}\n\nexpected_schema:\n{}\n\nprocessed_schema:\n{}"
+        "\n\n",
+        jsoncons::pretty_print(input_schema),
+        jsoncons::pretty_print(expected_schema),
+        jsoncons::pretty_print(processed_schema))) {
         // check that the processed schema is the same as the expected schema,
         // output the difference if not
         auto jpatch = jsoncons::jsonpatch::from_diff(

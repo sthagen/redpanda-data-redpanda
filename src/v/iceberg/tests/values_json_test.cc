@@ -250,13 +250,15 @@ static const std::vector<values_json_test_case> test_cases{
         struct_type s;
         s.fields.emplace_back(
           nested_field::create(8, "field_one", field_required::no, int_type{}));
-        s.fields.emplace_back(nested_field::create(
-          9, "field_two", field_required::no, string_type{}));
-        s.fields.emplace_back(nested_field::create(
-          10,
-          "field_three",
-          field_required::no,
-          list_type::create(4, field_required::no, int_type{})));
+        s.fields.emplace_back(
+          nested_field::create(
+            9, "field_two", field_required::no, string_type{}));
+        s.fields.emplace_back(
+          nested_field::create(
+            10,
+            "field_three",
+            field_required::no,
+            list_type::create(4, field_required::no, int_type{})));
         return s;
     }(),
     R"({"8":23,"9":"foobar","10":[null,1,2,3]})",
@@ -266,17 +268,19 @@ static const std::vector<values_json_test_case> test_cases{
     std::make_unique<list_value>([]() -> decltype(list_value::elements) {
         decltype(list_value::elements) vec;
         for (auto i : std::views::iota(0, 3)) {
-            vec.emplace_back(std::make_unique<struct_value>(
-              [i]() -> decltype(struct_value::fields) {
-                  decltype(struct_value::fields) vec;
-                  if (i == 0) {
-                      vec.emplace_back(string_value{
-                        bytes_to_iobuf(bytes::from_string("foobar"))});
-                  } else {
-                      vec.emplace_back(std::nullopt);
-                  }
-                  return vec;
-              }()));
+            vec.emplace_back(
+              std::make_unique<struct_value>(
+                [i]() -> decltype(struct_value::fields) {
+                    decltype(struct_value::fields) vec;
+                    if (i == 0) {
+                        vec.emplace_back(
+                          string_value{
+                            bytes_to_iobuf(bytes::from_string("foobar"))});
+                    } else {
+                        vec.emplace_back(std::nullopt);
+                    }
+                    return vec;
+                }()));
         }
         return vec;
     }()),
@@ -295,9 +299,10 @@ static const std::vector<values_json_test_case> test_cases{
     "map_value",
     std::make_unique<map_value>([]() -> decltype(map_value::kvs) {
         decltype(map_value::kvs) vec;
-        vec.emplace_back(kv_value{
-          int_value{23},
-          string_value{bytes_to_iobuf(bytes::from_string("foobar"))}});
+        vec.emplace_back(
+          kv_value{
+            int_value{23},
+            string_value{bytes_to_iobuf(bytes::from_string("foobar"))}});
         vec.emplace_back(kv_value{int_value{42}, std::nullopt});
         return vec;
     }()),
@@ -873,8 +878,9 @@ TEST_P(DecimalRoundTripTest, JsonToValToJsonToVal) {
       parsed_value = value_from_json(parsed, type, field_required::yes));
     ASSERT_TRUE(parsed_value.has_value());
     ASSERT_TRUE(std::holds_alternative<primitive_value>(parsed_value.value()));
-    ASSERT_TRUE(std::holds_alternative<decimal_value>(
-      std::get<primitive_value>(parsed_value.value())));
+    ASSERT_TRUE(
+      std::holds_alternative<decimal_value>(
+        std::get<primitive_value>(parsed_value.value())));
 
     auto parsed_dec = std::get<decimal_value>(
       std::get<primitive_value>(parsed_value.value()));
@@ -900,8 +906,9 @@ TEST_P(DecimalRoundTripTest, JsonToValToJsonToVal) {
     ASSERT_TRUE(parsed_value_2.has_value());
     ASSERT_TRUE(
       std::holds_alternative<primitive_value>(parsed_value_2.value()));
-    ASSERT_TRUE(std::holds_alternative<decimal_value>(
-      std::get<primitive_value>(parsed_value_2.value())));
+    ASSERT_TRUE(
+      std::holds_alternative<decimal_value>(
+        std::get<primitive_value>(parsed_value_2.value())));
 
     auto parsed_dec_2 = std::get<decimal_value>(
       std::get<primitive_value>(parsed_value_2.value()));

@@ -53,10 +53,11 @@ void fill_response_with_errors(
 
         t.partitions.reserve(topic.partitions.size());
         for (const auto& partition : topic.partitions) {
-            t.partitions.push_back(produce_response::partition{
-              .partition_index = partition.partition_index,
-              .error_code = error,
-              .error_message = error_msg});
+            t.partitions.push_back(
+              produce_response::partition{
+                .partition_index = partition.partition_index,
+                .error_code = error,
+                .error_message = error_msg});
         }
     }
 }
@@ -298,9 +299,10 @@ partition_produce_stages produce_topic_partition(
     auto shard = octx.rctx.shards().shard_for(ntp);
 
     if (!shard) {
-        return make_ready_stage(produce_response::partition{
-          .partition_index = ntp.tp.partition,
-          .error_code = error_code::not_leader_for_partition});
+        return make_ready_stage(
+          produce_response::partition{
+            .partition_index = ntp.tp.partition,
+            .error_code = error_code::not_leader_for_partition});
     }
 
     // steal the batch from the adapter
@@ -462,9 +464,10 @@ topic_produce_error(const produce_request::topic& topic, error_code error) {
     partitions_produced.reserve(topic.partitions.size());
 
     for (const auto& topic_partition : topic.partitions) {
-        partitions_produced.push_back(produce_response::partition{
-          .partition_index = topic_partition.partition_index,
-          .error_code = error});
+        partitions_produced.push_back(
+          produce_response::partition{
+            .partition_index = topic_partition.partition_index,
+            .error_code = error});
     }
 
     return topic_produce_stages{
@@ -876,10 +879,11 @@ produce_handler::handle(request_context ctx, ss::smp_service_group ssg) {
                           // request result in the connection being
                           // dropped to signal an issue to the client
                           return ss::make_exception_future<response_ptr>(
-                            std::runtime_error(fmt::format(
-                              "Closing connection due to error in produce "
-                              "response: {}",
-                              octx.response)));
+                            std::runtime_error(
+                              fmt::format(
+                                "Closing connection due to error in produce "
+                                "response: {}",
+                                octx.response)));
                       });
                 } catch (...) {
                     /*
@@ -896,8 +900,9 @@ produce_handler::handle(request_context ctx, ss::smp_service_group ssg) {
                       .discard_result()
                       .then([] {
                           return ss::make_exception_future<response_ptr>(
-                            std::runtime_error("First stage produce failed but "
-                                               "second stage succeeded."));
+                            std::runtime_error(
+                              "First stage produce failed but "
+                              "second stage succeeded."));
                       })
                       .handle_exception([](std::exception_ptr e) {
                           return ss::make_exception_future<response_ptr>(e);

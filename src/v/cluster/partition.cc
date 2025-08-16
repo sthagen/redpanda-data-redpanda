@@ -350,9 +350,10 @@ ss::future<result<kafka_result>> partition::replicate(
     if (!res) {
         co_return ret_t(res.error());
     }
-    co_return ret_t(kafka_result{
-      model::offset_cast(log()->from_log_offset(res.value().last_offset)),
-      res.value().last_term});
+    co_return ret_t(
+      kafka_result{
+        model::offset_cast(log()->from_log_offset(res.value().last_offset)),
+        res.value().last_term});
 }
 
 ss::shared_ptr<cluster::rm_stm> partition::rm_stm() {
@@ -1064,8 +1065,9 @@ void partition::set_topic_config(
 ss::future<> partition::serialize_json_manifest_to_output_stream(
   ss::output_stream<char>& output) {
     if (!_archival_meta_stm || !_cloud_storage_partition) {
-        throw std::runtime_error(fmt::format(
-          "{} not configured for cloud storage", _topic_cfg->tp_ns));
+        throw std::runtime_error(
+          fmt::format(
+            "{} not configured for cloud storage", _topic_cfg->tp_ns));
     }
 
     // The timeout here is meant to place an upper bound on the amount
@@ -1407,14 +1409,17 @@ partition::do_unsafe_reset_remote_partition_manifest_from_cloud(bool force) {
       _cloud_storage_api.local());
     auto res = co_await dl.download_manifest(rtc, &new_manifest);
     if (res.has_error()) {
-        throw std::runtime_error(ssx::sformat(
-          "Failed to download partition manifest with error: {}", res.error()));
+        throw std::runtime_error(
+          ssx::sformat(
+            "Failed to download partition manifest with error: {}",
+            res.error()));
     }
     if (
       res.value()
       == cloud_storage::find_partition_manifest_outcome::no_matching_manifest) {
-        throw std::runtime_error(ssx::sformat(
-          "No matching manifest for {} rev {}", ntp(), initial_rev));
+        throw std::runtime_error(
+          ssx::sformat(
+            "No matching manifest for {} rev {}", ntp(), initial_rev));
     }
 
     const auto max_removable

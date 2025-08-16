@@ -947,17 +947,19 @@ FIXTURE_TEST(
         for (model::partition_id::type i = 0; i < partitions; ++i) {
             std::vector<model::broker_shard> replicas;
             for (int r = 0; r < replication_factor; ++r) {
-                replicas.push_back(model::broker_shard{
-                  model::node_id{r},
-                  random_generators::get_int<uint32_t>(0, 3)});
+                replicas.push_back(
+                  model::broker_shard{
+                    model::node_id{r},
+                    random_generators::get_int<uint32_t>(0, 3)});
             }
             std::shuffle(
               replicas.begin(),
               replicas.end(),
               random_generators::internal::gen);
 
-            assignments.push_back(cluster::partition_assignment{
-              raft::group_id{1}, model::partition_id{i}, replicas});
+            assignments.push_back(
+              cluster::partition_assignment{
+                raft::group_id{1}, model::partition_id{i}, replicas});
         }
         return cluster::create_topic_cmd{
           make_tp_ns(name),

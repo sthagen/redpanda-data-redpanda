@@ -365,8 +365,9 @@ ntp_archiver::ntp_archiver(
       config::shard_local_cfg()
         .cloud_storage_manifest_max_upload_interval_sec.bind())
   , _manifest_view(std::move(amv))
-  , _initial_backoff(config::shard_local_cfg()
-                       .cloud_storage_upload_loop_initial_backoff_ms.bind())
+  , _initial_backoff(
+      config::shard_local_cfg()
+        .cloud_storage_upload_loop_initial_backoff_ms.bind())
   , _max_backoff(
       config::shard_local_cfg().cloud_storage_upload_loop_max_backoff_ms.bind())
   , _execution_monitor("ntp_archiver", liveness_check_interval) {
@@ -549,8 +550,9 @@ void ntp_archiver::notify_leadership(std::optional<model::node_id> leader_id) {
 }
 
 ss::future<> ntp_archiver::upload_until_abort() {
-    if (unlikely(config::shard_local_cfg()
-                   .cloud_storage_disable_upload_loop_for_tests.value())) {
+    if (unlikely(
+          config::shard_local_cfg()
+            .cloud_storage_disable_upload_loop_for_tests.value())) {
         vlog(_rtclog.warn, "Skipping upload loop start");
         co_return;
     }
@@ -1055,12 +1057,13 @@ ss::future<> ntp_archiver::upload_until_term_change_legacy() {
         std::optional<batch_result> result;
         auto track_paused = _probe->register_archiver_on_hold(uploads_paused);
         if (!uploads_paused) {
-            result = co_await upload_next_candidates(archival_stm_fence{
-              .read_write_fence = fence,
-              // Only use the rw-fence if the feature is enabled which requires
-              // major version upgrade.
-              .emit_rw_fence_cmd = emit_read_write_fence(_feature_table),
-            });
+            result = co_await upload_next_candidates(
+              archival_stm_fence{
+                .read_write_fence = fence,
+                // Only use the rw-fence if the feature is enabled which
+                // requires major version upgrade.
+                .emit_rw_fence_cmd = emit_read_write_fence(_feature_table),
+              });
         }
         if (result.has_value()) {
             auto [compacted_upload_result, non_compacted_upload_result]
@@ -2206,8 +2209,9 @@ ntp_archiver::wait_uploads_complete(
               "{} can be added",
               segment_results.size(),
               num_accepted);
-            _probe->gap_detected(model::offset(
-              static_cast<int64_t>(segment_results.size() - num_accepted)));
+            _probe->gap_detected(
+              model::offset(
+                static_cast<int64_t>(segment_results.size() - num_accepted)));
         }
         vassert(
           num_accepted <= segment_results.size(),
@@ -2972,8 +2976,9 @@ ss::future<> ntp_archiver::garbage_collect_archive() {
         }
     }
 
-    _probe->segments_deleted(static_cast<int64_t>(
-      all_deletes_succeeded ? segments_to_remove_count : 0));
+    _probe->segments_deleted(
+      static_cast<int64_t>(
+        all_deletes_succeeded ? segments_to_remove_count : 0));
     vlog(
       _rtclog.debug,
       "Deleted {} spillover segments from the cloud",

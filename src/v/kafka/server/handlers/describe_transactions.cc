@@ -144,10 +144,11 @@ ss::future<response_ptr> describe_transactions_handler::handle(
       tx_frontend, response, std::move(request.data.transactional_ids));
 
     for (auto& tx_id : unauthorized) {
-        response.data.transaction_states.push_back(describe_transaction_state{
-          .error_code = error_code::transactional_id_authorization_failed,
-          .transactional_id = tx_id,
-        });
+        response.data.transaction_states.push_back(
+          describe_transaction_state{
+            .error_code = error_code::transactional_id_authorization_failed,
+            .transactional_id = tx_id,
+          });
     }
 
     co_return co_await ctx.respond(std::move(response));

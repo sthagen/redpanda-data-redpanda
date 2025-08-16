@@ -86,9 +86,10 @@ expected<json::Document> parse_json(iobuf&& raw_response) {
     doc.ParseStream(wrapper);
 
     if (doc.HasParseError()) {
-        return tl::unexpected(json_parse_error{
-          .context = "parse_json",
-          .error = parse_error_msg{GetParseError_En(doc.GetParseError())}});
+        return tl::unexpected(
+          json_parse_error{
+            .context = "parse_json",
+            .error = parse_error_msg{GetParseError_En(doc.GetParseError())}});
     }
 
     return doc;

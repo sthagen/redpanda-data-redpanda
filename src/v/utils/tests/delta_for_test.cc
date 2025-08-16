@@ -971,10 +971,11 @@ void prefix_truncate_test_case(const int64_t num_elements, column_t& column) {
         column.append(value);
         if (samples.empty() || random_generators::get_int(10) == 0) {
             vlog(test.info, "Add sample {} at {}", value, i);
-            samples.push_back(sample_t{
-              .sample = value,
-              .index = i,
-            });
+            samples.push_back(
+              sample_t{
+                .sample = value,
+                .index = i,
+              });
         }
         total_size++;
     }
@@ -1037,10 +1038,11 @@ void at_with_hint_test_case(const int64_t num_elements, column_t& column) {
         }
         if (i % 16 == 0) {
             auto hint = column.get_current_stream_pos();
-            hints.push_back(hint_t{
-              .pos = hint,
-              .index = static_cast<uint32_t>(i),
-            });
+            hints.push_back(
+              hint_t{
+                .pos = hint,
+                .index = static_cast<uint32_t>(i),
+              });
         }
         total_size++;
     }

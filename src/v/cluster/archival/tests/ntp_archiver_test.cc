@@ -2080,15 +2080,16 @@ FIXTURE_TEST(test_ntp_archiver_upload_loop_blocked, archiver_fixture) {
 
     // the local log is truncated and starts at offset 3000
     std::vector<cloud_storage::segment_meta> meta;
-    meta.push_back(cloud_storage::segment_meta{
-      .is_compacted = false,
-      .size_bytes = 100,
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .delta_offset = model::offset_delta(0),
-      .segment_term = model::term_id{1},
-      .delta_offset_end = model::offset_delta(0),
-    });
+    meta.push_back(
+      cloud_storage::segment_meta{
+        .is_compacted = false,
+        .size_bytes = 100,
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .delta_offset = model::offset_delta(0),
+        .segment_term = model::term_id{1},
+        .delta_offset_end = model::offset_delta(0),
+      });
     part->archival_meta_stm()
       ->add_segments(
         meta,
@@ -2196,15 +2197,16 @@ FIXTURE_TEST(
 
     // the local log is truncated and starts at offset 3000
     std::vector<cloud_storage::segment_meta> meta;
-    meta.push_back(cloud_storage::segment_meta{
-      .is_compacted = false,
-      .size_bytes = 100,
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .delta_offset = model::offset_delta(0),
-      .segment_term = model::term_id{1},
-      .delta_offset_end = model::offset_delta(0),
-    });
+    meta.push_back(
+      cloud_storage::segment_meta{
+        .is_compacted = false,
+        .size_bytes = 100,
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .delta_offset = model::offset_delta(0),
+        .segment_term = model::term_id{1},
+        .delta_offset_end = model::offset_delta(0),
+      });
     part->archival_meta_stm()
       ->add_segments(
         meta,

@@ -636,8 +636,11 @@ void group_configuration::update(model::broker broker) {
       });
 
     if (it == _brokers.end()) {
-        throw std::invalid_argument(fmt::format(
-          "broker {} does not exists in configuration {}", broker.id(), *this));
+        throw std::invalid_argument(
+          fmt::format(
+            "broker {} does not exists in configuration {}",
+            broker.id(),
+            *this));
     }
 
     *it = std::move(broker);
@@ -665,10 +668,11 @@ void configuration_change_strategy_v3::add_broker(
       _cfg._brokers.cend(),
       [id = broker.id()](const model::broker& n) { return id == n.id(); });
     if (unlikely(it != _cfg._brokers.cend())) {
-        throw std::invalid_argument(fmt::format(
-          "broker {} already present in current configuration {}",
-          broker.id(),
-          _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "broker {} already present in current configuration {}",
+            broker.id(),
+            _cfg));
     }
 
     _cfg._old = _cfg._current;
@@ -684,8 +688,9 @@ void configuration_change_strategy_v3::remove_broker(model::node_id id) {
       [id](const model::broker& n) { return id == n.id(); });
 
     if (unlikely(broker_it == _cfg._brokers.cend())) {
-        throw std::invalid_argument(fmt::format(
-          "broker {} not found in current configuration {}", id, _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "broker {} not found in current configuration {}", id, _cfg));
     }
 
     auto new_cfg = _cfg._current;
@@ -849,10 +854,11 @@ void configuration_change_strategy_v4::add_broker(
       _cfg._brokers.cend(),
       [id = broker.id()](const model::broker& n) { return id == n.id(); });
     if (unlikely(it != _cfg._brokers.cend())) {
-        throw std::invalid_argument(fmt::format(
-          "broker {} already present in current configuration {}",
-          broker.id(),
-          _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "broker {} already present in current configuration {}",
+            broker.id(),
+            _cfg));
     }
 
     _cfg._configuration_update = configuration_update{};
@@ -868,8 +874,9 @@ void configuration_change_strategy_v4::remove_broker(model::node_id id) {
       _cfg._brokers.cend(),
       [id](const model::broker& n) { return id == n.id(); });
     if (unlikely(broker_it == _cfg._brokers.cend())) {
-        throw std::invalid_argument(fmt::format(
-          "broker {} not found in current configuration {}", id, _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "broker {} not found in current configuration {}", id, _cfg));
     }
 
     auto new_cfg = _cfg._current;
@@ -1102,8 +1109,9 @@ void configuration_change_strategy_v5::add(
     _cfg._revision = rev;
 
     if (unlikely(_cfg.contains(node))) {
-        throw std::invalid_argument(fmt::format(
-          "node {} already present in current configuration {}", node, _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "node {} already present in current configuration {}", node, _cfg));
     }
 
     _cfg._configuration_update = configuration_update{};
@@ -1116,8 +1124,9 @@ void configuration_change_strategy_v5::add(
 void configuration_change_strategy_v5::remove(
   vnode id, model::revision_id rev) {
     if (!_cfg._current.contains(id)) {
-        throw std::invalid_argument(fmt::format(
-          "node {} not found in current configuration {}", id, _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "node {} not found in current configuration {}", id, _cfg));
     }
 
     auto new_cfg = _cfg._current;
@@ -1275,8 +1284,11 @@ void configuration_change_strategy_v6::add(
   model::revision_id rev,
   std::optional<model::offset> learner_start_offset) {
     if (_cfg._current.contains(node)) {
-        throw std::invalid_argument(fmt::format(
-          "replica {} already found in current configuration {}", node, _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "replica {} already found in current configuration {}",
+            node,
+            _cfg));
     }
     auto new_replicas = _cfg.all_nodes();
     new_replicas.push_back(node);
@@ -1286,8 +1298,9 @@ void configuration_change_strategy_v6::add(
 void configuration_change_strategy_v6::remove(
   vnode node, model::revision_id rev) {
     if (!_cfg._current.contains(node)) {
-        throw std::invalid_argument(fmt::format(
-          "replica {} not found in current configuration {}", node, _cfg));
+        throw std::invalid_argument(
+          fmt::format(
+            "replica {} not found in current configuration {}", node, _cfg));
     }
     auto new_replicas = _cfg.all_nodes();
     std::erase_if(new_replicas, [node](const vnode& v) { return v == node; });

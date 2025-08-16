@@ -23,10 +23,11 @@ void configuration_bootstrap_state::process_configuration(
   model::record_batch b) {
     if (unlikely(
           b.header().type != model::record_batch_type::raft_configuration)) {
-        throw std::runtime_error(fmt::format(
-          "Logic error. Asked a configuration tracker to process an unknown "
-          "record_batch_type: {}",
-          b.header().type));
+        throw std::runtime_error(
+          fmt::format(
+            "Logic error. Asked a configuration tracker to process an unknown "
+            "record_batch_type: {}",
+            b.header().type));
     }
     if (unlikely(b.compressed())) {
         throw std::runtime_error(
@@ -46,11 +47,12 @@ void configuration_bootstrap_state::process_data_offsets(
     _data_batches_seen++;
     if (unlikely(
           b.header().type == model::record_batch_type::raft_configuration)) {
-        throw std::runtime_error(fmt::format(
-          "Logic error. Asked a data tracker to process "
-          "configuration_batch_type "
-          "record_batch_type: {}",
-          b.header().type));
+        throw std::runtime_error(
+          fmt::format(
+            "Logic error. Asked a data tracker to process "
+            "configuration_batch_type "
+            "record_batch_type: {}",
+            b.header().type));
     }
     process_offsets(b.base_offset(), b.last_offset());
 }

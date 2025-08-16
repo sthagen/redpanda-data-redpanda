@@ -122,13 +122,15 @@ TEST_F(ClusterFixture, TestClusterRestartAndClientReconnection) {
 kafka::produce_request make_produce_request(
   model::topic_partition tp, model::record_batch&& batch, acks acks) {
     chunked_vector<kafka::produce_request::partition> partitions;
-    partitions.emplace_back(kafka::produce_request::partition{
-      .partition_index{tp.partition},
-      .records = kafka::produce_request_record_data(std::move(batch))});
+    partitions.emplace_back(
+      kafka::produce_request::partition{
+        .partition_index{tp.partition},
+        .records = kafka::produce_request_record_data(std::move(batch))});
 
     chunked_vector<kafka::produce_request::topic> topics;
-    topics.emplace_back(kafka::produce_request::topic{
-      .name{std::move(tp.topic)}, .partitions{std::move(partitions)}});
+    topics.emplace_back(
+      kafka::produce_request::topic{
+        .name{std::move(tp.topic)}, .partitions{std::move(partitions)}});
     std::optional<ss::sstring> t_id;
     return {t_id, acks, std::move(topics)};
 }

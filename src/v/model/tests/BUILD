@@ -95,6 +95,20 @@ redpanda_cc_btest(
 )
 
 redpanda_cc_gtest(
+    name = "kitp_test",
+    timeout = "short",
+    srcs = [
+        "kitp_test.cc",
+    ],
+    deps = [
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@abseil-cpp//absl/hash",
+        "@googletest//:gtest",
+    ],
+)
+
+redpanda_cc_gtest(
     name = "topic_id_partition_test",
     timeout = "short",
     srcs = [

@@ -98,11 +98,12 @@ std::pair<client_ptr, client_mu_ptr> kafka_client_cache::fetch_or_insert(
         auto& current_credentials = it_hash->client->get_credentials();
         if (current_credentials && current_credentials->password != user.pass) {
             vlog(plog.debug, "Updating password for user {}", k);
-            it_hash->client->set_credentials(kafka::client::sasl_configuration{
-              .mechanism = current_credentials->mechanism,
-              .username = current_credentials->username,
-              .password = user.pass,
-            });
+            it_hash->client->set_credentials(
+              kafka::client::sasl_configuration{
+                .mechanism = current_credentials->mechanism,
+                .username = current_credentials->username,
+                .password = user.pass,
+              });
         } else {
             vlog(plog.debug, "Reuse client for user {}", k);
         }

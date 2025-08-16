@@ -164,8 +164,9 @@ model::record adl<model::record>::from(iobuf_parser& in) {
         auto hkey = adl<iobuf>{}.from(in);
         auto hvalue_len = adl<int32_t>{}.from(in);
         auto hvalue = adl<iobuf>{}.from(in);
-        headers.emplace_back(model::record_header(
-          hkey_len, std::move(hkey), hvalue_len, std::move(hvalue)));
+        headers.emplace_back(
+          model::record_header(
+            hkey_len, std::move(hkey), hvalue_len, std::move(hvalue)));
     }
     return model::record(
       sz_bytes,

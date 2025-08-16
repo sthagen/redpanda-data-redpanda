@@ -24,8 +24,9 @@ cluster::cluster(connection_configuration config)
   , _logger(
       kclog, fmt::format("{}", _config.client_id.value_or("kafka-client")))
   , _brokers(_logger, std::make_unique<remote_broker_factory>(_config, _logger))
-  , _next_seed(random_generators::get_int<size_t>(
-      0, _config.initial_brokers.size() - 1)) {}
+  , _next_seed(
+      random_generators::get_int<size_t>(
+        0, _config.initial_brokers.size() - 1)) {}
 
 cluster::cluster(
   connection_configuration config,
@@ -34,8 +35,9 @@ cluster::cluster(
   , _logger(
       kclog, fmt::format("{}", _config.client_id.value_or("kafka-client")))
   , _brokers(_logger, std::move(broker_factory))
-  , _next_seed(random_generators::get_int<size_t>(
-      0, _config.initial_brokers.size() - 1)) {}
+  , _next_seed(
+      random_generators::get_int<size_t>(
+        0, _config.initial_brokers.size() - 1)) {}
 
 ss::future<> cluster::start() {
     vlog(

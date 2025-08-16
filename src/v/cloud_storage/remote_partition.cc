@@ -633,10 +633,11 @@ private:
                   });
             }
 
-            throw std::runtime_error(fmt::format(
-              "Failed to query spillover manifests: {}, query: {}",
-              cur.error(),
-              query));
+            throw std::runtime_error(
+              fmt::format(
+                "Failed to query spillover manifests: {}, query: {}",
+                cur.error(),
+                query));
         }
         _view_cursor = std::move(cur.value());
         co_await _view_cursor->with_manifest(

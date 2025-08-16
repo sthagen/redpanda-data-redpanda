@@ -28,15 +28,17 @@ fetch_request make_fetch_request(
   int32_t max_bytes,
   std::chrono::milliseconds timeout) {
     chunked_vector<fetch_request::partition> partitions;
-    partitions.push_back(fetch_request::partition{
-      .partition{tp.partition},
-      .current_leader_epoch = kafka::invalid_leader_epoch,
-      .fetch_offset{offset},
-      .log_start_offset{model::offset{-1}},
-      .partition_max_bytes = max_bytes});
+    partitions.push_back(
+      fetch_request::partition{
+        .partition{tp.partition},
+        .current_leader_epoch = kafka::invalid_leader_epoch,
+        .fetch_offset{offset},
+        .log_start_offset{model::offset{-1}},
+        .partition_max_bytes = max_bytes});
     chunked_vector<fetch_request::topic> topics;
-    topics.push_back(fetch_request::topic{
-      .topic{tp.topic}, .partitions{std::move(partitions)}});
+    topics.push_back(
+      fetch_request::topic{
+        .topic{tp.topic}, .partitions{std::move(partitions)}});
 
     return fetch_request{
       .data = {

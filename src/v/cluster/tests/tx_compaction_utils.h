@@ -103,16 +103,17 @@ public:
             }
             return log->apply_segment_ms().then([&] {
                 return log
-                  ->housekeeping(storage::housekeeping_config{
-                    model::timestamp(
-                      model::timestamp::now().value() - ret_duration.count()),
-                    std::nullopt,
-                    log->stm_manager()->max_removable_local_log_offset(),
-                    std::nullopt,
-                    std::nullopt,
-                    std::chrono::milliseconds{0},
-                    dummy_as,
-                  })
+                  ->housekeeping(
+                    storage::housekeeping_config{
+                      model::timestamp(
+                        model::timestamp::now().value() - ret_duration.count()),
+                      std::nullopt,
+                      log->stm_manager()->max_removable_local_log_offset(),
+                      std::nullopt,
+                      std::nullopt,
+                      std::chrono::milliseconds{0},
+                      dummy_as,
+                    })
                   .handle_exception_type(
                     [](const storage::segment_closed_exception&) {});
             });
@@ -190,29 +191,37 @@ public:
             // Every tx has 3 ops, a begin, data, <commit/abort>
             // Last op is controlled by tx_types param in the spec.
             // For mixed type spec, we randomly pick a commit/abort.
-            ops.emplace(ss::make_shared(
-              begin_op{tx_op_ctx{_data_gen, stm, log, pid, term}, weight0}));
-            ops.emplace(ss::make_shared(
-              data_op{tx_op_ctx{_data_gen, stm, log, pid, term}, weight1}));
+            ops.emplace(
+              ss::make_shared(
+                begin_op{tx_op_ctx{_data_gen, stm, log, pid, term}, weight0}));
+            ops.emplace(
+              ss::make_shared(
+                data_op{tx_op_ctx{_data_gen, stm, log, pid, term}, weight1}));
 
             if (
               s._types == tx_types::commit_only
               || (s._types == tx_types::mixed && tests::random_bool())) {
                 _committed_pids.insert(pid);
-                ops.emplace(ss::make_shared(commit_op{
-                  tx_op_ctx{_data_gen, stm, log, pid, term}, weight2}));
+                ops.emplace(
+                  ss::make_shared(
+                    commit_op{
+                      tx_op_ctx{_data_gen, stm, log, pid, term}, weight2}));
             } else {
                 _aborted_pids.insert(pid);
-                ops.emplace(ss::make_shared(abort_op{
-                  tx_op_ctx{_data_gen, stm, log, pid, term}, weight2}));
+                ops.emplace(
+                  ss::make_shared(
+                    abort_op{
+                      tx_op_ctx{_data_gen, stm, log, pid, term}, weight2}));
             }
         }
 
         // Sprinkle log rolls randomly.
         for ([[maybe_unused]] auto _ : boost::irange(s._num_rolls)) {
-            ops.emplace(ss::make_shared(roll_op{
-              tx_op_ctx{_data_gen, stm, log, {}},
-              random_generators::get_int(1, num_ops)}));
+            ops.emplace(
+              ss::make_shared(
+                roll_op{
+                  tx_op_ctx{_data_gen, stm, log, {}},
+                  random_generators::get_int(1, num_ops)}));
         }
 
         //----- Step 2: Execute ops
@@ -256,8 +265,12 @@ public:
           : tx_op(std::move(ctx), weight) {}
 
         ss::future<> execute() override {
-            RPTEST_REQUIRE_CORO(co_await _ctx._stm->begin_tx(
-              _ctx._pid, model::tx_seq{0}, tx_timeout, model::partition_id(0)));
+            RPTEST_REQUIRE_CORO(
+              co_await _ctx._stm->begin_tx(
+                _ctx._pid,
+                model::tx_seq{0},
+                tx_timeout,
+                model::partition_id(0)));
         }
 
         tx_op_type type() override { return tx_op_type::begin; }

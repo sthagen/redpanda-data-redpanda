@@ -376,12 +376,13 @@ static cloud_storage_clients::s3_configuration transport_configuration() {
 static ss::lw_shared_ptr<cloud_roles::apply_credentials>
 make_credentials(const cloud_storage_clients::s3_configuration& cfg) {
     return ss::make_lw_shared(
-      cloud_roles::make_credentials_applier(cloud_roles::aws_credentials{
-        cfg.access_key.value(),
-        cfg.secret_key.value(),
-        std::nullopt,
-        cfg.region,
-        cloud_roles::aws_service_name{"s3"}}));
+      cloud_roles::make_credentials_applier(
+        cloud_roles::aws_credentials{
+          cfg.access_key.value(),
+          cfg.secret_key.value(),
+          std::nullopt,
+          cfg.region,
+          cloud_roles::aws_service_name{"s3"}}));
 }
 
 /// Create server and client, server is initialized with default

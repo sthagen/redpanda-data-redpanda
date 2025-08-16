@@ -78,8 +78,9 @@ time_transform_visitor<DurationT>::operator()(const primitive_value& v) {
           std::get<timestamptz_value>(v).val);
     }
 
-    throw std::invalid_argument(fmt::format(
-      "day_transform_visitor not implemented for primitive value {}", v));
+    throw std::invalid_argument(
+      fmt::format(
+        "day_transform_visitor not implemented for primitive value {}", v));
 }
 template int32_t
 time_transform_visitor<std::chrono::days>::operator()(const primitive_value& v);

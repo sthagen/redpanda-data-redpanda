@@ -121,10 +121,11 @@ TEST(RecordBatchBuilderTest, serialize_deserialize_then_cmp) {
               random_generators::gen_alphanum_string(32),
               random_generators::gen_alphanum_string(32));
         }
-        sample_data.push_back(detail::sample_type{
-          .key = random_generators::gen_alphanum_string(32),
-          .value = random_generators::gen_alphanum_string(32),
-          .kv_pairs = std::move(kv_pairs)});
+        sample_data.push_back(
+          detail::sample_type{
+            .key = random_generators::gen_alphanum_string(32),
+            .value = random_generators::gen_alphanum_string(32),
+            .kv_pairs = std::move(kv_pairs)});
     }
 
     /// 2. Serialize to record_batch

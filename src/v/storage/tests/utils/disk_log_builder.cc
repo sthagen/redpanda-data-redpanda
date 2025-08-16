@@ -51,8 +51,9 @@ ss::future<> disk_log_builder::add_random_batch(
   should_flush_after flush,
   std::optional<model::timestamp> base_ts) {
     auto buff = chunked_circular_buffer<model::record_batch>();
-    buff.push_back(model::test::make_random_batch(
-      offset, num_records, bool(comp), bt, std::nullopt, now(base_ts)));
+    buff.push_back(
+      model::test::make_random_batch(
+        offset, num_records, bool(comp), bt, std::nullopt, now(base_ts)));
     advance_time(buff.back());
     return write(std::move(buff), config, flush);
 }

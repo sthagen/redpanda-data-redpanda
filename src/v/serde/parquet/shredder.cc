@@ -72,9 +72,11 @@ private:
                 element, std::move(list), levels);
           },
           [element](group_value) {
-              return ss::make_exception_future(std::runtime_error(fmt::format(
-                "unexpected struct value for leaf schema element {}",
-                element->name())));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  fmt::format(
+                    "unexpected struct value for leaf schema element {}",
+                    element->name())));
           },
           [this, element, levels](null_value v) {
               // If this is the level in the tree that is turning NULL that is
@@ -83,8 +85,9 @@ private:
               if (
                 element->repetition_type == field_repetition_type::required
                 && element->max_definition_level == levels.definition_level) {
-                  return ss::make_exception_future(std::runtime_error(
-                    "detected null value for required leaf node"));
+                  return ss::make_exception_future(
+                    std::runtime_error(
+                      "detected null value for required leaf node"));
               }
               return _callback({
                 .schema_element_position = element->position,
@@ -158,21 +161,26 @@ private:
               // invalid, this is a required node, however parent nodes could be
               // propagating a null value, which is valid.
               if (element->max_definition_level == levels.definition_level) {
-                  return ss::make_exception_future(std::runtime_error(
-                    "detected null value for required group node"));
+                  return ss::make_exception_future(
+                    std::runtime_error(
+                      "detected null value for required group node"));
               }
               return process_optional_null_group(element, levels);
           },
           [element](repeated_value) -> ss::future<> {
-              return ss::make_exception_future(std::runtime_error(fmt::format(
-                "unexpected list value for non-repeated schema element {}",
-                element->name())));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  fmt::format(
+                    "unexpected list value for non-repeated schema element {}",
+                    element->name())));
           },
           [element](auto v) -> ss::future<> {
-              return ss::make_exception_future(std::runtime_error(fmt::format(
-                "unexpected leaf value for required schema element {}: {}",
-                element->name(),
-                value(std::move(v)))));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  fmt::format(
+                    "unexpected leaf value for required schema element {}: {}",
+                    element->name(),
+                    value(std::move(v)))));
           });
     }
 
@@ -187,15 +195,19 @@ private:
               return process_repeated_value(element, levels, std::move(list));
           },
           [element](group_value) {
-              return ss::make_exception_future(std::runtime_error(fmt::format(
-                "unexpected struct value for repeated schema element {}",
-                element->name())));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  fmt::format(
+                    "unexpected struct value for repeated schema element {}",
+                    element->name())));
           },
           [element](auto v) {
-              return ss::make_exception_future(std::runtime_error(fmt::format(
-                "unexpected leaf value for repeated schema element {}: {}",
-                element->name(),
-                value(std::move(v)))));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  fmt::format(
+                    "unexpected leaf value for repeated schema element {}: {}",
+                    element->name(),
+                    value(std::move(v)))));
           });
     }
 
@@ -211,15 +223,19 @@ private:
               return process_optional_null_group(element, levels);
           },
           [element](repeated_value) -> ss::future<> {
-              return ss::make_exception_future(std::runtime_error(fmt::format(
-                "unexpected list value for non-repeated schema element {}",
-                element->name())));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  fmt::format(
+                    "unexpected list value for non-repeated schema element {}",
+                    element->name())));
           },
           [element](auto v) -> ss::future<> {
-              return ss::make_exception_future(std::runtime_error(fmt::format(
-                "unexpected leaf value for optional schema element {}: {}",
-                element->name(),
-                value(std::move(v)))));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  fmt::format(
+                    "unexpected leaf value for optional schema element {}: {}",
+                    element->name(),
+                    value(std::move(v)))));
           });
     }
 
@@ -273,12 +289,14 @@ private:
       group_value group) {
         if (group.size() != element->children.size()) {
             co_return co_await ss::make_exception_future(
-              std::runtime_error(fmt::format(
-                "schema/struct mismatch, schema had {} children, struct had {} "
-                "fields. At column {}",
-                element->children.size(),
-                group.size(),
-                element->position)));
+              std::runtime_error(
+                fmt::format(
+                  "schema/struct mismatch, schema had {} children, struct had "
+                  "{} "
+                  "fields. At column {}",
+                  element->children.size(),
+                  group.size(),
+                  element->position)));
         }
         // Levels don't change for require elements because they always have
         // to be there so no additional bits need to be tracked (they'd be

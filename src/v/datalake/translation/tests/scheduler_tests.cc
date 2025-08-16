@@ -69,18 +69,22 @@ TEST_F_CORO(many_concurrent_translators, test_concurrent_add_remove) {
       [this] {
           auto running = _scheduler->running_translators();
           if (running > max_concurrent_translators) {
-              return ss::make_exception_future(std::runtime_error(ssx::sformat(
-                "concurrent translators count {} exceeded limit {}",
-                running,
-                max_concurrent_translators)));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  ssx::sformat(
+                    "concurrent translators count {} exceeded limit {}",
+                    running,
+                    max_concurrent_translators)));
           }
           auto allocated_memory
             = _scheduler->reservations()->allocated_memory();
           if (allocated_memory > total_memory) {
-              return ss::make_exception_future(std::runtime_error(ssx::sformat(
-                "Memory oversubscribed. allocated: {}, total: {}",
-                allocated_memory,
-                total_memory)));
+              return ss::make_exception_future(
+                std::runtime_error(
+                  ssx::sformat(
+                    "Memory oversubscribed. allocated: {}, total: {}",
+                    allocated_memory,
+                    total_memory)));
           }
           return ss::sleep(10ms);
       });

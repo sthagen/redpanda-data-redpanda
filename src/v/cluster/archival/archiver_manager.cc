@@ -971,8 +971,9 @@ archiver_manager::archiver_manager(
   ss::sharded<cloud_storage::cache>& cache,
   ss::sharded<archival::upload_housekeeping_service>& upload_housekeeping,
   ss::lw_shared_ptr<const configuration> config)
-  : _impl(std::make_unique<impl>(
-      node_id, pm, gm, api, cache, upload_housekeeping, config)) {}
+  : _impl(
+      std::make_unique<impl>(
+        node_id, pm, gm, api, cache, upload_housekeeping, config)) {}
 
 archiver_manager::~archiver_manager() {}
 

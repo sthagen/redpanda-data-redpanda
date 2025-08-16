@@ -41,16 +41,18 @@ BOOST_AUTO_TEST_CASE(test_with_custom_assignments) {
       .num_partitions = -1,
       .replication_factor = -1};
 
-    custom_assignments.assignments.push_back(creatable_replica_assignment{
-      .partition_index = model::partition_id(0),
-      .broker_ids = {model::node_id(1), model::node_id(2), model::node_id(3)},
-    });
+    custom_assignments.assignments.push_back(
+      creatable_replica_assignment{
+        .partition_index = model::partition_id(0),
+        .broker_ids = {model::node_id(1), model::node_id(2), model::node_id(3)},
+      });
 
-    custom_assignments.assignments.push_back(creatable_replica_assignment{
-      .partition_index = model::partition_id(1),
-      .broker_ids
-      = {model::node_id(10), model::node_id(20), model::node_id(30)},
-    });
+    custom_assignments.assignments.push_back(
+      creatable_replica_assignment{
+        .partition_index = model::partition_id(1),
+        .broker_ids
+        = {model::node_id(10), model::node_id(20), model::node_id(30)},
+      });
 
     auto cluster_tp_config = to_cluster_type(custom_assignments);
     BOOST_REQUIRE_EQUAL(

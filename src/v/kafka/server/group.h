@@ -843,8 +843,9 @@ private:
         cluster::simple_batch_builder builder(
           model::record_batch_type::raft_data, model::offset(0));
 
-        auto kv = group_metadata_serializer::to_kv(group_metadata_kv{
-          .key = std::move(key), .value = std::move(metadata)});
+        auto kv = group_metadata_serializer::to_kv(
+          group_metadata_kv{
+            .key = std::move(key), .value = std::move(metadata)});
         builder.add_raw_kv(std::move(kv.key), std::move(kv.value));
 
         return std::move(builder).build();

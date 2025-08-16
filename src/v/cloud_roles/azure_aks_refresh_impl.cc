@@ -29,11 +29,12 @@ namespace {
 ss::sstring load_from_env(const char* env_var) {
     auto env_value = std::getenv(env_var);
     if (!env_value) {
-        throw std::runtime_error(fmt::format(
-          "environment variable {} is not set, the Azure AKS client cannot "
-          "function "
-          "without this.",
-          env_var));
+        throw std::runtime_error(
+          fmt::format(
+            "environment variable {} is not set, the Azure AKS client cannot "
+            "function "
+            "without this.",
+            env_var));
     }
     return env_value;
 }

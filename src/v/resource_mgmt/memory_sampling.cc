@@ -128,12 +128,13 @@ memory_sampling::get_oom_diagnostics_callback() {
         const size_t top_n = std::min(size_t(10), num_sites);
         top_n_allocation_sites(allocation_sites, top_n);
 
-        writer("Alloc sites legend:\n"
-               "    size: the estimated total size of all allocations at this "
-               "stack (i.e., adjusted up from observed samples)\n"
-               "    count: the number of live samples at this "
-               "stack (i.e., NOT adjusted up from observed samples)\n"
-               "    at: the backtrace for this allocation site\n");
+        writer(
+          "Alloc sites legend:\n"
+          "    size: the estimated total size of all allocations at this "
+          "stack (i.e., adjusted up from observed samples)\n"
+          "    count: the number of live samples at this "
+          "stack (i.e., NOT adjusted up from observed samples)\n"
+          "    at: the backtrace for this allocation site\n");
         writer(diagnostics_header());
         writer("\n");
         if (oom_recorder.has_value()) {
@@ -149,8 +150,9 @@ memory_sampling::get_oom_diagnostics_callback() {
                                    allocation_sites[i])
                                    .size;
 
-            writer(std::string_view(
-              format_buf.data(), std::min(bytes_written, format_buf.size())));
+            writer(
+              std::string_view(
+                format_buf.data(), std::min(bytes_written, format_buf.size())));
             if (oom_recorder.has_value()) {
                 (*oom_recorder)(std::string_view(
                   format_buf.data(),

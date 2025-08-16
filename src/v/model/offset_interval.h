@@ -40,11 +40,12 @@ public:
     checked(model::offset min, model::offset max) {
         auto ret = optional(min, max);
         if (!ret.has_value()) {
-            throw std::invalid_argument(fmt::format(
-              "Invalid arguments for constructing a non-empty bounded offset "
-              "interval: min({}) <= max({})",
-              min,
-              max));
+            throw std::invalid_argument(
+              fmt::format(
+                "Invalid arguments for constructing a non-empty bounded offset "
+                "interval: min({}) <= max({})",
+                min,
+                max));
         }
 
         return ret.value();

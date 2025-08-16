@@ -345,15 +345,16 @@ ss::future<> run_workload(
         }
         return log->apply_segment_ms().then([&] {
             return log
-              ->housekeeping(storage::housekeeping_config{
-                model::timestamp::max(),
-                std::nullopt,
-                log->stm_manager()->max_removable_local_log_offset(),
-                std::nullopt,
-                std::nullopt,
-                std::chrono::milliseconds{0},
-                dummy_as,
-              })
+              ->housekeeping(
+                storage::housekeeping_config{
+                  model::timestamp::max(),
+                  std::nullopt,
+                  log->stm_manager()->max_removable_local_log_offset(),
+                  std::nullopt,
+                  std::nullopt,
+                  std::chrono::milliseconds{0},
+                  dummy_as,
+                })
               .handle_exception_type(
                 [](const storage::segment_closed_exception&) {});
         });

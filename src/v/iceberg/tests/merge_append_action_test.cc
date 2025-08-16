@@ -99,12 +99,13 @@ public:
               .record_count = records_per_file,
               .file_size_bytes = 1_KiB,
             };
-            ret.emplace_back(file_to_append{
-              .file = std::move(file),
-              .schema_id = (schema_id ? *schema_id : md.current_schema_id),
-              .partition_spec_id
-              = (partition_spec_id ? *partition_spec_id : md.default_spec_id),
-            });
+            ret.emplace_back(
+              file_to_append{
+                .file = std::move(file),
+                .schema_id = (schema_id ? *schema_id : md.current_schema_id),
+                .partition_spec_id
+                = (partition_spec_id ? *partition_spec_id : md.default_spec_id),
+              });
         }
         ret[0].file.record_count += leftover_records;
         return ret;
@@ -318,10 +319,11 @@ TEST_F(MergeAppendActionTest, TestMergeAfterTypePromotion) {
           orig_type, new_type, tx.table().partition_specs.back());
         ASSERT_FALSE(compat_res.has_error());
 
-        auto res = tx.set_schema(iceberg::schema{
-                                   .schema_struct = std::move(new_type),
-                                   .identifier_field_ids = {},
-                                 })
+        auto res = tx.set_schema(
+                       iceberg::schema{
+                         .schema_struct = std::move(new_type),
+                         .identifier_field_ids = {},
+                       })
                      .get();
         ASSERT_FALSE(res.has_error()) << res.error();
     }
@@ -661,11 +663,12 @@ TEST_F(MergeAppendActionTest, TestMultiplePartitionSpecs) {
     {
         // Add second spec
         auto new_spec = unresolved_partition_spec{};
-        new_spec.fields.push_back(unresolved_partition_spec::field{
-          .source_name = {"baz"},
-          .transform = identity_transform{},
-          .name = "baz",
-        });
+        new_spec.fields.push_back(
+          unresolved_partition_spec::field{
+            .source_name = {"baz"},
+            .transform = identity_transform{},
+            .name = "baz",
+          });
         auto res = tx.set_partition_spec(std::move(new_spec)).get();
         ASSERT_FALSE(res.has_error()) << res.error();
         ASSERT_EQ(tx.table().partition_specs.size(), 2);
@@ -681,11 +684,12 @@ TEST_F(MergeAppendActionTest, TestMultiplePartitionSpecs) {
     {
         // Add third spec
         auto new_spec = unresolved_partition_spec{};
-        new_spec.fields.push_back(unresolved_partition_spec::field{
-          .source_name = {"foo"},
-          .transform = identity_transform{},
-          .name = "foo",
-        });
+        new_spec.fields.push_back(
+          unresolved_partition_spec::field{
+            .source_name = {"foo"},
+            .transform = identity_transform{},
+            .name = "foo",
+          });
         auto res = tx.set_partition_spec(std::move(new_spec)).get();
         ASSERT_FALSE(res.has_error()) << res.error();
         ASSERT_EQ(tx.table().partition_specs.size(), 3);
@@ -745,12 +749,13 @@ TEST_F(MergeAppendActionTest, TestMergeWithMultiplePartitionSpecs) {
         // Add new partition spec and make it default.
         auto table = std::move(tx).release_metadata();
         auto new_spec = partition_spec{.spec_id = partition_spec::id_t{1}};
-        new_spec.fields.push_back(partition_field{
-          .source_id = nested_field::id_t{3}, // baz
-          .field_id = partition_field::id_t{1001},
-          .name = "baz",
-          .transform = identity_transform{},
-        });
+        new_spec.fields.push_back(
+          partition_field{
+            .source_id = nested_field::id_t{3}, // baz
+            .field_id = partition_field::id_t{1001},
+            .name = "baz",
+            .transform = identity_transform{},
+          });
         table.partition_specs.push_back(std::move(new_spec));
         table.default_spec_id = table.partition_specs.back().spec_id;
         tx = transaction(std::move(table));
@@ -768,10 +773,11 @@ TEST_F(MergeAppendActionTest, TestMergeWithMultiplePartitionSpecs) {
           orig_type, new_type, tx.table().partition_specs.back());
         ASSERT_FALSE(compat_res.has_error());
 
-        auto res = tx.set_schema(iceberg::schema{
-                                   .schema_struct = std::move(new_type),
-                                   .identifier_field_ids = {},
-                                 })
+        auto res = tx.set_schema(
+                       iceberg::schema{
+                         .schema_struct = std::move(new_type),
+                         .identifier_field_ids = {},
+                       })
                      .get();
         ASSERT_FALSE(res.has_error()) << res.error();
     }

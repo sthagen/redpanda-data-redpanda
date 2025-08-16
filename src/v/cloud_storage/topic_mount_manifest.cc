@@ -66,8 +66,8 @@ void topic_mount_manifest::from_iobuf(iobuf in) {
 ///
 /// \return asynchronous input_stream with the serialized json
 ss::future<iobuf> topic_mount_manifest::serialize_buf() const {
-    return ss::make_ready_future<iobuf>(
-      serde::to_iobuf(topic_mount_manifest_state{
+    return ss::make_ready_future<iobuf>(serde::to_iobuf(
+      topic_mount_manifest_state{
         .label = _source_label, .tp_ns = _tp_ns, .rev = _rev}));
 }
 

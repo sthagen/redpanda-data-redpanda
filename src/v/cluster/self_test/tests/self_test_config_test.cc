@@ -44,11 +44,12 @@ BOOST_AUTO_TEST_CASE(test_diskcheck_validation) {
       cft::diskcheck_option_out_of_range);
 
     BOOST_CHECK_NO_THROW(
-      cft::diskcheck::validate_options(cluster::diskcheck_opts{
-        .skip_write = true,
-        .skip_read = false,
-        .duration = 5000ms,
-        .parallelism = 50}));
+      cft::diskcheck::validate_options(
+        cluster::diskcheck_opts{
+          .skip_write = true,
+          .skip_read = false,
+          .duration = 5000ms,
+          .parallelism = 50}));
 }
 
 BOOST_AUTO_TEST_CASE(test_netcheck_validation) {
@@ -86,11 +87,13 @@ BOOST_AUTO_TEST_CASE(test_netcheck_validation) {
         cluster::netcheck_opts{.peers = peers, .duration = 50min}),
       cft::netcheck_option_out_of_range);
 
-    BOOST_CHECK_NO_THROW(cft::netcheck::validate_options(cluster::netcheck_opts{
-      .peers = peers,
-      .request_size = 1500,
-      .duration = 5000ms,
-      .parallelism = 25}));
+    BOOST_CHECK_NO_THROW(
+      cft::netcheck::validate_options(
+        cluster::netcheck_opts{
+          .peers = peers,
+          .request_size = 1500,
+          .duration = 5000ms,
+          .parallelism = 25}));
 }
 
 static const std::string sample_self_test_config = R"(

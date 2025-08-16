@@ -47,14 +47,15 @@ struct tx_range_manifest_json_handler {
             if (
               compat_version
               > static_cast<int>(tx_range_manifest_version::current_version)) {
-                throw std::runtime_error(fmt::format(
-                  "Can't deserialize tx manifest, supported version {}, "
-                  "manifest "
-                  "version {}, compatible version {}",
-                  static_cast<int32_t>(
-                    tx_range_manifest_version::current_version),
-                  version,
-                  compat_version));
+                throw std::runtime_error(
+                  fmt::format(
+                    "Can't deserialize tx manifest, supported version {}, "
+                    "manifest "
+                    "version {}, compatible version {}",
+                    static_cast<int32_t>(
+                      tx_range_manifest_version::current_version),
+                    version,
+                    compat_version));
             }
             _manifest_keys |= static_cast<uint8_t>(
               manifest_keys::compat_version);

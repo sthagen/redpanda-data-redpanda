@@ -51,8 +51,9 @@ result<reader_outcome, errc> batch_collector::add_batch(
 
     cur_buffer_size_ += batch_hdr.size_bytes;
     batch_hdr.ctx.term = cur_term_;
-    batches_.emplace_back(model::record_batch(
-      batch_hdr, std::move(records), model::record_batch::tag_ctor_ng{}));
+    batches_.emplace_back(
+      model::record_batch(
+        batch_hdr, std::move(records), model::record_batch::tag_ctor_ng{}));
 
     // Signal to the caller that the buffer is full, but still accept the batch
     // since we already have the header and records available here.

@@ -107,32 +107,33 @@ admin_server::list_transforms(std::unique_ptr<ss::http::request>) {
     }
     auto report = co_await _transform_service->local().list_transforms();
 
-    co_return ss::json::json_return_type(ss::json::stream_range_as_array(
-      std::move(report.transforms), [](const auto& entry) {
-          const model::transform_report& t = entry.second;
-          ss::httpd::transform_json::transform_metadata meta;
-          meta.name = t.metadata.name();
-          meta.input_topic = t.metadata.input_topic.tp();
-          for (const auto& output_topic : t.metadata.output_topics) {
-              meta.output_topics.push(output_topic.tp());
-          }
-          for (const auto& [k, v] : t.metadata.environment) {
-              ss::httpd::transform_json::environment_variable var;
-              var.key = k;
-              var.value = v;
-              meta.environment.push(var);
-          }
-          for (const auto& [_, processor] : t.processors) {
-              ss::httpd::transform_json::partition_transform_status s;
-              s.partition = processor.id();
-              s.node_id = processor.node();
-              s.status = convert_transform_status(processor.status);
-              s.lag = processor.lag;
-              meta.status.push(s);
-          }
-          meta.compression = t.metadata.compression_mode;
-          return meta;
-      }));
+    co_return ss::json::json_return_type(
+      ss::json::stream_range_as_array(
+        std::move(report.transforms), [](const auto& entry) {
+            const model::transform_report& t = entry.second;
+            ss::httpd::transform_json::transform_metadata meta;
+            meta.name = t.metadata.name();
+            meta.input_topic = t.metadata.input_topic.tp();
+            for (const auto& output_topic : t.metadata.output_topics) {
+                meta.output_topics.push(output_topic.tp());
+            }
+            for (const auto& [k, v] : t.metadata.environment) {
+                ss::httpd::transform_json::environment_variable var;
+                var.key = k;
+                var.value = v;
+                meta.environment.push(var);
+            }
+            for (const auto& [_, processor] : t.processors) {
+                ss::httpd::transform_json::partition_transform_status s;
+                s.partition = processor.id();
+                s.node_id = processor.node();
+                s.status = convert_transform_status(processor.status);
+                s.lag = processor.lag;
+                meta.status.push(s);
+            }
+            meta.compression = t.metadata.compression_mode;
+            return meta;
+        }));
 }
 
 namespace {
@@ -284,8 +285,9 @@ admin_server::deploy_transform(std::unique_ptr<ss::http::request> req) {
             using tp = model::timestamp_clock::time_point;
             using dur = model::timestamp_clock::duration;
             if (value >= dur::max() / 1ms) {
-                throw ss::httpd::bad_request_exception(fmt::format(
-                  "Bad offset: Timestamp value out of range ({})", value));
+                throw ss::httpd::bad_request_exception(
+                  fmt::format(
+                    "Bad offset: Timestamp value out of range ({})", value));
             }
             offset_opts.position = model::to_timestamp(tp{value * 1ms});
         } else if (format == "from_start") {
@@ -328,15 +330,16 @@ admin_server::list_committed_offsets(std::unique_ptr<ss::http::request> req) {
         co_return ss::json::json_void();
     }
 
-    co_return ss::json::json_return_type(ss::json::stream_range_as_array(
-      lw_shared_container(std::move(result).value()),
-      [](const model::transform_committed_offset& committed) {
-          ss::httpd::transform_json::committed_offset response;
-          response.transform_name = committed.name();
-          response.offset = committed.offset();
-          response.partition = committed.partition();
-          return response;
-      }));
+    co_return ss::json::json_return_type(
+      ss::json::stream_range_as_array(
+        lw_shared_container(std::move(result).value()),
+        [](const model::transform_committed_offset& committed) {
+            ss::httpd::transform_json::committed_offset response;
+            response.transform_name = committed.name();
+            response.offset = committed.offset();
+            response.partition = committed.partition();
+            return response;
+        }));
 }
 
 ss::future<ss::json::json_return_type>

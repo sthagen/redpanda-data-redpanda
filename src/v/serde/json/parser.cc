@@ -297,8 +297,10 @@ public:
         case token::error:
         case token::end_object:
         case token::end_array:
-            throw std::runtime_error(fmt::format(
-              "skip_value called with unexpected token: {}", *_current_token));
+            throw std::runtime_error(
+              fmt::format(
+                "skip_value called with unexpected token: {}",
+                *_current_token));
         }
 
         dassert(false, "Unreachable. All cases should be handled.");

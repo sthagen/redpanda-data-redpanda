@@ -44,8 +44,9 @@ range_batch_consumer::operator()(model::record_batch batch) {
         }
     }
     if (add_term) {
-        _range.info.terms.insert(std::make_pair(
-          batch.term(), model::offset_cast(batch.base_offset())));
+        _range.info.terms.insert(
+          std::make_pair(
+            batch.term(), model::offset_cast(batch.base_offset())));
     }
 
     auto data = serde::to_iobuf(std::move(batch));

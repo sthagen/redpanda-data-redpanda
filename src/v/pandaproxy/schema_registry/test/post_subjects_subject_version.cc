@@ -225,8 +225,9 @@ FIXTURE_TEST(
         BOOST_REQUIRE_EQUAL(
           res.headers.result(),
           boost::beast::http::status::unprocessable_entity);
-        BOOST_REQUIRE(std::string_view(res.body).starts_with(
-          R"({"error_code":422,"message":")"));
+        BOOST_REQUIRE(
+          std::string_view(res.body).starts_with(
+            R"({"error_code":422,"message":")"));
     }
 }
 
@@ -249,8 +250,9 @@ FIXTURE_TEST(
         BOOST_REQUIRE_EQUAL(
           res.headers.result(),
           boost::beast::http::status::unprocessable_entity);
-        BOOST_REQUIRE(std::string_view(res.body).starts_with(
-          R"({"error_code":422,"message":")"));
+        BOOST_REQUIRE(
+          std::string_view(res.body).starts_with(
+            R"({"error_code":422,"message":")"));
     }
 }
 
@@ -385,8 +387,9 @@ FIXTURE_TEST(
       ppj::rjson_serialize_str(simple_req_id_invalid));
     BOOST_REQUIRE_EQUAL(
       res.headers.result(), boost::beast::http::status::unprocessable_entity);
-    BOOST_REQUIRE(std::string_view(res.body).starts_with(
-      R"({"error_code":422,"message":")"));
+    BOOST_REQUIRE(
+      std::string_view(res.body).starts_with(
+        R"({"error_code":422,"message":")"));
 }
 
 FIXTURE_TEST(

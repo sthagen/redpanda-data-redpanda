@@ -1690,8 +1690,9 @@ group_manager::offset_delete(offset_delete_request&& r) {
         if (!deleted_offsets_set.contains(tp)) {
             error = kafka::error_code::group_subscribed_to_topic;
         }
-        response_data[tp.topic].emplace_back(offset_delete_response_partition{
-          .partition_index = tp.partition, .error_code = error});
+        response_data[tp.topic].emplace_back(
+          offset_delete_response_partition{
+            .partition_index = tp.partition, .error_code = error});
     }
 
     offset_delete_response response(kafka::error_code::none);
@@ -1707,8 +1708,9 @@ group_manager::list_groups(const list_groups_filter_data& filter_data) const {
     auto loading = std::any_of(
       _partitions.cbegin(),
       _partitions.cend(),
-      [](const std::
-           pair<const model::ntp, ss::lw_shared_ptr<attached_partition>>& p) {
+      [](
+        const std::
+          pair<const model::ntp, ss::lw_shared_ptr<attached_partition>>& p) {
           return p.second->loading;
       });
 
@@ -1843,19 +1845,21 @@ ss::future<chunked_vector<deletable_group_result>> group_manager::delete_groups(
         auto error = validate_group_status(
           group_info.first, group_info.second, delete_groups_api::key, false);
         if (error != error_code::none) {
-            results.push_back(deletable_group_result{
-              .group_id = std::move(group_info.second),
-              .error_code = error_code::not_coordinator,
-            });
+            results.push_back(
+              deletable_group_result{
+                .group_id = std::move(group_info.second),
+                .error_code = error_code::not_coordinator,
+              });
             continue;
         }
 
         auto group = get_group(group_info.second);
         if (!group) {
-            results.push_back(deletable_group_result{
-              .group_id = std::move(group_info.second),
-              .error_code = error_code::group_id_not_found,
-            });
+            results.push_back(
+              deletable_group_result{
+                .group_id = std::move(group_info.second),
+                .error_code = error_code::group_id_not_found,
+              });
             continue;
         }
 
@@ -1867,10 +1871,11 @@ ss::future<chunked_vector<deletable_group_result>> group_manager::delete_groups(
             group->pre_shutdown();
             _groups.erase(group_info.second);
         }
-        results.push_back(deletable_group_result{
-          .group_id = std::move(group_info.second),
-          .error_code = error,
-        });
+        results.push_back(
+          deletable_group_result{
+            .group_id = std::move(group_info.second),
+            .error_code = error,
+          });
     }
 
     _groups.rehash(0);

@@ -1016,11 +1016,12 @@ SEASTAR_THREAD_TEST_CASE(test_upload_aligned_to_non_existent_offset) {
     for (; second != spec.segment_starts.end(); ++first, ++second) {
         b | storage::add_segment(*first);
         for (auto curr_offset = *first; curr_offset < *second; ++curr_offset) {
-            b.add_random_batch(model::test::record_batch_spec{
-                                 .offset = model::offset{curr_offset},
-                                 .count = 1,
-                                 .max_key_cardinality = 1,
-                               })
+            b.add_random_batch(
+               model::test::record_batch_spec{
+                 .offset = model::offset{curr_offset},
+                 .count = 1,
+                 .max_key_cardinality = 1,
+               })
               .get();
         }
         auto seg = b.get_log_segments().back();
@@ -2085,8 +2086,9 @@ SEASTAR_THREAD_TEST_CASE(test_new_segment_upload_fuzz) {
 
     // Consume the log to find all batch boundaries
     auto reader = b.get_disk_log_impl()
-                    .make_reader(storage::local_log_reader_config(
-                      model::offset{0}, model::offset{last_offset}))
+                    .make_reader(
+                      storage::local_log_reader_config(
+                        model::offset{0}, model::offset{last_offset}))
                     .get();
 
     vlog(testlog.info, "Consuming from the log 0 - {}", last_offset);

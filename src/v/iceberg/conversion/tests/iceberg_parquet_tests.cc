@@ -20,76 +20,90 @@ iceberg::struct_type primitive_types() {
     iceberg::struct_type primitives;
     // all possible iceberg primitives
 
-    primitives.fields.push_back(iceberg::nested_field::create(
-      0,
-      "boolean_type_field_0",
-      iceberg::field_required::yes,
-      iceberg::boolean_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      1,
-      "int_type_field_1",
-      iceberg::field_required::yes,
-      iceberg::int_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      2,
-      "long_type_field_2",
-      iceberg::field_required::yes,
-      iceberg::long_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      3,
-      "float_type_field_3",
-      iceberg::field_required::yes,
-      iceberg::float_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      4,
-      "double_type_field_4",
-      iceberg::field_required::yes,
-      iceberg::double_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      5,
-      "decimal_type_field_5",
-      iceberg::field_required::yes,
-      iceberg::decimal_type{.precision = 10, .scale = 2}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      6,
-      "date_type_field_6",
-      iceberg::field_required::yes,
-      iceberg::date_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      7,
-      "time_type_field_7",
-      iceberg::field_required::yes,
-      iceberg::time_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      8,
-      "timestamp_type_field_8",
-      iceberg::field_required::yes,
-      iceberg::timestamp_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      9,
-      "timestamptz_type_field_9",
-      iceberg::field_required::yes,
-      iceberg::timestamptz_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      10,
-      "string_type_field_10",
-      iceberg::field_required::yes,
-      iceberg::string_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      11,
-      "uuid_type_field_11",
-      iceberg::field_required::yes,
-      iceberg::uuid_type{}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      12,
-      "fixed_type_field_12",
-      iceberg::field_required::yes,
-      iceberg::fixed_type{.length = 12}));
-    primitives.fields.push_back(iceberg::nested_field::create(
-      13,
-      "binary_type_field_13",
-      iceberg::field_required::yes,
-      iceberg::binary_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        0,
+        "boolean_type_field_0",
+        iceberg::field_required::yes,
+        iceberg::boolean_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        1,
+        "int_type_field_1",
+        iceberg::field_required::yes,
+        iceberg::int_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        2,
+        "long_type_field_2",
+        iceberg::field_required::yes,
+        iceberg::long_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        3,
+        "float_type_field_3",
+        iceberg::field_required::yes,
+        iceberg::float_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        4,
+        "double_type_field_4",
+        iceberg::field_required::yes,
+        iceberg::double_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        5,
+        "decimal_type_field_5",
+        iceberg::field_required::yes,
+        iceberg::decimal_type{.precision = 10, .scale = 2}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        6,
+        "date_type_field_6",
+        iceberg::field_required::yes,
+        iceberg::date_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        7,
+        "time_type_field_7",
+        iceberg::field_required::yes,
+        iceberg::time_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        8,
+        "timestamp_type_field_8",
+        iceberg::field_required::yes,
+        iceberg::timestamp_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        9,
+        "timestamptz_type_field_9",
+        iceberg::field_required::yes,
+        iceberg::timestamptz_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        10,
+        "string_type_field_10",
+        iceberg::field_required::yes,
+        iceberg::string_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        11,
+        "uuid_type_field_11",
+        iceberg::field_required::yes,
+        iceberg::uuid_type{}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        12,
+        "fixed_type_field_12",
+        iceberg::field_required::yes,
+        iceberg::fixed_type{.length = 12}));
+    primitives.fields.push_back(
+      iceberg::nested_field::create(
+        13,
+        "binary_type_field_13",
+        iceberg::field_required::yes,
+        iceberg::binary_type{}));
 
     return primitives;
 }
@@ -236,47 +250,51 @@ AssertionResult primitive_schema_matches(
 iceberg::struct_type list_types() {
     iceberg::struct_type lists;
 
-    lists.fields.push_back(iceberg::nested_field::create(
-      0,
-      "required_booleans",
-      iceberg::field_required::yes,
-      iceberg::list_type{
-        .element_field = iceberg::nested_field::create(
-          1,
-          "element_field",
-          iceberg::field_required::yes,
-          iceberg::boolean_type{})}));
-    lists.fields.push_back(iceberg::nested_field::create(
-      1,
-      "optional_longs",
-      iceberg::field_required::yes,
-      iceberg::list_type{
-        .element_field = iceberg::nested_field::create(
-          1,
-          "element_field",
-          iceberg::field_required::no,
-          iceberg::long_type{})}));
-    lists.fields.push_back(iceberg::nested_field::create(
-      2,
-      "optional_top_level_decimals",
-      iceberg::field_required::no,
-      iceberg::list_type{
-        .element_field = iceberg::nested_field::create(
-          1,
-          "element_field",
-          iceberg::field_required::yes,
-          iceberg::decimal_type{.precision = 4, .scale = 12})}));
+    lists.fields.push_back(
+      iceberg::nested_field::create(
+        0,
+        "required_booleans",
+        iceberg::field_required::yes,
+        iceberg::list_type{
+          .element_field = iceberg::nested_field::create(
+            1,
+            "element_field",
+            iceberg::field_required::yes,
+            iceberg::boolean_type{})}));
+    lists.fields.push_back(
+      iceberg::nested_field::create(
+        1,
+        "optional_longs",
+        iceberg::field_required::yes,
+        iceberg::list_type{
+          .element_field = iceberg::nested_field::create(
+            1,
+            "element_field",
+            iceberg::field_required::no,
+            iceberg::long_type{})}));
+    lists.fields.push_back(
+      iceberg::nested_field::create(
+        2,
+        "optional_top_level_decimals",
+        iceberg::field_required::no,
+        iceberg::list_type{
+          .element_field = iceberg::nested_field::create(
+            1,
+            "element_field",
+            iceberg::field_required::yes,
+            iceberg::decimal_type{.precision = 4, .scale = 12})}));
 
-    lists.fields.push_back(iceberg::nested_field::create(
-      3,
-      "structs",
-      iceberg::field_required::yes,
-      iceberg::list_type{
-        .element_field = iceberg::nested_field::create(
-          1,
-          "element_field",
-          iceberg::field_required::yes,
-          primitive_types())}));
+    lists.fields.push_back(
+      iceberg::nested_field::create(
+        3,
+        "structs",
+        iceberg::field_required::yes,
+        iceberg::list_type{
+          .element_field = iceberg::nested_field::create(
+            1,
+            "element_field",
+            iceberg::field_required::yes,
+            primitive_types())}));
     return lists;
 }
 
@@ -374,8 +392,9 @@ iceberg::struct_type map_types() {
           tests::random_bool() ? iceberg::field_required::yes
                                : iceberg::field_required::no,
           iceberg::make_copy(primitive.fields[value_type_idx]->type));
-        maps.fields.push_back(iceberg::nested_field::create(
-          f->id, f->name, f->required, std::move(map)));
+        maps.fields.push_back(
+          iceberg::nested_field::create(
+            f->id, f->name, f->required, std::move(map)));
     }
     auto key_type_idx = random_generators::get_int(primitive.fields.size() - 1);
 
@@ -386,8 +405,9 @@ iceberg::struct_type map_types() {
       iceberg::field_required::yes,
       primitive_types());
 
-    maps.fields.push_back(iceberg::nested_field::create(
-      15, "nested_struct_map", iceberg::field_required::yes, std::move(map)));
+    maps.fields.push_back(
+      iceberg::nested_field::create(
+        15, "nested_struct_map", iceberg::field_required::yes, std::move(map)));
 
     return maps;
 }
@@ -522,11 +542,12 @@ TEST(DatalakeParquetSchema, Maps) {
 TEST(DatalakeParquetSchema, NestedStruct) {
     iceberg::struct_type schema;
     auto nested = primitive_types();
-    schema.fields.push_back(iceberg::nested_field::create(
-      0,
-      "nested_struct",
-      iceberg::field_required::yes,
-      iceberg::make_copy(primitive_types())));
+    schema.fields.push_back(
+      iceberg::nested_field::create(
+        0,
+        "nested_struct",
+        iceberg::field_required::yes,
+        iceberg::make_copy(primitive_types())));
 
     auto parquet_schema = iceberg::schema_to_parquet(schema);
     ASSERT_EQ(parquet_schema.name(), "root");
@@ -859,8 +880,9 @@ TEST(DataParquetValues, TestPrimitiveValues) {
 
     auto& parquet_value = result.value();
 
-    ASSERT_TRUE(std::visit(
-      value_validating_visitor{parquet_value}, std::move(test_value)));
+    ASSERT_TRUE(
+      std::visit(
+        value_validating_visitor{parquet_value}, std::move(test_value)));
 }
 
 TEST(DataParquetValues, TestLists) {
@@ -884,21 +906,24 @@ TEST(DataParquetValues, TestMaps) {
 
 TEST(DataParquetValues, TestNestedStruct) {
     iceberg::struct_type schema;
-    schema.fields.push_back(iceberg::nested_field::create(
-      0,
-      "nested_struct",
-      iceberg::field_required(tests::random_bool()),
-      primitive_types()));
-    schema.fields.push_back(iceberg::nested_field::create(
-      1,
-      "nested_lists",
-      iceberg::field_required(tests::random_bool()),
-      list_types()));
-    schema.fields.push_back(iceberg::nested_field::create(
-      2,
-      "nested_maps",
-      iceberg::field_required(tests::random_bool()),
-      map_types()));
+    schema.fields.push_back(
+      iceberg::nested_field::create(
+        0,
+        "nested_struct",
+        iceberg::field_required(tests::random_bool()),
+        primitive_types()));
+    schema.fields.push_back(
+      iceberg::nested_field::create(
+        1,
+        "nested_lists",
+        iceberg::field_required(tests::random_bool()),
+        list_types()));
+    schema.fields.push_back(
+      iceberg::nested_field::create(
+        2,
+        "nested_maps",
+        iceberg::field_required(tests::random_bool()),
+        map_types()));
     auto schema_field = iceberg::field_type{std::move(schema)};
     auto [result, test_value] = prepare_test_data(
       iceberg::make_copy(schema_field));

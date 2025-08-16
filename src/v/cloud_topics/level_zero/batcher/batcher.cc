@@ -45,9 +45,10 @@ batcher<Clock>::batcher(
   , _bucket(std::move(bucket))
   , _upload_timeout(
       config::shard_local_cfg().cloud_storage_segment_upload_timeout_ms.bind())
-  , _upload_interval(config::shard_local_cfg()
-                       .cloud_storage_upload_loop_initial_backoff_ms
-                       .bind()) // TODO: use different config
+  , _upload_interval(
+      config::shard_local_cfg()
+        .cloud_storage_upload_loop_initial_backoff_ms
+        .bind()) // TODO: use different config
   , _rtc(_as)
   , _logger(cd_log, _rtc)
   , _stage(std::move(stage)) {}

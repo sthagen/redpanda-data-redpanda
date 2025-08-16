@@ -216,8 +216,9 @@ void requests::stm_apply(
     gc_requests_from_older_terms(term);
     result_promise_t ready{};
     ready.set_value(kafka_result{.last_offset = offset});
-    _finished_requests.emplace_back(ss::make_lw_shared<request>(
-      bid.first_seq, bid.last_seq, model::term_id{-1}, std::move(ready)));
+    _finished_requests.emplace_back(
+      ss::make_lw_shared<request>(
+        bid.first_seq, bid.last_seq, model::term_id{-1}, std::move(ready)));
 
     while (_finished_requests.size() > requests_cached_max) {
         _finished_requests.pop_front();
@@ -255,11 +256,12 @@ producer_state::producer_state(
     for (auto& req : snapshot.finished_requests) {
         result_promise_t ready{};
         ready.set_value(kafka_result{req.last_offset});
-        _requests._finished_requests.push_back(ss::make_lw_shared<request>(
-          req.first_sequence,
-          req.last_sequence,
-          model::term_id{-1},
-          std::move(ready)));
+        _requests._finished_requests.push_back(
+          ss::make_lw_shared<request>(
+            req.first_sequence,
+            req.last_sequence,
+            model::term_id{-1},
+            std::move(ready)));
     }
 }
 

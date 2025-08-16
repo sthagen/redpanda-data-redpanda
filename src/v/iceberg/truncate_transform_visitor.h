@@ -21,8 +21,10 @@ struct truncate_transform_visitor {
     value operator()(const binary_value&);
 
     value operator()(const auto& value) {
-        throw std::invalid_argument(fmt::format(
-          "value {} must be of type supported by the bucket transform", value));
+        throw std::invalid_argument(
+          fmt::format(
+            "value {} must be of type supported by the bucket transform",
+            value));
     };
 };
 } // namespace iceberg

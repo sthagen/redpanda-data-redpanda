@@ -34,10 +34,11 @@ avro::GenericDatum base_val_to_avro(const value&, const avro::NodePtr&);
 void maybe_throw_wrong_type(
   const avro::Type& expected, const avro::Type& actual) {
     if (expected != actual) {
-        throw std::invalid_argument(fmt::format(
-          "Expected {} type but got {}",
-          avro::toString(expected),
-          avro::toString(actual)));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected {} type but got {}",
+            avro::toString(expected),
+            avro::toString(actual)));
     }
 }
 
@@ -46,15 +47,17 @@ void maybe_throw_wrong_logical_type(
     if (
       expected.type() != actual.type() || expected.scale() != actual.scale()
       || expected.precision() != actual.precision()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected (type: {}, precision: {}, scale: {}) logical_type but got: "
-          "(type: {}, precision: {}, scale: {})",
-          expected.type(),
-          expected.precision(),
-          expected.scale(),
-          actual.type(),
-          actual.precision(),
-          actual.scale()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected (type: {}, precision: {}, scale: {}) logical_type but "
+            "got: "
+            "(type: {}, precision: {}, scale: {})",
+            expected.type(),
+            expected.precision(),
+            expected.scale(),
+            actual.type(),
+            actual.precision(),
+            actual.scale()));
     }
 }
 
@@ -62,9 +65,10 @@ void maybe_throw_wrong_logical_type(
 void maybe_throw_invalid_schema(
   const avro::NodePtr& actual_schema, const avro::Type& expected_type) {
     if (!actual_schema) {
-        throw std::invalid_argument(fmt::format(
-          "Unexpected null schema, expected {} type!",
-          avro::toString(expected_type)));
+        throw std::invalid_argument(
+          fmt::format(
+            "Unexpected null schema, expected {} type!",
+            avro::toString(expected_type)));
     }
     const auto& actual_type = actual_schema->type();
     maybe_throw_wrong_type(expected_type, actual_type);
@@ -237,9 +241,10 @@ val_to_avro(const std::optional<value>& val, const avro::NodePtr& avro_schema) {
         return avro::GenericDatum(avro_schema, un);
     }
     if (!val.has_value()) {
-        throw std::invalid_argument(fmt::format(
-          "Value is null but expected {} type",
-          avro::toString(avro_schema->type())));
+        throw std::invalid_argument(
+          fmt::format(
+            "Value is null but expected {} type",
+            avro::toString(avro_schema->type())));
     }
     return base_val_to_avro(*val, avro_schema);
 }
@@ -252,12 +257,13 @@ struct_to_avro(const struct_value& v, const avro::NodePtr& avro_schema) {
     avro::GenericDatum datum(avro_schema);
     auto& record = datum.value<avro::GenericRecord>();
     if (record.fieldCount() != v.fields.size()) {
-        throw std::invalid_argument(fmt::format(
-          "Struct value does not match given Avro schema: {} "
-          "fields vs expected {}: {}",
-          v.fields.size(),
-          record.fieldCount(),
-          v));
+        throw std::invalid_argument(
+          fmt::format(
+            "Struct value does not match given Avro schema: {} "
+            "fields vs expected {}: {}",
+            v.fields.size(),
+            record.fieldCount(),
+            v));
     }
     for (size_t i = 0; i < v.fields.size(); i++) {
         const auto& child_val_ptr = v.fields[i];
@@ -321,11 +327,12 @@ struct primitive_value_parsing_visitor {
 
         const auto& v = data_.value<avro::GenericFixed>().value();
         if (v.size() != schema_type.length) {
-            throw std::invalid_argument(fmt::format(
-              "Fixed type length mismatch, schema length: {}, current value "
-              "length: {}",
-              schema_type.length,
-              v.size()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Fixed type length mismatch, schema length: {}, current value "
+                "length: {}",
+                schema_type.length,
+                v.size()));
         }
         iobuf b;
         b.append(v.data(), v.size());
@@ -362,10 +369,11 @@ struct primitive_value_parsing_visitor {
         maybe_throw_wrong_logical_type(data_.logicalType(), lt);
         const auto& v = data_.value<avro::GenericFixed>().value();
         if (v.size() > 16) {
-            throw std::invalid_argument(fmt::format(
-              "decimals with more than 16 bytes are not supported, current "
-              "value size: {}",
-              v.size()));
+            throw std::invalid_argument(
+              fmt::format(
+                "decimals with more than 16 bytes are not supported, current "
+                "value size: {}",
+                v.size()));
         }
         bytes decimal_bytes(bytes::initialized_zero{}, 16);
 
@@ -398,10 +406,11 @@ struct value_parsing_visitor {
         auto v = std::make_unique<struct_value>();
         const auto& record = data_.value<avro::GenericRecord>();
         if (t.fields.size() != record.fieldCount()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected key-value record of size {}: {}",
-              t.fields.size(),
-              record.fieldCount()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected key-value record of size {}: {}",
+                t.fields.size(),
+                record.fieldCount()));
         }
         for (size_t i = 0; i < t.fields.size(); i++) {
             v->fields.emplace_back(val_from_avro(
@@ -417,9 +426,10 @@ struct value_parsing_visitor {
             maybe_throw_wrong_type(d.type(), avro::AVRO_RECORD);
             const auto& kv_record = d.value<avro::GenericRecord>();
             if (kv_record.fieldCount() != 2) {
-                throw std::invalid_argument(fmt::format(
-                  "Expected key-value record of size 2: {}",
-                  kv_record.fieldCount()));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Expected key-value record of size 2: {}",
+                    kv_record.fieldCount()));
             }
             const auto& k_record = kv_record.fieldAt(0);
             const auto& v_record = kv_record.fieldAt(1);
@@ -443,16 +453,18 @@ std::optional<value> val_from_avro(
   field_required required) {
     if (required) {
         if (d.isUnion()) {
-            throw std::invalid_argument(fmt::format(
-              "Unexpected union for required field: {}",
-              avro::toString(d.type())));
+            throw std::invalid_argument(
+              fmt::format(
+                "Unexpected union for required field: {}",
+                avro::toString(d.type())));
         }
         return std::visit(value_parsing_visitor{d}, expected_type);
     }
     if (!d.isUnion()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected union for non-required field: {}",
-          avro::toString(d.type())));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected union for non-required field: {}",
+            avro::toString(d.type())));
     }
     // NOTE: type() on a union unwraps the union type.
     if (d.type() == avro::AVRO_NULL) {

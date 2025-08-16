@@ -216,15 +216,16 @@ SEASTAR_THREAD_TEST_CASE(heartbeat_response_roundtrip) {
         auto dirty_idx = commited_idx
                          + model::offset(random_generators::get_int(10000));
 
-        reply.meta.push_back(raft::append_entries_reply{
-          .target_node_id = raft::vnode(
-            model::node_id(2), model::revision_id(i)),
-          .node_id = raft::vnode(model::node_id(1), model::revision_id(i)),
-          .group = raft::group_id(i),
-          .term = model::term_id(random_generators::get_int(0, 1000)),
-          .last_flushed_log_index = commited_idx,
-          .last_dirty_log_index = dirty_idx,
-          .result = raft::reply_result::success});
+        reply.meta.push_back(
+          raft::append_entries_reply{
+            .target_node_id = raft::vnode(
+              model::node_id(2), model::revision_id(i)),
+            .node_id = raft::vnode(model::node_id(1), model::revision_id(i)),
+            .group = raft::group_id(i),
+            .term = model::term_id(random_generators::get_int(0, 1000)),
+            .last_flushed_log_index = commited_idx,
+            .last_dirty_log_index = dirty_idx,
+            .result = raft::reply_result::success});
     }
     absl::flat_hash_map<raft::group_id, raft::append_entries_reply> expected;
     expected.reserve(reply.meta.size());
@@ -262,15 +263,17 @@ SEASTAR_THREAD_TEST_CASE(heartbeat_response_roundtrip) {
 SEASTAR_THREAD_TEST_CASE(heartbeat_response_negatives) {
     raft::heartbeat_reply reply;
 
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id(2), model::revision_id(-1)),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(-1)),
-      .group = raft::group_id(1),
-      .term = model::term_id(random_generators::get_int(0, 1000)),
-      .last_flushed_log_index = model::offset(-1),
-      .last_dirty_log_index = model::offset(-1),
-      .last_term_base_offset = model::offset(-1),
-      .result = raft::reply_result::success});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(
+          model::node_id(2), model::revision_id(-1)),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(-1)),
+        .group = raft::group_id(1),
+        .term = model::term_id(random_generators::get_int(0, 1000)),
+        .last_flushed_log_index = model::offset(-1),
+        .last_dirty_log_index = model::offset(-1),
+        .last_term_base_offset = model::offset(-1),
+        .result = raft::reply_result::success});
 
     auto buf = serde::to_iobuf(reply);
     auto result = serde::from_iobuf<raft::heartbeat_reply>(std::move(buf));
@@ -286,38 +289,41 @@ SEASTAR_THREAD_TEST_CASE(heartbeat_response_negatives) {
 SEASTAR_THREAD_TEST_CASE(heartbeat_response_with_failures) {
     raft::heartbeat_reply reply;
     // first reply is a failure
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(1),
-      .term = model::term_id(random_generators::get_int(0, 1000)),
-      .last_flushed_log_index = model::offset{},
-      .last_dirty_log_index = model::offset{},
-      .last_term_base_offset = model::offset{},
-      .result = raft::reply_result::follower_busy});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(1),
+        .term = model::term_id(random_generators::get_int(0, 1000)),
+        .last_flushed_log_index = model::offset{},
+        .last_dirty_log_index = model::offset{},
+        .last_term_base_offset = model::offset{},
+        .result = raft::reply_result::follower_busy});
 
     /**
      * Two other replies are successful
      */
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id(0), model::revision_id{1}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(2),
-      .term = model::term_id(1),
-      .last_flushed_log_index = model::offset(100),
-      .last_dirty_log_index = model::offset(101),
-      .last_term_base_offset = model::offset(102),
-      .result = raft::reply_result::success});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id(0), model::revision_id{1}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(2),
+        .term = model::term_id(1),
+        .last_flushed_log_index = model::offset(100),
+        .last_dirty_log_index = model::offset(101),
+        .last_term_base_offset = model::offset(102),
+        .result = raft::reply_result::success});
 
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id(0), model::revision_id{1}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(3),
-      .term = model::term_id(5),
-      .last_flushed_log_index = model::offset(200),
-      .last_dirty_log_index = model::offset(201),
-      .last_term_base_offset = model::offset(202),
-      .result = raft::reply_result::success});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id(0), model::revision_id{1}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(3),
+        .term = model::term_id(5),
+        .last_flushed_log_index = model::offset(200),
+        .last_dirty_log_index = model::offset(201),
+        .last_term_base_offset = model::offset(202),
+        .result = raft::reply_result::success});
 
     auto buf = serde::to_iobuf(reply);
 
@@ -349,38 +355,41 @@ SEASTAR_THREAD_TEST_CASE(
   heartbeat_response_with_failures_and_not_initialized_groups) {
     raft::heartbeat_reply reply;
     // first reply is a success but group is empty
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id{0}, model::revision_id{0}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(1),
-      .term = model::term_id(1),
-      .last_flushed_log_index = model::offset{},
-      .last_dirty_log_index = model::offset{},
-      .last_term_base_offset = model::offset{},
-      .result = raft::reply_result::success});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id{0}, model::revision_id{0}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(1),
+        .term = model::term_id(1),
+        .last_flushed_log_index = model::offset{},
+        .last_dirty_log_index = model::offset{},
+        .last_term_base_offset = model::offset{},
+        .result = raft::reply_result::success});
 
     /**
      * Two other replies are failures
      */
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(2),
-      .term = model::term_id(1),
-      .last_flushed_log_index = model::offset{},
-      .last_dirty_log_index = model::offset{},
-      .last_term_base_offset = model::offset{},
-      .result = raft::reply_result::group_unavailable});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(2),
+        .term = model::term_id(1),
+        .last_flushed_log_index = model::offset{},
+        .last_dirty_log_index = model::offset{},
+        .last_term_base_offset = model::offset{},
+        .result = raft::reply_result::group_unavailable});
 
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(3),
-      .term = model::term_id(5),
-      .last_flushed_log_index = model::offset{},
-      .last_dirty_log_index = model::offset{},
-      .last_term_base_offset = model::offset{},
-      .result = raft::reply_result::group_unavailable});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(3),
+        .term = model::term_id(5),
+        .last_flushed_log_index = model::offset{},
+        .last_dirty_log_index = model::offset{},
+        .last_term_base_offset = model::offset{},
+        .result = raft::reply_result::group_unavailable});
 
     auto buf = serde::to_iobuf(reply);
 
@@ -409,38 +418,41 @@ SEASTAR_THREAD_TEST_CASE(
 SEASTAR_THREAD_TEST_CASE(heartbeat_response_with_only_failures) {
     raft::heartbeat_reply reply;
     // first reply is a success but group is empty
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(1),
-      .term = model::term_id(1),
-      .last_flushed_log_index = model::offset{},
-      .last_dirty_log_index = model::offset{},
-      .last_term_base_offset = model::offset{},
-      .result = raft::reply_result::group_unavailable});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(1),
+        .term = model::term_id(1),
+        .last_flushed_log_index = model::offset{},
+        .last_dirty_log_index = model::offset{},
+        .last_term_base_offset = model::offset{},
+        .result = raft::reply_result::group_unavailable});
 
     /**
      * Two other replies are failures
      */
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(2),
-      .term = model::term_id(1),
-      .last_flushed_log_index = model::offset{},
-      .last_dirty_log_index = model::offset{},
-      .last_term_base_offset = model::offset{},
-      .result = raft::reply_result::group_unavailable});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(2),
+        .term = model::term_id(1),
+        .last_flushed_log_index = model::offset{},
+        .last_dirty_log_index = model::offset{},
+        .last_term_base_offset = model::offset{},
+        .result = raft::reply_result::group_unavailable});
 
-    reply.meta.push_back(raft::append_entries_reply{
-      .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
-      .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
-      .group = raft::group_id(3),
-      .term = model::term_id(5),
-      .last_flushed_log_index = model::offset{},
-      .last_dirty_log_index = model::offset{},
-      .last_term_base_offset = model::offset{},
-      .result = raft::reply_result::group_unavailable});
+    reply.meta.push_back(
+      raft::append_entries_reply{
+        .target_node_id = raft::vnode(model::node_id{}, model::revision_id{}),
+        .node_id = raft::vnode(model::node_id(1), model::revision_id(1)),
+        .group = raft::group_id(3),
+        .term = model::term_id(5),
+        .last_flushed_log_index = model::offset{},
+        .last_dirty_log_index = model::offset{},
+        .last_term_base_offset = model::offset{},
+        .result = raft::reply_result::group_unavailable});
 
     auto buf = serde::to_iobuf(reply);
 

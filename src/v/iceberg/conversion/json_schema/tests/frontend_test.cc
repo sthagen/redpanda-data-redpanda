@@ -28,10 +28,11 @@ json::Document parse_json(std::string_view json_str) {
     json::Document doc;
     doc.Parse(json_str.data(), json_str.size());
     if (doc.HasParseError()) {
-        throw std::runtime_error(fmt::format(
-          "JSON parse error: {} at offset {}",
-          doc.GetParseError(),
-          doc.GetErrorOffset()));
+        throw std::runtime_error(
+          fmt::format(
+            "JSON parse error: {} at offset {}",
+            doc.GetParseError(),
+            doc.GetErrorOffset()));
     }
     return doc;
 }
@@ -259,8 +260,9 @@ TEST(frontend_test, array_items) {
 )";
 
     ASSERT_EQ(expected, ir_tree_printer::to_string(schema));
-    ASSERT_TRUE(std::holds_alternative<std::reference_wrapper<const subschema>>(
-      schema.root().items()));
+    ASSERT_TRUE(
+      std::holds_alternative<std::reference_wrapper<const subschema>>(
+        schema.root().items()));
     ASSERT_EQ(
       std::get<std::reference_wrapper<const subschema>>(schema.root().items())
         .get()
@@ -331,8 +333,9 @@ TEST(frontend_test, array_items_and_additional_items) {
 )";
 
     ASSERT_EQ(expected, ir_tree_printer::to_string(schema));
-    ASSERT_TRUE(std::holds_alternative<std::reference_wrapper<const subschema>>(
-      schema.root().items()));
+    ASSERT_TRUE(
+      std::holds_alternative<std::reference_wrapper<const subschema>>(
+        schema.root().items()));
     ASSERT_TRUE(schema.root().additional_items().has_value());
     ASSERT_EQ(
       schema.root().additional_items()->get().types(),
@@ -543,11 +546,12 @@ TEST(frontend_test, supported_dialects) {
             if (expect_exception) {
                 ASSERT_THAT(
                   e.what(),
-                  StrEq(fmt::format(
-                    "Unsupported JSON Schema feature: Unsupported JSON "
-                    "Schema "
-                    "dialect: {}",
-                    d)));
+                  StrEq(
+                    fmt::format(
+                      "Unsupported JSON Schema feature: Unsupported JSON "
+                      "Schema "
+                      "dialect: {}",
+                      d)));
                 continue;
             }
             throw;
@@ -587,9 +591,9 @@ TEST(frontend_test, explicit_unknown_dialect) {
             "https://example.com/irrelevant-base.json",
             std::nullopt);
       },
-      ThrowsMessage<std::runtime_error>(
-        StrEq("Fell off the end of a string-switch while matching: "
-              "https://example.com/draft-07/schema")));
+      ThrowsMessage<std::runtime_error>(StrEq(
+        "Fell off the end of a string-switch while matching: "
+        "https://example.com/draft-07/schema")));
 }
 
 TEST(frontend_test, depth_limit) {
@@ -613,9 +617,10 @@ TEST(frontend_test, depth_limit) {
     EXPECT_THAT(
       [&] {
           frontend{}.compile(
-            parse_json(fmt::format(
-              R"({{"$id": "https://example.com/root.json", "type": "object", "properties": {{"nested": {}}}}})",
-              generate_nested_schema(32))),
+            parse_json(
+              fmt::format(
+                R"({{"$id": "https://example.com/root.json", "type": "object", "properties": {{"nested": {}}}}})",
+                generate_nested_schema(32))),
             "https://example.com/irrelevant-base.json",
             dialect::draft7);
       },

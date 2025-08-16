@@ -120,12 +120,14 @@ TEST(ProtobufCompat, LibprotobufCompat) {
         libpb_version.mutable_metadata()->insert({"one", "two"});
         auto* phone_one = libpb_version.add_phones();
         phone_one->set_number("123-456-7890");
-        phone_one->set_type(rich::example::Person_PhoneNumber_PhoneType::
-                              Person_PhoneNumber_PhoneType_MOBILE);
+        phone_one->set_type(
+          rich::example::Person_PhoneNumber_PhoneType::
+            Person_PhoneNumber_PhoneType_MOBILE);
         auto* phone_two = libpb_version.add_phones();
         phone_two->set_number("987-654-3210");
-        phone_two->set_type(rich::example::Person_PhoneNumber_PhoneType::
-                              Person_PhoneNumber_PhoneType_WORK);
+        phone_two->set_type(
+          rich::example::Person_PhoneNumber_PhoneType::
+            Person_PhoneNumber_PhoneType_WORK);
     }
     // Protobuf
     std::string libpb_serialized;
@@ -152,9 +154,10 @@ TEST(ProtobufCompat, LibprotobufCompat) {
     };
     for (auto opts : options) {
         libpb_serialized = "";
-        EXPECT_TRUE(google::protobuf::json::MessageToJsonString(
-                      libpb_version, &libpb_serialized, opts)
-                      .ok());
+        EXPECT_TRUE(
+          google::protobuf::json::MessageToJsonString(
+            libpb_version, &libpb_serialized, opts)
+            .ok());
         auto p = serde::pb::json::peekable_parser(
           iobuf::from(libpb_serialized));
         serde_parsed = {};
@@ -165,9 +168,10 @@ TEST(ProtobufCompat, LibprotobufCompat) {
     }
     serde_serialized = iobuf_to_string(serde_version.to_json().get());
     libpb_parsed = {};
-    EXPECT_TRUE(google::protobuf::json::JsonStringToMessage(
-                  serde_serialized, &libpb_parsed)
-                  .ok());
+    EXPECT_TRUE(
+      google::protobuf::json::JsonStringToMessage(
+        serde_serialized, &libpb_parsed)
+        .ok());
     diff = "";
     EXPECT_TRUE(differencer.Compare(libpb_version, libpb_parsed)) << diff;
 }
@@ -222,22 +226,25 @@ TEST(ProtobufCompat, RandomizedConformanceJsonTest) {
         };
         for (auto opts : options) {
             std::string libpb_serialized;
-            ASSERT_TRUE(google::protobuf::json::MessageToJsonString(
-                          libpb, &libpb_serialized, opts)
-                          .ok());
+            ASSERT_TRUE(
+              google::protobuf::json::MessageToJsonString(
+                libpb, &libpb_serialized, opts)
+                .ok());
             auto p = serde::pb::json::peekable_parser(
               iobuf::from(libpb_serialized));
             protobuf_test_messages::editions::test_all_types_edition2023 serde;
-            ASSERT_NO_THROW(protobuf_test_messages::editions::
-                              test_all_types_edition2023::from_json(&p, &serde)
-                                .get())
+            ASSERT_NO_THROW(
+              protobuf_test_messages::editions::test_all_types_edition2023::
+                from_json(&p, &serde)
+                  .get())
               << libpb_serialized;
             auto serde_serialized = iobuf_to_string(serde.to_json().get());
             protobuf_test_messages::editions::TestAllTypesEdition2023
               libpb_parsed;
-            ASSERT_TRUE(google::protobuf::json::JsonStringToMessage(
-                          serde_serialized, &libpb_parsed)
-                          .ok())
+            ASSERT_TRUE(
+              google::protobuf::json::JsonStringToMessage(
+                serde_serialized, &libpb_parsed)
+                .ok())
               << serde_serialized;
             google::protobuf::util::MessageDifferencer differencer;
             std::string diff;
@@ -312,9 +319,10 @@ TEST(ProtobufCompat, Wellknown) {
 
     libpb = {};
     deserialized = {};
-    ASSERT_TRUE(google::protobuf::json::JsonStringToMessage(
-                  iobuf_to_string(serialized.copy()), &libpb, {})
-                  .ok());
+    ASSERT_TRUE(
+      google::protobuf::json::JsonStringToMessage(
+        iobuf_to_string(serialized.copy()), &libpb, {})
+        .ok());
     std::string libpb_serialized;
     ASSERT_TRUE(
       google::protobuf::json::MessageToJsonString(libpb, &libpb_serialized, {})

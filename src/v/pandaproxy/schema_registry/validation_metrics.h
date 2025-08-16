@@ -33,22 +33,25 @@ public:
             sm::make_counter(
               "hits",
               [this]() { return _hits; },
-              sm::description("Total number of hits for the server-side schema "
-                              "ID validation cache (see cluster config: "
-                              "kafka_schema_id_validation_cache_capacity)"),
+              sm::description(
+                "Total number of hits for the server-side schema "
+                "ID validation cache (see cluster config: "
+                "kafka_schema_id_validation_cache_capacity)"),
               {}),
             sm::make_counter(
               "misses",
               [this]() { return _misses; },
-              sm::description("Total number of misses for the server-side "
-                              "schema ID validation cache (see cluster config: "
-                              "kafka_schema_id_validation_cache_capacity)"),
+              sm::description(
+                "Total number of misses for the server-side "
+                "schema ID validation cache (see cluster config: "
+                "kafka_schema_id_validation_cache_capacity)"),
               {}),
             sm::make_counter(
               "batches_decompressed",
               [this]() { return _batches_decompressed; },
-              sm::description("Total number of batches decompressed for "
-                              "server-side schema ID validation"),
+              sm::description(
+                "Total number of batches decompressed for "
+                "server-side schema ID validation"),
               {}),
           },
           {},

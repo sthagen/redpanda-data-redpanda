@@ -372,8 +372,9 @@ SEASTAR_THREAD_TEST_CASE(wrong_compaction_strategy_throws) {
         .get(),
       std::runtime_error,
       [](std::runtime_error ex) {
-          return std::string(ex.what()).find("Invalid compaction_strategy: "
-                                             "wrong_value")
+          return std::string(ex.what()).find(
+                   "Invalid compaction_strategy: "
+                   "wrong_value")
                  != std::string::npos;
       });
 }

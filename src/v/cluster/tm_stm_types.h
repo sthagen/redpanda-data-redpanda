@@ -283,12 +283,14 @@ struct transaction_metadata_v1 {
         result.timeout_ms = timeout_ms;
         result.last_update_ts = last_update_ts;
         for (auto& partition : partitions) {
-            result.partitions.push_back(tx_metadata::tx_partition{
-              .ntp = partition.ntp, .etag = partition.etag});
+            result.partitions.push_back(
+              tx_metadata::tx_partition{
+                .ntp = partition.ntp, .etag = partition.etag});
         }
         for (auto& group : groups) {
-            result.groups.push_back(tx_metadata::tx_group{
-              .group_id = group.group_id, .etag = group.etag});
+            result.groups.push_back(
+              tx_metadata::tx_group{
+                .group_id = group.group_id, .etag = group.etag});
         }
         return result;
     };
@@ -354,12 +356,14 @@ struct transaction_metadata_v0 {
         result.timeout_ms = timeout_ms;
         result.last_update_ts = ss::lowres_system_clock::now();
         for (auto& partition : partitions) {
-            result.partitions.push_back(tx_metadata::tx_partition{
-              .ntp = partition.ntp, .etag = partition.etag});
+            result.partitions.push_back(
+              tx_metadata::tx_partition{
+                .ntp = partition.ntp, .etag = partition.etag});
         }
         for (auto& group : groups) {
-            result.groups.push_back(tx_metadata::tx_group{
-              .group_id = group.group_id, .etag = group.etag});
+            result.groups.push_back(
+              tx_metadata::tx_group{
+                .group_id = group.group_id, .etag = group.etag});
         }
         return result;
     };

@@ -69,8 +69,9 @@ upload_housekeeping_service::upload_housekeeping_service(
       std::make_unique<sliding_window_t>(0.0, _idle_timeout(), ma_resolution))
   , _api_slow_downs(
       std::make_unique<sliding_window_t>(0.0, _idle_timeout(), ma_resolution))
-  , _api_slow_downs_rate(std::make_unique<sliding_window_t>(
-      0.0, slow_downs_rate_window, slow_downs_rate_resolution)) {
+  , _api_slow_downs_rate(
+      std::make_unique<sliding_window_t>(
+        0.0, slow_downs_rate_window, slow_downs_rate_resolution)) {
     _idle_timer.set_callback([this] { return idle_timer_callback(); });
     _epoch_timer.set_callback([this] { return epoch_timer_callback(); });
     _idle_timeout.watch([this] {

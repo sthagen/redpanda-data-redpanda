@@ -65,8 +65,9 @@ create_client_credentials(
 
     if (pw.err != cluster::errc::success) {
         co_return ss::coroutine::return_exception(
-          std::runtime_error(fmt::format(
-            "Failed to fetch credential for principal: {}", principal)));
+          std::runtime_error(
+            fmt::format(
+              "Failed to fetch credential for principal: {}", principal)));
     }
 
     co_return sasl_configuration{

@@ -74,11 +74,12 @@ batch_consumer::consume_result skipping_consumer::accept_batch_start(
     // check for holes in the offset range on disk
     // skip check for compacted logs
     if (unlikely(header.base_offset < _expected_next_batch)) {
-        throw std::runtime_error(fmt::format(
-          "incorrect offset encountered reading from disk log: "
-          "expected batch offset {} (actual {})",
-          _expected_next_batch,
-          header.base_offset()));
+        throw std::runtime_error(
+          fmt::format(
+            "incorrect offset encountered reading from disk log: "
+            "expected batch offset {} (actual {})",
+            _expected_next_batch,
+            header.base_offset()));
     }
 
     /**
@@ -140,8 +141,9 @@ void skipping_consumer::consume_records(iobuf&& records) {
 ss::future<batch_consumer::stop_parser> skipping_consumer::consume_batch_end() {
     // Note: This is what keeps the train moving. the `_reader.*` transitively
     // updates the next batch to consume
-    _reader.add_one(model::record_batch(
-      _header, std::move(_records), model::record_batch::tag_ctor_ng{}));
+    _reader.add_one(
+      model::record_batch(
+        _header, std::move(_records), model::record_batch::tag_ctor_ng{}));
     // We keep the batch in the buffer so that the reader can be cached.
     if (
       _header.last_offset() >= _reader._seg.offsets().get_stable_offset()

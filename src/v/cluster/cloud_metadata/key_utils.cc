@@ -28,18 +28,20 @@ ss::sstring cluster_manifests_prefix(const model::cluster_uuid& cluster_uuid) {
 
 cloud_storage::remote_manifest_path cluster_manifest_key(
   const model::cluster_uuid& cluster_uuid, const cluster_metadata_id& meta_id) {
-    return cloud_storage::remote_manifest_path(fmt::format(
-      "{}/{}/cluster_manifest.json",
-      cluster_manifests_prefix(cluster_uuid),
-      meta_id()));
+    return cloud_storage::remote_manifest_path(
+      fmt::format(
+        "{}/{}/cluster_manifest.json",
+        cluster_manifests_prefix(cluster_uuid),
+        meta_id()));
 }
 
 cloud_storage::remote_segment_path controller_snapshot_key(
   const model::cluster_uuid& cluster_uuid, const model::offset& offset) {
-    return cloud_storage::remote_segment_path(fmt::format(
-      "{}/{}/controller.snapshot",
-      cluster_uuid_prefix(cluster_uuid),
-      offset()));
+    return cloud_storage::remote_segment_path(
+      fmt::format(
+        "{}/{}/controller.snapshot",
+        cluster_uuid_prefix(cluster_uuid),
+        offset()));
 }
 
 ss::sstring cluster_metadata_prefix(

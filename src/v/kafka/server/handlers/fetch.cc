@@ -1025,9 +1025,10 @@ public:
         if (
           fetch_read_strategy
           == model::fetch_read_strategy::non_polling_with_debounce) {
-            co_await ss::sleep(std::min(
-              config::shard_local_cfg().fetch_reads_debounce_timeout(),
-              octx.request.data.max_wait_ms));
+            co_await ss::sleep(
+              std::min(
+                config::shard_local_cfg().fetch_reads_debounce_timeout(),
+                octx.request.data.max_wait_ms));
         }
         // Ensure both fetch debounce and the fetch scheduling group are enabled
         // before trying to apply any delay.
@@ -1202,16 +1203,17 @@ private:
                 // that shard. This is meant to help avoiding unintended cross
                 // shard access.
                 return ss::do_with(
-                  fetch_worker(fetch_worker::shard_local_fetch_context{
-                    .foreign_read = foreign_read,
-                    .bytes_left = octx.bytes_left,
-                    .min_bytes = min_fetch_bytes,
-                    .deadline = octx.deadline,
-                    .requests = std::move(configs),
-                    .srv = octx.rctx.server().local(),
-                    .mgr = mgr,
-                    .as = _worker_aborts[shard],
-                  }),
+                  fetch_worker(
+                    fetch_worker::shard_local_fetch_context{
+                      .foreign_read = foreign_read,
+                      .bytes_left = octx.bytes_left,
+                      .min_bytes = min_fetch_bytes,
+                      .deadline = octx.deadline,
+                      .requests = std::move(configs),
+                      .srv = octx.rctx.server().local(),
+                      .mgr = mgr,
+                      .as = _worker_aborts[shard],
+                    }),
                   [](auto& worker) { return worker.run(); });
             });
 
@@ -1487,9 +1489,10 @@ static ss::future<> fetch_topic_partitions(op_context& octx) {
 
     octx.reset_context();
     // debounce next read retry
-    co_await ss::sleep(std::min(
-      config::shard_local_cfg().fetch_reads_debounce_timeout(),
-      octx.request.data.max_wait_ms));
+    co_await ss::sleep(
+      std::min(
+        config::shard_local_cfg().fetch_reads_debounce_timeout(),
+        octx.request.data.max_wait_ms));
 }
 
 namespace testing {

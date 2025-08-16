@@ -34,11 +34,12 @@ val_with_timestamp(const field_type& type, model::timestamp timestamp_ms) {
 iceberg::struct_type default_type_with_columns(size_t extra_columns) {
     auto type = schemaless_struct_type();
     for (size_t i = 0; i < extra_columns; ++i) {
-        type.fields.emplace_back(nested_field::create(
-          type.fields.size() + 1,
-          fmt::format("foo-{}", i),
-          field_required::no,
-          int_type{}));
+        type.fields.emplace_back(
+          nested_field::create(
+            type.fields.size() + 1,
+            fmt::format("foo-{}", i),
+            field_required::no,
+            int_type{}));
     }
     return type;
 }
@@ -194,20 +195,22 @@ TEST(PartitioningWriterTest, TestCompositeKey) {
       false);
 
     auto schema_type = default_type_with_columns(5);
-    schema_type.fields.push_back(nested_field::create(
-      schema_type.fields.size() + 1,
-      "foo_str",
-      field_required::no,
-      string_type{}));
+    schema_type.fields.push_back(
+      nested_field::create(
+        schema_type.fields.size() + 1,
+        "foo_str",
+        field_required::no,
+        string_type{}));
 
     auto schema_field = field_type{schema_type.copy()};
 
     unresolved_partition_spec unresolved_spec = hour_partition_spec();
-    unresolved_spec.fields.push_back(unresolved_partition_spec::field{
-      .source_name = {"foo_str"},
-      .transform = identity_transform{},
-      .name = "field2",
-    });
+    unresolved_spec.fields.push_back(
+      unresolved_partition_spec::field{
+        .source_name = {"foo_str"},
+        .transform = identity_transform{},
+        .name = "field2",
+      });
     auto spec = partition_spec::resolve(unresolved_spec, schema_type);
     ASSERT_TRUE(spec.has_value());
 

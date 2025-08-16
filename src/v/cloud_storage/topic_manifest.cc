@@ -436,8 +436,9 @@ topic_manifest::update(manifest_format format, ss::input_stream<char> is) {
 ss::future<iobuf> topic_manifest::serialize_buf() const {
     vassert(_topic_config.has_value(), "_topic_config is not initialized");
     // serialize in binary format
-    return ss::make_ready_future<iobuf>(serde::to_iobuf(topic_manifest_state{
-      .cfg = _topic_config.value(), .initial_revision = _rev}));
+    return ss::make_ready_future<iobuf>(serde::to_iobuf(
+      topic_manifest_state{
+        .cfg = _topic_config.value(), .initial_revision = _rev}));
 }
 
 ss::sstring topic_manifest::display_name() const {

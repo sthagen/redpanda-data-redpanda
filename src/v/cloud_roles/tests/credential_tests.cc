@@ -25,8 +25,9 @@ BOOST_AUTO_TEST_CASE(test_gcp_headers) {
         BOOST_REQUIRE_EQUAL(h.at(bh::field::authorization), "Bearer a-token");
     }
 
-    applier.reset_creds(cloud_roles::gcp_credentials{
-      .oauth_token = cloud_roles::oauth_token_str{"second-token"}});
+    applier.reset_creds(
+      cloud_roles::gcp_credentials{
+        .oauth_token = cloud_roles::oauth_token_str{"second-token"}});
 
     {
         bh::request_header<> h{};
@@ -56,13 +57,14 @@ BOOST_AUTO_TEST_CASE(test_aws_headers) {
         BOOST_REQUIRE_EQUAL(h.at("x-amz-content-sha256"), "UNSIGNED-PAYLOAD");
     }
 
-    applier.reset_creds(cloud_roles::aws_credentials{
-      .access_key_id = cloud_roles::public_key_str{"pub2"},
-      .secret_access_key = cloud_roles::private_key_str{"priv2"},
-      .session_token = cloud_roles::session_token{"tok2"},
-      .region = cloud_roles::aws_region_name{"us-east-1"},
-      .service = cloud_roles::aws_service_name{"s3"},
-    });
+    applier.reset_creds(
+      cloud_roles::aws_credentials{
+        .access_key_id = cloud_roles::public_key_str{"pub2"},
+        .secret_access_key = cloud_roles::private_key_str{"priv2"},
+        .session_token = cloud_roles::session_token{"tok2"},
+        .region = cloud_roles::aws_region_name{"us-east-1"},
+        .service = cloud_roles::aws_service_name{"s3"},
+      });
 
     {
         bh::request_header<> h{};
@@ -96,8 +98,9 @@ BOOST_AUTO_TEST_CASE(test_azure_oauth_headers) {
           h.at("x-ms-version"), cloud_roles::azure_storage_api_version);
     }
 
-    applier.reset_creds(cloud_roles::abs_oauth_credentials{
-      .oauth_token = cloud_roles::oauth_token_str{"second-token"}});
+    applier.reset_creds(
+      cloud_roles::abs_oauth_credentials{
+        .oauth_token = cloud_roles::oauth_token_str{"second-token"}});
     {
         bh::request_header<> h{};
         BOOST_REQUIRE(!applier.add_auth(h));

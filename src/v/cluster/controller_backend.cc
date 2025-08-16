@@ -601,8 +601,9 @@ controller_backend::calculate_learner_initial_offset(
           model::timestamp::now().value() - initial_retention_ms->count());
     }
 
-    auto retention_offset = log->retention_offset(storage::gc_config(
-      retention_timestamp_threshold, initial_retention_bytes));
+    auto retention_offset = log->retention_offset(
+      storage::gc_config(
+        retention_timestamp_threshold, initial_retention_bytes));
 
     if (!retention_offset) {
         return std::nullopt;

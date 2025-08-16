@@ -101,15 +101,17 @@ inline timestamp_clock::time_point to_time_point(timestamp ts) {
 }
 
 inline timestamp to_timestamp(timestamp_clock::time_point ts) {
-    return timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(
-                       ts.time_since_epoch())
-                       .count());
+    return timestamp(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+        ts.time_since_epoch())
+        .count());
 }
 
 inline timestamp to_timestamp(ss::manual_clock::time_point ts) {
-    return timestamp(std::chrono::duration_cast<std::chrono::milliseconds>(
-                       ts.time_since_epoch())
-                       .count());
+    return timestamp(
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+        ts.time_since_epoch())
+        .count());
 }
 
 inline timestamp new_timestamp() {

@@ -389,28 +389,31 @@ struct persisted_stm_test_fixture : state_machine_fixture {
                     // cas
                     if (tests::random_bool()) {
                         // success
-                        batch.push_back(kv_operation{
-                          .key = it->first,
-                          .value = new_v,
-                          .expected_value = it->second,
-                        });
+                        batch.push_back(
+                          kv_operation{
+                            .key = it->first,
+                            .value = new_v,
+                            .expected_value = it->second,
+                          });
                         it->second = new_v;
                         continue;
                     }
 
                     // failure
-                    batch.push_back(kv_operation{
-                      .key = it->first,
-                      .value = new_v,
-                      .expected_value = new_v,
-                    });
+                    batch.push_back(
+                      kv_operation{
+                        .key = it->first,
+                        .value = new_v,
+                        .expected_value = new_v,
+                      });
 
                 } else {
                     auto new_k = random_generators::gen_alphanum_string(16);
                     state[new_k] = new_v;
 
-                    batch.push_back(kv_operation{
-                      .key = std::move(new_k), .value = std::move(new_v)});
+                    batch.push_back(
+                      kv_operation{
+                        .key = std::move(new_k), .value = std::move(new_v)});
                 }
             }
             i += batch_size;
@@ -447,10 +450,12 @@ struct persisted_stm_test_fixture : state_machine_fixture {
           10s, [](raft_node_instance& node) {
               auto committed = node.raft()->committed_offset();
               return node.raft()
-                ->make_reader(storage::local_log_reader_config(
-                  node.raft()->start_offset(),
-                  model::offset(random_generators::get_int(
-                    node.raft()->start_offset()(), committed()))))
+                ->make_reader(
+                  storage::local_log_reader_config(
+                    node.raft()->start_offset(),
+                    model::offset(
+                      random_generators::get_int(
+                        node.raft()->start_offset()(), committed()))))
                 .then([](auto rdr) {
                     return model::consume_reader_to_memory(
                       std::move(rdr), default_timeout());
@@ -468,8 +473,9 @@ struct persisted_stm_test_fixture : state_machine_fixture {
               ->take_snapshot(snapshot_offset)
               .then([raft = n.raft(), snapshot_offset](
                       state_machine_manager::snapshot_result snapshot_result) {
-                  return raft->write_snapshot(raft::write_snapshot_cfg(
-                    snapshot_offset, std::move(snapshot_result.data)));
+                  return raft->write_snapshot(
+                    raft::write_snapshot_cfg(
+                      snapshot_offset, std::move(snapshot_result.data)));
               });
         });
     }
@@ -547,19 +553,21 @@ TEST_F_CORO(persisted_stm_test_fixture, test_basic_operations) {
     /**
      * Should succeed
      */
-    ops.push_back(kv_operation{
-      .key = "one",
-      .value = "one-v-updated",
-      .expected_value = "one-v",
-    });
+    ops.push_back(
+      kv_operation{
+        .key = "one",
+        .value = "one-v-updated",
+        .expected_value = "one-v",
+      });
     /**
      * Should fail
      */
-    ops.push_back(kv_operation{
-      .key = "one",
-      .value = "one-v-updated-second",
-      .expected_value = "one-v",
-    });
+    ops.push_back(
+      kv_operation{
+        .key = "one",
+        .value = "one-v-updated-second",
+        .expected_value = "one-v",
+      });
     kv_state expected;
     co_await apply_operations(expected, std::move(ops));
     co_await wait_for_apply();

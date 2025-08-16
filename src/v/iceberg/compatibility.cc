@@ -122,11 +122,12 @@ update_field(const nested_field& src, const nested_field& dest) {
         }
         return std::nullopt;
     }(src.type);
-    dest.set_evolution_metadata(nested_field::src_info{
-      .id = src.id,
-      .required = src.required,
-      .type = src_type,
-    });
+    dest.set_evolution_metadata(
+      nested_field::src_info{
+        .id = src.id,
+        .required = src.required,
+        .type = src_type,
+      });
     return {};
 }
 

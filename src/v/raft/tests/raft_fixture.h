@@ -457,17 +457,19 @@ public:
             auto read_from = start_offset == model::offset{}
                                ? n->raft()->start_offset()
                                : start_offset;
-            node_batches.push_back(co_await n->read_batches_in_range(
-              read_from, model::offset::max()));
+            node_batches.push_back(
+              co_await n->read_batches_in_range(
+                read_from, model::offset::max()));
         }
-        ASSERT_TRUE_CORO(std::all_of(
-          node_batches.begin(),
-          node_batches.end(),
-          [&reference = node_batches.front()](const auto& batches) {
-              return batches.size() == reference.size()
-                     && std::equal(
-                       batches.begin(), batches.end(), reference.begin());
-          }));
+        ASSERT_TRUE_CORO(
+          std::all_of(
+            node_batches.begin(),
+            node_batches.end(),
+            [&reference = node_batches.front()](const auto& batches) {
+                return batches.size() == reference.size()
+                       && std::equal(
+                         batches.begin(), batches.end(), reference.begin());
+            }));
     }
 
     ss::future<> wait_for_committed_offset(

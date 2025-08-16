@@ -97,11 +97,12 @@ public:
         chunked_vector<kafka::incremental_alterable_config> cfg_list;
         cfg_list.reserve(operations.size());
         for (auto& [k, v] : operations) {
-            cfg_list.push_back(kafka::incremental_alterable_config{
-              .name = k,
-              .config_operation = static_cast<int8_t>(v.second),
-              .value = v.first,
-            });
+            cfg_list.push_back(
+              kafka::incremental_alterable_config{
+                .name = k,
+                .config_operation = static_cast<int8_t>(v.second),
+                .value = v.first,
+              });
         }
 
         return kafka::incremental_alter_configs_resource{

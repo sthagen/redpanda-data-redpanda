@@ -112,8 +112,9 @@ public:
             // e.g. if someone entered a non-integer node_id, or an invalid
             // internal RPC address.
             if (!ok && prop->is_required()) {
-                throw std::invalid_argument(fmt::format(
-                  "Property {} is required and has invalid value", name));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Property {} is required and has invalid value", name));
             }
         }
 

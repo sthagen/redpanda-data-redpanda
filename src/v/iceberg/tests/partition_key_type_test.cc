@@ -74,12 +74,13 @@ TEST_F(PartitionKeyTypeTest, TestMissingField) {
 TEST_F(PartitionKeyTypeTest, TestMultipleFields) {
     auto schema = nested_test_schema();
     auto spec = make_spec(0, 1, 1000, "f1", identity_transform{});
-    spec.fields.emplace_back(partition_field{
-      .source_id = nested_field::id_t{2},
-      .field_id = partition_field::id_t{1001},
-      .name = "f2",
-      .transform = identity_transform{},
-    });
+    spec.fields.emplace_back(
+      partition_field{
+        .source_id = nested_field::id_t{2},
+        .field_id = partition_field::id_t{1001},
+        .name = "f2",
+        .transform = identity_transform{},
+      });
     auto pk_type = partition_key_type::create(spec, schema);
     const auto& pk_struct = pk_type.type;
 

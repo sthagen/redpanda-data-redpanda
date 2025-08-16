@@ -13,9 +13,10 @@
 #include <seastar/testing/perf_tests.hh>
 
 PERF_TEST(from_uri, s3_compat) {
-    auto converter = iceberg::uri_converter(cloud_io::s3_compat_provider{
-      .scheme = "s3",
-    });
+    auto converter = iceberg::uri_converter(
+      cloud_io::s3_compat_provider{
+        .scheme = "s3",
+      });
     auto bucket = cloud_storage_clients::bucket_name("bucket");
     std::filesystem::path path(
       "a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/r/s/t/u/v/w/x/y/z");

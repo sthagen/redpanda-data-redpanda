@@ -230,9 +230,10 @@ void parse_data_section(license& lc, const json::Document& doc) {
         json::StringBuffer sb;
         json::Writer<json::StringBuffer> writer(sb);
         license_data_validator.schema_validator.GetError().Accept(writer);
-        throw license_malformed_exception(ss::format(
-          "License data section failed to match schema with error: {}",
-          sb.GetString()));
+        throw license_malformed_exception(
+          ss::format(
+            "License data section failed to match schema with error: {}",
+            sb.GetString()));
     }
     ldf.parser(lc, doc);
 }

@@ -71,8 +71,9 @@ group_metadata_type decode_metadata_type(protocol::decoder& key_reader) {
     if (version == group_metadata_version{2}) {
         return group_metadata_type::group_metadata;
     }
-    throw std::invalid_argument(fmt::format(
-      "unexpected group metadata record with key versions {}", version));
+    throw std::invalid_argument(
+      fmt::format(
+        "unexpected group metadata record with key versions {}", version));
 }
 
 void group_metadata_key::encode(
@@ -112,12 +113,15 @@ void member_state::encode(protocol::encoder& writer, const member_state& v) {
     writer.write(v.instance_id);
     writer.write(v.client_id);
     writer.write(v.client_host);
-    writer.write(static_cast<int32_t>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(v.rebalance_timeout)
-        .count()));
-    writer.write(static_cast<int32_t>(
-      std::chrono::duration_cast<std::chrono::milliseconds>(v.session_timeout)
-        .count()));
+    writer.write(
+      static_cast<int32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+          v.rebalance_timeout)
+          .count()));
+    writer.write(
+      static_cast<int32_t>(
+        std::chrono::duration_cast<std::chrono::milliseconds>(v.session_timeout)
+          .count()));
     writer.write(iobuf_to_bytes(v.subscription.copy()));
     writer.write(iobuf_to_bytes(v.assignment.copy()));
 }

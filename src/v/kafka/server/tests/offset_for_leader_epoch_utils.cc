@@ -27,11 +27,12 @@ kafka_offset_for_epoch_transport::offsets_for_leaders(
     kafka::offset_for_leader_epoch_request req;
     kafka::offset_for_leader_topic t{topic_name, {}, {}};
     for (const auto [pid, term] : term_per_partition) {
-        t.partitions.emplace_back(kafka::offset_for_leader_partition{
-          .partition = pid,
-          .current_leader_epoch = kafka::leader_epoch{-1},
-          .leader_epoch = kafka::leader_epoch(term()),
-        });
+        t.partitions.emplace_back(
+          kafka::offset_for_leader_partition{
+            .partition = pid,
+            .current_leader_epoch = kafka::leader_epoch{-1},
+            .leader_epoch = kafka::leader_epoch(term()),
+          });
     }
     req.data.topics.emplace_back(std::move(t));
     auto resp = co_await _transport.dispatch(
@@ -47,8 +48,9 @@ kafka_offset_for_epoch_transport::offsets_for_leaders(
             ret.emplace(p_res.partition, p_res.end_offset);
             continue;
         }
-        throw std::runtime_error(fmt::format(
-          "Error for partition {}: {}", p_res.partition, p_res.error_code));
+        throw std::runtime_error(
+          fmt::format(
+            "Error for partition {}: {}", p_res.partition, p_res.error_code));
     }
     co_return ret;
 }

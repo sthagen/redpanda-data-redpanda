@@ -27,9 +27,10 @@ SEASTAR_THREAD_TEST_CASE(test_partition_iteration) {
         shards.resize(cores);
         for (int i = 0; i < partitions; ++i) {
             auto core = random_generators::get_int(0, cores - 1);
-            shards[core].partitions.push_back(ep::partition{
-              .group = raft::group_id(group_id++),
-            });
+            shards[core].partitions.push_back(
+              ep::partition{
+                .group = raft::group_id(group_id++),
+              });
         }
         return ep::schedule(std::move(shards), partitions);
     };

@@ -39,15 +39,17 @@ TEST(cluster_link_utils_test, test_tls_file_config) {
     ASSERT_TRUE(cfg.broker_tls.has_value());
     auto& tls_cfg = cfg.broker_tls.value();
     ASSERT_TRUE(tls_cfg.truststore.has_value());
-    ASSERT_TRUE(std::holds_alternative<std::filesystem::path>(
-      tls_cfg.truststore.value()));
+    ASSERT_TRUE(
+      std::holds_alternative<std::filesystem::path>(
+        tls_cfg.truststore.value()));
     EXPECT_EQ(
       std::get<std::filesystem::path>(tls_cfg.truststore.value()),
       std::filesystem::path("/path/to/ca.crt"));
 
     ASSERT_TRUE(tls_cfg.k_store.has_value());
-    ASSERT_TRUE(std::holds_alternative<kafka::client::key_cert_path>(
-      tls_cfg.k_store.value()));
+    ASSERT_TRUE(
+      std::holds_alternative<kafka::client::key_cert_path>(
+        tls_cfg.k_store.value()));
     auto& k_store = std::get<kafka::client::key_cert_path>(
       tls_cfg.k_store.value());
     EXPECT_EQ(k_store.cert, std::filesystem::path("/path/to/cert.crt"));

@@ -33,8 +33,9 @@ decimal_type parse_decimal(std::string_view type_str) {
           .precision = static_cast<uint32_t>(std::stoul(ss::sstring(p_str))),
           .scale = static_cast<uint32_t>(std::stoul(ss::sstring(s_str)))};
     }
-    throw std::invalid_argument(fmt::format(
-      "Decimal requires format decimal(uint32, uint32): {}", type_str));
+    throw std::invalid_argument(
+      fmt::format(
+        "Decimal requires format decimal(uint32, uint32): {}", type_str));
 }
 
 fixed_type parse_fixed(std::string_view type_str) {
@@ -124,8 +125,9 @@ field_type parse_type(const json::Value& v) {
     } else if (type == "map") {
         return parse_map(v);
     }
-    throw std::invalid_argument(fmt::format(
-      "Expected type field of 'struct', 'list', or 'map': {}", type));
+    throw std::invalid_argument(
+      fmt::format(
+        "Expected type field of 'struct', 'list', or 'map': {}", type));
 }
 
 } // namespace iceberg

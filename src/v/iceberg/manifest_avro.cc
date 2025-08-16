@@ -83,9 +83,10 @@ partition_spec partition_spec_from_str(const partition_spec_strs& strs) {
     json::Document fields_json;
     fields_json.Parse(strs.fields_json_str);
     if (!fields_json.IsArray()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected 'partition_spec' to be array of fields: {}",
-          fields_json.GetType()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected 'partition_spec' to be array of fields: {}",
+            fields_json.GetType()));
     }
     const auto& const_json = fields_json;
     auto fields = parse_partition_fields(const_json.GetArray());
@@ -118,10 +119,11 @@ manifest_metadata metadata_from_reader(avro::DataFileReaderBase& rdr) {
     m.manifest_content_type = content_type_from_str(
       find_required_str("content"));
     m.format_version = format_from_str(find_required_str("format-version"));
-    m.partition_spec = partition_spec_from_str(partition_spec_strs{
-      .spec_id_str = find_required_str("partition-spec-id"),
-      .fields_json_str = find_required_str("partition-spec"),
-    });
+    m.partition_spec = partition_spec_from_str(
+      partition_spec_strs{
+        .spec_id_str = find_required_str("partition-spec-id"),
+        .fields_json_str = find_required_str("partition-spec"),
+      });
     m.schema = schema_from_str(find_required_str("schema"));
     return m;
 }

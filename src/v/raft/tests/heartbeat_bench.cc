@@ -27,11 +27,12 @@ static ss::logger hblog("hb-perf");
 
 struct fixture {
     static raft::reply_result random_status() {
-        return random_generators::random_choice(std::vector<raft::reply_result>{
-          raft::reply_result::success,
-          raft::reply_result::failure,
-          raft::reply_result::follower_busy,
-          raft::reply_result::group_unavailable});
+        return random_generators::random_choice(
+          std::vector<raft::reply_result>{
+            raft::reply_result::success,
+            raft::reply_result::failure,
+            raft::reply_result::follower_busy,
+            raft::reply_result::group_unavailable});
     }
 
     std::vector<raft::group_id> make_groups(size_t cnt) {
@@ -61,13 +62,14 @@ struct fixture {
               .last_visible_index = tests::random_named_int<model::offset>(),
             };
             meta.dirty_offset = meta.prev_log_index;
-            req.heartbeats.push_back(raft::heartbeat_metadata{
-              .meta = meta,
-              .node_id = raft::vnode(
-                source, tests::random_named_int<model::revision_id>()),
-              .target_node_id = raft::vnode(
-                target, tests::random_named_int<model::revision_id>()),
-            });
+            req.heartbeats.push_back(
+              raft::heartbeat_metadata{
+                .meta = meta,
+                .node_id = raft::vnode(
+                  source, tests::random_named_int<model::revision_id>()),
+                .target_node_id = raft::vnode(
+                  target, tests::random_named_int<model::revision_id>()),
+              });
         }
 
         return req;
@@ -102,16 +104,17 @@ struct fixture {
         raft::heartbeat_reply reply;
         reply.meta.reserve(old_req.heartbeats.size());
         for (auto& hb : old_req.heartbeats) {
-            reply.meta.push_back(raft::append_entries_reply{
-              .target_node_id = hb.node_id,
-              .node_id = hb.target_node_id,
-              .group = hb.meta.group,
-              .term = hb.meta.term,
-              .last_flushed_log_index = hb.meta.prev_log_index,
-              .last_dirty_log_index = hb.meta.prev_log_index,
-              .last_term_base_offset = hb.meta.prev_log_index,
-              .result = raft::reply_result::success,
-            });
+            reply.meta.push_back(
+              raft::append_entries_reply{
+                .target_node_id = hb.node_id,
+                .node_id = hb.target_node_id,
+                .group = hb.meta.group,
+                .term = hb.meta.term,
+                .last_flushed_log_index = hb.meta.prev_log_index,
+                .last_dirty_log_index = hb.meta.prev_log_index,
+                .last_term_base_offset = hb.meta.prev_log_index,
+                .result = raft::reply_result::success,
+              });
         }
         return reply;
     }

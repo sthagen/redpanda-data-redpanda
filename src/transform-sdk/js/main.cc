@@ -94,9 +94,10 @@ public:
 
     std::expected<qjs::value, qjs::exception>
     array(JSContext* ctx, std::span<qjs::value> /*params*/) {
-        const std::span data_view = {// NOLINTNEXTLINE(*-const-cast)
-                                     const_cast<uint8_t*>(_data.data()),
-                                     _data.size()};
+        const std::span data_view = {
+          // NOLINTNEXTLINE(*-const-cast)
+          const_cast<uint8_t*>(_data.data()),
+          _data.size()};
         auto array = qjs::value::uint8_array(ctx, data_view);
         // This memory isn't copied so we need to make sure we
         // invalid these arrays when the memory is gone.
@@ -131,17 +132,19 @@ public:
     std::expected<qjs::value, qjs::exception>
     write(JSContext* ctx, std::span<qjs::value> params) {
         if (params.size() != 1) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              std::format(
-                "invalid number of parameters to writer.write, got: {}, "
-                "expected: 1",
-                params.size())));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                std::format(
+                  "invalid number of parameters to writer.write, got: {}, "
+                  "expected: 1",
+                  params.size())));
         }
         auto& param = params.front();
         if (!param.is_object()) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx, "expected only object parameters to writer.write"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx, "expected only object parameters to writer.write"));
         }
         auto key = extract_data(ctx, param.get_property("key"));
         if (!key.has_value()) [[unlikely]] {
@@ -162,8 +165,9 @@ public:
         });
         _strings.clear(); // free any allocated strings
         if (errc) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx, std::format("error writing record: {}", errc.message())));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx, std::format("error writing record: {}", errc.message())));
         }
         return qjs::value::undefined(ctx);
     }
@@ -183,8 +187,9 @@ public:
         for (size_t i = 0; i < len; ++i) {
             auto elem = val.get_element(i);
             if (!elem.is_object()) [[unlikely]] {
-                return std::unexpected(qjs::exception::make(
-                  ctx, "expected only objects as headers"));
+                return std::unexpected(
+                  qjs::exception::make(
+                    ctx, "expected only objects as headers"));
             }
             auto key = extract_data(ctx, elem.get_property("key"));
             if (!key.has_value()) [[unlikely]] {
@@ -329,25 +334,28 @@ public:
     std::expected<qjs::value, qjs::exception>
     lookup_schema_by_id(JSContext* ctx, std::span<qjs::value> params) {
         if (params.size() != 1) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              std::format(
-                "invalid number of parameters to "
-                "SchemaRegistryClient.lookupSchemaById, got: {}, "
-                "expected: 1",
-                params.size())));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                std::format(
+                  "invalid number of parameters to "
+                  "SchemaRegistryClient.lookupSchemaById, got: {}, "
+                  "expected: 1",
+                  params.size())));
         }
         auto& param = params.front();
         if (!param.is_number()) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              "expected integer for 'id' param to "
-              "SchemaRegistryClient.lookupSchemaById"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                "expected integer for 'id' param to "
+                "SchemaRegistryClient.lookupSchemaById"));
         }
 
         return _client
-          ->lookup_schema_by_id(redpanda::sr::schema_id{
-            static_cast<redpanda::sr::schema_id::type>(param.as_integer())})
+          ->lookup_schema_by_id(
+            redpanda::sr::schema_id{
+              static_cast<redpanda::sr::schema_id::type>(param.as_integer())})
           .transform_error([ctx](std::error_code err) {
               return qjs::exception::make(
                 ctx, std::format("schema lookup failed: {}", err.message()));
@@ -360,29 +368,32 @@ public:
     std::expected<qjs::value, qjs::exception>
     lookup_schema_by_version(JSContext* ctx, std::span<qjs::value> params) {
         if (params.size() != 2) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              std::format(
-                "invalid number of parameters to "
-                "SchemaRegistryClient.lookupSchemaByVersion, got: "
-                "{}, expected: 2",
-                params.size())));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                std::format(
+                  "invalid number of parameters to "
+                  "SchemaRegistryClient.lookupSchemaByVersion, got: "
+                  "{}, expected: 2",
+                  params.size())));
         }
         const auto& subject_param = params[0];
         const auto& version_param = params[1];
 
         if (!subject_param.is_string()) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              "expected string for 'subject' param in "
-              "SchemaRegistryClient.lookupSchemaByVersion"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                "expected string for 'subject' param in "
+                "SchemaRegistryClient.lookupSchemaByVersion"));
         }
 
         if (!version_param.is_number()) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              "expected integer for 'version' param in "
-              "SchemaRegistryClient.lookupSchemaByVersion"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                "expected integer for 'version' param in "
+                "SchemaRegistryClient.lookupSchemaByVersion"));
         }
 
         return _client
@@ -403,20 +414,22 @@ public:
     std::expected<qjs::value, qjs::exception>
     lookup_latest_schema(JSContext* ctx, std::span<qjs::value> params) {
         if (params.size() != 1) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              std::format(
-                "invalid number of parameters to "
-                "SchemaRegistryClient.lookupLatestSchema, got: {}, "
-                "expected: 1",
-                params.size())));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                std::format(
+                  "invalid number of parameters to "
+                  "SchemaRegistryClient.lookupLatestSchema, got: {}, "
+                  "expected: 1",
+                  params.size())));
         }
         const auto& subject_param = params[0];
         if (!subject_param.is_string()) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              "expected string for 'subject' param in "
-              "SchemaRegistryClient.lookupLatestSchema"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                "expected string for 'subject' param in "
+                "SchemaRegistryClient.lookupLatestSchema"));
         }
 
         return _client->lookup_latest_schema(subject_param.string_data().view())
@@ -432,27 +445,30 @@ public:
     std::expected<qjs::value, qjs::exception>
     create_schema(JSContext* ctx, std::span<qjs::value> params) {
         if (params.size() != 2) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              std::format(
-                "invalid number of parameters to "
-                "SchemaRegistryClient.createSchema, got: {}, expected: 2",
-                params.size())));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                std::format(
+                  "invalid number of parameters to "
+                  "SchemaRegistryClient.createSchema, got: {}, expected: 2",
+                  params.size())));
         }
         const auto& subject_param = params[0];
         const auto& schema_param = params[1];
 
         if (!subject_param.is_string()) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              "expected string for 'subject' param in "
-              "SchemaRegistryClient.createSchema"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                "expected string for 'subject' param in "
+                "SchemaRegistryClient.createSchema"));
         }
         if (!schema_param.is_object()) [[unlikely]] {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              "expected an object for 'schema' param in "
-              "SchemaRegistryClient.createSchema"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                "expected an object for 'schema' param in "
+                "SchemaRegistryClient.createSchema"));
         }
 
         return extract_schema(ctx, schema_param)
@@ -480,52 +496,59 @@ private:
     extract_schema(JSContext* ctx, const qjs::value& val) {
         auto raw_schema = val.get_property("schema");
         if (!raw_schema.is_string()) {
-            return std::unexpected(qjs::exception::make(
-              ctx, "malformed schema def: expected string for 'schema'"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx, "malformed schema def: expected string for 'schema'"));
         }
         auto format = val.get_property("format");
         if (!format.is_number()) {
-            return std::unexpected(qjs::exception::make(
-              ctx, "malformed schema def: expected int for 'format'"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx, "malformed schema def: expected int for 'format'"));
         }
         redpanda::sr::schema::reference_container native_refs;
         auto refs = val.get_property("references");
         if (!refs.is_null() && !refs.is_undefined()) {
             if (!refs.is_array()) {
-                return std::unexpected(qjs::exception::make(
-                  ctx,
-                  "malformed schema def: expected array for 'references'"));
+                return std::unexpected(
+                  qjs::exception::make(
+                    ctx,
+                    "malformed schema def: expected array for 'references'"));
             }
 
             native_refs.reserve(refs.array_length());
             for (size_t i = 0; i < refs.array_length(); ++i) {
                 auto ref = refs.get_element(i);
                 if (!ref.is_object()) {
-                    return std::unexpected(qjs::exception::make(
-                      ctx,
-                      "malformed schema def: expected array "
-                      "of objects for 'references'"));
+                    return std::unexpected(
+                      qjs::exception::make(
+                        ctx,
+                        "malformed schema def: expected array "
+                        "of objects for 'references'"));
                 }
                 auto name = ref.get_property("name");
                 if (!name.is_string()) {
-                    return std::unexpected(qjs::exception::make(
-                      ctx,
-                      "malformed schema def: bad reference: "
-                      "'name' should be a string"));
+                    return std::unexpected(
+                      qjs::exception::make(
+                        ctx,
+                        "malformed schema def: bad reference: "
+                        "'name' should be a string"));
                 }
                 auto subj = ref.get_property("subject");
                 if (!subj.is_string()) {
-                    return std::unexpected(qjs::exception::make(
-                      ctx,
-                      "malformed schema def: bad reference: "
-                      "'subject' should be a string"));
+                    return std::unexpected(
+                      qjs::exception::make(
+                        ctx,
+                        "malformed schema def: bad reference: "
+                        "'subject' should be a string"));
                 }
                 auto vers = ref.get_property("version");
                 if (!vers.is_number()) {
-                    return std::unexpected(qjs::exception::make(
-                      ctx,
-                      "malformed schema def: bad reference: "
-                      "'version' should be a number"));
+                    return std::unexpected(
+                      qjs::exception::make(
+                        ctx,
+                        "malformed schema def: bad reference: "
+                        "'version' should be a number"));
                 }
                 native_refs.emplace_back(
                   std::string{name.string_data().view()},
@@ -550,10 +573,11 @@ private:
               std::string{raw_schema.string_data().view()},
               std::make_optional(std::move(native_refs)));
         default:
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              std::format(
-                "malformed schema def: 'format' out of range, got {}", fmt)));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                std::format(
+                  "malformed schema def: 'format' out of range, got {}", fmt)));
         }
     }
 
@@ -702,8 +726,9 @@ decode_schema_id_impl(JSContext* ctx, qjs::value& arg) {
             }
             // NOTE(oren): we should never reach here (covered by earlier
             // checks)
-            return std::unexpected(qjs::exception::make(
-              ctx, "Unexpected type for schema ID decode"));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx, "Unexpected type for schema ID decode"));
         })
       .and_then([&obj](const qjs::value& rest) {
           return obj.set_property("rest", rest);
@@ -738,10 +763,11 @@ std::expected<std::monostate, qjs::exception> initial_native_modules(
         JSContext* ctx, const qjs::value&, std::span<qjs::value> args)
         -> std::expected<qjs::value, qjs::exception> {
           if (args.size() != 1 || !args.front().is_function()) [[unlikely]] {
-              return std::unexpected(qjs::exception::make(
-                ctx,
-                "invalid argument, onRecordWritten must take only a single "
-                "function as an argument"));
+              return std::unexpected(
+                qjs::exception::make(
+                  ctx,
+                  "invalid argument, onRecordWritten must take only a single "
+                  "function as an argument"));
           }
           return {std::exchange(*user_callback, std::move(args.front()))};
       });
@@ -764,19 +790,22 @@ std::expected<std::monostate, qjs::exception> initial_native_modules(
       [](JSContext* ctx, const qjs::value&, std::span<qjs::value> args)
         -> std::expected<qjs::value, qjs::exception> {
           if (args.size() != 1) [[unlikely]] {
-              return std::unexpected(qjs::exception::make(
-                ctx,
-                std::format(
-                  "wrong number of arguments to decodeSchemaID: expected 1 got "
-                  "{}",
-                  args.size())));
+              return std::unexpected(
+                qjs::exception::make(
+                  ctx,
+                  std::format(
+                    "wrong number of arguments to decodeSchemaID: expected 1 "
+                    "got "
+                    "{}",
+                    args.size())));
           }
           if (!(args.front().is_string() || args.front().is_array_buffer()
                 || args.front().is_uint8_array())) [[unlikely]] {
-              return std::unexpected(qjs::exception::make(
-                ctx,
-                "Illegal argument to decodeSchemaID: Expected one of "
-                "string, ArrayBuffer, or Uint8Array"));
+              return std::unexpected(
+                qjs::exception::make(
+                  ctx,
+                  "Illegal argument to decodeSchemaID: Expected one of "
+                  "string, ArrayBuffer, or Uint8Array"));
           }
           return decode_schema_id_impl(ctx, args.front());
       });
@@ -785,25 +814,30 @@ std::expected<std::monostate, qjs::exception> initial_native_modules(
       [](JSContext* ctx, const qjs::value&, std::span<qjs::value> args)
         -> std::expected<qjs::value, qjs::exception> {
           if (args.size() != 2) [[unlikely]] {
-              return std::unexpected(qjs::exception::make(
-                ctx,
-                std::format(
-                  "wrong number of arguments to encodeSchemaID: expected 2 got "
-                  "{}",
-                  args.size())));
+              return std::unexpected(
+                qjs::exception::make(
+                  ctx,
+                  std::format(
+                    "wrong number of arguments to encodeSchemaID: expected 2 "
+                    "got "
+                    "{}",
+                    args.size())));
           }
           if (!args[0].is_number()) {
-              return std::unexpected(qjs::exception::make(
-                ctx,
-                "expected a numeric SchemaID for 'id' param in "
-                "encodeSchemaID"));
+              return std::unexpected(
+                qjs::exception::make(
+                  ctx,
+                  "expected a numeric SchemaID for 'id' param in "
+                  "encodeSchemaID"));
           }
           if (!(args[1].is_string() || args[1].is_array_buffer()
                 || args[1].is_uint8_array())) {
-              return std::unexpected(qjs::exception::make(
-                ctx,
-                "expected one of string, ArrayBuffer, or Uint8Array for 'buf' "
-                "param in encodeSchemaID"));
+              return std::unexpected(
+                qjs::exception::make(
+                  ctx,
+                  "expected one of string, ArrayBuffer, or Uint8Array for "
+                  "'buf' "
+                  "param in encodeSchemaID"));
           }
           return encode_schema_id_impl(ctx, args[0], args[1]);
       });

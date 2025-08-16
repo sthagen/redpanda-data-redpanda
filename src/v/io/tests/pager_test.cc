@@ -243,16 +243,18 @@ TEST_P(PagerTest, Read) {
              * filemap::read and the requested [offset, len) range.
              */
             seastar::input_stream<char> input1(
-              seastar::data_source(std::make_unique<io::paging_data_source>(
-                pages, io::paging_data_source::config{offset, read_size})));
+              seastar::data_source(
+                std::make_unique<io::paging_data_source>(
+                  pages, io::paging_data_source::config{offset, read_size})));
 
             /*
              * an input stream over a view of the input seed data constrained to
              * what was returned by pager::read.
              */
             seastar::input_stream<char> input2(
-              seastar::data_source(std::make_unique<memory_data_source>(
-                data().share(offset, read_size))));
+              seastar::data_source(
+                std::make_unique<memory_data_source>(
+                  data().share(offset, read_size))));
 
             EXPECT_TRUE(EqualInputStreams(input1, input2));
         }
@@ -270,8 +272,8 @@ TEST_P(AppendPagerTest, Append) {
 
     // input stream over [0, file_size() + append_size() * count)
     auto pager_istream = [&](int count) {
-        return seastar::input_stream<char>(
-          seastar::data_source(std::make_unique<io::paging_data_source>(
+        return seastar::input_stream<char>(seastar::data_source(
+          std::make_unique<io::paging_data_source>(
             &pager(),
             io::paging_data_source::config{
               0, file_size() + (count * append_size())})));

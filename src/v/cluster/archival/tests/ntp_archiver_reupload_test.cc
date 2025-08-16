@@ -247,14 +247,15 @@ struct reupload_fixture : public archiver_fixture {
         auto compacted_before
           = disk_log_impl()->get_probe().get_segments_compacted();
         disk_log_impl()
-          ->housekeeping(storage::housekeeping_config{
-            model::timestamp::max(),
-            std::nullopt,
-            max_removable,
-            std::nullopt,
-            std::nullopt,
-            std::chrono::milliseconds{0},
-            abort_source})
+          ->housekeeping(
+            storage::housekeeping_config{
+              model::timestamp::max(),
+              std::nullopt,
+              max_removable,
+              std::nullopt,
+              std::nullopt,
+              std::chrono::milliseconds{0},
+              abort_source})
           .get();
 
         // Check that the compaction actually compacts
@@ -623,12 +624,13 @@ FIXTURE_TEST(test_both_uploads_with_one_failing, reupload_fixture) {
     // Self-compact the first segment and re-upload. One compacted
     // and one non-compacted segments are uploaded.
     reset_http_call_state();
-    auto seg = run_disk_log_housekeeping(disk_log_impl()
-                                           ->segments()
-                                           .begin()
-                                           ->get()
-                                           ->offsets()
-                                           .get_committed_offset());
+    auto seg = run_disk_log_housekeeping(
+      disk_log_impl()
+        ->segments()
+        .begin()
+        ->get()
+        ->offsets()
+        .get_committed_offset());
 
     // Fail the first compacted upload
     fail_request_if(

@@ -272,8 +272,9 @@ FIXTURE_TEST(test_remote_segment_chunk_read_fallback, cloud_storage_fixture) {
               return req.header("Range") == "";
           };
 
-          BOOST_REQUIRE(ranges::all_of(
-            get_requests(is_segment_dl_req), does_not_have_range_header));
+          BOOST_REQUIRE(
+            ranges::all_of(
+              get_requests(is_segment_dl_req), does_not_have_range_header));
 
           const auto is_chunk_path = [](std::string_view v) {
               return v.find("_chunks") != v.npos;
@@ -285,10 +286,11 @@ FIXTURE_TEST(test_remote_segment_chunk_read_fallback, cloud_storage_fixture) {
               return std::regex_match(path.begin(), path.end(), log_file_expr);
           };
 
-          BOOST_REQUIRE(ranges::any_of(
-            std::filesystem::recursive_directory_iterator{
-              tmp_directory.get_path()},
-            is_log_path));
+          BOOST_REQUIRE(
+            ranges::any_of(
+              std::filesystem::recursive_directory_iterator{
+                tmp_directory.get_path()},
+              is_log_path));
           BOOST_REQUIRE(downloaded == segment_bytes);
       };
     test_wrapper(*this, test, upload_index_t::no);
@@ -441,8 +443,9 @@ FIXTURE_TEST(test_chunk_multiple_readers, cloud_storage_fixture) {
 
     std::vector<std::unique_ptr<remote_segment_batch_reader>> readers{};
     for (auto i = 0; i < 1000; ++i) {
-        readers.push_back(std::make_unique<remote_segment_batch_reader>(
-          segment, reader_config, probe, ts_probe, ssx::semaphore_units()));
+        readers.push_back(
+          std::make_unique<remote_segment_batch_reader>(
+            segment, reader_config, probe, ts_probe, ssx::semaphore_units()));
     }
 
     auto all_readers_done = [&readers] {
@@ -461,8 +464,9 @@ FIXTURE_TEST(test_chunk_multiple_readers, cloud_storage_fixture) {
           });
 
         auto results = ss::when_all_succeed(reads.begin(), reads.end()).get();
-        BOOST_REQUIRE(ranges::all_of(
-          results, [](const auto& result) { return !result.has_error(); }));
+        BOOST_REQUIRE(ranges::all_of(results, [](const auto& result) {
+            return !result.has_error();
+        }));
     }
 
     for (const auto& reader : readers) {
@@ -494,10 +498,11 @@ FIXTURE_TEST(test_chunk_prefetch, cloud_storage_fixture) {
                   fmt::format("_chunks/{}", start));
             };
 
-            BOOST_REQUIRE(ranges::any_of(
-              std::filesystem::recursive_directory_iterator{
-                tmp_directory.get_path()},
-              is_path_to_chunk));
+            BOOST_REQUIRE(
+              ranges::any_of(
+                std::filesystem::recursive_directory_iterator{
+                  tmp_directory.get_path()},
+                is_path_to_chunk));
 
             const auto does_match_byte_range = [&](const auto& req) {
                 const auto header = req.header("Range");

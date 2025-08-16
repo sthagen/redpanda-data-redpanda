@@ -159,9 +159,10 @@ struct transform_application_validating_visitor {
           || std::holds_alternative<timestamptz_type>(field_type)) {
             return success;
         }
-        return partition_spec_field_error(fmt::format(
-          "Can not apply hour transform to non timestamp field: {}",
-          field_type));
+        return partition_spec_field_error(
+          fmt::format(
+            "Can not apply hour transform to non timestamp field: {}",
+            field_type));
     }
     checked<std::nullopt_t, partition_spec_field_error>
     operator()(const void_transform&) {
@@ -175,10 +176,11 @@ private:
         if (is_date_or_timestamp(field_type)) {
             return success;
         }
-        return partition_spec_field_error(fmt::format(
-          "Can not apply {} transform to non or date timestamp field: {}",
-          transform_type,
-          field_type));
+        return partition_spec_field_error(
+          fmt::format(
+            "Can not apply {} transform to non or date timestamp field: {}",
+            transform_type,
+            field_type));
     }
     const primitive_type& field_type;
 };
@@ -188,8 +190,9 @@ checked<std::nullopt_t, partition_spec_field_error>
 validate_transform_can_be_applied(
   const transform& tr, const field_type& field_type) {
     if (!std::holds_alternative<primitive_type>(field_type)) {
-        return partition_spec_field_error(fmt::format(
-          "Can not apply transform to non-primitive field: {}", field_type));
+        return partition_spec_field_error(
+          fmt::format(
+            "Can not apply transform to non-primitive field: {}", field_type));
     }
 
     return std::visit(

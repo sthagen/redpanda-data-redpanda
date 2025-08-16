@@ -114,11 +114,12 @@ ss::future<response_ptr> describe_configs_handler::handle(
       security::default_cluster_name);
 
     for (auto& resource : request.data.resources) {
-        response.data.results.push_back(describe_configs_result{
-          .error_code = error_code::none,
-          .resource_type = resource.resource_type,
-          .resource_name = resource.resource_name,
-        });
+        response.data.results.push_back(
+          describe_configs_result{
+            .error_code = error_code::none,
+            .resource_type = resource.resource_type,
+            .resource_name = resource.resource_name,
+          });
 
         auto& result = response.data.results.back();
 

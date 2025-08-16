@@ -126,12 +126,13 @@ TEST_F(FileSystemCatalogTest, TestCommit) {
     manifest_io manifest_io(remote(), bucket_name);
     transaction txn(std::move(create_res.value()));
     auto set_schema_res = txn
-                            .set_schema(schema{
-                              .schema_struct = std::get<struct_type>(
-                                test_nested_schema_type()),
-                              .schema_id = schema::id_t{1},
-                              .identifier_field_ids = {},
-                            })
+                            .set_schema(
+                              schema{
+                                .schema_struct = std::get<struct_type>(
+                                  test_nested_schema_type()),
+                                .schema_id = schema::id_t{1},
+                                .identifier_field_ids = {},
+                              })
                             .get();
     ASSERT_FALSE(set_schema_res.has_error());
 
@@ -165,12 +166,13 @@ TEST_F(FileSystemCatalogTest, TestCommit) {
     // Now try committing a transaction to the wrong table.
     transaction another_txn(std::move(create_res.value()));
     set_schema_res = another_txn
-                       .set_schema(schema{
-                         .schema_struct = std::get<struct_type>(
-                           test_nested_schema_type()),
-                         .schema_id = schema::id_t{2},
-                         .identifier_field_ids = {nested_field::id_t{1}},
-                       })
+                       .set_schema(
+                         schema{
+                           .schema_struct = std::get<struct_type>(
+                             test_nested_schema_type()),
+                           .schema_id = schema::id_t{2},
+                           .identifier_field_ids = {nested_field::id_t{1}},
+                         })
                        .get();
     ASSERT_FALSE(set_schema_res.has_error());
     const table_identifier wrong_id{.ns = {"ns"}, .table = "who_me"};
@@ -215,12 +217,13 @@ TEST_F(FileSystemCatalogTest, TestDrop) {
 
         transaction txn(std::move(create_res.value()));
         auto set_schema_res = txn
-                                .set_schema(schema{
-                                  .schema_struct = std::get<struct_type>(
-                                    test_nested_schema_type()),
-                                  .schema_id = schema::id_t{1},
-                                  .identifier_field_ids = {},
-                                })
+                                .set_schema(
+                                  schema{
+                                    .schema_struct = std::get<struct_type>(
+                                      test_nested_schema_type()),
+                                    .schema_id = schema::id_t{1},
+                                    .identifier_field_ids = {},
+                                  })
                                 .get();
         ASSERT_FALSE(set_schema_res.has_error());
         auto tx_res = catalog.commit_txn(id, std::move(txn)).get();

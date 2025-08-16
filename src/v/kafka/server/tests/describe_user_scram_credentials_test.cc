@@ -46,22 +46,24 @@ protected:
 
         chunked_vector<kafka::describe_user_scram_credentials_result> check;
         check.reserve(2);
-        check.emplace_back(kafka::describe_user_scram_credentials_result{
-          .user = kafka::scram_user_name{user_name_256},
-          .error_code = kafka::error_code::none,
-          .credential_infos = {
-            kafka::credential_info{
-              .mechanism = kafka::scram_mechanism::scram_sha_256,
-              .iterations = security::scram_sha256::min_iterations},
-          }});
-        check.emplace_back(kafka::describe_user_scram_credentials_result{
-          .user = kafka::scram_user_name{user_name_512},
-          .error_code = kafka::error_code::none,
-          .credential_infos = {
-            kafka::credential_info{
-              .mechanism = kafka::scram_mechanism::scram_sha_512,
-              .iterations = security::scram_sha512::min_iterations},
-          }});
+        check.emplace_back(
+          kafka::describe_user_scram_credentials_result{
+            .user = kafka::scram_user_name{user_name_256},
+            .error_code = kafka::error_code::none,
+            .credential_infos = {
+              kafka::credential_info{
+                .mechanism = kafka::scram_mechanism::scram_sha_256,
+                .iterations = security::scram_sha256::min_iterations},
+            }});
+        check.emplace_back(
+          kafka::describe_user_scram_credentials_result{
+            .user = kafka::scram_user_name{user_name_512},
+            .error_code = kafka::error_code::none,
+            .credential_infos = {
+              kafka::credential_info{
+                .mechanism = kafka::scram_mechanism::scram_sha_512,
+                .iterations = security::scram_sha512::min_iterations},
+            }});
 
         std::ranges::sort(
           resp.data.results,
@@ -187,8 +189,9 @@ FIXTURE_TEST(
     auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     kafka::describe_user_scram_credentials_request req;
-    req.data.users.emplace(chunked_vector<kafka::user_name>{
-      kafka::user_name{.name = kafka::scram_user_name{"non_existent_user"}}});
+    req.data.users.emplace(
+      chunked_vector<kafka::user_name>{
+        kafka::user_name{.name = kafka::scram_user_name{"non_existent_user"}}});
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_CHECK(resp.data.errored());
@@ -207,8 +210,9 @@ FIXTURE_TEST(
     auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     kafka::describe_user_scram_credentials_request req;
-    req.data.users.emplace(chunked_vector<kafka::user_name>{
-      kafka::user_name{.name = kafka::scram_user_name{""}}});
+    req.data.users.emplace(
+      chunked_vector<kafka::user_name>{
+        kafka::user_name{.name = kafka::scram_user_name{""}}});
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_CHECK(resp.data.errored());
     BOOST_CHECK_EQUAL(resp.data.error_code, kafka::error_code::none);
@@ -226,9 +230,10 @@ FIXTURE_TEST(
     auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     kafka::describe_user_scram_credentials_request req;
-    req.data.users.emplace(chunked_vector<kafka::user_name>{
-      kafka::user_name{.name = kafka::scram_user_name{"non_existent_user"}},
-      kafka::user_name{.name = kafka::scram_user_name{"non_existent_user"}}});
+    req.data.users.emplace(
+      chunked_vector<kafka::user_name>{
+        kafka::user_name{.name = kafka::scram_user_name{"non_existent_user"}},
+        kafka::user_name{.name = kafka::scram_user_name{"non_existent_user"}}});
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_CHECK(resp.data.errored());
@@ -251,9 +256,10 @@ FIXTURE_TEST(
     auto deferred_close = ss::defer([&client] { client.stop().get(); });
     client.connect().get();
     kafka::describe_user_scram_credentials_request req;
-    req.data.users.emplace(chunked_vector<kafka::user_name>{
-      kafka::user_name{.name = kafka::scram_user_name{"exists_256"}},
-      kafka::user_name{.name = kafka::scram_user_name{"exists_256"}}});
+    req.data.users.emplace(
+      chunked_vector<kafka::user_name>{
+        kafka::user_name{.name = kafka::scram_user_name{"exists_256"}},
+        kafka::user_name{.name = kafka::scram_user_name{"exists_256"}}});
 
     auto resp = client.dispatch(std::move(req), kafka::api_version(0)).get();
     BOOST_CHECK(resp.data.errored());
@@ -282,12 +288,13 @@ FIXTURE_TEST(
         "password_512", security::scram_sha256::min_iterations));
 
     kafka::describe_user_scram_credentials_request req;
-    req.data.users.emplace(chunked_vector<kafka::user_name>{
-      kafka::user_name{.name = exists_1},
-      kafka::user_name{.name = exists_2},
-      kafka::user_name{.name = does_not_exist},
-      kafka::user_name{.name = does_not_exist_duplicate},
-      kafka::user_name{.name = does_not_exist_duplicate}});
+    req.data.users.emplace(
+      chunked_vector<kafka::user_name>{
+        kafka::user_name{.name = exists_1},
+        kafka::user_name{.name = exists_2},
+        kafka::user_name{.name = does_not_exist},
+        kafka::user_name{.name = does_not_exist_duplicate},
+        kafka::user_name{.name = does_not_exist_duplicate}});
 
     wait_for_controller_leadership().get();
     auto client = make_kafka_client().get();
@@ -300,35 +307,40 @@ FIXTURE_TEST(
 
     chunked_vector<kafka::describe_user_scram_credentials_result> check;
     check.reserve(4);
-    check.emplace_back(kafka::describe_user_scram_credentials_result{
-      .user = kafka::scram_user_name{exists_1()},
-      .error_code = kafka::error_code::none,
-      .credential_infos = {
-        kafka::credential_info{
-          .mechanism = kafka::scram_mechanism::scram_sha_256,
-          .iterations = security::scram_sha256::min_iterations},
-      }});
-    check.emplace_back(kafka::describe_user_scram_credentials_result{
-      .user = kafka::scram_user_name{exists_2()},
-      .error_code = kafka::error_code::none,
-      .credential_infos = {
-        kafka::credential_info{
-          .mechanism = kafka::scram_mechanism::scram_sha_256,
-          .iterations = security::scram_sha256::min_iterations},
-      }});
-    check.emplace_back(kafka::describe_user_scram_credentials_result{
-      .user = kafka::scram_user_name{does_not_exist()},
-      .error_code = kafka::error_code::resource_not_found,
-      .error_message = ssx::sformat(
-        "Cannot describe SCRAM credentials for non-existent user: {}",
-        does_not_exist())});
-    check.emplace_back(kafka::describe_user_scram_credentials_result{
-      .user = kafka::scram_user_name{does_not_exist_duplicate()},
-      .error_code = kafka::error_code::duplicate_resource,
-      .error_message = ssx::sformat(
-        "Cannot describe SCRAM credentials for the same user twice in a single "
-        "request: {}",
-        does_not_exist_duplicate())});
+    check.emplace_back(
+      kafka::describe_user_scram_credentials_result{
+        .user = kafka::scram_user_name{exists_1()},
+        .error_code = kafka::error_code::none,
+        .credential_infos = {
+          kafka::credential_info{
+            .mechanism = kafka::scram_mechanism::scram_sha_256,
+            .iterations = security::scram_sha256::min_iterations},
+        }});
+    check.emplace_back(
+      kafka::describe_user_scram_credentials_result{
+        .user = kafka::scram_user_name{exists_2()},
+        .error_code = kafka::error_code::none,
+        .credential_infos = {
+          kafka::credential_info{
+            .mechanism = kafka::scram_mechanism::scram_sha_256,
+            .iterations = security::scram_sha256::min_iterations},
+        }});
+    check.emplace_back(
+      kafka::describe_user_scram_credentials_result{
+        .user = kafka::scram_user_name{does_not_exist()},
+        .error_code = kafka::error_code::resource_not_found,
+        .error_message = ssx::sformat(
+          "Cannot describe SCRAM credentials for non-existent user: {}",
+          does_not_exist())});
+    check.emplace_back(
+      kafka::describe_user_scram_credentials_result{
+        .user = kafka::scram_user_name{does_not_exist_duplicate()},
+        .error_code = kafka::error_code::duplicate_resource,
+        .error_message = ssx::sformat(
+          "Cannot describe SCRAM credentials for the same user twice in a "
+          "single "
+          "request: {}",
+          does_not_exist_duplicate())});
 
     std::ranges::sort(
       resp.data.results,

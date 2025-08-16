@@ -364,8 +364,9 @@ field_type type_from_avro(const avro::NodePtr& n, with_field_ids with_ids) {
         throw std::invalid_argument("Avro enum type not supported");
     case avro::AVRO_ARRAY: {
         if (n->leaves() != 1) {
-            throw std::invalid_argument(fmt::format(
-              "Avro list type must have 1 child type", n->leaves()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Avro list type must have 1 child type", n->leaves()));
         }
         if (n->logicalType().type() == avro::LogicalType::MAP) {
             const auto& kv_node = n->leafAt(0);
@@ -374,8 +375,9 @@ field_type type_from_avro(const avro::NodePtr& n, with_field_ids with_ids) {
                   "Expected map type to be array of records");
             }
             if (kv_node->leaves() != 2) {
-                throw std::invalid_argument(fmt::format(
-                  "Expected 2 leaves in key-value record: {}", n->leaves()));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Expected 2 leaves in key-value record: {}", n->leaves()));
             }
             auto key_field = child_field_from_avro(kv_node, 0, with_ids);
             auto val_field = child_field_from_avro(kv_node, 1, with_ids);

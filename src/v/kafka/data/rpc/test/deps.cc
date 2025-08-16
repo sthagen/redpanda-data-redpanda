@@ -67,10 +67,11 @@ void kafka_data_test_fixture::wire_up_and_start() {
 
 void kafka_data_test_fixture::register_services(
   std::vector<std::unique_ptr<::rpc::service>>& services) {
-    services.push_back(std::make_unique<kafka::data::rpc::network_service>(
-      ss::default_scheduling_group(),
-      ss::default_smp_service_group(),
-      &_remote_services));
+    services.push_back(
+      std::make_unique<kafka::data::rpc::network_service>(
+        ss::default_scheduling_group(),
+        ss::default_smp_service_group(),
+        &_remote_services));
 }
 
 void kafka_data_test_fixture::elect_leader(

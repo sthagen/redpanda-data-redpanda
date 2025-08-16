@@ -447,11 +447,12 @@ struct compat_check<cluster::topic_properties> {
         obj.max_compaction_lag_ms = std::nullopt;
 
         if (reply != obj) {
-            throw compat_error(fmt::format(
-              "Verify of {{cluster::topic_properties}} ADL decoding "
-              "failed:\n Expected: {}\nDecoded: {}",
-              obj,
-              reply));
+            throw compat_error(
+              fmt::format(
+                "Verify of {{cluster::topic_properties}} ADL decoding "
+                "failed:\n Expected: {}\nDecoded: {}",
+                obj,
+                reply));
         }
     }
 };
@@ -545,11 +546,12 @@ struct compat_check<cluster::topic_configuration> {
         obj.tp_id = std::nullopt;
 
         if (cfg != obj) {
-            throw compat_error(fmt::format(
-              "Verify of {{cluster::topic_property}} adl decoding "
-              "failed:\n Expected: {}\nDecoded: {}",
-              obj,
-              cfg));
+            throw compat_error(
+              fmt::format(
+                "Verify of {{cluster::topic_property}} adl decoding "
+                "failed:\n Expected: {}\nDecoded: {}",
+                obj,
+                cfg));
         }
     }
 };

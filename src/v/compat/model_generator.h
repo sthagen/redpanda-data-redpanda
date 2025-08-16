@@ -141,8 +141,9 @@ struct instance_generator<model::record_batch_header> {
         h.first_timestamp = model::timestamp(
           random_generators::get_int<int64_t>(
             0, std::numeric_limits<int64_t>::max()));
-        h.max_timestamp = model::timestamp(random_generators::get_int<int64_t>(
-          0, std::numeric_limits<int64_t>::max()));
+        h.max_timestamp = model::timestamp(
+          random_generators::get_int<int64_t>(
+            0, std::numeric_limits<int64_t>::max()));
         h.producer_id = random_generators::get_int(
           random_generators::get_int<int64_t>(
             0, std::numeric_limits<int64_t>::max()));
@@ -161,18 +162,19 @@ struct instance_generator<model::record_batch_header> {
 template<>
 struct instance_generator<model::record_batch> {
     static model::record_batch random() {
-        return model::test::make_random_batch(model::test::record_batch_spec{
-          .allow_compression = true,
-          .count = 1,
-          .bt = tests::random_batch_type(),
-          .enable_idempotence = tests::random_bool(),
-          .producer_id = random_generators::get_int(
-            0, std::numeric_limits<int32_t>::max()),
-          .producer_epoch = random_generators::get_int<int16_t>(
-            0, std::numeric_limits<int16_t>::max()),
-          .base_sequence = random_generators::get_int(
-            0, std::numeric_limits<int32_t>::max()),
-          .is_transactional = tests::random_bool()});
+        return model::test::make_random_batch(
+          model::test::record_batch_spec{
+            .allow_compression = true,
+            .count = 1,
+            .bt = tests::random_batch_type(),
+            .enable_idempotence = tests::random_bool(),
+            .producer_id = random_generators::get_int(
+              0, std::numeric_limits<int32_t>::max()),
+            .producer_epoch = random_generators::get_int<int16_t>(
+              0, std::numeric_limits<int16_t>::max()),
+            .base_sequence = random_generators::get_int(
+              0, std::numeric_limits<int32_t>::max()),
+            .is_transactional = tests::random_bool()});
     }
 
     static std::vector<model::record_batch> limits() { return {}; }

@@ -236,8 +236,9 @@ public:
       typename dur_t,
       typename = std::enable_if_t<detail::is_duration_v<dur_t>, dur_t>>
     void record(dur_t dur) {
-        _histo.record(static_cast<uint64_t>(
-          std::chrono::duration_cast<duration_t>(dur).count()));
+        _histo.record(
+          static_cast<uint64_t>(
+            std::chrono::duration_cast<duration_t>(dur).count()));
     }
 
     void record(duration_t::rep dur) {

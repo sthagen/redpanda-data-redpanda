@@ -413,10 +413,11 @@ public:
             node_config.get("rpc_server")
               .set_value(net::unresolved_address("127.0.0.1", rpc_port));
             node_config.get("kafka_api")
-              .set_value(std::vector<config::broker_authn_endpoint>{
-                config::broker_authn_endpoint{
-                  .address = net::unresolved_address(
-                    "127.0.0.1", kafka_port)}});
+              .set_value(
+                std::vector<config::broker_authn_endpoint>{
+                  config::broker_authn_endpoint{
+                    .address = net::unresolved_address(
+                      "127.0.0.1", kafka_port)}});
             node_config.get("data_directory")
               .set_value(config::data_directory_path{.path = base_path});
             if (s3_config) {
@@ -485,8 +486,9 @@ public:
                 const auto time_since_epoch
                   = std::chrono::system_clock::now().time_since_epoch();
                 config
-                  .get("enable_developmental_unrecoverable_data_corrupting_"
-                       "features")
+                  .get(
+                    "enable_developmental_unrecoverable_data_corrupting_"
+                    "features")
                   .set_value(ssx::sformat("{}", time_since_epoch));
 
                 config.get("development_enable_cloud_topics").set_value(true);
@@ -497,9 +499,10 @@ public:
     YAML::Node proxy_config(uint16_t proxy_port = 8082) {
         pandaproxy::rest::configuration cfg;
         cfg.get("pandaproxy_api")
-          .set_value(std::vector<config::rest_authn_endpoint>{
-            config::rest_authn_endpoint{
-              .address = net::unresolved_address("127.0.0.1", proxy_port)}});
+          .set_value(
+            std::vector<config::rest_authn_endpoint>{
+              config::rest_authn_endpoint{
+                .address = net::unresolved_address("127.0.0.1", proxy_port)}});
         return to_yaml(cfg, config::redact_secrets::no);
     }
 
@@ -516,9 +519,10 @@ public:
     YAML::Node schema_reg_config(uint16_t listen_port = 8081) {
         pandaproxy::schema_registry::configuration cfg;
         cfg.get("schema_registry_api")
-          .set_value(std::vector<config::rest_authn_endpoint>{
-            config::rest_authn_endpoint{
-              .address = net::unresolved_address("127.0.0.1", listen_port)}});
+          .set_value(
+            std::vector<config::rest_authn_endpoint>{
+              config::rest_authn_endpoint{
+                .address = net::unresolved_address("127.0.0.1", listen_port)}});
         cfg.get("schema_registry_replication_factor")
           .set_value(std::make_optional<int16_t>(1));
         return to_yaml(cfg, config::redact_secrets::no);
@@ -653,10 +657,11 @@ public:
                 results.size());
               const auto& result = results.at(0);
               if (result.ec != cluster::errc::success) {
-                  throw std::runtime_error(fmt::format(
-                    "error creating topic {}: {}",
-                    result.tp_ns,
-                    cluster::make_error_code(result.ec).message()));
+                  throw std::runtime_error(
+                    fmt::format(
+                      "error creating topic {}: {}",
+                      result.tp_ns,
+                      cluster::make_error_code(result.ec).message()));
               }
 
               if (wait) {
@@ -980,8 +985,9 @@ public:
           bytes(password.cbegin(), password.cend()),
           server_first.salt(),
           server_first.iterations());
-        client_final.set_proof(ScramMech::client_proof(
-          salted_password, client_first, server_first, client_final));
+        client_final.set_proof(
+          ScramMech::client_proof(
+            salted_password, client_first, server_first, client_final));
 
         auto server_final = send_scram_client_final(client, client_final);
         BOOST_REQUIRE(!server_final.error());

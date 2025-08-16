@@ -414,10 +414,11 @@ public:
         scfg.disable_public_metrics = net::public_metrics_disabled::yes;
         _server = std::make_unique<::rpc::rpc_server>(scfg);
         std::vector<std::unique_ptr<::rpc::service>> rpc_services;
-        rpc_services.push_back(std::make_unique<network_service>(
-          ss::default_scheduling_group(),
-          ss::default_smp_service_group(),
-          &_remote_services));
+        rpc_services.push_back(
+          std::make_unique<network_service>(
+            ss::default_scheduling_group(),
+            ss::default_smp_service_group(),
+            &_remote_services));
         _kd->register_services(rpc_services);
         _server->add_services(std::move(rpc_services));
         _server->start();

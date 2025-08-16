@@ -267,8 +267,9 @@ void leader_balancer::handle_topic_deltas(
 void leader_balancer::check_register_leadership_change_notification() {
     if (!_leadership_change_notify_handle && _in_flight_changes.size() > 0) {
         _leadership_change_notify_handle
-          = _leaders.register_leadership_change_notification(std::bind_front(
-            std::mem_fn(&leader_balancer::on_leadership_change), this));
+          = _leaders.register_leadership_change_notification(
+            std::bind_front(
+              std::mem_fn(&leader_balancer::on_leadership_change), this));
     }
 }
 
@@ -298,8 +299,9 @@ ss::future<> leader_balancer::start() {
         std::mem_fn(&leader_balancer::check_if_controller_leader), this));
 
     _maintenance_state_notify_handle
-      = _members.register_maintenance_state_change_notification(std::bind_front(
-        std::mem_fn(&leader_balancer::on_maintenance_change), this));
+      = _members.register_maintenance_state_change_notification(
+        std::bind_front(
+          std::mem_fn(&leader_balancer::on_maintenance_change), this));
 
     _topic_deltas_handle = _topics.register_topic_delta_notification(
       std::bind_front(
@@ -682,8 +684,9 @@ ss::future<ss::stop_iteration> leader_balancer::balance() {
           });
 
         if (min_timeout != _in_flight_changes.end()) {
-            _timer.arm(std::chrono::abs(
-              min_timeout->second.expires - clock_type::now()));
+            _timer.arm(
+              std::chrono::abs(
+                min_timeout->second.expires - clock_type::now()));
         } else {
             _timer.arm(_mute_timeout());
         }

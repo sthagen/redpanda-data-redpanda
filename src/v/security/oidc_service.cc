@@ -342,8 +342,9 @@ struct service::impl {
             if (!_creds) {
                 ss::tls::credentials_builder builder;
                 builder.set_client_auth(ss::tls::client_auth::NONE);
-                builder.set_minimum_tls_version(config::from_config(
-                  config::shard_local_cfg().tls_min_version()));
+                builder.set_minimum_tls_version(
+                  config::from_config(
+                    config::shard_local_cfg().tls_min_version()));
                 co_await builder.set_system_trust();
                 _creds = co_await net::build_reloadable_credentials_with_probe<
                   ss::tls::certificate_credentials>(

@@ -73,12 +73,13 @@ struct segment_spec {
 inline void populate_local_log(
   storage::disk_log_builder& b, const std::vector<segment_spec>& segs) {
     for (const auto& spec : segs) {
-        auto record_batch = make_random_batch(model::test::record_batch_spec{
-          .offset = spec.start_offset,
-          .allow_compression = false,
-          .count = 1,
-          .record_sizes = std::vector<size_t>{spec.size_bytes},
-          .timestamp = spec.timestamp});
+        auto record_batch = make_random_batch(
+          model::test::record_batch_spec{
+            .offset = spec.start_offset,
+            .allow_compression = false,
+            .count = 1,
+            .record_sizes = std::vector<size_t>{spec.size_bytes},
+            .timestamp = spec.timestamp});
 
         b | storage::add_segment(spec.start_offset)
           | storage::add_batch(std::move(record_batch));

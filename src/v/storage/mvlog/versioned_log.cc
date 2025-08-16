@@ -43,8 +43,10 @@ readonly_segment::readonly_segment(std::unique_ptr<active_segment> active_seg)
   : segment_file(std::move(active_seg->segment_file))
   , readable_seg(std::move(active_seg->readable_seg))
   , id(active_seg->id)
-  , offsets(model::bounded_offset_interval::checked(
-      active_seg->base_offset, model::prev_offset(active_seg->next_offset))) {}
+  , offsets(
+      model::bounded_offset_interval::checked(
+        active_seg->base_offset, model::prev_offset(active_seg->next_offset))) {
+}
 
 versioned_log::versioned_log(storage::ntp_config cfg)
   : ntp_cfg_(std::move(cfg)) {}

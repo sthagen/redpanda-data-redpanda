@@ -52,10 +52,12 @@ configuration_manager::configuration_manager(
 ss::future<> configuration_manager::truncate(model::offset offset) {
     vlog(_ctxlog.trace, "Truncating configurations at {}", offset);
     if (unlikely(offset <= _configurations.begin()->first)) {
-        return ss::make_exception_future<>(std::invalid_argument(fmt::format(
-          "can not truncate with offsets, lower or equal than the first one {} "
-          "included in the manager ",
-          _configurations.begin()->first)));
+        return ss::make_exception_future<>(std::invalid_argument(
+          fmt::format(
+            "can not truncate with offsets, lower or equal than the first one "
+            "{} "
+            "included in the manager ",
+            _configurations.begin()->first)));
     }
 
     return _lock.with([this, offset] {
@@ -161,10 +163,11 @@ void configuration_manager::add_configuration(
     auto [_, success] = _configurations.try_emplace(
       offset, indexed_configuration(std::move(cfg), idx));
     if (!success) {
-        throw std::invalid_argument(fmt::format(
-          "Unable to add configuration at offset {} as it "
-          "already exists",
-          offset));
+        throw std::invalid_argument(
+          fmt::format(
+            "Unable to add configuration at offset {} as it "
+            "already exists",
+            offset));
     }
 }
 

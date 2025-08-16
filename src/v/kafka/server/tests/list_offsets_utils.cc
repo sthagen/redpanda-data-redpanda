@@ -22,12 +22,14 @@ kafka_list_offsets_transport::list_offsets(
   model::topic topic_name, pid_to_timestamp_map_t ts_per_partition) {
     kafka::list_offsets_request req;
 
-    req.data.topics.emplace_back(kafka::list_offset_topic{
-      .name = std::move(topic_name),
-    });
+    req.data.topics.emplace_back(
+      kafka::list_offset_topic{
+        .name = std::move(topic_name),
+      });
     for (const auto& [pid, ts] : ts_per_partition) {
-        req.data.topics[0].partitions.emplace_back(kafka::list_offset_partition{
-          .partition_index = pid, .timestamp = ts});
+        req.data.topics[0].partitions.emplace_back(
+          kafka::list_offset_partition{
+            .partition_index = pid, .timestamp = ts});
     }
     auto resp = co_await _transport.dispatch(
       std::move(req), kafka::api_version(3));
@@ -38,10 +40,11 @@ kafka_list_offsets_transport::list_offsets(
     pid_to_offset_map_t ret;
     for (const auto& p_res : resp.data.topics[0].partitions) {
         if (p_res.error_code != kafka::error_code::none) {
-            throw std::runtime_error(fmt::format(
-              "Error for partition {}: {}",
-              p_res.partition_index,
-              p_res.error_code));
+            throw std::runtime_error(
+              fmt::format(
+                "Error for partition {}: {}",
+                p_res.partition_index,
+                p_res.error_code));
         }
         ret[p_res.partition_index] = p_res.offset;
     }

@@ -62,11 +62,12 @@ struct compat_check<cluster::get_node_health_reply> {
         const auto equal = name == "serde" ? expected == decoded
                                            : expected.report == decoded.report;
         if (!equal) {
-            throw compat_error(fmt::format(
-              "Verify of {{{}}} decoding failed:\nExpected: {}\nDecoded: {}",
-              name,
-              expected,
-              decoded));
+            throw compat_error(
+              fmt::format(
+                "Verify of {{{}}} decoding failed:\nExpected: {}\nDecoded: {}",
+                name,
+                expected,
+                decoded));
         }
     }
 };

@@ -16,9 +16,10 @@
 
 namespace crypto::internal {
 inline bytes_view string_view_to_bytes_view(std::string_view v) {
-    return {// NOLINTNEXTLINE: allow reinterpret_cast
-            reinterpret_cast<const bytes_view::value_type*>(v.data()),
-            v.size()};
+    return {
+      // NOLINTNEXTLINE: allow reinterpret_cast
+      reinterpret_cast<const bytes_view::value_type*>(v.data()),
+      v.size()};
 }
 
 inline bytes_span<> char_span_to_bytes_span(std::span<char> v) {

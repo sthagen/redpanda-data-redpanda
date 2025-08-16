@@ -57,8 +57,9 @@ public:
      */
     void execute_action(
       std::string_view feature_name, feature_update_action::action_t a) {
-        apply_action(feature_update_action{
-          .feature_name = ss::sstring(feature_name), .action = a});
+        apply_action(
+          feature_update_action{
+            .feature_name = ss::sstring(feature_name), .action = a});
     }
 };
 

@@ -249,8 +249,9 @@ public:
     const std::optional<std::reference_wrapper<const subschema>>
     additional_properties() const {
         return additional_properties_
-                 ? std::make_optional(std::reference_wrapper<const subschema>(
-                     *additional_properties_.get()))
+                 ? std::make_optional(
+                     std::reference_wrapper<const subschema>(
+                       *additional_properties_.get()))
                  : std::nullopt;
     }
 
@@ -273,10 +274,10 @@ public:
     /// See https://www.learnjsonschema.com/2020-12/applicator/additional-items/
     const std::optional<std::reference_wrapper<const subschema>>
     additional_items() const {
-        return additional_items_
-                 ? std::make_optional(std::reference_wrapper<const subschema>(
-                     *additional_items_.get()))
-                 : std::nullopt;
+        return additional_items_ ? std::make_optional(
+                                     std::reference_wrapper<const subschema>(
+                                       *additional_items_.get()))
+                                 : std::nullopt;
     }
 
     /// \return Format of this schema object if specified.

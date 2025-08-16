@@ -78,8 +78,9 @@ ss::future<iobuf> stream_compressor::compress(iobuf io, type t) {
 }
 ss::future<iobuf> stream_compressor::uncompress(iobuf io, type t) {
     if (io.empty()) {
-        return ss::make_exception_future<iobuf>(std::runtime_error(fmt::format(
-          "Asked to decompress:{} an empty buffer:{}", (int)t, io)));
+        return ss::make_exception_future<iobuf>(std::runtime_error(
+          fmt::format(
+            "Asked to decompress:{} an empty buffer:{}", (int)t, io)));
     }
     switch (t) {
     case type::zstd:

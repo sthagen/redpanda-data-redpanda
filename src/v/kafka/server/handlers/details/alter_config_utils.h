@@ -174,10 +174,11 @@ ss::future<chunked_vector<R>> do_alter_topics_configuration(
       });
 
     for (auto& r : boost::make_iterator_range(valid_end, resources.end())) {
-        responses.push_back(make_error_alter_config_resource_response<R>(
-          r,
-          error_code::invalid_config,
-          "duplicated topic {} alter config request"));
+        responses.push_back(
+          make_error_alter_config_resource_response<R>(
+            r,
+            error_code::invalid_config,
+            "duplicated topic {} alter config request"));
     }
     cluster::topic_properties_update_vector updates;
     for (auto& r : boost::make_iterator_range(resources.begin(), valid_end)) {
@@ -192,11 +193,13 @@ ss::future<chunked_vector<R>> do_alter_topics_configuration(
     if (validate_only) {
         // all pending updates are valid, just generate responses
         for (auto& u : updates) {
-            responses.push_back(R{
-              .error_code = error_code::none,
-              .resource_type = static_cast<int8_t>(config_resource_type::topic),
-              .resource_name = u.tp_ns.tp,
-            });
+            responses.push_back(
+              R{
+                .error_code = error_code::none,
+                .resource_type = static_cast<int8_t>(
+                  config_resource_type::topic),
+                .resource_name = u.tp_ns.tp,
+              });
         }
 
         co_return responses;
@@ -208,13 +211,14 @@ ss::future<chunked_vector<R>> do_alter_topics_configuration(
         model::timeout_clock::now()
           + config::shard_local_cfg().alter_topic_cfg_timeout_ms());
     for (auto& res : update_results) {
-        responses.push_back(R{
-          .error_code = map_topic_error_code(res.ec),
-          .error_message = res.error_message.value_or(
-            make_error_code(res.ec).message()),
-          .resource_type = static_cast<int8_t>(config_resource_type::topic),
-          .resource_name = res.tp_ns.tp(),
-        });
+        responses.push_back(
+          R{
+            .error_code = map_topic_error_code(res.ec),
+            .error_message = res.error_message.value_or(
+              make_error_code(res.ec).message()),
+            .resource_type = static_cast<int8_t>(config_resource_type::topic),
+            .resource_name = res.tp_ns.tp(),
+          });
     }
 
     // Group-by error code, value is list of topic names as strings

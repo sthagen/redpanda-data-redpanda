@@ -167,8 +167,9 @@ BOOST_AUTO_TEST_CASE(test_update_jitter) {
         const auto until_next = sched.until_next_scrub();
         BOOST_REQUIRE(until_next.has_value());
 
-        jitter.set_value(std::chrono::duration_cast<std::chrono::milliseconds>(
-          updated_jitter));
+        jitter.set_value(
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+            updated_jitter));
         const auto until_next_after_jitter_change = sched.until_next_scrub();
         BOOST_REQUIRE(until_next_after_jitter_change.has_value());
 

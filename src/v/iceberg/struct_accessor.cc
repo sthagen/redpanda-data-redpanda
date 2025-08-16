@@ -108,10 +108,11 @@ struct_accessor::from_struct_type(const struct_type& s) {
 const std::optional<value>&
 struct_accessor::get(const struct_value& parent_val) const {
     if (position_ >= parent_val.fields.size()) {
-        throw std::invalid_argument(fmt::format(
-          "Invalid access to position {}, struct has {} fields",
-          position_,
-          parent_val.fields.size()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Invalid access to position {}, struct has {} fields",
+            position_,
+            parent_val.fields.size()));
     }
     const auto& child_val = parent_val.fields[position_];
     if (!child_val) {

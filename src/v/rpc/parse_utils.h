@@ -35,10 +35,11 @@ namespace rpc {
 namespace detail {
 inline void check_out_of_range(size_t got, size_t expected) {
     if (unlikely(got != expected)) {
-        throw std::out_of_range(fmt::format(
-          "parse_utils out of range. got:{} bytes and expected:{} bytes",
-          got,
-          expected));
+        throw std::out_of_range(
+          fmt::format(
+            "parse_utils out of range. got:{} bytes and expected:{} bytes",
+            got,
+            expected));
     }
 }
 } // namespace detail
@@ -77,10 +78,11 @@ inline void validate_payload_and_header(const iobuf& io, const header& h) {
     detail::check_out_of_range(consumed, h.payload_size);
     const auto got_checksum = hasher.digest();
     if (h.payload_checksum != got_checksum) {
-        throw std::runtime_error(fmt::format(
-          "invalid rpc checksum. got:{}, expected:{}",
-          got_checksum,
-          h.payload_checksum));
+        throw std::runtime_error(
+          fmt::format(
+            "invalid rpc checksum. got:{}, expected:{}",
+            got_checksum,
+            h.payload_checksum));
     }
 }
 
@@ -160,10 +162,11 @@ decode_for_version(iobuf_parser& parser, transport_version version) {
     static_assert(serde::is_envelope<T>);
 
     if (version < transport_version::v2) {
-        return ss::make_exception_future<T>(std::runtime_error(fmt::format(
-          "Unexpected serde-only message {} at {} < v2",
-          typeid(T).name(),
-          version)));
+        return ss::make_exception_future<T>(std::runtime_error(
+          fmt::format(
+            "Unexpected serde-only message {} at {} < v2",
+            typeid(T).name(),
+            version)));
     }
     return serde::read_async<T>(parser);
 }

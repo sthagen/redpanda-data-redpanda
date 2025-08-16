@@ -372,8 +372,9 @@ replicate_entries_stm::replicate_entries_stm(
   , _meta(r.metadata())
   , _is_flush_required(r.is_flush_required())
   , _batches_size(r.batches_size())
-  , _batches(std::make_unique<chunked_vector<model::record_batch>>(
-      std::move(r).release_batches()))
+  , _batches(
+      std::make_unique<chunked_vector<model::record_batch>>(
+        std::move(r).release_batches()))
   , _followers_seq(std::move(seqs))
   , _ctxlog(_ptr->_ctxlog) {}
 

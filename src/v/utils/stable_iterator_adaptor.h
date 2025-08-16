@@ -65,11 +65,12 @@ private:
     void validate_revision() const {
         auto current_revision = _stability_func();
         if (_stable_revision != current_revision) {
-            throw iterator_stability_violation(fmt::format(
-              "Iterator stability violated, stable_revision: {}, current "
-              "revision: {}",
-              _stable_revision,
-              current_revision));
+            throw iterator_stability_violation(
+              fmt::format(
+                "Iterator stability violated, stable_revision: {}, current "
+                "revision: {}",
+                _stable_revision,
+                current_revision));
         }
     }
 

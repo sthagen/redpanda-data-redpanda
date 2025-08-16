@@ -170,8 +170,9 @@ void probe::setup_metrics(const model::ntp& ntp) {
         sm::make_counter(
           "corrupted_compaction_indices",
           [this] { return _corrupted_compaction_index; },
-          sm::description("Number of times we had to re-construct the "
-                          ".compaction index on a segment"),
+          sm::description(
+            "Number of times we had to re-construct the "
+            ".compaction index on a segment"),
           labels),
         sm::make_counter(
           "compacted_segment",
@@ -196,8 +197,9 @@ void probe::setup_metrics(const model::ntp& ntp) {
         sm::make_counter(
           "tombstones_removed",
           [this] { return _tombstones_removed; },
-          sm::description("Number of tombstone records removed by compaction "
-                          "due to the delete.retention.ms setting."),
+          sm::description(
+            "Number of tombstone records removed by compaction "
+            "due to the delete.retention.ms setting."),
           labels),
         sm::make_counter(
           "cleanly_compacted_segment",
@@ -210,14 +212,16 @@ void probe::setup_metrics(const model::ntp& ntp) {
         sm::make_counter(
           "segments_marked_tombstone_free",
           [this] { return _segments_marked_tombstone_free; },
-          sm::description("Number of segments that have been verified through "
-                          "the compaction process to be tombstone free."),
+          sm::description(
+            "Number of segments that have been verified through "
+            "the compaction process to be tombstone free."),
           labels),
         sm::make_counter(
           "complete_sliding_window_rounds",
           [this] { return _num_rounds_window_compaction; },
-          sm::description("Number of rounds of sliding window compaction that "
-                          "have been driven to completion."),
+          sm::description(
+            "Number of rounds of sliding window compaction that "
+            "have been driven to completion."),
           labels),
         sm::make_counter(
           "chunked_compaction_runs",
@@ -240,8 +244,9 @@ void probe::setup_metrics(const model::ntp& ntp) {
         sm::make_counter(
           "adjacent_segments_compacted",
           [this] { return _num_adjacent_segments_compacted; },
-          sm::description("Number of segments that have been compacted away "
-                          "during adjacent merge compaction."),
+          sm::description(
+            "Number of segments that have been compacted away "
+            "during adjacent merge compaction."),
           labels),
       },
       {},

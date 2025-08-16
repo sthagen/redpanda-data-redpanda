@@ -197,10 +197,11 @@ private:
                     buf = co_await _in.read_up_to(_max_size);
                 }
                 ++_cnt;
-                _buffer.push_back(data_item{
-                  .buf = std::move(buf),
-                  .units = std::move(units),
-                  .mask = _bitmask});
+                _buffer.push_back(
+                  data_item{
+                    .buf = std::move(buf),
+                    .units = std::move(units),
+                    .mask = _bitmask});
                 _pcond.broadcast();
             }
         } catch (...) {

@@ -484,8 +484,9 @@ std::expected<std::monostate, exception> runtime::create_builtins() {
     auto global_this = value::global(_ctx.get());
     auto result = global_this.set_property(
       "console",
-      factory.create(std::make_unique<console>(
-        console::config{.info = stdout, .warn = stderr})));
+      factory.create(
+        std::make_unique<console>(
+          console::config{.info = stdout, .warn = stderr})));
 
     if (!result.has_value()) {
         return result;
@@ -618,38 +619,39 @@ std::expected<std::monostate, exception> module_builder::build(JSContext* ctx) {
 
         // NOLINTNEXTLINE(*signed-bitwise*)
         constexpr int prop_flags = JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE;
-        entries.push_back(JSCFunctionListEntry{
-          .name = function.name->c_str(),
-          .prop_flags = prop_flags,
-          .def_type = JS_DEF_CFUNC,
-          .magic = my_magic,
-          .u = {
-            .func = {
-              .length = 0,
-              .cproto = JS_CFUNC_generic_magic,
-              .cfunc = {
-                .generic_magic = [](
-                                   JSContext* ctx,
-                                   JSValue this_val,
-                                   int argc,
-                                   JSValue* argv,
-                                   int magic) -> JSValue {
-                    auto* ctx_state = static_cast<runtime::context_state*>(
-                      JS_GetContextOpaque(ctx));
-                    const native_function& func
-                      = ctx_state->named_functions[magic].func;
-                    std::vector<value> args;
-                    args.reserve(argc);
-                    for (const JSValue arg : std::span(argv, argc)) {
-                        args.emplace_back(ctx, JS_DupValue(ctx, arg));
-                    }
-                    auto result = func(
-                      ctx, value(ctx, JS_DupValue(ctx, this_val)), args);
-                    if (result.has_value()) {
-                        return result.value().raw_dup();
-                    }
-                    return JS_Throw(ctx, result.error().val.raw_dup());
-                }}}}});
+        entries.push_back(
+          JSCFunctionListEntry{
+            .name = function.name->c_str(),
+            .prop_flags = prop_flags,
+            .def_type = JS_DEF_CFUNC,
+            .magic = my_magic,
+            .u = {
+              .func = {
+                .length = 0,
+                .cproto = JS_CFUNC_generic_magic,
+                .cfunc = {
+                  .generic_magic = [](
+                                     JSContext* ctx,
+                                     JSValue this_val,
+                                     int argc,
+                                     JSValue* argv,
+                                     int magic) -> JSValue {
+                      auto* ctx_state = static_cast<runtime::context_state*>(
+                        JS_GetContextOpaque(ctx));
+                      const native_function& func
+                        = ctx_state->named_functions[magic].func;
+                      std::vector<value> args;
+                      args.reserve(argc);
+                      for (const JSValue arg : std::span(argv, argc)) {
+                          args.emplace_back(ctx, JS_DupValue(ctx, arg));
+                      }
+                      auto result = func(
+                        ctx, value(ctx, JS_DupValue(ctx, this_val)), args);
+                      if (result.has_value()) {
+                          return result.value().raw_dup();
+                      }
+                      return JS_Throw(ctx, result.error().val.raw_dup());
+                  }}}}});
     }
 
     for (auto& [name, builder] : _objects) {
@@ -687,8 +689,9 @@ std::expected<std::monostate, exception> module_builder::build(JSContext* ctx) {
             static_cast<int>(func_exports.size()));
       });
     if (mod == nullptr) {
-        return std::unexpected(exception(value::error(
-          ctx, std::format("unable to register native module {}", _name))));
+        return std::unexpected(exception(
+          value::error(
+            ctx, std::format("unable to register native module {}", _name))));
     }
     JS_AddModuleExportList(
       ctx, mod, entries.data(), static_cast<int>(entries.size()));
@@ -726,42 +729,48 @@ object_builder::build(JSContext* ctx) {
         pnames.push_back(std::make_unique<std::string>(pname));
         if (const auto* arg = std::get_if<std::string>(&pval)) {
             strs.push_back(std::make_unique<std::string>(*arg));
-            props.push_back(JSCFunctionListEntry{
-              .name = pnames.back()->c_str(),
-              .prop_flags = 0,
-              .def_type = JS_DEF_PROP_STRING,
-              .magic = 0, /* not used */
-              .u = {.str = strs.back()->c_str()},
-            });
+            props.push_back(
+              JSCFunctionListEntry{
+                .name = pnames.back()->c_str(),
+                .prop_flags = 0,
+                .def_type = JS_DEF_PROP_STRING,
+                .magic = 0, /* not used */
+                .u = {.str = strs.back()->c_str()},
+              });
         } else if (const auto* arg = std::get_if<int32_t>(&pval)) {
-            props.push_back(JSCFunctionListEntry{
-              .name = pnames.back()->c_str(),
-              .prop_flags = 0,
-              .def_type = JS_DEF_PROP_INT32,
-              .magic = 0, /* not used */
-              .u = {.i32 = static_cast<int32_t>(*arg)},
-            });
+            props.push_back(
+              JSCFunctionListEntry{
+                .name = pnames.back()->c_str(),
+                .prop_flags = 0,
+                .def_type = JS_DEF_PROP_INT32,
+                .magic = 0, /* not used */
+                .u = {.i32 = static_cast<int32_t>(*arg)},
+              });
         } else if (const auto* arg = std::get_if<int64_t>(&pval)) {
-            props.push_back(JSCFunctionListEntry{
-              .name = pnames.back()->c_str(),
-              .prop_flags = 0,
-              .def_type = JS_DEF_PROP_INT64,
-              .magic = 0, /* not used */
-              .u = {.i64 = static_cast<int64_t>(*arg)},
-            });
+            props.push_back(
+              JSCFunctionListEntry{
+                .name = pnames.back()->c_str(),
+                .prop_flags = 0,
+                .def_type = JS_DEF_PROP_INT64,
+                .magic = 0, /* not used */
+                .u = {.i64 = static_cast<int64_t>(*arg)},
+              });
         } else if (const auto* arg = std::get_if<double>(&pval)) {
-            props.push_back(JSCFunctionListEntry{
-              .name = pnames.back()->c_str(),
-              .prop_flags = 0,
-              .def_type = JS_DEF_PROP_DOUBLE,
-              .magic = 0, /* not used */
-              .u = {.f64 = static_cast<double>(*arg)},
-            });
+            props.push_back(
+              JSCFunctionListEntry{
+                .name = pnames.back()->c_str(),
+                .prop_flags = 0,
+                .def_type = JS_DEF_PROP_DOUBLE,
+                .magic = 0, /* not used */
+                .u = {.f64 = static_cast<double>(*arg)},
+              });
         } else {
-            return std::unexpected(qjs::exception::make(
-              ctx,
-              std::format(
-                "object builder failed - bad type for '{}'", *pnames.back())));
+            return std::unexpected(
+              qjs::exception::make(
+                ctx,
+                std::format(
+                  "object builder failed - bad type for '{}'",
+                  *pnames.back())));
         }
     }
 

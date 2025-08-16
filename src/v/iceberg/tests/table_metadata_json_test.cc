@@ -253,6 +253,7 @@ TEST(TableMetadataJsonSerde, TestSchemaLookup) {
     ASSERT_NE(schema_by_struct, nullptr);
 
     EXPECT_EQ(*schema_by_id, *schema_by_struct);
-    EXPECT_TRUE(iceberg::schemas_equivalent(
-      schema_by_id->schema_struct, schema_by_struct->schema_struct));
+    EXPECT_TRUE(
+      iceberg::schemas_equivalent(
+        schema_by_id->schema_struct, schema_by_struct->schema_struct));
 }

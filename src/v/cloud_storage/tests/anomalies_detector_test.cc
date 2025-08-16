@@ -860,22 +860,25 @@ FIXTURE_TEST(test_metadata_anomalies, bucket_view_fixture) {
 
     cloud_storage::anomalies expected;
     // Bad deltas in STM manifest
-    expected.segment_metadata_anomalies.insert(cloud_storage::anomaly_meta{
-      .type = cloud_storage::anomaly_type::non_monotonical_delta,
-      .at = *get_stm_manifest().last_segment(),
-      .previous = *get_stm_manifest().begin()});
+    expected.segment_metadata_anomalies.insert(
+      cloud_storage::anomaly_meta{
+        .type = cloud_storage::anomaly_type::non_monotonical_delta,
+        .at = *get_stm_manifest().last_segment(),
+        .previous = *get_stm_manifest().begin()});
 
     // Overlap between spillover and STM manifest
-    expected.segment_metadata_anomalies.insert(cloud_storage::anomaly_meta{
-      .type = cloud_storage::anomaly_type::offset_overlap,
-      .at = *get_stm_manifest().begin(),
-      .previous = get_spillover_manifests().at(1).last_segment()});
+    expected.segment_metadata_anomalies.insert(
+      cloud_storage::anomaly_meta{
+        .type = cloud_storage::anomaly_type::offset_overlap,
+        .at = *get_stm_manifest().begin(),
+        .previous = get_spillover_manifests().at(1).last_segment()});
 
     // Gap between spillover manifests
-    expected.segment_metadata_anomalies.insert(cloud_storage::anomaly_meta{
-      .type = cloud_storage::anomaly_type::offset_gap,
-      .at = *get_spillover_manifests().at(1).begin(),
-      .previous = get_spillover_manifests().at(0).last_segment()});
+    expected.segment_metadata_anomalies.insert(
+      cloud_storage::anomaly_meta{
+        .type = cloud_storage::anomaly_type::offset_gap,
+        .at = *get_spillover_manifests().at(1).begin(),
+        .previous = get_spillover_manifests().at(0).last_segment()});
 
     BOOST_REQUIRE(result.detected == expected);
 
@@ -1205,9 +1208,10 @@ BOOST_AUTO_TEST_CASE(test_anomalies_size_limit) {
     {
         anomalies tmp;
         for (int i = 0; i < 80; i++) {
-            tmp.missing_segments.insert(segment_meta{
-              .base_offset = model::offset{i},
-            });
+            tmp.missing_segments.insert(
+              segment_meta{
+                .base_offset = model::offset{i},
+              });
         }
         result += std::move(tmp);
     }
@@ -1217,9 +1221,10 @@ BOOST_AUTO_TEST_CASE(test_anomalies_size_limit) {
     {
         anomalies tmp;
         for (int i = 100; i < 180; i++) {
-            tmp.missing_segments.insert(segment_meta{
-              .base_offset = model::offset{i},
-            });
+            tmp.missing_segments.insert(
+              segment_meta{
+                .base_offset = model::offset{i},
+              });
         }
         result += std::move(tmp);
     }
@@ -1229,9 +1234,10 @@ BOOST_AUTO_TEST_CASE(test_anomalies_size_limit) {
     {
         anomalies tmp;
         for (int i = 200; i < 400; i++) {
-            tmp.missing_segments.insert(segment_meta{
-              .base_offset = model::offset{i},
-            });
+            tmp.missing_segments.insert(
+              segment_meta{
+                .base_offset = model::offset{i},
+              });
         }
         result += std::move(tmp);
     }
@@ -1246,18 +1252,20 @@ BOOST_AUTO_TEST_CASE(test_anomalies_size_limit2) {
     anomalies result;
     {
         for (int i = 0; i < 200; i++) {
-            result.missing_segments.insert(segment_meta{
-              .base_offset = model::offset{i},
-            });
+            result.missing_segments.insert(
+              segment_meta{
+                .base_offset = model::offset{i},
+              });
         }
     }
 
     {
         anomalies tmp;
         for (int i = 200; i < 280; i++) {
-            tmp.missing_segments.insert(segment_meta{
-              .base_offset = model::offset{i},
-            });
+            tmp.missing_segments.insert(
+              segment_meta{
+                .base_offset = model::offset{i},
+              });
         }
         result += std::move(tmp);
     }

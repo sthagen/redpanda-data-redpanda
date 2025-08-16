@@ -72,9 +72,10 @@ partition_balancer_backend::partition_balancer_backend(
   , _partition_allocator(partition_allocator.local())
   , _topics_frontend(topics_frontend.local())
   , _members_frontend(members_frontend.local())
-  , _mode(features::make_sanctioning_binding<
-          features::license_required_feature::
-            partition_auto_balancing_continuous>())
+  , _mode(
+      features::make_sanctioning_binding<
+        features::license_required_feature::
+          partition_auto_balancing_continuous>())
   , _availability_timeout(std::move(availability_timeout))
   , _max_disk_usage_percent(std::move(max_disk_usage_percent))
   , _storage_space_alert_free_threshold_percent(
@@ -186,8 +187,9 @@ void partition_balancer_backend::on_members_update(
       state == model::membership_state::active
       || state == model::membership_state::draining) {
         if (_tick_in_progress) {
-            _tick_in_progress->request_abort_ex(balancer_tick_aborted_exception{
-              fmt::format("new membership update: {}", state)});
+            _tick_in_progress->request_abort_ex(
+              balancer_tick_aborted_exception{
+                fmt::format("new membership update: {}", state)});
         }
     }
 

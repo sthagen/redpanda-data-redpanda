@@ -69,11 +69,12 @@ public:
         }
 #endif
         auto module_dir = test_utils::get_runfile_path("src/v/crypto/tests");
-        ASSERT_NO_THROW_CORO(co_await svc.start(
-          std::ref(*thread_worker()),
-          get_config_file_path(),
-          ss::sstring{module_dir},
-          param.fips_mode));
+        ASSERT_NO_THROW_CORO(
+          co_await svc.start(
+            std::ref(*thread_worker()),
+            get_config_file_path(),
+            ss::sstring{module_dir},
+            param.fips_mode));
 
         ASSERT_NO_THROW_CORO(
           co_await svc.invoke_on_all(&crypto::ossl_context_service::start));
@@ -194,10 +195,12 @@ TEST_P_CORO(ossl_context_test_framework_param, keys) {
 TEST_P_CORO(ossl_context_test_framework_param, sigver) {
     auto key = crypto::key::load_rsa_public_key(
       sig_test_rsa_pub_key_n, sig_test_rsa_pub_key_e);
-    EXPECT_NO_THROW(EXPECT_TRUE(crypto::verify_signature(
-      crypto::digest_type::SHA256, key, sig_good_msg, sig_good_sig)));
-    EXPECT_NO_THROW(EXPECT_FALSE(crypto::verify_signature(
-      crypto::digest_type::SHA256, key, sig_bad_msg, sig_bad_sig)));
+    EXPECT_NO_THROW(EXPECT_TRUE(
+      crypto::verify_signature(
+        crypto::digest_type::SHA256, key, sig_good_msg, sig_good_sig)));
+    EXPECT_NO_THROW(EXPECT_FALSE(
+      crypto::verify_signature(
+        crypto::digest_type::SHA256, key, sig_bad_msg, sig_bad_sig)));
     return ss::make_ready_future();
 }
 

@@ -334,8 +334,9 @@ concat_segment_reader_view::concat_segment_reader_view(
   std::vector<ss::lw_shared_ptr<segment>> segments,
   size_t start_pos,
   size_t end_pos)
-  : _stream(ss::data_source{std::make_unique<concat_segment_data_source_impl>(
-      std::move(segments), start_pos, end_pos)}) {}
+  : _stream(
+      ss::data_source{std::make_unique<concat_segment_data_source_impl>(
+        std::move(segments), start_pos, end_pos)}) {}
 
 ss::input_stream<char> concat_segment_reader_view::take_stream() {
     auto r = std::move(_stream.value());

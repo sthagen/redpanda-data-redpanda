@@ -425,10 +425,11 @@ partition_manager::remove(const model::ntp& ntp, partition_removal_mode mode) {
     auto partition = get(ntp);
 
     if (!partition) {
-        throw std::invalid_argument(fmt::format(
-          "Can not remove partition. NTP {} is not present in partition "
-          "manager",
-          ntp));
+        throw std::invalid_argument(
+          fmt::format(
+            "Can not remove partition. NTP {} is not present in partition "
+            "manager",
+            ntp));
     }
     vlog(clusterlog.debug, "removing partition {}", ntp);
     partition_shutdown_state shutdown_state(partition);
@@ -463,11 +464,12 @@ partition_manager::shutdown(const model::ntp& ntp) {
     auto partition = get(ntp);
     if (!partition) {
         return ss::make_exception_future<xshard_transfer_state>(
-          std::invalid_argument(fmt::format(
-            "Can not shutdown partition. NTP {} is not present in "
-            "partition "
-            "manager",
-            ntp)));
+          std::invalid_argument(
+            fmt::format(
+              "Can not shutdown partition. NTP {} is not present in "
+              "partition "
+              "manager",
+              ntp)));
     }
     // remove partition from ntp & raft tables
     _ntp_table.erase(ntp);

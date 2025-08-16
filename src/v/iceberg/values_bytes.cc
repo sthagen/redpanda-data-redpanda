@@ -58,8 +58,9 @@ struct value_from_bytes_visitor {
 
     void check_size(size_t expected_size) {
         if (expected_size != p.bytes_left()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected {} bytes, got {}", expected_size, p.bytes_left()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected {} bytes, got {}", expected_size, p.bytes_left()));
         }
     }
     template<typename T, typename V>
@@ -140,16 +141,18 @@ bytes value_to_bytes(const value& v) {
     // Only primitive types are expected to be serialized as bytes, e.g. as an
     // upper/lower bound in a manifest.
     if (!std::holds_alternative<primitive_value>(v)) {
-        throw std::invalid_argument(fmt::format(
-          "Can only translate primitive values to bytes, got {}", v));
+        throw std::invalid_argument(
+          fmt::format(
+            "Can only translate primitive values to bytes, got {}", v));
     }
     return std::visit(value_to_bytes_visitor{}, std::get<primitive_value>(v));
 }
 
 value value_from_bytes(const field_type& type, const bytes& b) {
     if (!std::holds_alternative<primitive_type>(type)) {
-        throw std::invalid_argument(fmt::format(
-          "Can only translate primitive values from bytes, got {}", type));
+        throw std::invalid_argument(
+          fmt::format(
+            "Can only translate primitive values from bytes, got {}", type));
     }
     const auto& prim_type = std::get<primitive_type>(type);
     return std::visit(value_from_bytes_visitor{b}, prim_type);

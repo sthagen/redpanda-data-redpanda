@@ -79,10 +79,11 @@ public:
         auto schema_it = std::ranges::find(
           table.schemas, table.current_schema_id, &schema::schema_id);
         if (schema_it == table.schemas.end()) {
-            throw std::runtime_error(fmt::format(
-              "Schema {} not found in table {}",
-              table.current_schema_id,
-              table_ident));
+            throw std::runtime_error(
+              fmt::format(
+                "Schema {} not found in table {}",
+                table.current_schema_id,
+                table_ident));
         }
         co_return std::move(*schema_it);
     }
@@ -173,17 +174,19 @@ TEST_F(CatalogSchemaManagerTest, TestFillSuperset) {
     for (size_t i = 0; i < 2; ++i) {
         struct_type nested;
         for (size_t j = 0; j < 10; ++j) {
-            nested.fields.emplace_back(nested_field::create(
-              0,
-              fmt::format("inner-{}", j),
-              field_required::no,
-              boolean_type{}));
+            nested.fields.emplace_back(
+              nested_field::create(
+                0,
+                fmt::format("inner-{}", j),
+                field_required::no,
+                boolean_type{}));
         }
-        type.fields.emplace_back(nested_field::create(
-          0,
-          fmt::format("nested-{}", i),
-          field_required::no,
-          std::move(nested)));
+        type.fields.emplace_back(
+          nested_field::create(
+            0,
+            fmt::format("nested-{}", i),
+            field_required::no,
+            std::move(nested)));
     }
     // Alter the table schema
     auto ensure_res
@@ -217,11 +220,12 @@ TEST_F(CatalogSchemaManagerTest, TestFillSupersetSubtype) {
     reset_field_ids(type);
     for (size_t i = 0; i < 2; ++i) {
         std::get<struct_type>(type.fields.back()->type)
-          .fields.emplace_back(nested_field::create(
-            0,
-            fmt::format("extra-nested-{}", i),
-            field_required::no,
-            int_type{}));
+          .fields.emplace_back(
+            nested_field::create(
+              0,
+              fmt::format("extra-nested-{}", i),
+              field_required::no,
+              int_type{}));
     }
     // Alter the table schema
     auto ensure_res

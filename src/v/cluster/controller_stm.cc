@@ -98,11 +98,12 @@ ss::future<std::optional<iobuf>> controller_stm::maybe_make_join_snapshot() {
     co_await std::get<config_manager&>(_state).fill_snapshot(snapshot);
     apply_mtx_holder.return_all();
 
-    co_return serde::to_iobuf(controller_join_snapshot{
-      .last_applied = last_applied,
-      .bootstrap = std::move(snapshot.bootstrap),
-      .features = std::move(snapshot.features),
-      .config = std::move(snapshot.config)});
+    co_return serde::to_iobuf(
+      controller_join_snapshot{
+        .last_applied = last_applied,
+        .bootstrap = std::move(snapshot.bootstrap),
+        .features = std::move(snapshot.features),
+        .config = std::move(snapshot.config)});
 }
 
 ss::future<std::optional<iobuf>>

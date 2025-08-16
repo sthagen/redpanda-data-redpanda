@@ -100,9 +100,9 @@ make_aborted_txns(const std::vector<aborted_txn_range>& aborts) {
     return std::make_unique<predetermined_aborted_transaction_tracker>(tracked);
 }
 
-model::record_batch_reader
-make_reader(const std::initializer_list<
-            std::reference_wrapper<const model::record_batch>>& batches) {
+model::record_batch_reader make_reader(
+  const std::initializer_list<
+    std::reference_wrapper<const model::record_batch>>& batches) {
     chunked_circular_buffer<model::record_batch> buffer;
     for (const auto& b : batches) {
         buffer.push_back(b.get().copy());

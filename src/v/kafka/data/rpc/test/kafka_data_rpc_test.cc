@@ -142,11 +142,12 @@ public:
     result<partition_offsets_map, cluster::errc>
     get_partition_offsets(model::ktp ktp) {
         chunked_vector<topic_partitions> requested_topics;
-        requested_topics.push_back(topic_partitions{
-          .topic = ktp.get_topic(),
-          .partitions = chunked_vector<model::partition_id>::single(
-            ktp.get_partition()),
-        });
+        requested_topics.push_back(
+          topic_partitions{
+            .topic = ktp.get_topic(),
+            .partitions = chunked_vector<model::partition_id>::single(
+              ktp.get_partition()),
+          });
         return _kd->client()
           .local()
           .get_partition_offsets(std::move(requested_topics))

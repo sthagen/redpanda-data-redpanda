@@ -116,8 +116,9 @@ public:
         }
         auto topic_revision = partition->get_topic_revision_id();
         const auto& ot = partition->get_offset_translator_state();
-        auto max_offset = kafka::prev_offset(model::offset_cast(
-          ot->from_log_offset(partition->last_stable_offset())));
+        auto max_offset = kafka::prev_offset(
+          model::offset_cast(
+            ot->from_log_offset(partition->last_stable_offset())));
         auto& fe = coordinator_frontend(fixture->app.controller->self());
         coordinator::fetch_latest_translated_offset_request request;
         request.tp = ntp.tp;

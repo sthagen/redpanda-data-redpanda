@@ -83,8 +83,9 @@ rm_stm::rm_stm(
   : raft::persisted_stm<>(rm_stm_snapshot, logger, c)
   , _sync_timeout(config::shard_local_cfg().rm_sync_timeout_ms.bind())
   , _tx_timeout_delay(config::shard_local_cfg().tx_timeout_delay_ms.value())
-  , _abort_interval_ms(config::shard_local_cfg()
-                         .abort_timed_out_transactions_interval_ms.value())
+  , _abort_interval_ms(
+      config::shard_local_cfg()
+        .abort_timed_out_transactions_interval_ms.value())
   , _abort_index_segment_size(
       config::shard_local_cfg().abort_index_segment_size.value())
   , _is_tx_enabled(config::shard_local_cfg().enable_transactions.value())
@@ -1652,8 +1653,9 @@ ss::future<tx::errc> rm_stm::abort_all_txes() {
 void rm_stm::apply_fence(model::producer_identity pid, model::record_batch b) {
     auto result = maybe_create_producer(pid);
     if (result.has_error()) {
-        throw stm_apply_error(fmt::format(
-          "cannot apply batch: {}, error: {}", b.header(), result.error()));
+        throw stm_apply_error(
+          fmt::format(
+            "cannot apply batch: {}, error: {}", b.header(), result.error()));
     }
     auto producer = result.value().first;
     auto header = b.header();
@@ -1709,11 +1711,12 @@ void rm_stm::apply_control(
       _ctx_log.trace, "applying control batch of type {}, pid: {}", crt, pid);
     auto result = maybe_create_producer(pid);
     if (result.has_error()) {
-        throw stm_apply_error(fmt::format(
-          "cannot apply control batch, type: {}, pid: {}, error: {}",
-          crt,
-          pid,
-          result.error()));
+        throw stm_apply_error(
+          fmt::format(
+            "cannot apply control batch, type: {}, pid: {}, error: {}",
+            crt,
+            pid,
+            result.error()));
     }
     auto producer = result.value().first;
     auto tx_range = producer->apply_transaction_end(crt);
@@ -1767,8 +1770,9 @@ void rm_stm::apply_data(
         const auto last_kafka_offset = from_log_offset(header.last_offset());
         auto result = maybe_create_producer(bid.pid);
         if (result.has_error()) {
-            throw stm_apply_error(fmt::format(
-              "cannot apply batch: {}, error: {}", header, result.error()));
+            throw stm_apply_error(
+              fmt::format(
+                "cannot apply batch: {}, error: {}", header, result.error()));
         }
         auto producer = result.value().first;
         producer->apply_data(header, last_kafka_offset);
@@ -1995,10 +1999,11 @@ ss::future<raft::stm_snapshot> rm_stm::do_take_local_snapshot(
                 for (auto& r : aborted_ranges) {
                     ranges_offloaded_to_abort_snapshots.emplace(r);
                 }
-                aborted_snapshots.push_back(abort_snapshot{
-                  .first = first,
-                  .last = last,
-                  .aborted = std::move(aborted_ranges)});
+                aborted_snapshots.push_back(
+                  abort_snapshot{
+                    .first = first,
+                    .last = last,
+                    .aborted = std::move(aborted_ranges)});
                 final_abort_indexes.emplace_back(first, last);
                 // reset the current state
                 first = model::offset::max();

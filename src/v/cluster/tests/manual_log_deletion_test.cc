@@ -122,8 +122,9 @@ struct manual_deletion_fixture : public raft::raft_fixture {
 
         // disable and remove data
         for (auto id : nodes_to_delete) {
-            to_delete.push_back(std::filesystem::path(
-              node(id).raft()->log()->config().topic_directory()));
+            to_delete.push_back(
+              std::filesystem::path(
+                node(id).raft()->log()->config().topic_directory()));
         }
         for (auto id : nodes_to_delete) {
             stop_node(id).get();

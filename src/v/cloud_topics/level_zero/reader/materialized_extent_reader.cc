@@ -53,8 +53,9 @@ ss::future<result<chunked_vector<materialized_extent>>> materialize_sorted_run(
             if (res.has_error()) {
                 co_return res.error();
             }
-            hydrated.insert(std::make_pair(
-              back.meta.id, back.object.share(0, back.object.size_bytes())));
+            hydrated.insert(
+              std::make_pair(
+                back.meta.id, back.object.share(0, back.object.size_bytes())));
         }
     }
     co_return std::move(extents);

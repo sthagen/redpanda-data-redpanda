@@ -50,11 +50,12 @@ simple_object_builder::finish(object_id oid, size_t footer_pos) {
         return std::unexpected(
           error{fmt::format("Object {} is not a pending object", oid)});
     }
-    finished_objects_.emplace_back(metastore::object_metadata{
-      .oid = oid,
-      .footer_pos = footer_pos,
-      .ntp_metas = std::move(it->second),
-    });
+    finished_objects_.emplace_back(
+      metastore::object_metadata{
+        .oid = oid,
+        .footer_pos = footer_pos,
+        .ntp_metas = std::move(it->second),
+      });
     pending_objects_.erase(it);
     return {};
 }
@@ -64,8 +65,9 @@ std::expected<
   metastore::object_metadata_builder::error>
 simple_object_builder::release() {
     if (!pending_objects_.empty()) {
-        return std::unexpected(error{fmt::format(
-          "Builder still has {} pending object", pending_objects_.size())});
+        return std::unexpected(
+          error{fmt::format(
+            "Builder still has {} pending object", pending_objects_.size())});
     }
     return std::exchange(finished_objects_, {});
 }

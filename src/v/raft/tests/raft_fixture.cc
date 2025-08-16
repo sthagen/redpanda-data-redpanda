@@ -415,11 +415,12 @@ raft_node_instance::raft_node_instance(
   , _logger(test_log, fmt::format("[node: {}]", _id))
   , _base_directory(std::move(base_directory))
   , _protocol(ss::make_shared<in_memory_test_protocol>(node_map, _logger))
-  , _buffered_protocol(ss::make_shared<buffered_protocol>(
-      ss::default_scheduling_group(),
-      consensus_client_protocol(_protocol),
-      _max_inflight_requests.bind(),
-      _max_queued_bytes.bind()))
+  , _buffered_protocol(
+      ss::make_shared<buffered_protocol>(
+        ss::default_scheduling_group(),
+        consensus_client_protocol(_protocol),
+        _max_inflight_requests.bind(),
+        _max_queued_bytes.bind()))
   , _features(feature_table)
   , _recovery_mem_quota([this] {
       return raft::recovery_memory_quota::configuration{
@@ -605,8 +606,9 @@ raft_node_instance::read_batches_in_range(
 
 ss::future<model::offset> raft_node_instance::random_batch_base_offset(
   model::offset max, std::optional<model::offset> min) {
-    model::offset read_start(random_generators::get_int<int64_t>(
-      min.value_or(_raft->start_offset()), max));
+    model::offset read_start(
+      random_generators::get_int<int64_t>(
+        min.value_or(_raft->start_offset()), max));
 
     model::offset last = model::next_offset(read_start);
 

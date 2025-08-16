@@ -92,46 +92,46 @@ public:
       : sr(std::make_unique<schema::fake_registry>()) {}
 
     void SetUp() override {
-        auto avro_schema_id = sr
-                                ->create_schema(subject_schema{
-                                  subject{"foo-value"},
-                                  schema_definition{
-                                    avro_record_schema, schema_type::avro}})
+        auto avro_schema_id = sr->create_schema(
+                                  subject_schema{
+                                    subject{"foo-value"},
+                                    schema_definition{
+                                      avro_record_schema, schema_type::avro}})
                                 .get();
         ASSERT_EQ(1, avro_schema_id());
-        auto pb_schema_id = sr
-                              ->create_schema(subject_schema{
-                                subject{"foo-value"},
-                                schema_definition{
-                                  pb_record_schema, schema_type::protobuf}})
+        auto pb_schema_id = sr->create_schema(
+                                subject_schema{
+                                  subject{"foo-value"},
+                                  schema_definition{
+                                    pb_record_schema, schema_type::protobuf}})
                               .get();
         ASSERT_EQ(2, pb_schema_id());
-        auto json_schema_id = sr
-                                ->create_schema(subject_schema{
-                                  subject{"foo-value"},
-                                  schema_definition{
-                                    json_record_schema, schema_type::json}})
+        auto json_schema_id = sr->create_schema(
+                                  subject_schema{
+                                    subject{"foo-value"},
+                                    schema_definition{
+                                      json_record_schema, schema_type::json}})
                                 .get();
         ASSERT_EQ(3, json_schema_id());
-        avro_schema_id = sr
-                           ->create_schema(subject_schema{
-                             subject{"latest-avro"},
-                             schema_definition{
-                               avro_record_schema, schema_type::avro}})
+        avro_schema_id = sr->create_schema(
+                             subject_schema{
+                               subject{"latest-avro"},
+                               schema_definition{
+                                 avro_record_schema, schema_type::avro}})
                            .get();
         ASSERT_EQ(1, avro_schema_id());
-        pb_schema_id = sr
-                         ->create_schema(subject_schema{
-                           subject{"latest-proto"},
-                           schema_definition{
-                             pb_record_schema, schema_type::protobuf}})
+        pb_schema_id = sr->create_schema(
+                           subject_schema{
+                             subject{"latest-proto"},
+                             schema_definition{
+                               pb_record_schema, schema_type::protobuf}})
                          .get();
         ASSERT_EQ(2, pb_schema_id());
-        json_schema_id = sr
-                           ->create_schema(subject_schema{
-                             subject{"latest-json"},
-                             schema_definition{
-                               json_record_schema, schema_type::json}})
+        json_schema_id = sr->create_schema(
+                             subject_schema{
+                               subject{"latest-json"},
+                               schema_definition{
+                                 json_record_schema, schema_type::json}})
                            .get();
         ASSERT_EQ(3, json_schema_id());
     }
@@ -185,10 +185,12 @@ TEST_F(RecordSchemaResolverTest, TestProtobufSchemaHappyPath) {
 
     const auto expected_type = field_type{[] {
         auto expected_struct = struct_type{};
-        expected_struct.fields.emplace_back(nested_field::create(
-          1, "inner_label_1", field_required::no, string_type{}));
-        expected_struct.fields.emplace_back(nested_field::create(
-          2, "inner_number_1", field_required::no, int_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            1, "inner_label_1", field_required::no, string_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            2, "inner_number_1", field_required::no, int_type{}));
         return expected_struct;
     }()};
     EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -220,13 +222,16 @@ TEST_F(RecordSchemaResolverTest, TestProtobufSchemaHappyPathNested) {
           nested_field::create(2, "number", field_required::no, int_type{}));
 
         struct_type inner_struct;
-        inner_struct.fields.emplace_back(nested_field::create(
-          1, "inner_label_1", field_required::no, string_type{}));
-        inner_struct.fields.emplace_back(nested_field::create(
-          2, "inner_number_1", field_required::no, int_type{}));
+        inner_struct.fields.emplace_back(
+          nested_field::create(
+            1, "inner_label_1", field_required::no, string_type{}));
+        inner_struct.fields.emplace_back(
+          nested_field::create(
+            2, "inner_number_1", field_required::no, int_type{}));
 
-        expected_struct.fields.emplace_back(nested_field::create(
-          3, "inner", field_required::no, std::move(inner_struct)));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            3, "inner", field_required::no, std::move(inner_struct)));
         return expected_struct;
     }()};
     EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -250,22 +255,23 @@ message NestedMessage {
   optional SimpleMessage simple = 2;
 }
 )";
-    auto pb_schema_id = sr
-                          ->create_schema(subject_schema{
-                            subject{"simple_schema"},
-                            schema_definition{
-                              pb_simple_schema, schema_type::protobuf}})
+    auto pb_schema_id = sr->create_schema(
+                            subject_schema{
+                              subject{"simple_schema"},
+                              schema_definition{
+                                pb_simple_schema, schema_type::protobuf}})
                           .get();
     ASSERT_EQ(7, pb_schema_id());
-    pb_schema_id = sr->create_schema(subject_schema{
-                                       subject{"references_schema"},
-                                       schema_definition{
-                                         pb_references_schema,
-                                         schema_type::protobuf,
-                                         {schema_reference{
-                                           .name = "simple.proto",
-                                           .sub = subject{"simple_schema"},
-                                           .version = schema_version{0}}}}})
+    pb_schema_id = sr->create_schema(
+                       subject_schema{
+                         subject{"references_schema"},
+                         schema_definition{
+                           pb_references_schema,
+                           schema_type::protobuf,
+                           {schema_reference{
+                             .name = "simple.proto",
+                             .sub = subject{"simple_schema"},
+                             .version = schema_version{0}}}}})
                      .get();
     ASSERT_EQ(8, pb_schema_id());
     std::vector<int32_t> pb_offsets{};
@@ -288,10 +294,12 @@ message NestedMessage {
           nested_field::create(1, "label", field_required::no, string_type{}));
         simple_struct.fields.emplace_back(
           nested_field::create(2, "number", field_required::no, int_type{}));
-        simple_struct.fields.emplace_back(nested_field::create(
-          3, "big_number", field_required::no, long_type{}));
-        expected_struct.fields.emplace_back(nested_field::create(
-          2, "simple", field_required::no, std::move(simple_struct)));
+        simple_struct.fields.emplace_back(
+          nested_field::create(
+            3, "big_number", field_required::no, long_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            2, "simple", field_required::no, std::move(simple_struct)));
         return expected_struct;
     }()};
     EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -355,10 +363,12 @@ TEST_F(RecordSchemaResolverTest, TestJsonSchemaHappyPath) {
     // important the data's structure looks good.
     const auto expected_type = field_type{[] {
         auto expected_struct = struct_type{};
-        expected_struct.fields.emplace_back(nested_field::create(
-          0, "json_next", field_required::no, long_type{}));
-        expected_struct.fields.emplace_back(nested_field::create(
-          0, "json_value", field_required::no, long_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            0, "json_next", field_required::no, long_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            0, "json_value", field_required::no, long_type{}));
         return expected_struct;
     }()};
     EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -444,10 +454,12 @@ TEST_F(RecordSchemaResolverTest, TestLatestSubjectSchema_Protobuf_MessageName) {
 
     const auto expected_type = field_type{[] {
         auto expected_struct = struct_type{};
-        expected_struct.fields.emplace_back(nested_field::create(
-          1, "inner_label_1", field_required::no, string_type{}));
-        expected_struct.fields.emplace_back(nested_field::create(
-          2, "inner_number_1", field_required::no, int_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            1, "inner_label_1", field_required::no, string_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            2, "inner_number_1", field_required::no, int_type{}));
         return expected_struct;
     }()};
     EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -507,10 +519,12 @@ TEST_F(RecordSchemaResolverTest, TestLatestSubjectSchema_Json) {
 
     const auto expected_type = field_type{[] {
         auto expected_struct = struct_type{};
-        expected_struct.fields.emplace_back(nested_field::create(
-          0, "json_next", field_required::no, long_type{}));
-        expected_struct.fields.emplace_back(nested_field::create(
-          0, "json_value", field_required::no, long_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            0, "json_next", field_required::no, long_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            0, "json_value", field_required::no, long_type{}));
         return expected_struct;
     }()};
     EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -607,18 +621,18 @@ chunked_schema_cache make_schema_cache() {
 std::unique_ptr<counting_registry> make_counting_sr() {
     auto sr = std::make_unique<counting_registry>();
 
-    auto avro_schema_id = sr
-                            ->create_schema(subject_schema{
-                              subject{"foo-value"},
-                              schema_definition{
-                                avro_record_schema, schema_type::avro}})
+    auto avro_schema_id = sr->create_schema(
+                              subject_schema{
+                                subject{"foo-value"},
+                                schema_definition{
+                                  avro_record_schema, schema_type::avro}})
                             .get();
     vassert(1 == avro_schema_id(), "failed to registry avro schema");
-    auto pb_schema_id = sr
-                          ->create_schema(subject_schema{
-                            subject{"foo-value"},
-                            schema_definition{
-                              pb_record_schema, schema_type::protobuf}})
+    auto pb_schema_id = sr->create_schema(
+                            subject_schema{
+                              subject{"foo-value"},
+                              schema_definition{
+                                pb_record_schema, schema_type::protobuf}})
                           .get();
     vassert(2 == pb_schema_id(), "failed to register protobuf schema");
 
@@ -631,19 +645,20 @@ std::unique_ptr<counting_registry> make_counting_sr() {
         return fmt::format(schema_temp, i);
     };
     for (auto i = 3; i < 10; i++) {
-        auto pb_schema_id = sr
-                              ->create_schema(subject_schema{
-                                subject{"foo-value"},
-                                schema_definition{
-                                  get_simple_schema(i), schema_type::protobuf}})
+        auto pb_schema_id = sr->create_schema(
+                                subject_schema{
+                                  subject{"foo-value"},
+                                  schema_definition{
+                                    get_simple_schema(i),
+                                    schema_type::protobuf}})
                               .get();
         vassert(i == pb_schema_id(), "failed to register protobuf schema");
     }
-    auto json_schema_id = sr
-                            ->create_schema(subject_schema{
-                              subject{"foo-value"},
-                              schema_definition{
-                                json_record_schema, schema_type::json}})
+    auto json_schema_id = sr->create_schema(
+                              subject_schema{
+                                subject{"foo-value"},
+                                schema_definition{
+                                  json_record_schema, schema_type::json}})
                             .get();
     vassert(10 == json_schema_id(), "failed to register json schema");
     return sr;
@@ -678,10 +693,12 @@ TEST(CachedRecordSchemaResolverTest, TestProtobufSchemaCache) {
 
         const auto expected_type = field_type{[] {
             auto expected_struct = struct_type{};
-            expected_struct.fields.emplace_back(nested_field::create(
-              1, "inner_label_1", field_required::no, string_type{}));
-            expected_struct.fields.emplace_back(nested_field::create(
-              2, "inner_number_1", field_required::no, int_type{}));
+            expected_struct.fields.emplace_back(
+              nested_field::create(
+                1, "inner_label_1", field_required::no, string_type{}));
+            expected_struct.fields.emplace_back(
+              nested_field::create(
+                2, "inner_number_1", field_required::no, int_type{}));
             return expected_struct;
         }()};
         EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -718,8 +735,9 @@ TEST(CachedRecordSchemaResolverTest, TestAvroSchemaCache) {
 
         const auto expected_type = field_type{[] {
             auto expected_struct = struct_type{};
-            expected_struct.fields.emplace_back(nested_field::create(
-              0, "value", field_required::yes, long_type{}));
+            expected_struct.fields.emplace_back(
+              nested_field::create(
+                0, "value", field_required::yes, long_type{}));
             expected_struct.fields.emplace_back(
               nested_field::create(0, "next", field_required::yes, int_type{}));
             return expected_struct;
@@ -758,10 +776,12 @@ TEST(CachedRecordSchemaResolverTest, TestJsonSchemaCache) {
 
         const auto expected_type = field_type{[] {
             auto expected_struct = struct_type{};
-            expected_struct.fields.emplace_back(nested_field::create(
-              0, "json_next", field_required::no, long_type{}));
-            expected_struct.fields.emplace_back(nested_field::create(
-              0, "json_value", field_required::no, long_type{}));
+            expected_struct.fields.emplace_back(
+              nested_field::create(
+                0, "json_next", field_required::no, long_type{}));
+            expected_struct.fields.emplace_back(
+              nested_field::create(
+                0, "json_value", field_required::no, long_type{}));
             return expected_struct;
         }()};
         EXPECT_EQ(resolved_buf.type->type, expected_type);
@@ -807,10 +827,12 @@ TEST(CachedRecordSchemaResolverTest, TestSchemaCacheEviction) {
 
     const auto schema_2_expected_type = field_type{[] {
         auto expected_struct = struct_type{};
-        expected_struct.fields.emplace_back(nested_field::create(
-          1, "inner_label_1", field_required::no, string_type{}));
-        expected_struct.fields.emplace_back(nested_field::create(
-          2, "inner_number_1", field_required::no, int_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            1, "inner_label_1", field_required::no, string_type{}));
+        expected_struct.fields.emplace_back(
+          nested_field::create(
+            2, "inner_number_1", field_required::no, int_type{}));
         return expected_struct;
     }()};
 

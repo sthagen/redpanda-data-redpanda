@@ -384,8 +384,9 @@ shard_placement_table::initialize_from_kvstore(
 
     std::vector<std::unique_ptr<shard_placement_table>> extra_spts;
     for (size_t i = 0; i < extra_kvstores.size(); ++i) {
-        extra_spts.push_back(std::make_unique<shard_placement_table>(
-          ss::smp::count + i, *extra_kvstores[i]));
+        extra_spts.push_back(
+          std::make_unique<shard_placement_table>(
+            ss::smp::count + i, *extra_kvstores[i]));
     }
 
     // 1. gather kvstore markers from all shards
@@ -794,10 +795,11 @@ ss::future<> shard_placement_table::set_target(
             co_await container().invoke_on(
               target->shard,
               [&target, shard_rev, &ntp](shard_placement_table& other) {
-                  auto marker_buf = serde::to_iobuf(assignment_marker{
-                    .log_revision = target->log_revision,
-                    .shard_revision = shard_rev,
-                  });
+                  auto marker_buf = serde::to_iobuf(
+                    assignment_marker{
+                      .log_revision = target->log_revision,
+                      .shard_revision = shard_rev,
+                    });
                   vlog(
                     clusterlog.trace,
                     "[{}] put assigned marker, lr: {} sr: {}",
@@ -976,12 +978,13 @@ ss::future<std::error_code> shard_placement_table::prepare_create(
     if (!state.current()) {
         if (state._is_initial_for == expected_log_rev) {
             if (_persistence_enabled) {
-                auto marker_buf = serde::to_iobuf(current_state_marker{
-                  .ntp = ntp,
-                  .log_revision = expected_log_rev,
-                  .shard_revision = assigned.shard_revision,
-                  .is_complete = true,
-                });
+                auto marker_buf = serde::to_iobuf(
+                  current_state_marker{
+                    .ntp = ntp,
+                    .log_revision = expected_log_rev,
+                    .shard_revision = assigned.shard_revision,
+                    .is_complete = true,
+                  });
                 vlog(
                   clusterlog.trace,
                   "[{}] put initial cur state marker, lr: {} sr: {}",
@@ -1146,13 +1149,14 @@ shard_placement_table::prepare_transfer(
                 *dest._probe);
 
               if (dest._persistence_enabled) {
-                  auto marker_buf = serde::to_iobuf(current_state_marker{
-                    .ntp = ntp,
-                    .log_revision = expected_log_rev,
-                    .shard_revision = dest_state.current()->shard_revision,
-                    .is_complete = false,
-                    .remake_state = remake_state,
-                  });
+                  auto marker_buf = serde::to_iobuf(
+                    current_state_marker{
+                      .ntp = ntp,
+                      .log_revision = expected_log_rev,
+                      .shard_revision = dest_state.current()->shard_revision,
+                      .is_complete = false,
+                      .remake_state = remake_state,
+                    });
                   vlog(
                     clusterlog.trace,
                     "[{}] put receiving cur state marker, lr: {} sr: {}",
@@ -1235,13 +1239,14 @@ ss::future<> shard_placement_table::finish_transfer(
 
           ss::future<> fut = ss::now();
           if (dest._persistence_enabled) {
-              auto marker_buf = serde::to_iobuf(current_state_marker{
-                .ntp = ntp,
-                .log_revision = dest_state.current()->log_revision,
-                .shard_revision = dest_state.current()->shard_revision,
-                .is_complete = true,
-                .remake_state = dest_state.current()->remake_state,
-              });
+              auto marker_buf = serde::to_iobuf(
+                current_state_marker{
+                  .ntp = ntp,
+                  .log_revision = dest_state.current()->log_revision,
+                  .shard_revision = dest_state.current()->shard_revision,
+                  .is_complete = true,
+                  .remake_state = dest_state.current()->remake_state,
+                });
               vlog(
                 clusterlog.trace,
                 "[{}] put transferred cur state marker, lr: {} sr: {}",
@@ -1429,12 +1434,13 @@ ss::future<std::error_code> shard_placement_table::set_remake_state(
     current.remake_state = remake_state;
 
     if (_persistence_enabled) {
-        auto marker_buf = serde::to_iobuf(current_state_marker{
-          .ntp = ntp,
-          .log_revision = current.log_revision,
-          .shard_revision = current.shard_revision,
-          .is_complete = true,
-          .remake_state = remake_state});
+        auto marker_buf = serde::to_iobuf(
+          current_state_marker{
+            .ntp = ntp,
+            .log_revision = current.log_revision,
+            .shard_revision = current.shard_revision,
+            .is_complete = true,
+            .remake_state = remake_state});
         co_await _kvstore.put(
           kvstore_key_space,
           current_state_kvstore_key(current.group),

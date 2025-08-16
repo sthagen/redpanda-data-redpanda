@@ -653,11 +653,12 @@ TEST_F_CORO(raft_fixture, test_force_reconfiguration) {
               }
               auto target = random_generators::random_choice(not_leaders);
               return raft
-                ->transfer_leadership(transfer_leadership_request{
-                  .group = raft->group(),
-                  .target = target.id(),
-                  .timeout = 25ms,
-                })
+                ->transfer_leadership(
+                  transfer_leadership_request{
+                    .group = raft->group(),
+                    .target = target.id(),
+                    .timeout = 25ms,
+                  })
                 .then([this](transfer_leadership_reply r) {
                     if (r.result != raft::errc::success) {
                         vlog(logger().info, "error(transferring): {}", r);

@@ -24,42 +24,47 @@ field_type test_nested_schema_type() {
     nested_struct.fields.emplace_back(
       nested_field::create(3, "baz", field_required::no, boolean_type{}));
 
-    nested_struct.fields.emplace_back(nested_field::create(
-      4,
-      "qux",
-      field_required::yes,
-      list_type::create(5, field_required::yes, string_type{})));
+    nested_struct.fields.emplace_back(
+      nested_field::create(
+        4,
+        "qux",
+        field_required::yes,
+        list_type::create(5, field_required::yes, string_type{})));
 
-    nested_struct.fields.emplace_back(nested_field::create(
-      6,
-      "quux",
-      field_required::yes,
-      map_type::create(
-        7,
-        string_type{},
-        8,
+    nested_struct.fields.emplace_back(
+      nested_field::create(
+        6,
+        "quux",
         field_required::yes,
         map_type::create(
-          9, string_type{}, 10, field_required::yes, int_type{}))));
+          7,
+          string_type{},
+          8,
+          field_required::yes,
+          map_type::create(
+            9, string_type{}, 10, field_required::yes, int_type{}))));
 
     struct_type location_struct;
     location_struct.fields.emplace_back(
       nested_field::create(13, "latitude", field_required::no, float_type{}));
     location_struct.fields.emplace_back(
       nested_field::create(14, "longitude", field_required::no, float_type{}));
-    nested_struct.fields.emplace_back(nested_field::create(
-      11,
-      "location",
-      field_required::yes,
-      list_type::create(12, field_required::yes, std::move(location_struct))));
+    nested_struct.fields.emplace_back(
+      nested_field::create(
+        11,
+        "location",
+        field_required::yes,
+        list_type::create(
+          12, field_required::yes, std::move(location_struct))));
 
     struct_type person_struct;
     person_struct.fields.emplace_back(
       nested_field::create(16, "name", field_required::no, string_type{}));
     person_struct.fields.emplace_back(
       nested_field::create(17, "age", field_required::yes, int_type{}));
-    nested_struct.fields.emplace_back(nested_field::create(
-      15, "person", field_required::no, std::move(person_struct)));
+    nested_struct.fields.emplace_back(
+      nested_field::create(
+        15, "person", field_required::no, std::move(person_struct)));
 
     field_type nested_type = std::move(nested_struct);
     return nested_type;
@@ -68,14 +73,19 @@ field_type test_nested_schema_type() {
 field_type test_nested_schema_type_avro() {
     auto t = test_nested_schema_type();
     auto s_type = std::get<struct_type>(std::move(t));
-    s_type.fields.emplace_back(nested_field::create(
-      18,
-      "some_decimal",
-      field_required::no,
-      decimal_type{.precision = 10, .scale = 2}));
+    s_type.fields.emplace_back(
+      nested_field::create(
+        18,
+        "some_decimal",
+        field_required::no,
+        decimal_type{.precision = 10, .scale = 2}));
 
-    s_type.fields.emplace_back(nested_field::create(
-      19, "the_fixed_64_bytes", field_required::no, fixed_type{.length = 64}));
+    s_type.fields.emplace_back(
+      nested_field::create(
+        19,
+        "the_fixed_64_bytes",
+        field_required::no,
+        fixed_type{.length = 64}));
 
     s_type.fields.emplace_back(
       nested_field::create(20, "an_uuid", field_required::no, uuid_type{}));

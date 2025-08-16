@@ -95,8 +95,9 @@ void backlog_controller::setup_metrics() {
         sm::make_gauge(
           "backlog_size",
           [this] { return _current_sample; },
-          sm::description("Iceberg controller current backlog - averaged size "
-                          "of the backlog per partition")),
+          sm::description(
+            "Iceberg controller current backlog - averaged size "
+            "of the backlog per partition")),
 
       });
 }

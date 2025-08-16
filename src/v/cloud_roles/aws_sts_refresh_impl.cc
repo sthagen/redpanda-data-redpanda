@@ -65,10 +65,12 @@ static constexpr std::string_view request_payload
 static ss::sstring load_from_env(std::string_view env_var) {
     auto env_value = std::getenv(env_var.data());
     if (!env_value) {
-        throw std::runtime_error(fmt::format(
-          "environment variable {} is not set, the STS client cannot function "
-          "without this.",
-          env_var));
+        throw std::runtime_error(
+          fmt::format(
+            "environment variable {} is not set, the STS client cannot "
+            "function "
+            "without this.",
+            env_var));
     }
     return env_value;
 }

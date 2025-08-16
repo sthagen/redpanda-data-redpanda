@@ -41,8 +41,9 @@ struct test_fixture : public seastar_test {
     ss::future<> SetUpAsync() {
         co_await as.start();
         co_await migrated_resources.start();
-        co_await topics.start(ss::sharded_parameter(
-          [this] { return std::ref(migrated_resources.local()); }));
+        co_await topics.start(ss::sharded_parameter([this] {
+            return std::ref(migrated_resources.local());
+        }));
         leaders = std::make_unique<partition_leaders_table>(topics, as);
     }
     ss::future<> TearDownAsync() {

@@ -71,10 +71,11 @@ segment::segment(
 
 void segment::check_segment_not_closed(const char* msg) {
     if (unlikely(is_closed())) {
-        throw std::runtime_error(fmt::format(
-          "Attempted to perform operation: '{}' on a closed segment: {}",
-          msg,
-          *this));
+        throw std::runtime_error(
+          fmt::format(
+            "Attempted to perform operation: '{}' on a closed segment: {}",
+            msg,
+            *this));
     }
 }
 
@@ -537,28 +538,31 @@ ss::future<append_result> segment::do_append(const model::record_batch& b) {
       *this,
       b.header());
     if (unlikely(b.base_offset() > b.last_offset())) {
-        return ss::make_exception_future<append_result>(
-          std::runtime_error(fmt::format(
+        return ss::make_exception_future<append_result>(std::runtime_error(
+          fmt::format(
             "Empty batch written to {}. Batch header: {}",
             path(),
             b.header())));
     }
     if (unlikely(b.base_offset() < _tracker.get_base_offset())) {
-        return ss::make_exception_future<
-          append_result>(std::runtime_error(fmt::format(
-          "Invalid state. Attempted to append a batch with base_offset:{}, but "
-          "would invalidate our initial state base offset of:{}. Actual batch "
-          "header:{}, self:{}",
-          b.base_offset(),
-          _tracker.get_base_offset(),
-          b.header(),
-          *this)));
+        return ss::make_exception_future<append_result>(std::runtime_error(
+          fmt::format(
+            "Invalid state. Attempted to append a batch with base_offset:{}, "
+            "but "
+            "would invalidate our initial state base offset of:{}. Actual "
+            "batch "
+            "header:{}, self:{}",
+            b.base_offset(),
+            _tracker.get_base_offset(),
+            b.header(),
+            *this)));
     }
     if (unlikely(b.compressed() && !b.header().attrs.is_valid_compression())) {
-        return ss::make_exception_future<
-          append_result>(std::runtime_error(fmt::format(
-          "record batch marked as compressed, but has no valid compression:{}",
-          b.header())));
+        return ss::make_exception_future<append_result>(std::runtime_error(
+          fmt::format(
+            "record batch marked as compressed, but has no valid "
+            "compression:{}",
+            b.header())));
     }
     const auto start_physical_offset = _appender->file_byte_offset();
     const auto expected_end_physical = start_physical_offset
@@ -806,11 +810,12 @@ ss::future<ss::lw_shared_ptr<segment>> open_segment(
   ss::sharded<features::feature_table>& feature_table,
   std::optional<ntp_sanitizer_config> ntp_sanitizer_config) {
     if (path.get_version() != record_version_type::v1) {
-        throw std::runtime_error(fmt::format(
-          "Segment has invalid version {} != {} path {}",
-          path.get_version(),
-          record_version_type::v1,
-          path));
+        throw std::runtime_error(
+          fmt::format(
+            "Segment has invalid version {} != {} path {}",
+            path.get_version(),
+            record_version_type::v1,
+            path));
     }
 
     auto rdr = std::make_unique<segment_reader>(

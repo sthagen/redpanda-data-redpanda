@@ -727,75 +727,95 @@ void disk_space_manager::probe::setup_metrics() {
      *
      * If space management is disabled the metric value is 0.
      */
-    defs.emplace_back(sm::make_gauge(
-      "target_disk_size_bytes",
-      [this]() { return _sm->enabled() ? _sm->_target_size : 0; },
-      sm::description("Target maximum number of stored bytes.")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "target_disk_size_bytes",
+        [this]() { return _sm->enabled() ? _sm->_target_size : 0; },
+        sm::description("Target maximum number of stored bytes.")));
 
-    defs.emplace_back(sm::make_gauge(
-      "disk_usage_bytes",
-      [this]() { return _total_usage; },
-      sm::description(
-        "Total amount of disk usage under control of space management.")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "disk_usage_bytes",
+        [this]() { return _total_usage; },
+        sm::description(
+          "Total amount of disk usage under control of space management.")));
 
-    defs.emplace_back(sm::make_gauge(
-      "datalake_disk_usage_bytes",
-      [this]() { return _total_datalake_usage; },
-      sm::description("Total amount of disk usage by datalake.")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "datalake_disk_usage_bytes",
+        [this]() { return _total_datalake_usage; },
+        sm::description("Total amount of disk usage by datalake.")));
 
-    defs.emplace_back(sm::make_gauge(
-      "retention_reclaimable_bytes",
-      [this]() { return _retention_reclaimable; },
-      sm::description("Total amount of reclaimable data through standard "
-                      "retention policy (ref: retention.{ms,bytes}).")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "retention_reclaimable_bytes",
+        [this]() { return _retention_reclaimable; },
+        sm::description(
+          "Total amount of reclaimable data through standard "
+          "retention policy (ref: retention.{ms,bytes}).")));
 
-    defs.emplace_back(sm::make_gauge(
-      "available_reclaimable_bytes",
-      [this]() { return _available_reclaimable; },
-      sm::description("Total amount of available reclaimable data by space "
-                      "management.")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "available_reclaimable_bytes",
+        [this]() { return _available_reclaimable; },
+        sm::description(
+          "Total amount of available reclaimable data by space "
+          "management.")));
 
-    defs.emplace_back(sm::make_gauge(
-      "local_retention_reclaimable_bytes",
-      [this]() { return _local_retention_reclaimable; },
-      sm::description(
-        "Total amount of reclaimable data above the local "
-        "retention target (ref: retention.local.target.{ms,bytes}).")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "local_retention_reclaimable_bytes",
+        [this]() { return _local_retention_reclaimable; },
+        sm::description(
+          "Total amount of reclaimable data above the local "
+          "retention target (ref: retention.local.target.{ms,bytes}).")));
 
-    defs.emplace_back(sm::make_gauge(
-      "target_excess_bytes",
-      [this]() { return _target_excess; },
-      sm::description("Amount of data usage that exceeds target threshold.")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "target_excess_bytes",
+        [this]() { return _target_excess; },
+        sm::description(
+          "Amount of data usage that exceeds target threshold.")));
 
-    defs.emplace_back(sm::make_gauge(
-      "reclaim_local_bytes",
-      [this]() { return _reclaim_local; },
-      sm::description("Estimated amount of data above local retention to be "
-                      "reclaimed by space management")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "reclaim_local_bytes",
+        [this]() { return _reclaim_local; },
+        sm::description(
+          "Estimated amount of data above local retention to be "
+          "reclaimed by space management")));
 
-    defs.emplace_back(sm::make_gauge(
-      "reclaim_low_non_hinted_bytes",
-      [this]() { return _reclaim_low_non_hinted; },
-      sm::description("Estimated amount of data above the non-hinted low-space "
-                      "threshold to be reclaimed by space management")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "reclaim_low_non_hinted_bytes",
+        [this]() { return _reclaim_low_non_hinted; },
+        sm::description(
+          "Estimated amount of data above the non-hinted low-space "
+          "threshold to be reclaimed by space management")));
 
-    defs.emplace_back(sm::make_gauge(
-      "reclaim_low_hinted_bytes",
-      [this]() { return _reclaim_low_hinted; },
-      sm::description("Estimated amount of data above the hinted low-space "
-                      "threshold to be reclaimed by space management")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "reclaim_low_hinted_bytes",
+        [this]() { return _reclaim_low_hinted; },
+        sm::description(
+          "Estimated amount of data above the hinted low-space "
+          "threshold to be reclaimed by space management")));
 
-    defs.emplace_back(sm::make_gauge(
-      "reclaim_active_segment_bytes",
-      [this]() { return _reclaim_active_segment; },
-      sm::description("Estimated amount of data above the active segment to be "
-                      "reclaimed by space management")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "reclaim_active_segment_bytes",
+        [this]() { return _reclaim_active_segment; },
+        sm::description(
+          "Estimated amount of data above the active segment to be "
+          "reclaimed by space management")));
 
-    defs.emplace_back(sm::make_gauge(
-      "reclaim_estimate_bytes",
-      [this]() { return _reclaim_estimate; },
-      sm::description("Estimated amount of data to be reclaimed by space "
-                      "management in last schedule.")));
+    defs.emplace_back(
+      sm::make_gauge(
+        "reclaim_estimate_bytes",
+        [this]() { return _reclaim_estimate; },
+        sm::description(
+          "Estimated amount of data to be reclaimed by space "
+          "management in last schedule.")));
 
     _metrics.add_group(group_name, std::move(defs), {}, {sm::shard_label});
 }

@@ -37,30 +37,34 @@ convert_primitive(serde::json::parser& p, const primitive_type& ft) {
         return std::nullopt;
     case token::value_true:
         if (!std::holds_alternative<boolean_type>(ft)) {
-            throw value_conversion_exception(fmt::format(
-              "Mismatch json between json boolean value and schema type: {}",
-              ft));
+            throw value_conversion_exception(
+              fmt::format(
+                "Mismatch json between json boolean value and schema type: {}",
+                ft));
         }
         return iceberg::boolean_value(true);
     case token::value_false:
         if (!std::holds_alternative<boolean_type>(ft)) {
-            throw value_conversion_exception(fmt::format(
-              "Mismatch json between json boolean value and schema type: {}",
-              ft));
+            throw value_conversion_exception(
+              fmt::format(
+                "Mismatch json between json boolean value and schema type: {}",
+                ft));
         }
         return iceberg::boolean_value(false);
     case token::value_int:
         if (!std::holds_alternative<long_type>(ft)) {
-            throw value_conversion_exception(fmt::format(
-              "Mismatch json between json integer value and schema type: {}",
-              ft));
+            throw value_conversion_exception(
+              fmt::format(
+                "Mismatch json between json integer value and schema type: {}",
+                ft));
         }
         return iceberg::long_value(p.value_int());
     case token::value_double:
         if (!std::holds_alternative<double_type>(ft)) {
-            throw value_conversion_exception(fmt::format(
-              "Mismatch json between json double value and schema type: {}",
-              ft));
+            throw value_conversion_exception(
+              fmt::format(
+                "Mismatch json between json double value and schema type: {}",
+                ft));
         }
         return iceberg::double_value(p.value_double());
     case token::value_string: {
@@ -71,10 +75,11 @@ convert_primitive(serde::json::parser& p, const primitive_type& ft) {
 
         auto linearize = [](iobuf buf, size_t max_bytes) {
             if (buf.size_bytes() > max_bytes) {
-                throw value_conversion_exception(fmt::format(
-                  "String value exceeds maximum length of {} bytes: {}",
-                  max_bytes,
-                  buf.size_bytes()));
+                throw value_conversion_exception(
+                  fmt::format(
+                    "String value exceeds maximum length of {} bytes: {}",
+                    max_bytes,
+                    buf.size_bytes()));
             }
 
             iobuf_const_parser iop(buf);
@@ -105,8 +110,9 @@ convert_primitive(serde::json::parser& p, const primitive_type& ft) {
               .value();
         }
 
-        throw value_conversion_exception(fmt::format(
-          "Mismatch json between json string value and schema type: {}", ft));
+        throw value_conversion_exception(
+          fmt::format(
+            "Mismatch json between json string value and schema type: {}", ft));
     }
     default:
         throw value_conversion_exception(
@@ -170,9 +176,10 @@ ss::future<> decode_struct(
   const struct_type& st,
   const json_conversion_ir::struct_field_map_t& field_map) {
     if (p.token() != serde::json::token::start_object) {
-        throw value_conversion_exception(fmt::format(
-          "Expected start of JSON object for struct type but got {}",
-          p.token()));
+        throw value_conversion_exception(
+          fmt::format(
+            "Expected start of JSON object for struct type but got {}",
+            p.token()));
     }
 
     // Placeholder fields.
@@ -189,16 +196,18 @@ ss::future<> decode_struct(
         if (p.token() == serde::json::token::end_object) {
             for (size_t i = 0; i < st.fields.size(); ++i) {
                 if (st.fields[i]->required && !sv.fields[i].has_value()) {
-                    throw value_conversion_exception(fmt::format(
-                      "Required field {} is missing", st.fields[i]->name));
+                    throw value_conversion_exception(
+                      fmt::format(
+                        "Required field {} is missing", st.fields[i]->name));
                 }
             }
             co_return;
         }
 
         if (p.token() != serde::json::token::key) {
-            throw value_conversion_exception(fmt::format(
-              "Expected key token in JSON object but got {}", p.token()));
+            throw value_conversion_exception(
+              fmt::format(
+                "Expected key token in JSON object but got {}", p.token()));
         }
 
         auto key = p.value_string();

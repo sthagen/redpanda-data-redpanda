@@ -342,10 +342,11 @@ void migrations_table::fill_topic_locations(outbound_migration& odm) const {
               return cloud_storage_location{.hint = std::move(hint)};
           });
 
-        odm.topic_locations.push_back(topic_location{
-          .remote_topic = topic_md.get_configuration().remote_tp_ns(),
-          .location = std::move(location),
-        });
+        odm.topic_locations.push_back(
+          topic_location{
+            .remote_topic = topic_md.get_configuration().remote_tp_ns(),
+            .location = std::move(location),
+          });
     }
 }
 

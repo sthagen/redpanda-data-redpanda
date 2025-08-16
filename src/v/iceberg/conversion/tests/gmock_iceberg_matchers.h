@@ -32,21 +32,24 @@ auto OptionalIcebergPrimitive(const auto& value) {
 template<typename... MatcherT>
 auto IcebergStruct(MatcherT... matchers) {
     using struct_t = std::unique_ptr<struct_value>;
-    return Optional(VariantWith<struct_t>(Pointee(Field(
-      &struct_value::fields,
-      ElementsAre(std::forward<MatcherT>(matchers)...)))));
+    return Optional(
+      VariantWith<struct_t>(Pointee(Field(
+        &struct_value::fields,
+        ElementsAre(std::forward<MatcherT>(matchers)...)))));
 }
 
 template<typename MatcherT>
 auto IcebergList(MatcherT matcher) {
-    return Optional(VariantWith<std::unique_ptr<list_value>>(
-      Pointee(Field(&list_value::elements, std::forward<MatcherT>(matcher)))));
+    return Optional(
+      VariantWith<std::unique_ptr<list_value>>(Pointee(
+        Field(&list_value::elements, std::forward<MatcherT>(matcher)))));
 }
 
 template<typename MatcherT>
 auto IcebergMap(MatcherT matcher) {
-    return Optional(VariantWith<std::unique_ptr<map_value>>(
-      Pointee(Field(&map_value::kvs, std::forward<MatcherT>(matcher)))));
+    return Optional(
+      VariantWith<std::unique_ptr<map_value>>(
+        Pointee(Field(&map_value::kvs, std::forward<MatcherT>(matcher)))));
 }
 
 template<typename KeyMatcherT, typename ValueMatcherT>

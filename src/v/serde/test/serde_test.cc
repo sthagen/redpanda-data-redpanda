@@ -145,8 +145,9 @@ SEASTAR_THREAD_TEST_CASE(incompatible_version_throws) {
 
 SEASTAR_THREAD_TEST_CASE(manual_and_envelope_equal) {
     const auto roundtrip = serde::from_iobuf<test_msg1_new_manual>(
-      serde::to_iobuf(test_msg1_new{
-        ._a = 77, ._m = test_msg0{._i = 2, ._j = 3}, ._b = 88, ._c = 99}));
+      serde::to_iobuf(
+        test_msg1_new{
+          ._a = 77, ._m = test_msg0{._i = 2, ._j = 3}, ._b = 88, ._c = 99}));
     const auto check = test_msg1_new_manual{
       ._a = 77, ._m = test_msg0{._i = 2, ._j = 3}, ._b = 88, ._c = 99};
     BOOST_CHECK(roundtrip == check);
@@ -482,11 +483,12 @@ ss::future<> test_snapshot_header::serde_async_read(
     crc.extend(ss::cpu_to_le(metadata_size));
 
     if (std::cmp_not_equal(header_crc, crc.value())) {
-        throw std::runtime_error(fmt::format(
-          "Corrupt snapshot. Failed to verify header crc: {} != "
-          "{}: path?",
-          crc.value(),
-          header_crc));
+        throw std::runtime_error(
+          fmt::format(
+            "Corrupt snapshot. Failed to verify header crc: {} != "
+            "{}: path?",
+            crc.value(),
+            header_crc));
     }
 }
 
@@ -582,9 +584,10 @@ SEASTAR_THREAD_TEST_CASE(compat_test_removed_field) {
 }
 
 SEASTAR_THREAD_TEST_CASE(compat_test_removed_field_vector) {
-    auto b = serde::to_iobuf(std::vector<big>{
-      {.a = 1, .b = 2, .c = 3, .d = 0x77},
-      {.a = 123, .b = 456, .c = 789, .d = 0x77}});
+    auto b = serde::to_iobuf(
+      std::vector<big>{
+        {.a = 1, .b = 2, .c = 3, .d = 0x77},
+        {.a = 123, .b = 456, .c = 789, .d = 0x77}});
     const auto deserialized = serde::from_iobuf<std::vector<small>>(
       std::move(b));
     BOOST_CHECK(deserialized.at(0).a == 1);

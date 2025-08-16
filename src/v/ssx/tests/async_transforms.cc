@@ -34,8 +34,9 @@ SEASTAR_THREAD_TEST_CASE(async_transform_iter_test) {
     std::vector<int> out_iter = ssx::async_transform<std::vector<int>>(
                                   input.begin(), input.end(), plus(2))
                                   .get();
-    BOOST_TEST(std::equal(
-      out_iter.begin(), out_iter.end(), expected.begin(), expected.end()));
+    BOOST_TEST(
+      std::equal(
+        out_iter.begin(), out_iter.end(), expected.begin(), expected.end()));
 }
 
 SEASTAR_THREAD_TEST_CASE(async_transform_range_test) {
@@ -47,8 +48,9 @@ SEASTAR_THREAD_TEST_CASE(async_transform_range_test) {
 
     std::vector<int> out_range
       = ssx::async_transform<std::vector<int>>(input, plus(2)).get();
-    BOOST_TEST(std::equal(
-      out_range.begin(), out_range.end(), expected.begin(), expected.end()));
+    BOOST_TEST(
+      std::equal(
+        out_range.begin(), out_range.end(), expected.begin(), expected.end()));
 }
 
 SEASTAR_THREAD_TEST_CASE(async_transform_move_test) {
@@ -99,8 +101,9 @@ SEASTAR_THREAD_TEST_CASE(parallel_transform_iter_test) {
 
     std::vector<int> out_iter
       = ssx::parallel_transform(input.begin(), input.end(), plus(2)).get();
-    BOOST_TEST(std::equal(
-      out_iter.begin(), out_iter.end(), expected.begin(), expected.end()));
+    BOOST_TEST(
+      std::equal(
+        out_iter.begin(), out_iter.end(), expected.begin(), expected.end()));
 }
 
 SEASTAR_THREAD_TEST_CASE(parallel_transform_range_test) {
@@ -112,8 +115,9 @@ SEASTAR_THREAD_TEST_CASE(parallel_transform_range_test) {
 
     std::vector<int> out_range
       = ssx::parallel_transform(std::move(input), plus(2)).get();
-    BOOST_TEST(std::equal(
-      out_range.begin(), out_range.end(), expected.begin(), expected.end()));
+    BOOST_TEST(
+      std::equal(
+        out_range.begin(), out_range.end(), expected.begin(), expected.end()));
 }
 
 SEASTAR_THREAD_TEST_CASE(parallel_transform_chunked_range_test) {
@@ -127,6 +131,7 @@ SEASTAR_THREAD_TEST_CASE(parallel_transform_chunked_range_test) {
                        std::move(input), plus(2))
                        .get();
     static_assert(std::is_same_v<decltype(out_range), chunked_vector<int>>);
-    BOOST_TEST(std::equal(
-      out_range.begin(), out_range.end(), expected.begin(), expected.end()));
+    BOOST_TEST(
+      std::equal(
+        out_range.begin(), out_range.end(), expected.begin(), expected.end()));
 }

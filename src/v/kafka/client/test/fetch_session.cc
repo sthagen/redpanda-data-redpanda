@@ -45,14 +45,15 @@ kafka::fetch_response make_fetch_response(
         .session_id = s_id,
         .responses{}}};
     kafka::fetch_response::partition p{.topic = tpv.topic};
-    p.partitions.push_back(kafka::fetch_response::partition_response{
-      .partition_index = tpv.partition,
-      .error_code = kafka::error_code::none,
-      .high_watermark = model::offset{-1},
-      .last_stable_offset = model::offset{-1},
-      .log_start_offset = model::offset{-1},
-      .aborted_transactions = {},
-      .records{std::move(record_set)}});
+    p.partitions.push_back(
+      kafka::fetch_response::partition_response{
+        .partition_index = tpv.partition,
+        .error_code = kafka::error_code::none,
+        .high_watermark = model::offset{-1},
+        .last_stable_offset = model::offset{-1},
+        .log_start_offset = model::offset{-1},
+        .aborted_transactions = {},
+        .records{std::move(record_set)}});
     res.data.responses.push_back(std::move(p));
     return res;
 }

@@ -53,9 +53,10 @@ public:
       , tmp_dir("translation_task_test")
       , test_rcn(as, 10s, 1s)
       , cloud_io(sr->remote.local(), bucket_name)
-      , schema_mgr(std::make_unique<simple_schema_manager>(
-          iceberg::uri_converter(sr->remote.local().provider())
-            .to_uri(bucket_name, "test")))
+      , schema_mgr(
+          std::make_unique<simple_schema_manager>(
+            iceberg::uri_converter(sr->remote.local().provider())
+              .to_uri(bucket_name, "test")))
       , t_creator(
           std::make_unique<direct_table_creator>(*schema_resolver, *schema_mgr))
       , location_provider(sr->remote.local().provider(), bucket_name)

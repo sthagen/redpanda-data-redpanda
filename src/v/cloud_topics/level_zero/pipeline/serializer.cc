@@ -46,13 +46,14 @@ struct serializing_consumer {
           _output.size_bytes(),
           offset);
         auto extent_size = _output.size_bytes() - offset;
-        _extents.emplace_back(extent_meta{
-          .id = object_id{},
-          .first_byte_offset = first_byte_offset_t(offset),
-          .byte_range_size = byte_range_size_t(extent_size),
-          .base_offset = base,
-          .last_offset = last,
-        });
+        _extents.emplace_back(
+          extent_meta{
+            .id = object_id{},
+            .first_byte_offset = first_byte_offset_t(offset),
+            .byte_range_size = byte_range_size_t(extent_size),
+            .base_offset = base,
+            .last_offset = last,
+          });
 
         return ss::make_ready_future<ss::stop_iteration>(
           ss::stop_iteration::no);

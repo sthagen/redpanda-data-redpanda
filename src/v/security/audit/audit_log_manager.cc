@@ -246,14 +246,16 @@ ss::future<> audit_client::set_client_credentials() {
     auto& frontend = _controller->get_ephemeral_credential_frontend().local();
     auto pw = co_await frontend.get(audit_principal);
     if (pw.err != cluster::errc::success) {
-        throw std::runtime_error(fmt::format(
-          "Failed to fetch credential for principal: {}", audit_principal));
+        throw std::runtime_error(
+          fmt::format(
+            "Failed to fetch credential for principal: {}", audit_principal));
     }
-    _client.set_credentials(kafka::client::sasl_configuration{
-      .mechanism = pw.credential.mechanism(),
-      .username = pw.credential.user()(),
-      .password = pw.credential.password()(),
-    });
+    _client.set_credentials(
+      kafka::client::sasl_configuration{
+        .mechanism = pw.credential.mechanism(),
+        .username = pw.credential.user()(),
+        .password = pw.credential.password()(),
+      });
 }
 
 ss::future<> audit_client::configure() {

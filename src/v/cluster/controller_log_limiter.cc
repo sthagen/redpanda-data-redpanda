@@ -69,16 +69,18 @@ void group_limiter::setup_public_metrics() {
       {sm::make_counter(
          "requests_dropped",
          [this] { return _dropped_requests_amount; },
-         sm::description("Controller log rate limiting. "
-                         "Amount of requests that are dropped "
-                         "due to exceeding limit in group"),
+         sm::description(
+           "Controller log rate limiting. "
+           "Amount of requests that are dropped "
+           "due to exceeding limit in group"),
          labels)
          .aggregate({sm::shard_label}),
        sm::make_gauge(
          "requests_available_rps",
          [this] { return _throttler.available(); },
-         sm::description("Controller log rate limiting."
-                         " Available rps for group"),
+         sm::description(
+           "Controller log rate limiting."
+           " Available rps for group"),
          labels)
          .aggregate({sm::shard_label})});
 }

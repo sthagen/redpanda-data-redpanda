@@ -1748,11 +1748,12 @@ ss::future<topic_result> topics_frontend::do_create_partition(
           const auto new_partitions_cnt = p_cfg.new_total_partition_count
                                           - current;
           const auto replication_factor = static_cast<int16_t>(rf);
-          return al.allocate(simple_allocation_request{
-            p_cfg.tp_ns,
-            new_partitions_cnt,
-            replication_factor,
-            std::move(existing_rc)});
+          return al.allocate(
+            simple_allocation_request{
+              p_cfg.tp_ns,
+              new_partitions_cnt,
+              replication_factor,
+              std::move(existing_rc)});
       });
 
     // no assignments, error

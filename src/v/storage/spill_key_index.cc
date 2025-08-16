@@ -57,9 +57,10 @@ spill_key_index::spill_key_index(
   storage_resources& resources)
   : compacted_index_writer(std::move(name))
   , _resources(resources)
-  , _appender(storage::segment_appender(
-      std::move(dummy_file),
-      segment_appender::options(1, std::nullopt, _resources)))
+  , _appender(
+      storage::segment_appender(
+        std::move(dummy_file),
+        segment_appender::options(1, std::nullopt, _resources)))
   , _max_mem(max_mem) {}
 
 spill_key_index::~spill_key_index() {
@@ -337,9 +338,10 @@ ss::future<> spill_key_index::open() {
     auto index_file = co_await make_writer_handle(
       std::filesystem::path(filename()), _sanitizer_config, _truncate);
 
-    _appender.emplace(storage::segment_appender(
-      std::move(index_file),
-      segment_appender::options(1, std::nullopt, _resources)));
+    _appender.emplace(
+      storage::segment_appender(
+        std::move(index_file),
+        segment_appender::options(1, std::nullopt, _resources)));
 }
 
 ss::future<> spill_key_index::close() {

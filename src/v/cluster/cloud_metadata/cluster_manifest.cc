@@ -52,12 +52,14 @@ void cluster_metadata_manifest::load_from_json(const rapidjson::Document& doc) {
     if (
       compat_version
       > static_cast<int>(cluster_metadata_manifest::redpanda_serde_version)) {
-        throw std::runtime_error(fmt::format(
-          "Can't deserialize cluster manifest, supported version {}, manifest "
-          "version {}, compatible version {}",
-          static_cast<int>(cluster_metadata_manifest::redpanda_serde_version),
-          version,
-          compat_version));
+        throw std::runtime_error(
+          fmt::format(
+            "Can't deserialize cluster manifest, supported version {}, "
+            "manifest "
+            "version {}, compatible version {}",
+            static_cast<int>(cluster_metadata_manifest::redpanda_serde_version),
+            version,
+            compat_version));
     }
     if (doc.HasMember("cluster_uuid")) {
         std::string uuid_str(doc["cluster_uuid"].GetString());
@@ -66,10 +68,11 @@ void cluster_metadata_manifest::load_from_json(const rapidjson::Document& doc) {
             std::vector<uint8_t> uuid_vec{u.begin(), u.end()};
             cluster_uuid = model::cluster_uuid(uuid_vec);
         } catch (...) {
-            throw std::runtime_error(fmt::format(
-              "Failed to deserialize 'cluster_uuid' field {}: {}",
-              uuid_str,
-              std::current_exception()));
+            throw std::runtime_error(
+              fmt::format(
+                "Failed to deserialize 'cluster_uuid' field {}: {}",
+                uuid_str,
+                std::current_exception()));
         }
     }
     if (doc.HasMember("upload_time_since_epoch")) {
@@ -125,8 +128,9 @@ void cluster_metadata_manifest::to_json(std::ostream& out) const {
     w.Key("version");
     w.Int(static_cast<int>(cluster_metadata_manifest::redpanda_serde_version));
     w.Key("compat_version");
-    w.Int(static_cast<int>(
-      cluster_metadata_manifest::redpanda_serde_compat_version));
+    w.Int(
+      static_cast<int>(
+        cluster_metadata_manifest::redpanda_serde_compat_version));
     w.Key("cluster_uuid");
     w.String(ss::sstring(cluster_uuid()));
     w.Key("upload_time_since_epoch");

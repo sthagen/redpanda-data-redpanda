@@ -290,10 +290,11 @@ struct consumer_test_mock : public ::testing::Test {
           .topic = topic,
         });
         for (const auto& partition : partitions) {
-            assignment.back().partitions.push_back(partition_assignment{
-              .partition_id = model::partition_id(partition),
-              .next_offset = kafka::offset(0),
-            });
+            assignment.back().partitions.push_back(
+              partition_assignment{
+                .partition_id = model::partition_id(partition),
+                .next_offset = kafka::offset(0),
+              });
         }
         return assignment;
     }
@@ -428,10 +429,11 @@ TEST_F(consumer_test_mock, TestLeadershipChange) {
       .topic = test_topic,
     });
     // only partition 0 is assigned
-    assignment.back().partitions.push_back(partition_assignment{
-      .partition_id = model::partition_id(0),
-      .next_offset = kafka::offset(0),
-    });
+    assignment.back().partitions.push_back(
+      partition_assignment{
+        .partition_id = model::partition_id(0),
+        .next_offset = kafka::offset(0),
+      });
     consumer.assign_partitions(std::move(assignment)).get();
 
     fetch_and_append_to_map(all_batches, consumer).get();
@@ -486,10 +488,11 @@ TEST_F(consumer_test_mock, TestOffsetResetPolicy) {
       .topic = test_topic,
     });
     // only partition 0 is assigned
-    assignment.back().partitions.push_back(partition_assignment{
-      .partition_id = model::partition_id(0),
-      .next_offset = std::nullopt, // no offset set, should reset to earliest
-    });
+    assignment.back().partitions.push_back(
+      partition_assignment{
+        .partition_id = model::partition_id(0),
+        .next_offset = std::nullopt, // no offset set, should reset to earliest
+      });
     consumer.assign_partitions(std::move(assignment)).get();
 
     fetch_and_append_to_map(all_batches, consumer).get();
@@ -509,17 +512,19 @@ TEST_F(consumer_test_mock, TestOffsetResetPolicy) {
     // Set start offset to 400, so that the latest offset is 430
     set_partition_start_offset(test_topic, 1, model::offset(400));
     make_data_available(test_topic, 1, 30);
-    consumer.update_configuration(direct_consumer::configuration{
-      .reset_policy = offset_reset_policy::latest});
+    consumer.update_configuration(
+      direct_consumer::configuration{
+        .reset_policy = offset_reset_policy::latest});
     chunked_vector<topic_assignment> new_assignment;
     new_assignment.push_back({
       .topic = test_topic,
     });
     // only partition 0 is assigned
-    new_assignment.back().partitions.push_back(partition_assignment{
-      .partition_id = model::partition_id(1),
-      .next_offset = std::nullopt, // no offset set, should reset to latest
-    });
+    new_assignment.back().partitions.push_back(
+      partition_assignment{
+        .partition_id = model::partition_id(1),
+        .next_offset = std::nullopt, // no offset set, should reset to latest
+      });
     consumer.assign_partitions(std::move(new_assignment)).get();
     auto data = consumer.fetch_next(std::chrono::seconds(1)).get();
     // fetch should be empty, because the fetch offset was reset to latest
@@ -555,10 +560,11 @@ TEST_F(consumer_test_mock, TestFetchErrorPropagation) {
       .topic = test_topic,
     });
     // only partition 0 is assigned
-    assignment.back().partitions.push_back(partition_assignment{
-      .partition_id = model::partition_id(0),
-      .next_offset = std::nullopt, // no offset set, should reset to earliest
-    });
+    assignment.back().partitions.push_back(
+      partition_assignment{
+        .partition_id = model::partition_id(0),
+        .next_offset = std::nullopt, // no offset set, should reset to earliest
+      });
     consumer.assign_partitions(std::move(assignment)).get();
 
     fetch_and_append_to_map(all_batches, consumer).get();
@@ -597,10 +603,11 @@ TEST_F(consumer_test_mock, TestPartitionErrorPropagation) {
       .topic = test_topic,
     });
     // only partition 0 is assigned
-    assignment.back().partitions.push_back(partition_assignment{
-      .partition_id = model::partition_id(0),
-      .next_offset = std::nullopt, // no offset set, should reset to earliest
-    });
+    assignment.back().partitions.push_back(
+      partition_assignment{
+        .partition_id = model::partition_id(0),
+        .next_offset = std::nullopt, // no offset set, should reset to earliest
+      });
     // set retriable error for partition 0
     set_error(test_topic, 0, kafka::error_code::not_leader_for_partition);
     consumer.assign_partitions(std::move(assignment)).get();

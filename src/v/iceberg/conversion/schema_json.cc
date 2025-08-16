@@ -27,11 +27,12 @@ type_to_iceberg(const json_conversion_ir& ir) {
     } else {
         iceberg::struct_type ret;
 
-        ret.fields.push_back(iceberg::nested_field::create(
-          placeholder_field_id,
-          "root",
-          iceberg::field_required::no,
-          std::move(root)));
+        ret.fields.push_back(
+          iceberg::nested_field::create(
+            placeholder_field_id,
+            "root",
+            iceberg::field_required::no,
+            std::move(root)));
 
         return ret;
     }

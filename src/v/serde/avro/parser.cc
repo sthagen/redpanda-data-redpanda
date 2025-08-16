@@ -38,8 +38,9 @@ public:
     parse_node(const ::avro::NodePtr& node, parser_state& state) {
         state.level++;
         if (state.level >= max_nested_depth) {
-            throw std::invalid_argument(fmt::format(
-              "max nested field depth of {} reached", max_nested_depth));
+            throw std::invalid_argument(
+              fmt::format(
+                "max nested field depth of {} reached", max_nested_depth));
         }
         auto decrement_on_exit = ss::defer([&state] { state.level--; });
         switch (node->type()) {
@@ -56,11 +57,12 @@ public:
             auto [value, _] = _parser.read_varlong();
             using limits_t = std::numeric_limits<int32_t>;
             if (value < limits_t::min() || value > limits_t::max()) {
-                throw std::invalid_argument(fmt::format(
-                  "Value {} is outside of avro int limits: [{},{}]",
-                  value,
-                  limits_t::min(),
-                  limits_t::max()));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Value {} is outside of avro int limits: [{},{}]",
+                    value,
+                    limits_t::min(),
+                    limits_t::max()));
             }
             co_return std::make_unique<parsed::message>(
               parsed::primitive(static_cast<int32_t>(value)));
@@ -127,11 +129,13 @@ public:
         case ::avro::AVRO_UNION: {
             auto [idx, _] = _parser.read_varlong();
             if (idx < 0 || idx >= static_cast<int64_t>(node->leaves())) {
-                throw std::invalid_argument(fmt::format(
-                  "Invalid union branch decoded, it must be greater than 0 and "
-                  "smaller than number of leaves in union {}. current: {}",
-                  node->leaves(),
-                  idx));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Invalid union branch decoded, it must be greater than 0 "
+                    "and "
+                    "smaller than number of leaves in union {}. current: {}",
+                    node->leaves(),
+                    idx));
             }
 
             auto union_branch = node->leafAt(idx);
@@ -143,11 +147,12 @@ public:
             // fixed type is special as it does not have the size included in
             // the binary representation
             if (_parser.bytes_left() < node->fixedSize()) {
-                throw std::invalid_argument(fmt::format(
-                  "Error parsing fixed avro type. Expected fixed size: {}, "
-                  "while only {} bytes left in the buffer",
-                  node->fixedSize(),
-                  _parser.bytes_left()));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Error parsing fixed avro type. Expected fixed size: {}, "
+                    "while only {} bytes left in the buffer",
+                    node->fixedSize(),
+                    _parser.bytes_left()));
             }
 
             co_return std::make_unique<parsed::message>(
@@ -191,11 +196,12 @@ public:
         parser_state state;
         auto result = co_await parse_node(_schema->root(), state);
         if (_parser.bytes_left() > 0) {
-            throw std::invalid_argument(fmt::format(
-              "Bytes left in a buffer after parsing. Initial size: {}, left: "
-              "{}",
-              _initial_size,
-              _parser.bytes_left()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Bytes left in a buffer after parsing. Initial size: {}, left: "
+                "{}",
+                _initial_size,
+                _parser.bytes_left()));
         }
         co_return result;
     }
@@ -203,16 +209,18 @@ public:
 private:
     void validate_length(int64_t candidate) const {
         if (candidate < 0) {
-            throw std::invalid_argument(fmt::format(
-              "Invalid element length: {}, length can not be negative.",
-              candidate));
+            throw std::invalid_argument(
+              fmt::format(
+                "Invalid element length: {}, length can not be negative.",
+                candidate));
         }
 
         if (candidate > static_cast<int64_t>(_parser.bytes_left())) {
-            throw std::invalid_argument(fmt::format(
-              "Invalid length decoded. Decoded length: {}, bytes left: {}",
-              candidate,
-              _parser.bytes_left()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Invalid length decoded. Decoded length: {}, bytes left: {}",
+                candidate,
+                _parser.bytes_left()));
         }
     }
 

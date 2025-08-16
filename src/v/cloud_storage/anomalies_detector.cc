@@ -301,11 +301,13 @@ size_t anomalies_detector::get_visitable_segments() const {
         // Allow the scrubbing of one segment even if that means
         // going above the quota in order to ensure some forward
         // progress in all quota cases.
-        return size_t(std::max(
-          1, _received_quota.max_num_segments() - _result.segments_visited));
+        return size_t(
+          std::max(
+            1, _received_quota.max_num_segments() - _result.segments_visited));
     }
-    return size_t(std::max(
-      0, _received_quota.max_num_segments() - _result.segments_visited));
+    return size_t(
+      std::max(
+        0, _received_quota.max_num_segments() - _result.segments_visited));
 }
 
 bool anomalies_detector::should_stop() const {

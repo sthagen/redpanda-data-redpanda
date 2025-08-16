@@ -76,10 +76,11 @@ public:
         };
         auto wasm_binary = model::wasm_binary_iobuf(std::make_unique<iobuf>());
         {
-            auto path = test_utils::get_runfile_path(std::string(
-              std::filesystem::path(
-                "src/transform-sdk/go/transform/internal/testdata")
-              / file.stem() / file.filename()));
+            auto path = test_utils::get_runfile_path(
+              std::string(
+                std::filesystem::path(
+                  "src/transform-sdk/go/transform/internal/testdata")
+                / file.stem() / file.filename()));
             fmt::print(std::cerr, "Loading wasm file: {}\n", path);
             auto data = co_await ss::util::read_entire_file_contiguous(path);
             wasm_binary()->append(data.data(), data.size());
@@ -119,8 +120,9 @@ public:
                 return ssx::now(wasm::write_success::yes);
             })
           .then([output]() {
-              perf_tests::do_not_optimize(model::transformed_data::make_batch(
-                model::timestamp::now(), std::move(*output)));
+              perf_tests::do_not_optimize(
+                model::transformed_data::make_batch(
+                  model::timestamp::now(), std::move(*output)));
               perf_tests::stop_measuring_time();
           });
     }

@@ -120,8 +120,9 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
         sm::make_gauge(
           "committed_offset",
           [this] { return _partition.committed_offset(); },
-          sm::description("Partition commited offset. i.e. safely persisted on "
-                          "majority of replicas"),
+          sm::description(
+            "Partition commited offset. i.e. safely persisted on "
+            "majority of replicas"),
           labels),
         sm::make_gauge(
           "end_offset",
@@ -158,8 +159,9 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
         sm::make_total_bytes(
           "bytes_fetched_total",
           [this] { return _bytes_fetched; },
-          sm::description("Total number of bytes fetched (not all might be "
-                          "returned to the client)"),
+          sm::description(
+            "Total number of bytes fetched (not all might be "
+            "returned to the client)"),
           labels),
         sm::make_total_bytes(
           "bytes_fetched_from_follower_total",
@@ -177,8 +179,9 @@ void replicated_partition_probe::setup_internal_metrics(const model::ntp& ntp) {
                            .segments_metadata_bytes()
                        : 0;
           },
-          sm::description("Current number of bytes consumed by remote segments "
-                          "managed for this partition"),
+          sm::description(
+            "Current number of bytes consumed by remote segments "
+            "managed for this partition"),
           labels),
       },
       {},
@@ -306,8 +309,9 @@ void replicated_partition_probe::setup_public_metrics(const model::ntp& ntp) {
                     return fm.under_replicated;
                 });
           },
-          sm::description("Number of under replicated replicas (i.e. replicas "
-                          "that are live, but not at the latest offest)"),
+          sm::description(
+            "Number of under replicated replicas (i.e. replicas "
+            "that are live, but not at the latest offest)"),
           labels)
           .aggregate({sm::shard_label}),
         // Topic Level Metrics

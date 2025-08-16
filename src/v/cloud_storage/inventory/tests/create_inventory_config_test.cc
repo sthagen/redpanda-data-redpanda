@@ -75,10 +75,11 @@ TEST(CreateInvCfg, LowLevelApi) {
 }
 
 TEST(CreateInvCfg, HighLevelApi) {
-    test_create(csi::inv_ops{csi::aws_ops{
-      cloud_storage_clients::bucket_name{bucket},
-      csi::inventory_config_id{id},
-      prefix}});
+    test_create(
+      csi::inv_ops{csi::aws_ops{
+        cloud_storage_clients::bucket_name{bucket},
+        csi::inventory_config_id{id},
+        prefix}});
 }
 
 ss::future<cst::download_result>
@@ -133,8 +134,10 @@ TEST(CreateInvCfg, IfDoesNotExistCreates) {
     csi::MockRemote remote;
     EXPECT_CALL(remote, download_object(t::_))
       .Times(1)
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::notfound)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::notfound)));
 
     EXPECT_CALL(remote, upload_object(t::_))
       .Times(1)
@@ -163,15 +166,21 @@ TEST(CreateInvCfg, CreationRace) {
     csi::MockRemote remote;
     EXPECT_CALL(remote, download_object(t::_))
       .Times(2)
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::notfound)))
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::success)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::notfound)))
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::success)));
 
     EXPECT_CALL(remote, upload_object(t::_))
       .Times(1)
-      .WillOnce(t::Return(
-        ss::make_ready_future<cst::upload_result>(cst::upload_result::failed)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::upload_result>(
+            cst::upload_result::failed)));
 
     ss::abort_source as;
     retry_chain_node parent{as};
@@ -192,15 +201,21 @@ TEST(CreateInvCfg, FailedToCreate) {
     csi::MockRemote remote;
     EXPECT_CALL(remote, download_object(t::_))
       .Times(2)
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::notfound)))
-      .WillOnce(t::Return(ss::make_ready_future<cst::download_result>(
-        cst::download_result::notfound)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::notfound)))
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::download_result>(
+            cst::download_result::notfound)));
 
     EXPECT_CALL(remote, upload_object(t::_))
       .Times(1)
-      .WillOnce(t::Return(
-        ss::make_ready_future<cst::upload_result>(cst::upload_result::failed)));
+      .WillOnce(
+        t::Return(
+          ss::make_ready_future<cst::upload_result>(
+            cst::upload_result::failed)));
 
     ss::abort_source as;
     retry_chain_node parent{as};

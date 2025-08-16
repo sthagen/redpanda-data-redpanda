@@ -154,8 +154,9 @@ void admin_server::register_debug_routes() {
                     try {
                         val = boost::lexical_cast<int>(e);
                     } catch (const boost::bad_lexical_cast&) {
-                        throw ss::httpd::bad_param_exception(fmt::format(
-                          "Invalid parameter '{}' value {{{}}}", param, e));
+                        throw ss::httpd::bad_param_exception(
+                          fmt::format(
+                            "Invalid parameter '{}' value {{{}}}", param, e));
                     }
                 } else {
                     val = std::nullopt;
@@ -197,29 +198,32 @@ void admin_server::register_debug_routes() {
             cfg.max_spins_per_scheduling_point.has_value()
             && cfg.max_spins_per_scheduling_point.value()
                  < cfg.min_spins_per_scheduling_point.value()) {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Invalid parameter 'max_spins_per_scheduling_point' value "
-                "is too low: {} < {}",
-                cfg.max_spins_per_scheduling_point.value(),
-                cfg.min_spins_per_scheduling_point.value()));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Invalid parameter 'max_spins_per_scheduling_point' value "
+                  "is too low: {} < {}",
+                  cfg.max_spins_per_scheduling_point.value(),
+                  cfg.min_spins_per_scheduling_point.value()));
           }
           if (
             cfg.max_ms_per_scheduling_point.has_value()
             && cfg.max_ms_per_scheduling_point.value()
                  < cfg.min_ms_per_scheduling_point.value()) {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Invalid parameter 'max_ms_per_scheduling_point' value "
-                "is too low: {} < {}",
-                cfg.max_ms_per_scheduling_point.value(),
-                cfg.min_ms_per_scheduling_point.value()));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Invalid parameter 'max_ms_per_scheduling_point' value "
+                  "is too low: {} < {}",
+                  cfg.max_ms_per_scheduling_point.value(),
+                  cfg.min_ms_per_scheduling_point.value()));
           }
           cfg.num_fibers = 1;
           if (auto e = req->get_query_param("num_fibers"); !e.empty()) {
               try {
                   cfg.num_fibers = boost::lexical_cast<int>(e);
               } catch (const boost::bad_lexical_cast&) {
-                  throw ss::httpd::bad_param_exception(fmt::format(
-                    "Invalid parameter 'num_fibers' value {{{}}}", e));
+                  throw ss::httpd::bad_param_exception(
+                    fmt::format(
+                      "Invalid parameter 'num_fibers' value {{{}}}", e));
               }
           }
           return _stress_fiber_manager
@@ -458,10 +462,11 @@ void admin_server::register_debug_routes() {
       [](std::unique_ptr<ss::http::request> req) {
           auto value = req->get_query_param("value");
           if (value != "true" && value != "false") {
-              throw ss::httpd::bad_param_exception(fmt::format(
-                "Invalid parameter 'value' {{{}}}. Should be 'true' or "
-                "'false'",
-                value));
+              throw ss::httpd::bad_param_exception(
+                fmt::format(
+                  "Invalid parameter 'value' {{{}}}. Should be 'true' or "
+                  "'false'",
+                  value));
           }
 
           return ss::smp::invoke_on_all([value] {
@@ -573,8 +578,9 @@ admin_server::cpu_profile_handler(std::unique_ptr<ss::http::request> req) {
         try {
             shard_id = boost::lexical_cast<size_t>(shard_param);
         } catch (const boost::bad_lexical_cast&) {
-            throw ss::httpd::bad_param_exception(fmt::format(
-              "Invalid parameter 'shard_id' value {{{}}}", shard_param));
+            throw ss::httpd::bad_param_exception(
+              fmt::format(
+                "Invalid parameter 'shard_id' value {{{}}}", shard_param));
         }
         check_shard_id(*shard_id);
     }
@@ -585,8 +591,9 @@ admin_server::cpu_profile_handler(std::unique_ptr<ss::http::request> req) {
             wait_ms = std::chrono::milliseconds(
               boost::lexical_cast<uint64_t>(wait_param));
         } catch (const boost::bad_lexical_cast&) {
-            throw ss::httpd::bad_param_exception(fmt::format(
-              "Invalid parameter 'wait_ms' value {{{}}}", wait_param));
+            throw ss::httpd::bad_param_exception(
+              fmt::format(
+                "Invalid parameter 'wait_ms' value {{{}}}", wait_param));
         }
         if (*wait_ms < 1ms || *wait_ms > 15min) {
             throw ss::httpd::bad_param_exception(
@@ -651,10 +658,11 @@ admin_server::get_local_offsets_translated_handler(
     auto translate_to = to_kafka;
     if (auto e = req->get_query_param("translate_to"); !e.empty()) {
         if (e != to_kafka && e != to_rp) {
-            throw ss::httpd::bad_request_exception(fmt::format(
-              "'translate_to' parameter must be one of either {} or {}",
-              to_kafka,
-              to_rp));
+            throw ss::httpd::bad_request_exception(
+              fmt::format(
+                "'translate_to' parameter must be one of either {} or {}",
+                to_kafka,
+                to_rp));
         }
         translate_to = e;
     }
@@ -682,9 +690,10 @@ admin_server::get_local_offsets_translated_handler(
           auto partition = pm.get(ntp);
           if (!partition) {
               return ss::make_exception_future<ss::json::json_return_type>(
-                ss::httpd::not_found_exception(fmt::format(
-                  "partition with ntp {} could not be found on the node",
-                  ntp)));
+                ss::httpd::not_found_exception(
+                  fmt::format(
+                    "partition with ntp {} could not be found on the node",
+                    ntp)));
           }
           const auto& log = partition->log();
           std::vector<ss::httpd::debug_json::translated_offset> result;
@@ -700,9 +709,10 @@ admin_server::get_local_offsets_translated_handler(
                   }
                   result.push_back(std::move(to));
               } catch (const std::runtime_error&) {
-                  throw ss::httpd::bad_request_exception(fmt::format(
-                    "Offset provided {} was out of offset translator range",
-                    offset));
+                  throw ss::httpd::bad_request_exception(
+                    fmt::format(
+                      "Offset provided {} was out of offset translator range",
+                      offset));
               }
           }
           return ss::make_ready_future<ss::json::json_return_type>(
@@ -720,8 +730,9 @@ admin_server::cloud_storage_usage_handler(
         try {
             batch_size = std::stoi(batch_size_param);
         } catch (...) {
-            throw ss::httpd::bad_param_exception(fmt::format(
-              "batch_size must be an integer: {}", batch_size_param));
+            throw ss::httpd::bad_param_exception(
+              fmt::format(
+                "batch_size must be an integer: {}", batch_size_param));
         }
     }
 
@@ -732,8 +743,9 @@ admin_server::cloud_storage_usage_handler(
         try {
             retries_allowed = std::stoi(retries_param);
         } catch (...) {
-            throw ss::httpd::bad_param_exception(fmt::format(
-              "retries_allowed must be an integer: {}", retries_param));
+            throw ss::httpd::bad_param_exception(
+              fmt::format(
+                "retries_allowed must be an integer: {}", retries_param));
         }
     }
 
@@ -751,8 +763,9 @@ admin_server::cloud_storage_usage_handler(
         co_return ss::json::json_return_type(res.value());
     } else {
         throw ss::httpd::base_exception(
-          fmt::format("Failed to generate total cloud storage usage. "
-                      "Please retry."),
+          fmt::format(
+            "Failed to generate total cloud storage usage. "
+            "Please retry."),
           ss::http::reply::status_type::service_unavailable);
     }
 }
@@ -851,10 +864,11 @@ admin_server::get_partition_state_handler(
     const model::ntp ntp = parse_ntp_from_request(req->param);
     auto result = co_await get_partition_state(ntp, *_controller);
     if (result.has_error()) {
-        throw ss::httpd::server_error_exception(fmt::format(
-          "Error {} processing partition state for ntp: {}",
-          result.error(),
-          ntp));
+        throw ss::httpd::server_error_exception(
+          fmt::format(
+            "Error {} processing partition state for ntp: {}",
+            result.error(),
+            ntp));
     }
 
     ss::httpd::debug_json::partition_state response;
@@ -1047,27 +1061,30 @@ ss::future<ss::json::json_return_type> admin_server::override_node_uuid_handler(
         current_uuid = model::node_uuid(
           uuid_t::from_string(doc["current_node_uuid"].GetString()));
     } catch (const std::runtime_error& e) {
-        throw ss::httpd::bad_request_exception(ssx::sformat(
-          "failed parsing current_node_uuid: {} - {}",
-          doc["current_node_uuid"].GetString(),
-          e.what()));
+        throw ss::httpd::bad_request_exception(
+          ssx::sformat(
+            "failed parsing current_node_uuid: {} - {}",
+            doc["current_node_uuid"].GetString(),
+            e.what()));
     }
     auto& storage = _controller->get_storage().local();
     if (storage.node_uuid() != current_uuid) {
-        throw ss::httpd::bad_request_exception(ssx::sformat(
-          "Requested current node UUID: {} does not match node UUID: {}",
-          storage.node_uuid(),
-          current_uuid));
+        throw ss::httpd::bad_request_exception(
+          ssx::sformat(
+            "Requested current node UUID: {} does not match node UUID: {}",
+            storage.node_uuid(),
+            current_uuid));
     }
     model::node_uuid new_node_uuid;
     try {
         new_node_uuid = model::node_uuid(
           uuid_t::from_string(doc["new_node_uuid"].GetString()));
     } catch (const std::runtime_error& e) {
-        throw ss::httpd::bad_request_exception(ssx::sformat(
-          "failed parsing new_node_uuid: {} - {}",
-          doc["new_node_uuid"].GetString(),
-          e.what()));
+        throw ss::httpd::bad_request_exception(
+          ssx::sformat(
+            "failed parsing new_node_uuid: {} - {}",
+            doc["new_node_uuid"].GetString(),
+            e.what()));
     }
     model::node_id new_node_id;
     try {

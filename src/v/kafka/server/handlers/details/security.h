@@ -128,10 +128,11 @@ inline security::acl_binding to_acl_binding(const creatable_acl& acl) {
         auto errc = model::validate_kafka_topic_name(
           model::topic_view(pattern.name()));
         if (pattern.name() != "*" && errc) {
-            throw acl_conversion_error(fmt::format(
-              "ACL topic {} does not conform to kafka topic schema: {}",
-              pattern.name(),
-              errc.message()));
+            throw acl_conversion_error(
+              fmt::format(
+                "ACL topic {} does not conform to kafka topic schema: {}",
+                pattern.name(),
+                errc.message()));
         }
     }
 

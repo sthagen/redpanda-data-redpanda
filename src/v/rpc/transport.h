@@ -383,8 +383,9 @@ ss::future<result<rpc::client_context<T>>> parse_result(
               std::rethrow_exception(ex);
           }
           sctx->signal_body_parse();
-          return ret_t(rpc::client_context<T>(
-            sctx->get_header(), std::move(data_fut.get())));
+          return ret_t(
+            rpc::client_context<T>(
+              sctx->get_header(), std::move(data_fut.get())));
       });
 }
 

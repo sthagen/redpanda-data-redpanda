@@ -107,12 +107,13 @@ void plugin_table::upsert_transform(transform_id id, transform_metadata meta) {
     auto it = _name_index.find(std::string_view(meta.name()));
     if (it != _name_index.end()) {
         if (it->second != id) {
-            throw std::logic_error(ss::format(
-              "transform meta id={} is attempting to use a name {} which is "
-              "already registered to {}",
-              id,
-              meta.name,
-              it->second));
+            throw std::logic_error(
+              ss::format(
+                "transform meta id={} is attempting to use a name {} which is "
+                "already registered to {}",
+                id,
+                meta.name,
+                it->second));
         }
     } else {
         _name_index.emplace(meta.name, id);
@@ -199,12 +200,13 @@ void plugin_table::reset_transforms(plugin_table::map_t snap) {
         // build the name index
         auto it = snap_name_index.insert({v.name, k});
         if (!it.second) {
-            throw std::logic_error(ss::format(
-              "transform meta id={} is attempting to use a name {} which is "
-              "already registered to {}",
-              k,
-              v.name,
-              it.first->first));
+            throw std::logic_error(
+              ss::format(
+                "transform meta id={} is attempting to use a name {} which is "
+                "already registered to {}",
+                k,
+                v.name,
+                it.first->first));
         }
         // build topic indexes
         snap_input_index[v.input_topic].emplace(k);

@@ -53,12 +53,13 @@ inline model::compaction_strategy random_compaction_strategy() {
 }
 
 inline model::compression random_compression() {
-    return random_generators::random_choice(std::vector<model::compression>{
-      model::compression::gzip,
-      model::compression::zstd,
-      model::compression::none,
-      model::compression::producer,
-      model::compression::snappy});
+    return random_generators::random_choice(
+      std::vector<model::compression>{
+        model::compression::gzip,
+        model::compression::zstd,
+        model::compression::none,
+        model::compression::producer,
+        model::compression::snappy});
 }
 
 inline model::shadow_indexing_mode random_shadow_indexing_mode() {
@@ -74,8 +75,10 @@ inline model::shadow_indexing_mode random_shadow_indexing_mode() {
 }
 
 inline model::timestamp_type random_timestamp_type() {
-    return random_generators::random_choice(std::vector<model::timestamp_type>{
-      model::timestamp_type::append_time, model::timestamp_type::create_time});
+    return random_generators::random_choice(
+      std::vector<model::timestamp_type>{
+        model::timestamp_type::append_time,
+        model::timestamp_type::create_time});
 }
 
 inline model::broker_endpoint random_broker_endpoint() {
@@ -89,8 +92,9 @@ inline model::broker_endpoint random_broker_endpoint() {
 inline model::broker_properties random_broker_properties() {
     std::vector<ss::sstring> mount_paths;
     for (int i = 0; i < random_generators::get_int(10); i++) {
-        mount_paths.push_back(random_generators::gen_alphanum_string(
-          random_generators::get_int(1, 100)));
+        mount_paths.push_back(
+          random_generators::gen_alphanum_string(
+            random_generators::get_int(1, 100)));
     }
     std::unordered_map<ss::sstring, ss::sstring> etc_props;
     for (int i = 0; i < random_generators::get_int(10); i++) {
@@ -155,9 +159,10 @@ inline model::broker random_broker() {
 }
 
 inline model::membership_state random_membership_state() {
-    return membership_state(random_generators::get_int<int8_t>(
-      static_cast<int8_t>(model::membership_state::active),
-      static_cast<int8_t>(model::membership_state::removed)));
+    return membership_state(
+      random_generators::get_int<int8_t>(
+        static_cast<int8_t>(model::membership_state::active),
+        static_cast<int8_t>(model::membership_state::removed)));
 }
 
 inline model::producer_identity random_producer_identity() {

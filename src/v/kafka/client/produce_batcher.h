@@ -99,15 +99,16 @@ public:
               running_offset < consume_to,
               "Attempt to consume more records than have been received");
             auto response = consume_front(_client_reqs);
-            response.promise.set_value(partition_response{
-              .partition_index{res.partition_index},
-              .error_code = res.error_code,
-              .base_offset = res.error_code == error_code::none
-                               ? model::offset(running_offset)
-                               : model::offset(-1),
-              // TODO(Ben): Are these correct?
-              .log_append_time_ms = res.log_append_time_ms,
-              .log_start_offset = res.log_start_offset});
+            response.promise.set_value(
+              partition_response{
+                .partition_index{res.partition_index},
+                .error_code = res.error_code,
+                .base_offset = res.error_code == error_code::none
+                                 ? model::offset(running_offset)
+                                 : model::offset(-1),
+                // TODO(Ben): Are these correct?
+                .log_append_time_ms = res.log_append_time_ms,
+                .log_start_offset = res.log_start_offset});
             running_offset += response.record_count;
         }
     }

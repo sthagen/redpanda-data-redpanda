@@ -10,8 +10,8 @@
 #include "kafka/client/topic_cache.h"
 
 #include "container/chunked_vector.h"
-#include "kafka/client/exceptions.h"
 #include "kafka/client/types.h"
+#include "kafka/client/utils.h"
 #include "kafka/protocol/metadata.h"
 
 #include <seastar/core/future.hh>
@@ -23,7 +23,10 @@ void topic_cache::apply(
     topics_t new_cache;
     new_cache.reserve(topics.size());
     for (const auto& t : topics) {
-        auto& cache_t = new_cache.emplace(t.name, topic_data{}).first->second;
+        static_assert(
+          api_version_for(metadata_request::api_type::key) < api_version(12),
+          "topic::name is nullable in v12+");
+        auto& cache_t = new_cache.emplace(*t.name, topic_data{}).first->second;
         cache_t.authorized_operations = t.topic_authorized_operations;
         if (!t.partitions.empty()) {
             cache_t.replication_factor = t.partitions[0].replica_nodes.size();

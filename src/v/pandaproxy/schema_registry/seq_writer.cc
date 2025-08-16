@@ -394,9 +394,10 @@ ss::future<std::optional<bool>> seq_writer::do_write_mode(
 
     if (m == mode::import && !f) {
         auto make_exception = []() {
-            return as_exception(error_info{
-              error_code::subject_version_operation_not_permitted,
-              "Schema Registry can only move to import mode if empty"});
+            return as_exception(
+              error_info{
+                error_code::subject_version_operation_not_permitted,
+                "Schema Registry can only move to import mode if empty"});
         };
         if (!sub && co_await _store.has_subjects(include_deleted::yes)) {
             throw make_exception();

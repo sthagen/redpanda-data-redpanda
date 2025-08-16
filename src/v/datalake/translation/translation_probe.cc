@@ -68,8 +68,9 @@ void translation_probe::register_created_files_metrics() {
         sm::make_counter(
           "parquet_rows_added",
           _parquet_rows_added,
-          sm::description("Number of rows in created parquet files (not "
-                          "counting the DLQ table)"),
+          sm::description(
+            "Number of rows in created parquet files (not "
+            "counting the DLQ table)"),
           labels)
           .aggregate({
             sm::shard_label,
@@ -78,8 +79,9 @@ void translation_probe::register_created_files_metrics() {
         sm::make_counter(
           "parquet_bytes_added",
           _parquet_bytes_added,
-          sm::description("Number of bytes in created parquet files (not "
-                          "counting the DLQ table)"),
+          sm::description(
+            "Number of bytes in created parquet files (not "
+            "counting the DLQ table)"),
           labels)
           .aggregate({
             sm::shard_label,

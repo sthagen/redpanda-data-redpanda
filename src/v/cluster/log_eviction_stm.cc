@@ -212,8 +212,9 @@ log_eviction_stm::do_write_raft_snapshot(model::offset truncation_point) {
           truncation_point);
         co_return;
     }
-    co_await _raft->write_snapshot(raft::write_snapshot_cfg(
-      snapshot_result.last_included_offset, std::move(snapshot_result.data)));
+    co_await _raft->write_snapshot(
+      raft::write_snapshot_cfg(
+        snapshot_result.last_included_offset, std::move(snapshot_result.data)));
 }
 
 kafka::offset log_eviction_stm::kafka_start_offset_override() {

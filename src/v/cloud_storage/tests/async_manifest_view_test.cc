@@ -895,10 +895,13 @@ FIXTURE_TEST(test_async_manifest_view_after_gc, async_manifest_view_fixture) {
     // to the second segment in the second spillover manifest.
     BOOST_REQUIRE(spillover_start_offsets.size() == 3);
     const auto second_spill_start = spillover_start_offsets[0];
-    auto iter = std::next(std::find_if(
-      expected.begin(), expected.end(), [second_spill_start](const auto& meta) {
-          return meta.base_offset == second_spill_start;
-      }));
+    auto iter = std::next(
+      std::find_if(
+        expected.begin(),
+        expected.end(),
+        [second_spill_start](const auto& meta) {
+            return meta.base_offset == second_spill_start;
+        }));
     const auto second_seg_second_spill = *iter;
 
     stm_manifest.set_archive_start_offset(
@@ -1146,8 +1149,9 @@ FIXTURE_TEST(test_async_manifest_view_test_iter2, async_manifest_view_fixture) {
     auto cursor = std::move(maybe_cursor.value());
     cloud_storage::for_each_manifest(
       std::move(cursor),
-      [&actual](ssx::task_local_ptr<const cloud_storage::partition_manifest>
-                  p) mutable {
+      [&actual](
+        ssx::task_local_ptr<const cloud_storage::partition_manifest>
+          p) mutable {
           for (const auto& m : *p) {
               actual.push_back(m);
           }
@@ -1257,13 +1261,14 @@ FIXTURE_TEST(
     int ts_step = 10;
     int o_step = 10;
     for (int i = 0; i < num_segments; ++i) {
-        segs.push_back(segment_meta{
-          .size_bytes = 4097,
-          .base_offset = o{i * o_step},
-          .committed_offset = o{(i + 1) * o_step - 1},
-          .base_timestamp = model::timestamp{i * ts_step},
-          .max_timestamp = model::timestamp{i * ts_step + 1},
-          .segment_term = t{i}});
+        segs.push_back(
+          segment_meta{
+            .size_bytes = 4097,
+            .base_offset = o{i * o_step},
+            .committed_offset = o{(i + 1) * o_step - 1},
+            .base_timestamp = model::timestamp{i * ts_step},
+            .max_timestamp = model::timestamp{i * ts_step + 1},
+            .segment_term = t{i}});
     }
     auto target_term = model::term_id{1};
     // Populate 2 spillover manifests in map. The desired term,

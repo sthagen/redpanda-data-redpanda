@@ -164,19 +164,21 @@ public:
     void copy() const {
         auto iob0 = buf.copy();
         if (!(iob0 == buf)) {
-            throw std::runtime_error(fmt::format(
-              "Iobuf (sz={}) copy (sz={}) not identical (iobuf::copy)",
-              buf.size_bytes(),
-              iob0.size_bytes()));
+            throw std::runtime_error(
+              fmt::format(
+                "Iobuf (sz={}) copy (sz={}) not identical (iobuf::copy)",
+                buf.size_bytes(),
+                iob0.size_bytes()));
         }
 
         auto it = iobuf::iterator_consumer(buf.cbegin(), buf.cend());
         auto iob1 = iobuf_copy(it, buf.size_bytes());
         if (iob1 != buf) {
-            throw std::runtime_error(fmt::format(
-              "Iobuf (sz={}) copy (sz={}) not identical (iobuf_copy)",
-              buf.size_bytes(),
-              iob1.size_bytes()));
+            throw std::runtime_error(
+              fmt::format(
+                "Iobuf (sz={}) copy (sz={}) not identical (iobuf_copy)",
+                buf.size_bytes(),
+                iob1.size_bytes()));
         }
 
         iob0.append("a", 1);
@@ -204,17 +206,19 @@ public:
           [](size_t acc, std::string_view sv) { return acc + sv.size(); });
 
         if (buf.empty() != (ref_size == 0)) {
-            throw std::runtime_error(fmt::format(
-              "Iobuf empty state {} != reference empty state {}",
-              buf.empty(),
-              ref_size == 0));
+            throw std::runtime_error(
+              fmt::format(
+                "Iobuf empty state {} != reference empty state {}",
+                buf.empty(),
+                ref_size == 0));
         }
 
         if (buf.size_bytes() != ref_size) {
-            throw std::runtime_error(fmt::format(
-              "Iobuf size {} != reference size {}",
-              buf.size_bytes(),
-              ref_size));
+            throw std::runtime_error(
+              fmt::format(
+                "Iobuf size {} != reference size {}",
+                buf.size_bytes(),
+                ref_size));
         }
 
         check_equals();
@@ -269,8 +273,9 @@ private:
             while (!in.empty()) {
                 auto ref = ctx.next(in.size());
                 if (std::memcmp(in.data(), ref.data(), ref.size()) != 0) {
-                    throw std::runtime_error(fmt::format(
-                      "Iobuf contents differ from reference contents"));
+                    throw std::runtime_error(
+                      fmt::format(
+                        "Iobuf contents differ from reference contents"));
                 }
                 in.remove_prefix(ref.size());
             }
@@ -280,8 +285,9 @@ private:
         if (s.has_value()) {
             // coverage for iobuf::operator==(std:string_view) (equal)
             if (!(buf == std::string_view(s.value()))) {
-                throw std::runtime_error("Iobuf contents are not identical for "
-                                         "string_view comparison");
+                throw std::runtime_error(
+                  "Iobuf contents are not identical for "
+                  "string_view comparison");
             }
             // coverage for iobuf::operator==(std:string_view) (not-equal)
             if (!s.value().empty()) {

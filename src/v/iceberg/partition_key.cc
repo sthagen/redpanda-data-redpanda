@@ -50,9 +50,10 @@ partition_key partition_key::copy() const {
         // partitioning transformations defined by the Iceberg spec.
         const auto& partition_val = partition_field.value();
         if (!std::holds_alternative<primitive_value>(partition_val)) {
-            throw std::invalid_argument(fmt::format(
-              "Partition key holds unexpected non-primitive value: {}",
-              partition_val));
+            throw std::invalid_argument(
+              fmt::format(
+                "Partition key holds unexpected non-primitive value: {}",
+                partition_val));
         }
         // NOTE: primitive values all have default copy constructors.
         ret_val->fields.emplace_back(

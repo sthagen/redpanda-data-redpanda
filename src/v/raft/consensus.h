@@ -356,8 +356,9 @@ public:
             if (term > _term) {
                 _term = term;
                 _voted_for = {};
-                do_step_down(fmt::format(
-                  "external_stepdown with term {} - {}", term, ctx));
+                do_step_down(
+                  fmt::format(
+                    "external_stepdown with term {} - {}", term, ctx));
             }
         });
     }

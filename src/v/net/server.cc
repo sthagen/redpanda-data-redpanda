@@ -100,14 +100,16 @@ void server::start() {
                   endpoint.credentials, ss::engine().listen(endpoint.addr, lo));
             }
         } catch (...) {
-            throw std::runtime_error(fmt::format(
-              "{} - Error attempting to listen on {}: {}",
-              name(),
-              endpoint,
-              std::current_exception()));
+            throw std::runtime_error(
+              fmt::format(
+                "{} - Error attempting to listen on {}: {}",
+                name(),
+                endpoint,
+                std::current_exception()));
         }
-        auto& b = _listeners.emplace_back(std::make_unique<listener>(
-          endpoint.name, std::move(ss), tls_enabled));
+        auto& b = _listeners.emplace_back(
+          std::make_unique<listener>(
+            endpoint.name, std::move(ss), tls_enabled));
         listener& ref = *b;
         // background
         ssx::spawn_with_gate(
@@ -338,8 +340,9 @@ void server::setup_metrics() {
        sm::make_total_bytes(
          "consumed_mem_bytes",
          [this] { return cfg.max_service_memory_per_core - _memory.current(); },
-         sm::description(ssx::sformat(
-           "{}: Memory consumed by request processing", cfg.name))),
+         sm::description(
+           ssx::sformat(
+             "{}: Memory consumed by request processing", cfg.name))),
        sm::make_histogram(
          "dispatch_handler_latency",
          [this] { return _hist.internal_histogram_logform(); },

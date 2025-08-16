@@ -17,6 +17,7 @@
 #include "bytes/iobuf_parser.h"
 #include "kafka/protocol/batch_reader.h"
 #include "kafka/protocol/types.h"
+#include "model/fundamental.h"
 #include "strings/utf8.h"
 #include "utils/vint.h"
 
@@ -140,9 +141,7 @@ public:
         return {apply_control_validation(do_read_flex_string(n))};
     }
 
-    uuid read_uuid() {
-        return uuid(_parser.consume_type<uuid::underlying_t>());
-    }
+    uuid_t read_uuid() { return _parser.consume_type<uuid_t>(); }
 
     bytes read_bytes() { return _parser.read_bytes(read_int32()); }
 
@@ -264,10 +263,12 @@ public:
         while (num_tags-- > 0) {
             auto id = read_unsigned_varint(); // consume tag id
             if (id <= prev_tag_id) {
-                throw std::out_of_range(fmt::format(
-                  "Protocol error encountered when parsing tags, tags must be "
-                  "serialized in ascending order with no duplicates, tag: {}",
-                  id));
+                throw std::out_of_range(
+                  fmt::format(
+                    "Protocol error encountered when parsing tags, tags must "
+                    "be "
+                    "serialized in ascending order with no duplicates, tag: {}",
+                    id));
             }
             prev_tag_id = id;
             auto size = read_unsigned_varint(); // consume size in bytes
@@ -281,10 +282,12 @@ public:
         tagged_fields::type fs(std::move(fields));
         auto [_, succeded] = fs.emplace(tag_id(id), _parser.read_bytes(n));
         if (!succeded) {
-            throw std::out_of_range(fmt::format(
-              "Protocol error encountered when parsing unknown tags, duplicate "
-              "tag id detected: {}",
-              id));
+            throw std::out_of_range(
+              fmt::format(
+                "Protocol error encountered when parsing unknown tags, "
+                "duplicate "
+                "tag id detected: {}",
+                id));
         }
         fields = tagged_fields(std::move(fs));
     }
@@ -452,10 +455,10 @@ public:
         return write(std::string_view(*v));
     }
 
-    uint32_t write(uuid uuid) {
+    uint32_t write(uuid_t id) {
         /// This type is not prepended with its size
-        _out->append(uuid.view().data(), uuid::length);
-        return uuid::length;
+        _out->append(id.uuid().begin(), uuid_t::length);
+        return uuid_t::length;
     }
 
     uint32_t write(float64_t v) {

@@ -230,8 +230,9 @@ hard_constraint disk_not_overflowed_by_partition(
           _node_disk_reports;
     };
 
-    return hard_constraint(std::make_unique<impl>(
-      max_disk_usage_ratio, partition_size, node_disk_reports));
+    return hard_constraint(
+      std::make_unique<impl>(
+        max_disk_usage_ratio, partition_size, node_disk_reports));
 }
 
 soft_constraint max_final_capacity() {
@@ -316,8 +317,9 @@ soft_constraint least_disk_filled(
           _node_disk_reports;
     };
 
-    return soft_constraint(std::make_unique<impl>(
-      max_disk_usage_ratio, partition_size, node_disk_reports));
+    return soft_constraint(
+      std::make_unique<impl>(
+        max_disk_usage_ratio, partition_size, node_disk_reports));
 }
 
 soft_constraint distinct_rack_preferred(const members_table& members) {

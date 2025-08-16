@@ -134,8 +134,9 @@ public:
      * @return an opaque object that deregisters the reporter
      */
     template<typename F>
-    [[nodiscard("You need to hold the returned object to maintain "
-                "registration")]] deregister_holder
+    [[nodiscard(
+      "You need to hold the returned object to maintain "
+      "registration")]] deregister_holder
     register_reporter(const ss::sstring& name, F reporter_fn) {
         return inner_register(name, std::move(reporter_fn));
     }

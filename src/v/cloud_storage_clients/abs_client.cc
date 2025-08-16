@@ -106,8 +106,10 @@ parse_json_rest_error_response(boost::beast::http::status result, iobuf buf) {
           "Failed to parse ABS error response: {}",
           doc.GetParseError());
 
-        throw std::runtime_error(ssx::sformat(
-          "Failed to parse JSON ABS error response: {}", doc.GetParseError()));
+        throw std::runtime_error(
+          ssx::sformat(
+            "Failed to parse JSON ABS error response: {}",
+            doc.GetParseError()));
     }
 
     std::optional<ss::sstring> code;

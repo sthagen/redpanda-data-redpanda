@@ -329,8 +329,9 @@ ss::future<response_ptr> alter_user_scram_credentials_handler::handle(
           ec,
           ec.message());
 
-        res.data.results.emplace_back(alter_user_scram_credentials_result{
-          .user = u.name, .error_code = map_security_error_code(ec)});
+        res.data.results.emplace_back(
+          alter_user_scram_credentials_result{
+            .user = u.name, .error_code = map_security_error_code(ec)});
     }
 
     const auto user_exists_and_same_scram_mech =
@@ -349,11 +350,12 @@ ss::future<response_ptr> alter_user_scram_credentials_handler::handle(
         security::credential_user user{u.name};
 
         if (!user_exists_and_same_scram_mech(user, u.mechanism)) {
-            res.data.results.emplace_back(alter_user_scram_credentials_result{
-              .user = u.name,
-              .error_code = error_code::resource_not_found,
-              .error_message
-              = "Attempt to delete a user credential that does not exist"});
+            res.data.results.emplace_back(
+              alter_user_scram_credentials_result{
+                .user = u.name,
+                .error_code = error_code::resource_not_found,
+                .error_message
+                = "Attempt to delete a user credential that does not exist"});
         } else {
             vlog(klog.debug, "Deleting SCRAM credentials for user {}", u.name);
             auto ec = co_await ctx.security_frontend().delete_user(
@@ -364,8 +366,9 @@ ss::future<response_ptr> alter_user_scram_credentials_handler::handle(
               u.name,
               ec,
               ec.message());
-            res.data.results.emplace_back(alter_user_scram_credentials_result{
-              .user = u.name, .error_code = map_security_error_code(ec)});
+            res.data.results.emplace_back(
+              alter_user_scram_credentials_result{
+                .user = u.name, .error_code = map_security_error_code(ec)});
         }
     }
 

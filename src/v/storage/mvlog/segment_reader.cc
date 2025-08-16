@@ -104,8 +104,8 @@ segment_reader::make_stream(size_t start_pos, size_t length) const {
           interval.offset,
           interval.offset + interval.length);
     }
-    return ss::input_stream<char>(
-      ss::data_source(std::make_unique<skipping_data_source>(
+    return ss::input_stream<char>(ss::data_source(
+      std::make_unique<skipping_data_source>(
         segment_->file_, std::move(read_intervals))));
 }
 

@@ -337,10 +337,11 @@ model::record_batch transformed_data::make_batch(
     model::record_batch::compressed_records serialized_records;
     int32_t i = 0;
     for (model::transformed_data& r : records) {
-        serialized_records.append(std::move(r).to_serialized_record(
-          model::record_attributes(),
-          /*timestamp_delta=*/0,
-          /*offset_delta=*/i++));
+        serialized_records.append(
+          std::move(r).to_serialized_record(
+            model::record_attributes(),
+            /*timestamp_delta=*/0,
+            /*offset_delta=*/i++));
     }
 
     model::record_batch_header header;

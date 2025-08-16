@@ -32,9 +32,10 @@ chunked_vector<field_type> all_types() {
     all_types.emplace_back(timestamptz_type{});
     all_types.emplace_back(string_type{});
     all_types.emplace_back(uuid_type{});
-    all_types.emplace_back(fixed_type{
-      .length = 789,
-    });
+    all_types.emplace_back(
+      fixed_type{
+        .length = 789,
+      });
     all_types.emplace_back(binary_type{});
 
     // Complex types.
@@ -43,11 +44,13 @@ chunked_vector<field_type> all_types() {
     chunked_vector<nested_field_ptr> struct_fields;
     struct_fields.emplace_back(
       nested_field::create(1, "foo", field_required::yes, string_type{}));
-    all_types.emplace_back(struct_type{
-      .fields = std::move(struct_fields),
-    });
-    all_types.emplace_back(map_type::create(
-      0, string_type{}, 1, field_required::yes, string_type{}));
+    all_types.emplace_back(
+      struct_type{
+        .fields = std::move(struct_fields),
+      });
+    all_types.emplace_back(
+      map_type::create(
+        0, string_type{}, 1, field_required::yes, string_type{}));
     return all_types;
 };
 
@@ -319,15 +322,17 @@ namespace {
 field_type make_nested_struct(int depth) {
     struct_type ret;
     if (depth == 0) {
-        ret.fields.emplace_back(nested_field::create(
-          0, "d0", field_required::yes, primitive_type{int_type{}}));
+        ret.fields.emplace_back(
+          nested_field::create(
+            0, "d0", field_required::yes, primitive_type{int_type{}}));
         return ret;
     }
-    ret.fields.emplace_back(nested_field::create(
-      depth,
-      fmt::format("d{}", depth),
-      field_required::yes,
-      make_nested_struct(depth - 1)));
+    ret.fields.emplace_back(
+      nested_field::create(
+        depth,
+        fmt::format("d{}", depth),
+        field_required::yes,
+        make_nested_struct(depth - 1)));
     return ret;
 }
 
@@ -359,8 +364,9 @@ TEST(DatatypeTest, TestNestedCopyStruct) {
     ASSERT_EQ(1, d0.fields.size());
     ASSERT_EQ(d0.fields[0]->id(), 0);
     ASSERT_STREQ(d0.fields[0]->name.c_str(), "d0");
-    ASSERT_TRUE(std::holds_alternative<int_type>(
-      std::get<primitive_type>(d0.fields[0]->type)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_type>(
+        std::get<primitive_type>(d0.fields[0]->type)));
 }
 
 TEST(DatatypeTest, TestNestedCopyList) {
@@ -382,8 +388,9 @@ TEST(DatatypeTest, TestNestedCopyList) {
     ASSERT_FALSE(child_copy.element_field->required);
     ASSERT_TRUE(
       std::holds_alternative<primitive_type>(child_copy.element_field->type));
-    ASSERT_TRUE(std::holds_alternative<int_type>(
-      std::get<primitive_type>(child_copy.element_field->type)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_type>(
+        std::get<primitive_type>(child_copy.element_field->type)));
 }
 
 TEST(DatatypeTest, TestNestedCopyMap) {
@@ -407,8 +414,9 @@ TEST(DatatypeTest, TestNestedCopyMap) {
     ASSERT_FALSE(key_copy.element_field->required);
     ASSERT_TRUE(
       std::holds_alternative<primitive_type>(key_copy.element_field->type));
-    ASSERT_TRUE(std::holds_alternative<int_type>(
-      std::get<primitive_type>(key_copy.element_field->type)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_type>(
+        std::get<primitive_type>(key_copy.element_field->type)));
 
     ASSERT_TRUE(std::holds_alternative<list_type>(type_copy.value_field->type));
     const auto& value_copy = std::get<list_type>(type_copy.value_field->type);
@@ -416,6 +424,7 @@ TEST(DatatypeTest, TestNestedCopyMap) {
     ASSERT_FALSE(value_copy.element_field->required);
     ASSERT_TRUE(
       std::holds_alternative<primitive_type>(value_copy.element_field->type));
-    ASSERT_TRUE(std::holds_alternative<int_type>(
-      std::get<primitive_type>(value_copy.element_field->type)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_type>(
+        std::get<primitive_type>(value_copy.element_field->type)));
 }

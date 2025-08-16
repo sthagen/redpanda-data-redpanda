@@ -40,9 +40,10 @@ public:
 
     void check_empty() {
         if (_parser.bytes_left() != 0) {
-            throw std::runtime_error(fmt::format(
-              "expected empty parser, but {} bytes left",
-              _parser.bytes_left()));
+            throw std::runtime_error(
+              fmt::format(
+                "expected empty parser, but {} bytes left",
+                _parser.bytes_left()));
         }
     }
 
@@ -64,10 +65,11 @@ public:
             }
             return last;
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -86,10 +88,11 @@ public:
             }
             return last;
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -113,10 +116,11 @@ public:
                 co_await ss::coroutine::maybe_yield();
             }
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -132,10 +136,11 @@ public:
                 co_await ss::coroutine::maybe_yield();
             }
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -153,10 +158,11 @@ public:
                 co_await ss::coroutine::maybe_yield();
             }
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -176,10 +182,11 @@ public:
             }
             return last;
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -198,10 +205,11 @@ public:
                 co_await ss::coroutine::maybe_yield();
             }
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -211,18 +219,20 @@ public:
             auto length = read_length(&_parser);
             constexpr size_t allocation_limit = 128_KiB;
             if (std::cmp_greater(length, allocation_limit)) {
-                throw std::runtime_error(fmt::format(
-                  "string length {} exceeds allocation limit {} for field {}",
-                  length,
-                  allocation_limit,
-                  full_name));
+                throw std::runtime_error(
+                  fmt::format(
+                    "string length {} exceeds allocation limit {} for field {}",
+                    length,
+                    allocation_limit,
+                    full_name));
             }
             return _parser.read_string(length);
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -232,10 +242,11 @@ public:
             auto length = read_length(&_parser);
             return _parser.share(length);
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 
@@ -244,15 +255,17 @@ public:
         if (t.wire_type == wire_type::length) [[likely]] {
             auto length = read_length(&_parser);
             if (_depth >= max_depth) {
-                throw std::runtime_error(fmt::format(
-                  "max depth {} exceeded for field {}", _depth, full_name));
+                throw std::runtime_error(
+                  fmt::format(
+                    "max depth {} exceeded for field {}", _depth, full_name));
             }
             return wire_format_parser(_parser.share(length), _depth + 1);
         } else [[unlikely]] {
-            throw std::runtime_error(fmt::format(
-              "unexpected wire type {} for field {}",
-              std::to_underlying(t.wire_type),
-              full_name));
+            throw std::runtime_error(
+              fmt::format(
+                "unexpected wire type {} for field {}",
+                std::to_underlying(t.wire_type),
+                full_name));
         }
     }
 

@@ -32,11 +32,12 @@ using ::testing::Optional;
 
 TEST(HeapAllocatorParamsTest, SizeIsAligned) {
     size_t page_size = ::getpagesize();
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size + 3,
-      .num_heaps = 1,
-      .memset_chunk_size = default_memset_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size + 3,
+        .num_heaps = 1,
+        .memset_chunk_size = default_memset_chunk_size,
+      });
     auto mem = allocator
                  .allocate(
                    {.minimum = 0,
@@ -48,11 +49,12 @@ TEST(HeapAllocatorParamsTest, SizeIsAligned) {
 
 TEST(HeapAllocatorTest, CanAllocateOne) {
     size_t page_size = ::getpagesize();
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size,
-      .num_heaps = 1,
-      .memset_chunk_size = default_memset_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size,
+        .num_heaps = 1,
+        .memset_chunk_size = default_memset_chunk_size,
+      });
     auto mem
       = allocator.allocate({.minimum = page_size, .maximum = page_size}).get();
     ASSERT_TRUE(mem.has_value());
@@ -61,11 +63,12 @@ TEST(HeapAllocatorTest, CanAllocateOne) {
 
 TEST(HeapAllocatorTest, MustAllocateWithinBounds) {
     size_t page_size = ::getpagesize();
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size,
-      .num_heaps = 1,
-      .memset_chunk_size = default_memset_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size,
+        .num_heaps = 1,
+        .memset_chunk_size = default_memset_chunk_size,
+      });
     // minimum too large
     auto mem = allocator
                  .allocate({.minimum = page_size * 2, .maximum = page_size * 3})
@@ -80,11 +83,12 @@ TEST(HeapAllocatorTest, MustAllocateWithinBounds) {
 
 TEST(HeapAllocatorTest, Exhaustion) {
     size_t page_size = ::getpagesize();
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size,
-      .num_heaps = 1,
-      .memset_chunk_size = default_memset_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size,
+        .num_heaps = 1,
+        .memset_chunk_size = default_memset_chunk_size,
+      });
     auto mem
       = allocator.allocate({.minimum = page_size, .maximum = page_size}).get();
     EXPECT_TRUE(mem.has_value());
@@ -95,11 +99,12 @@ TEST(HeapAllocatorTest, Exhaustion) {
 
 TEST(HeapAllocatorTest, CanReturnMemoryToThePool) {
     size_t page_size = ::getpagesize();
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size,
-      .num_heaps = 3,
-      .memset_chunk_size = default_memset_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size,
+        .num_heaps = 3,
+        .memset_chunk_size = default_memset_chunk_size,
+      });
     heap_allocator::request req{.minimum = page_size, .maximum = page_size};
     std::vector<heap_memory> allocated;
     for (int i = 0; i < 3; ++i) {
@@ -131,11 +136,12 @@ TEST(HeapAllocatorTest, AsyncDeallocationOnlyOneAwakened) {
     size_t page_size = ::getpagesize();
     // force deallocations to be asynchronous.
     size_t test_chunk_size = page_size / 4;
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size,
-      .num_heaps = 2,
-      .memset_chunk_size = test_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size,
+        .num_heaps = 2,
+        .memset_chunk_size = test_chunk_size,
+      });
     heap_allocator::request req{.minimum = page_size, .maximum = page_size};
     // Start on deallocation in the background.
     allocator.deallocate(allocator.allocate(req).get().value(), page_size);
@@ -161,11 +167,12 @@ TEST(HeapAllocatorTest, AsyncDeallocationNotEnoughMemory) {
     size_t page_size = ::getpagesize();
     // force deallocations to be asynchronous.
     size_t test_chunk_size = page_size / 4;
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size,
-      .num_heaps = 1,
-      .memset_chunk_size = test_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size,
+        .num_heaps = 1,
+        .memset_chunk_size = test_chunk_size,
+      });
     heap_allocator::request req{.minimum = page_size, .maximum = page_size};
     allocator.deallocate(allocator.allocate(req).get().value(), page_size);
 
@@ -194,11 +201,12 @@ MATCHER(HeapIsZeroed, "is zeroed") {
 
 TEST(HeapAllocatorTest, MemoryIsZeroFilled) {
     size_t page_size = ::getpagesize();
-    heap_allocator allocator(heap_allocator::config{
-      .heap_memory_size = page_size,
-      .num_heaps = 1,
-      .memset_chunk_size = default_memset_chunk_size,
-    });
+    heap_allocator allocator(
+      heap_allocator::config{
+        .heap_memory_size = page_size,
+        .num_heaps = 1,
+        .memset_chunk_size = default_memset_chunk_size,
+      });
     heap_allocator::request req{.minimum = page_size, .maximum = page_size};
     auto allocated = allocator.allocate(req).get();
     ASSERT_TRUE(allocated.has_value());
@@ -212,20 +220,23 @@ TEST(HeapAllocatorTest, MemoryIsZeroFilled) {
 }
 
 TEST(StackAllocatorParamsTest, TrackingCanBeEnabled) {
-    stack_allocator allocator(stack_allocator::config{
-      .tracking_enabled = true,
-    });
+    stack_allocator allocator(
+      stack_allocator::config{
+        .tracking_enabled = true,
+      });
     EXPECT_TRUE(allocator.tracking_enabled());
-    allocator = stack_allocator(stack_allocator::config{
-      .tracking_enabled = false,
-    });
+    allocator = stack_allocator(
+      stack_allocator::config{
+        .tracking_enabled = false,
+      });
     EXPECT_FALSE(allocator.tracking_enabled());
 }
 
 TEST(StackAllocatorTest, CanAllocateOne) {
-    stack_allocator allocator(stack_allocator::config{
-      .tracking_enabled = true,
-    });
+    stack_allocator allocator(
+      stack_allocator::config{
+        .tracking_enabled = true,
+      });
     size_t page_size = ::getpagesize();
     auto stack = allocator.allocate(page_size * 4);
     EXPECT_EQ(stack.size(), page_size * 4);
@@ -233,9 +244,10 @@ TEST(StackAllocatorTest, CanAllocateOne) {
 }
 
 TEST(StackAllocatorTest, CanLookupMemory) {
-    stack_allocator allocator(stack_allocator::config{
-      .tracking_enabled = true,
-    });
+    stack_allocator allocator(
+      stack_allocator::config{
+        .tracking_enabled = true,
+      });
     size_t page_size = ::getpagesize();
     stack_memory stack = allocator.allocate(page_size * 4);
     stack_bounds bounds = stack.bounds();
@@ -264,9 +276,10 @@ TEST(StackAllocatorTest, CanLookupMemory) {
 }
 
 TEST(StackAllocatorTest, CanReturnMemoryToThePool) {
-    stack_allocator allocator(stack_allocator::config{
-      .tracking_enabled = true,
-    });
+    stack_allocator allocator(
+      stack_allocator::config{
+        .tracking_enabled = true,
+      });
     size_t page_size = ::getpagesize();
     auto stack = allocator.allocate(page_size * 4);
     auto bounds = stack.bounds();
@@ -288,9 +301,10 @@ MATCHER(StackIsZeroed, "is zeroed") {
 }
 
 TEST(StackAllocatorTest, MemoryIsZeroFilled) {
-    stack_allocator allocator(stack_allocator::config{
-      .tracking_enabled = true,
-    });
+    stack_allocator allocator(
+      stack_allocator::config{
+        .tracking_enabled = true,
+      });
     size_t page_size = ::getpagesize();
     auto stack = allocator.allocate(page_size * 4);
     EXPECT_THAT(stack, StackIsZeroed());

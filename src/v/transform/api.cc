@@ -82,9 +82,10 @@ public:
         auto ec = co_await _client->produce(
           {_topic, partition}, std::move(batches));
         if (ec != cluster::errc::success) {
-            throw std::runtime_error(ss::format(
-              "failure to produce transform data: {}",
-              cluster::error_category().message(int(ec))));
+            throw std::runtime_error(
+              ss::format(
+                "failure to produce transform data: {}",
+                cluster::error_category().message(int(ec))));
         }
     }
 
@@ -93,8 +94,9 @@ private:
         model::topic_namespace_view ns_tp{model::kafka_namespace, _topic};
         const auto& config = _topic_table->get_topic_cfg(ns_tp);
         if (!config) {
-            throw std::runtime_error(ss::format(
-              "unable to compute output partition for topic: {}", _topic));
+            throw std::runtime_error(
+              ss::format(
+                "unable to compute output partition for topic: {}", _topic));
         }
 
         const auto* disabled_set = _topic_table->get_topic_disabled_set(ns_tp);
@@ -111,10 +113,11 @@ private:
             }
         }
 
-        throw std::runtime_error(ss::format(
-          "unable to compute output partition for topic: {}, all output "
-          "partitions disabled",
-          _topic));
+        throw std::runtime_error(
+          ss::format(
+            "unable to compute output partition for topic: {}, all output "
+            "partitions disabled",
+            _topic));
     }
 
     model::topic _topic;
@@ -148,13 +151,14 @@ public:
 
     ss::future<std::optional<kafka::offset>>
     offset_at_timestamp(model::timestamp ts, ss::abort_source* as) final {
-        auto result = co_await _partition.timequery(storage::timequery_config(
-          _partition.start_offset(),
-          ts,
-          model::offset::max(),
-          /*type_filter=*/std::nullopt,
-          /*as=*/*as,
-          /*client_addr=*/std::nullopt));
+        auto result = co_await _partition.timequery(
+          storage::timequery_config(
+            _partition.start_offset(),
+            ts,
+            model::offset::max(),
+            /*type_filter=*/std::nullopt,
+            /*as=*/*as,
+            /*client_addr=*/std::nullopt));
         if (!result.has_value()) {
             co_return std::nullopt;
         }
@@ -327,9 +331,10 @@ public:
                 [&offsets, idx](auto result) {
                     if (result.has_error()) {
                         cluster::errc ec = result.error();
-                        throw std::runtime_error(ss::format(
-                          "error loading committed offset: {}",
-                          cluster::error_category().message(int(ec))));
+                        throw std::runtime_error(
+                          ss::format(
+                            "error loading committed offset: {}",
+                            cluster::error_category().message(int(ec))));
                     }
                     auto value = result.value();
                     if (value) {

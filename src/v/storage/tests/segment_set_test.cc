@@ -62,8 +62,13 @@ public:
     static segment_full_path
     make_segment_path(size_t test_idx, test_case::segment_spec spec) {
         static int cnt = 0;
-        return segment_full_path::mock(ss::format(
-          "{}/{}_{}_{}", test_idx, spec.base_offset, spec.dirty_offset, cnt++));
+        return segment_full_path::mock(
+          ss::format(
+            "{}/{}_{}_{}",
+            test_idx,
+            spec.base_offset,
+            spec.dirty_offset,
+            cnt++));
     }
 
     ss::future<segment_set::type>

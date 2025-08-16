@@ -96,11 +96,12 @@ void heartbeat_reply_v2::add(group_id group, reply_result status) {
 
 void heartbeat_reply_v2::add(
   group_id id, reply_result status, const heartbeat_reply_data& data) {
-    _full_replies.push_back(full_heartbeat_reply{
-      .group = id,
-      .result = status,
-      .data = data,
-    });
+    _full_replies.push_back(
+      full_heartbeat_reply{
+        .group = id,
+        .result = status,
+        .data = data,
+      });
 }
 
 ss::future<> heartbeat_reply_v2::serde_async_write(iobuf& out) {

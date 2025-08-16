@@ -107,20 +107,23 @@ generate_no_manifests_expectations(
     const char hex_chars[] = "0123456789abcdef";
     std::vector<s3_imposter_fixture::expectation> expectations;
     for (int i = 0; i < 16; ++i) {
-        expectations.emplace_back(s3_imposter_fixture::expectation{
-          .url = fmt::format("?list-type=2&prefix={}0000000/", hex_chars[i]),
-          .body = no_manifests,
-        });
+        expectations.emplace_back(
+          s3_imposter_fixture::expectation{
+            .url = fmt::format("?list-type=2&prefix={}0000000/", hex_chars[i]),
+            .body = no_manifests,
+          });
     }
-    expectations.emplace_back(s3_imposter_fixture::expectation{
-      .url = fmt::format(
-        "?list-type=2&prefix=meta/{}/{}/", tp_ns.ns(), tp_ns.tp()),
-      .body = no_manifests,
-    });
-    expectations.emplace_back(s3_imposter_fixture::expectation{
-      .url = "?list-type=2&prefix=meta/",
-      .body = no_manifests,
-    });
+    expectations.emplace_back(
+      s3_imposter_fixture::expectation{
+        .url = fmt::format(
+          "?list-type=2&prefix=meta/{}/{}/", tp_ns.ns(), tp_ns.tp()),
+        .body = no_manifests,
+      });
+    expectations.emplace_back(
+      s3_imposter_fixture::expectation{
+        .url = "?list-type=2&prefix=meta/",
+        .body = no_manifests,
+      });
     for (auto& e : additional_expectations) {
         expectations.emplace_back(std::move(e));
     }

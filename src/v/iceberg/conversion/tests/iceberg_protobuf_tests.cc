@@ -479,8 +479,9 @@ TEST_CORO(values_protobuf, TestSettingEmtpyNestedMessage) {
     // Nested message is empty so it fields are all defaults.
     EXPECT_THAT(
       field,
-      IcebergStruct(OptionalIcebergPrimitive<int_value>(
-        field_descriptor->default_value_int32())));
+      IcebergStruct(
+        OptionalIcebergPrimitive<int_value>(
+          field_descriptor->default_value_int32())));
 }
 
 TEST_CORO(values_protobuf, TestSettingDeeplyNestedMessages) {

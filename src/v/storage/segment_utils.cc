@@ -98,10 +98,11 @@ static inline ss::file wrap_handle(
   ss::file f,
   std::optional<ntp_sanitizer_config> ntp_sanitizer_config) {
     if (ntp_sanitizer_config) {
-        return ss::file(ss::make_shared(file_io_sanitizer(
-          std::move(f),
-          std::move(path),
-          std::move(ntp_sanitizer_config.value()))));
+        return ss::file(
+          ss::make_shared(file_io_sanitizer(
+            std::move(f),
+            std::move(path),
+            std::move(ntp_sanitizer_config.value()))));
     }
     return f;
 }
@@ -795,8 +796,9 @@ ss::future<compaction_result> self_compact_segment(
   kvstore& kvs,
   bool force_compaction) {
     if (s->has_appender()) {
-        throw std::runtime_error(fmt::format(
-          "Cannot compact an active segment. cfg:{} - segment:{}", cfg, s));
+        throw std::runtime_error(
+          fmt::format(
+            "Cannot compact an active segment. cfg:{} - segment:{}", cfg, s));
     }
 
     const bool may_remove_tombstones = may_have_removable_tombstones(s, cfg);
@@ -1262,11 +1264,12 @@ ss::future<compaction_result> concatenate_and_rebuild_target_segment(
     for (const auto& segment : segments) {
         // check generation id under write lock
         if (unlikely(segment->get_generation_id() != *gen_it)) {
-            throw generation_id_mismatch_exception(fmt::format(
-              "Aborting compaction of a segment: {}. Generation id mismatch, "
-              "previous generation: {}",
-              *segment,
-              *gen_it));
+            throw generation_id_mismatch_exception(
+              fmt::format(
+                "Aborting compaction of a segment: {}. Generation id mismatch, "
+                "previous generation: {}",
+                *segment,
+                *gen_it));
         }
         if (unlikely(segment->is_closed())) {
             throw segment_closed_exception();

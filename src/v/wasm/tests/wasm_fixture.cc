@@ -115,9 +115,11 @@ void WasmTestFixture::TearDown() {
 
 void WasmTestFixture::load_wasm(std::string_view filename) {
     std::filesystem::path file(filename);
-    auto path = test_utils::get_runfile_path(std::string(
-      std::filesystem::path("src/transform-sdk/go/transform/internal/testdata")
-      / file.stem() / file.filename()));
+    auto path = test_utils::get_runfile_path(
+      std::string(
+        std::filesystem::path(
+          "src/transform-sdk/go/transform/internal/testdata")
+        / file.stem() / file.filename()));
     auto wasm_file = ss::util::read_entire_file(path).get();
     auto buf = model::wasm_binary_iobuf(std::make_unique<iobuf>());
     for (auto& chunk : wasm_file) {
@@ -154,11 +156,12 @@ model::record_batch WasmTestFixture::transform(const model::record_batch& b) {
       model::timestamp::now(), std::move(transformed));
 }
 model::record_batch WasmTestFixture::make_tiny_batch() {
-    return model::test::make_random_batch(model::test::record_batch_spec{
-      .allow_compression = false,
-      .count = 1,
-      .timestamp = NOW,
-    });
+    return model::test::make_random_batch(
+      model::test::record_batch_spec{
+        .allow_compression = false,
+        .count = 1,
+        .timestamp = NOW,
+      });
 }
 model::record_batch WasmTestFixture::make_tiny_batch(iobuf record_value) {
     storage::record_batch_builder b(

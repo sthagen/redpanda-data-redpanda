@@ -50,45 +50,58 @@ server::routes_t get_proxy_routes(ss::gate& gate, one_shot& es) {
     server::routes_t routes;
     routes.api = ss::httpd::rest_json::name;
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::get_brokers, wrap(gate, es, get_brokers)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::get_brokers, wrap(gate, es, get_brokers)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::get_topics_names,
-      wrap(gate, es, get_topics_names)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::get_topics_names,
+        wrap(gate, es, get_topics_names)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::get_topics_records,
-      wrap(gate, es, get_topics_records)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::get_topics_records,
+        wrap(gate, es, get_topics_records)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::post_topics_name,
-      wrap(gate, es, post_topics_name)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::post_topics_name,
+        wrap(gate, es, post_topics_name)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::create_consumer, wrap(gate, es, create_consumer)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::create_consumer,
+        wrap(gate, es, create_consumer)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::remove_consumer, wrap(gate, es, remove_consumer)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::remove_consumer,
+        wrap(gate, es, remove_consumer)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::subscribe_consumer,
-      wrap(gate, es, subscribe_consumer)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::subscribe_consumer,
+        wrap(gate, es, subscribe_consumer)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::consumer_fetch, wrap(gate, es, consumer_fetch)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::consumer_fetch, wrap(gate, es, consumer_fetch)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::get_consumer_offsets,
-      wrap(gate, es, get_consumer_offsets)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::get_consumer_offsets,
+        wrap(gate, es, get_consumer_offsets)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::post_consumer_offsets,
-      wrap(gate, es, post_consumer_offsets)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::post_consumer_offsets,
+        wrap(gate, es, post_consumer_offsets)});
 
-    routes.routes.emplace_back(server::route_t{
-      ss::httpd::rest_json::http_rest_status_ready,
-      wrap(gate, es, status_ready)});
+    routes.routes.emplace_back(
+      server::route_t{
+        ss::httpd::rest_json::http_rest_status_ready,
+        wrap(gate, es, status_ready)});
 
     return routes;
 }

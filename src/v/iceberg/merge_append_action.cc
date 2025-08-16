@@ -316,10 +316,11 @@ ss::future<action::action_outcome> merge_append_action::build_updates() && {
           },
         });
     }
-    ret.requirements.emplace_back(table_requirement::assert_ref_snapshot_id{
-      .ref = "main",
-      .snapshot_id = old_snap_id,
-    });
+    ret.requirements.emplace_back(
+      table_requirement::assert_ref_snapshot_id{
+        .ref = "main",
+        .snapshot_id = old_snap_id,
+      });
     co_return ret;
 }
 

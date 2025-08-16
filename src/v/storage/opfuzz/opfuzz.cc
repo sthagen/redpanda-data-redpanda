@@ -429,8 +429,9 @@ struct read_op final : opfuzz::op {
               random_generators::get_int<model::offset::type>(
                 start(), lstats.dirty_offset()));
             // random end point
-            end = model::offset(random_generators::get_int<model::offset::type>(
-              start(), lstats.dirty_offset));
+            end = model::offset(
+              random_generators::get_int<model::offset::type>(
+                start(), lstats.dirty_offset));
         } else {
             start = lstats.start_offset;
             end = lstats.start_offset;

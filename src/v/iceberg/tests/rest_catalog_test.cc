@@ -170,34 +170,38 @@ static constexpr std::string_view table_metadata = R"J(
 chunked_vector<iceberg::schema> create_test_schemas() {
     iceberg::struct_type schema_struct;
 
-    schema_struct.fields.push_back(iceberg::nested_field::create(
-      iceberg::nested_field::id_t(1),
-      "name",
-      iceberg::field_required::yes,
-      iceberg::string_type{}));
-    schema_struct.fields.push_back(iceberg::nested_field::create(
-      iceberg::nested_field::id_t(2),
-      "age",
-      iceberg::field_required::yes,
-      iceberg::int_type{}));
+    schema_struct.fields.push_back(
+      iceberg::nested_field::create(
+        iceberg::nested_field::id_t(1),
+        "name",
+        iceberg::field_required::yes,
+        iceberg::string_type{}));
+    schema_struct.fields.push_back(
+      iceberg::nested_field::create(
+        iceberg::nested_field::id_t(2),
+        "age",
+        iceberg::field_required::yes,
+        iceberg::int_type{}));
     chunked_vector<iceberg::schema> ret;
-    ret.push_back(iceberg::schema{
-      .schema_struct = std::move(schema_struct),
-      .schema_id = iceberg::schema::id_t{1},
-    });
+    ret.push_back(
+      iceberg::schema{
+        .schema_struct = std::move(schema_struct),
+        .schema_id = iceberg::schema::id_t{1},
+      });
     return ret;
 }
 
 chunked_vector<iceberg::partition_spec> create_test_partition_spec() {
     chunked_vector<iceberg::partition_spec> ret;
-    ret.push_back(iceberg::partition_spec{
-      .spec_id = iceberg::partition_spec::id_t{1},
-      .fields = {iceberg::partition_field{
-        .source_id = iceberg::nested_field::id_t{2},
-        .field_id = iceberg::partition_field::id_t{1000},
-        .name = "partition_by_age",
-        .transform = iceberg::identity_transform{},
-      }}});
+    ret.push_back(
+      iceberg::partition_spec{
+        .spec_id = iceberg::partition_spec::id_t{1},
+        .fields = {iceberg::partition_field{
+          .source_id = iceberg::nested_field::id_t{2},
+          .field_id = iceberg::partition_field::id_t{1000},
+          .name = "partition_by_age",
+          .transform = iceberg::identity_transform{},
+        }}});
     return ret;
 }
 
@@ -207,12 +211,13 @@ chunked_vector<iceberg::sort_order> create_sort_orders() {
       .order_id = iceberg::sort_order::id_t{3},
       .fields = {},
     };
-    so.fields.push_back(iceberg::sort_field{
-      .transform = iceberg::identity_transform{},
-      .source_ids = {iceberg::nested_field::id_t{2}},
-      .direction = iceberg::sort_direction::asc,
-      .null_order = iceberg::null_order::nulls_first,
-    });
+    so.fields.push_back(
+      iceberg::sort_field{
+        .transform = iceberg::identity_transform{},
+        .source_ids = {iceberg::nested_field::id_t{2}},
+        .direction = iceberg::sort_direction::asc,
+        .null_order = iceberg::null_order::nulls_first,
+      });
     ret.push_back(std::move(so));
 
     return ret;
@@ -333,8 +338,9 @@ TEST_F(RestCatalogTest, CheckLoadTableHappyPath) {
       std::move(client), config::mock_binding<std::chrono::milliseconds>(10s));
 
     auto metadata = catalog
-                      .load_table(iceberg::table_identifier{
-                        .ns = {"foo", "bar", "baz"}, .table = "panda_table"})
+                      .load_table(
+                        iceberg::table_identifier{
+                          .ns = {"foo", "bar", "baz"}, .table = "panda_table"})
                       .get();
 
     ASSERT_TRUE(metadata.has_value());
@@ -484,11 +490,12 @@ TEST_F(RestCatalogTest, CommitTxnHappyPath) {
       .file_format = iceberg::data_file_format::parquet,
       .partition = iceberg::partition_key{.val = std::move(partition_key_val)},
     };
-    files.push_back(iceberg::file_to_append{
-      .file = std::move(file),
-      .schema_id = txn.table().current_schema_id,
-      .partition_spec_id = txn.table().default_spec_id,
-    });
+    files.push_back(
+      iceberg::file_to_append{
+        .file = std::move(file),
+        .schema_id = txn.table().current_schema_id,
+        .partition_spec_id = txn.table().default_spec_id,
+      });
 
     auto outcome = txn.merge_append(io, std::move(files)).get();
     ASSERT_FALSE(outcome.has_error());

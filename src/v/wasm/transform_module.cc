@@ -98,13 +98,14 @@ ss::future<> transform_module::for_each_record_async(
         });
     }
 
-    _call_ctx.emplace(batch_transform_context{
-      .batch_header = input.header(),
-      .batch_data = std::move(input).release_data(),
-      .max_input_record_size = max_size,
-      .records = std::move(records),
-      .callback = cb,
-    });
+    _call_ctx.emplace(
+      batch_transform_context{
+        .batch_header = input.header(),
+        .batch_data = std::move(input).release_data(),
+        .max_input_record_size = max_size,
+        .records = std::move(records),
+        .callback = cb,
+      });
 
     return host_wait_for_proccessing().finally(
       [this] { _call_ctx = std::nullopt; });

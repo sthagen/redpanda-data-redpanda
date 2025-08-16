@@ -56,18 +56,21 @@ void chunk_cache::setup_metrics() {
         sm::make_gauge(
           "total_size_bytes",
           [this] { return _size_total; },
-          sm::description("Total size of all segment appender chunks in any "
-                          "state, in bytes.")),
+          sm::description(
+            "Total size of all segment appender chunks in any "
+            "state, in bytes.")),
         sm::make_gauge(
           "available_size_bytes",
           [this] { return _size_available; },
-          sm::description("Total size of all free segment appender chunks in "
-                          "the cache, in bytes.")),
+          sm::description(
+            "Total size of all free segment appender chunks in "
+            "the cache, in bytes.")),
         sm::make_counter(
           "wait_count",
           [this] { return _wait_for_chunk_count; },
-          sm::description("Count of how many times we had to wait for a chunk "
-                          "to become available")),
+          sm::description(
+            "Count of how many times we had to wait for a chunk "
+            "to become available")),
       });
 }
 

@@ -107,7 +107,7 @@ void write_flex(T& type, iobuf& buf) {
               writer.write_tags(kafka::tagged_fields{});
           });
     } else if constexpr (
-      std::is_same_v<T, kafka::uuid> || std::is_same_v<T, kafka::float64_t>) {
+      std::is_same_v<T, uuid_t> || std::is_same_v<T, kafka::float64_t>) {
         writer.write(type);
     } else {
         writer.write_flex(type);
@@ -119,7 +119,7 @@ T read_flex(iobuf buf) {
     kafka::protocol::decoder reader(std::move(buf));
     if constexpr (std::is_same_v<T, ss::sstring>) {
         return reader.read_flex_string();
-    } else if constexpr (std::is_same_v<T, kafka::uuid>) {
+    } else if constexpr (std::is_same_v<T, uuid_t>) {
         return reader.read_uuid();
     } else if constexpr (std::is_same_v<T, kafka::float64_t>) {
         return reader.read_float64();
@@ -162,13 +162,10 @@ SEASTAR_THREAD_TEST_CASE(serde_flex_types) {
         return random_generators::gen_alphanum_string(str_len);
     };
     {
-        /// uuid
-        auto bytes = tests::random_bytes(16);
-        auto encoded = bytes_to_base64(bytes);
-        auto uuid = kafka::uuid::from_string(encoded);
+        /// uuid_t
+        auto uuid = uuid_t::create();
         auto rt = serde_flex(uuid);
-        BOOST_CHECK_EQUAL(uuid.view(), rt.view());
-        BOOST_CHECK_EQUAL(encoded, rt.to_string());
+        BOOST_CHECK_EQUAL(uuid, rt);
     }
     {
         /// flex strings

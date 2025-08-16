@@ -104,11 +104,12 @@ TEST_F(UpdateApplyingVisitorTest, TestSetCurrentSchema) {
     ASSERT_EQ(table.current_schema_id(), 0);
 
     // Now point to a different schema.
-    table.schemas.emplace_back(schema{
-      .schema_struct = std::get<struct_type>(test_nested_schema_type()),
-      .schema_id = schema::id_t{1},
-      .identifier_field_ids = {},
-    });
+    table.schemas.emplace_back(
+      schema{
+        .schema_struct = std::get<struct_type>(test_nested_schema_type()),
+        .schema_id = schema::id_t{1},
+        .identifier_field_ids = {},
+      });
     outcome = table_update::apply(make_update(1), table);
     ASSERT_EQ(outcome, table_update::outcome::success);
     ASSERT_EQ(table.current_schema_id(), 1);
@@ -126,11 +127,12 @@ TEST_F(UpdateApplyingVisitorTest, TestSetCurrentSchemaUnassigned) {
         };
     };
     auto table = create_table();
-    table.schemas.emplace_back(schema{
-      .schema_struct = std::get<struct_type>(test_nested_schema_type()),
-      .schema_id = schema::id_t{1},
-      .identifier_field_ids = {},
-    });
+    table.schemas.emplace_back(
+      schema{
+        .schema_struct = std::get<struct_type>(test_nested_schema_type()),
+        .schema_id = schema::id_t{1},
+        .identifier_field_ids = {},
+      });
 
     // Setting -1 for the schema is a special value that tells us to use the
     // highest id.
@@ -256,9 +258,10 @@ TEST_F(UpdateApplyingVisitorTest, TestRemoveSnapshots) {
     // Now actually remove some snapshots.
     table.snapshots.emplace();
     for (int64_t i = 0; i < 100; ++i) {
-        table.snapshots->emplace_back(snapshot{
-          .id = snapshot_id{i},
-        });
+        table.snapshots->emplace_back(
+          snapshot{
+            .id = snapshot_id{i},
+          });
     }
     ASSERT_TRUE(table.snapshots.has_value());
     ASSERT_EQ(table.snapshots->size(), 100);
@@ -281,9 +284,10 @@ TEST_F(UpdateApplyingVisitorTest, TestSetSnapshotReference) {
     auto table = create_table();
     table.snapshots.emplace();
     for (int64_t i = 0; i < 100; ++i) {
-        table.snapshots->emplace_back(snapshot{
-          .id = snapshot_id{i},
-        });
+        table.snapshots->emplace_back(
+          snapshot{
+            .id = snapshot_id{i},
+          });
     }
     // Set the table up with some snapshots but don't set a current snapshot.
     ASSERT_TRUE(table.snapshots.has_value());
@@ -373,14 +377,16 @@ TEST_F(UpdateApplyingVisitorTest, TestSetDefaultSpec) {
 
     auto table = create_table();
     // add a couple of partition specs
-    table.partition_specs.push_back(partition_spec{
-      .spec_id = partition_spec::id_t{0},
-      .fields = {},
-    });
-    table.partition_specs.push_back(partition_spec{
-      .spec_id = partition_spec::id_t{1},
-      .fields = {},
-    });
+    table.partition_specs.push_back(
+      partition_spec{
+        .spec_id = partition_spec::id_t{0},
+        .fields = {},
+      });
+    table.partition_specs.push_back(
+      partition_spec{
+        .spec_id = partition_spec::id_t{1},
+        .fields = {},
+      });
     table.default_spec_id = partition_spec::id_t{1};
 
     // Sanity check for a no-op when setting to the current default spec.

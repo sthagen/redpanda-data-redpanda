@@ -27,8 +27,9 @@ partition_replicator::partition_replicator(
   , _log(cllog, fmt::format("[{}-term-{}] replicator", ntp, term))
   , _source(std::move(source))
   , _sink(std::move(sink))
-  , _backoff_policy(make_exponential_backoff_policy<ss::lowres_clock>(
-      base_backoff, max_backoff)) {}
+  , _backoff_policy(
+      make_exponential_backoff_policy<ss::lowres_clock>(
+        base_backoff, max_backoff)) {}
 
 ss::future<> partition_replicator::start() {
     vlog(_log.trace, "Starting replicator");

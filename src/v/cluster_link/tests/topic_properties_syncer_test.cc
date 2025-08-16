@@ -28,10 +28,11 @@ model::metadata get_default_metadata() {
     model::link_configuration link_configuration;
     link_configuration.topic_metadata_mirroring_cfg.task_interval = 1s;
     link_configuration.topic_metadata_mirroring_cfg.topic_name_filters
-      .emplace_back(resource_name_filter_pattern{
-        .pattern_type = filter_pattern_type::literal,
-        .filter = filter_type::include,
-        .pattern = resource_name_filter_pattern::wildcard});
+      .emplace_back(
+        resource_name_filter_pattern{
+          .pattern_type = filter_pattern_type::literal,
+          .filter = filter_type::include,
+          .pattern = resource_name_filter_pattern::wildcard});
     link_state.mirror_topics.emplace(
       test_topic,
       model::mirror_topic_metadata{
@@ -178,11 +179,12 @@ TEST_F_CORO(
   update_properties_invalid_describe_configs_test,
   do_not_return_topic_config_mod_partition_count) {
     chunked_vector<kafka::describe_configs_result> response;
-    response.emplace_back(kafka::describe_configs_result{
-      .error_code = kafka::error_code::none,
-      .resource_type = kafka::config_resource_type::topic,
-      .resource_name = "no-such-topic",
-    });
+    response.emplace_back(
+      kafka::describe_configs_result{
+        .error_code = kafka::error_code::none,
+        .resource_type = kafka::config_resource_type::topic,
+        .resource_name = "no-such-topic",
+      });
     set_describe_configs_results(std::move(response));
     fixture()->get_cluster_mock().set_topic_partition_count(test_topic, 3);
 
@@ -212,11 +214,12 @@ TEST_F_CORO(
     }();
 
     chunked_vector<kafka::describe_configs_result> response;
-    response.emplace_back(kafka::describe_configs_result{
-      .error_code = kafka::error_code::none,
-      .resource_type = kafka::config_resource_type::topic,
-      .resource_name = "no-such-topic",
-    });
+    response.emplace_back(
+      kafka::describe_configs_result{
+        .error_code = kafka::error_code::none,
+        .resource_type = kafka::config_resource_type::topic,
+        .resource_name = "no-such-topic",
+      });
     set_describe_configs_results(std::move(response));
 
     // Nothing should change since no properties were changed
@@ -242,12 +245,13 @@ TEST_F_CORO(
         return mirror_topic_it->second.copy();
     }();
     chunked_vector<kafka::describe_configs_result> response;
-    response.emplace_back(kafka::describe_configs_result{
-      .error_code = kafka::error_code::topic_authorization_failed,
-      .resource_type = kafka::config_resource_type::topic,
-      .resource_name = test_topic,
-      .configs = {kafka::describe_configs_resource_result{
-        .name = "max.message.bytes", .value = "1024"}}});
+    response.emplace_back(
+      kafka::describe_configs_result{
+        .error_code = kafka::error_code::topic_authorization_failed,
+        .resource_type = kafka::config_resource_type::topic,
+        .resource_name = test_topic,
+        .configs = {kafka::describe_configs_resource_result{
+          .name = "max.message.bytes", .value = "1024"}}});
     set_describe_configs_results(std::move(response));
     fixture()->get_cluster_mock().set_topic_partition_count(test_topic, 3);
 
@@ -282,12 +286,13 @@ TEST_F_CORO(
         return mirror_topic_it->second.copy();
     }();
     chunked_vector<kafka::describe_configs_result> response;
-    response.emplace_back(kafka::describe_configs_result{
-      .error_code = kafka::error_code::none,
-      .resource_type = kafka::config_resource_type::broker,
-      .resource_name = test_topic,
-      .configs = {kafka::describe_configs_resource_result{
-        .name = "max.message.bytes", .value = "1024"}}});
+    response.emplace_back(
+      kafka::describe_configs_result{
+        .error_code = kafka::error_code::none,
+        .resource_type = kafka::config_resource_type::broker,
+        .resource_name = test_topic,
+        .configs = {kafka::describe_configs_resource_result{
+          .name = "max.message.bytes", .value = "1024"}}});
     set_describe_configs_results(std::move(response));
     fixture()->get_cluster_mock().set_topic_partition_count(test_topic, 3);
 

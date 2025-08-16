@@ -214,8 +214,9 @@ ss::future<cluster::errc> client::try_create_topic(
           config::shard_local_cfg().default_topic_partitions()),
         std::move(props)));
     if (fut.failed()) {
-        throw std::runtime_error(fmt::format(
-          "Error creating topic '{}': {}", nt, fut.get_exception()));
+        throw std::runtime_error(
+          fmt::format(
+            "Error creating topic '{}': {}", nt, fut.get_exception()));
     }
     auto ec = fut.get();
     if (
@@ -302,10 +303,11 @@ copy(const chunked_vector<topic_partitions>& vec) {
     chunked_vector<topic_partitions> result;
     result.reserve(vec.size());
     for (const auto& item : vec) {
-        result.push_back(topic_partitions{
-          .topic = item.topic,
-          .partitions = item.partitions.copy(),
-        });
+        result.push_back(
+          topic_partitions{
+            .topic = item.topic,
+            .partitions = item.partitions.copy(),
+          });
     }
     return result;
 }

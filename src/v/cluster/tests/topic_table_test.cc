@@ -193,27 +193,30 @@ FIXTURE_TEST(test_adding_partition, topic_table_fixture) {
 
     cluster::create_partitions_configuration cfg(make_tp_ns("test_tp_2"), 3);
     ss::chunked_fifo<cluster::partition_assignment> p_as;
-    p_as.push_back(cluster::partition_assignment{
-      raft::group_id(10),
-      model::partition_id(0),
-      {model::broker_shard{model::node_id(0), 0},
-       model::broker_shard{model::node_id(1), 1},
-       model::broker_shard{model::node_id(2), 2}},
-    });
-    p_as.push_back(cluster::partition_assignment{
-      raft::group_id(11),
-      model::partition_id(1),
-      {model::broker_shard{model::node_id(0), 0},
-       model::broker_shard{model::node_id(1), 1},
-       model::broker_shard{model::node_id(2), 2}},
-    });
-    p_as.push_back(cluster::partition_assignment{
-      raft::group_id(12),
-      model::partition_id(2),
-      {model::broker_shard{model::node_id(0), 0},
-       model::broker_shard{model::node_id(1), 1},
-       model::broker_shard{model::node_id(2), 2}},
-    });
+    p_as.push_back(
+      cluster::partition_assignment{
+        raft::group_id(10),
+        model::partition_id(0),
+        {model::broker_shard{model::node_id(0), 0},
+         model::broker_shard{model::node_id(1), 1},
+         model::broker_shard{model::node_id(2), 2}},
+      });
+    p_as.push_back(
+      cluster::partition_assignment{
+        raft::group_id(11),
+        model::partition_id(1),
+        {model::broker_shard{model::node_id(0), 0},
+         model::broker_shard{model::node_id(1), 1},
+         model::broker_shard{model::node_id(2), 2}},
+      });
+    p_as.push_back(
+      cluster::partition_assignment{
+        raft::group_id(12),
+        model::partition_id(2),
+        {model::broker_shard{model::node_id(0), 0},
+         model::broker_shard{model::node_id(1), 1},
+         model::broker_shard{model::node_id(2), 2}},
+      });
     cluster::create_partitions_configuration_assignment pca(
       std::move(cfg), std::move(p_as));
 

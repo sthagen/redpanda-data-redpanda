@@ -101,12 +101,13 @@ chunked_vector<replica_state_anomaly> replica_state_validator::validate() {
         // There is a gap between last uploaded offset and first available
         // local offset. Progress is impossible if the metadata consistency
         // checks are on.
-        result.push_back(replica_state_anomaly{
-          .type = replica_state_anomaly_type::offsets_gap,
-          .message = ssx::sformat(
-            "There is a gap between the manifest {} and local storage {}",
-            manifest_last,
-            local_interval)});
+        result.push_back(
+          replica_state_anomaly{
+            .type = replica_state_anomaly_type::offsets_gap,
+            .message = ssx::sformat(
+              "There is a gap between the manifest {} and local storage {}",
+              manifest_last,
+              local_interval)});
     }
 
     // 2. Check offset translator state
@@ -133,15 +134,16 @@ chunked_vector<replica_state_anomaly> replica_state_validator::validate() {
         // Offset translation state diverged on two different replicas.
         // Previous leader translated offset differently
         if (expected_delta != log_delta) {
-            result.push_back(replica_state_anomaly{
-              .type = replica_state_anomaly_type::ot_state,
-              .message = ssx::sformat(
-                "Offset translation anomaly detected for offset {}, expected "
-                "delta {}, actual delta {}, segment_meta: {}",
-                last_segment->base_offset,
-                expected_delta,
-                log_delta,
-                last_segment)});
+            result.push_back(
+              replica_state_anomaly{
+                .type = replica_state_anomaly_type::ot_state,
+                .message = ssx::sformat(
+                  "Offset translation anomaly detected for offset {}, expected "
+                  "delta {}, actual delta {}, segment_meta: {}",
+                  last_segment->base_offset,
+                  expected_delta,
+                  log_delta,
+                  last_segment)});
         }
     } else {
         vlog(

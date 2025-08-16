@@ -170,6 +170,14 @@ path_type_map = {
     },
     "DeleteTopicsRequestData": {
         "TimeoutMs": ("std::chrono::milliseconds", "int32"),
+        "Topics": {
+            "TopicId": ("model::topic_id", "uuid"),
+        },
+    },
+    "DeleteTopicsResponseData": {
+        "Responses": {
+            "TopicId": ("model::topic_id", "uuid"),
+        },
     },
     "CreateTopicsRequestData": {
         "timeoutMs": ("std::chrono::milliseconds", "int32"),
@@ -181,6 +189,7 @@ path_type_map = {
     },
     "CreateTopicsResponseData": {
         "Topics": {
+            "TopicId": ("model::topic_id", "uuid"),
             "Configs": {
                 "ConfigSource": ("kafka::describe_configs_source", "int8"),
             },
@@ -251,8 +260,14 @@ path_type_map = {
             },
         },
     },
+    "MetadataRequestData": {
+        "Topics": {
+            "TopicId": ("model::topic_id", "uuid"),
+        }
+    },
     "MetadataResponseData": {
         "Topics": {
+            "TopicId": ("model::topic_id", "uuid"),
             "Partitions": {
                 "PartitionIndex": ("model::partition_id", "int32"),
                 "IsrNodes": ("model::node_id", "int32"),
@@ -270,15 +285,20 @@ path_type_map = {
         "ReplicaId": ("model::node_id", "int32"),
         "RackId": ("model::rack_id", "string"),
         "Topics": {
+            "TopicId": ("model::topic_id", "uuid"),
             "Partitions": {
                 "Partition": ("model::partition_id", "int32"),
                 "FetchOffset": ("model::offset", "int64"),
                 "CurrentLeaderEpoch": ("kafka::leader_epoch", "int32"),
             },
         },
+        "ForgottenTopicsData": {
+            "TopicId": ("model::topic_id", "uuid"),
+        },
     },
     "FetchResponseData": {
         "Responses": {
+            "TopicId": ("model::topic_id", "uuid"),
             "Partitions": {
                 "PartitionIndex": ("model::partition_id", "int32"),
                 "HighWatermark": ("model::offset", "int64"),

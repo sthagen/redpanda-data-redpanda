@@ -349,8 +349,9 @@ TEST_F(cluster_metadata_uploader_fixture, test_upload_in_term) {
 
     // Now do some action and write a new snapshot.
     RPTEST_REQUIRE_EVENTUALLY(5s, [this] { return raft0->is_leader(); });
-    auto result = patch_config(cluster::config_update_request{
-                                 .upsert = {{"cluster_id", "foo"}}})
+    auto result = patch_config(
+                    cluster::config_update_request{
+                      .upsert = {{"cluster_id", "foo"}}})
                     .get();
     ASSERT_TRUE(!result.errc)
       << fmt::format("errc {} version {}", result.errc, result.version);
@@ -383,8 +384,9 @@ TEST_F(cluster_metadata_uploader_fixture, test_upload_loop_deletes_orphans) {
     });
 
     // Now do something to trigger another controller snapshot.
-    auto result = patch_config(cluster::config_update_request{
-                                 .upsert = {{"cluster_id", "foo"}}})
+    auto result = patch_config(
+                    cluster::config_update_request{
+                      .upsert = {{"cluster_id", "foo"}}})
                     .get();
 
     ASSERT_TRUE(!result.errc);

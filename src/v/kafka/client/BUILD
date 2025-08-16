@@ -222,6 +222,9 @@ redpanda_cc_library(
     hdrs = [
         "partitioners.h",
     ],
+    implementation_deps = [
+        "//src/v/kafka/client:utils",
+    ],
     deps = [
         ":exceptions",
         ":types",
@@ -243,6 +246,9 @@ redpanda_cc_library(
     ],
     hdrs = [
         "topic_cache.h",
+    ],
+    implementation_deps = [
+        "//src/v/kafka/client:utils",
     ],
     deps = [
         ":exceptions",

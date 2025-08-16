@@ -31,8 +31,9 @@ struct_type gen_nested_struct(int nesting_level, int n_at_each) {
                     return int_type{};
                 }
             }(j);
-            curr->fields.emplace_back(nested_field::create(
-              idx, std::to_string(idx), field_required::no, std::move(t)));
+            curr->fields.emplace_back(
+              nested_field::create(
+                idx, std::to_string(idx), field_required::no, std::move(t)));
         }
         curr = &std::get<struct_type>(curr->fields.front()->type);
     }

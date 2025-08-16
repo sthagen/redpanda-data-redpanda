@@ -90,10 +90,11 @@ public:
             int32_t kafka_port
               = node_config.kafka_api.value()[0].address.port();
             node_config.get("kafka_api")
-              .set_value(std::vector<config::broker_authn_endpoint>{
-                config::broker_authn_endpoint{
-                  .address = net::unresolved_address("127.0.0.1", kafka_port),
-                  .authn_method = config::broker_authn_method::sasl}});
+              .set_value(
+                std::vector<config::broker_authn_endpoint>{
+                  config::broker_authn_endpoint{
+                    .address = net::unresolved_address("127.0.0.1", kafka_port),
+                    .authn_method = config::broker_authn_method::sasl}});
 
             node_config.get("admin").set_value(
               std::vector<model::broker_endpoint>{model::broker_endpoint(
@@ -114,10 +115,11 @@ public:
             int32_t kafka_port
               = node_config.kafka_api.value()[0].address.port();
             node_config.get("kafka_api")
-              .set_value(std::vector<config::broker_authn_endpoint>{
-                config::broker_authn_endpoint{
-                  .address = net::unresolved_address("127.0.0.1", kafka_port),
-                  .authn_method = std::nullopt}});
+              .set_value(
+                std::vector<config::broker_authn_endpoint>{
+                  config::broker_authn_endpoint{
+                    .address = net::unresolved_address("127.0.0.1", kafka_port),
+                    .authn_method = std::nullopt}});
             node_config.get("admin").set_value(
               std::vector<model::broker_endpoint>{});
         }).get();

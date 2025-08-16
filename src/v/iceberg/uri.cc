@@ -29,8 +29,9 @@ uri uri_converter::to_uri(
     return ss::visit(
       _provider,
       [&](const cloud_io::s3_compat_provider& s3_compat) {
-          return uri(ssx::sformat(
-            "{}://{}/{}", s3_compat.scheme, bucket(), path.native()));
+          return uri(
+            ssx::sformat(
+              "{}://{}/{}", s3_compat.scheme, bucket(), path.native()));
       },
       [&](const cloud_io::abs_provider& abs) {
           // Always write to the dfs endpoint otherwise Trino w/ REST catalog
@@ -40,11 +41,12 @@ uri uri_converter::to_uri(
           // It seems that Iceberg clients know how to handle this type of
           // endpoint for both types of storage accounts (blob/legacy/flat
           // namespace and dfs/data lake gen2).
-          return uri(ssx::sformat(
-            "abfss://{}@{}.dfs.core.windows.net/{}",
-            bucket(),
-            abs.account_name,
-            path.native()));
+          return uri(
+            ssx::sformat(
+              "abfss://{}@{}.dfs.core.windows.net/{}",
+              bucket(),
+              abs.account_name,
+              path.native()));
       });
 }
 

@@ -67,9 +67,10 @@ validation_types_to_field_type(
       && types[1] == conversion::json_schema::json_value_type::null) {
         return convert_type(types[0]);
     } else {
-        return conversion_exception(fmt::format(
-          "Type constraint is not sufficient for transforming. Types: [{}]",
-          fmt::join(types, ", ")));
+        return conversion_exception(
+          fmt::format(
+            "Type constraint is not sufficient for transforming. Types: [{}]",
+            fmt::join(types, ", ")));
     }
 }
 
@@ -152,22 +153,25 @@ convert(conversion_context& ctx, const conversion::json_schema::subschema& s) {
                        json_conversion_ir::field_annotation{
                          field_position, std::move(field_index)})
                      .second) {
-                  return conversion_exception(fmt::format(
-                    "Duplicate field name in JSON schema: {}", name));
+                  return conversion_exception(
+                    fmt::format(
+                      "Duplicate field name in JSON schema: {}", name));
               }
 
-              st.fields.push_back(iceberg::nested_field::create(
-                placeholder_field_id,
-                name,
-                iceberg::field_required::no,
-                std::move(child_res.value())));
+              st.fields.push_back(
+                iceberg::nested_field::create(
+                  placeholder_field_id,
+                  name,
+                  iceberg::field_required::no,
+                  std::move(child_res.value())));
           }
 
           if (
             s.additional_properties()
             && s.additional_properties()->get().boolean_subschema() != false) {
-              return conversion_exception("Only 'false' subschema is supported "
-                                          "for additionalProperties keyword");
+              return conversion_exception(
+                "Only 'false' subschema is supported "
+                "for additionalProperties keyword");
           }
 
           return std::move(st);
@@ -182,7 +186,8 @@ convert(conversion_context& ctx, const conversion::json_schema::subschema& s) {
                 return conversion_exception(
                   "Cannot convert JSON schema list type without items");
             },
-            [&](const std::reference_wrapper<
+            [&](
+              const std::reference_wrapper<
                 const conversion::json_schema::subschema>& item) -> ret_t {
                 auto item_res = convert(ctx, item.get());
                 if (item_res.has_error()) {
@@ -207,11 +212,13 @@ convert(conversion_context& ctx, const conversion::json_schema::subschema& s) {
                     if (!resolved_type.has_value()) {
                         resolved_type = std::move(item_res.value());
                     } else if (*resolved_type != item_res.value()) {
-                        return conversion_exception(fmt::format(
-                          "List type items must have the same type, but found "
-                          "{} and {}",
-                          *resolved_type,
-                          item_res.value()));
+                        return conversion_exception(
+                          fmt::format(
+                            "List type items must have the same type, but "
+                            "found "
+                            "{} and {}",
+                            *resolved_type,
+                            item_res.value()));
                     }
                 }
 
@@ -224,12 +231,14 @@ convert(conversion_context& ctx, const conversion::json_schema::subschema& s) {
                     if (!resolved_type.has_value()) {
                         resolved_type = std::move(additional_item_res.value());
                     } else if (*resolved_type != additional_item_res.value()) {
-                        return conversion_exception(fmt::format(
-                          "List type items must have the same type, but found "
-                          "{} "
-                          "and {}",
-                          *resolved_type,
-                          additional_item_res.value()));
+                        return conversion_exception(
+                          fmt::format(
+                            "List type items must have the same type, but "
+                            "found "
+                            "{} "
+                            "and {}",
+                            *resolved_type,
+                            additional_item_res.value()));
                     }
                 }
 

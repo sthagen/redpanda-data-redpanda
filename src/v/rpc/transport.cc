@@ -146,8 +146,9 @@ transport::make_response_handler(netbuf& b, rpc::client_opts& opts) {
           rpclog.error,
           "Invalid transport state, reusing correlation id: {}",
           _correlation_idx + 1);
-        throw std::runtime_error("Invalid transport state. Doubly "
-                                 "registered correlation_id");
+        throw std::runtime_error(
+          "Invalid transport state. Doubly "
+          "registered correlation_id");
     }
     const uint32_t idx = ++_correlation_idx;
     b.set_correlation_id(idx);
@@ -492,33 +493,37 @@ std::vector<ss::metrics::metric_definition> client_probe::defs(
     namespace sm = ss::metrics;
     std::vector<sm::metric_definition> ret;
 
-    ret.emplace_back(sm::make_counter(
-                       "requests",
-                       [this] { return _requests; },
-                       sm::description("Number of requests"),
-                       labels)
-                       .aggregate(aggregate_labels));
+    ret.emplace_back(
+      sm::make_counter(
+        "requests",
+        [this] { return _requests; },
+        sm::description("Number of requests"),
+        labels)
+        .aggregate(aggregate_labels));
 
-    ret.emplace_back(sm::make_gauge(
-                       "requests_pending",
-                       [this] { return _requests_pending; },
-                       sm::description("Number of requests pending"),
-                       labels)
-                       .aggregate(aggregate_labels));
+    ret.emplace_back(
+      sm::make_gauge(
+        "requests_pending",
+        [this] { return _requests_pending; },
+        sm::description("Number of requests pending"),
+        labels)
+        .aggregate(aggregate_labels));
 
-    ret.emplace_back(sm::make_counter(
-                       "request_errors",
-                       [this] { return _request_errors; },
-                       sm::description("Number or requests errors"),
-                       labels)
-                       .aggregate(aggregate_labels));
+    ret.emplace_back(
+      sm::make_counter(
+        "request_errors",
+        [this] { return _request_errors; },
+        sm::description("Number or requests errors"),
+        labels)
+        .aggregate(aggregate_labels));
 
-    ret.emplace_back(sm::make_counter(
-                       "request_timeouts",
-                       [this] { return _request_timeouts; },
-                       sm::description("Number or requests timeouts"),
-                       labels)
-                       .aggregate(aggregate_labels));
+    ret.emplace_back(
+      sm::make_counter(
+        "request_timeouts",
+        [this] { return _request_timeouts; },
+        sm::description("Number or requests timeouts"),
+        labels)
+        .aggregate(aggregate_labels));
 
     ret.emplace_back(
       sm::make_total_bytes(
@@ -528,12 +533,13 @@ std::vector<ss::metrics::metric_definition> client_probe::defs(
         labels)
         .aggregate(aggregate_labels));
 
-    ret.emplace_back(sm::make_total_bytes(
-                       "in_bytes",
-                       [this] { return _in_bytes; },
-                       sm::description("Total number of bytes received"),
-                       labels)
-                       .aggregate(aggregate_labels));
+    ret.emplace_back(
+      sm::make_total_bytes(
+        "in_bytes",
+        [this] { return _in_bytes; },
+        sm::description("Total number of bytes received"),
+        labels)
+        .aggregate(aggregate_labels));
     ret.emplace_back(
       sm::make_counter(
         "read_dispatch_errors",
@@ -570,8 +576,9 @@ std::vector<ss::metrics::metric_definition> client_probe::defs(
       sm::make_counter(
         "requests_blocked_memory",
         [this] { return _requests_blocked_memory; },
-        sm::description("Number of requests that are blocked because"
-                        " of insufficient memory"),
+        sm::description(
+          "Number of requests that are blocked because"
+          " of insufficient memory"),
         labels)
         .aggregate(aggregate_labels));
 

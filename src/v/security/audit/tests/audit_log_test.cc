@@ -112,8 +112,9 @@ FIXTURE_TEST(test_audit_init_phase, kafka_client_fixture) {
 
     /// With the switch enabled the audit topic should be created
     wait_for_topics(
-      {cluster::topic_result(model::topic_namespace(
-        model::kafka_namespace, model::kafka_audit_logging_topic))})
+      {cluster::topic_result(
+        model::topic_namespace(
+          model::kafka_namespace, model::kafka_audit_logging_topic))})
       .get();
 
     /// Wait until the run loops are available, otherwise enqueuing events will

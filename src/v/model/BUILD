@@ -30,6 +30,7 @@ redpanda_cc_library(
         "compression.h",
         "errc.h",
         "fundamental.h",
+        "kitp.h",
         "ktp.h",
         "limits.h",
         "metadata.h",

@@ -46,8 +46,9 @@ FIXTURE_TEST(test_list_multiple_ntps, list_offsets_fixture) {
         auto& elem = req.data.topics.emplace_back(
           kafka::list_offset_topic{.name = topic.tp});
         for (int i = 0; i < n_partitions; ++i) {
-            elem.partitions.emplace_back(kafka::list_offset_partition{
-              .partition_index = model::partition_id{i}});
+            elem.partitions.emplace_back(
+              kafka::list_offset_partition{
+                .partition_index = model::partition_id{i}});
         }
     };
     add_tp(t1, 1);

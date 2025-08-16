@@ -20,6 +20,7 @@
 #include "container/contiguous_range_map.h"
 #include "logger.h"
 #include "model/fundamental.h"
+#include "model/kitp.h"
 #include "model/metadata.h"
 #include "utils/stable_iterator_adaptor.h"
 
@@ -101,11 +102,12 @@ public:
         concurrent_modification_error(
           model::revision_id initial_revision,
           model::revision_id current_revision)
-          : ::concurrent_modification_error(ssx::sformat(
-              "Topic table was modified by concurrent fiber. "
-              "(initial_revision: {}, current_revision: {}) ",
-              initial_revision,
-              current_revision)) {}
+          : ::concurrent_modification_error(
+              ssx::sformat(
+                "Topic table was modified by concurrent fiber. "
+                "(initial_revision: {}, current_revision: {}) ",
+                initial_revision,
+                current_revision)) {}
     };
 
     class in_progress_update {
@@ -502,8 +504,9 @@ public:
     void unregister_topic_delta_notification(cluster::notification_id_type id) {
         std::erase_if(
           _topic_notifications,
-          [id](const std::pair<cluster::notification_id_type, topic_delta_cb_t>&
-                 n) { return n.first == id; });
+          [id](
+            const std::pair<cluster::notification_id_type, topic_delta_cb_t>&
+              n) { return n.first == id; });
     }
 
     cluster::notification_id_type
@@ -654,6 +657,8 @@ public:
     bool contains(model::topic_namespace_view tp) const {
         return _topics.contains(tp);
     }
+    /// Checks if it has given partition
+    bool contains(const model::kitp& kitp) const;
     /// contains() check with stronger validation on the topic revision/offset.
     /// Just looking up in the cache can yield false negatives if the cache is
     /// not warmed up because controller replay can be in progress. This variant

@@ -118,10 +118,12 @@ TEST(WhenAllAlgorithm, when_all_basic_testing) {
         using StringPtr = std::unique_ptr<std::string>;
         std::vector<ss::future<StringPtr>> futures;
         futures.reserve(2);
-        futures.push_back(seastar::make_ready_future<StringPtr>(
-          std::make_unique<std::string>("test string 0")));
-        futures.push_back(seastar::make_ready_future<StringPtr>(
-          std::make_unique<std::string>("test string 1")));
+        futures.push_back(
+          seastar::make_ready_future<StringPtr>(
+            std::make_unique<std::string>("test string 0")));
+        futures.push_back(
+          seastar::make_ready_future<StringPtr>(
+            std::make_unique<std::string>("test string 1")));
         auto res = ssx::when_all_succeed<chunked_vector<StringPtr>>(
           std::move(futures));
         auto resolved = res.get();
@@ -136,8 +138,9 @@ TEST(WhenAllAlgorithm, when_all_basic_testing) {
         futures.reserve(few_items);
         futures.push_back(seastar::make_ready_future<int>(0));
         futures.push_back(seastar::make_ready_future<int>(1));
-        futures.emplace_back(seastar::make_exception_future<int>(
-          std::runtime_error{"Test Exception"}));
+        futures.emplace_back(
+          seastar::make_exception_future<int>(
+            std::runtime_error{"Test Exception"}));
         futures.push_back(seastar::make_ready_future<int>(3));
         futures.push_back(seastar::make_ready_future<int>(4));
         auto res = ssx::when_all_succeed<std::vector<int>>(std::move(futures));

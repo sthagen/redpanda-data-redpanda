@@ -54,9 +54,10 @@ parse_create_namespace_response(const json::Value& value) {
     ret.ns.reserve(ns_json_array.Size());
     for (const auto& ns_json : ns_json_array) {
         if (!ns_json.IsString()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected 'namespace' to be string array, element is {}",
-              ns_json.GetType()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected 'namespace' to be string array, element is {}",
+                ns_json.GetType()));
         }
         ret.ns.emplace_back(ns_json.GetString());
     }

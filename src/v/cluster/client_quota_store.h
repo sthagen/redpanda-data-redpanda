@@ -82,8 +82,9 @@ public:
               kv.first.parts, [client_id](const entity_key::part& key_part) {
                   return ss::visit(
                     key_part.part,
-                    [client_id](const entity_key::part::client_id_prefix_match&
-                                  prefix_match) {
+                    [client_id](
+                      const entity_key::part::client_id_prefix_match&
+                        prefix_match) {
                         return client_id.starts_with(prefix_match.value);
                     },
                     [](const auto&) { return false; });

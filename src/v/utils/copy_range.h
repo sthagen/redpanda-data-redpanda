@@ -79,8 +79,9 @@ inline ss::future<Container>
 copy_range(Iterator begin, Iterator end, AsyncAction action) {
     Container r;
     using itraits = std::iterator_traits<Iterator>;
-    r.reserve(ss::internal::iterator_range_estimate_vector_capacity(
-      begin, end, typename itraits::iterator_category()));
+    r.reserve(
+      ss::internal::iterator_range_estimate_vector_capacity(
+        begin, end, typename itraits::iterator_category()));
     return detail::copy_range(
       std::move(begin), std::move(end), std::move(action), std::move(r));
 }

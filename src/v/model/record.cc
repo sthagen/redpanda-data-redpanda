@@ -22,9 +22,10 @@ model::record record_batch_iterator::next() {
     ++_index;
     // if we're done, then check that we read all the buffer
     if (!has_next() && _parser.bytes_left()) [[unlikely]] {
-        throw std::out_of_range(fmt::format(
-          "Record iteration stopped with {} bytes remaining",
-          _parser.bytes_left()));
+        throw std::out_of_range(
+          fmt::format(
+            "Record iteration stopped with {} bytes remaining",
+            _parser.bytes_left()));
     }
     return r;
 }

@@ -236,8 +236,9 @@ FIXTURE_TEST(test_version_handler, prod_consume_fixture) {
     wait_for_controller_leadership().get();
     start();
     chunked_vector<kafka::produce_request::topic> topics;
-    topics.push_back(kafka::produce_request::topic{
-      .name = model::topic{"abc123"}, .partitions = small_batches(10)});
+    topics.push_back(
+      kafka::produce_request::topic{
+        .name = model::topic{"abc123"}, .partitions = small_batches(10)});
 
     const auto unsupported_version = kafka::api_version(
       kafka::produce_handler::max_supported() + 1);
@@ -354,9 +355,10 @@ struct tuple_binary_op {
           [&](auto&&... args1) {
               return std::apply(
                 [&](auto&&... args2) {
-                    return std::make_tuple(BinaryOp{}(
-                      std::forward<decltype(args1)>(args1),
-                      std::forward<decltype(args2)>(args2))...);
+                    return std::make_tuple(
+                      BinaryOp{}(
+                        std::forward<decltype(args1)>(args1),
+                        std::forward<decltype(args2)>(args2))...);
                 },
                 std::forward<decltype(t2)>(t2));
           },
@@ -914,8 +916,9 @@ FIXTURE_TEST(test_produce_bad_timestamps, prod_consume_fixture) {
     produce_messages(30min);
     BOOST_CHECK_EQUAL(bad_timestamps_metric, produce_bad_ts_count());
 
-    BOOST_TEST_INFO("disabling the alert for the past allows messages in the "
-                    "past without triggering the probe");
+    BOOST_TEST_INFO(
+      "disabling the alert for the past allows messages in the "
+      "past without triggering the probe");
     config::shard_local_cfg().log_message_timestamp_alert_before_ms.set_value(
       std::optional<std::chrono::milliseconds>{});
     produce_messages(-365 * 24h);

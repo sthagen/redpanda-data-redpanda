@@ -197,12 +197,13 @@ ss::future<response_t> cluster_mock::handle_metadata_request(
     auto md_req = std::get<metadata_request>(std::move(req));
     metadata_response_data r_data;
     for (auto& b : _brokers) {
-        r_data.brokers.push_back(metadata_response::broker{
-          .node_id = b.second.id,
-          .host = b.second.address.host(),
-          .port = b.second.address.port(),
-          .rack = b.second.rack,
-        });
+        r_data.brokers.push_back(
+          metadata_response::broker{
+            .node_id = b.second.id,
+            .host = b.second.address.host(),
+            .port = b.second.address.port(),
+            .rack = b.second.rack,
+          });
     }
 
     for (const auto& [topic, md] : _topics) {
@@ -216,11 +217,12 @@ ss::future<response_t> cluster_mock::handle_metadata_request(
               : kafka::topic_authorized_operations_not_set;
         md_topic.partitions.reserve(md.partitions.size());
         for (auto& [part_id, part_meta] : md.partitions) {
-            md_topic.partitions.push_back(metadata_response::partition{
-              .partition_index = part_id,
-              .leader_id = part_meta.leader,
-              .leader_epoch = part_meta.leader_epoch,
-              .replica_nodes = part_meta.replicas});
+            md_topic.partitions.push_back(
+              metadata_response::partition{
+                .partition_index = part_id,
+                .leader_id = part_meta.leader,
+                .leader_epoch = part_meta.leader_epoch,
+                .replica_nodes = part_meta.replicas});
         }
         r_data.topics.push_back(std::move(md_topic));
     }
@@ -295,8 +297,11 @@ api_versions_response
 make_api_versions_response(const supported_versions& versions) {
     api_versions_response_data r_data;
     for (const auto& [key, range] : versions) {
-        r_data.api_keys.push_back(api_versions_response_key{
-          .api_key = key, .min_version = range.min, .max_version = range.max});
+        r_data.api_keys.push_back(
+          api_versions_response_key{
+            .api_key = key,
+            .min_version = range.min,
+            .max_version = range.max});
     }
     return api_versions_response{.data = std::move(r_data)};
 }
@@ -362,9 +367,10 @@ void cluster_mock::add_topic(
           fmt::format("Topic {} already exists", topic_name));
     }
     if (replication_factor > _brokers.size()) {
-        throw std::invalid_argument(fmt::format(
-          "Replication factor {} exceeds available brokers",
-          replication_factor));
+        throw std::invalid_argument(
+          fmt::format(
+            "Replication factor {} exceeds available brokers",
+            replication_factor));
     }
 
     auto cluster_nodes = get_broker_ids();
@@ -410,20 +416,22 @@ void cluster_mock::set_topic_partition_count(
     }
 
     if (partition_count < 1) {
-        throw std::invalid_argument(fmt::format(
-          "Invalid partition count {} for topic {}",
-          partition_count,
-          topic_name));
+        throw std::invalid_argument(
+          fmt::format(
+            "Invalid partition count {} for topic {}",
+            partition_count,
+            topic_name));
     }
 
     if (
       topics_it->second.partitions.size()
       > static_cast<size_t>(partition_count)) {
-        throw std::invalid_argument(fmt::format(
-          "Cannot reduce partition count for topic {} from {} to {}",
-          topic_name,
-          topics_it->second.partitions.size(),
-          partition_count));
+        throw std::invalid_argument(
+          fmt::format(
+            "Cannot reduce partition count for topic {} from {} to {}",
+            topic_name,
+            topics_it->second.partitions.size(),
+            partition_count));
     }
 
     if (
@@ -462,14 +470,16 @@ void cluster_mock::set_topic_replication_factor(
           fmt::format("Topic {} does not exist", topic_name));
     }
     if (rf < 1) {
-        throw std::invalid_argument(fmt::format(
-          "Invalid replication factor {} for topic {}", rf, topic_name));
+        throw std::invalid_argument(
+          fmt::format(
+            "Invalid replication factor {} for topic {}", rf, topic_name));
     }
     if (static_cast<size_t>(rf) > _brokers.size()) {
-        throw std::invalid_argument(fmt::format(
-          "Replication factor {} exceeds available brokers for topic {}",
-          rf,
-          topic_name));
+        throw std::invalid_argument(
+          fmt::format(
+            "Replication factor {} exceeds available brokers for topic {}",
+            rf,
+            topic_name));
     }
 
     auto cur_rf = topics_it->second.partitions.begin()->second.replicas.size();

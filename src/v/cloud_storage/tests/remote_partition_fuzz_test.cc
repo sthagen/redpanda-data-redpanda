@@ -496,8 +496,9 @@ FIXTURE_TEST(test_scan_while_shutting_down, cloud_storage_fixture) {
               });
           });
     // NOTE: see issues/11271
-    BOOST_TEST_CONTEXT("scan_unit_close should terminate in a finite amount of "
-                       "time at shutdown") {
+    BOOST_TEST_CONTEXT(
+      "scan_unit_close should terminate in a finite amount of "
+      "time at shutdown") {
         test_log.info("waiting on close future with timeout");
         BOOST_CHECK_LE(close_fut.get(), 60s);
         test_log.info(

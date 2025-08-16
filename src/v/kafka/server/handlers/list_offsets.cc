@@ -142,12 +142,13 @@ static ss::future<list_offset_partition_response> list_offsets_partition(
           kafka_partition->leader_epoch());
     }
 
-    auto res = co_await kafka_partition->timequery(storage::timequery_config{
-      min_offset,
-      timestamp,
-      max_offset,
-      {model::record_batch_type::raft_data},
-      octx.rctx.abort_source().local()});
+    auto res = co_await kafka_partition->timequery(
+      storage::timequery_config{
+        min_offset,
+        timestamp,
+        max_offset,
+        {model::record_batch_type::raft_data},
+        octx.rctx.abort_source().local()});
     auto id = ktp.get_partition();
     if (res) {
         co_return list_offsets_response::make_partition(
@@ -272,10 +273,11 @@ static void handle_unauthorized(list_offsets_ctx& octx) {
                 partition.partition_index,
                 error_code::topic_authorization_failed)));
         }
-        octx.response.data.topics.push_back(list_offset_topic_response{
-          .name = std::move(topic.name),
-          .partitions = std::move(partitions),
-        });
+        octx.response.data.topics.push_back(
+          list_offset_topic_response{
+            .name = std::move(topic.name),
+            .partitions = std::move(partitions),
+          });
     }
 }
 
@@ -294,11 +296,13 @@ list_offsets_handler::handle(request_context ctx, ss::smp_service_group ssg) {
             chunked_vector<list_offset_partition_response> partitions;
             partitions.reserve(t.partitions.size());
             for (const auto& p : t.partitions) {
-                partitions.push_back(list_offsets_response::make_partition(
-                  p.partition_index, error_code::policy_violation));
+                partitions.push_back(
+                  list_offsets_response::make_partition(
+                    p.partition_index, error_code::policy_violation));
             }
-            response.data.topics.push_back(list_offset_topic_response{
-              .name = t.name, .partitions = std::move(partitions)});
+            response.data.topics.push_back(
+              list_offset_topic_response{
+                .name = t.name, .partitions = std::move(partitions)});
         }
         return ctx.respond(std::move(response));
     }
@@ -320,9 +324,10 @@ list_offsets_handler::handle(request_context ctx, ss::smp_service_group ssg) {
               chunked_vector<list_offset_partition_response> resp;
               resp.reserve(t.partitions.size());
               for (const auto& p : t.partitions) {
-                  resp.emplace_back(list_offset_partition_response{
-                    .partition_index = p.partition_index,
-                    .error_code = error_code::broker_not_available});
+                  resp.emplace_back(
+                    list_offset_partition_response{
+                      .partition_index = p.partition_index,
+                      .error_code = error_code::broker_not_available});
               }
 
               return list_offset_topic_response{

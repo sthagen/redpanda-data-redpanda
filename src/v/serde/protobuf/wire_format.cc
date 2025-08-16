@@ -101,10 +101,11 @@ uint64_t read_varint<uint64_t, zigzag::no>(iobuf_parser* parser) {
 int32_t read_length(iobuf_parser* parser) {
     auto len = read_varint<int32_t, zigzag::no>(parser);
     if (len < 0 || std::cmp_greater(len, parser->bytes_left())) [[unlikely]] {
-        throw std::runtime_error(fmt::format(
-          "invalid length field: (length={}, bytes_left={})",
-          len,
-          parser->bytes_left()));
+        throw std::runtime_error(
+          fmt::format(
+            "invalid length field: (length={}, bytes_left={})",
+            len,
+            parser->bytes_left()));
     }
     return len;
 }

@@ -39,10 +39,11 @@ gssapi_rule::gssapi_rule(
   , _number_of_components(number_of_components)
   , _format(format)
   , _match(match)
-  , _from_pattern(std::regex{
-      from_pattern.data(),
-      from_pattern.length(),
-      std::regex_constants::ECMAScript | std::regex_constants::optimize})
+  , _from_pattern(
+      std::regex{
+        from_pattern.data(),
+        from_pattern.length(),
+        std::regex_constants::ECMAScript | std::regex_constants::optimize})
   , _from_pattern_str(from_pattern)
   , _to_pattern(to_pattern)
   , _repeat(repeat_)

@@ -261,18 +261,20 @@ std::tuple<Type> extract_parameter(
         auto ptr_len = static_cast<uint32_t>(raw_params[idx++]);
         void* host_ptr = mem->translate_raw(
           guest_ptr, ptr_len * sizeof(typename Type::element_type));
-        return std::make_tuple(ffi::array<typename Type::element_type>(
-          // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-          reinterpret_cast<typename Type::element_type*>(host_ptr),
-          ptr_len));
+        return std::make_tuple(
+          ffi::array<typename Type::element_type>(
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            reinterpret_cast<typename Type::element_type*>(host_ptr),
+            ptr_len));
     } else if constexpr (std::is_same_v<ss::sstring, Type>) {
         ptr guest_ptr{static_cast<uint32_t>(raw_params[idx++])};
         auto ptr_len = static_cast<uint32_t>(raw_params[idx++]);
         void* host_ptr = mem->translate_raw(guest_ptr, ptr_len);
-        return std::make_tuple(ss::sstring(
-          // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
-          reinterpret_cast<char*>(host_ptr),
-          ptr_len));
+        return std::make_tuple(
+          ss::sstring(
+            // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+            reinterpret_cast<char*>(host_ptr),
+            ptr_len));
     } else if constexpr (
       std::is_same_v<Type, const void*> || std::is_same_v<Type, void*>) {
         ++idx;

@@ -700,16 +700,18 @@ struct instance_generator<cluster::topic_configuration> {
             model::topic(""),
             std::numeric_limits<int32_t>::max(),
             std::numeric_limits<int16_t>::max(),
-            model::topic_id(std::vector<uint8_t>(
-              uuid_t::length, std::numeric_limits<uint8_t>::max())),
+            model::topic_id(
+              std::vector<uint8_t>(
+                uuid_t::length, std::numeric_limits<uint8_t>::max())),
             std::numeric_limits<bool>::max(),
           },
           {model::ns(""),
            model::topic(""),
            std::numeric_limits<int32_t>::min(),
            std::numeric_limits<int16_t>::min(),
-           model::topic_id(std::vector<uint8_t>(
-             uuid_t::length, std::numeric_limits<uint8_t>::min())),
+           model::topic_id(
+             std::vector<uint8_t>(
+               uuid_t::length, std::numeric_limits<uint8_t>::min())),
            std::numeric_limits<bool>::min()}};
     }
 };

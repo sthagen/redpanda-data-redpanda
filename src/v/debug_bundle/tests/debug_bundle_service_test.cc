@@ -99,8 +99,9 @@ struct debug_bundle_service_fixture : public seastar_test {
     ss::future<> restart_service() {
         ASSERT_NO_THROW_CORO(co_await _service.stop());
         ASSERT_NO_THROW_CORO(co_await _service.start(_kvstore.get()));
-        ASSERT_NO_THROW_CORO(co_await _service.invoke_on_all(
-          [](debug_bundle::service& s) { return s.start(); }));
+        ASSERT_NO_THROW_CORO(
+          co_await _service.invoke_on_all(
+            [](debug_bundle::service& s) { return s.start(); }));
     }
 
     ss::future<> wait_for_status(
@@ -172,10 +173,11 @@ struct debug_bundle_service_started_fixture
   : public debug_bundle_service_fixture {
     ss::future<> SetUpAsync() override {
         co_await debug_bundle_service_fixture::SetUpAsync();
-        ASSERT_NO_THROW_CORO(co_await _service.invoke_on_all(
-          [](debug_bundle::service& s) -> ss::future<> {
-              co_await s.start();
-          }));
+        ASSERT_NO_THROW_CORO(
+          co_await _service.invoke_on_all(
+            [](debug_bundle::service& s) -> ss::future<> {
+                co_await s.start();
+            }));
     }
 
     ss::future<> run_bundle(
@@ -202,8 +204,9 @@ struct debug_bundle_service_started_fixture
 TEST_F_CORO(debug_bundle_service_fixture, basic_start_stop) {
     auto debug_bundle_dir = _data_dir
                             / debug_bundle::service::debug_bundle_dir_name;
-    ASSERT_NO_THROW_CORO(co_await _service.invoke_on_all(
-      [](debug_bundle::service& s) -> ss::future<> { co_await s.start(); }));
+    ASSERT_NO_THROW_CORO(
+      co_await _service.invoke_on_all(
+        [](debug_bundle::service& s) -> ss::future<> { co_await s.start(); }));
 }
 
 TEST_F_CORO(debug_bundle_service_fixture, bad_rpk_path) {
@@ -211,8 +214,9 @@ TEST_F_CORO(debug_bundle_service_fixture, bad_rpk_path) {
     auto debug_bundle_dir = _data_dir
                             / debug_bundle::service::debug_bundle_dir_name;
     // We should still expect the service to start, but it will emit a warning
-    ASSERT_NO_THROW_CORO(co_await _service.invoke_on_all(
-      [](debug_bundle::service& s) -> ss::future<> { co_await s.start(); }));
+    ASSERT_NO_THROW_CORO(
+      co_await _service.invoke_on_all(
+        [](debug_bundle::service& s) -> ss::future<> { co_await s.start(); }));
 }
 
 TEST_F_CORO(debug_bundle_service_started_fixture, change_bundle_dir) {
@@ -332,36 +336,37 @@ TEST_F_CORO(debug_bundle_service_started_fixture, test_all_parameters) {
       .k8s_namespace = k8s_namespace_name,
       .label_selector = label_select};
 
-    ss::sstring expected_params(fmt::format(
-      "debug bundle --output {}/{}.zip --verbose -Xuser={} -Xpass={} "
-      "-Xsasl.mechanism={} --controller-logs-size-limit {}B "
-      "--cpu-profiler-wait {}s --logs-since {} --logs-size-limit {}B "
-      "--logs-until {} --metrics-interval {}s --metrics-samples {} "
-      "--partition "
-      "{}/{}/1,2,3 {}/{}/4,5,6 -Xtls.enabled=true "
-      "-Xtls.insecure_skip_verify=false --namespace {} --label-selector "
-      "{}={},{}={}\n",
-      (_data_dir / debug_bundle::service::debug_bundle_dir_name).native(),
-      job_id,
-      username,
-      password,
-      mechanism,
-      controller_logs_size_limit_bytes,
-      cpu_profiler_wait_seconds.count(),
-      logs_since,
-      logs_size_limit,
-      logs_until,
-      metrics_interval_seconds.count(),
-      metrics_samples,
-      tn1.ns,
-      tn1.tp,
-      tn2.ns,
-      tn2.tp,
-      k8s_namespace_name,
-      label_select[0].key,
-      label_select[0].value,
-      label_select[1].key,
-      label_select[1].value));
+    ss::sstring expected_params(
+      fmt::format(
+        "debug bundle --output {}/{}.zip --verbose -Xuser={} -Xpass={} "
+        "-Xsasl.mechanism={} --controller-logs-size-limit {}B "
+        "--cpu-profiler-wait {}s --logs-since {} --logs-size-limit {}B "
+        "--logs-until {} --metrics-interval {}s --metrics-samples {} "
+        "--partition "
+        "{}/{}/1,2,3 {}/{}/4,5,6 -Xtls.enabled=true "
+        "-Xtls.insecure_skip_verify=false --namespace {} --label-selector "
+        "{}={},{}={}\n",
+        (_data_dir / debug_bundle::service::debug_bundle_dir_name).native(),
+        job_id,
+        username,
+        password,
+        mechanism,
+        controller_logs_size_limit_bytes,
+        cpu_profiler_wait_seconds.count(),
+        logs_since,
+        logs_size_limit,
+        logs_until,
+        metrics_interval_seconds.count(),
+        metrics_samples,
+        tn1.ns,
+        tn1.tp,
+        tn2.ns,
+        tn2.tp,
+        k8s_namespace_name,
+        label_select[0].key,
+        label_select[0].value,
+        label_select[1].key,
+        label_select[1].value));
 
     auto res = co_await _service.local().initiate_rpk_debug_bundle_collection(
       job_id, std::move(params));
@@ -982,8 +987,9 @@ TEST_F_CORO(debug_bundle_service_started_fixture, test_timeout_during_restart) {
 
     co_await ss::sleep(ttl + 1s);
     ASSERT_NO_THROW_CORO(co_await _service.start(_kvstore.get()));
-    ASSERT_NO_THROW_CORO(co_await _service.invoke_on_all(
-      [](debug_bundle::service& s) { return s.start(); }));
+    ASSERT_NO_THROW_CORO(
+      co_await _service.invoke_on_all(
+        [](debug_bundle::service& s) { return s.start(); }));
 
     std::filesystem::path job_file
       = _data_dir

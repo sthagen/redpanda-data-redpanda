@@ -409,8 +409,9 @@ scheduler::scheduler(
   disk_manager& disk_monitor)
   : _scheduling_policy(std::move(policy))
   , _disk_monitor(disk_monitor)
-  , _mem_tracker(reservations_tracker::make_default(
-      total_memory, memory_block_size, *this, _disk_monitor)) {
+  , _mem_tracker(
+      reservations_tracker::make_default(
+        total_memory, memory_block_size, *this, _disk_monitor)) {
     ssx::repeat_until_gate_closed_or_aborted(
       _executor.gate, _executor.as, [this] {
           return main().handle_exception([](const std::exception_ptr& e) {

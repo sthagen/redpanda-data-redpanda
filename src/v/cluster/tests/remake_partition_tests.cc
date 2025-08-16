@@ -141,13 +141,14 @@ FIXTURE_TEST(
     auto shard_revision = state->assigned()->shard_revision;
     auto group = state->assigned()->group;
 
-    auto marker_buf = serde::to_iobuf(cluster::current_state_marker{
-      .ntp = test_ntp,
-      .log_revision = log_revision,
-      .shard_revision = shard_revision,
-      .is_complete = true,
-      .remake_state
-      = cluster::shard_placement_table::remake_partition_state::initiated});
+    auto marker_buf = serde::to_iobuf(
+      cluster::current_state_marker{
+        .ntp = test_ntp,
+        .log_revision = log_revision,
+        .shard_revision = shard_revision,
+        .is_complete = true,
+        .remake_state
+        = cluster::shard_placement_table::remake_partition_state::initiated});
     kvstore
       .put(
         storage::kvstore::key_space::shard_placement,
@@ -180,13 +181,14 @@ FIXTURE_TEST(
     auto shard_revision = state->assigned()->shard_revision;
     auto group = state->assigned()->group;
 
-    auto marker_buf = serde::to_iobuf(cluster::current_state_marker{
-      .ntp = test_ntp,
-      .log_revision = log_revision,
-      .shard_revision = shard_revision,
-      .is_complete = true,
-      .remake_state
-      = cluster::shard_placement_table::remake_partition_state::deleted});
+    auto marker_buf = serde::to_iobuf(
+      cluster::current_state_marker{
+        .ntp = test_ntp,
+        .log_revision = log_revision,
+        .shard_revision = shard_revision,
+        .is_complete = true,
+        .remake_state
+        = cluster::shard_placement_table::remake_partition_state::deleted});
     kvstore
       .put(
         storage::kvstore::key_space::shard_placement,

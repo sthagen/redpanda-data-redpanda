@@ -167,8 +167,9 @@ void server_probe::setup_metrics(const ss::sstring& group_name) {
             [this, usage] {
                 return usage(_ctx.inflight_sem.current(), _ctx.max_inflight);
             },
-            sm::description(ssx::sformat(
-              "Usage ratio of in-flight requests in the {}", group_name)))
+            sm::description(
+              ssx::sformat(
+                "Usage ratio of in-flight requests in the {}", group_name)))
             .aggregate({}));
         defs.emplace_back(
           sm::make_gauge(
@@ -176,17 +177,19 @@ void server_probe::setup_metrics(const ss::sstring& group_name) {
             [this, usage] {
                 return usage(_ctx.mem_sem.current(), _ctx.max_memory);
             },
-            sm::description(ssx::sformat(
-              "Memory usage ratio of in-flight requests in the {}",
-              group_name)))
+            sm::description(
+              ssx::sformat(
+                "Memory usage ratio of in-flight requests in the {}",
+                group_name)))
             .aggregate({}));
         defs.emplace_back(
           sm::make_gauge(
             "queued_requests_memory_blocked",
             [this] { return _ctx.mem_sem.waiters(); },
-            sm::description(ssx::sformat(
-              "Number of requests queued in {}, due to memory limitations",
-              group_name)))
+            sm::description(
+              ssx::sformat(
+                "Number of requests queued in {}, due to memory limitations",
+                group_name)))
             .aggregate({}));
         return defs;
     };

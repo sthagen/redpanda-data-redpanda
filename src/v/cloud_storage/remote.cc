@@ -76,10 +76,12 @@ remote::remote(
   : _io(io)
   , _materialized(std::make_unique<materialized_resources>())
   , _probe(
-      remote_metrics_disabled(static_cast<bool>(
-        std::visit([](auto&& cfg) { return cfg.disable_metrics; }, conf))),
-      remote_metrics_disabled(static_cast<bool>(std::visit(
-        [](auto&& cfg) { return cfg.disable_public_metrics; }, conf))),
+      remote_metrics_disabled(
+        static_cast<bool>(
+          std::visit([](auto&& cfg) { return cfg.disable_metrics; }, conf))),
+      remote_metrics_disabled(
+        static_cast<bool>(std::visit(
+          [](auto&& cfg) { return cfg.disable_public_metrics; }, conf))),
       *_materialized,
       _io.local().resources()) {}
 

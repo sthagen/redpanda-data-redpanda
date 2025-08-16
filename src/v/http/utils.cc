@@ -55,10 +55,11 @@ iobuf form_encode_data(
   const absl::flat_hash_map<ss::sstring, ss::sstring>& data) {
     std::vector<ss::sstring> pairs;
     for (const auto& [k, v] : data) {
-        pairs.emplace_back(fmt::format(
-          "{}={}",
-          uri_encode(k, uri_encode_slash::yes),
-          uri_encode(v, uri_encode_slash::yes)));
+        pairs.emplace_back(
+          fmt::format(
+            "{}={}",
+            uri_encode(k, uri_encode_slash::yes),
+            uri_encode(v, uri_encode_slash::yes)));
     }
     return iobuf::from(boost::algorithm::join(pairs, "&"));
 }

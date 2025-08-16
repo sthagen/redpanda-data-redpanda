@@ -62,18 +62,20 @@ fetch_session::make_offset_commit_request() const {
     if (_offsets.empty()) {
         return res;
     }
-    res.push_back(offset_commit_request_topic{
-      .name{_offsets.begin()->first}, .partitions{}});
+    res.push_back(
+      offset_commit_request_topic{
+        .name{_offsets.begin()->first}, .partitions{}});
     for (const auto& [t, po] : _offsets) {
         for (const auto& [p_id, o] : po) {
             if (res.back().name != t) {
                 res.push_back(
                   offset_commit_request_topic{.name = t, .partitions{}});
             }
-            res.back().partitions.push_back(offset_commit_request_partition{
-              .partition_index = p_id,
-              .committed_offset = o - model::offset(1),
-              .committed_leader_epoch = invalid_leader_epoch});
+            res.back().partitions.push_back(
+              offset_commit_request_partition{
+                .partition_index = p_id,
+                .committed_offset = o - model::offset(1),
+                .committed_leader_epoch = invalid_leader_epoch});
         }
     }
     return res;

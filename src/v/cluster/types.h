@@ -1215,10 +1215,11 @@ public:
     explicit configuration_invariants_changed(
       const configuration_invariants& expected,
       const configuration_invariants& current)
-      : _msg(ssx::sformat(
-          "Configuration invariants changed. Expected: {}, current: {}",
-          expected,
-          current)) {}
+      : _msg(
+          ssx::sformat(
+            "Configuration invariants changed. Expected: {}, current: {}",
+            expected,
+            current)) {}
 
     const char* what() const noexcept final { return _msg.c_str(); }
 
@@ -2496,6 +2497,7 @@ struct leader_term {
 
     std::optional<model::node_id> leader;
     model::term_id term;
+    friend auto operator<=>(const leader_term&, const leader_term&) = default;
     friend std::ostream& operator<<(std::ostream&, const leader_term&);
 };
 

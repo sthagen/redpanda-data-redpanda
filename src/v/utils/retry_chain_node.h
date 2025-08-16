@@ -219,18 +219,24 @@ public:
 
     /// Return a view of the entire buffer (const version)
     auto view() const {
-        return std::views::join(std::views::all(std::array{
-          std::span(_data).subspan(
-            _start, _size < _capacity ? _size - _start : _capacity - _start),
-          std::span(_data).subspan(0, _size < _capacity ? 0 : _start)}));
+        return std::views::join(
+          std::views::all(
+            std::array{
+              std::span(_data).subspan(
+                _start,
+                _size < _capacity ? _size - _start : _capacity - _start),
+              std::span(_data).subspan(0, _size < _capacity ? 0 : _start)}));
     }
 
     /// Return a view of the entire buffer
     auto view() {
-        return std::views::join(std::views::all(std::array{
-          std::span(_data).subspan(
-            _start, _size < _capacity ? _size - _start : _capacity - _start),
-          std::span(_data).subspan(0, _size < _capacity ? 0 : _start)}));
+        return std::views::join(
+          std::views::all(
+            std::array{
+              std::span(_data).subspan(
+                _start,
+                _size < _capacity ? _size - _start : _capacity - _start),
+              std::span(_data).subspan(0, _size < _capacity ? 0 : _start)}));
     }
 
 private:

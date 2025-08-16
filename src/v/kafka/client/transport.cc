@@ -68,10 +68,11 @@ transport::request_entry::request_entry(
 void transport::request_entry::set_response(
   iobuf data, std::optional<tagged_fields> tags) {
     timeout_timer.cancel();
-    response_promise.set_value(response_data{
-      .tags = std::move(tags),
-      .data = std::move(data),
-    });
+    response_promise.set_value(
+      response_data{
+        .tags = std::move(tags),
+        .data = std::move(data),
+      });
 }
 void transport::request_entry::set_error(errc ec) {
     timeout_timer.cancel();
@@ -117,10 +118,11 @@ ss::future<> transport::read_loop() {
           bytes_remaining);
         auto reply_buffer = co_await read_iobuf_exactly(_in, bytes_remaining);
 
-        entry->response_promise.set_value(response_data{
-          .tags = std::move(reply_tags),
-          .data = std::move(reply_buffer),
-        });
+        entry->response_promise.set_value(
+          response_data{
+            .tags = std::move(reply_tags),
+            .data = std::move(reply_buffer),
+          });
     }
 }
 
@@ -155,11 +157,12 @@ transport::connect(model::timeout_clock::time_point connection_timeout) {
     return base_transport::connect(connection_timeout).then([this] {
         // background
         ssx::spawn_with_gate(_dispatch_gate, [this] {
-            set_keepalive_parameters(ss::net::tcp_keepalive_params{
-              .idle = tcp_keepalive_idle,
-              .interval = tcp_keepalive_interval,
-              .count = tcp_keepalive_probes,
-            });
+            set_keepalive_parameters(
+              ss::net::tcp_keepalive_params{
+                .idle = tcp_keepalive_idle,
+                .interval = tcp_keepalive_interval,
+                .count = tcp_keepalive_probes,
+              });
             set_keepalive(true);
             return read_loop().then_wrapped([this](ss::future<> f) {
                 fail_outstanding_futures();

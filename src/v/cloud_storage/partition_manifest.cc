@@ -369,12 +369,13 @@ segment_name partition_manifest::generate_remote_segment_name(
         [[fallthrough]];
     case segment_name_format::v3:
         // Use new style format ".../base-committed-term-size-v1.log"
-        return segment_name(ssx::sformat(
-          "{}-{}-{}-{}-v1.log",
-          val.base_offset(),
-          val.committed_offset(),
-          val.size_bytes,
-          val.segment_term()));
+        return segment_name(
+          ssx::sformat(
+            "{}-{}-{}-{}-v1.log",
+            val.base_offset(),
+            val.committed_offset(),
+            val.size_bytes,
+            val.segment_term()));
     }
     __builtin_unreachable();
 }

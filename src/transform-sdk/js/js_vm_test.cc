@@ -53,14 +53,16 @@ struct native_object {
     std::expected<qjs::value, qjs::exception>
     add(JSContext* ctx, std::span<qjs::value> args) {
         if (args.size() != 2) {
-            last_result.emplace(std::unexpected(
-              qjs::exception::make(ctx, "wrong number of args")));
+            last_result.emplace(
+              std::unexpected(
+                qjs::exception::make(ctx, "wrong number of args")));
         } else if (!args.front().is_number() || !args.back().is_number()) {
             last_result.emplace(
               std::unexpected(qjs::exception::make(ctx, "wrong types")));
         } else {
-            last_result.emplace(qjs::value::number(
-              ctx, args.front().as_number() + args.back().as_number()));
+            last_result.emplace(
+              qjs::value::number(
+                ctx, args.front().as_number() + args.back().as_number()));
         }
         return last_result.value();
     }

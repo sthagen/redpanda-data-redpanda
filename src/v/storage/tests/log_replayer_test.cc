@@ -57,14 +57,16 @@ public:
                       base_name + ".index",
                       ss::open_flags::create | ss::open_flags::rw)
                       .get();
-        fd = ss::file(ss::make_shared(file_io_sanitizer(
-          std::move(fd),
-          std::filesystem::path{base_name},
-          ntp_sanitizer_config{.sanitize_only = true})));
-        fidx = ss::file(ss::make_shared(file_io_sanitizer(
-          std::move(fidx),
-          std::filesystem::path{base_name + ".index"},
-          ntp_sanitizer_config{.sanitize_only = true})));
+        fd = ss::file(
+          ss::make_shared(file_io_sanitizer(
+            std::move(fd),
+            std::filesystem::path{base_name},
+            ntp_sanitizer_config{.sanitize_only = true})));
+        fidx = ss::file(
+          ss::make_shared(file_io_sanitizer(
+            std::move(fidx),
+            std::filesystem::path{base_name + ".index"},
+            ntp_sanitizer_config{.sanitize_only = true})));
 
         auto appender = std::make_unique<segment_appender>(
           fd, segment_appender::options(1, std::nullopt, resources));
@@ -101,10 +103,11 @@ public:
         auto fd = ss::open_file_dma(
                     name, ss::open_flags::create | ss::open_flags::rw)
                     .get();
-        fd = ss::file(ss::make_shared(file_io_sanitizer(
-          std::move(fd),
-          std::filesystem::path{name},
-          ntp_sanitizer_config{.sanitize_only = true})));
+        fd = ss::file(
+          ss::make_shared(file_io_sanitizer(
+            std::move(fd),
+            std::filesystem::path{name},
+            ntp_sanitizer_config{.sanitize_only = true})));
         auto out = ss::make_file_output_stream(std::move(fd)).get();
         const auto b = random_generators::gen_alphanum_string(100);
         out.write(b.data(), b.size()).get();

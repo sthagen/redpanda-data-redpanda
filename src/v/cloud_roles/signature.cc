@@ -355,13 +355,14 @@ ss::sstring redact_headers_from_string(const std::string_view original) {
     std::set<std::string_view> redacted{};
     const auto redacted_fields = http::redacted_fields();
     for (const auto& rf : redacted_fields) {
-        redacted.insert(ss::visit(
-          rf,
-          [](const boost::beast::http::field& f) {
-              const auto view = to_string(f);
-              return std::string_view{view.data(), view.size()};
-          },
-          [](const std::string& s) { return std::string_view{s}; }));
+        redacted.insert(
+          ss::visit(
+            rf,
+            [](const boost::beast::http::field& f) {
+                const auto view = to_string(f);
+                return std::string_view{view.data(), view.size()};
+            },
+            [](const std::string& s) { return std::string_view{s}; }));
     }
 
     const auto lines = absl::StrSplit(original, "\n");
@@ -371,8 +372,9 @@ ss::sstring redact_headers_from_string(const std::string_view original) {
             const auto tokens = absl::StrSplit(line, ":");
             const auto key = *tokens.begin();
             if (redacted.contains(key)) {
-                result.emplace_back(fmt::format(
-                  "{}:{}", *tokens.begin(), config::secret_placeholder));
+                result.emplace_back(
+                  fmt::format(
+                    "{}:{}", *tokens.begin(), config::secret_placeholder));
                 continue;
             }
         }

@@ -188,13 +188,14 @@ static void run_test_can_append_mixed(size_t fallocate_size) {
         auto in = make_file_input_stream(f, acc);
         iobuf result = read_iobuf_exactly(in, step).get();
         if (original != result) {
-            SCOPED_TRACE(fmt::format(
-              "==> i:{}, step:{}, acc:{}, og.size:{}, expected.size{}\n",
-              i,
-              step,
-              acc,
-              original.size_bytes(),
-              result.size_bytes()));
+            SCOPED_TRACE(
+              fmt::format(
+                "==> i:{}, step:{}, acc:{}, og.size:{}, expected.size{}\n",
+                i,
+                step,
+                acc,
+                original.size_bytes(),
+                result.size_bytes()));
             auto in = iobuf::iterator_consumer(
               original.cbegin(), original.cend());
             fmt::memory_buffer comp_str;
@@ -339,13 +340,14 @@ static void run_concurrent_append_flush(
     auto seed = random_generators::get_int<size_t>();
     std::default_random_engine rng(seed);
 
-    SCOPED_TRACE(fmt::format(
-      "run_concurrent_append_flush, seed: {}, fallocate_size: {}, "
-      "max_buf_size: {}, buf_count: {}",
-      seed,
-      fallocate_size,
-      max_buf_size,
-      buf_count));
+    SCOPED_TRACE(
+      fmt::format(
+        "run_concurrent_append_flush, seed: {}, fallocate_size: {}, "
+        "max_buf_size: {}, buf_count: {}",
+        seed,
+        fallocate_size,
+        max_buf_size,
+        buf_count));
     // the basic idea is we create a bunch of random buffers, then randomly
     // perform actions on the segment appedner, like appending one of the
     // random buffers, flushing the appender, yeilding, etc.

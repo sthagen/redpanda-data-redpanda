@@ -71,39 +71,48 @@ void snc_quotas_probe::setup_metrics() {
               = std::numeric_limits<int64_t>::max() / 1024 * 1024;
             return max_without_conversion_error;
         };
-        metric_defs.emplace_back(sm::make_counter(
-          name,
-          [] {
-              return calc_quota(
-                config::shard_local_cfg().kafka_throughput_limit_node_in_bps());
-          },
-          desc,
-          {label_ingress}));
-        metric_defs.emplace_back(sm::make_counter(
-          name,
-          [] {
-              return calc_quota(config::shard_local_cfg()
-                                  .kafka_throughput_limit_node_out_bps());
-          },
-          desc,
-          {label_egress}));
+        metric_defs.emplace_back(
+          sm::make_counter(
+            name,
+            [] {
+                return calc_quota(
+                  config::shard_local_cfg()
+                    .kafka_throughput_limit_node_in_bps());
+            },
+            desc,
+            {label_ingress}));
+        metric_defs.emplace_back(
+          sm::make_counter(
+            name,
+            [] {
+                return calc_quota(
+                  config::shard_local_cfg()
+                    .kafka_throughput_limit_node_out_bps());
+            },
+            desc,
+            {label_egress}));
     }
-    metric_defs.emplace_back(sm::make_counter(
-      "traffic_intake",
-      _traffic.in,
-      sm::description("Amount of Kafka traffic received from the clients "
-                      "that is taken into processing, in bytes")));
+    metric_defs.emplace_back(
+      sm::make_counter(
+        "traffic_intake",
+        _traffic.in,
+        sm::description(
+          "Amount of Kafka traffic received from the clients "
+          "that is taken into processing, in bytes")));
 
-    metric_defs.emplace_back(sm::make_counter(
-      "traffic_egress",
-      _traffic.eg,
-      sm::description("Amount of Kafka traffic published to the clients "
-                      "that was taken into processing, in bytes")));
+    metric_defs.emplace_back(
+      sm::make_counter(
+        "traffic_egress",
+        _traffic.eg,
+        sm::description(
+          "Amount of Kafka traffic published to the clients "
+          "that was taken into processing, in bytes")));
 
-    metric_defs.emplace_back(sm::make_histogram(
-      "throttle_time",
-      [this] { return get_throttle_time(); },
-      sm::description("Throttle time histogram (in seconds)")));
+    metric_defs.emplace_back(
+      sm::make_histogram(
+        "throttle_time",
+        [this] { return get_throttle_time(); },
+        sm::description("Throttle time histogram (in seconds)")));
 
     _metrics.add_group(
       prometheus_sanitize::metrics_name("kafka:quotas"),

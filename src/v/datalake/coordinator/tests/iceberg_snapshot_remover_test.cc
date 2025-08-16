@@ -102,11 +102,12 @@ public:
           .partition = std::move(pk),
           .file_size_bytes = 0,
         };
-        files.emplace_back(iceberg::file_to_append{
-          .file = std::move(file),
-          .schema_id = txn.table().current_schema_id,
-          .partition_spec_id = txn.table().default_spec_id,
-        });
+        files.emplace_back(
+          iceberg::file_to_append{
+            .file = std::move(file),
+            .schema_id = txn.table().current_schema_id,
+            .partition_spec_id = txn.table().default_spec_id,
+          });
 
         auto merge_res = co_await txn.merge_append(
           manifest_io, std::move(files));

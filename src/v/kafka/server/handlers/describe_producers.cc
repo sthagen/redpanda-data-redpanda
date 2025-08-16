@@ -74,14 +74,15 @@ partition_response do_get_producers_for_data_partition(
             kafka_tx_start = partition->log()->from_log_offset(
               tx_start.value());
         }
-        resp.active_producers.push_back(producer_state{
-          .producer_id = pid,
-          .producer_epoch = state->id().get_epoch(),
-          .last_sequence = state->last_sequence_number().value_or(-1),
-          .last_timestamp = state->last_update_timestamp().value(),
-          .coordinator_epoch = -1,
-          .current_txn_start_offset = kafka_tx_start,
-        });
+        resp.active_producers.push_back(
+          producer_state{
+            .producer_id = pid,
+            .producer_epoch = state->id().get_epoch(),
+            .last_sequence = state->last_sequence_number().value_or(-1),
+            .last_timestamp = state->last_update_timestamp().value(),
+            .coordinator_epoch = -1,
+            .current_txn_start_offset = kafka_tx_start,
+          });
     }
     return resp;
 }

@@ -154,7 +154,7 @@ public:
     ///              representation of a retry_chain_node.
     ss::future<client_lease> acquire_with_timeout(
       ss::abort_source& as,
-      ss::lowres_clock::time_point deadline,
+      ss::lowres_clock::duration deadline,
       std::optional<ss::sstring> ctx = std::nullopt);
 
     /// \brief Get number of connections
@@ -169,9 +169,9 @@ public:
     bool has_waiters() const noexcept { return _cvar.has_waiters(); }
 
 private:
-    ss::future<>
-    client_self_configure(std::optional<std::reference_wrapper<stop_signal>>
-                            application_stop_signal);
+    ss::future<> client_self_configure(
+      std::optional<std::reference_wrapper<stop_signal>>
+        application_stop_signal);
     ss::future<
       std::optional<cloud_storage_clients::client_self_configuration_output>>
     do_client_self_configure(http_client_ptr client);

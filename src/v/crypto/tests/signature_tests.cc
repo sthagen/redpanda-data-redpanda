@@ -24,19 +24,21 @@ TEST(crypto_sig_validation, rsa_2k_sha256_good) {
     auto key = crypto::key::load_rsa_public_key(
       sig_test_rsa_pub_key_n, sig_test_rsa_pub_key_e);
 
-    EXPECT_TRUE(crypto::verify_signature(
-      crypto::digest_type::SHA256, key, sig_good_msg, sig_good_sig));
+    EXPECT_TRUE(
+      crypto::verify_signature(
+        crypto::digest_type::SHA256, key, sig_good_msg, sig_good_sig));
 }
 
 TEST(crypto_sig_validation, rsa_2k_sha256_bad) {
     auto key = crypto::key::load_rsa_public_key(
       sig_test_rsa_pub_key_n, sig_test_rsa_pub_key_e);
 
-    EXPECT_FALSE(crypto::verify_signature(
-      crypto::digest_type::SHA256,
-      key,
-      bytes_view_to_string_view(sig_bad_msg),
-      bytes_view_to_string_view(sig_bad_sig)));
+    EXPECT_FALSE(
+      crypto::verify_signature(
+        crypto::digest_type::SHA256,
+        key,
+        bytes_view_to_string_view(sig_bad_msg),
+        bytes_view_to_string_view(sig_bad_sig)));
 }
 
 TEST(crypto_sig_validation, rsa_2k_sha256_good_multi_string) {

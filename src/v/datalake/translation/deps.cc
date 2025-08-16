@@ -322,8 +322,9 @@ public:
       ss::lw_shared_ptr<cluster::partition> partition)
       : _partition(std::move(partition))
       , _stm(_partition->raft()->stm_manager()->get<translation_stm>())
-      , _partition_proxy(std::make_unique<kafka::partition_proxy>(
-          kafka::make_partition_proxy(_partition)))
+      , _partition_proxy(
+          std::make_unique<kafka::partition_proxy>(
+            kafka::make_partition_proxy(_partition)))
       , _partition_flush_subscription(_partition->register_flush_hook(
           std::bind_front(&wait_stm_translated, _stm))) {}
 
@@ -507,8 +508,9 @@ public:
       , _features(features->local())
       , _probe(std::move(probe))
       , _invalid_record_action(compute_invalid_record_action())
-      , _cp_enabled(translation_task::custom_partitioning_enabled{
-          _features.is_active(features::feature::datalake_iceberg_ga)})
+      , _cp_enabled(
+          translation_task::custom_partitioning_enabled{
+            _features.is_active(features::feature::datalake_iceberg_ga)})
       , _mem_tracker(translator_mem_tracker{_reservations}) {}
 
     ss::future<> translate_now(
@@ -516,18 +518,19 @@ public:
       kafka::offset start_offset,
       ss::abort_source& as) final {
         if (!_in_progress_translation) {
-            _in_progress_translation.emplace(translation_task{
-              _ntp,
-              _topic_revision,
-              make_writer_factory(),
-              _cloud_io,
-              _schema_mgr,
-              *_type_resolver,
-              *_record_translator,
-              *_table_creator,
-              _invalid_record_action,
-              _location_provider,
-              *_probe});
+            _in_progress_translation.emplace(
+              translation_task{
+                _ntp,
+                _topic_revision,
+                make_writer_factory(),
+                _cloud_io,
+                _schema_mgr,
+                *_type_resolver,
+                *_record_translator,
+                *_table_creator,
+                _invalid_record_action,
+                _location_provider,
+                *_probe});
         }
         return _in_progress_translation->translate_once(
           std::move(reader), start_offset, as);
@@ -569,9 +572,10 @@ public:
                   auto result = result_f.get();
                   if (result.has_error()) {
                       return ss::make_exception_future(
-                        std::runtime_error(fmt::format(
-                          "Error flushing in-progress translation: {}",
-                          result.error())));
+                        std::runtime_error(
+                          fmt::format(
+                            "Error flushing in-progress translation: {}",
+                            result.error())));
                   }
                   return ss::now();
               })
@@ -709,8 +713,9 @@ public:
       ss::lw_shared_ptr<cluster::partition> partition,
       cluster::topic_table& topics)
       : _partition(std::move(partition))
-      , _partition_proxy(std::make_unique<kafka::partition_proxy>(
-          kafka::make_partition_proxy(_partition)))
+      , _partition_proxy(
+          std::make_unique<kafka::partition_proxy>(
+            kafka::make_partition_proxy(_partition)))
       , _topics(topics)
       , _stm(_partition->raft()->stm_manager()->get<translation_stm>()) {}
 

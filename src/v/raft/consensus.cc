@@ -191,8 +191,9 @@ void consensus::setup_metrics() {
                      && _configuration_manager.get_latest().get_state()
                           != configuration_state::simple;
           },
-          sm::description("Indicates if current raft group configuration is in "
-                          "joint state i.e. configuration is being changed"),
+          sm::description(
+            "Indicates if current raft group configuration is in "
+            "joint state i.e. configuration is being changed"),
           labels),
       },
       {},
@@ -392,10 +393,12 @@ consensus::success_reply consensus::update_follower_index(
     }
     if (unlikely(reply.group != _group)) {
         // logic bug
-        throw std::runtime_error(fmt::format(
-          "Append entries response send to wrong group: {}, current group: {}",
-          reply.group,
-          _group));
+        throw std::runtime_error(
+          fmt::format(
+            "Append entries response send to wrong group: {}, current group: "
+            "{}",
+            reply.group,
+            _group));
     }
 
     // check preconditions for processing the reply
@@ -2090,9 +2093,10 @@ consensus::do_append_entries(append_entries_request&& r) {
     auto last_log_term
       = lstats.dirty_offset == request_metadata.prev_log_index
           ? lstats.dirty_offset_term // use term from lstats
-          : get_term(model::offset(
-              request_metadata
-                .prev_log_index)); // lookup for request term in log
+          : get_term(
+              model::offset(
+                request_metadata
+                  .prev_log_index)); // lookup for request term in log
     // We can only check prev_log_term for entries that are present in the
     // log. When leader installed snapshot on the follower we may require to
     // skip the term check as term of prev_log_idx may not be available.
@@ -3306,8 +3310,9 @@ void consensus::trigger_leadership_notification() {
       "triggering leadership notification with term: {}, new leader: {}",
       _term,
       _leader_id);
-    _leader_notification(leadership_status{
-      .term = _term, .group = _group, .current_leader = _leader_id});
+    _leader_notification(
+      leadership_status{
+        .term = _term, .group = _group, .current_leader = _leader_id});
 
     if (_follower_recovery_state && !_leader_id) {
         // If we are recovering and the group has lost leadership, it is unclear

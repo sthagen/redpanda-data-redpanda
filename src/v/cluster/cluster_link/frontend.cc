@@ -270,9 +270,9 @@ ss::future<errc> frontend::dispatch_mutation_to_remote(
                         return result<void>(r.value().ec);
                     });
               },
-              [client,
-               timeout](cluster::cluster_link_update_mirror_topic_state_cmd
-                          cmd) mutable {
+              [client, timeout](
+                cluster::cluster_link_update_mirror_topic_state_cmd
+                  cmd) mutable {
                   return client
                     .update_mirror_topic_state(
                       cluster::update_mirror_topic_state_request{
@@ -291,9 +291,9 @@ ss::future<errc> frontend::dispatch_mutation_to_remote(
                           return result<void>(r.value().ec);
                       });
               },
-              [client,
-               timeout](cluster::cluster_link_update_mirror_topic_properties_cmd
-                          cmd) mutable {
+              [client, timeout](
+                cluster::cluster_link_update_mirror_topic_properties_cmd
+                  cmd) mutable {
                   return client
                     .update_mirror_topic_properties(
                       cluster::update_mirror_topic_properties_request{

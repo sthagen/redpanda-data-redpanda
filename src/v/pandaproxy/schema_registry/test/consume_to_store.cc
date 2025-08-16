@@ -58,8 +58,9 @@ inline model::record_batch make_delete_subject_batch(pps::subject sub) {
       model::record_batch_type::raft_data, model::offset{0}};
 
     rb.add_raw_kv(
-      to_json_iobuf(pps::delete_subject_key{
-        .seq{model::offset{0}}, .node{model::node_id{0}}, .sub{sub}}),
+      to_json_iobuf(
+        pps::delete_subject_key{
+          .seq{model::offset{0}}, .node{model::node_id{0}}, .sub{sub}}),
       to_json_iobuf(pps::delete_subject_value{.sub{sub}}));
     return std::move(rb).build();
 }
@@ -71,11 +72,12 @@ inline model::record_batch make_delete_subject_permanently_batch(
 
     std::for_each(versions.cbegin(), versions.cend(), [&](auto version) {
         rb.add_raw_kv(
-          to_json_iobuf(pps::schema_key{
-            .seq{model::offset{0}},
-            .node{model::node_id{0}},
-            .sub{sub},
-            .version{version}}),
+          to_json_iobuf(
+            pps::schema_key{
+              .seq{model::offset{0}},
+              .node{model::node_id{0}},
+              .sub{sub},
+              .version{version}}),
           std::nullopt);
     });
     return std::move(rb).build();

@@ -26,8 +26,9 @@ feature_table_snapshot feature_table_snapshot::from(const feature_table& ft) {
     fts.license = ft.get_configured_license();
     for (const auto& state : ft._feature_state) {
         auto& name = state.spec.name;
-        fts.states.push_back(feature_state_snapshot{
-          .name = ss::sstring(name), .state = state._state});
+        fts.states.push_back(
+          feature_state_snapshot{
+            .name = ss::sstring(name), .state = state._state});
     }
     fts.applied_offset = ft.get_applied_offset();
     fts.original_version = ft.get_original_version();

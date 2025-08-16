@@ -55,10 +55,11 @@ ss::future<response_ptr> txn_offset_commit(txn_offset_commit_ctx& octx) {
       .txn_offset_commit(std::move(octx.request))
       .then([&octx](txn_offset_commit_response resp) {
           for (auto& topic : octx.unauthorized_tps) {
-              resp.data.topics.push_back(txn_offset_commit_response_topic{
-                .name = topic.first,
-                .partitions = std::move(topic.second),
-              });
+              resp.data.topics.push_back(
+                txn_offset_commit_response_topic{
+                  .name = topic.first,
+                  .partitions = std::move(topic.second),
+                });
           }
           if (unlikely(!octx.nonexistent_tps.empty())) {
               /*
@@ -80,10 +81,11 @@ ss::future<response_ptr> txn_offset_commit(txn_offset_commit_ctx& octx) {
                * response directly.
                */
               for (auto& topic : octx.nonexistent_tps) {
-                  resp.data.topics.push_back(txn_offset_commit_response_topic{
-                    .name = topic.first,
-                    .partitions = std::move(topic.second),
-                  });
+                  resp.data.topics.push_back(
+                    txn_offset_commit_response_topic{
+                      .name = topic.first,
+                      .partitions = std::move(topic.second),
+                    });
               }
           }
           return octx.rctx.respond(std::move(resp));
@@ -153,10 +155,11 @@ ss::future<response_ptr> txn_offset_commit_handler::handle(
              */
             auto& parts = octx.nonexistent_tps[topic.name];
             for (const auto& part : topic.partitions) {
-                parts.push_back(txn_offset_commit_response_partition{
-                  .partition_index = part.partition_index,
-                  .error_code = error_code::unknown_topic_or_partition,
-                });
+                parts.push_back(
+                  txn_offset_commit_response_partition{
+                    .partition_index = part.partition_index,
+                    .error_code = error_code::unknown_topic_or_partition,
+                  });
             }
             continue;
         }
@@ -170,25 +173,28 @@ ss::future<response_ptr> txn_offset_commit_handler::handle(
             auto& parts = octx.nonexistent_tps[topic.name];
             if (!octx.rctx.metadata_cache().contains(
                   tn, part.partition_index)) {
-                parts.push_back(txn_offset_commit_response_partition{
-                  .partition_index = part.partition_index,
-                  .error_code = error_code::unknown_topic_or_partition,
-                });
+                parts.push_back(
+                  txn_offset_commit_response_partition{
+                    .partition_index = part.partition_index,
+                    .error_code = error_code::unknown_topic_or_partition,
+                  });
                 continue;
             }
             valid_partitions.push_back(std::move(part));
         }
-        valid_topics.push_back(txn_offset_commit_request_topic{
-          .name = topic.name,
-          .partitions = std::move(valid_partitions),
-          .unknown_tags = std::move(topic.unknown_tags),
-        });
+        valid_topics.push_back(
+          txn_offset_commit_request_topic{
+            .name = topic.name,
+            .partitions = std::move(valid_partitions),
+            .unknown_tags = std::move(topic.unknown_tags),
+          });
     }
     octx.request.data.topics = std::move(valid_topics);
 
     if (!octx.rctx.audit()) {
-        return octx.rctx.respond(txn_offset_commit_response{
-          octx.request, error_code::broker_not_available});
+        return octx.rctx.respond(
+          txn_offset_commit_response{
+            octx.request, error_code::broker_not_available});
     }
 
     return ss::do_with(std::move(octx), txn_offset_commit);

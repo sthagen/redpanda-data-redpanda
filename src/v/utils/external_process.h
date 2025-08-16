@@ -153,12 +153,13 @@ public:
     void set_stdout_consumer(Consumer consumer) {
         vassert(!_stdout_consumer.has_value(), "Already set stdout consumer");
         auto cout = _process.cout();
-        _stdout_consumer.emplace(ss::do_with(
-          std::move(cout),
-          [consumer = std::move(consumer)](
-            ss::input_stream<char>& cout) mutable {
-              return cout.consume(std::move(consumer));
-          }));
+        _stdout_consumer.emplace(
+          ss::do_with(
+            std::move(cout),
+            [consumer = std::move(consumer)](
+              ss::input_stream<char>& cout) mutable {
+                return cout.consume(std::move(consumer));
+            }));
     }
 
     /**
@@ -175,12 +176,13 @@ public:
     void set_stderr_consumer(Consumer consumer) {
         vassert(!_stderr_consumer.has_value(), "Already set stdout consumer");
         auto cerr = _process.cerr();
-        _stderr_consumer.emplace(ss::do_with(
-          std::move(cerr),
-          [consumer = std::move(consumer)](
-            ss::input_stream<char>& cerr) mutable {
-              return cerr.consume(std::move(consumer));
-          }));
+        _stderr_consumer.emplace(
+          ss::do_with(
+            std::move(cerr),
+            [consumer = std::move(consumer)](
+              ss::input_stream<char>& cerr) mutable {
+                return cerr.consume(std::move(consumer));
+            }));
     }
 
     /**

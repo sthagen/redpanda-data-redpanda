@@ -53,8 +53,9 @@ TEST(TestTransforms, TestHourlyTransform) {
                                .value();
 
     ASSERT_TRUE(std::holds_alternative<primitive_value>(start_transformed));
-    ASSERT_TRUE(std::holds_alternative<int_value>(
-      std::get<primitive_value>(start_transformed)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_value>(
+        std::get<primitive_value>(start_transformed)));
     auto start_val = std::get<int_value>(
       std::get<primitive_value>(start_transformed));
 
@@ -69,8 +70,9 @@ TEST(TestTransforms, TestHourlyTransform) {
       = apply_transform(make_timestamp_val(plus_1hr), hour_transform{}).value();
     ASSERT_NE(start_transformed, plus_1hr_transformed);
     ASSERT_TRUE(std::holds_alternative<primitive_value>(plus_1hr_transformed));
-    ASSERT_TRUE(std::holds_alternative<int_value>(
-      std::get<primitive_value>(plus_1hr_transformed)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_value>(
+        std::get<primitive_value>(plus_1hr_transformed)));
     auto plus_1hr_val = std::get<int_value>(
       std::get<primitive_value>(plus_1hr_transformed));
     ASSERT_EQ(start_val.val + 1, plus_1hr_val.val);
@@ -81,8 +83,9 @@ TEST(TestTransforms, TestHourlyTransform) {
           .value();
     ASSERT_NE(start_transformed, minus_1hr_transformed);
     ASSERT_TRUE(std::holds_alternative<primitive_value>(minus_1hr_transformed));
-    ASSERT_TRUE(std::holds_alternative<int_value>(
-      std::get<primitive_value>(minus_1hr_transformed)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_value>(
+        std::get<primitive_value>(minus_1hr_transformed)));
     auto minus_1hr_val = std::get<int_value>(
       std::get<primitive_value>(minus_1hr_transformed));
     ASSERT_EQ(start_val.val - 1, minus_1hr_val.val);
@@ -170,8 +173,9 @@ TEST_P(TestTimeTransforms, TestConversion) {
                          make_timestamp_val(test_case.time_shift), test_case.tr)
                          .value();
     ASSERT_TRUE(std::holds_alternative<primitive_value>(transformed));
-    ASSERT_TRUE(std::holds_alternative<int_value>(
-      std::get<primitive_value>(transformed)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_value>(
+        std::get<primitive_value>(transformed)));
     auto transformed_val = std::get<int_value>(
       std::get<primitive_value>(transformed));
 
@@ -185,8 +189,9 @@ TEST_P(TestDateTransforms, TestConversion) {
                          make_date_val(test_case.time_shift), test_case.tr)
                          .value();
     ASSERT_TRUE(std::holds_alternative<primitive_value>(transformed));
-    ASSERT_TRUE(std::holds_alternative<int_value>(
-      std::get<primitive_value>(transformed)));
+    ASSERT_TRUE(
+      std::holds_alternative<int_value>(
+        std::get<primitive_value>(transformed)));
     auto transformed_val = std::get<int_value>(
       std::get<primitive_value>(transformed));
 

@@ -44,8 +44,10 @@ segment_index::segment_index(
   : _path(std::move(path))
   , _step(step)
   , _feature_table(std::ref(feature_table))
-  , _state(index_state::make_empty_index(
-      base, storage::internal::should_apply_delta_time_offset(_feature_table)))
+  , _state(
+      index_state::make_empty_index(
+        base,
+        storage::internal::should_apply_delta_time_offset(_feature_table)))
   , _sanitizer_config(std::move(sanitizer_config)) {
     _state.broker_timestamp = broker_timestamp;
     _state.clean_compact_timestamp = clean_compact_timestamp;
@@ -63,8 +65,10 @@ segment_index::segment_index(
   : _path(std::move(path))
   , _step(step)
   , _feature_table(std::ref(feature_table))
-  , _state(index_state::make_empty_index(
-      base, storage::internal::should_apply_delta_time_offset(_feature_table)))
+  , _state(
+      index_state::make_empty_index(
+        base,
+        storage::internal::should_apply_delta_time_offset(_feature_table)))
   , _mock_file(mock_file) {}
 
 ss::future<ss::file> segment_index::open() {

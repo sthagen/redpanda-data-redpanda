@@ -198,8 +198,9 @@ ss::future<> mock_translator::translation_loop() {
                     for (size_t i = 0; i < _num_writers; i++) {
                         auto writer_bytes = random_generators::get_int<size_t>(
                           0, remaining);
-                        writers.push_back(_writers[i].write(
-                          writer_bytes, _translation_state->as));
+                        writers.push_back(
+                          _writers[i].write(
+                            writer_bytes, _translation_state->as));
                         remaining -= writer_bytes;
                     }
                     co_await ss::when_all_succeed(

@@ -100,10 +100,11 @@ parse_record_headers(Parser& parser, ParserData parser_data) {
      * number, check if it is the case and throw an exception.
      */
     if (static_cast<size_t>(header_count) > parser.bytes_left()) [[unlikely]] {
-        throw std::out_of_range(fmt::format(
-          "Expected {} headers, but only {} bytes left",
-          header_count,
-          parser.bytes_left()));
+        throw std::out_of_range(
+          fmt::format(
+            "Expected {} headers, but only {} bytes left",
+            header_count,
+            parser.bytes_left()));
     }
     headers.reserve(header_count);
     for (int i = 0; i < header_count; ++i) {
@@ -117,8 +118,9 @@ parse_record_headers(Parser& parser, ParserData parser_data) {
         if (value_length > 0) {
             value = parser_data(parser, value_length);
         }
-        headers.emplace_back(model::record_header(
-          key_length, std::move(key), value_length, std::move(value)));
+        headers.emplace_back(
+          model::record_header(
+            key_length, std::move(key), value_length, std::move(value)));
     }
     return headers;
 }
@@ -135,10 +137,11 @@ static model::record do_parse_one_record_from_buffer(
     iobuf key;
     if (key_length > 0) {
         if (key_length > record_size) [[unlikely]] {
-            throw std::out_of_range(fmt::format(
-              "Expected key length {} but record has only {} bytes in total",
-              key_length,
-              record_size));
+            throw std::out_of_range(
+              fmt::format(
+                "Expected key length {} but record has only {} bytes in total",
+                key_length,
+                record_size));
         }
         key = parser_data(parser, key_length);
     }
@@ -146,10 +149,12 @@ static model::record do_parse_one_record_from_buffer(
     iobuf value;
     if (value_length > 0) {
         if (value_length > record_size) [[unlikely]] {
-            throw std::out_of_range(fmt::format(
-              "Expected value length {} but record has only {} bytes in total",
-              value_length,
-              record_size));
+            throw std::out_of_range(
+              fmt::format(
+                "Expected value length {} but record has only {} bytes in "
+                "total",
+                value_length,
+                record_size));
         }
         value = parser_data(parser, value_length);
     }
@@ -178,10 +183,11 @@ parse_record_meta_from_buffer(iobuf_parser_base& parser) {
       "model attributes expected to be one byte");
     auto [record_size, rv] = parser.read_varlong();
     if (static_cast<size_t>(record_size) > parser.bytes_left()) [[unlikely]] {
-        throw std::out_of_range(fmt::format(
-          "Expected record size {} but only {} bytes left",
-          record_size,
-          parser.bytes_left()));
+        throw std::out_of_range(
+          fmt::format(
+            "Expected record size {} but only {} bytes left",
+            record_size,
+            parser.bytes_left()));
     }
     auto attr = parser.consume_type<model::record_attributes::type>();
     return std::make_pair(record_size, attr);

@@ -118,10 +118,11 @@ add_files_update::apply(topics_state& state, model::offset applied_offset) {
 
     auto& partition_state = tp_state.pid_to_pending_files[pid];
     for (auto& e : entries) {
-        partition_state.pending_entries.emplace_back(pending_entry{
-          .data = std::move(e),
-          .added_pending_at = applied_offset,
-        });
+        partition_state.pending_entries.emplace_back(
+          pending_entry{
+            .data = std::move(e),
+            .added_pending_at = applied_offset,
+          });
     }
     return std::nullopt;
 }

@@ -54,22 +54,26 @@ void server_probe::setup_metrics(
         sm::make_counter(
           "connection_close_errors",
           [this] { return _connection_close_error; },
-          sm::description(ssx::sformat(
-            "{}: Number of errors when shutting down the connection", proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of errors when shutting down the connection",
+              proto))),
         sm::make_counter(
           "connections_rejected",
           [this] { return _connections_rejected_open_limit; },
-          sm::description(ssx::sformat(
-            "{}: Number of connection attempts rejected for hitting open "
-            "connection count limits",
-            proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of connection attempts rejected for hitting open "
+              "connection count limits",
+              proto))),
         sm::make_counter(
           "connections_rejected_rate_limit",
           [this] { return _connections_rejected_rate_limit; },
-          sm::description(ssx::sformat(
-            "{}: Number of connection attempts rejected for hitting "
-            "connection rate limits",
-            proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of connection attempts rejected for hitting "
+              "connection rate limits",
+              proto))),
         sm::make_counter(
           "requests_completed",
           [this] { return _requests_completed; },
@@ -78,9 +82,10 @@ void server_probe::setup_metrics(
         sm::make_total_bytes(
           "received_bytes",
           [this] { return _in_bytes; },
-          sm::description(ssx::sformat(
-            "{}: Number of bytes received from the clients in valid requests",
-            proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of bytes received from the clients in valid requests",
+              proto))),
         sm::make_total_bytes(
           "sent_bytes",
           [this] { return _out_bytes; },
@@ -89,13 +94,15 @@ void server_probe::setup_metrics(
         sm::make_counter(
           "method_not_found_errors",
           [this] { return _method_not_found_errors; },
-          sm::description(ssx::sformat(
-            "{}: Number of requests with not available RPC method", proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of requests with not available RPC method", proto))),
         sm::make_counter(
           "corrupted_headers",
           [this] { return _corrupted_headers; },
-          sm::description(ssx::sformat(
-            "{}: Number of requests with corrupted headers", proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of requests with corrupted headers", proto))),
         sm::make_counter(
           "service_errors",
           [this] { return _service_errors; },
@@ -103,19 +110,22 @@ void server_probe::setup_metrics(
         sm::make_counter(
           "requests_blocked_memory",
           [this] { return _requests_blocked_memory; },
-          sm::description(ssx::sformat(
-            "{}: Number of requests blocked in memory backpressure", proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of requests blocked in memory backpressure", proto))),
         sm::make_gauge(
           "requests_pending",
           [this] { return _requests_received - _requests_completed; },
-          sm::description(ssx::sformat(
-            "{}: Number of requests pending in the queue", proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of requests pending in the queue", proto))),
         sm::make_counter(
           "connections_wait_rate",
           [this] { return _connections_wait_rate; },
-          sm::description(ssx::sformat(
-            "{}: Number of connections are blocked by connection rate",
-            proto))),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of connections are blocked by connection rate",
+              proto))),
       },
       {},
       {sm::shard_label});
@@ -149,9 +159,10 @@ void server_probe::setup_public_metrics(
         sm::make_total_bytes(
           "received_bytes",
           [this] { return _in_bytes; },
-          sm::description(ssx::sformat(
-            "{}: Number of bytes received from the clients in valid requests",
-            proto)),
+          sm::description(
+            ssx::sformat(
+              "{}: Number of bytes received from the clients in valid requests",
+              proto)),
           {server_label(proto)})
           .aggregate({sm::shard_label}),
         sm::make_total_bytes(
@@ -192,26 +203,29 @@ void client_probe::setup_metrics(
   std::vector<ss::metrics::metric_definition> defs) {
     namespace sm = ss::metrics;
 
-    defs.emplace_back(sm::make_gauge(
-                        "active_connections",
-                        [this] { return _connections; },
-                        sm::description("Currently active connections"),
-                        labels)
-                        .aggregate(aggregate_labels));
+    defs.emplace_back(
+      sm::make_gauge(
+        "active_connections",
+        [this] { return _connections; },
+        sm::description("Currently active connections"),
+        labels)
+        .aggregate(aggregate_labels));
 
-    defs.emplace_back(sm::make_counter(
-                        "connects",
-                        [this] { return _connects; },
-                        sm::description("Connection attempts"),
-                        labels)
-                        .aggregate(aggregate_labels));
+    defs.emplace_back(
+      sm::make_counter(
+        "connects",
+        [this] { return _connects; },
+        sm::description("Connection attempts"),
+        labels)
+        .aggregate(aggregate_labels));
 
-    defs.emplace_back(sm::make_counter(
-                        "connection_errors",
-                        [this] { return _connection_errors; },
-                        sm::description("Number of connection errors"),
-                        labels)
-                        .aggregate(aggregate_labels));
+    defs.emplace_back(
+      sm::make_counter(
+        "connection_errors",
+        [this] { return _connection_errors; },
+        sm::description("Number of connection errors"),
+        labels)
+        .aggregate(aggregate_labels));
 
     _metrics.add_group(
       prometheus_sanitize::metrics_name(ss::sstring(name)), defs);
@@ -379,8 +393,9 @@ void tls_certificate_probe::setup_metrics(
           sm::make_gauge(
             "certificate_serial",
             [this] { return _cert.value_or(cert{}).serial; },
-            sm::description("Least significant four bytes of the server "
-                            "certificate serial number"),
+            sm::description(
+              "Least significant four bytes of the server "
+              "certificate serial number"),
             labels)
             .aggregate(aggregate_labels));
         defs.emplace_back(
@@ -395,8 +410,9 @@ void tls_certificate_probe::setup_metrics(
           sm::make_gauge(
             "certificate_valid",
             [this] { return cert_valid() ? 1 : 0; },
-            sm::description("The value is one if the certificate is valid with "
-                            "the given truststore, otherwise zero."),
+            sm::description(
+              "The value is one if the certificate is valid with "
+              "the given truststore, otherwise zero."),
             labels)
             .aggregate(aggregate_labels));
         defs.emplace_back(

@@ -84,9 +84,10 @@ ss::future<uint64_t> cloud_storage_size_reducer::do_reduce() {
             }
 
             if (res.value().missing_partitions.size() > 0) {
-                throw cloud_storage_size_reducer_exception(fmt::format(
-                  "Cloud storage usage for {} partitions was not found",
-                  res.value().missing_partitions.size()));
+                throw cloud_storage_size_reducer_exception(
+                  fmt::format(
+                    "Cloud storage usage for {} partitions was not found",
+                    res.value().missing_partitions.size()));
             }
 
             total_cloud_storage_bytes += res.value().total_size_bytes;

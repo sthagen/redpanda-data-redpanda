@@ -395,10 +395,11 @@ members_manager::apply_update(model::record_batch b) {
           _pb_state.local().remove_node_to_rebalance(id);
 
           return _update_queue
-            .push_eventually(node_update{
-              .id = id,
-              .type = node_update_type::reallocation_finished,
-              .offset = update_offset})
+            .push_eventually(
+              node_update{
+                .id = id,
+                .type = node_update_type::reallocation_finished,
+                .offset = update_offset})
             .then([] { return make_error_code(errc::success); });
       },
       [this, update_offset](maintenance_mode_cmd cmd) {
@@ -715,11 +716,12 @@ ss::future<> members_manager::apply_snapshot(
     std::vector<node_update> updates;
 
     auto interrupt_previous_update = [&](model::node_id id) {
-        updates.push_back(node_update{
-          .id = id,
-          .type = node_update_type::interrupted,
-          .offset = snap_offset,
-        });
+        updates.push_back(
+          node_update{
+            .id = id,
+            .type = node_update_type::interrupted,
+            .offset = snap_offset,
+          });
     };
 
     for (const auto& [id, update] : snap.in_progress_updates) {
@@ -1000,13 +1002,14 @@ void members_manager::join_raft0() {
         return ss::repeat([this] {
                    return dispatch_join_to_seed_server(
                             std::cbegin(_seed_servers),
-                            std::move(join_node_request{
-                              features::feature_table::
-                                get_latest_logical_version(),
-                              features::feature_table::
-                                get_earliest_logical_version(),
-                              _storage.local().node_uuid()().to_vector(),
-                              _self}))
+                            std::move(
+                              join_node_request{
+                                features::feature_table::
+                                  get_latest_logical_version(),
+                                features::feature_table::
+                                  get_earliest_logical_version(),
+                                _storage.local().node_uuid()().to_vector(),
+                                _self}))
                      .then([this](result<join_node_reply> r) {
                          bool success = r && r.value().success;
                          // stop on success or closed gate
@@ -1329,8 +1332,9 @@ members_manager::handle_join_request(const join_node_request req) {
         } else {
             // Validate that the node ID matches the one in our table.
             if (*req_node_id != it->second) {
-                co_return ret_t(join_node_reply{
-                  status_t::id_changed, model::unassigned_node_id});
+                co_return ret_t(
+                  join_node_reply{
+                    status_t::id_changed, model::unassigned_node_id});
             }
             // if node was removed from the cluster doesn't allow it to rejoin
             // with the same UUID
@@ -1343,8 +1347,9 @@ members_manager::handle_join_request(const join_node_request req) {
                   "the cluster",
                   it->second,
                   it->first);
-                co_return ret_t(join_node_reply{
-                  status_t::bad_rejoin, model::unassigned_node_id});
+                co_return ret_t(
+                  join_node_reply{
+                    status_t::bad_rejoin, model::unassigned_node_id});
             }
         }
 
@@ -1695,8 +1700,9 @@ members_manager::persist_members_in_kvstore(model::offset update_offset) {
     return _storage.local().kvs().put(
       storage::kvstore::key_space::controller,
       cluster_members_key,
-      serde::to_iobuf(members_snapshot{
-        .members = std::move(brokers), .update_offset = update_offset}));
+      serde::to_iobuf(
+        members_snapshot{
+          .members = std::move(brokers), .update_offset = update_offset}));
 }
 
 members_manager::members_snapshot members_manager::read_members_from_kvstore() {

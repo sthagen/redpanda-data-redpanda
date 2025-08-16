@@ -60,8 +60,9 @@ TEST(metadata_test, test_serialize_deserialize) {
     EXPECT_EQ(m2.process_output_file_path, process_output_path);
     EXPECT_EQ(m2.sha256_checksum, test_bytes);
     auto test_status = m2.get_wait_status();
-    ASSERT_TRUE(std::holds_alternative<ss::experimental::process::wait_exited>(
-      test_status));
+    ASSERT_TRUE(
+      std::holds_alternative<ss::experimental::process::wait_exited>(
+        test_status));
     EXPECT_EQ(
       std::get<ss::experimental::process::wait_exited>(test_status).exit_code,
       std::get<ss::experimental::process::wait_exited>(status).exit_code);

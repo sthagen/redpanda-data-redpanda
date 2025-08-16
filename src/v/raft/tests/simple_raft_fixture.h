@@ -126,11 +126,12 @@ struct simple_raft_fixture {
 
         _raft = _storage.local()
                   .log_mgr()
-                  .manage(storage::ntp_config(
-                    _ntp,
-                    _data_dir,
-                    std::make_unique<storage::ntp_config::default_overrides>(
-                      overrides)))
+                  .manage(
+                    storage::ntp_config(
+                      _ntp,
+                      _data_dir,
+                      std::make_unique<storage::ntp_config::default_overrides>(
+                        overrides)))
                   .then([this](ss::shared_ptr<storage::log> log) mutable {
                       auto group = raft::group_id(0);
                       return _group_mgr.local().create_group(

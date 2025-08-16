@@ -59,13 +59,15 @@ admin_server::get_all_transactions_handler(
     try {
         coordinator_partition = std::stoi(coordinator_partition_str);
     } catch (...) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "Partition must be an integer: {}", coordinator_partition_str));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "Partition must be an integer: {}", coordinator_partition_str));
     }
 
     if (coordinator_partition < 0) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "Invalid coordinator partition {}", coordinator_partition));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "Invalid coordinator partition {}", coordinator_partition));
     }
 
     model::ntp tx_ntp(
@@ -141,9 +143,10 @@ admin_server::get_all_transactions_handler(
         co_await ss::coroutine::maybe_yield();
     }
 
-    co_return ss::json::json_return_type(ss::json::stream_range_as_array(
-      lw_shared_container(std::move(ans)),
-      [](auto& tx_info) { return tx_info; }));
+    co_return ss::json::json_return_type(
+      ss::json::stream_range_as_array(
+        lw_shared_container(std::move(ans)),
+        [](auto& tx_info) { return tx_info; }));
 }
 
 ss::future<ss::json::json_return_type>
@@ -239,13 +242,14 @@ admin_server::unsafe_abort_group_transaction(
     }
 
     if (pid_str.empty() || epoch_str.empty() || sequence_str.empty()) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "invalid producer_id({})/epoch({})/sequence({}), should be "
-          "integers "
-          ">= 0",
-          pid_str,
-          epoch_str,
-          sequence_str));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "invalid producer_id({})/epoch({})/sequence({}), should be "
+            "integers "
+            ">= 0",
+            pid_str,
+            epoch_str,
+            sequence_str));
     }
 
     std::optional<model::producer_id> pid;
@@ -274,8 +278,9 @@ admin_server::unsafe_abort_group_transaction(
           sequence_str);
         seq = model::tx_seq{parsed_seq};
     } catch (const boost::bad_lexical_cast& e) {
-        throw ss::httpd::bad_param_exception(fmt::format(
-          "invalid transaction sequence {}, should be >= 0", sequence_str));
+        throw ss::httpd::bad_param_exception(
+          fmt::format(
+            "invalid transaction sequence {}, should be >= 0", sequence_str));
     }
 
     auto& mapper = _kafka_server.local().coordinator_mapper();

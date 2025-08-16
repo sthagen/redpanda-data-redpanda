@@ -39,11 +39,12 @@ group_manager::group_manager(
   , _raft_recv_sg(raft_recv_sg)
   , _raft_send_sg(raft_send_sg)
   , _configuration(cfg())
-  , _buffered_protocol(ss::make_shared<buffered_protocol>(
-      _raft_send_sg,
-      make_rpc_client_protocol(self, clients),
-      _configuration.max_inflight_requests_per_node,
-      _configuration.max_buffered_bytes_per_node))
+  , _buffered_protocol(
+      ss::make_shared<buffered_protocol>(
+        _raft_send_sg,
+        make_rpc_client_protocol(self, clients),
+        _configuration.max_inflight_requests_per_node,
+        _configuration.max_buffered_bytes_per_node))
   , _heartbeats(
       raft_heartbeats_sched_group,
       _configuration.heartbeat_interval,

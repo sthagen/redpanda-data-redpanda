@@ -169,6 +169,10 @@ bool metadata_cache::contains(
     return _topics_state.local().contains(tp, pid);
 }
 
+bool metadata_cache::contains(const model::kitp& kitp) const {
+    return _topics_state.local().contains(kitp);
+}
+
 bool metadata_cache::contains(model::topic_namespace_view tp) const {
     return _topics_state.local().contains(tp);
 }

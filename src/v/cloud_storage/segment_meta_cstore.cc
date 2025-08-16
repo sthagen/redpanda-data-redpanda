@@ -556,8 +556,9 @@ public:
         auto maybe_hint = [&]() -> std::optional<hint_vec_t> {
             // escape hatch: disable the use of _hints if their value causes
             // std::out_of_bound exceptions.
-            if (unlikely(config::shard_local_cfg()
-                           .storage_ignore_cstore_hints.value())) {
+            if (unlikely(
+                  config::shard_local_cfg()
+                    .storage_ignore_cstore_hints.value())) {
                 return std::nullopt;
             }
 

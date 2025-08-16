@@ -36,10 +36,11 @@ debug_service_impl::start_stress_fiber(proto::start_stress_fiber_request req) {
         bool has_min = min != 0;
         bool has_max = max != 0;
         if (has_min != has_max) {
-            throw serde::pb::rpc::invalid_argument_exception(fmt::format(
-              "Both min and max settings for {} must be set or unset "
-              "together.",
-              name));
+            throw serde::pb::rpc::invalid_argument_exception(
+              fmt::format(
+                "Both min and max settings for {} must be set or unset "
+                "together.",
+                name));
         }
         if (!has_min) {
             return false;
@@ -53,8 +54,9 @@ debug_service_impl::start_stress_fiber(proto::start_stress_fiber_request req) {
               fmt::format("Max setting for {} must be non-negative.", name));
         }
         if (min > max) {
-            throw serde::pb::rpc::invalid_argument_exception(fmt::format(
-              "Min setting for {} must not exceed max setting.", name));
+            throw serde::pb::rpc::invalid_argument_exception(
+              fmt::format(
+                "Min setting for {} must not exceed max setting.", name));
         }
         return true;
     };

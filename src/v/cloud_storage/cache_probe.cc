@@ -103,8 +103,9 @@ cache_probe::cache_probe() {
                 sm::make_counter(
                   "fast_trims",
                   [this] { return _fast_trims; },
-                  sm::description("Number of times we have trimmed the cache "
-                                  "using the normal (fast) mode."))
+                  sm::description(
+                    "Number of times we have trimmed the cache "
+                    "using the normal (fast) mode."))
                   .aggregate(aggregate_labels),
                 sm::make_counter(
                   "exhaustive_trims",
@@ -128,8 +129,9 @@ cache_probe::cache_probe() {
                 sm::make_counter(
                   "in_mem_trims",
                   [this] { return _in_mem_trims; },
-                  sm::description("Number of times we trimmed the cache using "
-                                  "the in-memory access tracker."))
+                  sm::description(
+                    "Number of times we trimmed the cache using "
+                    "the in-memory access tracker."))
                   .aggregate(aggregate_labels),
               });
         }
@@ -146,14 +148,16 @@ cache_probe::cache_probe() {
             sm::make_counter(
               "hit",
               [this] { return _num_cached_gets; },
-              sm::description("Number of get requests for objects that are "
-                              "already in cache."))
+              sm::description(
+                "Number of get requests for objects that are "
+                "already in cache."))
               .aggregate(aggregate_labels),
             sm::make_counter(
               "miss",
               [this] { return _num_miss_gets; },
-              sm::description("Number of failed get requests because of "
-                              "missing object in the cache."))
+              sm::description(
+                "Number of failed get requests because of "
+                "missing object in the cache."))
               .aggregate(aggregate_labels),
             sm::make_gauge(
               "in_progress_files",

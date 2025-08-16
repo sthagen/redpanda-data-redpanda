@@ -219,6 +219,7 @@ redpanda_cc_btest(
     deps = [
         "//src/v/kafka/client",
         "//src/v/kafka/client:configuration",
+        "//src/v/kafka/client:utils",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",
@@ -243,6 +244,7 @@ redpanda_cc_btest(
         "//src/v/http",
         "//src/v/kafka/client",
         "//src/v/kafka/client:configuration",
+        "//src/v/kafka/client:utils",
         "//src/v/kafka/client/test:fixture",
         "//src/v/kafka/client/test:utils",
         "//src/v/kafka/protocol",

@@ -168,17 +168,19 @@ ss::future<> log_manager::clean_close(ss::shared_ptr<storage::log> log) {
         co_await _kvstore.put(
           kvstore::key_space::storage,
           internal::clean_segment_key(log->config().ntp()),
-          serde::to_iobuf(internal::clean_segment_value{
-            .segment_name = std::filesystem::path(clean_segment.value())
-                              .filename()
-                              .string()}));
+          serde::to_iobuf(
+            internal::clean_segment_value{
+              .segment_name = std::filesystem::path(clean_segment.value())
+                                .filename()
+                                .string()}));
     }
 }
 
 ss::future<> log_manager::start() {
     _probe->setup_metrics();
-    if (unlikely(config::shard_local_cfg()
-                   .log_disable_housekeeping_for_tests.value())) {
+    if (unlikely(
+          config::shard_local_cfg()
+            .log_disable_housekeeping_for_tests.value())) {
         co_return;
     }
 
@@ -1038,8 +1040,9 @@ ss::future<usage_report> log_manager::disk_usage() {
         logs.push_back(it.second->handle);
     }
 
-    ss::semaphore limit(std::max<size_t>(
-      1, config::shard_local_cfg().space_management_max_log_concurrency()));
+    ss::semaphore limit(
+      std::max<size_t>(
+        1, config::shard_local_cfg().space_management_max_log_concurrency()));
 
     co_return co_await ss::map_reduce(
       logs.begin(),

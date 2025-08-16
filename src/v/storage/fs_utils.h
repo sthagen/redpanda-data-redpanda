@@ -38,12 +38,13 @@ struct segment_path {
       const model::offset& base_offset,
       const model::term_id& term,
       const record_version_type& version) {
-        return std::filesystem::path(ss::format(
-          "{}/{}-{}-{}.log",
-          ntp_config.work_directory(),
-          base_offset(),
-          term(),
-          to_string(version)));
+        return std::filesystem::path(
+          ss::format(
+            "{}/{}-{}-{}.log",
+            ntp_config.work_directory(),
+            base_offset(),
+            term(),
+            to_string(version)));
     }
 
     /// Parse metadata from a segment filename.

@@ -145,15 +145,17 @@ TEST(Consumer, WriteThenReadHashes) {
     }
 
     EXPECT_EQ(
-      hashes.at(p0)->exists(cloud_storage::remote_segment_path{
-        "eba06988/kafka/partagas/0_24/195-200-1573504-1-v1.log.1"}),
+      hashes.at(p0)->exists(
+        cloud_storage::remote_segment_path{
+          "eba06988/kafka/partagas/0_24/195-200-1573504-1-v1.log.1"}),
       lookup_result::exists);
     EXPECT_EQ(
       hashes.at(p0)->exists(cloud_storage::remote_segment_path{"missing"}),
       lookup_result::missing);
     EXPECT_EQ(
-      hashes.at(p2)->exists(cloud_storage::remote_segment_path{
-        "ea2201bd/kafka/partagas/2_24/142-147-1573504-1-v1.log.1"}),
+      hashes.at(p2)->exists(
+        cloud_storage::remote_segment_path{
+          "ea2201bd/kafka/partagas/2_24/142-147-1573504-1-v1.log.1"}),
       lookup_result::exists);
 
     for (auto h : std::views::values(hashes)) {
@@ -178,8 +180,9 @@ TEST(Consumer, CollisionDetection) {
     ASSERT_TRUE(h.load_hashes().get());
 
     EXPECT_EQ(
-      h.exists(cloud_storage::remote_segment_path{
-        "03be712b/kafka/topic-A/110_24/554-559-1573504-1-v1.log.2"}),
+      h.exists(
+        cloud_storage::remote_segment_path{
+          "03be712b/kafka/topic-A/110_24/554-559-1573504-1-v1.log.2"}),
       lookup_result::possible_collision);
     h.stop().get();
 }
@@ -207,8 +210,9 @@ TEST(Consumer, ConsumeMultipleStreams) {
     ASSERT_TRUE(h.load_hashes().get());
 
     EXPECT_EQ(
-      h.exists(cloud_storage::remote_segment_path{
-        "eba06988/kafka/partagas/0_24/195-200-1573504-1-v1.log.1"}),
+      h.exists(
+        cloud_storage::remote_segment_path{
+          "eba06988/kafka/partagas/0_24/195-200-1573504-1-v1.log.1"}),
       lookup_result::possible_collision);
     h.stop().get();
 }

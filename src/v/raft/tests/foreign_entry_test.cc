@@ -128,8 +128,9 @@ struct foreign_entry_fixture {
         std::vector<model::broker> learners;
         for (auto i = 0; i < active_nodes; ++i) {
             nodes.push_back(model::random_broker(i, i));
-            learners.push_back(model::random_broker(
-              active_nodes + 1, active_nodes * active_nodes));
+            learners.push_back(
+              model::random_broker(
+                active_nodes + 1, active_nodes * active_nodes));
         }
         return raft::group_configuration(
           std::move(nodes), model::revision_id(1));

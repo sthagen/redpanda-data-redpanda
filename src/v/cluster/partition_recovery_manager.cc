@@ -57,8 +57,9 @@ static constexpr ss::lowres_clock::duration initial_backoff = 200ms;
 class missing_partition_exception final : public std::exception {
 public:
     explicit missing_partition_exception(const storage::ntp_config& ntpc)
-      : _msg(ssx::sformat(
-          "missing partition {}, rev {}", ntpc.ntp(), ntpc.get_revision())) {}
+      : _msg(
+          ssx::sformat(
+            "missing partition {}, rev {}", ntpc.ntp(), ntpc.get_revision())) {}
 
     explicit missing_partition_exception(const remote_manifest_path& path)
       : _msg(ssx::sformat("missing partition s3://{}", path)) {}
@@ -490,10 +491,11 @@ partition_downloader::download_log_with_capped_size(
           dlpart.dest_prefix);
         auto offsets = co_await download_segment_file(s, dlpart);
         if (offsets.has_value()) {
-            dloffsets.push_back(offset_range{
-              .min_offset = offsets->min_offset,
-              .max_offset = offsets->max_offset,
-            });
+            dloffsets.push_back(
+              offset_range{
+                .min_offset = offsets->min_offset,
+                .max_offset = offsets->max_offset,
+              });
         }
     }
 

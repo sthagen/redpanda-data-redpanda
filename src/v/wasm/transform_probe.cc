@@ -32,8 +32,9 @@ void transform_probe::setup_metrics(ss::sstring transform_name) {
       {
         sm::make_histogram(
           "latency_sec",
-          sm::description("A histogram of the latency in seconds of "
-                          "transforming a single record"),
+          sm::description(
+            "A histogram of the latency in seconds of "
+            "transforming a single record"),
           labels,
           [this] { return _transform_latency.public_histogram_logform(); })
           .aggregate({ss::metrics::shard_label}),

@@ -100,8 +100,9 @@ ss::future<bool> snapshot_manager::snapshot_exists(ss::sstring filename) const {
 }
 
 ss::future<> snapshot_manager::remove_partial_snapshots() {
-    std::regex re(fmt::format(
-      R"(^{}\.partial\.(\d+)\.([a-zA-Z0-9]{{4}})$)", _partial_prefix));
+    std::regex re(
+      fmt::format(
+        R"(^{}\.partial\.(\d+)\.([a-zA-Z0-9]{{4}})$)", _partial_prefix));
     return directory_walker::walk(
       _dir.string(), [this, re = std::move(re)](ss::directory_entry ent) {
           if (!ent.type || *ent.type != ss::directory_entry_type::regular) {
@@ -169,8 +170,9 @@ ss::future<snapshot_header> snapshot_reader::read_header() {
       .then([this](iobuf buf) {
           if (buf.size_bytes() != snapshot_header::ondisk_size) {
               return ss::make_exception_future<snapshot_header>(
-                std::runtime_error(fmt::format(
-                  "Snapshot file does not contain full header: {}", _path)));
+                std::runtime_error(
+                  fmt::format(
+                    "Snapshot file does not contain full header: {}", _path)));
           }
 
           iobuf_parser parser(std::move(buf));
@@ -197,8 +199,9 @@ ss::future<snapshot_header> snapshot_reader::read_header() {
           crc.extend(ss::cpu_to_le(hdr.metadata_size));
 
           if (hdr.header_crc != crc.value()) {
-              return ss::make_exception_future<snapshot_header>(
-                std::runtime_error(fmt::format(
+              return ss::make_exception_future<
+                snapshot_header>(std::runtime_error(
+                fmt::format(
                   "Corrupt snapshot. Failed to verify header crc: {} != {}: {}",
                   crc.value(),
                   hdr.header_crc,
@@ -207,11 +210,12 @@ ss::future<snapshot_header> snapshot_reader::read_header() {
 
           if (hdr.version != snapshot_header::supported_version) {
               return ss::make_exception_future<snapshot_header>(
-                std::runtime_error(fmt::format(
-                  "Invalid snapshot version {} != {}: {}",
-                  hdr.version,
-                  snapshot_header::supported_version,
-                  _path)));
+                std::runtime_error(
+                  fmt::format(
+                    "Invalid snapshot version {} != {}: {}",
+                    hdr.version,
+                    snapshot_header::supported_version,
+                    _path)));
           }
 
           return ss::make_ready_future<snapshot_header>(hdr);
@@ -223,8 +227,8 @@ ss::future<iobuf> snapshot_reader::read_metadata() {
         return read_iobuf_exactly(_input, header.metadata_size)
           .then([this, header](iobuf buf) {
               if ((int32_t)buf.size_bytes() != header.metadata_size) {
-                  return ss::make_exception_future<iobuf>(
-                    std::runtime_error(fmt::format(
+                  return ss::make_exception_future<iobuf>(std::runtime_error(
+                    fmt::format(
                       "Corrupt snapshot. Failed to read metadata: {}", _path)));
               }
 
@@ -232,8 +236,8 @@ ss::future<iobuf> snapshot_reader::read_metadata() {
               crc_extend_iobuf(crc, buf);
 
               if (header.metadata_crc != crc.value()) {
-                  return ss::make_exception_future<iobuf>(
-                    std::runtime_error(fmt::format(
+                  return ss::make_exception_future<iobuf>(std::runtime_error(
+                    fmt::format(
                       "Corrupt snapshot. Failed to verify metadata crc: {} != "
                       "{}: {}",
                       crc.value(),

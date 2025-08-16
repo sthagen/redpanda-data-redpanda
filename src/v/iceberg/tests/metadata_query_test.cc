@@ -93,11 +93,12 @@ public:
               .record_count = records_per_file,
               .file_size_bytes = 1_KiB,
             };
-            ret.emplace_back(file_to_append{
-              .file = std::move(file),
-              .schema_id = md.current_schema_id,
-              .partition_spec_id = md.default_spec_id,
-            });
+            ret.emplace_back(
+              file_to_append{
+                .file = std::move(file),
+                .schema_id = md.current_schema_id,
+                .partition_spec_id = md.default_spec_id,
+              });
         }
         ret[0].file.record_count += leftover_records;
         return ret;

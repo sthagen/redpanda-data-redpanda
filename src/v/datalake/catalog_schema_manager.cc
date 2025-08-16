@@ -156,11 +156,12 @@ simple_schema_manager::ensure_table_schema(
         .id = table_id.copy(),
         .schema = std::move(s),
         .partition_spec = std::move(resolve_res.value()),
-        .location = iceberg::uri(fmt::format(
-          "{}/{}",
-          table_location_prefix_(),
-          fmt::join(table_id.ns, "/"),
-          table_id.table)),
+        .location = iceberg::uri(
+          fmt::format(
+            "{}/{}",
+            table_location_prefix_(),
+            fmt::join(table_id.ns, "/"),
+            table_id.table)),
         .properties = std::nullopt,
       });
 
@@ -212,10 +213,11 @@ catalog_schema_manager::ensure_table_schema(
     if (!get_res.value()) {
         // The desired schema is backwards compatible with the current table
         // schema. Add the schema to the table.
-        auto update_res = co_await txn.set_schema(iceberg::schema{
-          .schema_struct = std::move(type_copy),
-          .identifier_field_ids = {},
-        });
+        auto update_res = co_await txn.set_schema(
+          iceberg::schema{
+            .schema_struct = std::move(type_copy),
+            .identifier_field_ids = {},
+          });
         if (update_res.has_error()) {
             auto msg = fmt::format(
               "Failed trying to apply schema update to table {}: {}",

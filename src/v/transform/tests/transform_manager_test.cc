@@ -342,8 +342,9 @@ public:
         auto [ntp, meta] = transform_and_partition(str);
         auto entry = _registry->lookup_by_name(meta.name);
         if (!entry) {
-            throw std::runtime_error(ss::format(
-              "unknown transform to report an error for: {}", meta.name()));
+            throw std::runtime_error(
+              ss::format(
+                "unknown transform to report an error for: {}", meta.name()));
         }
         _manager->on_transform_state_change(
           entry->first, ntp, processor::state::errored);

@@ -73,8 +73,9 @@ public:
               {
                 sm::make_counter(
                   "produced_bytes",
-                  sm::description("Total bytes produced, broken down by "
-                                  "compression_type label."),
+                  sm::description(
+                    "Total bytes produced, broken down by "
+                    "compression_type label."),
                   {compression_label},
                   [this, compress_type] {
                       auto idx = (size_t)compress_type;

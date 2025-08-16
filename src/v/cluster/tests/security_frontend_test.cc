@@ -194,10 +194,11 @@ FIXTURE_TEST(test_role_management, cluster_test_fixture) {
             auto ec
               = app_0->controller->get_feature_manager()
                   .local()
-                  .write_action(cluster::feature_update_action{
-                    .feature_name = ss::sstring("role_based_access_control"),
-                    .action
-                    = cluster::feature_update_action::action_t::deactivate})
+                  .write_action(
+                    cluster::feature_update_action{
+                      .feature_name = ss::sstring("role_based_access_control"),
+                      .action
+                      = cluster::feature_update_action::action_t::deactivate})
                   .get();
             success = ec == cluster::errc::success;
         }

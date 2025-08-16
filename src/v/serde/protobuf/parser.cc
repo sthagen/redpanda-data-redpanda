@@ -81,9 +81,10 @@ private:
                 break;
             case wire_type::group_start:
             case wire_type::group_end:
-                throw std::runtime_error(fmt::format(
-                  "legacy proto2 groups not supported (field={})",
-                  tag.field_number));
+                throw std::runtime_error(
+                  fmt::format(
+                    "legacy proto2 groups not supported (field={})",
+                    tag.field_number));
             }
             return current_->parser.bytes_left() > 0 ? ss::stop_iteration::no
                                                      : ss::stop_iteration::yes;
@@ -195,8 +196,9 @@ private:
         case google::protobuf::FieldDescriptor::TYPE_BYTES:
         case google::protobuf::FieldDescriptor::TYPE_GROUP:
         case google::protobuf::FieldDescriptor::TYPE_MESSAGE:
-            throw std::runtime_error(fmt::format(
-              "invalid fixed64 type: {}", field_descriptor->type_name()));
+            throw std::runtime_error(
+              fmt::format(
+                "invalid fixed64 type: {}", field_descriptor->type_name()));
         }
     }
 
@@ -235,8 +237,9 @@ private:
         case google::protobuf::FieldDescriptor::TYPE_BYTES:
         case google::protobuf::FieldDescriptor::TYPE_GROUP:
         case google::protobuf::FieldDescriptor::TYPE_MESSAGE:
-            throw std::runtime_error(fmt::format(
-              "invalid fixed32 type: {}", field_descriptor->type_name()));
+            throw std::runtime_error(
+              fmt::format(
+                "invalid fixed32 type: {}", field_descriptor->type_name()));
         }
     }
 
@@ -500,9 +503,10 @@ private:
             break;
         }
         case pb::FieldDescriptor::TYPE_GROUP:
-            throw std::runtime_error(fmt::format(
-              "legacy proto2 groups not supported (field={})",
-              descriptor->number()));
+            throw std::runtime_error(
+              fmt::format(
+                "legacy proto2 groups not supported (field={})",
+                descriptor->number()));
         }
     }
 

@@ -158,8 +158,9 @@ default_translator::translate_data(
 
 record_type key_value_translator::build_type(std::optional<resolved_type>) {
     auto ret_type = schemaless_struct_type();
-    ret_type.fields.emplace_back(iceberg::nested_field::create(
-      10, "value", iceberg::field_required::no, iceberg::binary_type{}));
+    ret_type.fields.emplace_back(
+      iceberg::nested_field::create(
+        10, "value", iceberg::field_required::no, iceberg::binary_type{}));
     return record_type{
       .comps = record_schema_components{
           .key_identifier = std::nullopt,
@@ -234,8 +235,9 @@ structured_data_translator::build_type(std::optional<resolved_type> val_type) {
                 auto& system_fields = std::get<iceberg::struct_type>(
                   ret_type.fields[0]->type);
                 // Use the next id of the system defaults.
-                system_fields.fields.emplace_back(iceberg::nested_field::create(
-                  10, "data", field->required, std::move(field->type)));
+                system_fields.fields.emplace_back(
+                  iceberg::nested_field::create(
+                    10, "data", field->required, std::move(field->type)));
                 continue;
             }
             // Add the extra user-defined fields.

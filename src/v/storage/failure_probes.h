@@ -81,10 +81,11 @@ private:
     [[gnu::noinline]] ss::future<>
     inject_method_failure(methods method, std::string_view method_name) {
         if (_exception_methods & type(method)) {
-            return ss::make_exception_future<>(std::runtime_error(fmt::format(
-              "FailureInjector: "
-              "storage::log::{}",
-              method_name)));
+            return ss::make_exception_future<>(std::runtime_error(
+              fmt::format(
+                "FailureInjector: "
+                "storage::log::{}",
+                method_name)));
         }
         if (_delay_methods & type(method)) {
             return ss::sleep(std::chrono::milliseconds(_prng() % 50));

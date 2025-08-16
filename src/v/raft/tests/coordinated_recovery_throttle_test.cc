@@ -86,10 +86,11 @@ struct test_fixture {
 
     void check_available_all_shards(size_t expected) {
         auto available = all_available().get();
-        BOOST_REQUIRE(std::all_of(
-          available.begin(), available.end(), [expected](auto current) {
-              return current == expected;
-          }));
+        BOOST_REQUIRE(
+          std::all_of(
+            available.begin(), available.end(), [expected](auto current) {
+                return current == expected;
+            }));
     }
 
     void check_available(ss::shard_id shard, size_t expected) {

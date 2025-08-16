@@ -46,11 +46,12 @@ struct_from_avro_record(const avro::NodePtr& node, state& state) {
 
         auto field = std::move(result.value());
         if (field.has_value()) {
-            ret.fields.push_back(iceberg::nested_field::create(
-              placeholder_field_id,
-              node->nameAt(i),
-              iceberg::field_required::yes,
-              std::move(field.value())));
+            ret.fields.push_back(
+              iceberg::nested_field::create(
+                placeholder_field_id,
+                node->nameAt(i),
+                iceberg::field_required::yes,
+                std::move(field.value())));
         }
     }
     return ret;
@@ -140,10 +141,11 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
         return iceberg::long_type{};
     case avro::AVRO_ARRAY: {
         if (node->leaves() != 1) {
-            return conversion_exception(fmt::format(
-              "Invalid number of leaves {} in AVRO_ARRAY, expected to have "
-              "only 1 leaf",
-              node->leaves()));
+            return conversion_exception(
+              fmt::format(
+                "Invalid number of leaves {} in AVRO_ARRAY, expected to have "
+                "only 1 leaf",
+                node->leaves()));
         }
         auto element_type = node->leafAt(0);
         auto field_res = field_type_from_avro(element_type, state);
@@ -161,16 +163,18 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
     }
     case avro::AVRO_MAP: {
         if (node->leaves() != 2) {
-            return conversion_exception(fmt::format(
-              "Invalid number of leaves {} in AVRO_MAP, expected to have "
-              "exactly 2 leaves",
-              node->leaves()));
+            return conversion_exception(
+              fmt::format(
+                "Invalid number of leaves {} in AVRO_MAP, expected to have "
+                "exactly 2 leaves",
+                node->leaves()));
         }
 
         if (node->leafAt(0)->type() != avro::AVRO_STRING) {
-            return conversion_exception(fmt::format(
-              "AVRO_MAP is expected to be a string. Current key type: {}",
-              node->leafAt(0)->type()));
+            return conversion_exception(
+              fmt::format(
+                "AVRO_MAP is expected to be a string. Current key type: {}",
+                node->leafAt(0)->type()));
         }
         auto value_t_result = field_type_from_avro(node->leafAt(1), state);
         if (value_t_result.has_error()) {
@@ -201,14 +205,15 @@ inner_field_type_from_avro(const avro::NodePtr& node, state& state) {
             }
             auto field = std::move(result.value());
             if (field.has_value()) {
-                ret.fields.push_back(iceberg::nested_field::create(
-                  placeholder_field_id,
-                  // union struct fields name are represented as
-                  // <union_name>_<leaf_idx>
-                  fmt::format("union_opt_{}", i),
-                  // union struct fields are not required
-                  iceberg::field_required::no,
-                  std::move(field.value())));
+                ret.fields.push_back(
+                  iceberg::nested_field::create(
+                    placeholder_field_id,
+                    // union struct fields name are represented as
+                    // <union_name>_<leaf_idx>
+                    fmt::format("union_opt_{}", i),
+                    // union struct fields are not required
+                    iceberg::field_required::no,
+                    std::move(field.value())));
             }
         }
         return ret;
@@ -261,12 +266,13 @@ field_type_from_avro(const avro::NodePtr& node, state& state) {
     try {
         return inner_field_type_from_avro(node, state);
     } catch (...) {
-        return conversion_exception(fmt::format(
-          "exception thrown while converting AVRO {} schema of type {} to "
-          "iceberg - {}",
-          *node,
-          node->type(),
-          std::current_exception()));
+        return conversion_exception(
+          fmt::format(
+            "exception thrown while converting AVRO {} schema of type {} to "
+            "iceberg - {}",
+            *node,
+            node->type(),
+            std::current_exception()));
     }
 }
 
@@ -289,11 +295,12 @@ type_to_iceberg(const avro::NodePtr& node) {
               "AVRO_NULL is not supported top level type");
         }
 
-        ret.fields.push_back(iceberg::nested_field::create(
-          placeholder_field_id,
-          node->hasName() ? node->name().fullname() : "root",
-          iceberg::field_required::yes,
-          std::move(field.value())));
+        ret.fields.push_back(
+          iceberg::nested_field::create(
+            placeholder_field_id,
+            node->hasName() ? node->name().fullname() : "root",
+            iceberg::field_required::yes,
+            std::move(field.value())));
         return ret;
     }
 

@@ -186,13 +186,14 @@ public:
       const pb::Message* descriptor,
       ErrorLocation location,
       std::string_view message) final {
-        _errors.emplace_back(err{
-          level::error,
-          ss::sstring{filename},
-          ss::sstring{element_name},
-          descriptor,
-          location,
-          ss::sstring{message}});
+        _errors.emplace_back(
+          err{
+            level::error,
+            ss::sstring{filename},
+            ss::sstring{element_name},
+            descriptor,
+            location,
+            ss::sstring{message}});
     }
 
     void RecordWarning(
@@ -201,13 +202,14 @@ public:
       const pb::Message* descriptor,
       ErrorLocation location,
       std::string_view message) final {
-        _errors.emplace_back(err{
-          level::warn,
-          ss::sstring{filename},
-          ss::sstring{element_name},
-          descriptor,
-          location,
-          ss::sstring{message}});
+        _errors.emplace_back(
+          err{
+            level::warn,
+            ss::sstring{filename},
+            ss::sstring{element_name},
+            descriptor,
+            location,
+            ss::sstring{message}});
     }
 
     error_info error(std::string_view sub) const;

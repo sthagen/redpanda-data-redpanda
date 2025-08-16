@@ -844,11 +844,12 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
               errors, [ec](error_code e) { return ec == e; });
         };
         if (is_verbose && reportable(e.code())) {
-            auto resp = ppj::rjson_serialize_iobuf(post_compatibility_res{
-              .is_compat = false,
-              .messages = {e.message()},
-              .is_verbose = is_verbose,
-            });
+            auto resp = ppj::rjson_serialize_iobuf(
+              post_compatibility_res{
+                .is_compat = false,
+                .messages = {e.message()},
+                .is_verbose = is_verbose,
+              });
             log_response(*rq.req, resp);
             rp.rep->write_body("json", json::as_body_writer(std::move(resp)));
             co_return rp;
@@ -862,11 +863,12 @@ compatibility_subject_version(server::request_t rq, server::reply_t rp) {
             version, schema.share(), is_verbose);
       });
 
-    auto resp = ppj::rjson_serialize_iobuf(post_compatibility_res{
-      .is_compat = get_res.is_compat,
-      .messages = std::move(get_res.messages),
-      .is_verbose = is_verbose,
-    });
+    auto resp = ppj::rjson_serialize_iobuf(
+      post_compatibility_res{
+        .is_compat = get_res.is_compat,
+        .messages = std::move(get_res.messages),
+        .is_verbose = is_verbose,
+      });
     log_response(*rq.req, resp);
     rp.rep->write_body("json", json::as_body_writer(std::move(resp)));
     co_return rp;

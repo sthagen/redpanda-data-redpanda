@@ -66,8 +66,9 @@ public:
       : dispatcher(allocator, table, state) {
         migrated_resources.start().get();
         table
-          .start(ss::sharded_parameter(
-            [this] { return std::ref(migrated_resources.local()); }))
+          .start(ss::sharded_parameter([this] {
+              return std::ref(migrated_resources.local());
+          }))
           .get();
         members.start_single().get();
         features.start().get();
@@ -228,11 +229,13 @@ struct partition_balancer_planner_fixture {
             BOOST_REQUIRE_EQUAL(nodes.size(), replication_factor);
             std::vector<model::broker_shard> replicas;
             for (model::node_id n : nodes) {
-                replicas.push_back(model::broker_shard{
-                  n, random_generators::get_int<uint32_t>(0, 3)});
+                replicas.push_back(
+                  model::broker_shard{
+                    n, random_generators::get_int<uint32_t>(0, 3)});
             }
-            assignments.push_back(cluster::partition_assignment{
-              raft::group_id{1}, model::partition_id{i}, replicas});
+            assignments.push_back(
+              cluster::partition_assignment{
+                raft::group_id{1}, model::partition_id{i}, replicas});
         }
         cluster::create_topic_cmd cmd{
           make_tp_ns(name),
@@ -297,8 +300,9 @@ struct partition_balancer_planner_fixture {
       model::ntp ntp, const std::vector<model::node_id>& new_nodes) {
         std::vector<model::broker_shard> new_replicas;
         for (auto n : new_nodes) {
-            new_replicas.push_back(model::broker_shard{
-              n, random_generators::get_int<uint32_t>(0, 3)});
+            new_replicas.push_back(
+              model::broker_shard{
+                n, random_generators::get_int<uint32_t>(0, 3)});
         }
         move_partition_replicas(std::move(ntp), std::move(new_replicas));
     }
@@ -341,10 +345,11 @@ struct partition_balancer_planner_fixture {
             if (unavailable_nodes.contains(i)) {
                 last_seen = last_seen - node_unavailable_timeout;
             }
-            status_updates.push_back(cluster::node_status{
-              .node_id = model::node_id(i),
-              .last_seen = last_seen,
-            });
+            status_updates.push_back(
+              cluster::node_status{
+                .node_id = model::node_id(i),
+                .last_seen = last_seen,
+              });
         }
 
         co_await workers.node_status_table.invoke_on_all(

@@ -28,10 +28,11 @@ namespace {
 template<typename T>
 void throw_if_not_present(const config::property<std::optional<T>>& property) {
     if (!property().has_value()) {
-        throw std::runtime_error(ssx::sformat(
-          "Configuration property {} value must be present when using REST "
-          "Iceberg catalog",
-          property.name()));
+        throw std::runtime_error(
+          ssx::sformat(
+            "Configuration property {} value must be present when using REST "
+            "Iceberg catalog",
+            property.name()));
     }
 }
 
@@ -90,8 +91,9 @@ struct endpoint_information {
 endpoint_information endpoint_to_address(const ss::sstring& url_str) {
     auto url = ada::parse(url_str);
     if (!url) {
-        throw std::invalid_argument(fmt::format(
-          "Malformed Iceberg REST catalog endpoint url: {}", url_str));
+        throw std::invalid_argument(
+          fmt::format(
+            "Malformed Iceberg REST catalog endpoint url: {}", url_str));
     }
     // Default port as used by the Iceberg catalogs
     uint16_t port = url->type == ada::scheme::HTTPS ? 443 : 8181;
@@ -101,10 +103,11 @@ endpoint_information endpoint_to_address(const ss::sstring& url_str) {
         if (
           !parsed || port_from_uri < 0
           || port_from_uri > std::numeric_limits<uint16_t>::max()) {
-            throw std::invalid_argument(fmt::format(
-              "Malformed Iceberg REST catalog endpoint url: {}, unable to "
-              "parse port",
-              url_str));
+            throw std::invalid_argument(
+              fmt::format(
+                "Malformed Iceberg REST catalog endpoint url: {}, unable to "
+                "parse port",
+                url_str));
         }
         port = static_cast<uint16_t>(port_from_uri);
     }
@@ -149,9 +152,10 @@ rest_catalog_factory::rest_catalog_factory(
   ss::metrics::label_instance label,
   datalake::credential_manager& cred_mgr)
   : config_(&config)
-  , client_probe_(ss::make_shared<iceberg::rest_client::client_probe>(
-      net::public_metrics_disabled(config.disable_public_metrics()),
-      std::move(label)))
+  , client_probe_(
+      ss::make_shared<iceberg::rest_client::client_probe>(
+        net::public_metrics_disabled(config.disable_public_metrics()),
+        std::move(label)))
   , credential_manager_(cred_mgr) {}
 
 rest_catalog_factory::credentials_and_token

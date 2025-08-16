@@ -173,9 +173,10 @@ sharded_store::project_ids(stored_schema schema) {
     if (is_new && schema.version != invalid_schema_version) {
         const auto mode = co_await get_mode(sub, default_to_global::yes);
         if (v_id != schema.version && mode != mode::import) {
-            throw as_exception(error_info{
-              error_code::schema_version_not_next,
-              "Version is not one more than previous version"});
+            throw as_exception(
+              error_info{
+                error_code::schema_version_not_next,
+                "Version is not one more than previous version"});
         }
 
         v_id = schema.version;

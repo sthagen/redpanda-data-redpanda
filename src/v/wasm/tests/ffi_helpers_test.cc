@@ -172,8 +172,9 @@ TEST(FFIHelpers, ExtractParameters) {
         uint64_t*>(&mem, ffi_types, 0);
     ASSERT_EQ(extracted_mem, &mem);
     ASSERT_EQ(array.data(), guest_array.data());
-    ASSERT_TRUE(std::equal(
-      array.begin(), array.end(), guest_array.begin(), guest_array.end()));
+    ASSERT_TRUE(
+      std::equal(
+        array.begin(), array.end(), guest_array.begin(), guest_array.end()));
     ASSERT_EQ(ns, model::kafka_namespace);
     ASSERT_EQ(i32, std::numeric_limits<int32_t>::max());
     ASSERT_EQ(i64, std::numeric_limits<int64_t>::min());

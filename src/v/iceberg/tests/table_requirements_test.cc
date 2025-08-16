@@ -27,12 +27,13 @@ table_metadata create_table() {
     chunked_vector<schema> schemas;
     schemas.emplace_back(s.copy());
     partition_spec pspec{.spec_id = partition_spec::id_t{0}};
-    pspec.fields.push_back(partition_field{
-      .source_id = nested_field::id_t{2},
-      .field_id = partition_field::id_t{1000},
-      .name = "field1",
-      .transform = identity_transform{},
-    });
+    pspec.fields.push_back(
+      partition_field{
+        .source_id = nested_field::id_t{2},
+        .field_id = partition_field::id_t{1000},
+        .name = "field1",
+        .transform = identity_transform{},
+      });
     return table_metadata{
       .format_version = format_version::v2,
       .table_uuid = uuid_t::create(),

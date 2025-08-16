@@ -25,8 +25,8 @@ size_t file::size() const {
 ss::input_stream<char> file::make_stream(uint64_t offset, uint64_t length) {
     vassert(pager_, "file has been closed");
     auto max_len = size() - offset;
-    return ss::input_stream<char>(
-      ss::data_source(std::make_unique<::experimental::io::paging_data_source>(
+    return ss::input_stream<char>(ss::data_source(
+      std::make_unique<::experimental::io::paging_data_source>(
         pager_.get(),
         ::experimental::io::paging_data_source::config{
           offset, std::min(max_len, length)})));
@@ -85,9 +85,10 @@ ss::future<> file_manager::remove_file(std::filesystem::path path) {
 file_manager::file_manager(
   size_t cache_size_bytes, size_t small_queue_size_bytes)
   : storage_(std::make_unique<::experimental::io::disk_persistence>())
-  , cache_(std::make_unique<::experimental::io::page_cache>(
-      ::experimental::io::page_cache::config{
-        .cache_size = cache_size_bytes,
-        .small_size = small_queue_size_bytes})) {}
+  , cache_(
+      std::make_unique<::experimental::io::page_cache>(
+        ::experimental::io::page_cache::config{
+          .cache_size = cache_size_bytes,
+          .small_size = small_queue_size_bytes})) {}
 
 } // namespace storage::experimental::mvlog

@@ -46,7 +46,7 @@ require (
 	github.com/prometheus/client_model v0.6.2
 	github.com/prometheus/common v0.65.0
 	github.com/redpanda-data/common-go/proto v0.0.0-20250801174835-9eea07f1ea06
-	github.com/redpanda-data/common-go/rpadmin v0.1.14
+	github.com/redpanda-data/common-go/rpadmin v0.1.15
 	github.com/redpanda-data/common-go/rpsr v0.1.2
 	github.com/rs/xid v1.6.0
 	github.com/safchain/ethtool v0.6.2
@@ -60,6 +60,7 @@ require (
 	github.com/tklauser/go-sysconf v0.3.15
 	github.com/twmb/franz-go v1.19.5
 	github.com/twmb/franz-go/pkg/kadm v1.16.1
+	github.com/twmb/franz-go/pkg/kfake v0.0.0-20250729165834-29dc44e616cd
 	github.com/twmb/franz-go/pkg/kmsg v1.11.2
 	github.com/twmb/franz-go/pkg/sr v1.5.0
 	github.com/twmb/franz-go/plugin/kzap v1.1.2

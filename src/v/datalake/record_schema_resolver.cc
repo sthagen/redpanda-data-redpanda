@@ -383,8 +383,9 @@ record_schema_resolver::resolve_buf_type(std::optional<iobuf> b) const {
     }
 
     auto shared_schema = schema_res.value();
-    co_return shared_schema->visit(schema_translating_visitor{
-      std::move(buf_no_id), schema_id, shared_schema});
+    co_return shared_schema->visit(
+      schema_translating_visitor{
+        std::move(buf_no_id), schema_id, shared_schema});
 }
 
 ss::future<checked<resolved_type, type_resolver::errc>>
@@ -461,32 +462,34 @@ latest_subject_schema_resolver::resolve_buf_type(std::optional<iobuf> b) const {
         co_return schema_res.error();
     }
     auto shared_schema = schema_res.value();
-    auto resolve_res = shared_schema->visit(ss::make_visitor(
-      [this, &latest_schema, &shared_schema](
-        const ppsr::protobuf_schema_definition& pb_def)
-        -> checked<resolved_type, type_resolver::errc> {
-          std::vector<int32_t> offsets;
-          if (const auto& explicit_name = protobuf_message_name_) {
-              auto res = compute_message_offsets(pb_def, *explicit_name);
-              if (res.has_error()) {
-                  return res.error();
-              }
-              offsets = std::move(res.value());
-          } else {
-              offsets = {0};
-          }
-          return translate_protobuf_schema(
-            pb_def, latest_schema.id, offsets, std::move(shared_schema));
-      },
-      [&latest_schema, &shared_schema](const ppsr::avro_schema_definition& def)
-        -> checked<resolved_type, type_resolver::errc> {
-          return translate_avro_schema(
-            def, latest_schema.id, std::move(shared_schema));
-      },
-      [&latest_schema](const ppsr::json_schema_definition& def)
-        -> checked<resolved_type, type_resolver::errc> {
-          return translate_json_schema(def, latest_schema.id);
-      }));
+    auto resolve_res = shared_schema->visit(
+      ss::make_visitor(
+        [this, &latest_schema, &shared_schema](
+          const ppsr::protobuf_schema_definition& pb_def)
+          -> checked<resolved_type, type_resolver::errc> {
+            std::vector<int32_t> offsets;
+            if (const auto& explicit_name = protobuf_message_name_) {
+                auto res = compute_message_offsets(pb_def, *explicit_name);
+                if (res.has_error()) {
+                    return res.error();
+                }
+                offsets = std::move(res.value());
+            } else {
+                offsets = {0};
+            }
+            return translate_protobuf_schema(
+              pb_def, latest_schema.id, offsets, std::move(shared_schema));
+        },
+        [&latest_schema,
+         &shared_schema](const ppsr::avro_schema_definition& def)
+          -> checked<resolved_type, type_resolver::errc> {
+            return translate_avro_schema(
+              def, latest_schema.id, std::move(shared_schema));
+        },
+        [&latest_schema](const ppsr::json_schema_definition& def)
+          -> checked<resolved_type, type_resolver::errc> {
+            return translate_json_schema(def, latest_schema.id);
+        }));
     if (resolve_res.has_error()) {
         co_return resolve_res.error();
     }

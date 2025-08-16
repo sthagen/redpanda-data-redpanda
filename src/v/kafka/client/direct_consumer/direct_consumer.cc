@@ -20,8 +20,9 @@ namespace kafka::client {
 direct_consumer::direct_consumer(cluster& cluster, configuration cfg)
   : _cluster(&cluster)
   , _config(cfg)
-  , _fetched_data_queue(std::make_unique<data_queue>(
-      cfg.max_buffered_bytes, cfg.max_buffered_elements)) {}
+  , _fetched_data_queue(
+      std::make_unique<data_queue>(
+        cfg.max_buffered_bytes, cfg.max_buffered_elements)) {}
 
 ss::future<fetches>
 direct_consumer::fetch_next(std::chrono::milliseconds timeout) {
@@ -164,8 +165,9 @@ direct_consumer::assign_partitions(chunked_vector<topic_assignment> topics) {
     for (auto& t : topics) {
         auto ec = model::validate_kafka_topic_name(t.topic);
         if (ec) {
-            throw std::invalid_argument(fmt::format(
-              "Invalid topic name: {}, error: {}", t.topic, ec.message()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Invalid topic name: {}, error: {}", t.topic, ec.message()));
         }
         for (auto& p : t.partitions) {
             vlog(

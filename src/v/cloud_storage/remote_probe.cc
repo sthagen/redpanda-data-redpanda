@@ -63,8 +63,9 @@ remote_probe::remote_probe(
             sm::make_counter(
               "manifest_download_backoff",
               [this] { return get_manifest_download_backoffs(); },
-              sm::description("Number of times backoff was applied during "
-                              "manifest download")),
+              sm::description(
+                "Number of times backoff was applied during "
+                "manifest download")),
             sm::make_counter(
               "successful_uploads",
               [this] { return get_successful_uploads(); },
@@ -92,13 +93,15 @@ remote_probe::remote_probe(
             sm::make_counter(
               "upload_backoff",
               [this] { return get_upload_backoffs(); },
-              sm::description("Number of times backoff was applied during "
-                              "log-segment uploads")),
+              sm::description(
+                "Number of times backoff was applied during "
+                "log-segment uploads")),
             sm::make_counter(
               "download_backoff",
               [this] { return get_download_backoffs(); },
-              sm::description("Number of times backoff  was applied during "
-                              "log-segment downloads")),
+              sm::description(
+                "Number of times backoff  was applied during "
+                "log-segment downloads")),
             sm::make_counter(
               "bytes_sent",
               [this] { return _cnt_bytes_sent; },
@@ -143,8 +146,9 @@ remote_probe::remote_probe(
             sm::make_counter(
               "controller_snapshot_upload_backoff",
               [this] { return get_controller_snapshot_upload_backoffs(); },
-              sm::description("Number of times backoff was applied during "
-                              "controller snapshot uploads")),
+              sm::description(
+                "Number of times backoff was applied during "
+                "controller snapshot uploads")),
             sm::make_histogram(
               "client_acquisition_latency",
               [this] {
@@ -206,8 +210,9 @@ remote_probe::remote_probe(
             sm::make_gauge(
               "readers",
               [&ms] { return ms.current_segment_readers(); },
-              sm::description("Number of segment read cursors for hydrated "
-                              "remote log segments"))
+              sm::description(
+                "Number of segment read cursors for hydrated "
+                "remote log segments"))
               .aggregate({sm::shard_label}),
             sm::make_gauge(
               "partition_readers",
@@ -219,16 +224,18 @@ remote_probe::remote_probe(
             sm::make_counter(
               "partition_readers_delayed",
               [&ms] { return ms.get_partition_readers_delayed(); },
-              sm::description("How many partition reades were delayed due to "
-                              "hitting reader limit. This indicates cluster "
-                              "is saturated with tiered storage reads."))
+              sm::description(
+                "How many partition reades were delayed due to "
+                "hitting reader limit. This indicates cluster "
+                "is saturated with tiered storage reads."))
               .aggregate({sm::shard_label}),
             sm::make_counter(
               "segment_readers_delayed",
               [&ms] { return ms.get_segment_readers_delayed(); },
-              sm::description("How many segment readers were delayed due to "
-                              "hitting reader limit. This indicates cluster "
-                              "is saturated with tiered storage reads."))
+              sm::description(
+                "How many segment readers were delayed due to "
+                "hitting reader limit. This indicates cluster "
+                "is saturated with tiered storage reads."))
               .aggregate({sm::shard_label}),
             sm::make_counter(
               "segment_materializations_delayed",
@@ -262,8 +269,9 @@ remote_probe::remote_probe(
               [&ms] {
                   return ms.get_materialized_manifest_cache().size_bytes();
               },
-              sm::description("Bytes of memory used for spilled manifests "
-                              "currently cached in memory"),
+              sm::description(
+                "Bytes of memory used for spilled manifests "
+                "currently cached in memory"),
               {})
               .aggregate({sm::shard_label}),
           });

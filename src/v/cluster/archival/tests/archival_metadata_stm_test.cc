@@ -169,11 +169,12 @@ using cloud_storage::segment_name;
 FIXTURE_TEST(test_archival_stm_happy_path, archival_metadata_stm_fixture) {
     wait_for_confirmed_leader();
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     // State machine is initially dirty: this is a cue to upload a manifest
     // when a partition is created, even if we haven't uploaded any segments
@@ -221,13 +222,14 @@ FIXTURE_TEST(
   archival_metadata_stm_fixture) {
     wait_for_confirmed_leader();
     std::vector<segment_meta> m;
-    m.push_back(segment_meta{
-      .is_compacted = true,
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1),
-    });
+    m.push_back(
+      segment_meta{
+        .is_compacted = true,
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1),
+      });
     archival_stm
       ->add_segments(
         m,
@@ -248,16 +250,18 @@ FIXTURE_TEST(
 FIXTURE_TEST(test_archival_stm_segment_replace, archival_metadata_stm_fixture) {
     wait_for_confirmed_leader();
     std::vector<cloud_storage::segment_meta> m1;
-    m1.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m1.push_back(segment_meta{
-      .base_offset = model::offset(1000),
-      .committed_offset = model::offset(1999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    m1.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m1.push_back(
+      segment_meta{
+        .base_offset = model::offset(1000),
+        .committed_offset = model::offset(1999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
     // Replicate add_segment_cmd command that adds segment with offset 0
     archival_stm
       ->add_segments(
@@ -273,14 +277,15 @@ FIXTURE_TEST(test_archival_stm_segment_replace, archival_metadata_stm_fixture) {
     BOOST_REQUIRE(archival_stm->get_start_offset() == model::offset(0));
     // Replace first segment
     std::vector<cloud_storage::segment_meta> m2;
-    m2.push_back(segment_meta{
-      .is_compacted = true,
-      .size_bytes = 1024,
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1),
-      .sname_format = cloud_storage::segment_name_format::v2});
+    m2.push_back(
+      segment_meta{
+        .is_compacted = true,
+        .size_bytes = 1024,
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1),
+        .sname_format = cloud_storage::segment_name_format::v2});
     archival_stm
       ->add_segments(
         m2,
@@ -503,26 +508,30 @@ FIXTURE_TEST(
     wait_for_confirmed_leader();
     auto& ntp_cfg = _raft->log_config();
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .base_offset = model::offset(100),
-      .committed_offset = model::offset(199),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .base_offset = model::offset(200),
-      .committed_offset = model::offset(299),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .base_offset = model::offset(300),
-      .committed_offset = model::offset(399),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(100),
+        .committed_offset = model::offset(199),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(200),
+        .committed_offset = model::offset(299),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(300),
+        .committed_offset = model::offset(399),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
     partition_manifest pm(ntp_cfg.ntp(), ntp_cfg.get_remote_revision());
     for (const auto& s : m) {
         auto name = cloud_storage::generate_local_segment_name(
@@ -614,10 +623,11 @@ old_segments_from_manifest(const cloud_storage::partition_manifest& m) {
         }
         auto name = cloud_storage::generate_local_segment_name(
           meta.base_offset, meta.segment_term);
-        segments.push_back(old::segment{
-          .ntp_revision_deprecated = meta.ntp_revision,
-          .name = std::move(name),
-          .meta = meta});
+        segments.push_back(
+          old::segment{
+            .ntp_revision_deprecated = meta.ntp_revision,
+            .name = std::move(name),
+            .meta = meta});
     }
 
     std::sort(
@@ -713,24 +723,27 @@ FIXTURE_TEST(
 FIXTURE_TEST(test_archival_stm_batching, archival_metadata_stm_fixture) {
     wait_for_confirmed_leader();
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .size_bytes = 200,
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .base_offset = model::offset(1000),
-      .committed_offset = model::offset(1999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .size_bytes = 100,
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(999),
-      .archiver_term = model::term_id(2),
-      .segment_term = model::term_id(1),
-      .sname_format = cloud_storage::segment_name_format::v2});
+    m.push_back(
+      segment_meta{
+        .size_bytes = 200,
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(1000),
+        .committed_offset = model::offset(1999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .size_bytes = 100,
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(999),
+        .archiver_term = model::term_id(2),
+        .segment_term = model::term_id(1),
+        .sname_format = cloud_storage::segment_name_format::v2});
     // Replicate add_segment_cmd command that adds segment with offset 0
     auto batcher = archival_stm->batch_start(
       ss::lowres_clock::now() + 10s, never_abort);
@@ -747,24 +760,27 @@ FIXTURE_TEST(test_archival_stm_batching, archival_metadata_stm_fixture) {
 FIXTURE_TEST(test_archival_stm_spillover, archival_metadata_stm_fixture) {
     wait_for_confirmed_leader();
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .size_bytes = 100,
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .size_bytes = 200,
-      .base_offset = model::offset(1000),
-      .committed_offset = model::offset(1999),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .size_bytes = 300,
-      .base_offset = model::offset(2000),
-      .committed_offset = model::offset(2999),
-      .archiver_term = model::term_id(2),
-      .segment_term = model::term_id(2)});
+    m.push_back(
+      segment_meta{
+        .size_bytes = 100,
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .size_bytes = 200,
+        .base_offset = model::offset(1000),
+        .committed_offset = model::offset(1999),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .size_bytes = 300,
+        .base_offset = model::offset(2000),
+        .committed_offset = model::offset(2999),
+        .archiver_term = model::term_id(2),
+        .segment_term = model::term_id(2)});
 
     // Replicate add_segment_cmd command that adds segment with offset 0
     auto batcher = archival_stm->batch_start(
@@ -812,8 +828,10 @@ FIXTURE_TEST(test_archival_stm_spillover, archival_metadata_stm_fixture) {
     // aligned spillover command should remove segment
     auto batcher2 = archival_stm->batch_start(
       ss::lowres_clock::now() + 10s, never_abort);
-    batcher2.spillover(cloud_storage::segment_meta{
-      .base_offset = model::offset(0), .committed_offset = model::offset(999)});
+    batcher2.spillover(
+      cloud_storage::segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(999)});
     batcher2.truncate_archive_init(model::offset(200), model::offset_delta(0));
     batcher2.cleanup_archive(model::offset(100), 0);
     batcher2.replicate().get();
@@ -836,33 +854,36 @@ FIXTURE_TEST(
   test_archival_stm_truncate_kafka_offset, archival_metadata_stm_fixture) {
     wait_for_confirmed_leader();
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .size_bytes = 1000,
-      .base_offset = model::offset(1000),
-      .committed_offset = model::offset(1999),
-      .delta_offset = model::offset_delta(0),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1),
-      .delta_offset_end = model::offset_delta(0),
-    });
-    m.push_back(segment_meta{
-      .size_bytes = 2000,
-      .base_offset = model::offset(2000),
-      .committed_offset = model::offset(2999),
-      .delta_offset = model::offset_delta(0),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1),
-      .delta_offset_end = model::offset_delta(0),
-    });
-    m.push_back(segment_meta{
-      .size_bytes = 3000,
-      .base_offset = model::offset(3000),
-      .committed_offset = model::offset(3999),
-      .delta_offset = model::offset_delta(0),
-      .archiver_term = model::term_id(2),
-      .segment_term = model::term_id(2),
-      .delta_offset_end = model::offset_delta(0),
-    });
+    m.push_back(
+      segment_meta{
+        .size_bytes = 1000,
+        .base_offset = model::offset(1000),
+        .committed_offset = model::offset(1999),
+        .delta_offset = model::offset_delta(0),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1),
+        .delta_offset_end = model::offset_delta(0),
+      });
+    m.push_back(
+      segment_meta{
+        .size_bytes = 2000,
+        .base_offset = model::offset(2000),
+        .committed_offset = model::offset(2999),
+        .delta_offset = model::offset_delta(0),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1),
+        .delta_offset_end = model::offset_delta(0),
+      });
+    m.push_back(
+      segment_meta{
+        .size_bytes = 3000,
+        .base_offset = model::offset(3000),
+        .committed_offset = model::offset(3999),
+        .delta_offset = model::offset_delta(0),
+        .archiver_term = model::term_id(2),
+        .segment_term = model::term_id(2),
+        .delta_offset_end = model::offset_delta(0),
+      });
 
     // Replicate add_segment_cmd command that adds segment with offset 0
     auto batcher1 = archival_stm->batch_start(
@@ -919,16 +940,18 @@ FIXTURE_TEST(
 FIXTURE_TEST(test_reset_metadata, archival_metadata_stm_fixture) {
     wait_for_confirmed_leader();
     std::vector<cloud_storage::segment_meta> m;
-    m.push_back(segment_meta{
-      .base_offset = model::offset(0),
-      .committed_offset = model::offset(99),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
-    m.push_back(segment_meta{
-      .base_offset = model::offset(100),
-      .committed_offset = model::offset(199),
-      .archiver_term = model::term_id(1),
-      .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(0),
+        .committed_offset = model::offset(99),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(100),
+        .committed_offset = model::offset(199),
+        .archiver_term = model::term_id(1),
+        .segment_term = model::term_id(1)});
 
     // Replicate add_segment_cmd command that adds segment with offset 0
     archival_stm
@@ -946,11 +969,12 @@ FIXTURE_TEST(test_reset_metadata, archival_metadata_stm_fixture) {
     auto batcher = archival_stm->batch_start(
       ss::lowres_clock::now() + 10s, never_abort);
     m.clear();
-    m.push_back(segment_meta{
-      .base_offset = model::offset(100),
-      .committed_offset = model::offset(199),
-      .archiver_term = model::term_id(2),
-      .segment_term = model::term_id(2)});
+    m.push_back(
+      segment_meta{
+        .base_offset = model::offset(100),
+        .committed_offset = model::offset(199),
+        .archiver_term = model::term_id(2),
+        .segment_term = model::term_id(2)});
     batcher.reset_metadata();
     batcher.add_segments(std::move(m), cluster::segment_validated::yes);
     batcher.replicate().get();
@@ -966,11 +990,12 @@ FIXTURE_TEST(test_highest_producer_id, archival_metadata_stm_fixture) {
     auto add_segment =
       [&](int64_t base, int64_t committed, model::producer_id pid) {
           std::vector<cloud_storage::segment_meta> m;
-          m.push_back(segment_meta{
-            .base_offset = model::offset(base),
-            .committed_offset = model::offset(committed),
-            .archiver_term = model::term_id(1),
-            .segment_term = model::term_id(1)});
+          m.push_back(
+            segment_meta{
+              .base_offset = model::offset(base),
+              .committed_offset = model::offset(committed),
+              .archiver_term = model::term_id(1),
+              .segment_term = model::term_id(1)});
           archival_stm
             ->add_segments(
               std::move(m),

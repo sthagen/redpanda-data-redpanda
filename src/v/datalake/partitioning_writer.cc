@@ -140,13 +140,14 @@ partitioning_writer::finish() && {
           file_res.value().size_bytes,
           file_res.value().path());
 
-        files.push_back(partitioned_file{
-          .local_file = std::move(file_res.value()),
-          .data_location = remote_prefix_,
-          .schema_id = schema_id_,
-          .partition_spec_id = spec_.spec_id,
-          .partition_key = std::move(pk),
-          .partition_key_path = std::move(partition_key_path_res.value())});
+        files.push_back(
+          partitioned_file{
+            .local_file = std::move(file_res.value()),
+            .data_location = remote_prefix_,
+            .schema_id = schema_id_,
+            .partition_spec_id = spec_.spec_id,
+            .partition_key = std::move(pk),
+            .partition_key_path = std::move(partition_key_path_res.value())});
     }
 
     vlog(

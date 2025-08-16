@@ -26,11 +26,12 @@ public:
         constexpr nested_field::id_t base_field_id{50};
         auto type = std::get<struct_type>(test_nested_schema_type());
         for (size_t i = 0; i < extra_cols; ++i) {
-            type.fields.emplace_back(nested_field::create(
-              base_field_id() + i,
-              fmt::format("test{}", i),
-              field_required::no,
-              boolean_type{}));
+            type.fields.emplace_back(
+              nested_field::create(
+                base_field_id() + i,
+                fmt::format("test{}", i),
+                field_required::no,
+                boolean_type{}));
         }
         return schema{
           .schema_struct = std::move(type),
@@ -97,8 +98,9 @@ TEST_F(UpdateSchemaActionTest, TestExistingSchema) {
     ASSERT_EQ(tx.updates().requirements.size(), 1);
 
     // We should require the original schema id.
-    ASSERT_TRUE(std::holds_alternative<assert_current_schema_id>(
-      tx.updates().requirements[0]));
+    ASSERT_TRUE(
+      std::holds_alternative<assert_current_schema_id>(
+        tx.updates().requirements[0]));
     ASSERT_EQ(
       std::get<assert_current_schema_id>(tx.updates().requirements[0])
         .current_schema_id(),
@@ -130,8 +132,9 @@ TEST_F(UpdateSchemaActionTest, TestNewSchema) {
 
     // We should require the original schema id.
     ASSERT_EQ(tx.updates().requirements.size(), 1);
-    ASSERT_TRUE(std::holds_alternative<assert_current_schema_id>(
-      tx.updates().requirements[0]));
+    ASSERT_TRUE(
+      std::holds_alternative<assert_current_schema_id>(
+        tx.updates().requirements[0]));
     ASSERT_EQ(
       std::get<assert_current_schema_id>(tx.updates().requirements[0])
         .current_schema_id(),
@@ -145,8 +148,9 @@ TEST_F(UpdateSchemaActionTest, TestNewSchema) {
     ASSERT_FALSE(res.has_error());
     ASSERT_EQ(tx.updates().updates.size(), 4);
     ASSERT_EQ(tx.updates().requirements.size(), 1);
-    ASSERT_TRUE(std::holds_alternative<assert_current_schema_id>(
-      tx.updates().requirements[0]));
+    ASSERT_TRUE(
+      std::holds_alternative<assert_current_schema_id>(
+        tx.updates().requirements[0]));
     ASSERT_EQ(
       std::get<assert_current_schema_id>(tx.updates().requirements[0])
         .current_schema_id(),
@@ -178,8 +182,9 @@ TEST_F(UpdateSchemaActionTest, TestNewMultipleSchemas) {
 
     // We should require the original schema id.
     ASSERT_EQ(tx.updates().requirements.size(), 1);
-    ASSERT_TRUE(std::holds_alternative<assert_current_schema_id>(
-      tx.updates().requirements[0]));
+    ASSERT_TRUE(
+      std::holds_alternative<assert_current_schema_id>(
+        tx.updates().requirements[0]));
     ASSERT_EQ(
       std::get<assert_current_schema_id>(tx.updates().requirements[0])
         .current_schema_id(),

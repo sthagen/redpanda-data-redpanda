@@ -232,34 +232,37 @@ static void add_broker_config(
          * If value was overriden, include override
          */
         if (src == describe_configs_source::static_broker_config) {
-            synonyms.push_back(describe_configs_synonym{
-              .name = ss::sstring(property.name()),
-              .value = describe_f(property.value()),
-              .source = static_cast<int8_t>(
-                describe_configs_source::static_broker_config),
-            });
+            synonyms.push_back(
+              describe_configs_synonym{
+                .name = ss::sstring(property.name()),
+                .value = describe_f(property.value()),
+                .source = static_cast<int8_t>(
+                  describe_configs_source::static_broker_config),
+              });
         }
         /**
          * If property is required it has no default
          */
         if (!property.is_required()) {
-            synonyms.push_back(describe_configs_synonym{
-              .name = ss::sstring(property.name()),
-              .value = describe_f(property.default_value()),
-              .source = static_cast<int8_t>(
-                describe_configs_source::default_config),
-            });
+            synonyms.push_back(
+              describe_configs_synonym{
+                .name = ss::sstring(property.name()),
+                .value = describe_f(property.default_value()),
+                .source = static_cast<int8_t>(
+                  describe_configs_source::default_config),
+              });
         }
     }
 
-    result.push_back(config_response{
-      .name = ss::sstring(name),
-      .value = describe_f(property.value()),
-      .config_source = src,
-      .synonyms = std::move(synonyms),
-      .config_type = property_config_type<T>(),
-      .documentation = documentation,
-    });
+    result.push_back(
+      config_response{
+        .name = ss::sstring(name),
+        .value = describe_f(property.value()),
+        .config_source = src,
+        .synonyms = std::move(synonyms),
+        .config_type = property_config_type<T>(),
+        .documentation = documentation,
+      });
 }
 
 template<typename T, typename Func>
@@ -300,28 +303,31 @@ static void add_topic_config(
     if (include_synonyms) {
         synonyms.reserve(2);
         if (overrides) {
-            synonyms.push_back(describe_configs_synonym{
-              .name = ss::sstring(override_name),
-              .value = describe_f(*overrides),
-              .source = static_cast<int8_t>(describe_configs_source::topic),
-            });
+            synonyms.push_back(
+              describe_configs_synonym{
+                .name = ss::sstring(override_name),
+                .value = describe_f(*overrides),
+                .source = static_cast<int8_t>(describe_configs_source::topic),
+              });
         }
-        synonyms.push_back(describe_configs_synonym{
-          .name = ss::sstring(default_name),
-          .value = describe_f(default_value),
-          .source = static_cast<int8_t>(
-            describe_configs_source::default_config),
-        });
+        synonyms.push_back(
+          describe_configs_synonym{
+            .name = ss::sstring(default_name),
+            .value = describe_f(default_value),
+            .source = static_cast<int8_t>(
+              describe_configs_source::default_config),
+          });
     }
 
-    result.push_back(config_response{
-      .name = ss::sstring(override_name),
-      .value = describe_f(overrides.value_or(default_value)),
-      .config_source = src,
-      .synonyms = std::move(synonyms),
-      .config_type = property_config_type<T>(),
-      .documentation = documentation,
-    });
+    result.push_back(
+      config_response{
+        .name = ss::sstring(override_name),
+        .value = describe_f(overrides.value_or(default_value)),
+        .config_source = src,
+        .synonyms = std::move(synonyms),
+        .config_type = property_config_type<T>(),
+        .documentation = documentation,
+      });
 }
 /**
  * Special overload for topic configuration which does not have the default per
@@ -343,28 +349,31 @@ static void add_topic_config(
     if (include_synonyms) {
         synonyms.reserve(2);
         if (overrides) {
-            synonyms.push_back(describe_configs_synonym{
-              .name = ss::sstring(override_name),
-              .value = describe_f(*overrides),
-              .source = static_cast<int8_t>(describe_configs_source::topic),
-            });
+            synonyms.push_back(
+              describe_configs_synonym{
+                .name = ss::sstring(override_name),
+                .value = describe_f(*overrides),
+                .source = static_cast<int8_t>(describe_configs_source::topic),
+              });
         }
-        synonyms.push_back(describe_configs_synonym{
-          .name = ss::sstring(override_name),
-          .value = std::nullopt,
-          .source = static_cast<int8_t>(
-            describe_configs_source::default_config),
-        });
+        synonyms.push_back(
+          describe_configs_synonym{
+            .name = ss::sstring(override_name),
+            .value = std::nullopt,
+            .source = static_cast<int8_t>(
+              describe_configs_source::default_config),
+          });
     }
 
-    result.push_back(config_response{
-      .name = ss::sstring(override_name),
-      .value = describe_f(overrides),
-      .config_source = src,
-      .synonyms = std::move(synonyms),
-      .config_type = property_config_type<T>(),
-      .documentation = documentation,
-    });
+    result.push_back(
+      config_response{
+        .name = ss::sstring(override_name),
+        .value = describe_f(overrides),
+        .config_source = src,
+        .synonyms = std::move(synonyms),
+        .config_type = property_config_type<T>(),
+        .documentation = documentation,
+      });
 }
 
 /**

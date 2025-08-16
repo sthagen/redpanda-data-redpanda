@@ -117,8 +117,9 @@ TEST_F_CORO(cluster_link_table_test, upsert_success_test) {
       .uuid = uuid_t(::uuid_t::create()),
       .connection = connection_config{}};
 
-    ASSERT_NO_THROW_CORO(co_await _table.local().apply_update(
-      testing::create_upsert_command(model::offset{1}, link.copy())));
+    ASSERT_NO_THROW_CORO(
+      co_await _table.local().apply_update(
+        testing::create_upsert_command(model::offset{1}, link.copy())));
 
     ASSERT_EQ_CORO(_table.local().size(), 1);
 
@@ -132,8 +133,9 @@ TEST_F_CORO(cluster_link_table_test, upsert_success_test) {
     ASSERT_TRUE_CORO(found_link.has_value());
     EXPECT_EQ(found_link->get(), link.copy());
 
-    ASSERT_NO_THROW_CORO(co_await _table.local().apply_update(
-      testing::create_remove_command(name_t("link1"))));
+    ASSERT_NO_THROW_CORO(
+      co_await _table.local().apply_update(
+        testing::create_remove_command(name_t("link1"))));
     found_link = _table.local().find_link_by_name(name_t("link1"));
     EXPECT_FALSE(found_link.has_value());
     found_link = _table.local().find_link_by_id(id_t(1));
@@ -154,15 +156,17 @@ TEST_F_CORO(cluster_link_table_test, upsert_update) {
       .uuid = second_uuid,
       .connection = connection_config{}};
 
-    ASSERT_NO_THROW_CORO(co_await _table.local().apply_update(
-      testing::create_upsert_command(model::offset{1}, link.copy())));
+    ASSERT_NO_THROW_CORO(
+      co_await _table.local().apply_update(
+        testing::create_upsert_command(model::offset{1}, link.copy())));
     ASSERT_EQ_CORO(_table.local().size(), 1);
     auto found_link = _table.local().find_link_by_name(name_t("link1"));
     ASSERT_TRUE_CORO(found_link.has_value());
     EXPECT_EQ(found_link->get(), link.copy());
 
-    ASSERT_NO_THROW_CORO(co_await _table.local().apply_update(
-      testing::create_upsert_command(model::offset{2}, updated_link.copy())));
+    ASSERT_NO_THROW_CORO(
+      co_await _table.local().apply_update(
+        testing::create_upsert_command(model::offset{2}, updated_link.copy())));
     EXPECT_EQ(_table.local().size(), 1);
     found_link = _table.local().find_link_by_name(name_t("link1"));
     ASSERT_TRUE_CORO(found_link.has_value());
@@ -185,8 +189,9 @@ TEST_F_CORO(cluster_link_table_test, upsert_duplicate_name) {
 
 TEST_F_CORO(cluster_link_table_test, remove_non_existent_link) {
     EXPECT_EQ(_table.local().size(), 0);
-    EXPECT_NO_THROW(co_await _table.local().apply_update(
-      testing::create_remove_command(name_t("nonexistent"))));
+    EXPECT_NO_THROW(
+      co_await _table.local().apply_update(
+        testing::create_remove_command(name_t("nonexistent"))));
     EXPECT_EQ(_table.local().size(), 0);
 }
 
@@ -316,8 +321,9 @@ TEST_F_CORO(cluster_link_table_test, with_mirror_topics) {
       .connection = connection_config{}};
     testing::set_link_mirror_topics(link, test_topic, mirror_state, test_topic);
 
-    ASSERT_NO_THROW_CORO(co_await _table.local().apply_update(
-      testing::create_upsert_command(model::offset{1}, link.copy())));
+    ASSERT_NO_THROW_CORO(
+      co_await _table.local().apply_update(
+        testing::create_upsert_command(model::offset{1}, link.copy())));
 
     ASSERT_EQ_CORO(_table.local().size(), 1);
 

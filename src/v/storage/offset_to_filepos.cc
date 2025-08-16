@@ -44,13 +44,14 @@ offset_to_filepos_consumer::operator()(::model::record_batch batch) {
     if (
       _target_last_offset > batch.base_offset()
       && _target_last_offset <= batch.last_offset()) {
-        throw std::runtime_error(fmt::format(
-          "Offset to file position consumer isn't able to translate "
-          "offsets other than batch base offset or offset being in the "
-          "gap. Requested offset: {}, current batch offsets: [{},{}]",
-          _target_last_offset,
-          batch.base_offset(),
-          batch.last_offset()));
+        throw std::runtime_error(
+          fmt::format(
+            "Offset to file position consumer isn't able to translate "
+            "offsets other than batch base offset or offset being in the "
+            "gap. Requested offset: {}, current batch offsets: [{},{}]",
+            _target_last_offset,
+            batch.base_offset(),
+            batch.last_offset()));
     }
 
     _prev_batch_last_offset = batch.last_offset();

@@ -1411,9 +1411,10 @@ TEST_P(
         cluster::feature_manager& feature_manager
           = app.controller->get_feature_manager().local();
         feature_manager
-          .write_action(cluster::feature_update_action{
-            .feature_name = ss::sstring{"compaction_placeholder_batch"},
-            .action = cluster::feature_update_action::action_t::deactivate})
+          .write_action(
+            cluster::feature_update_action{
+              .feature_name = ss::sstring{"compaction_placeholder_batch"},
+              .action = cluster::feature_update_action::action_t::deactivate})
           .get();
         auto& feature_table = app.controller->get_feature_table().local();
         auto feature_state
@@ -2089,8 +2090,9 @@ TEST_F(CompactionFixtureTest, TestBatchCacheResetAfterAdjacentMerge) {
 
     auto target_segs_v = disk_log.segments() | std::views::take(num_segments);
 
-    ASSERT_TRUE(std::ranges::all_of(
-      target_segs_v, [](const auto& s) { return !s->has_appender(); }));
+    ASSERT_TRUE(std::ranges::all_of(target_segs_v, [](const auto& s) {
+        return !s->has_appender();
+    }));
 
     storage::segment_set segs{storage::segment_set::underlying_t{
       target_segs_v.begin(), target_segs_v.end()}};

@@ -155,9 +155,10 @@ ss::future<response_ptr> list_partition_reassignments_handler::handle(
           all_in_progress_reassignments.begin(),
           all_in_progress_reassignments.end(),
           [&resp](const ongoing_topic_reassignment& topic_reassignment) {
-              resp.data.topics.emplace_back(ongoing_topic_reassignment{
-                .name = topic_reassignment.name,
-                .partitions = topic_reassignment.partitions.copy()});
+              resp.data.topics.emplace_back(
+                ongoing_topic_reassignment{
+                  .name = topic_reassignment.name,
+                  .partitions = topic_reassignment.partitions.copy()});
           });
         co_return co_await ctx.respond(std::move(resp));
     }

@@ -1231,10 +1231,11 @@ ss::future<> cache::put(
     auto filename = normal_key_path.filename();
     if (std::string_view(filename.native())
           .ends_with(cache_tmp_file_extension)) {
-        throw std::invalid_argument(fmt::format(
-          "Cache file key {} is ending with tmp extension {}.",
-          normal_key_path.native(),
-          cache_tmp_file_extension));
+        throw std::invalid_argument(
+          fmt::format(
+            "Cache file key {} is ending with tmp extension {}.",
+            normal_key_path.native(),
+            cache_tmp_file_extension));
     }
     auto dir_path = normal_key_path.remove_filename();
 
@@ -1243,12 +1244,13 @@ ss::future<> cache::put(
     // should not be read directly. _cnt is an atomic counter that
     // ensures the uniqueness of names for tmp files within one shard,
     // while shard_id ensures uniqueness across multiple shards.
-    auto tmp_filename = std::filesystem::path(ss::format(
-      "{}_{}_{}{}",
-      filename.native(),
-      ss::this_shard_id(),
-      (++_cnt),
-      cache_tmp_file_extension));
+    auto tmp_filename = std::filesystem::path(
+      ss::format(
+        "{}_{}_{}{}",
+        filename.native(),
+        ss::this_shard_id(),
+        (++_cnt),
+        cache_tmp_file_extension));
     auto tmp_filepath = dir_path / tmp_filename;
 
     ss::file tmp_cache_file;

@@ -33,12 +33,13 @@ static void validate_replica_set_diversity(
   const std::vector<model::broker_shard>& replicas) {
     if (replicas.size() > 1) {
         auto sentinel = replicas.front();
-        BOOST_TEST_REQUIRE(std::all_of(
-          std::next(replicas.begin()),
-          replicas.end(),
-          [sentinel](const model::broker_shard bs) {
-              return sentinel.node_id != bs.node_id;
-          }));
+        BOOST_TEST_REQUIRE(
+          std::all_of(
+            std::next(replicas.begin()),
+            replicas.end(),
+            [sentinel](const model::broker_shard bs) {
+                return sentinel.node_id != bs.node_id;
+            }));
     }
 }
 
@@ -81,11 +82,12 @@ FIXTURE_TEST(unregister_node, partition_allocator_fixture) {
     BOOST_REQUIRE(allocator().contains_node(model::node_id(0)));
     // allocator MUST still contain the node. it has to be marked as removed
     BOOST_REQUIRE(allocator().contains_node(model::node_id(1)));
-    BOOST_REQUIRE(allocator()
-                    .state()
-                    .allocation_nodes()
-                    .find(model::node_id(1))
-                    ->second->is_removed());
+    BOOST_REQUIRE(
+      allocator()
+        .state()
+        .allocation_nodes()
+        .find(model::node_id(1))
+        ->second->is_removed());
     BOOST_REQUIRE(allocator().contains_node(model::node_id(2)));
     BOOST_REQUIRE_EQUAL(allocator().state().available_nodes(), 2);
 }
@@ -646,10 +648,11 @@ FIXTURE_TEST(updating_nodes_properties, partition_allocator_fixture) {
     auto it = allocator().state().allocation_nodes().find(model::node_id(1));
     auto allocated = it->second->allocated_partitions();
     auto new_rack = model::rack_id{"rack_A"};
-    allocator().update_allocation_nodes(std::vector<model::broker>{
-      create_broker(0, 2),
-      create_broker(1, 10, new_rack),
-      create_broker(2, 7)});
+    allocator().update_allocation_nodes(
+      std::vector<model::broker>{
+        create_broker(0, 2),
+        create_broker(1, 10, new_rack),
+        create_broker(2, 7)});
     BOOST_REQUIRE_EQUAL(it->second->cpus(), 10);
     // changing core count doesn't change number of allocated partitions
     BOOST_REQUIRE_EQUAL(it->second->allocated_partitions(), allocated);

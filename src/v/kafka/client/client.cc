@@ -266,10 +266,11 @@ ss::future<produce_response> client::produce_records(
     std::vector<kafka::produce_request::partition> partitions;
     partitions.reserve(partition_builders.size());
     for (auto& pb : partition_builders) {
-        partitions.emplace_back(kafka::produce_request::partition{
-          .partition_index = pb.first,
-          .records = kafka::produce_request_record_data{
-            std::move(pb.second).build()}});
+        partitions.emplace_back(
+          kafka::produce_request::partition{
+            .partition_index = pb.first,
+            .records = kafka::produce_request_record_data{
+              std::move(pb.second).build()}});
     }
 
     // Produce batch to tp
@@ -283,8 +284,9 @@ ss::future<produce_response> client::produce_records(
       });
 
     chunked_vector<topic_produce_response> responses_cv;
-    responses_cv.emplace_back(topic_produce_response{
-      .name{std::move(topic)}, .partitions{std::move(responses)}});
+    responses_cv.emplace_back(
+      topic_produce_response{
+        .name{std::move(topic)}, .partitions{std::move(responses)}});
 
     co_return produce_response{
       .data = produce_response_data{
@@ -374,12 +376,13 @@ client::list_offsets(list_offsets_request req) {
 ss::future<list_offsets_response>
 client::list_offsets(model::topic_partition tp) {
     kafka::list_offsets_request req;
-    req.data.topics.emplace_back(kafka::list_offset_topic{
-      .name = std::move(tp.topic),
-      .partitions = {kafka::list_offset_partition{
-        .partition_index = tp.partition,
-        .max_num_offsets = 1,
-      }}});
+    req.data.topics.emplace_back(
+      kafka::list_offset_topic{
+        .name = std::move(tp.topic),
+        .partitions = {kafka::list_offset_partition{
+          .partition_index = tp.partition,
+          .max_num_offsets = 1,
+        }}});
     return list_offsets(std::move(req));
 }
 
@@ -680,12 +683,13 @@ ss::future<kafka::describe_configs_response> client::do_describe_topics(
     chunked_vector<describe_configs_resource> dcr;
     dcr.reserve(topics.size());
     for (const auto& topic : topics) {
-        dcr.push_back(describe_configs_resource{
-          .resource_type = config_resource_type::topic,
-          .resource_name = topic(),
-          .configuration_keys = configuration_keys.transform(
-            &chunked_vector<ss::sstring>::copy),
-        });
+        dcr.push_back(
+          describe_configs_resource{
+            .resource_type = config_resource_type::topic,
+            .resource_name = topic(),
+            .configuration_keys = configuration_keys.transform(
+              &chunked_vector<ss::sstring>::copy),
+          });
     }
 
     co_return co_await _cluster.dispatch_to_any(

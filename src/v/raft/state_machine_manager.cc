@@ -719,11 +719,12 @@ state_machine_manager::take_snapshot(model::offset last_included_offset) {
       "taking snapshot with last included offset: {}",
       last_included_offset);
     if (last_included_offset < _raft->start_offset()) {
-        throw std::logic_error(fmt::format(
-          "Can not take snapshot of a state from before raft start offset. "
-          "Requested offset: {}, start offset: {}",
-          last_included_offset,
-          _raft->start_offset()));
+        throw std::logic_error(
+          fmt::format(
+            "Can not take snapshot of a state from before raft start offset. "
+            "Requested offset: {}, start offset: {}",
+            last_included_offset,
+            _raft->start_offset()));
     }
     auto holder = _gate.hold();
     // wait for all STMs to be on the same page
@@ -756,11 +757,12 @@ state_machine_manager::take_snapshot() {
 
     auto u = co_await _apply_mutex.get_units();
     if (last_applied() < _raft->start_offset()) {
-        throw std::logic_error(fmt::format(
-          "Can not take snapshot of a state from before raft start offset. "
-          "Requested offset: {}, start offset: {}",
-          last_applied(),
-          _raft->start_offset()));
+        throw std::logic_error(
+          fmt::format(
+            "Can not take snapshot of a state from before raft start offset. "
+            "Requested offset: {}, start offset: {}",
+            last_applied(),
+            _raft->start_offset()));
     }
     // wait once again for all state machines to finish applying batches
     co_await wait(last_applied(), model::no_timeout, _as);

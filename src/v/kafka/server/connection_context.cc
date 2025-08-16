@@ -88,9 +88,10 @@ parse_vcluster_connection_id(const std::string& hex_str) {
     auto match = std::regex_match(
       hex_str.cbegin(), hex_str.cend(), matches, hex_characters_regexp);
     if (!match) {
-        throw invalid_virtual_connection_id(fmt::format(
-          "virtual cluster connection id '{}' is not a hexadecimal integer",
-          hex_str));
+        throw invalid_virtual_connection_id(
+          fmt::format(
+            "virtual cluster connection id '{}' is not a hexadecimal integer",
+            hex_str));
     }
 
     vcluster_connection_id cid;
@@ -124,19 +125,21 @@ parse_virtual_connection_id(const kafka::request_header& header) {
     }
 
     if (header.client_id->size() < v_connection_id_size) {
-        throw invalid_virtual_connection_id(fmt::format(
-          "virtual connection client id size must contain at least {} "
-          "characters. Current size: {}",
-          v_connection_id_size,
-          header.client_id_buffer.size()));
+        throw invalid_virtual_connection_id(
+          fmt::format(
+            "virtual connection client id size must contain at least {} "
+            "characters. Current size: {}",
+            v_connection_id_size,
+            header.client_id_buffer.size()));
     }
     try {
         virtual_connection_id connection_id{
           .virtual_cluster_id = xid::from_string(
             std::string_view(header.client_id->begin(), xid::str_size)),
-          .connection_id = parse_vcluster_connection_id(std::string(
-            std::next(header.client_id_buffer.begin(), xid::str_size),
-            connection_id_str_size))};
+          .connection_id = parse_vcluster_connection_id(
+            std::string(
+              std::next(header.client_id_buffer.begin(), xid::str_size),
+              connection_id_str_size))};
 
         return virtual_connection_client_id{
           .v_connection_id = connection_id,
@@ -193,8 +196,9 @@ ss::future<> connection_context::start() {
                     klog.debug,
                     "Connection input_shutdown; aborting operations for {}",
                     conn->addr);
-                  return _as.request_abort_ex(std::system_error(
-                    std::make_error_code(std::errc::connection_aborted)));
+                  return _as.request_abort_ex(
+                    std::system_error(
+                      std::make_error_code(std::errc::connection_aborted)));
               })
               .finally([this]() { _wait_input_shutdown.set_value(); });
     } else {
@@ -374,10 +378,11 @@ ss::future<> connection_context::process_one_request() {
     }
 
     if (sz.value() > _max_request_size()) {
-        throw net::invalid_request_error(fmt::format(
-          "request size {} is larger than the configured max {}",
-          sz,
-          _max_request_size()));
+        throw net::invalid_request_error(
+          fmt::format(
+            "request size {} is larger than the configured max {}",
+            sz,
+            _max_request_size()));
     }
 
     /*
@@ -671,11 +676,12 @@ connection_context::reserve_request_units(api_key key, size_t size) {
                                 : default_memory_estimate(size);
     if (unlikely(mem_estimate >= (size_t)std::numeric_limits<int32_t>::max())) {
         // TODO: Create error response using the specific API?
-        throw std::runtime_error(fmt::format(
-          "request too large > 1GB (size: {}, estimate: {}, API: {})",
-          size,
-          mem_estimate,
-          handler ? (*handler)->name() : "<bad key>"));
+        throw std::runtime_error(
+          fmt::format(
+            "request too large > 1GB (size: {}, estimate: {}, API: {})",
+            size,
+            mem_estimate,
+            handler ? (*handler)->name() : "<bad key>"));
     }
     auto fut = ss::get_units(_server.memory(), mem_estimate);
     if (_server.memory().waiters()) {

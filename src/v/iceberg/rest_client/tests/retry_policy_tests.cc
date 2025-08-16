@@ -43,8 +43,9 @@ TEST(default_retry_policy, status_retriable) {
             gateway_timeout,
             too_many_requests,
             request_timeout})) {
-        auto result = p.should_retry(http::downloaded_response{
-          .status = status, .body = iobuf::from("retry")});
+        auto result = p.should_retry(
+          http::downloaded_response{
+            .status = status, .body = iobuf::from("retry")});
         ASSERT_FALSE(result.has_value());
         ASSERT_TRUE(result.error().can_be_retried);
         ASSERT_FALSE(result.error().aborted);
@@ -55,8 +56,9 @@ TEST(default_retry_policy, status_not_retriable) {
     r::default_retry_policy p;
     for (const auto status : std::to_array(
            {bad_request, unauthorized, method_not_allowed, not_acceptable})) {
-        auto result = p.should_retry(http::downloaded_response{
-          .status = status, .body = iobuf::from("retry")});
+        auto result = p.should_retry(
+          http::downloaded_response{
+            .status = status, .body = iobuf::from("retry")});
         ASSERT_FALSE(result.has_value());
         ASSERT_FALSE(result.error().can_be_retried);
         ASSERT_FALSE(result.error().aborted);
@@ -95,20 +97,23 @@ TEST(default_retry_policy, abort_exception) {
 }
 
 TEST(default_retry_policy, nested_exception) {
-    auto gate_failure = throw_and_catch(ss::nested_exception{
-      std::make_exception_ptr(ss::gate_closed_exception{}),
-      std::make_exception_ptr(std::runtime_error{"out"})});
+    auto gate_failure = throw_and_catch(
+      ss::nested_exception{
+        std::make_exception_ptr(ss::gate_closed_exception{}),
+        std::make_exception_ptr(std::runtime_error{"out"})});
     ASSERT_TRUE(gate_failure.aborted);
     ASSERT_FALSE(gate_failure.can_be_retried);
-    auto abort_failure = throw_and_catch(ss::nested_exception{
-      std::make_exception_ptr(std::invalid_argument{""}),
-      std::make_exception_ptr(ss::abort_requested_exception{})});
+    auto abort_failure = throw_and_catch(
+      ss::nested_exception{
+        std::make_exception_ptr(std::invalid_argument{""}),
+        std::make_exception_ptr(ss::abort_requested_exception{})});
     ASSERT_TRUE(abort_failure.aborted);
     ASSERT_FALSE(abort_failure.can_be_retried);
 
-    auto result = throw_and_catch(ss::nested_exception{
-      std::make_exception_ptr(std::invalid_argument{"i"}),
-      std::make_exception_ptr(std::invalid_argument{"o"})});
+    auto result = throw_and_catch(
+      ss::nested_exception{
+        std::make_exception_ptr(std::invalid_argument{"i"}),
+        std::make_exception_ptr(std::invalid_argument{"o"})});
     ASSERT_FALSE(result.can_be_retried);
     ASSERT_TRUE(std::holds_alternative<ss::sstring>(result.err));
     ASSERT_EQ(

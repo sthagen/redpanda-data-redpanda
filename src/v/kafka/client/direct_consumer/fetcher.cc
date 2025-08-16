@@ -818,12 +818,13 @@ fetcher::do_list_offsets(list_offsets_request req) {
             topics.topic = std::move(topic.name);
             topics.offsets.reserve(topic.partitions.size());
             for (auto& partition : topic.partitions) {
-                topics.offsets.push_back(partition_offset{
-                  .partition_id = partition.partition_index,
-                  .error_code = partition.error_code,
-                  .leader_epoch = partition.leader_epoch,
-                  .offset = model::offset_cast(partition.offset),
-                });
+                topics.offsets.push_back(
+                  partition_offset{
+                    .partition_id = partition.partition_index,
+                    .error_code = partition.error_code,
+                    .leader_epoch = partition.leader_epoch,
+                    .offset = model::offset_cast(partition.offset),
+                  });
             }
             offsets.push_back(std::move(topics));
         }

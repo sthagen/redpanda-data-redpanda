@@ -12,6 +12,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "base/vlog.h"
 #include "kafka/client/exceptions.h"
+#include "kafka/client/utils.h"
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/schemata/offset_commit_request.h"
 #include "model/fundamental.h"
@@ -110,7 +111,12 @@ get_topics_names(server::request_t rq, server::reply_t rp) {
           names.reserve(res.data.topics.size());
           for (auto& topic : res.data.topics) {
               if (!topic.is_internal) {
-                  names.emplace_back(topic.name);
+                  static_assert(
+                    kafka::client::api_version_for(
+                      kafka::metadata_request::api_type::key)
+                      < kafka::api_version(12),
+                    "topic::name is nullable in v12+");
+                  names.emplace_back(*topic.name);
               }
           }
 

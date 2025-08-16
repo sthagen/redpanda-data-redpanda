@@ -213,11 +213,12 @@ void verify_adl_or_serde(T expected, compat_binary test) {
     const auto name = test.name;
     auto decoded = decode_adl_or_serde<T>(std::move(test));
     if (expected != decoded) {
-        throw compat_error(fmt::format(
-          "Verify of {{{}}} decoding failed:\nExpected: {}\nDecoded: {}",
-          name,
-          expected,
-          decoded));
+        throw compat_error(
+          fmt::format(
+            "Verify of {{{}}} decoding failed:\nExpected: {}\nDecoded: {}",
+            name,
+            expected,
+            decoded));
     }
 }
 
@@ -226,11 +227,12 @@ void verify_serde_only(T expected, compat_binary test) {
     const auto name = test.name;
     auto decoded = decode_serde_only<T>(std::move(test));
     if (expected != decoded) {
-        throw compat_error(fmt::format(
-          "Verify of {{{}}} decoding failed:\nExpected: {}\nDecoded: {}",
-          name,
-          expected,
-          decoded));
+        throw compat_error(
+          fmt::format(
+            "Verify of {{{}}} decoding failed:\nExpected: {}\nDecoded: {}",
+            name,
+            expected,
+            decoded));
     }
 }
 
@@ -244,12 +246,13 @@ void verify_serde_round_trip(T, compat_binary test) {
     iobuf after_round_trip;
     serde::write_async(after_round_trip, decoded).get();
     if (expected != after_round_trip) {
-        throw compat_error(fmt::format(
-          "Verify of {{{}}} round trip decoding failed:\nExpected: "
-          "{}\nDecoded: {}",
-          name,
-          expected,
-          after_round_trip));
+        throw compat_error(
+          fmt::format(
+            "Verify of {{{}}} round trip decoding failed:\nExpected: "
+            "{}\nDecoded: {}",
+            name,
+            expected,
+            after_round_trip));
     }
 }
 

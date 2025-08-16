@@ -126,10 +126,11 @@ void scrub_segment_meta(
     if (
       previous && previous->delta_offset != model::offset_delta{}
       && current.delta_offset == model::offset_delta{}) {
-        detected.insert(anomaly_meta{
-          .type = anomaly_type::missing_delta,
-          .at = current,
-          .previous = previous});
+        detected.insert(
+          anomaly_meta{
+            .type = anomaly_type::missing_delta,
+            .at = current,
+            .previous = previous});
     }
 
     // The delta offset field of a segment should always be greater or
@@ -138,10 +139,11 @@ void scrub_segment_meta(
       previous && previous->delta_offset != model::offset_delta{}
       && current.delta_offset != model::offset_delta{}
       && previous->delta_offset > current.delta_offset) {
-        detected.insert(anomaly_meta{
-          .type = anomaly_type::non_monotonical_delta,
-          .at = current,
-          .previous = previous});
+        detected.insert(
+          anomaly_meta{
+            .type = anomaly_type::non_monotonical_delta,
+            .at = current,
+            .previous = previous});
     }
 
     // The committed offset of a segment should always be greater or equal
@@ -167,10 +169,11 @@ void scrub_segment_meta(
     if (
       previous
       && model::next_offset(previous->committed_offset) < current.base_offset) {
-        detected.insert(anomaly_meta{
-          .type = anomaly_type::offset_gap,
-          .at = current,
-          .previous = previous});
+        detected.insert(
+          anomaly_meta{
+            .type = anomaly_type::offset_gap,
+            .at = current,
+            .previous = previous});
     }
 
     // The base offset of a given segment should be equal to the committed
@@ -179,10 +182,11 @@ void scrub_segment_meta(
     if (
       previous
       && model::next_offset(previous->committed_offset) > current.base_offset) {
-        detected.insert(anomaly_meta{
-          .type = anomaly_type::offset_overlap,
-          .at = current,
-          .previous = previous});
+        detected.insert(
+          anomaly_meta{
+            .type = anomaly_type::offset_overlap,
+            .at = current,
+            .previous = previous});
     }
 }
 

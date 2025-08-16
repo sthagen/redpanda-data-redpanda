@@ -138,8 +138,9 @@ std::optional<retention_calculator> retention_calculator::factory(
             if (
               first_seg != manifest.end()
               && first_seg->max_timestamp < oldest_allowed_timestamp) {
-                strats.push_back(std::make_unique<time_based_strategy>(
-                  oldest_allowed_timestamp));
+                strats.push_back(
+                  std::make_unique<time_based_strategy>(
+                    oldest_allowed_timestamp));
                 vlog(
                   archival_log.trace,
                   "{} time based retention strategy added, oldest allowed "

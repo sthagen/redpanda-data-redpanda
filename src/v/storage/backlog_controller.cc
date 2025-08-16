@@ -144,8 +144,9 @@ void backlog_controller::setup_metrics(const ss::sstring& controller_label) {
         sm::make_gauge(
           "error",
           [this] { return _prev_error; },
-          sm::description("current controller error, i.e difference between "
-                          "set point and backlog size")),
+          sm::description(
+            "current controller error, i.e difference between "
+            "set point and backlog size")),
         sm::make_gauge(
           "shares",
           [this] { return _current_shares; },

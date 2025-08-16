@@ -494,10 +494,11 @@ private:
         for (const auto& [id, state] : _nodes) {
             auto last_seen = raft::clock_type::now();
             // TODO: add ability to add unavailable nodes
-            status_updates.push_back(cluster::node_status{
-              .node_id = id,
-              .last_seen = last_seen,
-            });
+            status_updates.push_back(
+              cluster::node_status{
+                .node_id = id,
+                .last_seen = last_seen,
+              });
         }
 
         _workers.node_status_table
@@ -714,8 +715,9 @@ private:
               topic2partitions;
             for (const auto& [ntp, repl] : replicas) {
                 topic2partitions[model::topic_namespace(ntp.ns, ntp.tp.topic)]
-                  .push_back(cluster::partition_status{
-                    .id = ntp.tp.partition, .size_bytes = repl.local_size});
+                  .push_back(
+                    cluster::partition_status{
+                      .id = ntp.tp.partition, .size_bytes = repl.local_size});
             }
 
             chunked_vector<cluster::topic_status> topics;

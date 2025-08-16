@@ -20,19 +20,22 @@ namespace {
 chunked_hash_map<ss::sstring, ss::sstring>
 parse_string_map(const json::Value& map_json, std::string_view member_name) {
     if (!map_json.IsObject()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected map field '{}' to be an object type", member_name));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected map field '{}' to be an object type", member_name));
     }
     const auto& map_obj = map_json.GetObject();
     chunked_hash_map<ss::sstring, ss::sstring> ret;
     ret.reserve(map_obj.MemberCount());
     for (const auto& property : map_obj) {
         if (!property.name.IsString() || !property.value.IsString()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected '{}' field to be a string map. Current type map<{},{}>",
-              member_name,
-              property.name.GetType(),
-              property.value.GetType()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected '{}' field to be a string map. Current type "
+                "map<{},{}>",
+                member_name,
+                property.name.GetType(),
+                property.value.GetType()));
         }
 
         ret.emplace(property.name.GetString(), property.value.GetString());
@@ -75,10 +78,11 @@ json::Value::ConstArray
 parse_required_array(const json::Value& v, std::string_view member_name) {
     const auto& array_json = parse_required(v, member_name);
     if (!array_json.IsArray()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected array for field '{}': {}",
-          member_name,
-          array_json.GetType()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected array for field '{}': {}",
+            member_name,
+            array_json.GetType()));
     }
     return array_json.GetArray();
 }
@@ -91,8 +95,9 @@ parse_optional_array(const json::Value& v, std::string_view member_name) {
     }
     const auto& val = json.value().get();
     if (!val.IsArray()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected array for field '{}': {}", member_name, val.GetType()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected array for field '{}': {}", member_name, val.GetType()));
     }
     return val.GetArray();
 }
@@ -101,10 +106,11 @@ json::Value::ConstObject
 parse_required_object(const json::Value& v, std::string_view member_name) {
     const auto& obj_json = parse_required(v, member_name);
     if (!obj_json.IsObject()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected object for field '{}': {}",
-          member_name,
-          obj_json.GetType()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected object for field '{}': {}",
+            member_name,
+            obj_json.GetType()));
     }
     return obj_json.GetObject();
 }
@@ -117,8 +123,9 @@ parse_optional_object(const json::Value& v, std::string_view member_name) {
     }
     const auto& val = json.value().get();
     if (!val.IsObject()) {
-        throw std::invalid_argument(fmt::format(
-          "Expected object for field '{}': {}", member_name, val.GetType()));
+        throw std::invalid_argument(
+          fmt::format(
+            "Expected object for field '{}': {}", member_name, val.GetType()));
     }
     return val.GetObject();
 }

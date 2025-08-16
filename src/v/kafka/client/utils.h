@@ -22,7 +22,7 @@ namespace kafka::client {
 /**
  * Default API versions for Kafka APIs used by the client.
  */
-inline api_version api_version_for(api_key key) {
+constexpr api_version api_version_for(api_key key) {
     switch (key) {
     case offset_fetch_api::key:
         return api_version(4);

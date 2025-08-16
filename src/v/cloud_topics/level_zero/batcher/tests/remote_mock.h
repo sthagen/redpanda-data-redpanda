@@ -83,8 +83,9 @@ public:
       cloud_io::upload_result res = cloud_io::upload_result::success) {
         EXPECT_CALL(*this, upload_object(::testing::_))
           .Times(1)
-          .WillOnce(::testing::Return(
-            ss::make_ready_future<cloud_io::upload_result>(res)));
+          .WillOnce(
+            ::testing::Return(
+              ss::make_ready_future<cloud_io::upload_result>(res)));
     }
 
     static std::deque<ss::sstring>

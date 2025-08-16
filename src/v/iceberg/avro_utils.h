@@ -112,12 +112,14 @@ public:
               "returned false");
         }
         if (cur_frag_pos_ < len) {
-            throw std::runtime_error(fmt::format(
-              "invalid `backup` call in avro_iobuf_istream - trying to backup "
-              "more than the last call to `next` current_fragment_position: "
-              "{}, backup_len: {}",
-              cur_frag_pos_,
-              len));
+            throw std::runtime_error(
+              fmt::format(
+                "invalid `backup` call in avro_iobuf_istream - trying to "
+                "backup "
+                "more than the last call to `next` current_fragment_position: "
+                "{}, backup_len: {}",
+                cur_frag_pos_,
+                len));
         }
         cur_frag_pos_ -= len;
     }

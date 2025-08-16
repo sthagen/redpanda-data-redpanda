@@ -75,11 +75,12 @@ self_test_backend::do_start_test(start_test_request r) {
                   std::make_move_iterator(dtr.begin()),
                   std::make_move_iterator(dtr.end()));
             } else {
-                results.push_back(self_test_result{
-                  .name = dto.name,
-                  .test_type = "disk",
-                  .warning = "Disk self test prevented from starting due to "
-                             "cancel signal"});
+                results.push_back(
+                  self_test_result{
+                    .name = dto.name,
+                    .test_type = "disk",
+                    .warning = "Disk self test prevented from starting due to "
+                               "cancel signal"});
             }
         } catch (const std::exception& ex) {
             vlog(
@@ -87,8 +88,9 @@ self_test_backend::do_start_test(start_test_request r) {
               "Disk self test finished with error: {} - options: {}",
               ex.what(),
               dto);
-            results.push_back(self_test_result{
-              .name = dto.name, .test_type = "disk", .error = ex.what()});
+            results.push_back(
+              self_test_result{
+                .name = dto.name, .test_type = "disk", .error = ex.what()});
         }
     }
 
@@ -104,18 +106,20 @@ self_test_backend::do_start_test(start_test_request r) {
                       std::make_move_iterator(ntr.begin()),
                       std::make_move_iterator(ntr.end()));
                 } else {
-                    results.push_back(self_test_result{
-                      .name = nto.name,
-                      .test_type = "network",
-                      .warning
-                      = "Network self test prevented from starting due to "
-                        "cancel signal"});
+                    results.push_back(
+                      self_test_result{
+                        .name = nto.name,
+                        .test_type = "network",
+                        .warning
+                        = "Network self test prevented from starting due to "
+                          "cancel signal"});
                 }
             } else {
-                results.push_back(self_test_result{
-                  .name = nto.name,
-                  .test_type = "network",
-                  .warning = "No peers to start network test against"});
+                results.push_back(
+                  self_test_result{
+                    .name = nto.name,
+                    .test_type = "network",
+                    .warning = "No peers to start network test against"});
             }
         } catch (const std::exception& ex) {
             vlog(
@@ -123,8 +127,9 @@ self_test_backend::do_start_test(start_test_request r) {
               "Network self test finished with error: {} - options: {}",
               ex.what(),
               nto);
-            results.push_back(self_test_result{
-              .name = nto.name, .test_type = "network", .error = ex.what()});
+            results.push_back(
+              self_test_result{
+                .name = nto.name, .test_type = "network", .error = ex.what()});
         }
     }
 
@@ -139,11 +144,12 @@ self_test_backend::do_start_test(start_test_request r) {
                   std::make_move_iterator(ctr.begin()),
                   std::make_move_iterator(ctr.end()));
             } else {
-                results.push_back(self_test_result{
-                  .name = cto.name,
-                  .test_type = "cloud",
-                  .warning = "Cloud self test prevented from starting due to "
-                             "cancel signal"});
+                results.push_back(
+                  self_test_result{
+                    .name = cto.name,
+                    .test_type = "cloud",
+                    .warning = "Cloud self test prevented from starting due to "
+                               "cancel signal"});
             }
         } catch (const std::exception& ex) {
             vlog(
@@ -151,19 +157,21 @@ self_test_backend::do_start_test(start_test_request r) {
               "Cloud self test finished with error: {} - options: {}",
               ex.what(),
               cto);
-            results.push_back(self_test_result{
-              .name = cto.name, .test_type = "cloud", .error = ex.what()});
+            results.push_back(
+              self_test_result{
+                .name = cto.name, .test_type = "cloud", .error = ex.what()});
         }
     }
 
     for (const auto& unparsed_check : unparsed_checks) {
-        results.push_back(self_test_result{
-          .name = "Unknown",
-          .test_type = unparsed_check.test_type,
-          .error = fmt::format(
-            "Unknown test type {} requested on node {}",
-            unparsed_check.test_type,
-            _self)});
+        results.push_back(
+          self_test_result{
+            .name = "Unknown",
+            .test_type = unparsed_check.test_type,
+            .error = fmt::format(
+              "Unknown test type {} requested on node {}",
+              unparsed_check.test_type,
+              _self)});
     }
 
     co_return results;

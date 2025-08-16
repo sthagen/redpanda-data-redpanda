@@ -22,34 +22,37 @@ chunked_vector<translated_offset_range> make_pending_files(
     for (const auto& [begin, end] : offset_bounds) {
         chunked_vector<data_file> fs;
         if (with_file) {
-            fs.emplace_back(data_file{
-              .remote_path = fmt::format("{}-{}", begin, end),
-              .file_size_bytes = 1024,
-              .table_schema_id = 0,
-              .partition_spec_id = 0,
-              .partition_key = chunked_vector<std::optional<bytes>>::single(
-                std::nullopt),
-            });
+            fs.emplace_back(
+              data_file{
+                .remote_path = fmt::format("{}-{}", begin, end),
+                .file_size_bytes = 1024,
+                .table_schema_id = 0,
+                .partition_spec_id = 0,
+                .partition_key = chunked_vector<std::optional<bytes>>::single(
+                  std::nullopt),
+              });
         }
         auto total_bytes = (end - begin + 1)
                            * random_generators::get_int<uint64_t>(
                              100, 1000); // Simulate some bytes processed.
         if (dlq) {
-            files.emplace_back(translated_offset_range{
-              .start_offset = kafka::offset{begin},
-              .last_offset = kafka::offset{end},
-              .dlq_files = std::move(fs),
-              .kafka_bytes_processed = total_bytes,
-              // Other args irrelevant.
-            });
+            files.emplace_back(
+              translated_offset_range{
+                .start_offset = kafka::offset{begin},
+                .last_offset = kafka::offset{end},
+                .dlq_files = std::move(fs),
+                .kafka_bytes_processed = total_bytes,
+                // Other args irrelevant.
+              });
         } else {
-            files.emplace_back(translated_offset_range{
-              .start_offset = kafka::offset{begin},
-              .last_offset = kafka::offset{end},
-              .files = std::move(fs),
-              .kafka_bytes_processed = total_bytes,
-              // Other args irrelevant.
-            });
+            files.emplace_back(
+              translated_offset_range{
+                .start_offset = kafka::offset{begin},
+                .last_offset = kafka::offset{end},
+                .files = std::move(fs),
+                .kafka_bytes_processed = total_bytes,
+                // Other args irrelevant.
+              });
         }
     }
     return files;
@@ -66,8 +69,9 @@ void add_partition_state(
         auto& p_state = state.pid_to_pending_files[pid];
         for (auto& f :
              make_pending_files(offset_bounds_by_pid[i], with_files, dlq)) {
-            p_state.pending_entries.emplace_back(pending_entry{
-              .data = std::move(f), .added_pending_at = added_at});
+            p_state.pending_entries.emplace_back(
+              pending_entry{
+                .data = std::move(f), .added_pending_at = added_at});
         }
     }
 }

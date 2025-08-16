@@ -11,7 +11,6 @@
 
 #pragma once
 
-#include "absl/container/flat_hash_map.h"
 #include "base/seastarx.h"
 #include "cluster/fwd.h"
 #include "cluster/members_table.h"
@@ -19,6 +18,7 @@
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
 #include "model/fundamental.h"
+#include "model/kitp.h"
 #include "model/metadata.h"
 #include "model/timestamp.h"
 #include "pandaproxy/schema_registry/subject_name_strategy.h"
@@ -101,6 +101,11 @@ public:
 
     const topic_table::underlying_t& all_topics_metadata() const;
 
+    std::optional<model::topic_namespace>
+    get_name_by_id(model::topic_id tp_id) const {
+        return _topics_state.local().get_name_by_id(tp_id);
+    }
+
     /// Returns all brokers, returns copy as the content of broker can change
     const members_table::cache_t& nodes() const;
 
@@ -127,6 +132,7 @@ public:
     bool should_reject_reads(model::topic_namespace_view) const;
     bool should_reject_writes(model::topic_namespace_view) const;
 
+    bool contains(const model::kitp& kitp) const;
     bool contains(model::topic_namespace_view, model::partition_id) const;
     bool contains(model::topic_namespace_view) const;
     topic_table::topic_state

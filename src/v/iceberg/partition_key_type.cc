@@ -70,8 +70,9 @@ partition_key_type partition_key_type::create(
         const auto& source_id = field.source_id;
         const auto type_iter = ids_to_types.find(source_id);
         if (type_iter == ids_to_types.end()) {
-            throw std::invalid_argument(fmt::format(
-              "Expected source field ID {} to be in schema", source_id()));
+            throw std::invalid_argument(
+              fmt::format(
+                "Expected source field ID {} to be in schema", source_id()));
         }
         const auto& source_type = *type_iter->second;
         auto result_field = nested_field::create(
@@ -96,16 +97,18 @@ partition_key_type partition_key_type::copy() const {
         // partitioning transformations defined by the Iceberg spec.
         const auto& partition_type = partition_field->type;
         if (!std::holds_alternative<primitive_type>(partition_type)) {
-            throw std::invalid_argument(fmt::format(
-              "Partition key type holds unexpected non-primitive type: {}",
-              partition_type));
+            throw std::invalid_argument(
+              fmt::format(
+                "Partition key type holds unexpected non-primitive type: {}",
+                partition_type));
         }
         // NOTE: primitive types all have default copy constructors.
-        ret_type.fields.emplace_back(nested_field::create(
-          partition_field->id,
-          partition_field->name,
-          partition_field->required,
-          std::get<primitive_type>(partition_type)));
+        ret_type.fields.emplace_back(
+          nested_field::create(
+            partition_field->id,
+            partition_field->name,
+            partition_field->required,
+            std::get<primitive_type>(partition_type)));
     }
     return partition_key_type{std::move(ret_type)};
 }

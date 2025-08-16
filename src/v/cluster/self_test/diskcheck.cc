@@ -72,10 +72,12 @@ ss::future<> diskcheck::verify_remaining_space(size_t dataset_size) {
       node::local_monitor::shard,
       [](node::local_monitor& lm) { return lm.get_state_cached(); });
     if (disk_state.data_disk.free <= dataset_size) {
-        throw diskcheck_option_out_of_range(fmt::format(
-          "Not enough disk space to run benchmark, requested: {}, existing: {}",
-          dataset_size,
-          disk_state.data_disk.free));
+        throw diskcheck_option_out_of_range(
+          fmt::format(
+            "Not enough disk space to run benchmark, requested: {}, existing: "
+            "{}",
+            dataset_size,
+            disk_state.data_disk.free));
     }
 }
 

@@ -37,13 +37,14 @@ make_batches(const std::vector<batch_spec>& specs) {
         std::vector<size_t> record_sizes;
         std::fill_n(std::back_inserter(record_sizes), count, 100);
         batches.push_back(
-          model::test::make_random_batch(model::test::record_batch_spec{
-            .offset = kafka::offset_cast(spec.base_offset),
-            .count = count,
-            .record_sizes = record_sizes,
-            .timestamp = spec.max_timestamp,
-            .all_records_have_same_timestamp = true,
-          }));
+          model::test::make_random_batch(
+            model::test::record_batch_spec{
+              .offset = kafka::offset_cast(spec.base_offset),
+              .count = count,
+              .record_sizes = record_sizes,
+              .timestamp = spec.max_timestamp,
+              .all_records_have_same_timestamp = true,
+            }));
     }
     return batches;
 }

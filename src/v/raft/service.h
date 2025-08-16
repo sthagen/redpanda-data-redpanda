@@ -526,8 +526,9 @@ private:
         for (const auto& full_beat : hb_request.full_heartbeats()) {
             const auto shard = _shard_table.shard_for(full_beat.group);
             if (unlikely(!shard)) {
-                ret.group_missing_requests.push_back(group_heartbeat{
-                  .group = full_beat.group, .data = full_beat.data});
+                ret.group_missing_requests.push_back(
+                  group_heartbeat{
+                    .group = full_beat.group, .data = full_beat.data});
                 continue;
             }
 

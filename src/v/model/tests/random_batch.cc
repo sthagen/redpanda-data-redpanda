@@ -36,8 +36,9 @@ std::vector<model::record_header> make_headers(int n = 2) {
     for (int i = 0; i < n; ++i) {
         int key_len = get_int(i, 10);
         int val_len = get_int(i, 10);
-        ret.emplace_back(model::record_header(
-          key_len, random_iobuf(key_len), val_len, random_iobuf(val_len)));
+        ret.emplace_back(
+          model::record_header(
+            key_len, random_iobuf(key_len), val_len, random_iobuf(val_len)));
     }
     return ret;
 }
@@ -99,13 +100,14 @@ model::record_batch make_random_batch(
   model::record_batch_type bt,
   std::optional<std::vector<size_t>> record_sizes,
   std::optional<model::timestamp> ts) {
-    return make_random_batch(record_batch_spec{
-      .offset = o,
-      .allow_compression = allow_compression,
-      .count = num_records,
-      .bt = bt,
-      .record_sizes = std::move(record_sizes),
-      .timestamp = ts});
+    return make_random_batch(
+      record_batch_spec{
+        .offset = o,
+        .allow_compression = allow_compression,
+        .count = num_records,
+        .bt = bt,
+        .record_sizes = std::move(record_sizes),
+        .timestamp = ts});
 }
 
 model::record_batch

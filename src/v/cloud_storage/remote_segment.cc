@@ -114,8 +114,9 @@ remote_segment::remote_segment(
   , _chunk_root(fmt::format("{}_chunks", _path().native()))
   , _term(meta.segment_term)
   , _base_rp_offset(meta.base_offset)
-  , _base_offset_delta(std::clamp(
-      meta.delta_offset, model::offset_delta(0), model::offset_delta::max()))
+  , _base_offset_delta(
+      std::clamp(
+        meta.delta_offset, model::offset_delta(0), model::offset_delta::max()))
   , _max_rp_offset(meta.committed_offset)
   , _base_timestamp(meta.base_timestamp)
   , _size(meta.size_bytes)

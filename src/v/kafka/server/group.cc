@@ -132,8 +132,9 @@ group::group(
   , _term(term)
   , _enable_group_metrics(conf.enable_consumer_group_metrics.bind(
       std::function{enabled_metrics::from_vector}))
-  , _abort_interval_ms(config::shard_local_cfg()
-                         .abort_timed_out_transactions_interval_ms.value())
+  , _abort_interval_ms(
+      config::shard_local_cfg()
+        .abort_timed_out_transactions_interval_ms.value())
   , _tx_frontend(tx_frontend)
   , _feature_table(feature_table) {
     setup_metrics();
@@ -171,8 +172,9 @@ group::group(
   , _term(term)
   , _enable_group_metrics(conf.enable_consumer_group_metrics.bind(
       std::function{enabled_metrics::from_vector}))
-  , _abort_interval_ms(config::shard_local_cfg()
-                         .abort_timed_out_transactions_interval_ms.value())
+  , _abort_interval_ms(
+      config::shard_local_cfg()
+        .abort_timed_out_transactions_interval_ms.value())
   , _tx_frontend(tx_frontend)
   , _feature_table(feature_table) {
     for (auto& m : md.members) {
@@ -327,12 +329,13 @@ void group::add_member_no_join(member_ptr member) {
         auto [_, success] = _static_members.emplace(
           *member->group_instance_id(), member->id());
         if (!success) {
-            throw std::runtime_error(fmt::format(
-              "group already contains member with group instance id: {}, "
-              "group "
-              "state: {}",
-              member,
-              *this));
+            throw std::runtime_error(
+              fmt::format(
+                "group already contains member with group instance id: {}, "
+                "group "
+                "state: {}",
+                member,
+                *this));
         }
     }
     if (_members.empty()) {
@@ -835,12 +838,13 @@ group::join_group_stages group::update_static_member_and_rebalance(
     case group_state::empty:
         [[fallthrough]];
     case group_state::dead:
-        throw std::runtime_error(fmt::format(
-          "group was not supposed to be in {} state when the unknown static "
-          "member {} rejoins, group state: {}",
-          state(),
-          r.data.group_instance_id,
-          *this));
+        throw std::runtime_error(
+          fmt::format(
+            "group was not supposed to be in {} state when the unknown static "
+            "member {} rejoins, group state: {}",
+            state(),
+            r.data.group_instance_id,
+            *this));
     }
 }
 
@@ -850,10 +854,11 @@ member_ptr group::replace_static_member(
   const member_id& new_member_id) {
     auto it = _members.find(old_member_id);
     if (it == _members.end()) {
-        throw std::runtime_error(fmt::format(
-          "can not replace not existing member with id {}, group state: {}",
-          old_member_id,
-          *this));
+        throw std::runtime_error(
+          fmt::format(
+            "can not replace not existing member with id {}, group state: {}",
+            old_member_id,
+            *this));
     }
     auto member = it->second;
     _members.erase(it);
@@ -1731,10 +1736,11 @@ group::handle_leave_group(leave_group_request&& r) {
     response.data.members.reserve(r.data.members.size());
     for (auto& m : r.data.members) {
         auto ec = member_leave_group(m.member_id, m.group_instance_id);
-        response.data.members.push_back(member_response{
-          .member_id = m.member_id,
-          .group_instance_id = m.group_instance_id,
-          .error_code = ec});
+        response.data.members.push_back(
+          member_response{
+            .member_id = m.member_id,
+            .group_instance_id = m.group_instance_id,
+            .error_code = ec});
     }
     return ss::make_ready_future<leave_group_response>(std::move(response));
 }
@@ -2057,12 +2063,13 @@ group::store_txn_offsets(txn_offset_commit_request r) {
 
     for (auto& t : r.data.topics) {
         for (const auto& p : t.partitions) {
-            offsets.push_back(group_tx::partition_offset{
-              .tp = model::topic_partition(t.name, p.partition_index),
-              .offset = p.committed_offset,
-              .leader_epoch = p.committed_leader_epoch,
-              .metadata = p.committed_metadata,
-            });
+            offsets.push_back(
+              group_tx::partition_offset{
+                .tp = model::topic_partition(t.name, p.partition_index),
+                .offset = p.committed_offset,
+                .leader_epoch = p.committed_leader_epoch,
+                .metadata = p.committed_metadata,
+              });
         }
     }
 
@@ -3416,16 +3423,18 @@ group::decode_consumer_subscriptions(iobuf data) {
 
     const auto count = reader.read_int32();
     if (count < 0) {
-        throw std::out_of_range(fmt::format(
-          "consumer metadata contains negative topic count {}", count));
+        throw std::out_of_range(
+          fmt::format(
+            "consumer metadata contains negative topic count {}", count));
     }
 
     // a simple heuristic to avoid large allocations
     if (static_cast<size_t>(count) > reader.bytes_left()) {
-        throw std::out_of_range(fmt::format(
-          "consumer metadata topic count too large {} > {}",
-          count,
-          reader.bytes_left()));
+        throw std::out_of_range(
+          fmt::format(
+            "consumer metadata topic count too large {} > {}",
+            count,
+            reader.bytes_left()));
     }
 
     absl::node_hash_set<model::topic> topics;
@@ -3434,15 +3443,18 @@ group::decode_consumer_subscriptions(iobuf data) {
     while (topics.size() != static_cast<size_t>(count)) {
         const auto len = reader.read_int16();
         if (len < 0) {
-            throw std::out_of_range(fmt::format(
-              "consumer metadata contains negative topic name length {}", len));
+            throw std::out_of_range(
+              fmt::format(
+                "consumer metadata contains negative topic name length {}",
+                len));
         } else if (static_cast<size_t>(len) > max_topic_name_length) {
-            throw std::out_of_range(fmt::format(
-              "consumer metadata contains topic name that exceeds maximum "
-              "size "
-              "{} > {}",
-              len,
-              max_topic_name_length));
+            throw std::out_of_range(
+              fmt::format(
+                "consumer metadata contains topic name that exceeds maximum "
+                "size "
+                "{} > {}",
+                len,
+                max_topic_name_length));
         }
         auto name = reader.read_string_unchecked(len);
         topics.insert(model::topic(std::move(name)));

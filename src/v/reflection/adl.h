@@ -172,10 +172,11 @@ struct adl {
           is_vector || is_chunked_vector || is_chunked_fifo) {
             using value_type = typename type::value_type;
             if (unlikely(t.size() > std::numeric_limits<int32_t>::max())) {
-                throw std::invalid_argument(fmt::format(
-                  "Vector size {} exceeded int32_max: {}",
-                  t.size(),
-                  std::numeric_limits<int32_t>::max()));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Vector size {} exceeded int32_max: {}",
+                    t.size(),
+                    std::numeric_limits<int32_t>::max()));
             }
             adl<int32_t>{}.to(out, t.size());
             for (value_type& i : t) {
@@ -185,10 +186,11 @@ struct adl {
         } else if constexpr (is_btree_set) {
             using value_type = typename type::value_type;
             if (unlikely(t.size() > std::numeric_limits<int32_t>::max())) {
-                throw std::invalid_argument(fmt::format(
-                  "Set size {} exceeded int32_max: {}",
-                  t.size(),
-                  std::numeric_limits<int32_t>::max()));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Set size {} exceeded int32_max: {}",
+                    t.size(),
+                    std::numeric_limits<int32_t>::max()));
             }
             adl<int32_t>{}.to(out, t.size());
             for (const value_type& i : t) {

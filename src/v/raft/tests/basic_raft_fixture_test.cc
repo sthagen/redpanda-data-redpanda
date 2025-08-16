@@ -72,8 +72,9 @@ TEST_F(raft_fixture, test_empty_writes) {
       model::record_batch_type::raft_data, model::offset(0));
 
     // Catch the error when appending.
-    auto res = replicate(chunked_vector<model::record_batch>::single(
-                           std::move(builder).build()))
+    auto res = replicate(
+                 chunked_vector<model::record_batch>::single(
+                   std::move(builder).build()))
                  .get();
     ASSERT_TRUE(res.has_error());
     ASSERT_EQ(res.error(), errc::leader_append_failed);
@@ -382,11 +383,12 @@ TEST_P_CORO(
           }
           auto target = random_generators::random_choice(not_leaders);
           return raft
-            ->transfer_leadership(transfer_leadership_request{
-              .group = raft->group(),
-              .target = target.id(),
-              .timeout = 25ms,
-            })
+            ->transfer_leadership(
+              transfer_leadership_request{
+                .group = raft->group(),
+                .target = target.id(),
+                .timeout = 25ms,
+              })
             .then([this](transfer_leadership_reply r) {
                 if (r.result != raft::errc::success) {
                     vlog(logger().info, "error(transferring): {}", r);
@@ -827,11 +829,12 @@ TEST_F_CORO(raft_fixture, leadership_transfer_delay) {
     ss::circular_buffer<leadership_changed_event> events;
 
     register_leader_callback([&](model::node_id id, leadership_status status) {
-        events.push_back(leadership_changed_event{
-          .node = id,
-          .status = status,
-          .timestamp = clock_t::now(),
-        });
+        events.push_back(
+          leadership_changed_event{
+            .node = id,
+            .status = status,
+            .timestamp = clock_t::now(),
+          });
     });
     auto leader_id = get_leader().value();
     auto& leader_node = node(leader_id);

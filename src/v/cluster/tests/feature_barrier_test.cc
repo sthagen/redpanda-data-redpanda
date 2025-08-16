@@ -52,12 +52,13 @@ struct barrier_fixture {
     void create_brokers(int n) {
         std::vector<model::broker> brokers;
         for (int i = 0; i < n; ++i) {
-            brokers.push_back(model::broker(
-              model::node_id{i},
-              net::unresolved_address{},
-              net::unresolved_address{},
-              std::nullopt,
-              model::broker_properties{}));
+            brokers.push_back(
+              model::broker(
+                model::node_id{i},
+                net::unresolved_address{},
+                net::unresolved_address{},
+                std::nullopt,
+                model::broker_properties{}));
         }
         for (auto& br : brokers) {
             BOOST_REQUIRE(!members.apply(

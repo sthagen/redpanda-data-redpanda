@@ -55,14 +55,16 @@ ss::future<action::action_outcome> update_schema_action::build_updates() && {
         co_return errc::unexpected_state;
     }
     auto last_column_id = new_schema_.highest_field_id();
-    ret.updates.emplace_back(table_update::add_schema{
-      .schema = std::move(new_schema_),
-      .last_column_id = last_column_id,
-    });
+    ret.updates.emplace_back(
+      table_update::add_schema{
+        .schema = std::move(new_schema_),
+        .last_column_id = last_column_id,
+      });
     // NOTE: -1 indicates that we should set the schema to the one added in
     // this update.
-    ret.updates.emplace_back(table_update::set_current_schema{
-      table_update::set_current_schema::last_added});
+    ret.updates.emplace_back(
+      table_update::set_current_schema{
+        table_update::set_current_schema::last_added});
     ret.requirements.emplace_back(
       table_requirement::assert_current_schema_id{cur_schema_id});
     co_return ret;

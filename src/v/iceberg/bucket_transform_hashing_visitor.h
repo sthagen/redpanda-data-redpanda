@@ -25,8 +25,10 @@ struct bucket_transform_hashing_visitor {
     uint32_t operator()(const uuid_value&);
 
     uint32_t operator()(const auto& value) {
-        throw std::invalid_argument(fmt::format(
-          "value {} must be of type supported by the bucket transform", value));
+        throw std::invalid_argument(
+          fmt::format(
+            "value {} must be of type supported by the bucket transform",
+            value));
     };
 };
 } // namespace iceberg

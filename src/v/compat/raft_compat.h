@@ -597,31 +597,35 @@ struct compat_check<raft::append_entries_request> {
           std::move(test));
 
         if (decoded.source_node() != expected.source_node()) {
-            throw compat_error(fmt::format(
-              "Expected node_id {} got {}",
-              expected.source_node(),
-              decoded.source_node()));
+            throw compat_error(
+              fmt::format(
+                "Expected node_id {} got {}",
+                expected.source_node(),
+                decoded.source_node()));
         }
 
         if (decoded.target_node() != expected.target_node()) {
-            throw compat_error(fmt::format(
-              "Expected target_node_id {} got {}",
-              expected.target_node(),
-              decoded.target_node()));
+            throw compat_error(
+              fmt::format(
+                "Expected target_node_id {} got {}",
+                expected.target_node(),
+                decoded.target_node()));
         }
 
         if (decoded.metadata() != expected.metadata()) {
-            throw compat_error(fmt::format(
-              "Expected meta {} got {}",
-              expected.metadata(),
-              decoded.metadata()));
+            throw compat_error(
+              fmt::format(
+                "Expected meta {} got {}",
+                expected.metadata(),
+                decoded.metadata()));
         }
 
         if (decoded.is_flush_required() != expected.is_flush_required()) {
-            throw compat_error(fmt::format(
-              "Expected flush {} got {}",
-              expected.is_flush_required(),
-              decoded.is_flush_required()));
+            throw compat_error(
+              fmt::format(
+                "Expected flush {} got {}",
+                expected.is_flush_required(),
+                decoded.is_flush_required()));
         }
 
         auto decoded_batches = std::move(decoded).release_batches();
@@ -629,10 +633,11 @@ struct compat_check<raft::append_entries_request> {
         auto expected_batches = std::move(expected).release_batches();
 
         if (decoded_batches.size() != expected_batches.size()) {
-            throw compat_error(fmt::format(
-              "Expected {} batches got {}",
-              expected_batches.size(),
-              decoded_batches.size()));
+            throw compat_error(
+              fmt::format(
+                "Expected {} batches got {}",
+                expected_batches.size(),
+                decoded_batches.size()));
         }
 
         vassert(
@@ -642,10 +647,11 @@ struct compat_check<raft::append_entries_request> {
 
         for (size_t i = 0; i < decoded_batches.size(); i++) {
             if (decoded_batches[i] != expected_batches[i]) {
-                throw compat_error(fmt::format(
-                  "Expected batch {}\n decoded batch {}",
-                  expected_batches[i],
-                  decoded_batches[i]));
+                throw compat_error(
+                  fmt::format(
+                    "Expected batch {}\n decoded batch {}",
+                    expected_batches[i],
+                    decoded_batches[i]));
             }
         }
     }

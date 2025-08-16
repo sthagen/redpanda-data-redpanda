@@ -38,11 +38,12 @@ struct fixture {
         };
 
         for (int i = 0; i < partitions_count; ++i) {
-            fetch_topic.partitions.push_back(kafka::fetch_request::partition{
-              .partition = model::partition_id(i),
-              .fetch_offset = model::offset(i * 10),
-              .partition_max_bytes = 100_KiB,
-            });
+            fetch_topic.partitions.push_back(
+              kafka::fetch_request::partition{
+                .partition = model::partition_id(i),
+                .fetch_offset = model::offset(i * 10),
+                .partition_max_bytes = 100_KiB,
+              });
         }
         return fetch_topic;
     }

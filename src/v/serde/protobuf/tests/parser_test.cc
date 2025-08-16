@@ -200,10 +200,11 @@ private:
             }
         }
         if (set.size() > 1) {
-            throw std::runtime_error(fmt::format(
-              "multiple oneof values ({}) set: {}",
-              oneof->name(),
-              fmt::join(set, ", ")));
+            throw std::runtime_error(
+              fmt::format(
+                "multiple oneof values ({}) set: {}",
+                oneof->name(),
+                fmt::join(set, ", ")));
         }
     }
 
@@ -346,9 +347,10 @@ private:
               },
               [&, this](const std::unique_ptr<parsed::message>& v) {
                   if (value_field->message_type() == nullptr) {
-                      throw std::runtime_error(fmt::format(
-                        "expected message type got: {}",
-                        value_field->DebugString()));
+                      throw std::runtime_error(
+                        fmt::format(
+                          "expected message type got: {}",
+                          value_field->DebugString()));
                   }
                   auto msg = convert_to_protobuf(
                     *v, value_field->message_type());
@@ -472,30 +474,32 @@ test: 1
 }
 
 TEST_F(ProtobufParserFixture, OneOf) {
-    EXPECT_TRUE(parse_merged_as<pbthree::Version4>({
-      R"(
+    EXPECT_TRUE(
+      parse_merged_as<pbthree::Version4>({
+        R"(
 # proto-file: three.proto
 # proto-message: Version4
 foo: "hello"
 )",
-      R"(
+        R"(
 # proto-file: three.proto
 # proto-message: Version4
 data: true
 )",
-    }));
-    EXPECT_TRUE(parse_merged_as<pbthree::Version4>({
-      R"(
+      }));
+    EXPECT_TRUE(
+      parse_merged_as<pbthree::Version4>({
+        R"(
 # proto-file: three.proto
 # proto-message: Version4
 data: true
 )",
-      R"(
+        R"(
 # proto-file: three.proto
 # proto-message: Version4
 foo: "hello"
 )",
-    }));
+      }));
 }
 
 TEST_F(ProtobufParserFixture, NegativeEnums) {

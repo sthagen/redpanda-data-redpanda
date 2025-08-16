@@ -122,10 +122,11 @@ ss::sstring remote_path_provider::spillover_manifest_path(
 
 ss::sstring remote_path_provider::topic_mount_manifest_path(
   const topic_mount_manifest& manifest) const {
-    return ss::sstring(cloud_storage::topic_mount_manifest_path(
-      manifest.get_source_label().cluster_uuid,
-      manifest.get_tp_ns(),
-      manifest.get_revision_id()));
+    return ss::sstring(
+      cloud_storage::topic_mount_manifest_path(
+        manifest.get_source_label().cluster_uuid,
+        manifest.get_tp_ns(),
+        manifest.get_revision_id()));
 }
 
 ss::sstring remote_path_provider::segment_path(

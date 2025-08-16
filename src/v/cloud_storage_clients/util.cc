@@ -260,17 +260,19 @@ void url_encode_target(http::client::request_header& header) {
     auto query_pos = header.target().find_first_of("?");
     // encode full target as there are no query parameters
     if (query_pos == std::string::npos) {
-        header.target(std::string(
-          http::uri_encode(header.target(), http::uri_encode_slash::no)));
+        header.target(
+          std::string(
+            http::uri_encode(header.target(), http::uri_encode_slash::no)));
     } else {
         // encode only the path part of the target
         // TODO: add individual query parameters encoding here as well.
-        header.target(fmt::format(
-          "{}{}",
-          http::uri_encode(
-            std::string_view(header.target().begin(), query_pos),
-            http::uri_encode_slash::no),
-          header.target().substr(query_pos)));
+        header.target(
+          fmt::format(
+            "{}{}",
+            http::uri_encode(
+              std::string_view(header.target().begin(), query_pos),
+              http::uri_encode_slash::no),
+            header.target().substr(query_pos)));
     }
 }
 

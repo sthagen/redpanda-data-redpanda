@@ -29,16 +29,18 @@ void logger_probe::setup_metrics(model::transform_name_view transform_name) {
 
     auto setup_common = [this, &labels]() {
         std::vector<sm::impl::metric_definition_impl> defs;
-        defs.emplace_back(sm::make_counter(
-          "events_total",
-          [this]() { return _total_log_events; },
-          sm::description("Running count of transform log events"),
-          labels));
-        defs.emplace_back(sm::make_counter(
-          "events_dropped_total",
-          [this]() { return _total_dropped_log_events; },
-          sm::description("Running count of dropped transform log events"),
-          labels));
+        defs.emplace_back(
+          sm::make_counter(
+            "events_total",
+            [this]() { return _total_log_events; },
+            sm::description("Running count of transform log events"),
+            labels));
+        defs.emplace_back(
+          sm::make_counter(
+            "events_dropped_total",
+            [this]() { return _total_dropped_log_events; },
+            sm::description("Running count of dropped transform log events"),
+            labels));
         return defs;
     };
 
@@ -84,8 +86,9 @@ void manager_probe::setup_metrics(std::function<double()> get_usage_ratio) {
       sm::make_counter(
         "write_errors_total",
         [this] { return _total_write_errors; },
-        sm::description("Running count of errors while writing to the "
-                        "transform logs topic")),
+        sm::description(
+          "Running count of errors while writing to the "
+          "transform logs topic")),
     };
 
     _metrics.add_group(group_name, std::move(defs), {}, {sm::shard_label});

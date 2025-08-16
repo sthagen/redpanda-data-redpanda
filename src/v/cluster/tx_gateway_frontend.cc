@@ -1405,10 +1405,11 @@ ss::future<add_partitions_tx_reply> tx_gateway_frontend::do_add_partition_to_tx(
             should_retry = should_retry || expected_ec;
 
             if (br.ec == tx::errc::none) {
-                partitions.push_back(tx_metadata::tx_partition{
-                  .ntp = br.ntp,
-                  .etag = br.etag,
-                  .topic_revision = br.topic_revision});
+                partitions.push_back(
+                  tx_metadata::tx_partition{
+                    .ntp = br.ntp,
+                    .etag = br.etag,
+                    .topic_revision = br.topic_revision});
             }
         }
         if (should_abort) {

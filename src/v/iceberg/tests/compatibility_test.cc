@@ -291,42 +291,49 @@ struct_type nested_test_struct() {
 
     struct_type nested_struct;
     struct_type key_struct;
-    key_struct.fields.emplace_back(nested_field::create(
-      ids.get_one(), "baz", field_required::yes, int_type{}));
+    key_struct.fields.emplace_back(
+      nested_field::create(
+        ids.get_one(), "baz", field_required::yes, int_type{}));
 
     struct_type nested_value_struct;
-    nested_value_struct.fields.emplace_back(nested_field::create(
-      ids.get_one(), "nmv1", field_required::yes, int_type{}));
-    nested_value_struct.fields.emplace_back(nested_field::create(
-      ids.get_one(), "nmv2", field_required::yes, string_type{}));
+    nested_value_struct.fields.emplace_back(
+      nested_field::create(
+        ids.get_one(), "nmv1", field_required::yes, int_type{}));
+    nested_value_struct.fields.emplace_back(
+      nested_field::create(
+        ids.get_one(), "nmv2", field_required::yes, string_type{}));
 
-    nested_struct.fields.emplace_back(nested_field::create(
-      ids.get_one(),
-      "quux",
-      field_required::yes,
-      map_type::create(
+    nested_struct.fields.emplace_back(
+      nested_field::create(
         ids.get_one(),
-        std::move(key_struct),
-        ids.get_one(),
+        "quux",
         field_required::yes,
         map_type::create(
           ids.get_one(),
-          string_type{},
+          std::move(key_struct),
           ids.get_one(),
           field_required::yes,
-          std::move(nested_value_struct)))));
+          map_type::create(
+            ids.get_one(),
+            string_type{},
+            ids.get_one(),
+            field_required::yes,
+            std::move(nested_value_struct)))));
 
     struct_type location_struct;
-    location_struct.fields.emplace_back(nested_field::create(
-      ids.get_one(), "latitude", field_required::yes, float_type{}));
-    location_struct.fields.emplace_back(nested_field::create(
-      ids.get_one(), "longitude", field_required::yes, float_type{}));
-    nested_struct.fields.emplace_back(nested_field::create(
-      ids.get_one(),
-      "location",
-      field_required::yes,
-      list_type::create(
-        ids.get_one(), field_required::yes, std::move(location_struct))));
+    location_struct.fields.emplace_back(
+      nested_field::create(
+        ids.get_one(), "latitude", field_required::yes, float_type{}));
+    location_struct.fields.emplace_back(
+      nested_field::create(
+        ids.get_one(), "longitude", field_required::yes, float_type{}));
+    nested_struct.fields.emplace_back(
+      nested_field::create(
+        ids.get_one(),
+        "location",
+        field_required::yes,
+        list_type::create(
+          ids.get_one(), field_required::yes, std::move(location_struct))));
 
     return nested_struct;
 }
@@ -355,8 +362,9 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
           return s;
       },
     .update = [](struct_type& s) { s.fields[0]->type = long_type{}; },
@@ -371,11 +379,13 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "qux",
-            field_required::yes,
-            list_type::create(ids.get_one(), field_required::yes, int_type{})));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(),
+              "qux",
+              field_required::yes,
+              list_type::create(
+                ids.get_one(), field_required::yes, int_type{})));
           return s;
       },
     .update =
@@ -394,12 +404,13 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "qux",
-            field_required::yes,
-            list_type::create(
-              ids.get_one(), field_required::yes, struct_type{})));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(),
+              "qux",
+              field_required::yes,
+              list_type::create(
+                ids.get_one(), field_required::yes, struct_type{})));
           return s;
       },
     .update =
@@ -421,16 +432,17 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "a_map",
-            field_required::no,
-            map_type::create(
+          s.fields.emplace_back(
+            nested_field::create(
               ids.get_one(),
-              int_type{},
-              ids.get_one(),
+              "a_map",
               field_required::no,
-              float_type{})));
+              map_type::create(
+                ids.get_one(),
+                int_type{},
+                ids.get_one(),
+                field_required::no,
+                float_type{})));
           return s;
       },
     .update =
@@ -456,18 +468,22 @@ static const std::vector<struct_evolution_test_case> valid_cases{
           list_element.fields.emplace_back(
             nested_field::create(0, "f1", field_required::no, int_type{}));
           struct_type nested_struct{};
-          nested_struct.fields.emplace_back(nested_field::create(
-            0,
-            "nested_list",
-            field_required::no,
-            list_type::create(0, field_required::no, date_type{})));
-          list_element.fields.emplace_back(nested_field::create(
-            0, "f2", field_required::no, std::move(nested_struct)));
-          s.fields.emplace_back(nested_field::create(
-            0,
-            "nested",
-            field_required::no,
-            list_type::create(0, field_required::no, std::move(list_element))));
+          nested_struct.fields.emplace_back(
+            nested_field::create(
+              0,
+              "nested_list",
+              field_required::no,
+              list_type::create(0, field_required::no, date_type{})));
+          list_element.fields.emplace_back(
+            nested_field::create(
+              0, "f2", field_required::no, std::move(nested_struct)));
+          s.fields.emplace_back(
+            nested_field::create(
+              0,
+              "nested",
+              field_required::no,
+              list_type::create(
+                0, field_required::no, std::move(list_element))));
       },
     .validator =
       [](const struct_type&, const struct_type& dest) {
@@ -486,10 +502,12 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::yes, int_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "bar", field_required::yes, float_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::yes, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "bar", field_required::yes, float_type{}));
           return s;
       },
     .update =
@@ -512,8 +530,9 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::yes, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::yes, int_type{}));
           return s;
       },
     .update = [](struct_type& s) { s.fields.pop_back(); },
@@ -528,10 +547,12 @@ static const std::vector<struct_evolution_test_case> valid_cases{
       [](unique_id_generator& ids) {
           struct_type s{};
           struct_type nested{};
-          nested.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::yes, int_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "nested", field_required::yes, std::move(nested)));
+          nested.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::yes, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "nested", field_required::yes, std::move(nested)));
 
           return s;
       },
@@ -556,12 +577,15 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s;
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "bar", field_required::no, string_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "baz", field_required::no, double_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "bar", field_required::no, string_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "baz", field_required::no, double_type{}));
           return s;
       },
     .update =
@@ -572,8 +596,9 @@ static const std::vector<struct_evolution_test_case> valid_cases{
             s.fields.end(),
             std::back_inserter(foobarbaz.fields));
           s.fields.clear();
-          s.fields.emplace_back(nested_field::create(
-            0, "foobarbaz", field_required::no, std::move(foobarbaz)));
+          s.fields.emplace_back(
+            nested_field::create(
+              0, "foobarbaz", field_required::no, std::move(foobarbaz)));
       },
     .validator =
       [](const struct_type& src, const struct_type& dest) {
@@ -623,8 +648,9 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::yes, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::yes, int_type{}));
           return s;
       },
     .update =
@@ -682,8 +708,9 @@ static const std::vector<struct_evolution_test_case> valid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
           return s;
       },
     .update = [](struct_type& s) { s.fields.back()->name = "bar"; },
@@ -701,15 +728,19 @@ static const std::vector<struct_evolution_test_case> valid_cases{
       [](unique_id_generator& ids) {
           struct_type s{};
           struct_type nested{};
-          nested.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
-          nested.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "bar",
-            field_required::no,
-            list_type::create(ids.get_one(), field_required::no, int_type{})));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "nested", field_required::no, std::move(nested)));
+          nested.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
+          nested.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(),
+              "bar",
+              field_required::no,
+              list_type::create(
+                ids.get_one(), field_required::no, int_type{})));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "nested", field_required::no, std::move(nested)));
           return s;
       },
     .update = [](struct_type& s) { s.fields.pop_back(); },
@@ -731,8 +762,9 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
           return s;
       },
     .update = [](struct_type& s) { s.fields[0]->type = string_type{}; },
@@ -744,11 +776,13 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "qux",
-            field_required::yes,
-            list_type::create(ids.get_one(), field_required::yes, int_type{})));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(),
+              "qux",
+              field_required::yes,
+              list_type::create(
+                ids.get_one(), field_required::yes, int_type{})));
           return s;
       },
     .update =
@@ -763,12 +797,13 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "qux",
-            field_required::yes,
-            list_type::create(
-              ids.get_one(), field_required::yes, struct_type{})));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(),
+              "qux",
+              field_required::yes,
+              list_type::create(
+                ids.get_one(), field_required::yes, struct_type{})));
           return s;
       },
     .update =
@@ -785,16 +820,17 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "a_map",
-            field_required::no,
-            map_type::create(
+          s.fields.emplace_back(
+            nested_field::create(
               ids.get_one(),
-              int_type{},
-              ids.get_one(),
+              "a_map",
               field_required::no,
-              float_type{})));
+              map_type::create(
+                ids.get_one(),
+                int_type{},
+                ids.get_one(),
+                field_required::no,
+                float_type{})));
           return s;
       },
     .update =
@@ -808,16 +844,17 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(),
-            "a_map",
-            field_required::no,
-            map_type::create(
+          s.fields.emplace_back(
+            nested_field::create(
               ids.get_one(),
-              int_type{},
-              ids.get_one(),
+              "a_map",
               field_required::no,
-              float_type{})));
+              map_type::create(
+                ids.get_one(),
+                int_type{},
+                ids.get_one(),
+                field_required::no,
+                float_type{})));
           return s;
       },
     .update =
@@ -831,8 +868,9 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
           return s;
       },
     .update =
@@ -853,10 +891,12 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
       [](unique_id_generator& ids) {
           struct_type s{};
           struct_type foo{};
-          foo.fields.emplace_back(nested_field::create(
-            ids.get_one(), "bar", field_required::no, int_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, std::move(foo)));
+          foo.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "bar", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, std::move(foo)));
           return s;
       },
     .update =
@@ -876,10 +916,12 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, float_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, float_type{}));
           return s;
       },
     .update = [](struct_type& s) { s.fields.back()->type = long_type{}; },
@@ -915,8 +957,9 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::no, int_type{}));
           return s;
       },
     .update =
@@ -946,10 +989,12 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
       [](unique_id_generator& ids) {
           struct_type s{};
           struct_type n{};
-          n.fields.emplace_back(nested_field::create(
-            ids.get_one(), "date", field_required::no, date_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "nested", field_required::no, std::move(n)));
+          n.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "date", field_required::no, date_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "nested", field_required::no, std::move(n)));
           return s;
       },
     .update =
@@ -966,8 +1011,9 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
     .generator =
       [](unique_id_generator& ids) {
           struct_type s{};
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::yes, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::yes, int_type{}));
           return s;
       },
     .update = [](struct_type& s) { s.fields.pop_back(); },
@@ -981,10 +1027,12 @@ static const std::vector<struct_evolution_test_case> invalid_cases{
       [](unique_id_generator& ids) {
           struct_type s{};
           struct_type nested{};
-          nested.fields.emplace_back(nested_field::create(
-            ids.get_one(), "foo", field_required::yes, int_type{}));
-          s.fields.emplace_back(nested_field::create(
-            ids.get_one(), "nested", field_required::yes, std::move(nested)));
+          nested.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "foo", field_required::yes, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(
+              ids.get_one(), "nested", field_required::yes, std::move(nested)));
           return s;
       },
     .update = [](struct_type& s) { s.fields.pop_back(); },

@@ -77,8 +77,9 @@ PERF_TEST_F(partition_allocator_fixture, recovery) {
     std::vector<model::broker_shard> replicas;
 
     for (auto i = 0; i < node_capacity; ++i) {
-        replicas.push_back(model::broker_shard{
-          .node_id = model::node_id(i % 3), .shard = uint32_t(i) % 24});
+        replicas.push_back(
+          model::broker_shard{
+            .node_id = model::node_id(i % 3), .shard = uint32_t(i) % 24});
     }
 
     perf_tests::start_measuring_time();

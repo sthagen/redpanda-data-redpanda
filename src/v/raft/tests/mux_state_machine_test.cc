@@ -293,8 +293,9 @@ TEST_F_CORO(kv1_stm_fixture, test_mux_state_machine_simple_scenarios) {
       serialize_cmd(set_cmd{"test", 10}, batch_type_1));
     vlog(kvlog.info, "long afterwards");
     ASSERT_EQ_CORO(res, errc::success);
-    ASSERT_TRUE_CORO(co_await with_leaders_kv(
-      [](const map_t& map) { return map.find("test")->second == 10; }));
+    ASSERT_TRUE_CORO(co_await with_leaders_kv([](const map_t& map) {
+        return map.find("test")->second == 10;
+    }));
 
     // error
     vlog(kvlog.info, "Test case: error set");
@@ -302,24 +303,27 @@ TEST_F_CORO(kv1_stm_fixture, test_mux_state_machine_simple_scenarios) {
       serialize_cmd(set_cmd{"test", 11}, batch_type_1));
 
     ASSERT_EQ_CORO(res, errc::key_already_exists);
-    ASSERT_TRUE_CORO(co_await with_leaders_kv(
-      [](const map_t& map) { return map.find("test")->second == 10; }));
+    ASSERT_TRUE_CORO(co_await with_leaders_kv([](const map_t& map) {
+        return map.find("test")->second == 10;
+    }));
 
     // success cas
     vlog(kvlog.info, "Test case: success cas");
     res = co_await replicate_and_wait(
       serialize_cmd(cas_cmd{"test", 10, 20}, batch_type_1));
     ASSERT_EQ_CORO(res, errc::success);
-    ASSERT_TRUE_CORO(co_await with_leaders_kv(
-      [](const map_t& map) { return map.find("test")->second == 20; }));
+    ASSERT_TRUE_CORO(co_await with_leaders_kv([](const map_t& map) {
+        return map.find("test")->second == 20;
+    }));
 
     // error cas
     vlog(kvlog.info, "Test case: error cas");
     res = co_await replicate_and_wait(
       serialize_cmd(cas_cmd{"test", 11, 20}, batch_type_1));
     ASSERT_EQ_CORO(res, errc::cas_error);
-    ASSERT_TRUE_CORO(co_await with_leaders_kv(
-      [](const map_t& map) { return map.find("test")->second == 20; }));
+    ASSERT_TRUE_CORO(co_await with_leaders_kv([](const map_t& map) {
+        return map.find("test")->second == 20;
+    }));
 
     // success delete
     vlog(kvlog.info, "Test case: success delete");
@@ -356,8 +360,9 @@ TEST_F_CORO(kv1_stm_fixture, test_concurrent_sets) {
         if (results[i] == errc::success) {
             vlog(kvlog.info, "Applied value: {}", i);
             ++success_count;
-            ASSERT_TRUE_CORO(co_await with_leaders_kv(
-              [i](const map_t& map) { return map.find("test")->second == i; }));
+            ASSERT_TRUE_CORO(co_await with_leaders_kv([i](const map_t& map) {
+                return map.find("test")->second == i;
+            }));
         }
     }
     ASSERT_EQ_CORO(success_count, 1);

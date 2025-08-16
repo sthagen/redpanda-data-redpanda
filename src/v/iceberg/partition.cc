@@ -54,12 +54,13 @@ std::optional<partition_spec> partition_spec::resolve(
             return std::nullopt;
         }
 
-        fields.push_back(partition_field{
-          .source_id = source_field->id,
-          .field_id = cur_field_id,
-          .name = field.name,
-          .transform = field.transform,
-        });
+        fields.push_back(
+          partition_field{
+            .source_id = source_field->id,
+            .field_id = cur_field_id,
+            .name = field.name,
+            .transform = field.transform,
+          });
         cur_field_id += 1;
     }
 

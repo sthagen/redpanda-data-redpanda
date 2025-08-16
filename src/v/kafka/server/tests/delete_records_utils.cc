@@ -51,10 +51,11 @@ kafka_delete_records_transport::delete_records(
             ret.emplace(p_res.partition_index, p_res.low_watermark);
             continue;
         }
-        throw std::runtime_error(fmt::format(
-          "Error for partition {}: {}",
-          p_res.partition_index,
-          p_res.error_code));
+        throw std::runtime_error(
+          fmt::format(
+            "Error for partition {}: {}",
+            p_res.partition_index,
+            p_res.error_code));
     }
     co_return ret;
 }

@@ -159,11 +159,12 @@ replicated_object_builder::finish(object_id oid, size_t footer_pos) {
       it != objects.pending_objects_.end(),
       "Pending objects expected to contain {}",
       oid);
-    objects.finished_objects_.emplace_back(metastore::object_metadata{
-      .oid = oid,
-      .footer_pos = footer_pos,
-      .ntp_metas = std::move(it->second),
-    });
+    objects.finished_objects_.emplace_back(
+      metastore::object_metadata{
+        .oid = oid,
+        .footer_pos = footer_pos,
+        .ntp_metas = std::move(it->second),
+      });
     objects.pending_objects_.erase(it);
 
     return {};

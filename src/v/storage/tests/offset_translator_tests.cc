@@ -308,8 +308,9 @@ collect_base_offsets(ss::shared_ptr<storage::log> log) {
         std::vector<model::offset> res;
     };
 
-    auto r = co_await log->make_reader(storage::local_log_reader_config(
-      log->offsets().start_offset, log->offsets().dirty_offset));
+    auto r = co_await log->make_reader(
+      storage::local_log_reader_config(
+        log->offsets().start_offset, log->offsets().dirty_offset));
     co_return co_await r.for_each_ref(consumer{}, model::no_timeout);
 }
 
@@ -344,9 +345,10 @@ struct fuzz_checker {
         public:
             consumer(fuzz_checker& self)
               : _self(self)
-              , _appender(self._log->make_appender(storage::log_append_config{
-                  .should_fsync = storage::log_append_config::fsync::no,
-                  .timeout = model::no_timeout})) {}
+              , _appender(self._log->make_appender(
+                  storage::log_append_config{
+                    .should_fsync = storage::log_append_config::fsync::no,
+                    .timeout = model::no_timeout})) {}
 
             ss::future<ss::stop_iteration>
             operator()(model::record_batch& batch) {

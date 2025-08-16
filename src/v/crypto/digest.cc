@@ -30,8 +30,9 @@ public:
           1
           != EVP_DigestInit_ex(
             _md_ctx.get(), internal::get_md(type), nullptr)) {
-            throw internal::ossl_error(fmt::format(
-              "Failed to initialize digest operation for {}", type));
+            throw internal::ossl_error(
+              fmt::format(
+                "Failed to initialize digest operation for {}", type));
         }
     }
 
@@ -48,8 +49,9 @@ public:
     bytes_span<> finish(bytes_span<> digest) {
         auto len = size();
         if (digest.size() != len) {
-            throw exception(fmt::format(
-              "Invalid digest buffer length: {} != {}", digest.size(), len));
+            throw exception(
+              fmt::format(
+                "Invalid digest buffer length: {} != {}", digest.size(), len));
         }
 
         return finish_no_check(digest);
@@ -70,8 +72,9 @@ public:
     bytes_span<> reset(bytes_span<> digest) {
         auto len = size();
         if (digest.size() != len) {
-            throw exception(fmt::format(
-              "Invalid digest buffer length: {} != {}", digest.size(), len));
+            throw exception(
+              fmt::format(
+                "Invalid digest buffer length: {} != {}", digest.size(), len));
         }
 
         finish_no_check(digest);

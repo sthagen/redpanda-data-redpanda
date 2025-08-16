@@ -597,9 +597,10 @@ ss::future<> shard_balancer::do_balance(mutex::units& lock) {
     co_await _storage.kvs().put(
       storage::kvstore::key_space::shard_placement,
       state_kvstore_key(),
-      serde::to_iobuf(persisted_state{
-        .last_rebalance_core_count = ss::smp::count,
-      }));
+      serde::to_iobuf(
+        persisted_state{
+          .last_rebalance_core_count = ss::smp::count,
+        }));
 }
 
 ss::future<> shard_balancer::set_target(

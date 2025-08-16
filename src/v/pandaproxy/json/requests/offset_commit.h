@@ -37,8 +37,9 @@ partition_offsets_request_to_offset_commit_request(
             res.push_back(
               kafka::offset_commit_request_topic{std::move(tp.topic), {}});
         }
-        res.back().partitions.push_back(kafka::offset_commit_request_partition{
-          .partition_index = tp.partition, .committed_offset = tp.offset});
+        res.back().partitions.push_back(
+          kafka::offset_commit_request_partition{
+            .partition_index = tp.partition, .committed_offset = tp.offset});
     }
     return res;
 }

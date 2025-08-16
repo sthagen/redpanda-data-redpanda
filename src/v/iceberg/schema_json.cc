@@ -35,9 +35,10 @@ schema parse_schema(const json::Value& v) {
         }
         for (const auto& id_json : identifier_fids_json->get().GetArray()) {
             if (!id_json.IsInt()) {
-                throw std::invalid_argument(fmt::format(
-                  "Schema has non-int 'identifier-field-ids' type: {}",
-                  id_json.GetType()));
+                throw std::invalid_argument(
+                  fmt::format(
+                    "Schema has non-int 'identifier-field-ids' type: {}",
+                    id_json.GetType()));
             }
             identifier_fids.emplace(id_json.GetInt());
         }

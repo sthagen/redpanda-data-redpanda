@@ -266,8 +266,9 @@ void skip_global_constexpr(iobuf_parser_base* parser) {
         std::ignore = parse_ref_type(parser);
         break;
     default:
-        throw parse_exception(fmt::format(
-          "unimplemented global opcode: {}", static_cast<uint8_t>(opcode)));
+        throw parse_exception(
+          fmt::format(
+            "unimplemented global opcode: {}", static_cast<uint8_t>(opcode)));
     }
     auto end = parser->consume_type<uint8_t>();
     constexpr uint8_t end_expression_marker = 0x0B;
@@ -399,10 +400,11 @@ private:
     void parse_signature_section() {
         auto vector_size = leb128::decode<uint32_t>(_parser);
         if (vector_size > max_functions) {
-            throw module_too_large_exception(fmt::format(
-              "too large of type section: {}, max: {}",
-              vector_size,
-              max_functions));
+            throw module_too_large_exception(
+              fmt::format(
+                "too large of type section: {}, max: {}",
+                vector_size,
+                max_functions));
         }
         _func_signatures.reserve(vector_size);
         for (uint32_t i = 0; i < vector_size; ++i) {
@@ -413,8 +415,9 @@ private:
     void parse_import_section() {
         auto vector_size = leb128::decode<uint32_t>(_parser);
         if (vector_size > max_imports) {
-            throw module_too_large_exception(fmt::format(
-              "too many imports: {}, max: {}", vector_size, max_imports));
+            throw module_too_large_exception(
+              fmt::format(
+                "too many imports: {}, max: {}", vector_size, max_imports));
         }
 
         _imports.reserve(vector_size);
@@ -468,8 +471,9 @@ private:
     void parse_function_decl_section() {
         auto vector_size = leb128::decode<uint32_t>(_parser);
         if (vector_size > max_functions) {
-            throw module_too_large_exception(fmt::format(
-              "too many functions: {}, max: {}", vector_size, max_functions));
+            throw module_too_large_exception(
+              fmt::format(
+                "too many functions: {}, max: {}", vector_size, max_functions));
         }
         _tables.reserve(max_functions);
         for (uint32_t i = 0; i < vector_size; ++i) {
@@ -483,8 +487,9 @@ private:
     void parse_table_section() {
         auto vector_size = leb128::decode<uint32_t>(_parser);
         if (vector_size > max_items) {
-            throw module_too_large_exception(fmt::format(
-              "too many tables: {}, max: {}", vector_size, max_items));
+            throw module_too_large_exception(
+              fmt::format(
+                "too many tables: {}, max: {}", vector_size, max_items));
         }
         _tables.reserve(vector_size);
         for (uint32_t i = 0; i < vector_size; ++i) {
@@ -495,8 +500,9 @@ private:
     void parse_memories_section() {
         auto vector_size = leb128::decode<uint32_t>(_parser);
         if (vector_size > max_items) {
-            throw module_too_large_exception(fmt::format(
-              "too many memories: {}, max: {}", vector_size, max_items));
+            throw module_too_large_exception(
+              fmt::format(
+                "too many memories: {}, max: {}", vector_size, max_items));
         }
         _memories.reserve(vector_size);
         for (uint32_t i = 0; i < vector_size; ++i) {
@@ -507,8 +513,9 @@ private:
     void parse_globals_section() {
         auto vector_size = leb128::decode<uint32_t>(_parser);
         if (vector_size > max_items) {
-            throw module_too_large_exception(fmt::format(
-              "too many globals: {}, max: {}", vector_size, max_items));
+            throw module_too_large_exception(
+              fmt::format(
+                "too many globals: {}, max: {}", vector_size, max_items));
         }
         _globals.reserve(vector_size);
         for (uint32_t i = 0; i < vector_size; ++i) {
@@ -520,8 +527,9 @@ private:
     void parse_export_section() {
         auto vector_size = leb128::decode<uint32_t>(_parser);
         if (vector_size > max_exports) {
-            throw module_too_large_exception(fmt::format(
-              "too many exports: {}, max: {}", vector_size, max_exports));
+            throw module_too_large_exception(
+              fmt::format(
+                "too many exports: {}, max: {}", vector_size, max_exports));
         }
         _exports.reserve(vector_size);
         for (uint32_t i = 0; i < vector_size; ++i) {

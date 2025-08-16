@@ -2551,10 +2551,11 @@ SEASTAR_THREAD_TEST_CASE(test_partition_manifest_outofbound_trigger) {
     auto all_bo = std::vector<model::offset>{};
     for (int i = 0; i < max_committed_offset;) {
         auto co = random_generators::get_int(1, 100);
-        m.add(partition_manifest::segment_meta{
-          .base_offset = model::offset{i},
-          .committed_offset = model::offset{i + co},
-        });
+        m.add(
+          partition_manifest::segment_meta{
+            .base_offset = model::offset{i},
+            .committed_offset = model::offset{i + co},
+          });
         i += co;
         all_bo.emplace_back(model::offset{i});
     }

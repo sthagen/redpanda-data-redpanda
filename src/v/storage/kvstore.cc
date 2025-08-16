@@ -474,19 +474,21 @@ ss::future<> kvstore::load_snapshot_from_reader(snapshot_reader& reader) {
     // read and restore db from snapshot
     auto buf = co_await read_iobuf_exactly(reader.input(), sizeof(int32_t));
     if (buf.size_bytes() != sizeof(int32_t)) {
-        throw std::runtime_error(fmt::format(
-          "Failed to read snapshot size. Wanted {} bytes != {}",
-          sizeof(int32_t),
-          buf.size_bytes()));
+        throw std::runtime_error(
+          fmt::format(
+            "Failed to read snapshot size. Wanted {} bytes != {}",
+            sizeof(int32_t),
+            buf.size_bytes()));
     }
     auto size = reflection::from_iobuf<int32_t>(std::move(buf));
 
     buf = co_await read_iobuf_exactly(reader.input(), size);
     if ((int32_t)buf.size_bytes() != size) {
-        throw std::runtime_error(fmt::format(
-          "Failed to read snapshot data. Wanted {} bytes != {}",
-          size,
-          buf.size_bytes()));
+        throw std::runtime_error(
+          fmt::format(
+            "Failed to read snapshot data. Wanted {} bytes != {}",
+            size,
+            buf.size_bytes()));
     }
 
     auto batch = co_await reflection::from_iobuf_async<model::record_batch>(
@@ -494,16 +496,20 @@ ss::future<> kvstore::load_snapshot_from_reader(snapshot_reader& reader) {
 
     auto batch_crc = model::crc_record_batch(batch);
     if (batch.header().crc != batch_crc) {
-        throw std::runtime_error(fmt::format(
-          "Snapshot batch failed crc {} != {}", batch_crc, batch.header().crc));
+        throw std::runtime_error(
+          fmt::format(
+            "Snapshot batch failed crc {} != {}",
+            batch_crc,
+            batch.header().crc));
     }
 
     auto header_crc = model::internal_header_only_crc(batch.header());
     if (batch.header().header_crc != header_crc) {
-        throw std::runtime_error(fmt::format(
-          "Snapshot batch header failed crc {} != {}",
-          header_crc,
-          batch.header().header_crc));
+        throw std::runtime_error(
+          fmt::format(
+            "Snapshot batch header failed crc {} != {}",
+            header_crc,
+            batch.header().header_crc));
     }
 
     auto lock = co_await _db_mut.get_units();

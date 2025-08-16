@@ -78,10 +78,11 @@ TEST(BatchCacheReclaimTest, reclaim) {
     ss::thread::yield();
 
     // all of the cache entries should be valid
-    EXPECT_TRUE(std::all_of(
-      cache_entries.begin(),
-      cache_entries.end(),
-      [](storage::batch_cache::entry& e) { return (bool)e.range(); }));
+    EXPECT_TRUE(
+      std::all_of(
+        cache_entries.begin(),
+        cache_entries.end(),
+        [](storage::batch_cache::entry& e) { return (bool)e.range(); }));
 
     stats = ss::memory::stats();
     EXPECT_EQ(stats.reclaims(), 0);
@@ -99,10 +100,11 @@ TEST(BatchCacheReclaimTest, reclaim) {
     ss::thread::yield();
 
     // now some of the cache entries should have been reclaimed
-    EXPECT_TRUE(std::any_of(
-      cache_entries.begin(),
-      cache_entries.end(),
-      [](storage::batch_cache::entry& e) { return !e.range(); }));
+    EXPECT_TRUE(
+      std::any_of(
+        cache_entries.begin(),
+        cache_entries.end(),
+        [](storage::batch_cache::entry& e) { return !e.range(); }));
 
     stats = ss::memory::stats();
     EXPECT_GT(stats.reclaims(), 0);

@@ -382,12 +382,13 @@ void namespaced_cache<
   CacheT>::insert(const NamespaceT& ns, EntryT& entry) {
     if (
       _namespaces.size() >= namespace_capacity() && !_namespaces.contains(ns)) {
-        throw cache_full_error(ssx::sformat(
-          "maximum number of namespaces reached. Min number of entries per "
-          "namespace: {}, max cache capacity: {}, current namespaces: {}",
-          effective_min_slots_per_namespace(),
-          _max_size(),
-          _namespaces.size()));
+        throw cache_full_error(
+          ssx::sformat(
+            "maximum number of namespaces reached. Min number of entries per "
+            "namespace: {}, max cache capacity: {}, current namespaces: {}",
+            effective_min_slots_per_namespace(),
+            _max_size(),
+            _namespaces.size()));
     }
     auto [it, _] = _namespaces.try_emplace(ns, std::make_unique<CacheT>());
 

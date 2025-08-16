@@ -53,10 +53,12 @@ materialized_resources::materialized_resources()
       "cst_materialized_resources_memory")
   , _manifest_meta_size(
       config::shard_local_cfg().cloud_storage_manifest_cache_size.bind())
-  , _manifest_cache(ss::make_shared<materialized_manifest_cache>(
-      config::shard_local_cfg().cloud_storage_manifest_cache_size()))
-  , _cache_carryover_bytes(config::shard_local_cfg()
-                             .cloud_storage_cache_trim_carryover_bytes.bind()) {
+  , _manifest_cache(
+      ss::make_shared<materialized_manifest_cache>(
+        config::shard_local_cfg().cloud_storage_manifest_cache_size()))
+  , _cache_carryover_bytes(
+      config::shard_local_cfg()
+        .cloud_storage_cache_trim_carryover_bytes.bind()) {
     auto update_max_mem = [this]() {
         // Update memory capacity to accommodate new max number of segment
         // readers

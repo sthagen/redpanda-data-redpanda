@@ -191,8 +191,9 @@ ss::future<> coordinator_stm::maybe_write_snapshot() {
       _log.debug,
       "creating snapshot at offset: {}",
       snapshot.last_included_offset);
-    co_await _raft->write_snapshot(raft::write_snapshot_cfg(
-      snapshot.last_included_offset, std::move(snapshot.data)));
+    co_await _raft->write_snapshot(
+      raft::write_snapshot_cfg(
+        snapshot.last_included_offset, std::move(snapshot.data)));
 }
 
 void coordinator_stm::write_snapshot_async() {

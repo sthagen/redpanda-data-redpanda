@@ -101,10 +101,11 @@ const json::Value* find_keyword(
                 }
             }
             if (!valid_type) {
-                throw std::runtime_error(fmt::format(
-                  "Invalid type for keyword {}. Expected one of: [{}].",
-                  keyword,
-                  fmt::join(types, ", ")));
+                throw std::runtime_error(
+                  fmt::format(
+                    "Invalid type for keyword {}. Expected one of: [{}].",
+                    keyword,
+                    fmt::join(types, ", ")));
             }
         }
         return &it->value;
@@ -353,8 +354,9 @@ public:
                   fmt::format("$defs/{}", k.GetString()),
                   compile_subschema(ctx, v));
                 if (!inserted) {
-                    throw std::runtime_error(fmt::format(
-                      "Duplicate subschema key: {}", k.GetString()));
+                    throw std::runtime_error(
+                      fmt::format(
+                        "Duplicate subschema key: {}", k.GetString()));
                 }
             }
         }
@@ -418,8 +420,9 @@ public:
             std::vector<json_value_type> types;
             for (const auto& type : node.GetArray()) {
                 if (!type.IsString()) {
-                    throw std::runtime_error("The type keyword must be a "
-                                             "string or an array of strings");
+                    throw std::runtime_error(
+                      "The type keyword must be a "
+                      "string or an array of strings");
                 }
                 types.push_back(parse_json_value_type(type.GetString()));
             }

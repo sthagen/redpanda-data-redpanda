@@ -70,22 +70,25 @@ void table::reset_links(map_t links) {
         }
         auto it = snap_name_index.emplace(metadata.name, id);
         if (!it.second) {
-            throw std::logic_error(fmt::format(
-              "cluster link id={} is attempting to use a name {} which is "
-              "already registered to {}",
-              id,
-              metadata.name,
-              it.first->second));
+            throw std::logic_error(
+              fmt::format(
+                "cluster link id={} is attempting to use a name {} which is "
+                "already registered to {}",
+                id,
+                metadata.name,
+                it.first->second));
         }
         for (const auto& t : metadata.state.mirror_topics) {
             auto topic_it = snap_topic_name_index.emplace(t.first, id);
             if (!topic_it.second) {
-                throw std::logic_error(fmt::format(
-                  "cluster link id={} is attempting to use a topic {} which is "
-                  "already registered to {}",
-                  id,
-                  t.first,
-                  topic_it.first->second));
+                throw std::logic_error(
+                  fmt::format(
+                    "cluster link id={} is attempting to use a topic {} which "
+                    "is "
+                    "already registered to {}",
+                    id,
+                    t.first,
+                    topic_it.first->second));
             }
         }
     }

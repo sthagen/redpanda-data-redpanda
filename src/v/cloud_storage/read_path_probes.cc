@@ -112,8 +112,9 @@ ts_read_path_probe::ts_read_path_probe() {
             sm::make_counter(
               "spillover_manifest_materialized",
               [this] { return _spillover_manifest_materialized; },
-              sm::description("Number of times spillover manifests were loaded "
-                              "from the cache"))
+              sm::description(
+                "Number of times spillover manifests were loaded "
+                "from the cache"))
               .aggregate(aggregate_labels),
 
             sm::make_gauge(

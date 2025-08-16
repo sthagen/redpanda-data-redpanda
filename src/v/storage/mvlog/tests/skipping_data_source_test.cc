@@ -43,8 +43,8 @@ public:
     }
     ss::input_stream<char>
     make_skipping_stream(skipping_data_source::read_list_t read_list) {
-        return ss::input_stream<char>(
-          ss::data_source(std::make_unique<skipping_data_source>(
+        return ss::input_stream<char>(ss::data_source(
+          std::make_unique<skipping_data_source>(
             paging_file_.get(), std::move(read_list))));
     }
 

@@ -54,14 +54,15 @@ static batches_with_identity make_batches(
       .last_seq = first_seq + count - 1,
       .record_count = count,
       .is_transactional = is_transactional};
-    result.batches.push_back(model::test::make_random_batch(
-      {.offset = model::offset(0),
-       .allow_compression = true,
-       .count = count,
-       .producer_id = pid.id,
-       .producer_epoch = pid.epoch,
-       .base_sequence = first_seq,
-       .is_transactional = is_transactional}));
+    result.batches.push_back(
+      model::test::make_random_batch(
+        {.offset = model::offset(0),
+         .allow_compression = true,
+         .count = count,
+         .producer_id = pid.id,
+         .producer_epoch = pid.epoch,
+         .base_sequence = first_seq,
+         .is_transactional = is_transactional}));
     return result;
 }
 

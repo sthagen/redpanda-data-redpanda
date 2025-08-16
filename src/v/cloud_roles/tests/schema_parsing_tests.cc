@@ -40,8 +40,9 @@ BOOST_AUTO_TEST_CASE(schema_parsing_error) {
     // schema is not a valid json (stray , at the end of the schema)
     auto parse_schema_fail = parse(
       schema_string, R"({"name": "John", "age":"42"})");
-    BOOST_CHECK(std::holds_alternative<cloud_roles::api_response_parse_error>(
-      parse_schema_fail));
+    BOOST_CHECK(
+      std::holds_alternative<cloud_roles::api_response_parse_error>(
+        parse_schema_fail));
 }
 
 auto to_str(const cloud_roles::validate_and_parse_res& val) {

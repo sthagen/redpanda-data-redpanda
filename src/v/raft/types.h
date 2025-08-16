@@ -565,8 +565,9 @@ public:
 
     explicit install_snapshot_request_foreign_wrapper(
       install_snapshot_request&& req)
-      : _ptr(ss::make_foreign(
-          std::make_unique<install_snapshot_request>(std::move(req)))) {}
+      : _ptr(
+          ss::make_foreign(
+            std::make_unique<install_snapshot_request>(std::move(req)))) {}
 
     install_snapshot_request copy() const {
         // make copy on target core
