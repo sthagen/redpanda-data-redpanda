@@ -65,7 +65,9 @@ log_gap_analysis make_log_gap_analysis(
     };
 
     for (auto&& rb : mem_log) {
-        rb = model::decompress_batch(std::move(rb)).get();
+        if (rb.compressed()) {
+            rb = model::decompress_batch(rb).get();
+        }
         batch_consumer(rb);
     }
     return ga;

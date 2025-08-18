@@ -548,10 +548,8 @@ ss::future<append_result> segment::do_append(const model::record_batch& b) {
         return ss::make_exception_future<append_result>(std::runtime_error(
           fmt::format(
             "Invalid state. Attempted to append a batch with base_offset:{}, "
-            "but "
-            "would invalidate our initial state base offset of:{}. Actual "
-            "batch "
-            "header:{}, self:{}",
+            "but would invalidate our initial state base offset of:{}. Actual "
+            "batch header:{}, self:{}",
             b.base_offset(),
             _tracker.get_base_offset(),
             b.header(),

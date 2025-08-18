@@ -570,7 +570,9 @@ ss::future<timequery_result> batch_timequery(
     // records in the batch have different timestamps.
     model::offset result_o = batch.base_offset();
     model::timestamp result_t = batch.header().first_timestamp;
-    batch = co_await model::decompress_batch(std::move(batch));
+    if (batch.compressed()) {
+        batch = co_await model::decompress_batch(batch);
+    }
     co_await batch.for_each_record_async(
       [&result_o, &result_t, &batch, query_interval, t](
         const model::record& r) -> ss::future<ss::stop_iteration> {

@@ -333,7 +333,7 @@ public:
         std::optional<const model::record_batch> u;
         bool compressed = batch.compressed();
         if (compressed) {
-            u.emplace(co_await model::decompress_batch(batch.copy()));
+            u.emplace(co_await model::decompress_batch(batch));
             _api->_schema_id_validation_probe.local().decompressed();
         }
 

@@ -7,53 +7,44 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "model/batch_compression.h"
 #include "model/record.h"
 #include "model/record_utils.h"
 #include "model/tests/random_batch.h"
 #include "model/timestamp.h"
 
-#include <seastar/testing/thread_test_case.hh>
+#include <gtest/gtest.h>
 
-#include <boost/test/data/monomorphic.hpp>
-#include <boost/test/data/test_case.hpp>
-#include <boost/test/unit_test.hpp>
+class RecordBatchTest : public ::testing::Test {};
 
-namespace bdata = boost::unit_test::data;
+class RecordBatchAttributesTest
+  : public ::testing::TestWithParam<
+      std::tuple<model::compression, model::timestamp_type>> {};
 
-std::array<model::compression, 5> compressions{
-  model::compression::none,
-  model::compression::gzip,
-  model::compression::snappy,
-  model::compression::zstd,
-  model::compression::lz4};
-
-BOOST_DATA_TEST_CASE(
-  test_with_append_time,
-  bdata::make(compressions) ^ bdata::make(model::timestamp_type::append_time),
-  c,
-  ts_tp) {
+TEST_P(RecordBatchAttributesTest, TestAttributes) {
+    auto [c, ts_tp] = GetParam();
     model::record_batch_attributes attrs;
     attrs |= c;
     attrs |= ts_tp;
 
-    BOOST_REQUIRE_EQUAL(attrs.compression(), c);
-    BOOST_REQUIRE_EQUAL(attrs.timestamp_type(), ts_tp);
+    EXPECT_EQ(attrs.compression(), c);
+    EXPECT_EQ(attrs.timestamp_type(), ts_tp);
 }
 
-BOOST_DATA_TEST_CASE(
-  test_with_create_time,
-  bdata::make(compressions) ^ bdata::make(model::timestamp_type::create_time),
-  c,
-  ts_tp) {
-    model::record_batch_attributes attrs;
-    attrs |= c;
-    attrs |= ts_tp;
+INSTANTIATE_TEST_SUITE_P(
+  CompressionAndTimestampTypes,
+  RecordBatchAttributesTest,
+  ::testing::Combine(
+    ::testing::Values(
+      model::compression::none,
+      model::compression::gzip,
+      model::compression::snappy,
+      model::compression::zstd,
+      model::compression::lz4),
+    ::testing::Values(
+      model::timestamp_type::append_time, model::timestamp_type::create_time)));
 
-    BOOST_REQUIRE_EQUAL(attrs.compression(), c);
-    BOOST_REQUIRE_EQUAL(attrs.timestamp_type(), ts_tp);
-}
-
-SEASTAR_THREAD_TEST_CASE(set_max_timestamp) {
+TEST_F(RecordBatchTest, SetMaxTimestamp) {
     auto batch = model::test::make_random_batch(model::offset(0), 10, true);
 
     // nothing changes if set to same values
@@ -61,37 +52,37 @@ SEASTAR_THREAD_TEST_CASE(set_max_timestamp) {
     auto hdr_crc = batch.header().header_crc;
     batch.set_max_timestamp(
       batch.header().attrs.timestamp_type(), batch.header().max_timestamp);
-    BOOST_TEST(crc == batch.header().crc);
-    BOOST_TEST(hdr_crc == batch.header().header_crc);
+    EXPECT_EQ(crc, batch.header().crc);
+    EXPECT_EQ(hdr_crc, batch.header().header_crc);
 
     // ts change updates crcs
     batch.set_max_timestamp(
       model::timestamp_type::append_time,
       model::timestamp(batch.header().max_timestamp() + 1));
-    BOOST_TEST(crc != batch.header().crc);
-    BOOST_TEST(hdr_crc != batch.header().header_crc);
+    EXPECT_NE(crc, batch.header().crc);
+    EXPECT_NE(hdr_crc, batch.header().header_crc);
 
     // same ts produces orig crcs
     batch.set_max_timestamp(
       model::timestamp_type::create_time,
       model::timestamp(batch.header().max_timestamp() - 1));
-    BOOST_TEST(crc == batch.header().crc);
-    BOOST_TEST(hdr_crc == batch.header().header_crc);
+    EXPECT_EQ(crc, batch.header().crc);
+    EXPECT_EQ(hdr_crc, batch.header().header_crc);
 }
 
-SEASTAR_THREAD_TEST_CASE(iterator) {
+TEST_F(RecordBatchTest, Iterator) {
     auto b = model::test::make_random_batch(model::offset(0), 10, false);
 
     auto it = model::record_batch_iterator::create(b);
     for (int i = 0; i < b.record_count(); ++i) {
-        BOOST_TEST(it.has_next());
+        EXPECT_TRUE(it.has_next());
         model::record r = it.next();
-        BOOST_TEST(r.offset_delta() == i);
+        EXPECT_EQ(r.offset_delta(), i);
     }
-    BOOST_TEST(!it.has_next());
+    EXPECT_FALSE(it.has_next());
 }
 
-SEASTAR_THREAD_TEST_CASE(extra_bytes_iterator) {
+TEST_F(RecordBatchTest, ExtraBytesIterator) {
     auto b = model::test::make_random_batch(model::offset(0), 1, false);
     auto buf = b.data().copy();
     // If there are extra bytes at the end of the batch we should throw.
@@ -103,11 +94,11 @@ SEASTAR_THREAD_TEST_CASE(extra_bytes_iterator) {
     b = model::record_batch(
       header, std::move(buf), model::record_batch::tag_ctor_ng{});
     auto it = model::record_batch_iterator::create(b);
-    BOOST_TEST(it.has_next());
-    BOOST_REQUIRE_THROW(it.next(), std::out_of_range);
+    EXPECT_TRUE(it.has_next());
+    EXPECT_THROW(it.next(), std::out_of_range);
 }
 
-SEASTAR_THREAD_TEST_CASE(test_corrupted_record_bytes) {
+TEST_F(RecordBatchTest, TestCorruptedRecordBytes) {
     auto b = model::test::make_random_batch(model::offset(0), 10, false);
     // use the trick to get mutable access to the records
     auto fields = b.serde_fields();
@@ -116,6 +107,41 @@ SEASTAR_THREAD_TEST_CASE(test_corrupted_record_bytes) {
         std::fill_n(f.get_write(), f.size(), 0xFF);
     }
     auto f = model::for_each_record(
-      b, [](model::record& r) { BOOST_CHECK(r.offset_delta() >= 0); });
-    BOOST_REQUIRE_THROW(f.get(), std::out_of_range);
+      b, [](model::record& r) { EXPECT_GE(r.offset_delta(), 0); });
+    EXPECT_THROW(f.get(), std::out_of_range);
 }
+
+class RecordBatchCompressionTest
+  : public ::testing::TestWithParam<model::compression> {};
+
+TEST_P(RecordBatchCompressionTest, Compression) {
+    auto b = model::test::make_random_batch({
+      .offset = model::offset(0),
+      .allow_compression = false,
+      .count = 10,
+    });
+    if (GetParam() == model::compression::none) {
+        EXPECT_ANY_THROW(model::decompress_batch(b).get());
+        EXPECT_ANY_THROW(
+          model::compress_batch(model::compression::none, std::move(b)).get());
+    } else {
+        auto c = model::compress_batch(GetParam(), std::move(b)).get();
+        EXPECT_TRUE(c.compressed());
+        EXPECT_EQ(c.header().attrs.compression(), GetParam());
+        auto u_copy = model::decompress_batch(c).get();
+        auto u = model::decompress_batch(std::move(c)).get();
+        EXPECT_FALSE(u.compressed());
+        EXPECT_EQ(u.header().attrs.compression(), model::compression::none);
+        EXPECT_EQ(u_copy, u);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  CompressionTypes,
+  RecordBatchCompressionTest,
+  ::testing::Values(
+    model::compression::none,
+    model::compression::gzip,
+    model::compression::snappy,
+    model::compression::zstd,
+    model::compression::lz4));

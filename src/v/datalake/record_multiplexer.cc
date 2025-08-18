@@ -110,7 +110,7 @@ ss::future<ss::stop_iteration> record_multiplexer::do_multiplex(
     const auto raw_size_bytes = batch.size_bytes();
     _translation_probe.increment_raw_bytes_processed(raw_size_bytes);
     if (batch.compressed()) {
-        batch = co_await model::decompress_batch(std::move(batch));
+        batch = co_await model::decompress_batch(batch);
     }
     const auto decompressed_size_bytes = batch.size_bytes();
     _translation_probe.increment_decompressed_bytes_processed(

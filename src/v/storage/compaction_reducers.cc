@@ -271,6 +271,9 @@ copy_data_segment_reducer::filter(model::record_batch batch) {
     new_hdr.first_timestamp = first_time;
     new_hdr.max_timestamp = last_time;
     new_hdr.record_count = rec_count;
+    // Remove compression bit, as this batch isn't compressed. If the original
+    // batch is compressed, the caller will re-compress.
+    new_hdr.attrs.remove_compression();
     new_hdr.reset_size_checksum_metadata(ret);
     auto new_batch = model::record_batch(
       new_hdr, std::move(ret), model::record_batch::tag_ctor_ng{});
@@ -351,24 +354,18 @@ copy_data_segment_reducer::operator()(model::record_batch b) {
     if (!b.compressed()) {
         co_return co_await filter_and_append(comp, std::move(b));
     }
-    auto batch = co_await model::decompress_batch(std::move(b));
-
-    co_return co_await filter_and_append(comp, std::move(batch));
+    b = co_await model::decompress_batch(b);
+    co_return co_await filter_and_append(comp, std::move(b));
 }
 
 ss::future<ss::stop_iteration>
-index_rebuilder_reducer::operator()(model::record_batch&& b) {
+index_rebuilder_reducer::operator()(model::record_batch b) {
     using stop_t = ss::stop_iteration;
-    auto f = ss::now();
-    if (!b.compressed()) {
-        f = do_index(std::move(b));
-    } else {
-        f = model::decompress_batch(std::move(b))
-              .then([this](model::record_batch&& b) {
-                  return do_index(std::move(b));
-              });
+    if (b.compressed()) {
+        b = co_await model::decompress_batch(b);
     }
-    return f.then([] { return ss::make_ready_future<stop_t>(stop_t::no); });
+    co_await do_index(std::move(b));
+    co_return stop_t::no;
 }
 
 ss::future<> index_rebuilder_reducer::do_index(model::record_batch&& b) {
@@ -480,11 +477,13 @@ map_building_reducer::operator()(model::record_batch batch) {
         // map state (see copy_data_segment_reducer::filter()).
         co_return ss::stop_iteration::no;
     }
-    auto b = co_await model::decompress_batch(std::move(batch));
-    co_await b.for_each_record_async(
+    if (batch.compressed()) {
+        batch = co_await model::decompress_batch(batch);
+    }
+    co_await batch.for_each_record_async(
       [this,
        &fully_indexed_batch,
-       base_offset = b.base_offset(),
+       base_offset = batch.base_offset(),
        type = header.type,
        is_control = header.attrs.is_control()](
         const model::record& r) -> ss::future<ss::stop_iteration> {

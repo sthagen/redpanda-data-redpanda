@@ -131,8 +131,7 @@ model::record_batch make_random_batch(record_batch_spec spec) {
       .base_offset = spec.offset,
       .type = spec.bt,
       .crc = 0, // we-reassign later
-      .attrs = model::record_batch_attributes(
-        get_int<int16_t>(0, spec.allow_compression ? 4 : 0)),
+      .attrs = {},
       .last_offset_delta = spec.count - 1,
       .first_timestamp = ts,
       .max_timestamp = max_ts,
@@ -177,10 +176,13 @@ model::record_batch make_random_batch(record_batch_spec spec) {
       model::packed_record_batch_header_size + body.size_bytes());
     auto batch = model::record_batch(
       header, std::move(body), model::record_batch::tag_ctor_ng{});
-    batch.header().crc = model::crc_record_batch(batch);
-    batch.header().header_crc = model::internal_header_only_crc(batch.header());
-    return model::compress_batch_sync(
-      header.attrs.compression(), std::move(batch));
+    auto compression = static_cast<model::compression>(
+      get_int<uint8_t>(0, spec.allow_compression ? 4 : 0));
+    if (compression == model::compression::none) {
+        batch.header().reset_size_checksum_metadata(batch.data());
+        return batch;
+    }
+    return model::compress_batch_sync(compression, std::move(batch));
 }
 
 model::record_batch make_random_batch(

@@ -531,7 +531,7 @@ public:
             co_return;
         }
         if (batch.compressed()) {
-            batch = co_await model::decompress_batch(std::move(batch));
+            batch = co_await model::decompress_batch(batch);
         }
         ss::future<> fut = co_await ss::coroutine::as_future(
           invoke_transform(std::move(batch), probe, std::move(cb)));

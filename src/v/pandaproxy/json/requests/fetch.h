@@ -121,7 +121,7 @@ public:
                 auto batch = std::move(*adapter.batch);
 
                 if (batch.compressed()) {
-                    batch = model::maybe_decompress_batch_sync(batch);
+                    batch = model::decompress_batch_sync(batch);
                 }
 
                 batch.for_each_record([&rjs, &w](model::record record) {
