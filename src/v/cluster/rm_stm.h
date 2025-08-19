@@ -11,16 +11,12 @@
 
 #pragma once
 
-#include "absl/container/btree_map.h"
-#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/container/node_hash_map.h"
 #include "bytes/iobuf.h"
 #include "cluster/fwd.h"
 #include "cluster/producer_state.h"
 #include "cluster/rm_stm_types.h"
 #include "cluster/state_machine_registry.h"
-#include "cluster/topic_table.h"
 #include "cluster/tx_utils.h"
 #include "config/property.h"
 #include "container/chunked_vector.h"
@@ -32,14 +28,12 @@
 #include "raft/state_machine.h"
 #include "storage/snapshot.h"
 #include "utils/available_promise.h"
-#include "utils/mutex.h"
 #include "utils/prefix_logger.h"
 
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/shared_ptr.hh>
 
 #include <string_view>
-#include <system_error>
 
 struct rm_stm_test_fixture;
 

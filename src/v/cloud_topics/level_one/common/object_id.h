@@ -15,7 +15,7 @@
 #include "utils/named_type.h"
 #include "utils/uuid.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // An object ID is a unique identifier for a cloud topic L1 object.
 using object_id = named_type<uuid_t, struct l1_object_id_tag>;
@@ -31,4 +31,4 @@ struct object_extent {
     fmt::iterator format_to(fmt::iterator it) const;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

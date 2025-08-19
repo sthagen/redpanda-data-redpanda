@@ -21,7 +21,7 @@
 #include <expected>
 #include <limits>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // An abstraction for a local file that is used for staging uploads to object
 // storage.
@@ -95,4 +95,4 @@ protected:
     ss::future<ss::input_stream<char>> read_file(staging_file*);
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

@@ -18,7 +18,7 @@ namespace cluster {
 class controller;
 }
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 class domain_manager;
 
 // Responsible for creating and managing domain managers on the leaders of the
@@ -50,4 +50,4 @@ private:
     std::unique_ptr<impl> _impl;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

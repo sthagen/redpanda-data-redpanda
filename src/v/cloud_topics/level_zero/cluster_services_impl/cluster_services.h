@@ -19,26 +19,26 @@
 
 #include <expected>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
-class cluster_services : public experimental::cloud_topics::cluster_services {
+class cluster_services : public cloud_topics::cluster_services {
 public:
     explicit cluster_services(
       ss::sharded<cluster::cluster_epoch_service<>>& epoch_generator)
       : _epoch_service(epoch_generator) {}
 
-    seastar::future<experimental::cloud_topics::cluster_epoch>
+    seastar::future<cloud_topics::cluster_epoch>
     current_epoch(seastar::abort_source* as) override {
         std::expected<int64_t, std::error_code> epoch
           = co_await _epoch_service.local().get_cached_epoch(as);
         if (!epoch) {
             throw std::system_error(epoch.error());
         }
-        co_return experimental::cloud_topics::cluster_epoch(epoch.value());
+        co_return cloud_topics::cluster_epoch(epoch.value());
     }
 
 private:
     ss::sharded<cluster::cluster_epoch_service<>>& _epoch_service;
 };
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

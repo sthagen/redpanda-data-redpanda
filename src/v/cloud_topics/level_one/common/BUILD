@@ -24,7 +24,7 @@ redpanda_cc_library(
     ],
     visibility = [
         "//src/v/cloud_topics/level_one:__subpackages__",
-        "//src/v/cloud_topics/level_zero/reconciler:__subpackages__",
+        "//src/v/cloud_topics/reconciler:__subpackages__",
     ],
     deps = [
         ":object_id",

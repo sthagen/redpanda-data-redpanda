@@ -19,7 +19,7 @@
 
 #include <expected>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 class ctp_stm_api;
 
@@ -95,4 +95,4 @@ private:
     ctp_stm_state _state;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

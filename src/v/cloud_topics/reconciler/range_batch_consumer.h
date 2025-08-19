@@ -21,7 +21,7 @@
 
 #include <optional>
 
-namespace experimental::cloud_topics::reconciler {
+namespace cloud_topics::reconciler {
 
 /*
  * metadata about a range of batches.
@@ -57,4 +57,4 @@ private:
     std::optional<kafka::offset> _base_offset;
 };
 
-} // namespace experimental::cloud_topics::reconciler
+} // namespace cloud_topics::reconciler

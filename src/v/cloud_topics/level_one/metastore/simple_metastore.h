@@ -15,7 +15,7 @@
 
 #include <seastar/core/future.hh>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 class simple_metastore;
 class simple_object_builder : public metastore::object_metadata_builder {
@@ -53,10 +53,11 @@ public:
     ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) override;
 
-    ss::future<std::expected<add_response, errc>>
-      add_objects(std::unique_ptr<object_metadata_builder>) override;
-    ss::future<std::expected<add_response, errc>>
-    add_objects(const chunked_vector<object_metadata>&);
+    ss::future<std::expected<add_response, errc>> add_objects(
+      std::unique_ptr<object_metadata_builder>,
+      const term_offset_map_t&) override;
+    ss::future<std::expected<add_response, errc>> add_objects(
+      const chunked_vector<object_metadata>&, const term_offset_map_t&);
 
     ss::future<std::expected<void, errc>>
       replace_objects(std::unique_ptr<object_metadata_builder>) override;
@@ -94,4 +95,4 @@ private:
     state state_;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

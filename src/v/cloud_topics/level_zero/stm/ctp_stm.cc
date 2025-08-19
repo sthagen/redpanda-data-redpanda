@@ -25,7 +25,7 @@
 
 #include <stdexcept>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 constexpr static auto ctp_stm_sync_timeout = std::chrono::seconds(10);
 
@@ -263,4 +263,4 @@ ss::future<cluster_epoch_fence> ctp_stm::fence_epoch(cluster_epoch e) {
     co_return cluster_epoch_fence{};
 }
 
-}; // namespace experimental::cloud_topics
+}; // namespace cloud_topics

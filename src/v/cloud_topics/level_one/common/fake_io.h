@@ -14,7 +14,7 @@
 #include "bytes/iobuf.h"
 #include "cloud_topics/level_one/common/abstract_io.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // The IO implementation that is entirely in-memory, used for testing.
 class fake_io : public io {
@@ -45,4 +45,4 @@ private:
     absl::btree_map<object_id, iobuf> _storage;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

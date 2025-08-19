@@ -29,10 +29,9 @@
 #include <chrono>
 #include <tuple>
 
-namespace cloud_topics = experimental::cloud_topics;
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 struct write_pipeline_accessor {
     // Returns true if the write request is in the `_pending` collection
     bool write_requests_pending(size_t n) {
@@ -41,7 +40,7 @@ struct write_pipeline_accessor {
 
     write_pipeline<ss::manual_clock>* pipeline;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0
 
 // Simulate sleep of certain duration and wait until the condition is met
 template<class Fn>

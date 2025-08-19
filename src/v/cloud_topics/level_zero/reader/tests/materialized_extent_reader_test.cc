@@ -27,10 +27,7 @@
 
 inline ss::logger test_log("materialized_extent_reader_gtest");
 
-using namespace cloud_storage;
 using namespace std::chrono_literals;
-
-namespace cloud_topics = experimental::cloud_topics;
 
 static chunked_vector<cloud_topics::extent_meta>
 convert_placeholders(const chunked_vector<model::record_batch>& batches) {

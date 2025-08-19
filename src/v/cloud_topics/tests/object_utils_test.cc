@@ -16,10 +16,8 @@
     "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}"
 
 TEST(ObjectPathFactory, LevelZeroPathFormat) {
-    auto path
-      = experimental::cloud_topics::object_path_factory::level_zero_path(
-        experimental::cloud_topics::object_id::create(
-          experimental::cloud_topics::cluster_epoch{42}));
+    auto path = cloud_topics::object_path_factory::level_zero_path(
+      cloud_topics::object_id::create(cloud_topics::cluster_epoch{42}));
     EXPECT_THAT(
       path().string(), ::testing::MatchesRegex("^42/" UUID_REGEX "$"));
 }

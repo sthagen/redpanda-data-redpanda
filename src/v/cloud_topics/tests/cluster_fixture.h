@@ -18,7 +18,7 @@
 #include "model/namespace.h"
 #include "raft/state_machine_manager.h"
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 class cluster_fixture
   : public cluster_test_fixture
@@ -69,4 +69,4 @@ public:
     }
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

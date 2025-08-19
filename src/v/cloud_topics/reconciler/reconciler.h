@@ -14,7 +14,7 @@
 #include "base/seastarx.h"
 #include "cloud_io/remote.h"
 #include "cloud_storage_clients/types.h"
-#include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
+#include "cloud_topics/reconciler/range_batch_consumer.h"
 #include "cluster/notification.h"
 #include "cluster/partition.h"
 #include "cluster/partition_manager.h"
@@ -26,11 +26,11 @@
 
 #include <optional>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 class data_plane_api;
 }
 
-namespace experimental::cloud_topics::reconciler {
+namespace cloud_topics::reconciler {
 
 /*
  * The reconciler runs on every shard. It queries the leader of cloud topic
@@ -159,4 +159,4 @@ private:
     ss::abort_source _as;
 };
 
-} // namespace experimental::cloud_topics::reconciler
+} // namespace cloud_topics::reconciler

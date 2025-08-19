@@ -46,9 +46,9 @@
 
 namespace {
 
-experimental::cloud_topics::cloud_topic_log_reader_config
+cloud_topics::cloud_topic_log_reader_config
 kafka_to_cloud_topic_log_reader_config(kafka::log_reader_config cfg) {
-    return experimental::cloud_topics::cloud_topic_log_reader_config(
+    return cloud_topics::cloud_topic_log_reader_config(
       /*start_offset=*/cfg.start_offset,
       /*max_offset=*/cfg.max_offset,
       /*min_bytes=*/cfg.min_bytes,
@@ -64,11 +64,11 @@ kafka_to_cloud_topic_log_reader_config(kafka::log_reader_config cfg) {
 
 namespace kafka {
 
-using frontend_errc = experimental::cloud_topics::frontend_errc;
+using frontend_errc = cloud_topics::frontend_errc;
 
 cloud_topic_partition::cloud_topic_partition(
   ss::lw_shared_ptr<cluster::partition> p,
-  std::unique_ptr<experimental::cloud_topics::frontend> fe) noexcept
+  std::unique_ptr<cloud_topics::frontend> fe) noexcept
   : _partition(std::move(p))
   , _fe(std::move(fe)) {}
 

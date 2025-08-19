@@ -18,7 +18,7 @@
 
 #include <algorithm>
 
-namespace ct = experimental::cloud_topics;
+namespace ct = cloud_topics;
 namespace {
 
 TEST(ctp_stm_state_test, initial_state) {

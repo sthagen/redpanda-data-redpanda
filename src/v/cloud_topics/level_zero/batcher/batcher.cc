@@ -32,14 +32,14 @@
 
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 template<class Clock>
 batcher<Clock>::batcher(
   write_pipeline<Clock>::stage stage,
   cloud_storage_clients::bucket_name bucket,
   cloud_io::remote_api<Clock>& remote_api,
-  experimental::cloud_topics::cluster_services* cluster_services)
+  cloud_topics::cluster_services* cluster_services)
   : _cluster_services(cluster_services)
   , _remote(remote_api)
   , _bucket(std::move(bucket))
@@ -253,4 +253,4 @@ ss::future<> batcher<Clock>::bg_controller_loop() {
 template class batcher<ss::lowres_clock>;
 template class batcher<ss::manual_clock>;
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

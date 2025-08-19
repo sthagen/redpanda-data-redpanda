@@ -21,7 +21,7 @@
 
 #include <seastar/coroutine/as_future.hh>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 namespace {
 template<typename Res>
@@ -221,4 +221,4 @@ void stm_factory::create(
     raft->log()->stm_manager()->add_stm(stm);
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

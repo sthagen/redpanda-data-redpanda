@@ -34,7 +34,7 @@
 #include <gtest/gtest.h>
 
 static ss::logger e2e_test_log("e2e_test");
-using namespace experimental::cloud_topics;
+using namespace cloud_topics;
 using namespace testing;
 
 class mock_api : public data_plane_api {
@@ -117,13 +117,10 @@ TEST_F(frontend_fixture, test_replicate_epoch) {
 
     auto partition = app.partition_manager.local().get(ntp);
     ASSERT_TRUE(
-      partition->raft()
-        ->stm_manager()
-        ->get<experimental::cloud_topics::ctp_stm>()
+      partition->raft()->stm_manager()->get<cloud_topics::ctp_stm>()
       != nullptr);
 
-    experimental::cloud_topics::frontend frontend(
-      std::move(partition), _data_plane.get());
+    cloud_topics::frontend frontend(std::move(partition), _data_plane.get());
 
     EXPECT_CALL(*_data_plane, cache_put(_, _)).Times(2);
     EXPECT_CALL(*_data_plane, write_and_debounce(_, _, _))

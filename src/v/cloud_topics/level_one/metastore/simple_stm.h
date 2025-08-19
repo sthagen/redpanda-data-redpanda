@@ -13,7 +13,7 @@
 #include "cluster/state_machine_registry.h"
 #include "raft/persisted_stm.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 using metastore_stm_base = raft::persisted_stm_no_snapshot_at_offset<>;
 
@@ -103,4 +103,4 @@ public:
       const cluster::stm_instance_config&) final;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

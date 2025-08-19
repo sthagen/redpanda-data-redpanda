@@ -16,11 +16,11 @@
 
 #include <seastar/core/future.hh>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 class frontend;
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1
 
-namespace experimental::cloud_topics::l1::rpc {
+namespace cloud_topics::l1::rpc {
 class service final : public impl::l1_rpc_service {
 public:
     service(
@@ -47,4 +47,4 @@ public:
 private:
     ss::sharded<frontend>* _frontend;
 };
-} // namespace experimental::cloud_topics::l1::rpc
+} // namespace cloud_topics::l1::rpc

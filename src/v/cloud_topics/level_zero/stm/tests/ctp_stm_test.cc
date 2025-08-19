@@ -22,7 +22,7 @@
 
 #include <optional>
 
-namespace ct = experimental::cloud_topics;
+namespace ct = cloud_topics;
 using namespace std::chrono_literals;
 
 struct ctp_stm_api_accessor {
@@ -52,7 +52,7 @@ public:
 
             raft::state_machine_manager_builder builder;
 
-            experimental::cloud_topics::ctp_stm_factory stm_factory;
+            cloud_topics::ctp_stm_factory stm_factory;
             stm_factory.create(
               builder, &*node->raft(), cluster::stm_instance_config{nullptr});
 
@@ -90,7 +90,7 @@ public:
           model::record_batch_type::dl_placeholder, base_offset);
 
         auto first_key = serde::to_iobuf(
-          experimental::cloud_topics::dl_placeholder_record_key::payload);
+          cloud_topics::dl_placeholder_record_key::payload);
 
         auto first_value = serde::to_iobuf(placeholder);
 

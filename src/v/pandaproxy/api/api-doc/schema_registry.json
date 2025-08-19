@@ -221,6 +221,13 @@
             "schema": {
               "$ref": "#/definitions/mode"
             }
+          },
+          {
+            "name": "force",
+            "description": "If true, override the emptiness check when setting the global mode to IMPORT",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "produces": [
@@ -318,6 +325,13 @@
             "schema": {
               "$ref": "#/definitions/mode"
             }
+          },
+          {
+            "name": "force",
+            "description": "If true, override the emptiness check when setting a subject's mode to IMPORT",
+            "in": "query",
+            "required": false,
+            "type": "boolean"
           }
         ],
         "produces": [
@@ -448,15 +462,7 @@
           "200": {
             "description": "OK",
             "schema": {
-              "type": "object",
-              "properties": {
-                "schemaType": {
-                  "type": "string"
-                },
-                "schema": {
-                  "type": "string"
-                }
-              }
+              "$ref": "#/definitions/schema_def"
             }
           },
           "404": {
@@ -826,7 +832,7 @@
             "name": "schema_def",
             "in": "body",
             "schema": {
-              "$ref": "#/definitions/schema_def"
+              "$ref": "#/definitions/stored_schema"
             }
           }
         ],

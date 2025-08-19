@@ -31,7 +31,7 @@
 #include <type_traits>
 #include <utility>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 namespace {
 
@@ -529,4 +529,4 @@ object_reader::create(ss::file f, size_t offset, size_t length) {
     return create(ss::make_file_input_stream(std::move(f), offset, length));
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

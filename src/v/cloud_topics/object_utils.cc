@@ -12,11 +12,11 @@
 
 #include "ssx/sformat.h"
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 cloud_storage_clients::object_key
 object_path_factory::level_zero_path(object_id id) {
     return cloud_storage_clients::object_key(ssx::sformat("{}", id));
 }
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

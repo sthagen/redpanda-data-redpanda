@@ -18,7 +18,7 @@
 #include <optional>
 #include <ostream>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 // Operates on Kafka offsets
 // TODO: Add enum/flag for L0 vs L1 reader
@@ -92,4 +92,4 @@ struct cloud_topic_log_reader_config {
     fmt::iterator format_to(fmt::iterator it) const;
 };
 
-}; // namespace experimental::cloud_topics
+}; // namespace cloud_topics

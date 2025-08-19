@@ -12,6 +12,7 @@
 
 #include "absl/strings/numbers.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/str_split.h"
 #include "base/units.h"
 #include "serde/json/writer.h"
@@ -399,7 +400,23 @@ ss::future<field_mask> field_mask_from_json(peekable_parser* parser) {
         }
         proto_name.clear();
         json_name_to_proto_name(json_name, &proto_name);
-        mask.paths.emplace_back(std::string_view(proto_name));
+        if (mask.paths.size() >= field_mask::max_paths) {
+            throw std::runtime_error(
+              fmt::format(
+                "field mask exceeds maximum number of paths: {}",
+                field_mask::max_paths));
+        }
+        size_t segments = std::ranges::count(std::string_view(proto_name), '.')
+                          + 1;
+        if (segments > field_mask::max_path_segments) {
+            throw std::runtime_error(
+              fmt::format(
+                "field mask path has more than {} segments: {}",
+                field_mask::max_path_segments,
+                proto_name));
+        }
+        mask.paths.emplace_back(
+          absl::StrSplit(std::string_view(proto_name), "."));
     }
     co_return mask;
 }
@@ -410,7 +427,7 @@ iobuf field_mask_to_json(const field_mask& mask) {
         if (!encoded.empty()) {
             encoded.append(std::to_array({','}));
         }
-        proto_name_to_json_name(path, &encoded);
+        proto_name_to_json_name(absl::StrJoin(path, "."), &encoded);
     }
     serde::json::writer w;
     w.string(encoded);

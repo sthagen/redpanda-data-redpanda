@@ -33,9 +33,8 @@ make_partition_proxy(const ss::lw_shared_ptr<cluster::partition>& partition) {
               "Cloud topic partition can't be created because the cloud-topics "
               "subsystem is not initialized");
         }
-        auto frontend_instance
-          = std::make_unique<experimental::cloud_topics::frontend>(
-            partition, ct_state->local().get_data_plane());
+        auto frontend_instance = std::make_unique<cloud_topics::frontend>(
+          partition, ct_state->local().get_data_plane());
         return make_with_impl<cloud_topic_partition>(
           partition, std::move(frontend_instance));
     }

@@ -40,7 +40,7 @@ class remote_api;
 class remote;
 } // namespace cloud_io
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 struct batcher_result {
     uuid_t uuid;
@@ -69,7 +69,7 @@ public:
       write_pipeline<Clock>::stage stage,
       cloud_storage_clients::bucket_name bucket,
       cloud_io::remote_api<Clock>& remote_api,
-      experimental::cloud_topics::cluster_services* cluster_services);
+      cloud_topics::cluster_services* cluster_services);
 
     ss::future<> start();
     ss::future<> stop();
@@ -100,7 +100,7 @@ private:
     /// \return size of the uploaded object or error code
     ss::future<result<size_t>> upload_object(object_id id, iobuf payload);
 
-    experimental::cloud_topics::cluster_services* _cluster_services;
+    cloud_topics::cluster_services* _cluster_services;
     cloud_io::remote_api<Clock>& _remote;
     cloud_storage_clients::bucket_name _bucket;
     config::binding<std::chrono::milliseconds> _upload_timeout;
@@ -117,4 +117,4 @@ private:
 
     write_pipeline<Clock>::stage _stage;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

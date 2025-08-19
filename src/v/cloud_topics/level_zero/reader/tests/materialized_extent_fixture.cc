@@ -29,7 +29,6 @@
 #include <filesystem>
 #include <stdexcept>
 
-namespace cloud_topics = experimental::cloud_topics;
 static ss::logger test_log("materialized_extent_fixture");
 
 ss::future<> materialized_extent_fixture::add_random_batches(int record_count) {

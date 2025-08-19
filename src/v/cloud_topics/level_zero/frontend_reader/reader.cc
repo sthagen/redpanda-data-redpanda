@@ -21,7 +21,7 @@
 #include <iterator>
 #include <utility>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 // TODO: add config
 static constexpr size_t L0_max_bytes_per_metadata_fetch = 4_KiB;
@@ -192,11 +192,11 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
           std::move(reader), deadline);
 
         // Convert L0 meta batches to extent_meta structures.
-        chunked_circular_buffer<experimental::cloud_topics::extent_meta> meta;
+        chunked_circular_buffer<cloud_topics::extent_meta> meta;
         chunked_circular_buffer<model::record_batch_header> headers;
         for (auto&& batch : placeholders) {
             headers.push_back(batch.header());
-            experimental::cloud_topics::extent_meta e{
+            cloud_topics::extent_meta e{
               .base_offset = model::offset_cast(batch.base_offset()),
               .last_offset = model::offset_cast(batch.last_offset()),
             };
@@ -204,9 +204,8 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
             iobuf_parser parser(std::move(payload));
             auto record = model::parse_one_record_from_buffer(parser);
             iobuf value = std::move(record).release_value();
-            auto placeholder
-              = serde::from_iobuf<experimental::cloud_topics::dl_placeholder>(
-                std::move(value));
+            auto placeholder = serde::from_iobuf<cloud_topics::dl_placeholder>(
+              std::move(value));
             e.id = placeholder.id;
             e.first_byte_offset = placeholder.offset;
             e.byte_range_size = placeholder.size_bytes;
@@ -275,7 +274,7 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
       _meta.size(),
       _headers.size());
     try {
-        chunked_vector<experimental::cloud_topics::extent_meta> to_materialize;
+        chunked_vector<cloud_topics::extent_meta> to_materialize;
         chunked_vector<model::record_batch_header> to_materialize_headers;
         size_t materialize_bytes = 0;
         while (_config.bytes_consumed < _config.max_bytes && !_meta.empty()) {
@@ -411,4 +410,4 @@ bool level_zero_log_reader_impl::is_end_of_stream() const {
     return _current == state::end_of_stream_state;
 }
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

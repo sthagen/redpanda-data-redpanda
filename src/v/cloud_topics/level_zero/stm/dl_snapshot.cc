@@ -10,8 +10,8 @@
 
 #include "cloud_topics/level_zero/stm/dl_snapshot.h"
 
-auto fmt::formatter<experimental::cloud_topics::dl_snapshot_id>::format(
-  const experimental::cloud_topics::dl_snapshot_id& id,
-  fmt::format_context& ctx) const -> decltype(ctx.out()) {
+auto fmt::formatter<cloud_topics::dl_snapshot_id>::format(
+  const cloud_topics::dl_snapshot_id& id, fmt::format_context& ctx) const
+  -> decltype(ctx.out()) {
     return fmt::format_to(ctx.out(), "{}", id.version);
 }

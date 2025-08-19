@@ -21,7 +21,7 @@ namespace storage {
 class log_manager;
 }
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 struct batch_cache_accessor;
 
@@ -79,4 +79,4 @@ private:
     friend struct batch_cache_accessor;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

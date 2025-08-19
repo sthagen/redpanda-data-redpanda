@@ -30,7 +30,7 @@
 
 #include <memory>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 class impl
   : public data_plane_api
@@ -161,4 +161,4 @@ ss::future<std::unique_ptr<data_plane_api>> make_data_plane(
     co_return std::move(p);
 }
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

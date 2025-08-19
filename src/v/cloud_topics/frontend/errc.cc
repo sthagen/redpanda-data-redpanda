@@ -9,10 +9,10 @@
  */
 #include "cloud_topics/frontend/errc.h"
 
-auto fmt::formatter<experimental::cloud_topics::frontend_errc>::format(
-  const experimental::cloud_topics::frontend_errc& err,
-  fmt::format_context& ctx) const -> decltype(ctx.out()) {
-    using enum experimental::cloud_topics::frontend_errc;
+auto fmt::formatter<cloud_topics::frontend_errc>::format(
+  const cloud_topics::frontend_errc& err, fmt::format_context& ctx) const
+  -> decltype(ctx.out()) {
+    using enum cloud_topics::frontend_errc;
     switch (err) {
     case offset_not_available:
         return fmt::format_to(

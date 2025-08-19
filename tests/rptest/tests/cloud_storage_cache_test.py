@@ -48,6 +48,7 @@ class CloudStorageCacheAdminApisTest(RedpandaTest):
         object_size = 4096
 
         for node in self.redpanda.nodes:
+            self.redpanda.clean_node(node)
             node.account.ssh(
                 f"mkdir -p {self.redpanda.cache_dir} ; "
                 f"for n in `seq 1 {num_objects}`; do "

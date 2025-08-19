@@ -19,7 +19,7 @@
 
 #include <chrono>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 batch_cache::batch_cache(
   storage::log_manager* log_manager, std::chrono::milliseconds gc_interval)
@@ -102,4 +102,4 @@ ss::future<> batch_cache::cleanup_index_entries() {
     _cleanup_timer.arm(_gc_interval);
 }
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

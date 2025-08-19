@@ -17,7 +17,7 @@
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 serialized_chunk::serialized_chunk(
   iobuf payload, chunked_vector<extent_meta> extents) noexcept
@@ -79,4 +79,4 @@ serialize_batches(chunked_vector<model::record_batch> batches) {
     co_return consumer.end_of_stream();
 }
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

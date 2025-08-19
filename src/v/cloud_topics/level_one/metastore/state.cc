@@ -12,7 +12,7 @@
 
 #include "model/namespace.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 std::optional<std::reference_wrapper<const partition_state>>
 state::partition_state(const model::topic_id_partition& tidp) const {
@@ -189,4 +189,4 @@ state state::copy() const {
     return res;
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

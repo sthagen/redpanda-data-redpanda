@@ -25,7 +25,7 @@
 
 struct ctp_stm_api_accessor;
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 class ctp_stm;
 
@@ -88,4 +88,4 @@ private:
     ss::shared_ptr<ctp_stm> _stm;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

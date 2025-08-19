@@ -32,8 +32,6 @@
 #include <queue>
 #include <stdexcept>
 
-namespace cloud_topics = experimental::cloud_topics;
-
 ss::logger test_log("L0_fetch_handler_test");
 
 static chunked_vector<cloud_topics::extent_meta>

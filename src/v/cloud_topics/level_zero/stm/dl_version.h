@@ -14,9 +14,9 @@
 
 #include <cstdint>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 /// A version number for MVCC semantics.
 using dl_version = named_type<int64_t, struct dl_version_tag>;
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

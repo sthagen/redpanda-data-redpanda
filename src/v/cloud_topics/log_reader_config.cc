@@ -13,7 +13,7 @@
 #include "base/format_to.h"
 #include "utils/to_string.h"
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 fmt::iterator cloud_topic_log_reader_config::format_to(fmt::iterator it) const {
     return fmt::format_to(
@@ -35,4 +35,4 @@ fmt::iterator cloud_topic_log_reader_config::format_to(fmt::iterator it) const {
       client_address);
 }
 
-}; // namespace experimental::cloud_topics
+}; // namespace cloud_topics

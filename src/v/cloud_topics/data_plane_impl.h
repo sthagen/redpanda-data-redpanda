@@ -34,7 +34,7 @@ namespace storage {
 class api;
 }
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 class cluster_services;
 class data_plane_api;
@@ -48,4 +48,4 @@ ss::future<std::unique_ptr<data_plane_api>> make_data_plane(
   seastar::sharded<cluster::cluster_epoch_service<ss::lowres_clock>>*
     cluster_services);
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

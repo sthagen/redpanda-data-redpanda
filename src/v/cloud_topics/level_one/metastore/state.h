@@ -24,7 +24,7 @@
 
 #include <expected>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // Represents the state managed by the replicated state machine that serves L1
 // metadata.
@@ -49,6 +49,17 @@ struct extent
     size_t len;
     // TODO: avoid duplicating the UUIDs with some indirection.
     object_id oid;
+};
+
+// Offset that corresponds to the start of a given term.
+struct term_start
+  : public serde::
+      envelope<term_start, serde::version<0>, serde::compat_version<0>> {
+    friend bool operator==(const term_start&, const term_start&) = default;
+    auto serde_fields() { return std::tie(term_id, start_offset); }
+
+    model::term_id term_id;
+    kafka::offset start_offset;
 };
 
 struct compaction_state
@@ -189,6 +200,16 @@ struct partition_state
     // Empty iff compaction has not been run for this partition.
     // TODO: should we remove this if cleanup policy is switched?
     std::optional<compaction_state> compaction_state;
+
+    // A mapping of terms (used instead of Kafka epochs) to the starting Kafka
+    // offset for that term. Both the term and offsets are maintained to be
+    // monotonically strictly increasing.
+    //
+    // TODO: when we implement set_start_offset(), we should retain enough
+    // information to return a value for the start_offset, even when the log
+    // has been prefix truncated to be empty. I.e. this list should never be
+    // empty once there has been data in the log.
+    chunked_vector<term_start> term_starts;
 };
 
 // Tracks the state managed for each partition of a Kafka topic.
@@ -237,4 +258,4 @@ struct stm_snapshot
     auto serde_fields() { return std::tie(state); }
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

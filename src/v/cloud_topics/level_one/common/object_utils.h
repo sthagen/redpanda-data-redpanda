@@ -12,7 +12,7 @@
 #include "cloud_storage_clients/types.h"
 #include "cloud_topics/level_one/common/object_id.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 /*
  * Utilities for working with the object storage paths.
@@ -25,4 +25,4 @@ public:
     static cloud_storage_clients::object_key level_one_path(object_id);
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

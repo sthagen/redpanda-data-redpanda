@@ -16,7 +16,7 @@
 
 #include <chrono>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 template<class Clock>
 read_request<Clock>::read_request(
@@ -75,4 +75,4 @@ bool read_request<Clock>::has_expired() const noexcept {
 
 template struct read_request<ss::lowres_clock>;
 template struct read_request<ss::manual_clock>;
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

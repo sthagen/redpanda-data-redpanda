@@ -14,7 +14,7 @@
 #include "model/fundamental.h"
 #include "serde/envelope.h"
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 /// In-memory state of the cloud-topics state machine (ctp_stm).
 ///
@@ -120,4 +120,4 @@ private:
     std::optional<model::offset> _last_reconciled_log_offset;
 };
 
-}; // namespace experimental::cloud_topics
+}; // namespace cloud_topics

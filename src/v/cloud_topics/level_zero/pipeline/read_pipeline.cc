@@ -28,7 +28,7 @@
 #include <exception>
 #include <variant>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 template<class Clock>
 read_pipeline<Clock>::read_pipeline()
@@ -191,4 +191,4 @@ event read_pipeline<Clock>::trigger_event(pipeline_stage stage) {
 template class read_pipeline<ss::lowres_clock>;
 template class read_pipeline<ss::manual_clock>;
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

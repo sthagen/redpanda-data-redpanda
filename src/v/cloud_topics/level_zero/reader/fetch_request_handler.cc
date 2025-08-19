@@ -31,7 +31,7 @@
 
 #include <exception>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 fetch_handler::fetch_handler(
   l0::read_pipeline<>::stage pipeline_stage,
@@ -174,4 +174,4 @@ ss::future<checked<bool, errc>> fetch_handler::process_requests() {
     co_return to_process.value().complete;
 }
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

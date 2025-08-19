@@ -16,7 +16,7 @@
 
 #include <utility>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 using cmd_key = named_type<uint8_t, struct cmd_key_tag>;
 
@@ -43,4 +43,4 @@ struct advance_reconciled_offset_cmd
     kafka::offset last_reconciled_offset;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

@@ -24,9 +24,9 @@
 #include <optional>
 #include <system_error>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 class frontend;
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics
 
 namespace cluster {
 class partition;
@@ -40,7 +40,7 @@ class cloud_topic_partition final : public kafka::partition_proxy::impl {
 public:
     explicit cloud_topic_partition(
       ss::lw_shared_ptr<cluster::partition> p,
-      std::unique_ptr<experimental::cloud_topics::frontend> fe) noexcept;
+      std::unique_ptr<cloud_topics::frontend> fe) noexcept;
 
     const model::ntp& ntp() const final;
 
@@ -100,7 +100,7 @@ public:
 
 private:
     ss::lw_shared_ptr<cluster::partition> _partition;
-    std::unique_ptr<experimental::cloud_topics::frontend> _fe;
+    std::unique_ptr<cloud_topics::frontend> _fe;
 };
 
 } // namespace kafka

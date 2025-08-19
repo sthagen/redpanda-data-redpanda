@@ -19,7 +19,6 @@
 
 #include <queue>
 
-namespace cloud_topics = experimental::cloud_topics;
 ss::logger test_log("materialized_extent_test_log");
 
 TEST_F_CORO(materialized_extent_fixture, materialize_from_cache) {

@@ -11,6 +11,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/variant_utils.hh>
+#include <span>
 
 class iobuf_parser;
 
@@ -82,7 +83,12 @@ public:
   
   int32_t get_c() const;
   void set_c(int32_t v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, foreign_message_edition2023* update);
+  
 private:
   int32_t c_{};
 };
@@ -119,7 +125,12 @@ public:
   void set_group_int32(int32_t v);
   uint32_t get_group_uint32() const;
   void set_group_uint32(uint32_t v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, test_all_types_edition2023_group_like_type* update);
+  
 private:
   int32_t group_int32_{};
   uint32_t group_uint32_{};
@@ -157,7 +168,12 @@ public:
   std::unique_ptr<test_all_types_edition2023>& get_corecursive();
   const std::unique_ptr<test_all_types_edition2023>& get_corecursive() const;
   void set_corecursive(std::unique_ptr<test_all_types_edition2023>&& v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, test_all_types_edition2023_nested_message* update);
+  
 private:
   int32_t a_{};
   std::unique_ptr<test_all_types_edition2023> corecursive_;
@@ -488,7 +504,12 @@ public:
   test_all_types_edition2023_group_like_type& get_delimited_field();
   const test_all_types_edition2023_group_like_type& get_delimited_field() const;
   void set_delimited_field(test_all_types_edition2023_group_like_type&& v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, test_all_types_edition2023* update);
+  
 private:
   int32_t optional_int32_{};
   int64_t optional_int64_{};

@@ -7,6 +7,8 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
+import re
+
 from ducktape.mark import matrix
 from ducktape.utils.util import wait_until
 from rptest.clients.rpk import RpkTool
@@ -194,7 +196,8 @@ class CompactionWithRecoveryTest(RedpandaTest, PartitionMovementMixin):
                              extra_rp_conf=extra_rp_conf)
 
     @skip_debug_mode
-    @cluster(num_nodes=4)
+    @cluster(num_nodes=4,
+             log_allow_list=[re.compile("tx - .*partition_not_found")])
     def test_tx_compaction_with_recovery(self):
         """Ensures correctness of tx + compaction with partition moves"""
 

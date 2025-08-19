@@ -77,7 +77,7 @@ struct linear_int_kv_batch_generator {
           model::timestamp(ts.value() + spec.count - 1));
         auto header = model::record_batch_header{
           .size_bytes = 0, // computed later
-          .base_offset = spec.offset,
+          .base_offset = spec.offset + model::offset_delta(idx * spec.count),
           .type = spec.bt,
           .crc = 0, // we-reassign later
           .attrs = {},

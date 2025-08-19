@@ -785,6 +785,12 @@ ss::future<ss::httpd::redirect_exception> admin_server::redirect_to_leader(
     // - if the host in the Host header matches one of our advertised kafka
     //   addresses, then assume that the peer's advertised kafka address
     //   with the same index will also be their public admin API address.
+    //   - a match in this case might be an exact match or the appearance
+    //     that the advertised address is a subdomain of request hostname.
+    //     this allows redirection of requests made through a headless service
+    //     in a k8s environment, but is not intended to cover all such cases,
+    //     since the service hostname could be anything. Context:
+    //     https://kubernetes.io/docs/concepts/services-networking/dns-pod-service/#pod-s-hostname-and-subdomain-fields
     // - Assume that the peer is listening on the same port that the client
     //   used to make this request (i.e. the port in Host)
     //
@@ -831,8 +837,25 @@ ss::future<ss::httpd::redirect_exception> admin_server::redirect_to_leader(
           kafka_endpoints.begin(),
           kafka_endpoints.end(),
           [req_hostname](const model::broker_endpoint& be) {
-              return be.address.host() == req_hostname;
+              std::string_view be_host{be.address.host()};
+
+              // exact match suggests that the request was directed to this
+              // particular broker
+              if (be_host == req_hostname) {
+                  return true;
+              }
+
+              // otherwise if the advertised host appears to be a subdomain of
+              // the request host, asume the request came through a headless
+              // service and call that a match
+              auto idx = be_host.find_first_of('.');
+              if (
+                idx == std::string_view::npos || idx + 1 == be_host.length()) {
+                  return false;
+              }
+              return be_host.substr(idx + 1) == req_hostname;
           });
+
         if (match_i != kafka_endpoints.end()) {
             auto listener_idx = size_t(
               std::distance(kafka_endpoints.begin(), match_i));
@@ -2343,11 +2366,18 @@ admin_server::put_license_handler(std::unique_ptr<ss::http::request> req) {
             throw ss::httpd::bad_request_exception(
               fmt::format("License is expired: {}", license));
         }
+
+        if (need_redirect_to_leader(model::controller_ntp, _metadata_cache)) {
+            // In order that we can do a reliable idempotence check, run on the
+            // controller leader
+            throw co_await redirect_to_leader(*req, model::controller_ntp);
+        }
+
         const auto& ft = _controller->get_feature_table().local();
         const auto& loaded_license = ft.get_license();
         if (loaded_license && (*loaded_license == license)) {
             /// Loaded license is idential to license in request, do
-            /// nothing and return 200(OK)
+            /// nothing and return 200(OK) for idempotence
             vlog(
               adminlog.info,
               "Attempted to load identical license, doing nothing: {}",

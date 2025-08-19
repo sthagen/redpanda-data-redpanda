@@ -26,7 +26,7 @@
 
 #include <stdexcept>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 std::ostream& operator<<(std::ostream& o, ctp_stm_api_errc errc) {
     switch (errc) {
@@ -133,4 +133,4 @@ std::optional<cluster_epoch> ctp_stm_api::get_max_seen_epoch() const {
     return _stm->state().get_max_seen_epoch();
 }
 
-}; // namespace experimental::cloud_topics
+}; // namespace cloud_topics

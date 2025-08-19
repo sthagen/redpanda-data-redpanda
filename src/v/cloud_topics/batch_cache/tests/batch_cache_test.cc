@@ -17,9 +17,7 @@
 
 #include <gtest/gtest.h>
 
-using namespace experimental;
-
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 struct batch_cache_accessor {
     static void
     evict_offset(batch_cache& c, const model::ntp& ntp, model::offset o) {
@@ -30,7 +28,7 @@ struct batch_cache_accessor {
     }
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics
 
 constexpr auto cache_check_interval = 100ms;
 

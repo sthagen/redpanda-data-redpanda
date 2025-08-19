@@ -18,8 +18,8 @@
 
 #include <gtest/gtest.h>
 
-using namespace experimental::cloud_topics;
-using namespace experimental::cloud_topics::l1;
+using namespace cloud_topics;
+using namespace cloud_topics::l1;
 
 namespace {
 const object_id oid1 = l1::create_object_id();
@@ -36,6 +36,9 @@ kafka::offset operator""_o(unsigned long long o) {
 
 model::timestamp operator""_t(unsigned long long t) {
     return model::timestamp{static_cast<int64_t>(t)};
+}
+model::term_id operator""_tm(unsigned long long t) {
+    return model::term_id{static_cast<int64_t>(t)};
 }
 
 class new_obj_builder {
@@ -76,6 +79,13 @@ public:
         out.new_objects.emplace_back(std::move(o));
         return *this;
     }
+    add_objects_builder&
+    add_term_start(std::string_view tp_str, model::term_id t, kafka::offset o) {
+        auto tp = model::topic_id_partition::from(tp_str);
+        out.new_terms[tp].emplace_back(
+          term_start{.term_id = t, .start_offset = o});
+        return *this;
+    }
     add_objects_update build() { return std::move(out); }
 
 private:
@@ -114,7 +124,7 @@ private:
 
 TEST(StateUpdateTest, TestEmptyAdd) {
     state s;
-    auto empty_update = add_objects_update::build(s, {});
+    auto empty_update = add_objects_update::build(s, {}, {});
     EXPECT_FALSE(empty_update.has_value());
     EXPECT_EQ(empty_update.error(), "No objects requested");
 }
@@ -127,6 +137,8 @@ TEST(StateUpdateTest, TestAddBasic) {
                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                                .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                                .build())
+                        .add_term_start(tidp_a, 0_tm, 0_o)
+                        .add_term_start(tidp_b, 0_tm, 0_o)
                         .build();
         ASSERT_FALSE(update.new_objects.empty());
         auto res = update.apply(s);
@@ -139,6 +151,8 @@ TEST(StateUpdateTest, TestAddBasic) {
                                .add(tidp_c, 0_o, 10_o, 1999_t, 0, 99)
                                .add(tidp_b, 11_o, 20_o, 1999_t, 100, 199)
                                .build())
+                        .add_term_start(tidp_c, 0_tm, 0_o)
+                        .add_term_start(tidp_b, 0_tm, 11_o)
                         .build();
         ASSERT_FALSE(update.new_objects.empty());
         auto res = update.apply(s);
@@ -156,6 +170,8 @@ TEST(StateUpdateTest, TestDuplicateAddSingleUpdate) {
                     .add(new_obj_builder(oid2, 100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
+                    .add_term_start(tidp_a, 0_tm, 0_o)
+                    .add_term_start(tidp_b, 0_tm, 0_o)
                     .build();
     ASSERT_FALSE(update.new_objects.empty());
     auto res = update.can_apply(s);
@@ -169,6 +185,7 @@ TEST(StateUpdateTest, TestStartAfterZero) {
                     .add(new_obj_builder(oid1, 100)
                            .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                            .build())
+                    .add_term_start(tidp_a, 0_tm, 11_o)
                     .build();
     state s;
     auto res = update.apply(s);
@@ -188,6 +205,9 @@ TEST(StateUpdateTest, TestDuplicateObject) {
                            .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                            .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
                            .build())
+                    .add_term_start(tidp_a, 0_tm, 0_o)
+                    .add_term_start(tidp_b, 0_tm, 0_o)
+                    .add_term_start(tidp_c, 0_tm, 0_o)
                     .build();
     state s;
     ASSERT_FALSE(update.new_objects.empty());
@@ -211,6 +231,9 @@ TEST(StateUpdateTest, TestDuplicateAddMultipleUpdates) {
                            .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                            .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
                            .build())
+                    .add_term_start(tidp_a, 0_tm, 0_o)
+                    .add_term_start(tidp_b, 0_tm, 0_o)
+                    .add_term_start(tidp_c, 0_tm, 0_o)
                     .build();
     state s;
     auto res = update.apply(s);
@@ -246,6 +269,8 @@ TEST(StateUpdateTest, TestOverlapSomePartitions) {
                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                                .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                                .build())
+                        .add_term_start(tidp_a, 0_tm, 0_o)
+                        .add_term_start(tidp_b, 0_tm, 0_o)
                         .build();
         auto res = update.apply(s);
         EXPECT_TRUE(res.has_value());
@@ -264,6 +289,8 @@ TEST(StateUpdateTest, TestOverlapSomePartitions) {
                            .add(tidp_a, 1337_o, 1337_o, 1999_t, 0, 5)
                            .add(tidp_b, 11_o, 20_o, 1999_t, 100, 199)
                            .build())
+                    .add_term_start(tidp_a, 0_tm, 1337_o)
+                    .add_term_start(tidp_b, 0_tm, 11_o)
                     .build();
     auto misaligned_res = update.apply(s);
     EXPECT_TRUE(misaligned_res.has_value());
@@ -294,6 +321,9 @@ MATCHER_P3(MatchesRange, oid, base, last, "") {
 MATCHER_P2(MatchesRange, base, last, "") {
     return arg.base_offset == base && arg.last_offset == last;
 }
+MATCHER_P2(MatchesTermStart, term, offset, "") {
+    return arg.term_id == term && arg.start_offset == offset;
+}
 
 } // namespace
 
@@ -309,6 +339,9 @@ TEST(StateUpdateTest, TestReplaceBasic) {
                         .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                         .add(tidp_c, 11_o, 20_o, 1999_t, 0, 99)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
+                 .add_term_start(tidp_c, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -369,6 +402,7 @@ TEST(StateUpdateTest, TestReplaceDuplicate) {
                  .add(new_obj_builder(oid1, 100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -393,6 +427,7 @@ TEST(StateUpdateTest, TestReplaceMisaligned) {
                  .add(new_obj_builder(oid1, 100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -418,6 +453,7 @@ TEST(StateUpdateTest, TestReplaceBadOrdering) {
                  .add(new_obj_builder(oid1, 100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -446,6 +482,7 @@ TEST(StateUpdateTest, TestEmptyReplace) {
                  .add(new_obj_builder(oid1, 100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -469,6 +506,9 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
+                 .add_term_start(tidp_c, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -552,6 +592,8 @@ TEST(StateUpdateTest, TestCompactionMissingExtent) {
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -585,6 +627,8 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -618,6 +662,8 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -626,6 +672,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
             .add(new_obj_builder(oid2, 300)
                    .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                    .build())
+            .add_term_start(tidp_a, 0_tm, 11_o)
             .build();
     add_res = add.apply(s);
     ASSERT_TRUE(add_res.has_value());
@@ -658,6 +705,8 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -666,6 +715,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
             .add(new_obj_builder(oid2, 300)
                    .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                    .build())
+            .add_term_start(tidp_a, 0_tm, 11_o)
             .build();
     add_res = add.apply(s);
     ASSERT_TRUE(add_res.has_value());
@@ -698,6 +748,8 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -744,6 +796,8 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
+                 .add_term_start(tidp_a, 0_tm, 0_o)
+                 .add_term_start(tidp_b, 0_tm, 0_o)
                  .build();
     state s;
     auto add_res = add.apply(s);
@@ -762,4 +816,247 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
       testing::ContainsRegex(
         "Tombstone-removed range .+ for .+ is not tracked "
         "as having tombstones"));
+}
+
+TEST(StateUpdateTest, TestAddIncreasingTerms) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 1_tm, 0_o)
+                    .add_term_start(tidp_a, 2_tm, 1_o)
+                    .build();
+    auto res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+    EXPECT_EQ(1, s.topic_to_state.size());
+
+    update = add_objects_builder()
+               .add(new_obj_builder(oid2, 100)
+                      .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                      .build())
+               .add_term_start(tidp_a, 3_tm, 11_o)
+               .add_term_start(tidp_a, 4_tm, 12_o)
+               .build();
+    res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+
+    auto p_state = s.partition_state(model::topic_id_partition::from(tidp_a));
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(2, p_state->get().extents.size());
+    EXPECT_EQ(4, p_state->get().term_starts.size());
+    EXPECT_THAT(
+      p_state->get().term_starts,
+      testing::ElementsAre(
+        MatchesTermStart(1_tm, 0_o),
+        MatchesTermStart(2_tm, 1_o),
+        MatchesTermStart(3_tm, 11_o),
+        MatchesTermStart(4_tm, 12_o)));
+}
+
+TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 1_tm, 0_o)
+                    .add_term_start(tidp_a, 2_tm, 1_o)
+                    .build();
+    auto res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+    EXPECT_EQ(1, s.topic_to_state.size());
+    auto p_state = s.partition_state(model::topic_id_partition::from(tidp_a));
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(1, p_state->get().extents.size());
+    EXPECT_EQ(2, p_state->get().term_starts.size());
+    EXPECT_THAT(
+      p_state->get().term_starts,
+      testing::ElementsAre(
+        MatchesTermStart(1_tm, 0_o), MatchesTermStart(2_tm, 1_o)));
+
+    // The start of term 2 shouldn't be changed, but term 3 should be added.
+    update = add_objects_builder()
+               .add(new_obj_builder(oid2, 100)
+                      .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                      .build())
+               .add_term_start(tidp_a, 2_tm, 11_o)
+               .add_term_start(tidp_a, 3_tm, 12_o)
+               .build();
+    res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(2, p_state->get().extents.size());
+    EXPECT_EQ(3, p_state->get().term_starts.size());
+    EXPECT_THAT(
+      p_state->get().term_starts,
+      testing::ElementsAre(
+        MatchesTermStart(1_tm, 0_o),
+        MatchesTermStart(2_tm, 1_o),
+        MatchesTermStart(3_tm, 12_o)));
+}
+
+TEST(StateUpdateTest, TestAddNoTerms) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .build();
+
+    auto res = update.can_apply(s);
+    EXPECT_FALSE(res.has_value());
+    EXPECT_THAT(
+      res.error()().c_str(),
+      testing::HasSubstr("Missing term info in request"));
+}
+
+TEST(StateUpdateTest, TestAddMissingTermsForPartition) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
+                           .build())
+                    .add_term_start(tidp_a, 0_tm, 0_o)
+                    .build();
+
+    auto res = update.can_apply(s);
+    EXPECT_FALSE(res.has_value());
+    EXPECT_THAT(
+      res.error()().c_str(), testing::HasSubstr("Missing term info for"));
+}
+
+TEST(StateUpdateTest, TestAddDecreasingTermInUpdate) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 2_tm, 0_o)
+                    .add_term_start(tidp_a, 1_tm, 1_o)
+                    .build();
+    auto res = update.apply(s);
+    EXPECT_FALSE(res.has_value());
+    EXPECT_THAT(res.error()().c_str(), testing::HasSubstr("Invalid term for"));
+}
+
+TEST(StateUpdateTest, TestAddDecreasingTerm) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 2_tm, 0_o)
+                    .build();
+    auto res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+
+    update = add_objects_builder()
+               .add(new_obj_builder(oid2, 100)
+                      .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                      .build())
+               .add_term_start(tidp_a, 1_tm, 11_o)
+               .build();
+    res = update.can_apply(s);
+    EXPECT_FALSE(res.has_value());
+    EXPECT_THAT(
+      res.error()().c_str(), testing::HasSubstr("must be >= last term"));
+}
+
+TEST(StateUpdateTest, TestAllowBogusTermWithBogusExtent) {
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 10_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 2_tm, 10_o)
+                    .add_term_start(tidp_a, 1_tm, 10_o)
+                    .build();
+    // If there's a misaligned extent, we won't expect that its terms are valid
+    // either, but we should expect the corrections to be populated.
+    state s;
+    chunked_hash_map<model::topic_id_partition, kafka::offset> corrections;
+    auto res = update.can_apply(s, &corrections);
+    EXPECT_TRUE(res.has_value());
+    EXPECT_EQ(1, corrections.size());
+
+    // When applying, the operation should succeed, but we should be left with
+    // a dead object and no extents.
+    res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+    EXPECT_TRUE(s.topic_to_state.empty());
+    EXPECT_EQ(1, s.objects.size());
+    auto& dead_obj = s.objects.begin()->second;
+    EXPECT_EQ(dead_obj.removed_data_size, dead_obj.total_data_size);
+}
+
+TEST(StateUpdateTest, TestTermsWithNoExtent) {
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 0_tm, 0_o)
+                    // Add some terms for a missing partition.
+                    .add_term_start(tidp_b, 0_tm, 0_o)
+                    .build();
+    state s;
+    auto res = update.can_apply(s);
+    EXPECT_FALSE(res.has_value());
+    EXPECT_THAT(
+      res.error()().c_str(),
+      testing::HasSubstr("Terms provided for a partition that has no extents"));
+}
+
+TEST(StateUpdateTest, TestAddMismatchedStartOffset) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 1_tm, 0_o)
+                    .build();
+    auto res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+
+    // Add an update where the term's start offset doesn't match the extent.
+    update = add_objects_builder()
+               .add(new_obj_builder(oid2, 100)
+                      .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                      .build())
+               .add_term_start(tidp_a, 2_tm, 0_o)
+               .build();
+    res = update.can_apply(s);
+    EXPECT_FALSE(res.has_value());
+    EXPECT_THAT(
+      res.error()().c_str(),
+      testing::HasSubstr("Extent start and term start do not match"));
+}
+
+TEST(StateUpdateTest, TestAddExtentEndsBelowLastTermStart) {
+    state s;
+    auto update = add_objects_builder()
+                    .add(new_obj_builder(oid1, 100)
+                           .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
+                           .build())
+                    .add_term_start(tidp_a, 1_tm, 0_o)
+                    // We can add at the last offset.
+                    .add_term_start(tidp_a, 2_tm, 10_o)
+                    .build();
+    auto res = update.apply(s);
+    EXPECT_TRUE(res.has_value());
+
+    update = add_objects_builder()
+               .add(new_obj_builder(oid2, 100)
+                      .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
+                      .build())
+               .add_term_start(tidp_a, 3_tm, 11_o)
+               // We cannot past the last offset.
+               .add_term_start(tidp_a, 4_tm, 21_o)
+               .build();
+    res = update.apply(s);
+    EXPECT_FALSE(res.has_value());
+    EXPECT_THAT(
+      res.error()().c_str(),
+      testing::HasSubstr("Extents end below a requested new term for"));
 }

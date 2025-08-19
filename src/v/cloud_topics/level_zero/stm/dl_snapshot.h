@@ -14,7 +14,7 @@
 #include "container/chunked_vector.h"
 #include "serde/envelope.h"
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 struct dl_snapshot_id
   : serde::
@@ -41,12 +41,12 @@ struct dl_snapshot_payload
     dl_snapshot_id id;
 };
 
-}; // namespace experimental::cloud_topics
+}; // namespace cloud_topics
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::dl_snapshot_id>
+struct fmt::formatter<cloud_topics::dl_snapshot_id>
   : fmt::formatter<std::string_view> {
-    auto format(
-      const experimental::cloud_topics::dl_snapshot_id&,
-      fmt::format_context& ctx) const -> decltype(ctx.out());
+    auto
+    format(const cloud_topics::dl_snapshot_id&, fmt::format_context& ctx) const
+      -> decltype(ctx.out());
 };

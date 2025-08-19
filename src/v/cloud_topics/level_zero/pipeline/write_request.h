@@ -23,7 +23,7 @@
 #include <seastar/core/semaphore.hh>
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 // This object is created for every produce request. It may contain
 // multiple batches.
@@ -76,4 +76,4 @@ template<class Clock>
 using write_request_list
   = intrusive_list<write_request<Clock>, &write_request<Clock>::_hook>;
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

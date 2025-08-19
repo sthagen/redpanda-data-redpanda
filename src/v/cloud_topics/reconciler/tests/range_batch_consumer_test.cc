@@ -7,14 +7,14 @@
  *
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
-#include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
+#include "cloud_topics/reconciler/range_batch_consumer.h"
 #include "model/record_batch_reader.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/random_bytes.h"
 
 #include <gtest/gtest.h>
 
-using consumer = experimental::cloud_topics::reconciler::range_batch_consumer;
+using consumer = cloud_topics::reconciler::range_batch_consumer;
 
 model::record_batch_reader make_reader(
   int offset, int record_size, int num_batches, int records_per_batch) {

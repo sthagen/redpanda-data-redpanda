@@ -28,6 +28,7 @@ var supportedModes = []string{"READONLY", "READWRITE", "IMPORT"}
 func setCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	var modeFlag string
 	var global bool
+	var force bool
 	cmd := &cobra.Command{
 		Use:   "set [SUBJECT...]",
 		Short: "Set schema registry mode",
@@ -41,6 +42,12 @@ Acceptable mode values:
   - READONLY
   - READWRITE
   - IMPORT
+
+You can only enable IMPORT mode on an empty schema registry (if setting mode
+globally) or an empty subject (if setting at the subject level). Empty means no
+schemas have ever been registered. Soft deletions are not sufficient — you must
+hard-delete any existing schemas before enabling IMPORT mode. To override this
+emptiness check, use the --force flag.
 `,
 		Example: `
 Set the global schema registry mode to READONLY
@@ -48,6 +55,9 @@ Set the global schema registry mode to READONLY
 
 Set the schema registry mode to READWRITE in subjects foo and bar
   rpk registry mode set foo bar --mode READWRITE
+
+Set the schema registry mode to IMPORT, overriding the emptiness check
+  rpk registry mode set --mode IMPORT --global --force
 `,
 		Run: func(cmd *cobra.Command, subjects []string) {
 			f := p.Formatter
@@ -70,10 +80,15 @@ Set the schema registry mode to READWRITE in subjects foo and bar
 			err = mode.UnmarshalText([]byte(modeFlag))
 			out.MaybeDie(err, "unable to parse mode flag: %v", err)
 
+			ctx := cmd.Context()
+			if force {
+				ctx = sr.WithParams(ctx, sr.Force)
+			}
+
 			if len(subjects) > 0 && global {
 				subjects = append(subjects, sr.GlobalSubject)
 			}
-			setModeResult := cl.SetMode(cmd.Context(), *mode, subjects...)
+			setModeResult := cl.SetMode(ctx, *mode, subjects...)
 
 			exit1, err := printModeResult(f, setModeResult)
 			out.MaybeDieErr(err)
@@ -84,6 +99,7 @@ Set the schema registry mode to READWRITE in subjects foo and bar
 	}
 
 	cmd.Flags().BoolVar(&global, "global", false, "Set the global schema registry mode in addition to subject modes")
+	cmd.Flags().BoolVar(&force, "force", false, "Whether to force setting mode to IMPORT when there are existing schemas")
 	cmd.Flags().StringVar(&modeFlag, "mode", "", fmt.Sprintf("Schema registry mode to set. Supported values: %v (case insensitive)", strings.Join(supportedModes, ", ")))
 	cmd.MarkFlagRequired("mode")
 	cmd.RegisterFlagCompletionFunc("mode", func(_ *cobra.Command, _ []string, _ string) ([]string, cobra.ShellCompDirective) {

@@ -11,7 +11,7 @@
 
 #include <fmt/format.h>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 // Frontend error codes
 enum class frontend_errc {
     offset_not_available,
@@ -19,11 +19,11 @@ enum class frontend_errc {
     not_leader_for_partition,
     offset_out_of_range,
 };
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics
 template<>
-struct fmt::formatter<experimental::cloud_topics::frontend_errc>
+struct fmt::formatter<cloud_topics::frontend_errc>
   : fmt::formatter<std::string_view> {
-    auto format(
-      const experimental::cloud_topics::frontend_errc&,
-      fmt::format_context& ctx) const -> decltype(ctx.out());
+    auto
+    format(const cloud_topics::frontend_errc&, fmt::format_context& ctx) const
+      -> decltype(ctx.out());
 };

@@ -26,7 +26,7 @@
 
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 class domain_supervisor::impl {
 public:
@@ -336,4 +336,4 @@ ss::future<bool> domain_supervisor::maybe_create_metastore_topic() {
     return _impl->maybe_create_metastore_topic();
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

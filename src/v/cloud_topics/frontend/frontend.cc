@@ -42,7 +42,7 @@
 #include <optional>
 #include <stdexcept>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 namespace {
 
@@ -60,10 +60,10 @@ static constexpr auto L0_replicate_default_timeout = 1s;
 // that matches the extent.
 static model::record_batch make_placeholder_batch(
   const model::record_batch_header& hdr,
-  const experimental::cloud_topics::extent_meta& extent) {
+  const cloud_topics::extent_meta& extent) {
     vassert(hdr.record_count > 0, "Empty record batch not allowed {}", hdr);
 
-    experimental::cloud_topics::dl_placeholder placeholder{
+    cloud_topics::dl_placeholder placeholder{
       .id = extent.id,
       .offset = extent.first_byte_offset,
       .size_bytes = extent.byte_range_size,
@@ -81,7 +81,7 @@ static model::record_batch make_placeholder_batch(
     }
 
     auto first_key = serde::to_iobuf(
-      experimental::cloud_topics::dl_placeholder_record_key::payload);
+      cloud_topics::dl_placeholder_record_key::payload);
 
     auto first_value = serde::to_iobuf(placeholder);
 
@@ -107,7 +107,7 @@ static model::record_batch make_placeholder_batch(
 // Utility function to convert array of extent_meta structs to
 // array of placeholder batches.
 static placeholder_batches_with_size convert_to_placeholders(
-  const chunked_vector<experimental::cloud_topics::extent_meta>& extents,
+  const chunked_vector<cloud_topics::extent_meta>& extents,
   const chunked_vector<model::record_batch_header>& original_headers) {
     // TODO: avoid copying this buffer
     ss::circular_buffer<model::record_batch_header> headers;
@@ -172,17 +172,14 @@ static void update_batches(
     }
 }
 
-static ss::lw_shared_ptr<experimental::cloud_topics::ctp_stm_api>
-make_ctp_stm_api(
+static ss::lw_shared_ptr<cloud_topics::ctp_stm_api> make_ctp_stm_api(
   retry_chain_node& rtc, ss::lw_shared_ptr<cluster::partition> p) {
-    auto stm
-      = p->raft()->stm_manager()->get<experimental::cloud_topics::ctp_stm>();
+    auto stm = p->raft()->stm_manager()->get<cloud_topics::ctp_stm>();
     if (!stm) {
         throw std::runtime_error(
           fmt::format("ctp_stm not found for partition {}", p->ntp()));
     }
-    return ss::make_lw_shared<experimental::cloud_topics::ctp_stm_api>(
-      rtc, stm);
+    return ss::make_lw_shared<cloud_topics::ctp_stm_api>(rtc, stm);
 }
 
 } // namespace
@@ -334,7 +331,7 @@ namespace {
 struct upload_and_replicate_stages {
     model::ntp ntp;
     ss::lw_shared_ptr<cluster::partition> partition;
-    ss::lw_shared_ptr<experimental::cloud_topics::ctp_stm_api> ctp_stm_api;
+    ss::lw_shared_ptr<cloud_topics::ctp_stm_api> ctp_stm_api;
     chunked_vector<model::record_batch> batches;
     model::batch_identity batch_id;
     raft::replicate_options opts;
@@ -694,4 +691,4 @@ ss::future<std::error_code> frontend::linearizable_barrier() {
     co_return r.error();
 }
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

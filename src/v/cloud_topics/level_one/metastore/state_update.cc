@@ -11,7 +11,7 @@
 
 #include "model/fundamental.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 namespace {
 
@@ -60,9 +60,11 @@ void new_object::collect_extents_by_tidp(sorted_extents_by_tidp_t* ret) const {
 std::expected<add_objects_update, stm_update_error> add_objects_update::build(
   const state& state,
   chunked_vector<new_object> objects,
+  term_state_update_t terms,
   chunked_hash_map<model::topic_id_partition, kafka::offset>* corrections) {
     add_objects_update update{
       .new_objects = std::move(objects),
+      .new_terms = std::move(terms),
     };
     auto allowed = update.can_apply(state, corrections);
     if (!allowed.has_value()) {
@@ -76,6 +78,10 @@ std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
   chunked_hash_map<model::topic_id_partition, kafka::offset>* corrections) {
     if (new_objects.empty()) {
         return std::unexpected(stm_update_error{"No objects requested"});
+    }
+    if (new_terms.empty()) {
+        return std::unexpected(
+          stm_update_error{"Missing term info in request"});
     }
     new_object::sorted_extents_by_tidp_t new_extents;
     for (const auto& o : new_objects) {
@@ -113,6 +119,97 @@ std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
                     extent.base_offset())));
             }
             expected_next = kafka::next_offset(extent.last_offset);
+        }
+        if (!new_terms.contains(tidp)) {
+            return std::unexpected(
+              stm_update_error{fmt::format("Missing term info for {}", tidp)});
+        }
+    }
+    // Now that we've validated the offsets of our extents, validate the terms
+    // for the accepted extents.
+    for (const auto& [tp, req_entries] : new_terms) {
+        if (req_entries.empty()) {
+            return std::unexpected(
+              stm_update_error{
+                fmt::format("Empty terms requested for {}", tp)});
+        }
+        if (corrected_next_offsets.contains(tp)) {
+            continue;
+        }
+        auto extents_it = new_extents.find(tp);
+        if (extents_it == new_extents.end() || extents_it->second.empty()) {
+            return std::unexpected(
+              stm_update_error{fmt::format(
+                "Terms provided for a partition that has no extents", tp)});
+        }
+        auto new_extents_start_offset
+          = extents_it->second.begin()->base_offset();
+        auto new_terms_start_offset = req_entries.begin()->start_offset;
+        if (new_extents_start_offset != new_terms_start_offset) {
+            return std::unexpected(
+              stm_update_error{fmt::format(
+                "Extent start and term start do not match for {}: {} != {}",
+                tp,
+                new_extents_start_offset,
+                new_terms_start_offset)});
+        }
+        auto new_extents_last_offset = extents_it->second.rbegin()->last_offset;
+        auto new_terms_last_start_offset = req_entries.back().start_offset;
+        if (new_extents_last_offset < new_terms_last_start_offset) {
+            return std::unexpected(
+              stm_update_error{fmt::format(
+                "Extents end below a requested new term for {}: {} < {}",
+                tp,
+                new_extents_last_offset,
+                new_terms_last_start_offset)});
+        }
+        auto p_state = state.partition_state(tp);
+        // First do a basic check that the incoming term entries can be
+        // appended to our state without violating ordering requirements.
+        if (p_state.has_value() && !p_state->get().term_starts.empty()) {
+            auto p_last_entry = p_state->get().term_starts.back();
+            auto req_first_entry = req_entries.begin();
+
+            // NOTE: it's valid for the first requested term to be equal to the
+            // last term (e.g. if leadership has not changed). The same cannot
+            // be said about offsets, hence the difference in comparator.
+            if (req_first_entry->term_id < p_last_entry.term_id) {
+                return std::unexpected(
+                  stm_update_error{fmt::format(
+                    "New term for {} must be >= last term: {} < {}",
+                    tp,
+                    req_first_entry->term_id,
+                    p_last_entry.term_id)});
+            }
+            if (req_first_entry->start_offset <= p_last_entry.start_offset) {
+                return std::unexpected(
+                  stm_update_error{fmt::format(
+                    "New term for {} must start after last term: {} <= {}",
+                    tp,
+                    req_first_entry->start_offset,
+                    p_last_entry.start_offset)});
+            }
+        }
+        // Now check that the the term entries themselves (both terms and
+        // offsets) are in increasing order.
+        auto max_term_so_far = model::term_id{-1};
+        auto max_offset_so_far = kafka::offset{-1};
+        for (const auto& entry : req_entries) {
+            if (
+              entry.term_id <= max_term_so_far
+              || entry.start_offset <= max_offset_so_far) {
+                return std::unexpected(
+                  stm_update_error{fmt::format(
+                    "Invalid term for {}: term={}, offset={}, "
+                    "max_term_so_far={}, max_offset_so_far={}",
+                    tp,
+                    entry.term_id,
+                    entry.start_offset,
+                    max_term_so_far,
+                    max_offset_so_far)});
+            }
+            max_term_so_far = entry.term_id;
+            max_offset_so_far = entry.start_offset;
         }
     }
     if (corrections) {
@@ -155,6 +252,30 @@ add_objects_update::apply(state& state) {
             for (const auto& extent : extents) {
                 state.objects[extent.oid].total_data_size += extent.len;
             }
+
+            // Also append the terms.
+            auto req_terms_it = new_terms.find(tidp);
+            if (req_terms_it == new_terms.end()) {
+                // Conservative error -- this should have been validated in
+                // can_apply().
+                return std::unexpected(
+                  stm_update_error{fmt::format(
+                    "Expected term updates for applied extents: {}", tidp)});
+            }
+            const auto& req_terms = req_terms_it->second;
+            auto new_term_it = req_terms.begin();
+            if (
+              !p_state.term_starts.empty()
+              && req_terms.begin()->term_id
+                   <= p_state.term_starts.back().term_id) {
+                // If the first added term matches the back of the latest
+                // tracked term, it isn't a new term.
+                ++new_term_it;
+            }
+            std::copy(
+              new_term_it,
+              req_terms.end(),
+              std::back_inserter(p_state.term_starts));
         } else {
             // The incoming extents don't align with the next position. "Drop"
             // them all.
@@ -453,4 +574,4 @@ replace_objects_update::build(
     return update;
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

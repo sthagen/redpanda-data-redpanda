@@ -20,7 +20,7 @@
 
 #include <iterator>
 
-using namespace experimental::cloud_topics::l1;
+using namespace cloud_topics::l1;
 
 namespace {
 struct batch_spec {

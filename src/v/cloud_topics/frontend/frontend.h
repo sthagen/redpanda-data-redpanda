@@ -31,7 +31,7 @@ namespace cluster {
 class partition;
 }
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 class data_plane_api;
 class ctp_stm_api;
 
@@ -158,7 +158,7 @@ private:
     retry_chain_node _rtc;
     ss::lw_shared_ptr<cluster::partition> _partition;
     data_plane_api* _data_plane;
-    ss::lw_shared_ptr<experimental::cloud_topics::ctp_stm_api> _ctp_stm_api;
+    ss::lw_shared_ptr<cloud_topics::ctp_stm_api> _ctp_stm_api;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

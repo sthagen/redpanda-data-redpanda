@@ -3115,10 +3115,8 @@ void application::start_runtime_services(
           pm.register_factory<datalake::translation::stm_factory>(
             config::shard_local_cfg().iceberg_enabled());
           if (config::shard_local_cfg().development_enable_cloud_topics()) {
-              pm.register_factory<
-                experimental::cloud_topics::ctp_stm_factory>();
-              pm.register_factory<
-                experimental::cloud_topics::l1::stm_factory>();
+              pm.register_factory<cloud_topics::ctp_stm_factory>();
+              pm.register_factory<cloud_topics::l1::stm_factory>();
           }
       })
       .get();
@@ -3347,7 +3345,7 @@ void application::start_runtime_services(
             config::shard_local_cfg().development_enable_cloud_topics()
             && cloud_topics_app) {
               runtime_services.push_back(
-                std::make_unique<experimental::cloud_topics::l1::rpc::service>(
+                std::make_unique<cloud_topics::l1::rpc::service>(
                   sched_groups.datalake_sg(),
                   smp_service_groups.datalake_sg(),
                   cloud_topics_app->get_sharded_l1_metastore_fe()));

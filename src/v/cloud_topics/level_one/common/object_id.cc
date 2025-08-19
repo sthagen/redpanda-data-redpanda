@@ -10,11 +10,11 @@
 
 #include "cloud_topics/level_one/common/object_id.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 fmt::iterator object_extent::format_to(fmt::iterator it) const {
     return fmt::format_to(
       it, "{{id: {}, position: {}, size: {}}}", id, position, size);
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

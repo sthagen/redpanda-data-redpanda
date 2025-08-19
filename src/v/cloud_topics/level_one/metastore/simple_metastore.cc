@@ -16,7 +16,22 @@
 
 #include <seastar/core/coroutine.hh>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
+
+namespace {
+term_state_update_t make_terms_update(const metastore::term_offset_map_t& m) {
+    term_state_update_t ret;
+    for (const auto& [tp, tp_terms] : m) {
+        chunked_vector<term_start> term_updates;
+        for (const auto& ts : tp_terms) {
+            term_updates.emplace_back(
+              term_start{.term_id = ts.term, .start_offset = ts.first_offset});
+        }
+        ret[tp] = std::move(term_updates);
+    }
+    return ret;
+}
+} // namespace
 
 object_id simple_object_builder::get_or_create_object_for(
   const model::topic_id_partition&) {
@@ -117,25 +132,32 @@ simple_metastore::get_offsets(
 
 ss::future<std::expected<metastore::add_response, metastore::errc>>
 simple_metastore::add_objects(
-  std::unique_ptr<metastore::object_metadata_builder> builder) {
+  std::unique_ptr<metastore::object_metadata_builder> builder,
+  const term_offset_map_t& terms) {
     auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
     auto objects_res = simple_builder->release();
     if (!objects_res.has_value()) {
         vlog(cd_log.error, "Failed to add: {}", objects_res.error());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
-    co_return co_await add_objects(objects_res.value());
+    co_return co_await add_objects(objects_res.value(), terms);
 }
 
 ss::future<std::expected<metastore::add_response, metastore::errc>>
-simple_metastore::add_objects(const chunked_vector<object_metadata>& objects) {
+simple_metastore::add_objects(
+  const chunked_vector<object_metadata>& objects,
+  const term_offset_map_t& terms) {
     chunked_vector<new_object> new_objects;
     for (const auto& o : objects) {
         new_objects.emplace_back(make_new_object(o));
     }
+    auto terms_update = make_terms_update(terms);
     add_response resp;
     auto update_res = add_objects_update::build(
-      state_, std::move(new_objects), &resp.corrected_next_offsets);
+      state_,
+      std::move(new_objects),
+      std::move(terms_update),
+      &resp.corrected_next_offsets);
     if (!update_res.has_value()) {
         vlog(cd_log.debug, "Object add failed: {}", update_res.error());
         co_return std::unexpected(metastore::errc::invalid_request);
@@ -350,4 +372,4 @@ simple_metastore::get_compaction_offsets(
     return resp;
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

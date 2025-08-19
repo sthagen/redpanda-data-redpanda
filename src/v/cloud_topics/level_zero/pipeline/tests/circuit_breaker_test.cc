@@ -15,7 +15,7 @@
 
 #include <gtest/gtest.h>
 
-using namespace experimental::cloud_topics;
+using namespace cloud_topics;
 using namespace std::chrono_literals;
 
 TEST(CircuitBreaker, open_closed_half_open_open) {

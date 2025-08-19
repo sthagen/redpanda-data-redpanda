@@ -14,7 +14,7 @@
 #include <seastar/core/abort_source.hh>
 #include <seastar/core/future.hh>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 /*
  * This interface defines access to cluster-level services, such as a global
@@ -42,4 +42,4 @@ public:
     current_epoch(seastar::abort_source*) = 0;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

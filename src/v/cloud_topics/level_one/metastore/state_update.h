@@ -18,7 +18,7 @@
 
 #include <expected>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 enum class update_key : uint8_t {
     add_objects = 0,
@@ -62,6 +62,9 @@ struct new_object
     void collect_extents_by_tidp(sorted_extents_by_tidp_t*) const;
 };
 
+using term_state_update_t
+  = chunked_hash_map<model::topic_id_partition, chunked_vector<term_start>>;
+
 struct add_objects_update
   : public serde::envelope<
       add_objects_update,
@@ -69,12 +72,13 @@ struct add_objects_update
       serde::compat_version<0>> {
     friend bool operator==(const add_objects_update&, const add_objects_update&)
       = default;
-    auto serde_fields() { return std::tie(new_objects); }
+    auto serde_fields() { return std::tie(new_objects, new_terms); }
 
     static constexpr auto key{update_key::add_objects};
     static std::expected<add_objects_update, stm_update_error> build(
       const state&,
       chunked_vector<new_object>,
+      term_state_update_t,
       chunked_hash_map<model::topic_id_partition, kafka::offset>* = nullptr);
 
     std::expected<std::monostate, stm_update_error> can_apply(
@@ -83,6 +87,7 @@ struct add_objects_update
     std::expected<std::monostate, stm_update_error> apply(state&);
 
     chunked_vector<new_object> new_objects;
+    term_state_update_t new_terms;
 };
 
 struct compaction_state_update
@@ -154,19 +159,18 @@ struct replace_objects_update
       compaction_updates;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::l1::update_key> final
+struct fmt::formatter<cloud_topics::l1::update_key> final
   : fmt::formatter<std::string_view> {
     template<typename FormatContext>
-    auto format(
-      const experimental::cloud_topics::l1::update_key& k,
-      FormatContext& ctx) const {
+    auto
+    format(const cloud_topics::l1::update_key& k, FormatContext& ctx) const {
         switch (k) {
-        case experimental::cloud_topics::l1::update_key::add_objects:
+        case cloud_topics::l1::update_key::add_objects:
             return formatter<string_view>::format("add_objects", ctx);
-        case experimental::cloud_topics::l1::update_key::replace_objects:
+        case cloud_topics::l1::update_key::replace_objects:
             return formatter<string_view>::format("replace_objects", ctx);
         }
     }

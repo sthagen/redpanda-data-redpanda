@@ -60,7 +60,7 @@ partition_manager::partition_manager(
   ss::sharded<features::feature_table>& feature_table,
   ss::sharded<archival::upload_housekeeping_service>& upload_hks,
   config::binding<std::chrono::milliseconds> partition_shutdown_timeout,
-  ss::sharded<experimental::cloud_topics::state_accessors>* cloud_topics_state)
+  ss::sharded<cloud_topics::state_accessors>* cloud_topics_state)
   : _storage(storage.local())
   , _raft_manager(raft)
   , _partition_recovery_mgr(recovery_mgr)

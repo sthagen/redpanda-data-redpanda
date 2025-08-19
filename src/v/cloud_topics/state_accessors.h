@@ -9,7 +9,7 @@
  */
 #pragma once
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 class data_plane_api;
 
@@ -27,4 +27,4 @@ public:
 private:
     data_plane_api* data_plane;
 };
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

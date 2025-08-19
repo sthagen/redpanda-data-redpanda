@@ -15,7 +15,7 @@
 
 #include <fmt/core.h>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 // This struct contains extent information (location of the byte slice in the
 // object + the object uuid) and the kafka metadata (base offset and committed
@@ -47,14 +47,14 @@ struct extent_meta {
     kafka::offset last_offset;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::extent_meta>
+struct fmt::formatter<cloud_topics::extent_meta>
   : fmt::formatter<std::string_view> {
     template<class Context>
-    constexpr auto format(
-      const experimental::cloud_topics::extent_meta& o, Context& ctx) const {
+    constexpr auto
+    format(const cloud_topics::extent_meta& o, Context& ctx) const {
         return format_to(
           ctx.out(),
           "{{id:{}, first_byte_offset:{}, byte_range_size:{}, "

@@ -17,8 +17,6 @@
 
 #include <iterator>
 
-namespace cloud_topics = experimental::cloud_topics;
-
 TEST(SerializerTest, EmptyReader) {
     auto res = cloud_topics::l0::serialize_batches({}).get();
     ASSERT_TRUE(res.payload.empty());

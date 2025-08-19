@@ -9,6 +9,8 @@
  * by the Apache License, Version 2.0
  */
 
+#include "absl/strings/str_join.h"
+#include "absl/strings/str_split.h"
 #include "absl/time/time.h"
 #include "base/units.h"
 #include "bytes/iobuf_parser.h"
@@ -303,8 +305,25 @@ public:
         while (parser.bytes_left() > 0) {
             auto tag = parser.read_tag();
             if (tag.field_number == 1) {
-                mask.paths.push_back(
-                  parser.template read_string<full_name>(tag));
+                auto path_str = parser.template read_string<full_name>(tag);
+                if (mask.paths.size() >= field_mask::max_paths) {
+                    throw std::runtime_error(
+                      fmt::format(
+                        "field mask exceeds maximum number of paths: {}",
+                        field_mask::max_paths));
+                }
+                size_t segments = std::ranges::count(
+                                    std::string_view(path_str), '.')
+                                  + 1;
+                if (segments > field_mask::max_path_segments) {
+                    throw std::runtime_error(
+                      fmt::format(
+                        "field mask path has more than {} segments: {}",
+                        field_mask::max_path_segments,
+                        path_str));
+                }
+                mask.paths.emplace_back(
+                  absl::StrSplit(std::string_view(path_str), "."));
             } else {
                 parser.skip_unknown(tag);
             }
@@ -346,8 +365,9 @@ inline iobuf field_mask_to_proto(const field_mask& mask) {
     for (const auto& path : mask.paths) {
         serde::pb::tag::write(
           {.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
-        serde::pb::write_length(path.size(), &buf);
-        buf.append_str(path);
+        std::string path_str = absl::StrJoin(path, ".");
+        serde::pb::write_length(static_cast<int32_t>(path_str.size()), &buf);
+        buf.append_str(path_str);
     }
     return buf;
 }

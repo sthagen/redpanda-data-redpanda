@@ -58,6 +58,7 @@ redpanda_cc_library(
         "//src/v/bytes:iobuf_parser",
         "//src/v/container:chunked_vector",
         "//src/v/utils:fixed_string",
+        "@abseil-cpp//absl/strings",
         "@fmt",
         "@seastar",
     ],
@@ -108,7 +109,6 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
-        "//src/v/container:chunked_vector",
         "@seastar",
     ],
 )

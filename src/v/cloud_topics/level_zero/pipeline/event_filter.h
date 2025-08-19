@@ -18,7 +18,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 enum class event_type {
     // This indicates default initialized event
@@ -124,4 +124,4 @@ public:
       = intrusive_list<event_filter, &event_filter::_hook>;
 };
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

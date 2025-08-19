@@ -12,7 +12,7 @@
 #include "cloud_topics/level_one/metastore/rpc_types.h"
 #include "cloud_topics/level_one/metastore/simple_stm.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // Encapsulates management of a given L1 metastore domain by wrapping a STM.
 // Expected to be running on the leader replicas of the partition that backs
@@ -53,4 +53,4 @@ private:
     ss::shared_ptr<simple_stm> stm_;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

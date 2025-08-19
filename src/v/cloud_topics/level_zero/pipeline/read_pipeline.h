@@ -26,7 +26,7 @@
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 struct read_pipeline_accessor;
 
@@ -131,4 +131,4 @@ private:
 
     circuit_breaker<Clock> _breaker;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

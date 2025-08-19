@@ -17,7 +17,9 @@
 #include "serde/rw/enum.h"
 #include "serde/rw/envelope.h"
 
-namespace experimental::cloud_topics::l1::rpc {
+#include <fmt/format.h>
+
+namespace cloud_topics::l1::rpc {
 
 enum class errc : int16_t {
     ok = 0,
@@ -47,10 +49,13 @@ struct add_objects_request
       serde::version<0>,
       serde::compat_version<0>> {
     using resp_t = add_objects_reply;
-    auto serde_fields() { return std::tie(metastore_partition, new_objects); }
+    auto serde_fields() {
+        return std::tie(metastore_partition, new_objects, new_terms);
+    }
 
     model::partition_id metastore_partition;
     chunked_vector<new_object> new_objects;
+    term_state_update_t new_terms;
 };
 
 struct replace_objects_reply
@@ -182,4 +187,31 @@ struct get_compaction_offsets_request
     model::timestamp tombstone_removal_upper_bound_ts;
 };
 
-} //  namespace experimental::cloud_topics::l1::rpc
+} //  namespace cloud_topics::l1::rpc
+
+template<>
+struct fmt::formatter<cloud_topics::l1::rpc::errc> final
+  : fmt::formatter<std::string_view> {
+    using errc = cloud_topics::l1::rpc::errc;
+    template<typename FormatContext>
+    auto format(const errc& ec, FormatContext& ctx) const {
+        switch (ec) {
+        case errc::ok:
+            return fmt::format_to(ctx.out(), "rpc::errc::ok");
+        case errc::incorrect_partition:
+            return fmt::format_to(ctx.out(), "rpc::errc::incorrect_partition");
+        case errc::timed_out:
+            return fmt::format_to(ctx.out(), "rpc::errc::timed_out");
+        case errc::not_leader:
+            return fmt::format_to(ctx.out(), "rpc::errc::not_leader");
+        case errc::concurrent_requests:
+            return fmt::format_to(ctx.out(), "rpc::errc::concurrent_requests");
+        case errc::missing_ntp:
+            return fmt::format_to(ctx.out(), "rpc::errc::missing_ntp");
+        case errc::out_of_range:
+            return fmt::format_to(ctx.out(), "rpc::errc::out_of_range");
+        }
+        return fmt::format_to(
+          ctx.out(), "rpc::errc::unknown({})", static_cast<int>(ec));
+    }
+};

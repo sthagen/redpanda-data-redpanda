@@ -12,7 +12,7 @@
 
 #include "model/fundamental.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 bool offset_interval_set::stream::has_next() const noexcept {
     return iter_ != set_.end();
@@ -60,4 +60,4 @@ offset_interval_set::to_vec() const {
     return ret;
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

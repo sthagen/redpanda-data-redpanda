@@ -16,7 +16,7 @@
 #include "container/chunked_vector.h"
 #include "model/record_batch_reader.h"
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 /// Chunk is produced by serializing single record
 /// batch reader (which usually contains data from
@@ -37,4 +37,4 @@ struct serialized_chunk {
 ss::future<serialized_chunk>
 serialize_batches(chunked_vector<model::record_batch> batches);
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

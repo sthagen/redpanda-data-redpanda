@@ -20,7 +20,7 @@
 #include <seastar/core/sharded.hh>
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 struct throttler_accessor;
 
@@ -82,4 +82,4 @@ private:
     // Number of times the pipeline was throttled by tput
     size_t _throttle_by_tput{0};
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

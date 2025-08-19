@@ -21,7 +21,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/lowres_clock.hh>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 /// Dataplane API
 class data_plane_api {
@@ -59,4 +59,4 @@ public:
     cache_get(const model::ntp&, model::offset o) = 0;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

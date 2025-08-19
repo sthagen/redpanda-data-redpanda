@@ -22,10 +22,12 @@ a::a() noexcept = default;
 a::a(a&&) noexcept = default;
 a& a::operator=(a&&) noexcept = default;
 a::~a() noexcept = default;
-bool a::operator==(const a&) const = default;
 c& a::get_c() { return c_; }
 const c& a::get_c() const { return c_; }
 void a::set_c(c&& v) { c_ = std::move(v); }
+bool a::operator==(const a& other) const {
+  return (c_ == other.c_);
+}
 fmt::iterator a::format_to(fmt::iterator it) const {
   return fmt::format_to(it, "{{c: {}}}", c_);
 }
@@ -108,18 +110,48 @@ seastar::future<a> a::from_json(iobuf data) {
   co_await serde::pb::json::check_next_eof(&parser);
   co_return self;
 }
+bool a::is_valid_field_path(std::span<const ss::sstring> path) {
+  if (path.empty()) { return true; }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, bool(*)(decltype(path))>>({
+    {"c", c::is_valid_field_path},
+  });
+  for (const auto& [name, is_valid] : fields) {
+    if (path.front() == name) {
+      return is_valid(path.subspan(1));
+    }
+  }
+  return false;
+}
+void a::apply_field_path_from(std::span<const ss::sstring> path, a* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
+    {"c", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->get_c().apply_field_path_from(path, &update->get_c());
+    }},
+  });
+  for (const auto& [name, apply] : fields) {
+    if (path.front() == name) {
+      return apply(path.subspan(1), this, update);
+    }
+  }
+}
 
 b::b() noexcept = default;
 b::b(b&&) noexcept = default;
 b& b::operator=(b&&) noexcept = default;
 b::~b() noexcept = default;
-bool b::operator==(const b&) const = default;
 c& b::get_c() { return c_; }
 const c& b::get_c() const { return c_; }
 void b::set_c(c&& v) { c_ = std::move(v); }
 a& b::get_a() { return a_; }
 const a& b::get_a() const { return a_; }
 void b::set_a(a&& v) { a_ = std::move(v); }
+bool b::operator==(const b& other) const {
+  return (c_ == other.c_) && (a_ == other.a_);
+}
 fmt::iterator b::format_to(fmt::iterator it) const {
   return fmt::format_to(it, "{{c: {}, a: {}}}", c_, a_);
 }
@@ -229,12 +261,47 @@ seastar::future<b> b::from_json(iobuf data) {
   co_await serde::pb::json::check_next_eof(&parser);
   co_return self;
 }
+bool b::is_valid_field_path(std::span<const ss::sstring> path) {
+  if (path.empty()) { return true; }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, bool(*)(decltype(path))>>({
+    {"c", c::is_valid_field_path},
+    {"a", a::is_valid_field_path},
+  });
+  for (const auto& [name, is_valid] : fields) {
+    if (path.front() == name) {
+      return is_valid(path.subspan(1));
+    }
+  }
+  return false;
+}
+void b::apply_field_path_from(std::span<const ss::sstring> path, b* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
+    {"c", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->get_c().apply_field_path_from(path, &update->get_c());
+    }},
+    {"a", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->get_a().apply_field_path_from(path, &update->get_a());
+    }},
+  });
+  for (const auto& [name, apply] : fields) {
+    if (path.front() == name) {
+      return apply(path.subspan(1), this, update);
+    }
+  }
+}
 
 c::c() noexcept = default;
 c::c(c&&) noexcept = default;
 c& c::operator=(c&&) noexcept = default;
 c::~c() noexcept = default;
-bool c::operator==(const c&) const = default;
+bool c::operator==(const c& other) const {
+  std::ignore = other;
+  return true;
+}
 fmt::iterator c::format_to(fmt::iterator it) const {
   return fmt::format_to(it, "{{}}");
 }
@@ -291,15 +358,26 @@ seastar::future<c> c::from_json(iobuf data) {
   co_await serde::pb::json::check_next_eof(&parser);
   co_return self;
 }
+bool c::is_valid_field_path(std::span<const ss::sstring> path) {
+  return path.empty();
+}
+void c::apply_field_path_from(std::span<const ss::sstring> path, c* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+}
 
 super_duper_secret::super_duper_secret() noexcept = default;
 super_duper_secret::super_duper_secret(super_duper_secret&&) noexcept = default;
 super_duper_secret& super_duper_secret::operator=(super_duper_secret&&) noexcept = default;
 super_duper_secret::~super_duper_secret() noexcept = default;
-bool super_duper_secret::operator==(const super_duper_secret&) const = default;
 ss::sstring& super_duper_secret::get_value() { return value_; }
 const ss::sstring& super_duper_secret::get_value() const { return value_; }
 void super_duper_secret::set_value(ss::sstring&& v) { value_ = std::move(v); }
+bool super_duper_secret::operator==(const super_duper_secret& other) const {
+  return (value_ == other.value_);
+}
 fmt::iterator super_duper_secret::format_to(fmt::iterator it) const {
   return fmt::format_to(it, "{{value: {}}}", "<redacted>");
 }
@@ -371,12 +449,156 @@ seastar::future<super_duper_secret> super_duper_secret::from_json(iobuf data) {
   co_await serde::pb::json::check_next_eof(&parser);
   co_return self;
 }
+bool super_duper_secret::is_valid_field_path(std::span<const ss::sstring> path) {
+  if (path.empty()) { return true; }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, bool(*)(decltype(path))>>({
+    {"value", [](auto path) { return path.empty(); }},
+  });
+  for (const auto& [name, is_valid] : fields) {
+    if (path.front() == name) {
+      return is_valid(path.subspan(1));
+    }
+  }
+  return false;
+}
+void super_duper_secret::apply_field_path_from(std::span<const ss::sstring> path, super_duper_secret* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
+    {"value", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->set_value(std::move(update->get_value()));
+    }},
+  });
+  for (const auto& [name, apply] : fields) {
+    if (path.front() == name) {
+      return apply(path.subspan(1), this, update);
+    }
+  }
+}
+
+mask_wrapper::mask_wrapper() noexcept = default;
+mask_wrapper::mask_wrapper(mask_wrapper&&) noexcept = default;
+mask_wrapper& mask_wrapper::operator=(mask_wrapper&&) noexcept = default;
+mask_wrapper::~mask_wrapper() noexcept = default;
+serde::pb::field_mask& mask_wrapper::get_mask() { return mask_; }
+const serde::pb::field_mask& mask_wrapper::get_mask() const { return mask_; }
+void mask_wrapper::set_mask(serde::pb::field_mask&& v) { mask_ = std::move(v); }
+bool mask_wrapper::operator==(const mask_wrapper& other) const {
+  return (mask_ == other.mask_);
+}
+fmt::iterator mask_wrapper::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{mask: {}}}", mask_);
+}
+seastar::future<> mask_wrapper::from_proto(serde::pb::wire_format_parser* parser, mask_wrapper* self) {
+  while (parser->bytes_left() > 0) {
+    auto tag = parser->read_tag();
+    switch (tag.field_number) {
+    case 1: { // mask
+      self->set_mask(parser->read_wellknown_field_mask<"example.MaskWrapper.mask">(tag));
+      break;
+    }
+    default:
+      parser->skip_unknown(tag);
+      break;
+    }
+  }
+  co_return;
+}
+seastar::future<mask_wrapper> mask_wrapper::from_proto(iobuf buf) {
+  mask_wrapper self;
+  serde::pb::wire_format_parser parser{std::move(buf)};
+  co_await from_proto(&parser, &self);
+  parser.check_empty();
+  co_return self;
+}
+seastar::future<iobuf> mask_wrapper::to_proto() const {
+  iobuf buf;
+  {
+    // mask
+    serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+    iobuf msg_buf = serde::pb::wellknown::field_mask_to_proto(get_mask());
+    serde::pb::write_length(static_cast<int32_t>(msg_buf.size_bytes()), &buf);
+    buf.append(std::move(msg_buf));
+  }
+  co_return buf;
+}
+seastar::future<iobuf> mask_wrapper::to_json() const {
+  serde::json::writer w;
+  w.begin_object();
+  w.key("mask");
+  w.append_raw_json(serde::pb::json::wellknown::field_mask_to_json(get_mask()));
+  w.end_object();
+  co_return std::move(w).finish();
+}
+seastar::future<> mask_wrapper::from_json(serde::pb::json::peekable_parser* parser, mask_wrapper* self) {
+  constexpr static auto key_to_field_number = std::to_array<std::pair<std::string_view, int32_t>>({
+    {"mask", 1},
+  });
+  auto entries = serde::pb::json::object_key_generator(parser);
+  while (auto key = co_await entries()) {
+    auto fields = std::ranges::equal_range(key_to_field_number, *key, std::less<>(), [](const auto& pair) { return pair.first; });
+    if (fields.empty()) {
+      co_await parser->skip_value();
+      continue;
+    }
+    switch (fields.front().second) {
+    case 1: { // mask
+      if (co_await parser->peek() == serde::json::token::value_null) {
+        co_await parser->next();
+      } else {
+        auto v = co_await serde::pb::json::wellknown::field_mask_from_json(parser);
+        self->set_mask(std::move(v));
+      }
+      break;
+    }
+    default:
+      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+    }
+  }
+  co_return;
+}
+seastar::future<mask_wrapper> mask_wrapper::from_json(iobuf data) {
+  mask_wrapper self;
+  serde::pb::json::peekable_parser parser(std::move(data));
+  co_await from_json(&parser, &self);
+  co_await serde::pb::json::check_next_eof(&parser);
+  co_return self;
+}
+bool mask_wrapper::is_valid_field_path(std::span<const ss::sstring> path) {
+  if (path.empty()) { return true; }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, bool(*)(decltype(path))>>({
+    {"mask", [](auto path) { return path.empty(); }},
+  });
+  for (const auto& [name, is_valid] : fields) {
+    if (path.front() == name) {
+      return is_valid(path.subspan(1));
+    }
+  }
+  return false;
+}
+void mask_wrapper::apply_field_path_from(std::span<const ss::sstring> path, mask_wrapper* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
+    {"mask", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->set_mask(std::move(update->get_mask()));
+    }},
+  });
+  for (const auto& [name, apply] : fields) {
+    if (path.front() == name) {
+      return apply(path.subspan(1), this, update);
+    }
+  }
+}
 
 well_known_protos::well_known_protos() noexcept = default;
 well_known_protos::well_known_protos(well_known_protos&&) noexcept = default;
 well_known_protos& well_known_protos::operator=(well_known_protos&&) noexcept = default;
 well_known_protos::~well_known_protos() noexcept = default;
-bool well_known_protos::operator==(const well_known_protos&) const = default;
 absl::Duration& well_known_protos::get_single_duration() { return single_duration_; }
 const absl::Duration& well_known_protos::get_single_duration() const { return single_duration_; }
 void well_known_protos::set_single_duration(absl::Duration&& v) { single_duration_ = std::move(v); }
@@ -404,6 +626,9 @@ void well_known_protos::set_repeated_timestamp(chunked_vector<absl::Time>&& v) {
 chunked_hash_map<ss::sstring, absl::Time>& well_known_protos::get_timestamp_map() { return timestamp_map_; }
 const chunked_hash_map<ss::sstring, absl::Time>& well_known_protos::get_timestamp_map() const { return timestamp_map_; }
 void well_known_protos::set_timestamp_map(chunked_hash_map<ss::sstring, absl::Time>&& v) { timestamp_map_ = std::move(v); }
+bool well_known_protos::operator==(const well_known_protos& other) const {
+  return (single_duration_ == other.single_duration_) && (repeated_duration_ == other.repeated_duration_) && (duration_map_ == other.duration_map_) && (single_field_mask_ == other.single_field_mask_) && (repeated_field_mask_ == other.repeated_field_mask_) && (field_mask_map_ == other.field_mask_map_) && (single_timestamp_ == other.single_timestamp_) && (repeated_timestamp_ == other.repeated_timestamp_) && (timestamp_map_ == other.timestamp_map_);
+}
 fmt::iterator well_known_protos::format_to(fmt::iterator it) const {
   return fmt::format_to(it, "{{single_duration: {}, repeated_duration: {}, duration_map: {}, single_field_mask: {}, repeated_field_mask: {}, field_mask_map: {}, single_timestamp: {}, repeated_timestamp: {}, timestamp_map: {}}}", single_duration_, repeated_duration_, duration_map_, single_field_mask_, repeated_field_mask_, field_mask_map_, single_timestamp_, repeated_timestamp_, timestamp_map_);
 }
@@ -875,6 +1100,78 @@ seastar::future<well_known_protos> well_known_protos::from_json(iobuf data) {
   co_await from_json(&parser, &self);
   co_await serde::pb::json::check_next_eof(&parser);
   co_return self;
+}
+bool well_known_protos::is_valid_field_path(std::span<const ss::sstring> path) {
+  if (path.empty()) { return true; }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, bool(*)(decltype(path))>>({
+    {"single_duration", [](auto path) { return path.empty(); }},
+    {"repeated_duration", [](auto path) { return path.empty(); }},
+    {"duration_map", [](auto path) { return path.empty(); }},
+    {"single_field_mask", [](auto path) { return path.empty(); }},
+    {"repeated_field_mask", [](auto path) { return path.empty(); }},
+    {"field_mask_map", [](auto path) { return path.empty(); }},
+    {"single_timestamp", [](auto path) { return path.empty(); }},
+    {"repeated_timestamp", [](auto path) { return path.empty(); }},
+    {"timestamp_map", [](auto path) { return path.empty(); }},
+  });
+  for (const auto& [name, is_valid] : fields) {
+    if (path.front() == name) {
+      return is_valid(path.subspan(1));
+    }
+  }
+  return false;
+}
+void well_known_protos::apply_field_path_from(std::span<const ss::sstring> path, well_known_protos* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
+    {"single_duration", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->set_single_duration(std::move(update->get_single_duration()));
+    }},
+    {"repeated_duration", [](auto, auto* self, auto* update) {
+      std::ranges::move(update->get_repeated_duration(), std::back_inserter(self->get_repeated_duration()));
+      update->get_repeated_duration().clear();
+    }},
+    {"duration_map", [](auto, auto* self, auto* update) {
+      for (auto& [k, v] : update->get_duration_map()) {
+        self->get_duration_map().insert_or_assign(std::move(k), std::move(v));
+      }
+      update->get_duration_map().clear();
+    }},
+    {"single_field_mask", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->set_single_field_mask(std::move(update->get_single_field_mask()));
+    }},
+    {"repeated_field_mask", [](auto, auto* self, auto* update) {
+      std::ranges::move(update->get_repeated_field_mask(), std::back_inserter(self->get_repeated_field_mask()));
+      update->get_repeated_field_mask().clear();
+    }},
+    {"field_mask_map", [](auto, auto* self, auto* update) {
+      for (auto& [k, v] : update->get_field_mask_map()) {
+        self->get_field_mask_map().insert_or_assign(std::move(k), std::move(v));
+      }
+      update->get_field_mask_map().clear();
+    }},
+    {"single_timestamp", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->set_single_timestamp(std::move(update->get_single_timestamp()));
+    }},
+    {"repeated_timestamp", [](auto, auto* self, auto* update) {
+      std::ranges::move(update->get_repeated_timestamp(), std::back_inserter(self->get_repeated_timestamp()));
+      update->get_repeated_timestamp().clear();
+    }},
+    {"timestamp_map", [](auto, auto* self, auto* update) {
+      for (auto& [k, v] : update->get_timestamp_map()) {
+        self->get_timestamp_map().insert_or_assign(std::move(k), std::move(v));
+      }
+      update->get_timestamp_map().clear();
+    }},
+  });
+  for (const auto& [name, apply] : fields) {
+    if (path.front() == name) {
+      return apply(path.subspan(1), this, update);
+    }
+  }
 }
 
 void enum_from_proto(iobuf_parser* p, corpus* e) {

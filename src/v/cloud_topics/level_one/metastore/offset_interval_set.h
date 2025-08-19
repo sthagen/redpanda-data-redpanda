@@ -17,7 +17,7 @@
 #include "serde/rw/envelope.h"
 #include "serde/rw/map.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // Wrapper around an interval_set, but with an interface that makes it
 // condusive to using inclusive offset ranges.
@@ -58,13 +58,12 @@ private:
     interval_set<kafka::offset::type> iset_;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1
 
 template<>
-struct fmt::formatter<
-  experimental::cloud_topics::l1::offset_interval_set::interval>
-  final : fmt::formatter<std::string_view> {
-    using iset = experimental::cloud_topics::l1::offset_interval_set;
+struct fmt::formatter<cloud_topics::l1::offset_interval_set::interval> final
+  : fmt::formatter<std::string_view> {
+    using iset = cloud_topics::l1::offset_interval_set;
     template<typename FormatContext>
     auto format(const iset::interval& iv, FormatContext& ctx) const {
         return fmt::format_to(

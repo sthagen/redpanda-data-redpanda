@@ -24,7 +24,7 @@
 #include <chrono>
 #include <cstdlib>
 
-namespace ct = ::experimental::cloud_topics;
+namespace ct = ::cloud_topics;
 
 struct read_pipeline_sink {
     explicit read_pipeline_sink(ct::l0::read_pipeline<>& p)

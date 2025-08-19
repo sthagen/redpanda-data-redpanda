@@ -17,7 +17,7 @@ namespace cluster {
 class partition;
 }
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 class data_plane_api;
 
 /*
@@ -98,7 +98,7 @@ private:
 
     state _current{state::empty_state};
 
-    chunked_circular_buffer<experimental::cloud_topics::extent_meta> _meta;
+    chunked_circular_buffer<cloud_topics::extent_meta> _meta;
     chunked_circular_buffer<model::record_batch_header> _headers;
     chunked_vector<model::record_batch> _batches;
     cloud_topic_log_reader_config _config;
@@ -106,4 +106,4 @@ private:
     data_plane_api* _ct_api;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

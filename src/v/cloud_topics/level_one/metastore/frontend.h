@@ -32,7 +32,7 @@ concept request_has_topic_id_partition = requires(T t) {
     { t.tp } -> std::same_as<model::topic_id_partition&>;
 };
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 class domain_supervisor;
 
 /*
@@ -77,10 +77,8 @@ public:
     metastore_partition(const model::topic_id_partition&) const;
 
 private:
-    using proto_t
-      = experimental::cloud_topics::l1::rpc::impl::l1_rpc_client_protocol;
-    using client
-      = experimental::cloud_topics::l1::rpc::impl::l1_rpc_client_protocol;
+    using proto_t = cloud_topics::l1::rpc::impl::l1_rpc_client_protocol;
+    using client = cloud_topics::l1::rpc::impl::l1_rpc_client_protocol;
 
     static constexpr std::chrono::seconds rpc_timeout{5};
 
@@ -95,9 +93,7 @@ private:
 
     template<auto LocalFunc, auto RemoteFunc, typename req_t>
     requires requires(
-      experimental::cloud_topics::l1::frontend f,
-      const model::ntp& ntp,
-      req_t req) {
+      cloud_topics::l1::frontend f, const model::ntp& ntp, req_t req) {
         (f.*LocalFunc)(std::move(req), ntp, ss::shard_id{0});
         request_has_metastore_partition<req_t>
           || request_has_topic_id_partition<req_t>;
@@ -143,4 +139,4 @@ private:
     domain_supervisor* _domain_supervisor;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

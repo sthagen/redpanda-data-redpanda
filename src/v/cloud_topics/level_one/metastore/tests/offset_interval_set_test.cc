@@ -14,7 +14,7 @@
 
 #include <gtest/gtest.h>
 
-using namespace experimental::cloud_topics::l1;
+using namespace cloud_topics::l1;
 using o = kafka::offset;
 namespace {
 MATCHER_P2(MatchesRange, base, last, "") {

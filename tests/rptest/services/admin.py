@@ -487,14 +487,15 @@ class Admin:
         if retry_codes is None:
             retry_codes = [503]
 
-        retries = Retry(status=retries_amount,
-                        connect=0,
-                        read=0,
-                        backoff_factor=1,
-                        status_forcelist=retry_codes,
-                        respect_retry_after_header=True,
-                        method_whitelist=None,
-                        remove_headers_on_redirect=[])
+        retries = Retry(
+            status=retries_amount,
+            connect=0,
+            read=0,
+            backoff_factor=1,
+            status_forcelist=retry_codes,
+            respect_retry_after_header=True,
+            allowed_methods=None,  # Retry all methods
+            remove_headers_on_redirect=[])
 
         self._session.mount("http://", HTTPAdapter(max_retries=retries))
 

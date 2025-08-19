@@ -24,7 +24,7 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 /// The result of the read request processing.
 /// Contains raft_data batches.
@@ -102,4 +102,4 @@ template<class Clock>
 using read_request_list
   = intrusive_list<read_request<Clock>, &read_request<Clock>::_hook>;
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

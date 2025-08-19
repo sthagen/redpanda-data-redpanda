@@ -19,7 +19,7 @@
 
 #include <seastar/core/coroutine.hh>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 app::app(ss::sstring logger_name)
   : ssx::sharded_service_container(logger_name)
@@ -85,4 +85,4 @@ ss::sharded<l1::domain_supervisor>* app::get_sharded_l1_domain_supervisor() {
 
 ss::sharded<state_accessors>* app::get_state() { return &state; }
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

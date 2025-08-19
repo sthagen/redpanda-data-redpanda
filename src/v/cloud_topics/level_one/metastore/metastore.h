@@ -21,7 +21,7 @@
 
 #include <expected>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // Interface to interact with the L1 metastore. Meant to be totally agnostic to
 // the underlying implementation, whether it's an in-memory store, replicated
@@ -111,6 +111,22 @@ public:
     };
     virtual std::unique_ptr<object_metadata_builder> object_builder() = 0;
 
+    struct term_offset {
+        model::term_id term;
+
+        // The first offset that the given term was seen in a given offset
+        // range. Note, this doesn't necessarily indicate the start offset for
+        // the term in the entire log, just within a specific range (e.g. the
+        // range covered by a newly added object)
+        kafka::offset first_offset;
+    };
+    // Mapping per partition of the first offset seen for each term for a given
+    // set of extents. Both the terms and the offsets must be strictly
+    // monotonically increasing.
+    using term_offset_map_t = chunked_hash_map<
+      model::topic_id_partition,
+      chunked_vector<term_offset>>;
+
     // Returns offsets (e.g. start, next) for the given partition.
     virtual ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) = 0;
@@ -131,8 +147,9 @@ public:
     // it does not imply that all extents were accepted by the metastore. The
     // response should be examined to determine if subsequent add_objects()
     // requests need to be re-aligned to a different offset.
-    virtual ss::future<std::expected<add_response, errc>>
-      add_objects(std::unique_ptr<object_metadata_builder>) = 0;
+    virtual ss::future<std::expected<add_response, errc>> add_objects(
+      std::unique_ptr<object_metadata_builder>, const term_offset_map_t&)
+      = 0;
 
     // Adds the given objects to the metastore, expecting that the new extents
     // replace an extent or set of extents covering the same range.
@@ -260,16 +277,15 @@ public:
       = 0;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::l1::metastore::errc> final
+struct fmt::formatter<cloud_topics::l1::metastore::errc> final
   : fmt::formatter<std::string_view> {
     template<typename FormatContext>
     auto format(
-      const experimental::cloud_topics::l1::metastore::errc& k,
-      FormatContext& ctx) const {
-        using enum experimental::cloud_topics::l1::metastore::errc;
+      const cloud_topics::l1::metastore::errc& k, FormatContext& ctx) const {
+        using enum cloud_topics::l1::metastore::errc;
         switch (k) {
         case invalid_request:
             return formatter<string_view>::format(

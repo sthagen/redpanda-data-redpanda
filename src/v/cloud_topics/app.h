@@ -12,7 +12,7 @@
 
 #include "cloud_topics/level_one/domain/domain_supervisor.h"
 #include "cloud_topics/level_one/metastore/frontend.h"
-#include "cloud_topics/level_zero/reconciler/reconciler.h"
+#include "cloud_topics/reconciler/reconciler.h"
 #include "cloud_topics/state_accessors.h"
 #include "ssx/sharded_service_container.h"
 
@@ -30,7 +30,7 @@ namespace storage {
 class api;
 } // namespace storage
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 class data_plane_api;
 
 class app : public ssx::sharded_service_container {
@@ -76,4 +76,4 @@ private:
     ss::sharded<l1::frontend> l1_metastore_fe;
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

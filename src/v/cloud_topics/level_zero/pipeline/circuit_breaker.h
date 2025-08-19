@@ -18,7 +18,7 @@
 
 #include <chrono>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 enum class circuit_breaker_state {
     open,
@@ -126,4 +126,4 @@ private:
     Clock::time_point _last_error_ts;
 };
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

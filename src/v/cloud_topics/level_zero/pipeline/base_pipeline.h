@@ -27,7 +27,7 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/coroutine/as_future.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 //
 class pipeline_abort_requested : public ss::abort_requested_exception {
@@ -266,4 +266,4 @@ private:
     event_filter<Clock>::event_filter_list _filters;
     pipeline_stage_container _stages;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

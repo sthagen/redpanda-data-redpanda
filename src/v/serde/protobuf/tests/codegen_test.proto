@@ -53,6 +53,10 @@ message SuperDuperSecret {
     string value = 1 [debug_redact = true];
 }
 
+message MaskWrapper {
+    google.protobuf.FieldMask mask = 1;
+}
+
 message WellKnownProtos {
     google.protobuf.Duration single_duration = 1;
     repeated google.protobuf.Duration repeated_duration = 2;

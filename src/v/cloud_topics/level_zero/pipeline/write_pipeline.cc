@@ -27,7 +27,7 @@
 #include <chrono>
 #include <exception>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 template<class Clock>
 write_pipeline<Clock>::write_pipeline()
@@ -269,4 +269,4 @@ write_pipeline<Clock>::stage::choose_abort_source(ss::abort_source* maybe_as) {
 template class write_pipeline<ss::lowres_clock>;
 template class write_pipeline<ss::manual_clock>;
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

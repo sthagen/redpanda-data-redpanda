@@ -16,7 +16,7 @@
 #include "cloud_topics/level_one/common/object_id.h"
 #include "model/fundamental.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // The IO implementation that hides caching and other complexities of
 // interacting with persistent storage of L1 objects.
@@ -57,4 +57,4 @@ private:
     cloud_storage::cache* _cache;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

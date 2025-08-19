@@ -13,7 +13,7 @@
 #include "bytes/iostream.h"
 #include "cloud_topics/level_one/common/object_id.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 class fake_file : public staging_file {
 public:
@@ -99,4 +99,4 @@ void fake_io::put_object(object_id id, iobuf data) {
 
 void fake_io::remove_object(object_id id) { _storage.erase(id); }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

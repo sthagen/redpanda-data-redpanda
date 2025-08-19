@@ -26,7 +26,7 @@
 
 #include <limits>
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 // clang-format off
 // L1 Object File Format:
@@ -341,17 +341,15 @@ public:
     virtual ss::future<> close() = 0;
 };
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1
 
 template<>
-struct fmt::formatter<
-  experimental::cloud_topics::l1::footer::partition::index_entry> {
+struct fmt::formatter<cloud_topics::l1::footer::partition::index_entry> {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
     typename FormatContext::iterator format(
-      const experimental::cloud_topics::l1::footer::partition::index_entry&
-        entry,
+      const cloud_topics::l1::footer::partition::index_entry& entry,
       FormatContext& ctx) const {
         return fmt::format_to(
           ctx.out(),
@@ -363,12 +361,12 @@ struct fmt::formatter<
 };
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::l1::footer::partition> {
+struct fmt::formatter<cloud_topics::l1::footer::partition> {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
     typename FormatContext::iterator format(
-      const experimental::cloud_topics::l1::footer::partition& partition,
+      const cloud_topics::l1::footer::partition& partition,
       FormatContext& ctx) const {
         return fmt::format_to(
           ctx.out(),
@@ -384,13 +382,12 @@ struct fmt::formatter<experimental::cloud_topics::l1::footer::partition> {
 };
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::l1::footer> {
+struct fmt::formatter<cloud_topics::l1::footer> {
     constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
     template<typename FormatContext>
-    typename FormatContext::iterator format(
-      const experimental::cloud_topics::l1::footer& index,
-      FormatContext& ctx) const {
+    typename FormatContext::iterator
+    format(const cloud_topics::l1::footer& index, FormatContext& ctx) const {
         auto out = fmt::format_to(ctx.out(), "{{partitions: [");
         for (const auto& [ntp, partition] : index.partitions) {
             out = fmt::format_to(

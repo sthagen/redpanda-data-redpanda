@@ -62,9 +62,7 @@ TEST_F(e2e_fixture, test_create_cloud_topic) {
 
     auto partition = app.partition_manager.local().get(ntp);
     ASSERT_TRUE(
-      partition->raft()
-        ->stm_manager()
-        ->get<experimental::cloud_topics::ctp_stm>()
+      partition->raft()->stm_manager()->get<cloud_topics::ctp_stm>()
       != nullptr);
 }
 

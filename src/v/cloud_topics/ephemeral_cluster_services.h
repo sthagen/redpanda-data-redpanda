@@ -13,7 +13,7 @@
 
 #include <seastar/core/coroutine.hh>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 class ephemeral_cluster_services : public cluster_services {
 public:
@@ -26,4 +26,4 @@ private:
     cluster_epoch epoch_{0};
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

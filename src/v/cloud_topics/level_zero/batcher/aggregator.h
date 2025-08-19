@@ -19,7 +19,7 @@
 
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 /// List of extent_meta values that has to be propagated
 /// to the particular write request.
@@ -82,4 +82,4 @@ private:
     size_t _size_bytes{0};
 };
 
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

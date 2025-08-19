@@ -12,7 +12,7 @@
 
 #include "model/fundamental.h"
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 void ctp_stm_state::advance_max_seen_epoch(cluster_epoch epoch) noexcept {
     _max_seen_epoch = std::max(
@@ -68,4 +68,4 @@ model::offset ctp_stm_state::get_max_collectible_offset() const noexcept {
     return model::offset::min();
 }
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics

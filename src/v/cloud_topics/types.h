@@ -18,7 +18,7 @@
 
 #include <cstdint>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 /// Offset in the cloud storage object
 using first_byte_offset_t = named_type<uint64_t, struct first_byte_offset_tag>;
@@ -62,20 +62,19 @@ enum class ctp_stm_object_ownership {
     shared = 1,
 };
 
-} // namespace experimental::cloud_topics
+} // namespace cloud_topics
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::object_id>
+struct fmt::formatter<cloud_topics::object_id>
   : fmt::formatter<std::string_view> {
-    auto format(
-      const experimental::cloud_topics::object_id&,
-      fmt::format_context& ctx) const -> decltype(ctx.out());
+    auto format(const cloud_topics::object_id&, fmt::format_context& ctx) const
+      -> decltype(ctx.out());
 };
 
 template<>
-struct fmt::formatter<experimental::cloud_topics::ctp_stm_object_ownership>
+struct fmt::formatter<cloud_topics::ctp_stm_object_ownership>
   : fmt::formatter<std::string_view> {
     auto format(
-      experimental::cloud_topics::ctp_stm_object_ownership,
-      fmt::format_context& ctx) const -> decltype(ctx.out());
+      cloud_topics::ctp_stm_object_ownership, fmt::format_context& ctx) const
+      -> decltype(ctx.out());
 };

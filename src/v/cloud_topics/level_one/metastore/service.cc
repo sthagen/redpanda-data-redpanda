@@ -12,7 +12,7 @@
 
 #include "cloud_topics/level_one/metastore/frontend.h"
 
-namespace experimental::cloud_topics::l1::rpc {
+namespace cloud_topics::l1::rpc {
 
 service::service(
   ss::scheduling_group sg,
@@ -57,4 +57,4 @@ ss::future<get_compaction_offsets_reply> service::get_compaction_offsets(
       std::move(request), frontend::local_only::yes);
 }
 
-} // namespace experimental::cloud_topics::l1::rpc
+} // namespace cloud_topics::l1::rpc

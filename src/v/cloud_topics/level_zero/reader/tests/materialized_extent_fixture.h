@@ -104,9 +104,9 @@ public:
     /// Create a list of batches that contain placeholders
     chunked_vector<model::record_batch> make_underlying();
 
-    static experimental::cloud_topics::l0::materialized_extent
+    static cloud_topics::l0::materialized_extent
     make_materialized_extent(model::record_batch batch) {
-        experimental::cloud_topics::extent_meta e{
+        cloud_topics::extent_meta e{
           .base_offset = model::offset_cast(batch.base_offset()),
           .last_offset = model::offset_cast(batch.last_offset()),
         };
@@ -114,13 +114,12 @@ public:
         iobuf_parser parser(std::move(payload));
         auto record = model::parse_one_record_from_buffer(parser);
         iobuf value = std::move(record).release_value();
-        auto placeholder
-          = serde::from_iobuf<experimental::cloud_topics::dl_placeholder>(
-            std::move(value));
+        auto placeholder = serde::from_iobuf<cloud_topics::dl_placeholder>(
+          std::move(value));
         e.id = placeholder.id;
         e.first_byte_offset = placeholder.offset;
         e.byte_range_size = placeholder.size_bytes;
-        return experimental::cloud_topics::l0::materialized_extent{
+        return cloud_topics::l0::materialized_extent{
           .meta = e,
         };
     }

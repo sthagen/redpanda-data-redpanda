@@ -54,7 +54,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/frontend:__pkg__",
         "//src/v/cloud_topics/frontend/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/frontend_reader:__pkg__",
-        "//src/v/cloud_topics/level_zero/reconciler:__pkg__",
+        "//src/v/cloud_topics/reconciler:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
     ],
@@ -85,7 +85,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/frontend/tests:__pkg__",
         "//src/v/cloud_topics/level_one/metastore/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/reader:__pkg__",
-        "//src/v/cloud_topics/level_zero/reconciler:__pkg__",
+        "//src/v/cloud_topics/reconciler:__pkg__",
         "//src/v/cloud_topics/tests:__pkg__",
         "//src/v/kafka/data:__pkg__",
         "//src/v/redpanda:__pkg__",
@@ -97,7 +97,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/domain:domain_supervisor",
         "//src/v/cloud_topics/level_one/metastore:frontend",
         "//src/v/cloud_topics/level_zero/common:extent_meta",
-        "//src/v/cloud_topics/level_zero/reconciler",
+        "//src/v/cloud_topics/reconciler",
         "//src/v/cluster",
         "//src/v/container:chunked_vector",
         "//src/v/model",
@@ -145,6 +145,10 @@ redpanda_cc_library(
     ],
     hdrs = [
         "object_utils.h",
+    ],
+    visibility = [
+        ":__subpackages__",
+        "//src/v/cloud_topics/reconciler:__pkg__",
     ],
     deps = [
         ":cluster_services_interface",

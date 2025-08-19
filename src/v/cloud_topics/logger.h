@@ -12,7 +12,7 @@
 
 #include <seastar/util/log.hh>
 
-namespace experimental::cloud_topics {
+namespace cloud_topics {
 
 extern seastar::logger cd_log;
 

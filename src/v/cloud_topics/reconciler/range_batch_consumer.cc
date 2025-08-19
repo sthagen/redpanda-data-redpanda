@@ -8,11 +8,11 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/reconciler/range_batch_consumer.h"
+#include "cloud_topics/reconciler/range_batch_consumer.h"
 
 #include "model/timestamp.h"
 
-namespace experimental::cloud_topics::reconciler {
+namespace cloud_topics::reconciler {
 
 ss::future<ss::stop_iteration>
 range_batch_consumer::operator()(model::record_batch batch) {
@@ -63,4 +63,4 @@ std::optional<range> range_batch_consumer::end_of_stream() {
     return std::nullopt;
 }
 
-} // namespace experimental::cloud_topics::reconciler
+} // namespace cloud_topics::reconciler

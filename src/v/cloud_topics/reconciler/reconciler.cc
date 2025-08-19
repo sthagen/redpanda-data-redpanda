@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_topics/level_zero/reconciler/reconciler.h"
+#include "cloud_topics/reconciler/reconciler.h"
 
 #include "base/vlog.h"
 #include "cloud_storage/configuration.h"
@@ -42,7 +42,7 @@ class aborted_transaction_tracker_impl
   : public kafka::aborted_transaction_tracker {
 public:
     aborted_transaction_tracker_impl(
-      experimental::cloud_topics::frontend* fe,
+      cloud_topics::frontend* fe,
       ss::lw_shared_ptr<const storage::offset_translator_state> translator)
       : _fe(fe)
       , _translator(std::move(translator)) {}
@@ -54,13 +54,13 @@ public:
     }
 
 private:
-    experimental::cloud_topics::frontend* _fe;
+    cloud_topics::frontend* _fe;
     ss::lw_shared_ptr<const storage::offset_translator_state> _translator;
 };
 
 } // namespace
 
-namespace experimental::cloud_topics::reconciler {
+namespace cloud_topics::reconciler {
 
 reconciler::reconciler(
   ss::sharded<cluster::partition_manager>* pm,
@@ -322,4 +322,4 @@ reconciler::make_reader(const attached_partition& partition, size_t max_bytes) {
       std::move(tracker), std::move(reader.reader));
 }
 
-} // namespace experimental::cloud_topics::reconciler
+} // namespace cloud_topics::reconciler

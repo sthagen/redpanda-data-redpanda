@@ -50,7 +50,7 @@ partition::partition(
   ss::sharded<features::feature_table>& feature_table,
   ss::sharded<archival::upload_housekeeping_service>& upload_hks,
   std::optional<cloud_storage_clients::bucket_name> read_replica_bucket,
-  ss::sharded<experimental::cloud_topics::state_accessors>* ct_state)
+  ss::sharded<cloud_topics::state_accessors>* ct_state)
   : _raft(std::move(r))
   , _cloud_topics_state(ct_state)
   , _probe(std::make_unique<replicated_partition_probe>(*this))
@@ -1838,7 +1838,7 @@ ss::future<result<ss::rwlock::holder>> partition::hold_writes_enabled() {
     co_return *std::move(maybe_units);
 }
 
-ss::sharded<experimental::cloud_topics::state_accessors>*
+ss::sharded<cloud_topics::state_accessors>*
 partition::get_cloud_topics_state() noexcept {
     return _cloud_topics_state;
 }

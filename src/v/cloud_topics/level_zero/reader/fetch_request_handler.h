@@ -20,7 +20,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/weak_ptr.hh>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 /// Read request handler.
 /// This component can process dl_placeholder batches.
@@ -55,4 +55,4 @@ private:
     ss::gate _gate;
     l0::read_pipeline<>::stage _pipeline_stage;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

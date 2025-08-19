@@ -13,7 +13,7 @@
 
 #include <gtest/gtest.h>
 
-using namespace experimental::cloud_topics::l1;
+using namespace cloud_topics::l1;
 using o = kafka::offset;
 using ts = model::timestamp;
 

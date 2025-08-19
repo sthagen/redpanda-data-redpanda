@@ -10,10 +10,10 @@
 
 #include "cloud_topics/level_one/common/abstract_io.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 ss::future<ss::input_stream<char>> io::read_file(staging_file* file) {
     return file->input_stream();
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

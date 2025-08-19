@@ -17,8 +17,6 @@
 
 #include <chrono>
 
-namespace cloud_topics = experimental::cloud_topics;
-
 TEST(WriteRequestTest, Expiration) {
     cloud_topics::l0::write_request<ss::manual_clock> req(
       model::kvstore_ntp(ss::shard_id(0)),

@@ -25,7 +25,7 @@
 
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 namespace {
 
@@ -269,4 +269,4 @@ file_io::delete_objects(chunked_vector<object_id> ids, ss::abort_source* as) {
     std::unreachable();
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

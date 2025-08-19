@@ -20,7 +20,7 @@
 #include "model/namespace.h"
 #include "rpc/connection_cache.h"
 
-namespace experimental::cloud_topics::l1 {
+namespace cloud_topics::l1 {
 
 namespace {
 
@@ -128,9 +128,7 @@ frontend::remote_dispatch(req_t request, model::node_id leader_id) {
 
 template<auto LocalFunc, auto RemoteFunc, typename req_t>
 requires requires(
-  experimental::cloud_topics::l1::frontend f,
-  const model::ntp& ntp,
-  req_t req) {
+  cloud_topics::l1::frontend f, const model::ntp& ntp, req_t req) {
     (f.*LocalFunc)(std::move(req), ntp, ss::shard_id{0});
     request_has_metastore_partition<req_t>
       || request_has_topic_id_partition<req_t>;
@@ -370,4 +368,4 @@ ss::future<rpc::get_compaction_offsets_reply> frontend::get_compaction_offsets(
       std::move(request), bool(local_only_exec));
 }
 
-} // namespace experimental::cloud_topics::l1
+} // namespace cloud_topics::l1

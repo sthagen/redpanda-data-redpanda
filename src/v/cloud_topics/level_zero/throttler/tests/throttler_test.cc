@@ -24,10 +24,9 @@
 
 inline ss::logger test_log("throttler_gtest");
 
-namespace cloud_topics = experimental::cloud_topics;
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 struct throttler_metrics {
     size_t events_counter;
@@ -55,9 +54,9 @@ struct throttler_accessor {
 
     throttler<ss::manual_clock>* throttler;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 struct write_pipeline_accessor {
     // Returns true if the write request is in the `_pending` collection
     bool write_requests_pending(size_t n) const {
@@ -88,7 +87,7 @@ struct write_pipeline_accessor {
 
     cloud_topics::l0::write_pipeline<ss::manual_clock>* pipeline;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0
 
 ss::future<> sleep(std::chrono::milliseconds delta, int retry_limit = 100) {
     ss::manual_clock::advance(delta);

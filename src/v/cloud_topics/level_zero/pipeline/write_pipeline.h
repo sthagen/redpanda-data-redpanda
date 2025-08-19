@@ -27,7 +27,7 @@
 #include <functional>
 #include <type_traits>
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 
 struct write_request_process_result {
     /// Iteration should be stopped
@@ -178,4 +178,4 @@ private:
     // Semaphore that represents memory budget that we have
     ssx::named_semaphore<Clock> _mem_budget;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0

@@ -47,8 +47,6 @@
 
 inline ss::logger test_log("aggregated_uploader_gtest");
 
-namespace cloud_topics = experimental::cloud_topics;
-
 struct reader_with_content {
     chunked_vector<bytes> keys;
     chunked_vector<bytes> records;
@@ -92,15 +90,15 @@ public:
     }
 };
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 struct batcher_accessor {
     ss::future<result<bool>> run_once() noexcept { return batcher->run_once(); }
 
     cloud_topics::l0::batcher<ss::manual_clock>* batcher;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 struct write_pipeline_accessor {
     // Returns true if the write request is in the `_pending` collection
     bool write_requests_pending(size_t n) {
@@ -109,7 +107,7 @@ struct write_pipeline_accessor {
 
     cloud_topics::l0::write_pipeline<ss::manual_clock>* pipeline;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0
 
 ss::future<> sleep(std::chrono::milliseconds delta, int retry_limit = 100) {
     ss::manual_clock::advance(delta);

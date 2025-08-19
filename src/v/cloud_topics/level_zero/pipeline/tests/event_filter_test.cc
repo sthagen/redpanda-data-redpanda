@@ -25,10 +25,10 @@
 #include <chrono>
 #include <limits>
 
-using namespace experimental::cloud_topics;
+using namespace cloud_topics;
 using namespace std::chrono_literals;
 
-namespace experimental::cloud_topics::l0 {
+namespace cloud_topics::l0 {
 struct write_pipeline_accessor {
     // Returns true if the write request is in the `_pending` collection
     bool write_requests_pending(size_t n) const {
@@ -42,7 +42,7 @@ struct write_pipeline_accessor {
 
     l0::write_pipeline<ss::lowres_clock>* pipeline;
 };
-} // namespace experimental::cloud_topics::l0
+} // namespace cloud_topics::l0
 
 size_t get_serialized_size(const model::record_batch& rb) {
     size_t res = model::packed_record_batch_header_size;

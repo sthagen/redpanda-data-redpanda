@@ -12,6 +12,7 @@
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
+#include <span>
 
 class iobuf_parser;
 
@@ -28,6 +29,7 @@ class a;
 class b;
 class c;
 class super_duper_secret;
+class mask_wrapper;
 class well_known_protos;
 
 // Test that enums that have prefixes in their values as recommended by protobuf
@@ -103,7 +105,12 @@ public:
   // Use the iobuf version instead.
   static seastar::future<> from_json(serde::pb::json::peekable_parser*, c*);
   
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, c* update);
+  
 private:
 };
 
@@ -137,7 +144,12 @@ public:
   c& get_c();
   const c& get_c() const;
   void set_c(c&& v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, a* update);
+  
 private:
   c c_;
 };
@@ -175,7 +187,12 @@ public:
   a& get_a();
   const a& get_a() const;
   void set_a(a&& v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, b* update);
+  
 private:
   c c_;
   a a_;
@@ -211,9 +228,54 @@ public:
   ss::sstring& get_value();
   const ss::sstring& get_value() const;
   void set_value(ss::sstring&& v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, super_duper_secret* update);
+  
 private:
   ss::sstring value_;
+};
+
+class mask_wrapper {
+public:
+  mask_wrapper() noexcept;
+  mask_wrapper(const mask_wrapper&) = delete;
+  mask_wrapper& operator=(const mask_wrapper&) = delete;
+  mask_wrapper(mask_wrapper&&) noexcept;
+  mask_wrapper& operator=(mask_wrapper&&) noexcept;
+  ~mask_wrapper() noexcept;
+  
+  bool operator==(const mask_wrapper&) const;
+  fmt::iterator format_to(fmt::iterator) const;
+  
+  // Serializes example.MaskWrapper into a protocol buffer, in a way that will not cause stalls for large messages.
+  seastar::future<iobuf> to_proto() const;
+  // Serializes example.MaskWrapper into proto3 JSON, in a way that will not cause stalls for large messages.
+  seastar::future<iobuf> to_json() const;
+  // Deserializes example.MaskWrapper from a protocol buffer, in a way that will not cause stalls for large messages.
+  static seastar::future<mask_wrapper> from_proto(iobuf);
+  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
+  // Use the iobuf version instead.
+  static seastar::future<> from_proto(serde::pb::wire_format_parser*, mask_wrapper*);
+  // Deserializes example.MaskWrapper from json, in a way that will not cause stalls for large messages.
+  static seastar::future<mask_wrapper> from_json(iobuf);
+  // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
+  // Use the iobuf version instead.
+  static seastar::future<> from_json(serde::pb::json::peekable_parser*, mask_wrapper*);
+  
+  serde::pb::field_mask& get_mask();
+  const serde::pb::field_mask& get_mask() const;
+  void set_mask(serde::pb::field_mask&& v);
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, mask_wrapper* update);
+  
+private:
+  serde::pb::field_mask mask_;
 };
 
 class well_known_protos {
@@ -270,7 +332,12 @@ public:
   chunked_hash_map<ss::sstring, absl::Time>& get_timestamp_map();
   const chunked_hash_map<ss::sstring, absl::Time>& get_timestamp_map() const;
   void set_timestamp_map(chunked_hash_map<ss::sstring, absl::Time>&& v);
-
+  
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  static bool is_valid_field_path(std::span<const ss::sstring> path);
+  // NOTE: This is intended to be used by field_mask only. Do not use directly.
+  void apply_field_path_from(std::span<const ss::sstring> path, well_known_protos* update);
+  
 private:
   absl::Duration single_duration_;
   chunked_vector<absl::Duration> repeated_duration_;
