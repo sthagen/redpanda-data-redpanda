@@ -396,3 +396,119 @@ TEST_F(ReplicatedMetastoreTest, TestInvalidTermRequest) {
     ASSERT_FALSE(add_res.has_value());
     ASSERT_EQ(add_res.error(), metastore::errc::invalid_request);
 }
+
+TEST_F(ReplicatedMetastoreTest, TestGetTermForOffset) {
+    auto& app = get_ct_app(model::node_id{0});
+    replicated_metastore meta(app.get_sharded_l1_metastore_fe()->local());
+
+    auto tp = make_tp(0);
+
+    auto obj_builder = meta.object_builder();
+    auto oid1 = obj_builder->get_or_create_object_for(tp);
+    auto add_res1 = obj_builder->add(
+      oid1,
+      metastore::object_metadata::ntp_metadata{
+        .tidp = tp,
+        .base_offset = o{0},
+        .last_offset = o{199},
+        .max_timestamp = ts{10000},
+        .pos = 0,
+        .size = 500,
+      });
+    ASSERT_TRUE(add_res1.has_value()) << add_res1.error();
+    auto fin_res1 = obj_builder->finish(oid1, 500);
+    ASSERT_TRUE(fin_res1.has_value()) << fin_res1.error();
+
+    // Add a couple terms.
+    metastore::term_offset_map_t terms;
+    terms[tp].emplace_back(
+      metastore::term_offset{.term = model::term_id{1}, .first_offset = o{0}});
+    terms[tp].emplace_back(
+      metastore::term_offset{
+        .term = model::term_id{2}, .first_offset = o{100}});
+
+    auto add_res = meta.add_objects(std::move(obj_builder), terms).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    const auto assert_term_eq = [&](kafka::offset o, model::term_id t) {
+        auto term_res = meta.get_term_for_offset(tp, o).get();
+        ASSERT_TRUE(term_res.has_value());
+        ASSERT_EQ(term_res.value(), t);
+    };
+
+    assert_term_eq(o{0}, model::term_id{1});
+    assert_term_eq(o{50}, model::term_id{1});
+    assert_term_eq(o{100}, model::term_id{2});
+    assert_term_eq(o{150}, model::term_id{2});
+    assert_term_eq(o{199}, model::term_id{2});
+    assert_term_eq(o{200}, model::term_id{2});
+
+    // Test offset out of range
+    auto term_res_oor = meta.get_term_for_offset(tp, o{201}).get();
+    ASSERT_FALSE(term_res_oor.has_value());
+    ASSERT_EQ(term_res_oor.error(), metastore::errc::out_of_range);
+
+    // Test missing ntp
+    auto missing_tp = make_tp(999);
+    auto term_missing = meta.get_term_for_offset(missing_tp, o{0}).get();
+    ASSERT_FALSE(term_missing.has_value());
+    ASSERT_EQ(term_missing.error(), metastore::errc::missing_ntp);
+}
+
+TEST_F(ReplicatedMetastoreTest, TestGetEndOffsetForTerm) {
+    auto& app = get_ct_app(model::node_id{0});
+    replicated_metastore meta(app.get_sharded_l1_metastore_fe()->local());
+
+    auto tp = make_tp(0);
+
+    // Set up initial objects with multiple terms
+    auto obj_builder = meta.object_builder();
+    auto oid1 = obj_builder->get_or_create_object_for(tp);
+    auto add_res1 = obj_builder->add(
+      oid1,
+      metastore::object_metadata::ntp_metadata{
+        .tidp = tp,
+        .base_offset = o{0},
+        .last_offset = o{199},
+        .max_timestamp = ts{10000},
+        .pos = 0,
+        .size = 500,
+      });
+    ASSERT_TRUE(add_res1.has_value()) << add_res1.error();
+    auto fin_res1 = obj_builder->finish(oid1, 500);
+    ASSERT_TRUE(fin_res1.has_value()) << fin_res1.error();
+
+    // Add a couple terms.
+    metastore::term_offset_map_t terms;
+    terms[tp].emplace_back(
+      metastore::term_offset{.term = model::term_id{1}, .first_offset = o{0}});
+    terms[tp].emplace_back(
+      metastore::term_offset{
+        .term = model::term_id{2}, .first_offset = o{100}});
+
+    auto add_res = meta.add_objects(std::move(obj_builder), terms).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    auto assert_end_offset_eq = [&](
+                                  model::term_id t, kafka::offset expected_o) {
+        auto end_res = meta.get_end_offset_for_term(tp, t).get();
+        ASSERT_TRUE(end_res.has_value());
+        ASSERT_EQ(expected_o, end_res.value());
+    };
+    assert_end_offset_eq(model::term_id{0}, o{0});
+    assert_end_offset_eq(model::term_id{1}, o{100});
+    assert_end_offset_eq(model::term_id{2}, o{200});
+
+    // Test non-existent term
+    auto end_res_fail
+      = meta.get_end_offset_for_term(tp, model::term_id{3}).get();
+    ASSERT_FALSE(end_res_fail.has_value());
+    ASSERT_EQ(end_res_fail.error(), metastore::errc::out_of_range);
+
+    // Test missing ntp
+    auto missing_tp = make_tp(999);
+    auto end_missing
+      = meta.get_end_offset_for_term(missing_tp, model::term_id{1}).get();
+    ASSERT_FALSE(end_missing.has_value());
+    ASSERT_EQ(end_missing.error(), metastore::errc::missing_ntp);
+}

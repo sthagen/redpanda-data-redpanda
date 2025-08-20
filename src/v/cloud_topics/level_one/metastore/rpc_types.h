@@ -187,6 +187,50 @@ struct get_compaction_offsets_request
     model::timestamp tombstone_removal_upper_bound_ts;
 };
 
+struct get_term_for_offset_reply
+  : serde::envelope<
+      get_term_for_offset_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, term); }
+
+    errc ec;
+    model::term_id term;
+};
+struct get_term_for_offset_request
+  : serde::envelope<
+      get_term_for_offset_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = get_term_for_offset_reply;
+    auto serde_fields() { return std::tie(tp, offset); }
+
+    model::topic_id_partition tp;
+    kafka::offset offset;
+};
+
+struct get_end_offset_for_term_reply
+  : serde::envelope<
+      get_end_offset_for_term_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec, end_offset); }
+
+    errc ec;
+    kafka::offset end_offset;
+};
+struct get_end_offset_for_term_request
+  : serde::envelope<
+      get_end_offset_for_term_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = get_end_offset_for_term_reply;
+    auto serde_fields() { return std::tie(tp, term); }
+
+    model::topic_id_partition tp;
+    model::term_id term;
+};
+
 } //  namespace cloud_topics::l1::rpc
 
 template<>

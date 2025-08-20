@@ -306,4 +306,61 @@ domain_manager::get_compaction_offsets(
     };
 }
 
+ss::future<rpc::get_term_for_offset_reply>
+domain_manager::get_term_for_offset(rpc::get_term_for_offset_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::get_term_for_offset_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::get_term_for_offset_reply{
+          .ec = convert_stm_errc(sync_res.error()),
+        };
+    }
+    auto& stm_state = stm_->state();
+    auto get_res = simple_metastore::get_term_for_offset(
+      stm_state, req.tp, req.offset);
+    if (!get_res.has_value()) {
+        co_return rpc::get_term_for_offset_reply{
+          .ec = convert_metastore_errc(get_res.error()),
+        };
+    }
+    co_return rpc::get_term_for_offset_reply{
+      .ec = rpc::errc::ok,
+      .term = get_res.value(),
+    };
+}
+
+ss::future<rpc::get_end_offset_for_term_reply>
+domain_manager::get_end_offset_for_term(
+  rpc::get_end_offset_for_term_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::get_end_offset_for_term_reply{
+          .ec = rpc::errc::not_leader,
+        };
+    }
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::get_end_offset_for_term_reply{
+          .ec = convert_stm_errc(sync_res.error()),
+        };
+    }
+    auto& stm_state = stm_->state();
+    auto get_res = simple_metastore::get_end_offset_for_term(
+      stm_state, req.tp, req.term);
+    if (!get_res.has_value()) {
+        co_return rpc::get_end_offset_for_term_reply{
+          .ec = convert_metastore_errc(get_res.error()),
+        };
+    }
+    co_return rpc::get_end_offset_for_term_reply{
+      .ec = rpc::errc::ok,
+      .end_offset = get_res.value(),
+    };
+}
+
 } // namespace cloud_topics::l1

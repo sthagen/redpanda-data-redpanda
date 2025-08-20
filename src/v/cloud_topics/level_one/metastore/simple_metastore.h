@@ -70,6 +70,12 @@ public:
     ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, model::timestamp) override;
 
+    ss::future<std::expected<kafka::offset, errc>> get_end_offset_for_term(
+      const model::topic_id_partition&, model::term_id) override;
+
+    ss::future<std::expected<model::term_id, errc>> get_term_for_offset(
+      const model::topic_id_partition&, kafka::offset) override;
+
     ss::future<std::expected<void, errc>> compact_objects(
       std::unique_ptr<object_metadata_builder>,
       const compaction_map_t&) override;
@@ -91,6 +97,10 @@ private:
     static std::expected<compaction_offsets_response, errc>
     get_compaction_offsets(
       const state&, const model::topic_id_partition&, model::timestamp);
+    static std::expected<kafka::offset, errc> get_end_offset_for_term(
+      const state&, const model::topic_id_partition&, model::term_id);
+    static std::expected<model::term_id, errc> get_term_for_offset(
+      const state&, const model::topic_id_partition&, kafka::offset);
 
     state state_;
 };

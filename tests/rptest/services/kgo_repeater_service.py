@@ -26,6 +26,8 @@ from ducktape.utils.util import wait_until
 from rptest.services.redpanda import RedpandaService, SaslCredentials
 from rptest.clients.rpk import RpkTool
 
+REMOTE_PORT_BASE = 8080
+
 
 class KgoRepeaterService(Service):
     EXE = "kgo-repeater"
@@ -66,6 +68,10 @@ class KgoRepeaterService(Service):
             assert len(nodes) > 0
             self.nodes = nodes
 
+        for node in self.nodes:
+            if not hasattr(node, "kgo_verifier_ports"):
+                node.kgo_verifier_ports = {}
+
         self.redpanda = redpanda
         self.topics = topics
         self.msg_size = msg_size
@@ -75,11 +81,6 @@ class KgoRepeaterService(Service):
 
         self.rate_limit_bps_per_node = rate_limit_bps // len(
             self.nodes) if rate_limit_bps else None
-
-        # Note: using a port that happens to already be in test environment
-        # firewall rules from other use cases.  If changing this, update
-        # terraform for test clusters.
-        self.remote_port = 8080
 
         self.key_count = key_count
         self.max_buffered_records = max_buffered_records
@@ -98,6 +99,21 @@ class KgoRepeaterService(Service):
 
         self._pid_by_node = {}
         self._stopped = False
+        self._remote_ports = {}
+
+    def _release_port(self, node):
+        port_map = getattr(node, "kgo_verifier_ports", dict())
+        if self.who_am_i() in port_map:
+            del port_map[self.who_am_i()]
+
+    def _select_port(self, node):
+        ports_in_use = set(node.kgo_verifier_ports.values())
+        i = REMOTE_PORT_BASE
+        while i in ports_in_use:
+            i = i + 1
+
+        node.kgo_verifier_ports[self.who_am_i()] = i
+        return i
 
     def clean_node(self, node):
         self.redpanda.logger.debug(f"{self.__class__.__name__}.clean_node")
@@ -106,6 +122,8 @@ class KgoRepeaterService(Service):
             node.account.remove(self.LOG_PATH)
 
     def start_node(self, node, clean=None):
+        self._log_node_network_state(node)
+        self._remote_ports[node] = self._select_port(node)
         initial_data_mb = self.mb_per_worker * self.workers
 
         topics = ",".join(self.topics)
@@ -113,7 +131,7 @@ class KgoRepeaterService(Service):
             "/opt/kgo-verifier/kgo-repeater "
             f"-topics {topics} -brokers {self.redpanda.brokers()} "
             f"-workers {self.workers} -initial-data-mb {initial_data_mb} "
-            f"-group {self.group_name} -remote -remote-port {self.remote_port} "
+            f"-group {self.group_name} -remote -remote-port {self._remote_ports[node]} "
         )
 
         if self.sasl_options is not None:
@@ -151,7 +169,7 @@ class KgoRepeaterService(Service):
         self.logger.info(f"start_node[{node.name}]: {cmd}")
         pid_str = node.account.ssh_output(cmd, timeout_sec=10)
         self.logger.debug(
-            f"spawned {self.who_am_i()} node={node.name} pid={pid_str} port={self.remote_port}"
+            f"spawned {self.who_am_i()} node={node.name} pid={pid_str} port={self._remote_ports[node]}"
         )
         self._pid_by_node[node.name] = int(pid_str.strip())
 
@@ -228,8 +246,27 @@ class KgoRepeaterService(Service):
             if b"No such process" not in e.msg:
                 raise
 
+        self._release_port(node)
+
+    def _log_node_network_state(self, node):
+        """
+        For debugging issues around starting and stopping processes: log which ports are in use.
+        """
+        self.logger.debug(
+            f"Gathering port usage information with 'netstat -panelot' on {node.name} while starting {self.who_am_i()}"
+        )
+
+        # Capture general process informatio
+
+        # Capture network information
+        for line in node.account.ssh_capture("netstat -panelot",
+                                             timeout_sec=30):
+            self.logger.debug(line.strip())
+
     def _remote_url(self, node, path):
-        return f"http://{node.account.hostname}:{self.remote_port}/{path}"
+        assert self._remote_ports is not None
+        assert node in self._remote_ports
+        return f"http://{node.account.hostname}:{self._remote_ports[node]}/{path}"
 
     def remote_to_all(self, path):
         for node in self.nodes:

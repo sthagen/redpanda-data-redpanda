@@ -174,6 +174,16 @@ public:
     virtual ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, model::timestamp) = 0;
 
+    // Returns the end (i.e. one past the last) offset at which data was added
+    // for the given partition term.
+    virtual ss::future<std::expected<kafka::offset, errc>>
+    get_end_offset_for_term(const model::topic_id_partition&, model::term_id)
+      = 0;
+
+    // Returns the partition term in which the given offset was added.
+    virtual ss::future<std::expected<model::term_id, errc>>
+    get_term_for_offset(const model::topic_id_partition&, kafka::offset) = 0;
+
     // Compaction metadata updates per partition
     //
     // Kafka compaction works by taking "dirty" ranges of data, collecting the

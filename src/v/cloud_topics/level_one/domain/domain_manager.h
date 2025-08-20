@@ -45,6 +45,12 @@ public:
     ss::future<rpc::get_compaction_offsets_reply>
       get_compaction_offsets(rpc::get_compaction_offsets_request);
 
+    ss::future<rpc::get_term_for_offset_reply>
+      get_term_for_offset(rpc::get_term_for_offset_request);
+
+    ss::future<rpc::get_end_offset_for_term_reply>
+      get_end_offset_for_term(rpc::get_end_offset_for_term_request);
+
 private:
     std::optional<ss::gate::holder> maybe_gate();
 

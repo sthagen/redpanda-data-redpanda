@@ -92,6 +92,29 @@ ss::future<rpc::get_compaction_offsets_reply> do_get_compaction_offsets(
     co_return co_await domain_mgr->get_compaction_offsets(std::move(req));
 }
 
+ss::future<rpc::get_term_for_offset_reply> do_get_term_for_offset(
+  domain_supervisor& domain_supervisor,
+  const model::ntp& ntp,
+  rpc::get_term_for_offset_request req) {
+    auto domain_mgr = domain_supervisor.get(ntp);
+    if (!domain_mgr) {
+        co_return rpc::get_term_for_offset_reply{.ec = rpc::errc::not_leader};
+    }
+    co_return co_await domain_mgr->get_term_for_offset(std::move(req));
+}
+
+ss::future<rpc::get_end_offset_for_term_reply> do_get_end_offset_for_term(
+  domain_supervisor& domain_supervisor,
+  const model::ntp& ntp,
+  rpc::get_end_offset_for_term_request req) {
+    auto domain_mgr = domain_supervisor.get(ntp);
+    if (!domain_mgr) {
+        co_return rpc::get_end_offset_for_term_reply{
+          .ec = rpc::errc::not_leader};
+    }
+    co_return co_await domain_mgr->get_end_offset_for_term(std::move(req));
+}
+
 } // namespace
 
 template<auto Func, typename req_t>
@@ -213,6 +236,22 @@ template ss::future<rpc::get_compaction_offsets_reply> frontend::process<
   &frontend::get_compaction_offsets_locally,
   &frontend::client::get_compaction_offsets>(
   rpc::get_compaction_offsets_request, bool);
+
+template ss::future<rpc::get_term_for_offset_reply>
+  frontend::remote_dispatch<&frontend::client::get_term_for_offset>(
+    rpc::get_term_for_offset_request, model::node_id);
+template ss::future<rpc::get_term_for_offset_reply> frontend::process<
+  &frontend::get_term_for_offset_locally,
+  &frontend::client::get_term_for_offset>(
+  rpc::get_term_for_offset_request, bool);
+
+template ss::future<rpc::get_end_offset_for_term_reply>
+  frontend::remote_dispatch<&frontend::client::get_end_offset_for_term>(
+    rpc::get_end_offset_for_term_request, model::node_id);
+template ss::future<rpc::get_end_offset_for_term_reply> frontend::process<
+  &frontend::get_end_offset_for_term_locally,
+  &frontend::client::get_end_offset_for_term>(
+  rpc::get_end_offset_for_term_request, bool);
 
 frontend::frontend(
   model::node_id self,
@@ -365,6 +404,48 @@ ss::future<rpc::get_compaction_offsets_reply> frontend::get_compaction_offsets(
     co_return co_await process<
       &frontend::get_compaction_offsets_locally,
       &client::get_compaction_offsets>(
+      std::move(request), bool(local_only_exec));
+}
+
+ss::future<rpc::get_term_for_offset_reply>
+frontend::get_term_for_offset_locally(
+  rpc::get_term_for_offset_request request,
+  const model::ntp& metastore_ntp,
+  ss::shard_id shard) {
+    co_return co_await container().invoke_on(
+      shard, [metastore_ntp, req = std::move(request)](frontend& fe) mutable {
+          return do_get_term_for_offset(
+            *(fe._domain_supervisor), metastore_ntp, std::move(req));
+      });
+}
+
+ss::future<rpc::get_term_for_offset_reply> frontend::get_term_for_offset(
+  rpc::get_term_for_offset_request request, local_only local_only_exec) {
+    auto holder = _gate.hold();
+    co_return co_await process<
+      &frontend::get_term_for_offset_locally,
+      &client::get_term_for_offset>(std::move(request), bool(local_only_exec));
+}
+
+ss::future<rpc::get_end_offset_for_term_reply>
+frontend::get_end_offset_for_term_locally(
+  rpc::get_end_offset_for_term_request request,
+  const model::ntp& metastore_ntp,
+  ss::shard_id shard) {
+    co_return co_await container().invoke_on(
+      shard, [metastore_ntp, req = std::move(request)](frontend& fe) mutable {
+          return do_get_end_offset_for_term(
+            *(fe._domain_supervisor), metastore_ntp, std::move(req));
+      });
+}
+
+ss::future<rpc::get_end_offset_for_term_reply>
+frontend::get_end_offset_for_term(
+  rpc::get_end_offset_for_term_request request, local_only local_only_exec) {
+    auto holder = _gate.hold();
+    co_return co_await process<
+      &frontend::get_end_offset_for_term_locally,
+      &client::get_end_offset_for_term>(
       std::move(request), bool(local_only_exec));
 }
 

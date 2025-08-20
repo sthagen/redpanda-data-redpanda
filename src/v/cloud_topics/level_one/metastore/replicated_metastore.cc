@@ -393,6 +393,50 @@ replicated_metastore::get_first_ge(
     co_return resp;
 }
 
+ss::future<std::expected<model::term_id, metastore::errc>>
+replicated_metastore::get_term_for_offset(
+  const model::topic_id_partition& tidp, kafka::offset offset) {
+    rpc::get_term_for_offset_request req;
+    req.tp = tidp;
+    req.offset = offset;
+
+    auto reply_fut = co_await ss::coroutine::as_future(
+      fe_.get_term_for_offset(std::move(req)));
+    if (reply_fut.failed()) {
+        auto ex = reply_fut.get_exception();
+        vlog(cd_log.warn, "Error while sending request: {}", ex);
+        co_return std::unexpected(metastore::errc::transport_error);
+    }
+    auto reply = reply_fut.get();
+    if (reply.ec != rpc::errc::ok) {
+        co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+    }
+
+    co_return reply.term;
+}
+
+ss::future<std::expected<kafka::offset, metastore::errc>>
+replicated_metastore::get_end_offset_for_term(
+  const model::topic_id_partition& tidp, model::term_id term) {
+    rpc::get_end_offset_for_term_request req;
+    req.tp = tidp;
+    req.term = term;
+
+    auto reply_fut = co_await ss::coroutine::as_future(
+      fe_.get_end_offset_for_term(std::move(req)));
+    if (reply_fut.failed()) {
+        auto ex = reply_fut.get_exception();
+        vlog(cd_log.warn, "Error while sending request: {}", ex);
+        co_return std::unexpected(metastore::errc::transport_error);
+    }
+    auto reply = reply_fut.get();
+    if (reply.ec != rpc::errc::ok) {
+        co_return std::unexpected(rpc_to_meta_errc(reply.ec));
+    }
+
+    co_return reply.end_offset;
+}
+
 ss::future<std::expected<void, metastore::errc>>
 replicated_metastore::compact_objects(
   std::unique_ptr<metastore::object_metadata_builder> builder,

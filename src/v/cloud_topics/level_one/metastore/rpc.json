@@ -31,6 +31,16 @@
             "output_type": "get_offsets_reply"
         },
         {
+            "name": "get_term_for_offset",
+            "input_type": "get_term_for_offset_request",
+            "output_type": "get_term_for_offset_reply"
+        },
+        {
+            "name": "get_end_offset_for_term",
+            "input_type": "get_end_offset_for_term_request",
+            "output_type": "get_end_offset_for_term_reply"
+        },
+        {
             "name": "get_compaction_offsets",
             "input_type": "get_compaction_offsets_request",
             "output_type": "get_compaction_offsets_reply"

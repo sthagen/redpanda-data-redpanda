@@ -465,8 +465,15 @@ redpanda_cc_library(
 
 redpanda_cc_library(
     name = "table_id_provider",
+    srcs = [
+        "table_id_provider.cc",
+    ],
     hdrs = [
         "table_id_provider.h",
+    ],
+    implementation_deps = [
+        "//src/v/config",
+        "@boost//:algorithm",
     ],
     visibility = ["//visibility:public"],
     deps = [

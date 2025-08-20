@@ -73,6 +73,12 @@ public:
     ss::future<rpc::get_compaction_offsets_reply> get_compaction_offsets(
       rpc::get_compaction_offsets_request, local_only = local_only::no);
 
+    ss::future<rpc::get_term_for_offset_reply> get_term_for_offset(
+      rpc::get_term_for_offset_request, local_only = local_only::no);
+
+    ss::future<rpc::get_end_offset_for_term_reply> get_end_offset_for_term(
+      rpc::get_end_offset_for_term_request, local_only = local_only::no);
+
     std::optional<model::partition_id>
     metastore_partition(const model::topic_id_partition&) const;
 
@@ -127,6 +133,17 @@ private:
     ss::future<rpc::get_compaction_offsets_reply>
     get_compaction_offsets_locally(
       rpc::get_compaction_offsets_request,
+      const model::ntp& metastore_ntp,
+      ss::shard_id);
+
+    ss::future<rpc::get_term_for_offset_reply> get_term_for_offset_locally(
+      rpc::get_term_for_offset_request,
+      const model::ntp& metastore_ntp,
+      ss::shard_id);
+
+    ss::future<rpc::get_end_offset_for_term_reply>
+    get_end_offset_for_term_locally(
+      rpc::get_end_offset_for_term_request,
       const model::ntp& metastore_ntp,
       ss::shard_id);
 

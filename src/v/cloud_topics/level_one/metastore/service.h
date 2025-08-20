@@ -41,6 +41,12 @@ public:
     ss::future<get_offsets_reply>
     get_offsets(get_offsets_request, ::rpc::streaming_context&) override;
 
+    ss::future<get_end_offset_for_term_reply> get_end_offset_for_term(
+      get_end_offset_for_term_request, ::rpc::streaming_context&) override;
+
+    ss::future<get_term_for_offset_reply> get_term_for_offset(
+      get_term_for_offset_request, ::rpc::streaming_context&) override;
+
     ss::future<get_compaction_offsets_reply> get_compaction_offsets(
       get_compaction_offsets_request, ::rpc::streaming_context&) override;
 

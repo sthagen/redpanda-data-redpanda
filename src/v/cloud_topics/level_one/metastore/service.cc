@@ -51,6 +51,18 @@ service::get_offsets(get_offsets_request request, ::rpc::streaming_context&) {
       std::move(request), frontend::local_only::yes);
 }
 
+ss::future<get_end_offset_for_term_reply> service::get_end_offset_for_term(
+  get_end_offset_for_term_request request, ::rpc::streaming_context&) {
+    return _frontend->local().get_end_offset_for_term(
+      std::move(request), frontend::local_only::yes);
+}
+
+ss::future<get_term_for_offset_reply> service::get_term_for_offset(
+  get_term_for_offset_request request, ::rpc::streaming_context&) {
+    return _frontend->local().get_term_for_offset(
+      std::move(request), frontend::local_only::yes);
+}
+
 ss::future<get_compaction_offsets_reply> service::get_compaction_offsets(
   get_compaction_offsets_request request, ::rpc::streaming_context&) {
     return _frontend->local().get_compaction_offsets(
