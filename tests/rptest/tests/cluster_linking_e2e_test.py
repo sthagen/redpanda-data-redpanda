@@ -8,11 +8,11 @@
 # by the Apache License, Version 2.0
 
 from ducktape.mark import matrix
-from rptest.services.multi_cluster_services import MultiClusterServices, ServiceType
+from rptest.services.multi_cluster_services import Cluster, MultiClusterServices, ServiceType
 from rptest.tests.redpanda_test import RedpandaTest
 
 from rptest.services.cluster import cluster
-from rptest.util import expect_exception
+from rptest.util import expect_exception, wait_until_result
 
 
 class MultiClusterTestBase(RedpandaTest):
@@ -20,17 +20,29 @@ class MultiClusterTestBase(RedpandaTest):
         super().__init__(test_context=test_context, *args, **kwargs)
 
     def basic_ops(self, services: MultiClusterServices):
+        def at_least_one_topic_exists(services: MultiClusterServices,
+                                      node: Cluster):
+            topics = services.list_topics(node, detailed=True)
+            return len(topics) > 0, topics
+
         topic = 'test-topic'
         services.create_topic(services.primary,
                               topic,
                               partitions=3,
                               replicas=3)
-        p_topics = services.list_topics(services.primary, detailed=True)
+        p_topics = wait_until_result(
+            lambda: at_least_one_topic_exists(services, services.primary),
+            timeout_sec=30,
+            err_msg="Failed to create a single topic on the primary cluster")
+
         services.create_topic(services.secondary,
                               topic,
                               partitions=3,
                               replicas=3)
-        s_topics = services.list_topics(services.secondary, detailed=True)
+        s_topics = wait_until_result(
+            lambda: at_least_one_topic_exists(services, services.secondary),
+            timeout_sec=30,
+            err_msg="Failed to create a single topic on the secondary cluster")
 
         assert p_topics == s_topics, \
             f"Expected same topics on both clusters, got {p_topics=} vs {s_topics=}"

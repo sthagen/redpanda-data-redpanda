@@ -11,6 +11,8 @@
 
 #include "cluster_link/model/types.h"
 
+#include "utils/to_string.h"
+
 #include <seastar/util/variant_utils.hh>
 
 #include <fmt/ranges.h>
@@ -115,12 +117,6 @@ update_mirror_topic_properties_cmd::copy() const {
 }
 } // namespace cluster_link::model
 
-auto fmt::formatter<cluster_link::model::mirror_topic_state>::format(
-  cluster_link::model::mirror_topic_state s, format_context& ctx)
-  -> decltype(ctx.out()) {
-    return fmt::format_to(ctx.out(), "{}", to_string_view(s));
-}
-
 auto fmt::formatter<cluster_link::model::task_state>::format(
   cluster_link::model::task_state st, format_context& ctx) const
   -> decltype(ctx.out()) {
@@ -188,13 +184,21 @@ auto fmt::formatter<cluster_link::model::connection_config>::format(
     return fmt::format_to(
       ctx.out(),
       "{{bootstrap_servers: {}, authn_config: {}, cert: {}, key: {:s}, ca: {}, "
-      "client_id: {}}}",
+      "client_id: {}, metadata_max_age_ms: {}, connection_timeout_ms: {}, "
+      "retry_backoff_ms: {}, fetch_wait_max_ms: {}, fetch_min_bytes: {}, "
+      "fetch_max_bytes: {}}}",
       c.bootstrap_servers,
       c.authn_config,
       c.cert,
       c.key,
       c.ca,
-      c.client_id);
+      c.client_id,
+      c.metadata_max_age_ms,
+      c.connection_timeout_ms,
+      c.retry_backoff_ms,
+      c.fetch_wait_max_ms,
+      c.fetch_min_bytes,
+      c.fetch_max_bytes);
 }
 
 auto fmt::formatter<std::optional<model::topic_id>>::format(

@@ -1740,8 +1740,8 @@ void application::wire_up_redpanda_services(
         // partition manager.
         // NOTE: this only instantiates the app; underlying services are
         // constructed separately once more of the subsystems are available.
-        construct_single_service(
-          cloud_topics_app, fmt::format("{}/cloud_topics", _log.name()));
+        cloud_topics_app = std::make_unique<cloud_topics::app>(
+          fmt::format("{}/cloud_topics", _log.name()));
     }
     syschecks::systemd_message("Adding partition manager").get();
     construct_service(

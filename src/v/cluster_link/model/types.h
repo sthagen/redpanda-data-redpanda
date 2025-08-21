@@ -136,13 +136,78 @@ struct connection_config
     std::optional<tls_file_or_value> ca;
     /// The client ID to use
     ss::sstring client_id;
+    // Max metadata age
+    std::optional<int32_t> metadata_max_age_ms;
+    // Default for metadata_max_age_ms (10 seconds)
+    static constexpr auto metadata_max_age_ms_default = 10000;
+    // Connection timeout
+    std::optional<int32_t> connection_timeout_ms;
+    // Default for connection_timeout_ms (1 second)
+    static constexpr auto connection_timeout_ms_default = 1000;
+    // Retry backoff
+    std::optional<int32_t> retry_backoff_ms;
+    // Default for retry_backoff_ms (100ms)
+    static constexpr auto retry_backoff_ms_default = 100;
+    // Maximum fetch wait time
+    std::optional<int32_t> fetch_wait_max_ms;
+    // Default value for fetch_wait_max_ms (100ms)
+    static constexpr auto fetch_wait_max_ms_default = 100;
+    // Minimum number of bytes to fetch
+    std::optional<int32_t> fetch_min_bytes;
+    // Default minimum number of bytes to fetch (1B)
+    static constexpr auto fetch_min_bytes_default = 1;
+    // Maximum number of bytes to fetch
+    std::optional<int32_t> fetch_max_bytes;
+    // Default maximum number of bytes to fetch (1MiB)
+    static constexpr auto fetch_max_bytes_default = 1 * 1024 * 1024;
+
+    // Returns the metadata_max_age_ms value
+    int32_t get_metadata_max_age_ms() const {
+        return metadata_max_age_ms.value_or(metadata_max_age_ms_default);
+    }
+
+    // Returns the connection_timeout_ms value
+    int32_t get_connection_timeout_ms() const {
+        return connection_timeout_ms.value_or(connection_timeout_ms_default);
+    }
+
+    // Returns the retry_backoff_ms value
+    int32_t get_retry_backoff_ms() const {
+        return retry_backoff_ms.value_or(retry_backoff_ms_default);
+    }
+
+    // Returns the fetch_wait_max_ms value
+    int32_t get_fetch_wait_max_ms() const {
+        return fetch_wait_max_ms.value_or(fetch_wait_max_ms_default);
+    }
+
+    // Returns the fetch_min_bytes value
+    int32_t get_fetch_min_bytes() const {
+        return fetch_min_bytes.value_or(fetch_min_bytes_default);
+    }
+
+    // Returns the fetch_max_bytes value
+    int32_t get_fetch_max_bytes() const {
+        return fetch_max_bytes.value_or(fetch_max_bytes_default);
+    }
 
     friend bool operator==(const connection_config&, const connection_config&)
       = default;
 
     auto serde_fields() {
         return std::tie(
-          bootstrap_servers, authn_config, cert, key, ca, client_id);
+          bootstrap_servers,
+          authn_config,
+          cert,
+          key,
+          ca,
+          client_id,
+          metadata_max_age_ms,
+          connection_timeout_ms,
+          retry_backoff_ms,
+          fetch_wait_max_ms,
+          fetch_min_bytes,
+          fetch_max_bytes);
     }
 };
 
@@ -244,12 +309,18 @@ struct topic_metadata_mirroring_config
     /// Flag to indicate if the task is enabled or not
     enabled_t is_enabled{enabled_t::yes};
     /// Interval for the topic creation task
-    ss::lowres_clock::duration task_interval{std::chrono::seconds(30)};
+    std::optional<ss::lowres_clock::duration> task_interval;
+    // Default interval (30 seconds)
+    static constexpr auto task_interval_default = std::chrono::seconds(30);
 
     /// Filters
     chunked_vector<resource_name_filter_pattern> topic_name_filters;
     /// List of topic properties to mirror
     absl::flat_hash_set<ss::sstring> topic_properties_to_mirror;
+
+    ss::lowres_clock::duration get_task_interval() const {
+        return task_interval.value_or(task_interval_default);
+    }
 
     friend bool operator==(
       const topic_metadata_mirroring_config&,
@@ -274,9 +345,17 @@ struct consumer_groups_mirroring_config
       serde::compat_version<0>> {
     /// Flag to indicate if the task is enabled or not
     enabled_t is_enabled{enabled_t::yes};
-    ss::lowres_clock::duration task_interval{std::chrono::seconds(30)};
+    // Task interval for consumer group mirroring
+    std::optional<ss::lowres_clock::duration> task_interval;
+    // Default interval for task (30s)
+    static constexpr auto default_task_interval = std::chrono::seconds(30);
+
     /// Filters
     chunked_vector<resource_name_filter_pattern> filters;
+
+    ss::lowres_clock::duration get_task_interval() const {
+        return task_interval.value_or(default_task_interval);
+    }
 
     friend bool operator==(
       const consumer_groups_mirroring_config&,

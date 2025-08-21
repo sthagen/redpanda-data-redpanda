@@ -331,22 +331,23 @@ ss::future<upload_result> remote::upload_stream(
     if (!result) {
         vlog(
           log.warn,
-          "Uploading {} {} to {}, backoff quota exceded, {} not "
-          "uploaded",
+          "Uploading {} {} to {}, backoff quota exceded, {} not uploaded",
           stream_label,
           path,
           bucket,
           stream_label);
+        result = upload_result::timedout;
     } else {
         vlog(
           log.warn,
-          "Uploading {} {} to {}, {}, segment not uploaded",
+          "Uploading {} {} to {}, {}, {} not uploaded",
           stream_label,
           path,
           bucket,
-          *result);
+          *result,
+          stream_label);
     }
-    co_return upload_result::timedout;
+    co_return *result;
 }
 
 ss::future<download_result> remote::download_stream(
@@ -1208,6 +1209,7 @@ ss::future<upload_result> remote::upload_object(upload_request upload_request) {
           path,
           transfer_details.bucket,
           upload_type);
+        result = upload_result::timedout;
     } else {
         vlog(
           ctxlog.warn,
@@ -1218,7 +1220,7 @@ ss::future<upload_result> remote::upload_object(upload_request upload_request) {
           *result,
           upload_type);
     }
-    co_return upload_result::timedout;
+    co_return *result;
 }
 
 ss::future<>

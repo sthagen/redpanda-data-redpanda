@@ -346,6 +346,33 @@ admin_server::admin_server(
     add_service(std::make_unique<admin::admin_service_impl>(&_services));
 }
 
+namespace {
+class rpc_handler : public ss::httpd::handler_base {
+public:
+    rpc_handler(
+      std::function<ss::future<std::unique_ptr<ss::http::reply>>(
+        std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>)>
+        h)
+      : _handler(std::move(h)) {}
+
+    ss::future<std::unique_ptr<ss::http::reply>> handle(
+      const ss::sstring&,
+      std::unique_ptr<ss::http::request> req,
+      std::unique_ptr<ss::http::reply> rep) override {
+        rep = co_await _handler(std::move(req), std::move(rep));
+        // The normal function handler in seastar sets the Content-Type here
+        // but we do that in the handler itself (and it's dynamic).
+        rep->done();
+        co_return rep;
+    }
+
+private:
+    std::function<ss::future<std::unique_ptr<ss::http::reply>>(
+      std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>)>
+      _handler;
+};
+} // namespace
+
 void admin_server::add_service(
   std::unique_ptr<serde::pb::rpc::base_service> service) {
     vlog(adminlog.debug, "Registering RPC service: {}", service->name());
@@ -358,17 +385,34 @@ void admin_server::add_service(
           /*path_parameters=*/{},
           /*mandatory_params=*/{},
         };
-        switch (route.authz_level) {
-        case serde::pb::rpc::authz_level::unauthenticated:
-            register_route_raw_async<publik>(path, route.handler);
-            break;
-        case serde::pb::rpc::authz_level::user:
-            register_route_raw_async<user>(path, route.handler);
-            break;
-        case serde::pb::rpc::authz_level::superuser:
-            register_route_raw_async<superuser>(path, route.handler);
-            break;
-        }
+        auto wrapped_handler =
+          [this, authz = route.authz_level, handler = route.handler](
+            std::unique_ptr<ss::http::request> req,
+            std::unique_ptr<ss::http::reply> rep)
+          -> ss::future<std::unique_ptr<ss::http::reply>> {
+            std::optional<request_auth_result> auth_state;
+            switch (authz) {
+            case serde::pb::rpc::authz_level::unauthenticated:
+                auth_state.emplace(apply_auth<publik>(*req));
+                break;
+            case serde::pb::rpc::authz_level::user:
+                auth_state.emplace(apply_auth<user>(*req));
+                break;
+            case serde::pb::rpc::authz_level::superuser:
+                auth_state.emplace(apply_auth<superuser>(*req));
+                break;
+            }
+            // Note: a request is only logged if it does not throw
+            // from authenticate().
+            log_request(*req, auth_state.value());
+            ss::sstring url = req->get_url();
+            return handler(std::move(req), std::move(rep))
+              .handle_exception(
+                exception_intercepter<std::remove_reference_t<
+                  decltype(handler(std::move(req), std::move(rep)).get())>>(
+                  url, auth_state.value()));
+        };
+        path.set(_server._routes, new rpc_handler(std::move(wrapped_handler)));
     }
     _services.push_back(std::move(service));
 }

@@ -10,6 +10,9 @@ redpanda_cc_library(
         "filter_utils.h",
         "types.h",
     ],
+    implementation_deps = [
+        "//src/v/utils:to_string",
+    ],
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/container:chunked_hash_map",

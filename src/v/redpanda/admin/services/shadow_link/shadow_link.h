@@ -18,22 +18,22 @@ class shadow_link_service_impl : public proto::admin::shadow_link_service {
 public:
     shadow_link_service_impl() = default;
 
-    ss::future<proto::admin::shadow_link>
+    ss::future<proto::admin::create_shadow_link_response>
       create_shadow_link(proto::admin::create_shadow_link_request) override;
 
     ss::future<proto::admin::delete_shadow_link_response>
       delete_shadow_link(proto::admin::delete_shadow_link_request) override;
 
-    ss::future<proto::admin::shadow_link>
+    ss::future<proto::admin::get_shadow_link_response>
       get_shadow_link(proto::admin::get_shadow_link_request) override;
 
     ss::future<proto::admin::list_shadow_links_response>
       list_shadow_links(proto::admin::list_shadow_links_request) override;
 
-    ss::future<proto::admin::shadow_link>
+    ss::future<proto::admin::update_shadow_link_response>
       update_shadow_link(proto::admin::update_shadow_link_request) override;
 
-    ss::future<proto::admin::shadow_link>
+    ss::future<proto::admin::fail_over_response>
       fail_over(proto::admin::fail_over_request) override;
 };
 } // namespace admin

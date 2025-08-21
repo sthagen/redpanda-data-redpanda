@@ -5,5 +5,6 @@ depot_tools/*
 src/v/dashboard/node_modules/*
 tests/rptest/remote_scripts/payload_pb2*
 tests/rptest/clients/admin/proto/*
+tests/rptest/clients/admin/google/*
 go/*
 .git/*

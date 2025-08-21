@@ -108,11 +108,11 @@ class AdminApiAuthTest(RedpandaTest):
         # Hit an endpoint requiring superuser
         charles_admin.get_cluster_config()
 
-        for protocol in ('proto', 'json'):
+        for protocol in ['json', 'proto']:
             admin_v2 = AdminV2(self.redpanda,
                                auth=(charles.username, charles.password),
                                protocol=protocol)
-            build_info = admin_v2.get_build_info(
+            build_info = admin_v2.admin().get_build_info(
                 admin_pb.GetBuildInfoRequest())
             self.logger.info(
                 f"Build info: version={build_info.version}, sha={build_info.build_sha}"

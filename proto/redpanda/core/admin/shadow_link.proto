@@ -29,7 +29,8 @@ import "google/protobuf/field_mask.proto";
 option (redpanda.pbgen.cpp_namespace) = "proto::admin";
 
 service ShadowLinkService {
-    rpc CreateShadowLink(CreateShadowLinkRequest) returns (ShadowLink) {
+    rpc CreateShadowLink(CreateShadowLinkRequest)
+        returns (CreateShadowLinkResponse) {
         option (redpanda.pbgen.rpc) = {
             authz: SUPERUSER
         };
@@ -40,7 +41,7 @@ service ShadowLinkService {
             authz: SUPERUSER
         };
     }
-    rpc GetShadowLink(GetShadowLinkRequest) returns (ShadowLink) {
+    rpc GetShadowLink(GetShadowLinkRequest) returns (GetShadowLinkResponse) {
         option (redpanda.pbgen.rpc) = {
             authz: SUPERUSER
         };
@@ -51,13 +52,14 @@ service ShadowLinkService {
             authz: SUPERUSER
         };
     }
-    rpc UpdateShadowLink(UpdateShadowLinkRequest) returns (ShadowLink) {
+    rpc UpdateShadowLink(UpdateShadowLinkRequest)
+        returns (UpdateShadowLinkResponse) {
         option (redpanda.pbgen.rpc) = {
             authz: SUPERUSER
         };
     }
     // Fails over a shadow link or a single shadow topic
-    rpc FailOver(FailOverRequest) returns (ShadowLink) {
+    rpc FailOver(FailOverRequest) returns (FailOverResponse) {
         option (redpanda.pbgen.rpc) = {
             authz: SUPERUSER
         };
@@ -84,7 +86,12 @@ message ShadowLink {
 // Create a new shadow link
 message CreateShadowLinkRequest {
     // The shadow link to create
-    ShadowLink cluster_link = 1;
+    ShadowLink shadow_link = 1;
+}
+// Response to creating a shadow link
+message CreateShadowLinkResponse {
+    // The shadow link that was created
+    ShadowLink shadow_link = 1;
 }
 // Request to delete a shadow link
 message DeleteShadowLinkRequest {
@@ -108,21 +115,31 @@ message GetShadowLinkRequest {
         }
     ];
 }
+// Response to getting a shadow link
+message GetShadowLinkResponse {
+    // The shadow link that was retrieved
+    ShadowLink shadow_link = 1;
+}
 // Request to list all shadow links
 message ListShadowLinksRequest {}
 // All shadow links on the cluster
 message ListShadowLinksResponse {
     // The shadow links
-    repeated ShadowLink cluster_links = 1;
+    repeated ShadowLink shadow_links = 1;
 }
 // Updates a shadow link
 message UpdateShadowLinkRequest {
     // The shadow link to update
-    ShadowLink cluster_link = 1;
+    ShadowLink shadow_link = 1;
 
     // The list of fields to update
     // See [AIP-134](https://google.aip.dev/134) for how to use `field_mask`
     google.protobuf.FieldMask update_mask = 2;
+}
+// Response to the update shadow link request
+message UpdateShadowLinkResponse {
+    // The shadow link that was updated
+    ShadowLink shadow_link = 1;
 }
 // Request to fail over a shadow link or a single shadow topic
 message FailOverRequest {
@@ -136,6 +153,11 @@ message FailOverRequest {
     // The name of the shadow topic to fail over, if not set will fail over
     // the entire shadow link
     string shadow_topic_name = 2 [(google.api.field_behavior) = OPTIONAL];
+}
+// The response to the FailOverRequest
+message FailOverResponse {
+    // The shadow link that was failed over
+    ShadowLink shadow_link = 1;
 }
 
 /* Other Messages */

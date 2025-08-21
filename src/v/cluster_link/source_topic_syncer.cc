@@ -124,14 +124,14 @@ source_topic_syncer::source_topic_syncer(
   link* link, const model::metadata& config)
   : controller_locked_task(
       link,
-      config.configuration.topic_metadata_mirroring_cfg.task_interval,
+      config.configuration.topic_metadata_mirroring_cfg.get_task_interval(),
       source_topic_syncer::task_name)
   , _config(config.configuration.topic_metadata_mirroring_cfg.copy()) {}
 
 void source_topic_syncer::update_config(const model::metadata& config) {
     _config = config.configuration.topic_metadata_mirroring_cfg.copy();
     set_run_interval(
-      config.configuration.topic_metadata_mirroring_cfg.task_interval);
+      config.configuration.topic_metadata_mirroring_cfg.get_task_interval());
 }
 
 ss::future<> source_topic_syncer::run_impl() {

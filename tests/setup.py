@@ -62,6 +62,7 @@ setup(
         "databricks-sdk==0.49.0",
         "databricks-sql-connector==4.0.2",
         "duckdb==1.3.1",
+        "connect-python==0.4.2",
     ],
     scripts=[],
 )

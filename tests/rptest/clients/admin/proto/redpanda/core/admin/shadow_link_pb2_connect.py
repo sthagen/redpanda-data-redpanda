@@ -1,0 +1,253 @@
+from __future__ import annotations
+from collections.abc import AsyncIterator
+from collections.abc import Iterator
+from collections.abc import Iterable
+import aiohttp
+import urllib3
+import typing
+import sys
+from connectrpc.client_async import AsyncConnectClient
+from connectrpc.client_sync import ConnectClient
+from connectrpc.client_protocol import ConnectProtocol
+from connectrpc.client_connect import ConnectProtocolError
+from connectrpc.headers import HeaderInput
+from connectrpc.server import ClientRequest
+from connectrpc.server import ClientStream
+from connectrpc.server import ServerResponse
+from connectrpc.server import ServerStream
+from connectrpc.server_sync import ConnectWSGI
+from connectrpc.streams import StreamInput
+from connectrpc.streams import AsyncStreamOutput
+from connectrpc.streams import StreamOutput
+from connectrpc.unary import UnaryOutput
+from connectrpc.unary import ClientStreamingOutput
+if typing.TYPE_CHECKING:
+    if sys.version_info >= (3, 11):
+        from wsgiref.types import WSGIApplication
+    else:
+        from _typeshed.wsgi import WSGIApplication
+from ..... import proto
+
+class ShadowLinkServiceClient:
+
+    def __init__(self, base_url: str, http_client: urllib3.PoolManager | None=None, protocol: ConnectProtocol=ConnectProtocol.CONNECT_PROTOBUF):
+        self.base_url = base_url
+        self._connect_client = ConnectClient(http_client, protocol)
+
+    def call_create_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.CreateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call CreateShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/CreateShadowLink'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    def create_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.CreateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = self.call_create_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_delete_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkResponse]:
+        """Low-level method to call DeleteShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/DeleteShadowLink'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkResponse, extra_headers, timeout_seconds)
+
+    def delete_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkResponse:
+        response = self.call_delete_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_get_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.GetShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call GetShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/GetShadowLink'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    def get_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.GetShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = self.call_get_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_list_shadow_links(self, req: proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksResponse]:
+        """Low-level method to call ListShadowLinks, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/ListShadowLinks'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksResponse, extra_headers, timeout_seconds)
+
+    def list_shadow_links(self, req: proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksResponse:
+        response = self.call_list_shadow_links(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_update_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.UpdateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call UpdateShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/UpdateShadowLink'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    def update_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.UpdateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = self.call_update_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    def call_fail_over(self, req: proto.redpanda.core.admin.shadow_link_pb2.FailOverRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call FailOver, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/FailOver'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    def fail_over(self, req: proto.redpanda.core.admin.shadow_link_pb2.FailOverRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = self.call_fail_over(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+class AsyncShadowLinkServiceClient:
+
+    def __init__(self, base_url: str, http_client: aiohttp.ClientSession, protocol: ConnectProtocol=ConnectProtocol.CONNECT_PROTOBUF):
+        self.base_url = base_url
+        self._connect_client = AsyncConnectClient(http_client, protocol)
+
+    async def call_create_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.CreateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call CreateShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/CreateShadowLink'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    async def create_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.CreateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = await self.call_create_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_delete_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkResponse]:
+        """Low-level method to call DeleteShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/DeleteShadowLink'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkResponse, extra_headers, timeout_seconds)
+
+    async def delete_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkResponse:
+        response = await self.call_delete_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_get_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.GetShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call GetShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/GetShadowLink'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    async def get_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.GetShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = await self.call_get_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_list_shadow_links(self, req: proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksResponse]:
+        """Low-level method to call ListShadowLinks, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/ListShadowLinks'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksResponse, extra_headers, timeout_seconds)
+
+    async def list_shadow_links(self, req: proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksResponse:
+        response = await self.call_list_shadow_links(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_update_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.UpdateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call UpdateShadowLink, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/UpdateShadowLink'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    async def update_shadow_link(self, req: proto.redpanda.core.admin.shadow_link_pb2.UpdateShadowLinkRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = await self.call_update_shadow_link(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+    async def call_fail_over(self, req: proto.redpanda.core.admin.shadow_link_pb2.FailOverRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        """Low-level method to call FailOver, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.ShadowLinkService/FailOver'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.shadow_link_pb2.ShadowLink, extra_headers, timeout_seconds)
+
+    async def fail_over(self, req: proto.redpanda.core.admin.shadow_link_pb2.FailOverRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.shadow_link_pb2.ShadowLink:
+        response = await self.call_fail_over(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
+@typing.runtime_checkable
+class ShadowLinkServiceProtocol(typing.Protocol):
+
+    def create_shadow_link(self, req: ClientRequest[proto.redpanda.core.admin.shadow_link_pb2.CreateShadowLinkRequest]) -> ServerResponse[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        ...
+
+    def delete_shadow_link(self, req: ClientRequest[proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkRequest]) -> ServerResponse[proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkResponse]:
+        ...
+
+    def get_shadow_link(self, req: ClientRequest[proto.redpanda.core.admin.shadow_link_pb2.GetShadowLinkRequest]) -> ServerResponse[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        ...
+
+    def list_shadow_links(self, req: ClientRequest[proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksRequest]) -> ServerResponse[proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksResponse]:
+        ...
+
+    def update_shadow_link(self, req: ClientRequest[proto.redpanda.core.admin.shadow_link_pb2.UpdateShadowLinkRequest]) -> ServerResponse[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        ...
+
+    def fail_over(self, req: ClientRequest[proto.redpanda.core.admin.shadow_link_pb2.FailOverRequest]) -> ServerResponse[proto.redpanda.core.admin.shadow_link_pb2.ShadowLink]:
+        ...
+SHADOW_LINK_SERVICE_PATH_PREFIX = '/redpanda.core.admin.ShadowLinkService'
+
+def wsgi_shadow_link_service(implementation: ShadowLinkServiceProtocol) -> WSGIApplication:
+    app = ConnectWSGI()
+    app.register_unary_rpc('/redpanda.core.admin.ShadowLinkService/CreateShadowLink', implementation.create_shadow_link, proto.redpanda.core.admin.shadow_link_pb2.CreateShadowLinkRequest)
+    app.register_unary_rpc('/redpanda.core.admin.ShadowLinkService/DeleteShadowLink', implementation.delete_shadow_link, proto.redpanda.core.admin.shadow_link_pb2.DeleteShadowLinkRequest)
+    app.register_unary_rpc('/redpanda.core.admin.ShadowLinkService/GetShadowLink', implementation.get_shadow_link, proto.redpanda.core.admin.shadow_link_pb2.GetShadowLinkRequest)
+    app.register_unary_rpc('/redpanda.core.admin.ShadowLinkService/ListShadowLinks', implementation.list_shadow_links, proto.redpanda.core.admin.shadow_link_pb2.ListShadowLinksRequest)
+    app.register_unary_rpc('/redpanda.core.admin.ShadowLinkService/UpdateShadowLink', implementation.update_shadow_link, proto.redpanda.core.admin.shadow_link_pb2.UpdateShadowLinkRequest)
+    app.register_unary_rpc('/redpanda.core.admin.ShadowLinkService/FailOver', implementation.fail_over, proto.redpanda.core.admin.shadow_link_pb2.FailOverRequest)
+    return app

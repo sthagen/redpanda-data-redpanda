@@ -2,11 +2,14 @@ import random
 from typing import Literal, Protocol, final
 import urllib3
 import urllib3.util
-import requests
-import google.protobuf.json_format as pbjson
 from ducktape.cluster.cluster import ClusterNode
 from rptest.clients.admin.proto.redpanda.core.admin import admin_pb2
+from rptest.clients.admin.proto.redpanda.core.admin import admin_pb2_connect
+from rptest.clients.admin.proto.redpanda.core.admin import shadow_link_pb2
+from rptest.clients.admin.proto.redpanda.core.admin import shadow_link_pb2_connect
 from rptest.clients.admin.proto.redpanda.core.admin.internal import debug_pb2
+from rptest.clients.admin.proto.redpanda.core.admin.internal import debug_pb2_connect
+from connectrpc.client_protocol import ConnectProtocol
 
 
 class RedpandaServiceProto(Protocol):
@@ -16,7 +19,35 @@ class RedpandaServiceProto(Protocol):
 
 # Re-export some protobufs for convenience
 admin_pb = admin_pb2
+shadow_link_pb = shadow_link_pb2
 debug_pb = debug_pb2
+
+
+# A hacky workaround for https://github.com/connectrpc/connect-python/issues/37
+class HeaderInjectingClient:
+    def __init__(self, client, headers_to_inject: dict[str, str]):
+        self.client = client
+        self.headers_to_inject = headers_to_inject
+
+    def call_unary(
+        self,
+        url: str,
+        req,
+        response_type,
+        extra_headers: dict[str, str] | None = None,
+        timeout_seconds: float | None = None,
+    ):
+        if extra_headers is None:
+            extra_headers = self.headers_to_inject
+        else:
+            extra_headers = self.headers_to_inject | extra_headers
+        return self.client.call_unary(
+            url=url,
+            req=req,
+            response_type=response_type,
+            extra_headers=extra_headers,
+            timeout_seconds=timeout_seconds,
+        )
 
 
 @final
@@ -35,26 +66,25 @@ class Admin:
                 basic_auth=f'{auth[0]}:{auth[1]}')
         else:
             self._headers = {}
-        self._headers['Content-Type'] = f"application/{protocol}"
         self._protocol = protocol
 
-    # TODO(rockwood): Auto generate the clients instead of manually crafting RPCs here
-
-    def get_build_info(
-            self, req: admin_pb.GetBuildInfoRequest) -> admin_pb.BuildInfo:
+    def _make_service(self, service_clazz):
         node = random.choice(self._rp.started_nodes())
-        if self._protocol == 'json':
-            body = pbjson.MessageToJson(req).encode()
-        else:
-            body = req.SerializeToString()
-        resp = requests.post(
-            url=
-            f"http://{node.account.hostname}:9644/v2/redpanda.core.admin.AdminService/GetBuildInfo",
-            headers=self._headers,
-            data=body,
+        client = service_clazz(
+            base_url=f"http://{node.account.hostname}:9644/v2",
+            protocol=ConnectProtocol.CONNECT_PROTOBUF
+            if self._protocol == 'proto' else ConnectProtocol.CONNECT_JSON,
         )
-        resp.raise_for_status()
-        if self._protocol == 'proto':
-            return admin_pb.BuildInfo.FromString(resp.content)
-        else:
-            return pbjson.Parse(resp.content, admin_pb.BuildInfo())
+        client._connect_client = HeaderInjectingClient(client._connect_client,
+                                                       self._headers.copy())
+        return client
+
+    def admin(self) -> admin_pb2_connect.AdminServiceClient:
+        return self._make_service(admin_pb2_connect.AdminServiceClient)
+
+    def debug(self) -> debug_pb2_connect.DebugServiceClient:
+        return self._make_service(debug_pb2_connect.DebugServiceClient)
+
+    def shadow_link(self) -> shadow_link_pb2_connect.ShadowLinkServiceClient:
+        return self._make_service(
+            shadow_link_pb2_connect.ShadowLinkServiceClient)
