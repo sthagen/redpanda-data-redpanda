@@ -76,3 +76,44 @@ TEST(OffsetIntervalSetTest, TestSerde) {
     auto roundtrip_s = serde::from_iobuf<offset_interval_set>(std::move(b));
     ASSERT_TRUE(s == roundtrip_s);
 }
+
+TEST(OffsetIntervalSetTest, TestTruncate) {
+    offset_interval_set s;
+    ASSERT_TRUE(s.insert(o{0}, o{0}));
+    ASSERT_TRUE(s.insert(o{2}, o{3}));
+    ASSERT_TRUE(s.insert(o{5}, o{5}));
+
+    // Below the start.
+    s.truncate_with_new_start_offset(o{-1});
+    EXPECT_THAT(
+      s.to_vec(),
+      testing::ElementsAre(
+        MatchesRange(o{0}, o{0}),
+        MatchesRange(o{2}, o{3}),
+        MatchesRange(o{5}, o{5})));
+
+    // At the start.
+    s.truncate_with_new_start_offset(o{0});
+    EXPECT_THAT(
+      s.to_vec(),
+      testing::ElementsAre(
+        MatchesRange(o{0}, o{0}),
+        MatchesRange(o{2}, o{3}),
+        MatchesRange(o{5}, o{5})));
+
+    // Between intervals.
+    s.truncate_with_new_start_offset(o{1});
+    EXPECT_THAT(
+      s.to_vec(),
+      testing::ElementsAre(MatchesRange(o{2}, o{3}), MatchesRange(o{5}, o{5})));
+
+    // At the edge of an interval.
+    s.truncate_with_new_start_offset(o{3});
+    EXPECT_THAT(
+      s.to_vec(),
+      testing::ElementsAre(MatchesRange(o{3}, o{3}), MatchesRange(o{5}, o{5})));
+
+    // Beyond the end.
+    s.truncate_with_new_start_offset(o{6});
+    EXPECT_THAT(s.to_vec(), testing::ElementsAre());
+}

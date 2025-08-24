@@ -47,6 +47,8 @@ std::string write_at_offset_stm::errc_category::message(int c) const {
     case errc::invalid_batch_type:
         return "Invalid batch type. Offset translated batches are not "
                "supported by write at offset state machine";
+    case errc::invalid_input:
+        return "Invalid input provided to write at offset state machine";
     }
     __builtin_unreachable();
 }
@@ -71,8 +73,8 @@ write_at_offset_stm::write_at_offset_stm(
   , _sync_lock("w-at-offset") {}
 
 raft::replicate_stages write_at_offset_stm::replicate(
-  model::record_batch batch,
-  kafka::offset expected_base_offset,
+  chunked_vector<model::record_batch> batches,
+  chunked_vector<kafka::offset> expected_base_offsets,
   std::optional<kafka::offset> prev_log_offset,
   model::timeout_clock::duration timeout,
   std::optional<std::reference_wrapper<ss::abort_source>> as) {
@@ -81,8 +83,8 @@ raft::replicate_stages write_at_offset_stm::replicate(
     return raft::replicate_stages{
       std::move(f),
       do_replicate(
-        std::move(batch),
-        expected_base_offset,
+        std::move(batches),
+        std::move(expected_base_offsets),
         prev_log_offset,
         timeout,
         std::move(as),
@@ -90,15 +92,24 @@ raft::replicate_stages write_at_offset_stm::replicate(
 }
 
 ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
-  model::record_batch batch,
-  kafka::offset expected_base_offset,
+  chunked_vector<model::record_batch> batches,
+  chunked_vector<kafka::offset> expected_base_offsets,
   std::optional<kafka::offset> prev_log_offset,
   model::timeout_clock::duration timeout,
   std::optional<std::reference_wrapper<ss::abort_source>> as,
   ss::promise<> enqueued_promise) {
+    if (batches.empty() || expected_base_offsets.size() != batches.size())
+      [[unlikely]] {
+        enqueued_promise.set_value();
+        co_return make_error_code(errc::invalid_input);
+    }
     // offset translated batches are not supported by write at offset state
     // machine
-    if (is_offset_translated_batch(batch)) [[unlikely]] {
+    auto any_offset_translated = std::ranges::any_of(
+      batches, [this](const model::record_batch& batch) {
+          return is_offset_translated_batch(batch);
+      });
+    if (any_offset_translated) [[unlikely]] {
         enqueued_promise.set_value();
         co_return make_error_code(errc::invalid_batch_type);
     }
@@ -128,12 +139,12 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
       _log.trace,
       "Requested replicate at offset: {} with previous log offset: {}. "
       "stm last offset: {} [inflight_last_offset: {}, last_offset: {}]",
-      expected_base_offset,
+      expected_base_offsets,
       prev_log_offset,
       stm_last_offset,
       _inflight_last_offset,
       _last_offset);
-
+    auto expected_base_offset = expected_base_offsets.front();
     const auto effective_prev_log_offset = prev_log_offset.value_or(
       kafka::prev_offset(expected_base_offset));
     /*
@@ -151,24 +162,50 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
         co_return make_error_code(errc::invalid_offset);
     }
 
-    chunked_vector<model::record_batch> batches;
-    // fill the gap with ghost batches if required
-    if (effective_prev_log_offset != kafka::prev_offset(expected_base_offset)) {
-        // the term argument is not important here, it will be
-        // overriden in Raft layer
-        auto ghost_batches = model::make_ghost_batches(
-          kafka::offset_cast(kafka::next_offset(stm_last_offset)),
-          model::prev_offset(kafka::offset_cast(expected_base_offset)),
-          model::term_id{0});
-        batches.reserve(ghost_batches.size() + 1);
-        std::ranges::move(ghost_batches, std::back_inserter(batches));
+    chunked_vector<model::record_batch> effective_batches;
+    effective_batches.reserve(batches.size());
+    auto effective_last_offset = effective_prev_log_offset;
+    // Fill in any gaps in the input batch offset space.
+    kafka::offset last_seen_offset{};
+    for (auto&& [expected_offset, batch] :
+         std::ranges::zip_view(expected_base_offsets, batches)) {
+        if (expected_offset < last_seen_offset) [[unlikely]] {
+            enqueued_promise.set_value();
+            vlog(
+              _log.warn,
+              "Expected batch offsets are not monotonically increasing: {} "
+              "followed by {}",
+              last_seen_offset,
+              expected_offset);
+            co_return make_error_code(errc::invalid_input);
+        }
+        last_seen_offset = expected_offset;
+        auto expected_prev_offset = kafka::prev_offset(expected_offset);
+        if (effective_last_offset != expected_prev_offset) {
+            // fill with ghost batch.
+            // The term argument is not important here, it will be
+            // overriden in Raft layer
+            auto ghost_batches = model::make_ghost_batches(
+              kafka::offset_cast(kafka::next_offset(effective_last_offset)),
+              kafka::offset_cast(expected_prev_offset),
+              model::term_id{0});
+            std::ranges::move(
+              ghost_batches, std::back_inserter(effective_batches));
+        }
+        effective_batches.push_back(std::move(batch));
+        effective_last_offset = kafka::offset(
+          expected_offset()
+          + effective_batches.back().header().last_offset_delta);
     }
 
+    vassert(
+      effective_batches.size() >= expected_base_offsets.size(),
+      "Effective batches {} are fewer than input batches {}",
+      effective_batches.size(),
+      expected_base_offsets.size());
+
     _inflight_last_offset = term_offset{
-      .offset = kafka::offset(
-        expected_base_offset() + batch.header().last_offset_delta),
-      .in_sync_term = _insync_term};
-    batches.push_back(std::move(batch));
+      .offset = effective_last_offset, .in_sync_term = _insync_term};
     /**
      * Write at offset state machine error handling is based on the assumption
      * that if one of the replicate calls fails all the subsequent replicate
@@ -178,7 +215,7 @@ ss::future<result<raft::replicate_result>> write_at_offset_stm::do_replicate(
      * Thanks to that assumption we can simply reset all inflight state instead
      * of reverting to the previous last offset.
      */
-    auto stages = try_replicate_in_stages(std::move(batches), as);
+    auto stages = try_replicate_in_stages(std::move(effective_batches), as);
 
     auto enq = std::move(stages.request_enqueued).finally([u = std::move(u)] {
     });

@@ -19,5 +19,45 @@ TEST(ObjectPathFactory, LevelZeroPathFormat) {
     auto path = cloud_topics::object_path_factory::level_zero_path(
       cloud_topics::object_id::create(cloud_topics::cluster_epoch{42}));
     EXPECT_THAT(
-      path().string(), ::testing::MatchesRegex("^42/" UUID_REGEX "$"));
+      path().string(),
+      ::testing::MatchesRegex(
+        "^level_zero/data/000000000000000042/" UUID_REGEX "$"));
+}
+
+TEST(ObjectPathFactory, LevelZeroDataDir) {
+    EXPECT_EQ(
+      cloud_topics::object_path_factory::level_zero_data_dir(),
+      cloud_storage_clients::object_key("level_zero/data/"));
+}
+
+TEST(ObjectPathFactory, LevelZeroParseEpoch) {
+    EXPECT_EQ(
+      cloud_topics::object_path_factory::level_zero_path_to_epoch(
+        "level_zero/data/000000000000010042/"),
+      cloud_topics::cluster_epoch(10042));
+
+    EXPECT_EQ(
+      cloud_topics::object_path_factory::level_zero_path_to_epoch(
+        "level_zero/data/000000000000010042/asdfalksjdflkjsdflkj"),
+      cloud_topics::cluster_epoch(10042));
+
+    EXPECT_EQ(
+      cloud_topics::object_path_factory::level_zero_path_to_epoch(
+        "level_asdf_zero/data/000000000000010042/asdfasdf")
+        .error(),
+      "L0 object name missing prefix: "
+      "level_asdf_zero/data/000000000000010042/asdfasdf");
+
+    EXPECT_EQ(
+      cloud_topics::object_path_factory::level_zero_path_to_epoch(
+        "level_zero/data/0000000000010042/")
+        .error(),
+      "L0 object name is too short: level_zero/data/0000000000010042/");
+
+    EXPECT_EQ(
+      cloud_topics::object_path_factory::level_zero_path_to_epoch(
+        "level_zero/data/00000X0000000010042/asdfasdf")
+        .error(),
+      "L0 object name has invalid epoch: "
+      "level_zero/data/00000X0000000010042/asdfasdf");
 }

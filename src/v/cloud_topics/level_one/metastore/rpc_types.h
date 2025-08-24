@@ -231,6 +231,27 @@ struct get_end_offset_for_term_request
     model::term_id term;
 };
 
+struct set_start_offset_reply
+  : serde::envelope<
+      set_start_offset_reply,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    auto serde_fields() { return std::tie(ec); }
+
+    errc ec;
+};
+struct set_start_offset_request
+  : serde::envelope<
+      set_start_offset_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    using resp_t = set_start_offset_reply;
+    auto serde_fields() { return std::tie(tp, start_offset); }
+
+    model::topic_id_partition tp;
+    kafka::offset start_offset;
+};
+
 } //  namespace cloud_topics::l1::rpc
 
 template<>

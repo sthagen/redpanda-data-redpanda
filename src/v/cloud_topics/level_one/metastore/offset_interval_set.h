@@ -53,6 +53,7 @@ public:
     bool contains(kafka::offset offset) const;
     stream make_stream() const;
     chunked_vector<interval> to_vec() const;
+    void truncate_with_new_start_offset(kafka::offset);
 
 private:
     interval_set<kafka::offset::type> iset_;

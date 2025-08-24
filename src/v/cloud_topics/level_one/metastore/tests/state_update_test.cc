@@ -1060,3 +1060,193 @@ TEST(StateUpdateTest, TestAddExtentEndsBelowLastTermStart) {
       res.error()().c_str(),
       testing::HasSubstr("Extents end below a requested new term for"));
 }
+
+TEST(StateUpdateTest, TestSetStartOffsetAlignedWithExtent) {
+    state s;
+    // Add some extents
+    auto add_update = add_objects_builder()
+                        .add(new_obj_builder(oid1, 100)
+                               .add(tidp_a, 0_o, 10_o, 2000_t, 0, 99)
+                               .build())
+                        .add(new_obj_builder(oid2, 100)
+                               .add(tidp_a, 11_o, 20_o, 2000_t, 0, 99)
+                               .build())
+                        .add(new_obj_builder(oid3, 100)
+                               .add(tidp_a, 21_o, 30_o, 2000_t, 0, 99)
+                               .build())
+                        .add_term_start(tidp_a, 0_tm, 0_o)
+                        .build();
+    auto res = add_update.apply(s);
+    ASSERT_TRUE(res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(3, p_state->get().extents.size());
+
+    // Set start offset to be aligned with the second extent (starts at 11)
+    auto set_start_update = set_start_offset_update::build(s, tp, 11_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Verify that the state has been updated correctly
+    p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(11_o, p_state->get().start_offset);
+    EXPECT_EQ(31_o, p_state->get().next_offset);
+
+    // The first extent should be fully removed from accounting
+    // Only extents 2 and 3 should remain
+    EXPECT_EQ(2, p_state->get().extents.size());
+}
+
+TEST(StateUpdateTest, TestSetStartOffsetNotAlignedWithExtent) {
+    state s;
+    // Add some extents
+    auto add_update = add_objects_builder()
+                        .add(new_obj_builder(oid1, 100)
+                               .add(tidp_a, 0_o, 10_o, 2000_t, 0, 99)
+                               .build())
+                        .add(new_obj_builder(oid2, 100)
+                               .add(tidp_a, 11_o, 20_o, 2000_t, 0, 99)
+                               .build())
+                        .add(new_obj_builder(oid3, 100)
+                               .add(tidp_a, 21_o, 30_o, 2000_t, 0, 99)
+                               .build())
+                        .add_term_start(tidp_a, 0_tm, 0_o)
+                        .build();
+    auto res = add_update.apply(s);
+    ASSERT_TRUE(res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(3, p_state->get().extents.size());
+
+    // Set start offset to be not aligned with any extent (offset 15 is in the
+    // middle of second extent)
+    auto set_start_update = set_start_offset_update::build(s, tp, 15_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Verify that the state has been updated correctly
+    p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(15_o, p_state->get().start_offset);
+    EXPECT_EQ(31_o, p_state->get().next_offset);
+
+    // The first extent should be fully removed, but the second and third should
+    // remain even though start is not aligned with the second extent's boundary
+    EXPECT_EQ(2, p_state->get().extents.size());
+}
+
+TEST(StateUpdateTest, TestSetStartOffsetEmptyWithTerms) {
+    state s;
+    // Add extents with various terms
+    auto add_update = add_objects_builder()
+                        .add(new_obj_builder(oid1, 100)
+                               .add(tidp_a, 0_o, 9_o, 2000_t, 0, 99)
+                               .build())
+                        .add_term_start(tidp_a, 1_tm, 0_o)
+                        .add_term_start(tidp_a, 2_tm, 3_o)
+                        .add_term_start(tidp_a, 5_tm, 7_o)
+                        .build();
+    auto res = add_update.apply(s);
+    ASSERT_TRUE(res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(1, p_state->get().extents.size());
+    EXPECT_EQ(3, p_state->get().term_starts.size());
+
+    // Set start offset beyond the end of all extents to make log empty.
+    auto set_start_update = set_start_offset_update::build(s, tp, 10_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(10_o, p_state->get().start_offset);
+    EXPECT_EQ(10_o, p_state->get().next_offset);
+
+    // All extents should be removed since start is beyond them.
+    EXPECT_EQ(0, p_state->get().extents.size());
+
+    // One term information should still be preserved to be able to serve term
+    // queries at the next offset.
+    EXPECT_EQ(1, p_state->get().term_starts.size());
+}
+
+TEST(StateUpdateTest, TestSetStartOffsetWithCompactionState) {
+    using testing::ElementsAre;
+    using range = struct compaction_state_update::cleaned_range;
+
+    state s;
+    // Add an extent and then compact it
+    auto add_update = add_objects_builder()
+                        .add(new_obj_builder(oid1, 100)
+                               .add(tidp_a, 0_o, 20_o, 2000_t, 0, 99)
+                               .build())
+                        .add_term_start(tidp_a, 0_tm, 0_o)
+                        .build();
+    auto res = add_update.apply(s);
+    ASSERT_TRUE(res.has_value());
+
+    // Compact part of the extent (clean offsets [5, 15])
+    auto replace_update
+      = replace_objects_builder()
+          .add(new_obj_builder(oid2, 100)
+                 .add(tidp_a, 0_o, 20_o, 2000_t, 0, 99)
+                 .build())
+          .clean(
+            tidp_a,
+            range{
+              .base_offset = 5_o, .last_offset = 15_o, .has_tombstones = true},
+            3000_t)
+          .build();
+    auto replace_res = replace_update.apply(s);
+    ASSERT_TRUE(replace_res.has_value());
+
+    auto tp = model::topic_id_partition::from(tidp_a);
+    auto p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    ASSERT_TRUE(p_state->get().compaction_state.has_value());
+
+    // Verify initial compaction state
+    EXPECT_THAT(
+      p_state->get().compaction_state->cleaned_ranges.to_vec(),
+      ElementsAre(MatchesRange(5_o, 15_o)));
+    EXPECT_THAT(
+      p_state->get().compaction_state->cleaned_ranges_with_tombstones,
+      ElementsAre(MatchesRange(5_o, 15_o)));
+
+    // Set start offset to fall within the cleaned range (offset 10)
+    auto set_start_update = set_start_offset_update::build(s, tp, 10_o);
+    ASSERT_TRUE(set_start_update.has_value());
+
+    auto apply_res = set_start_update->apply(s);
+    ASSERT_TRUE(apply_res.has_value());
+
+    // Verify that the state has been updated correctly
+    p_state = s.partition_state(tp);
+    ASSERT_TRUE(p_state.has_value());
+    EXPECT_EQ(10_o, p_state->get().start_offset);
+    EXPECT_EQ(21_o, p_state->get().next_offset);
+
+    // Check that compaction state reflects the new start
+    // The cleaned ranges should be adjusted to reflect the new start
+    ASSERT_TRUE(p_state->get().compaction_state.has_value());
+    EXPECT_THAT(
+      p_state->get().compaction_state->cleaned_ranges.to_vec(),
+      ElementsAre(MatchesRange(10_o, 15_o)));
+    EXPECT_THAT(
+      p_state->get().compaction_state->cleaned_ranges_with_tombstones,
+      ElementsAre(MatchesRange(10_o, 15_o)));
+}

@@ -93,8 +93,8 @@ class IdempotencyStressTest(PreallocNodesTest):
         return all([v <= expected_size for v in values])
 
     @cluster(num_nodes=4)
-    @matrix(max_producer_ids=[100, 1000, 3000])
     @skip_debug_mode
+    @matrix(max_producer_ids=[100, 1000, 3000])
     def producer_id_stress_test(self, max_producer_ids):
         """
         Check that Redpanda is handling gracefully large number of producer ids
@@ -124,8 +124,8 @@ class IdempotencyStressTest(PreallocNodesTest):
             f"Idempotent producer cache size exceeded {max_producer_ids}")
 
     @cluster(num_nodes=6)
-    @matrix(min_per_vcluster=[20, 33, 50])
     @skip_debug_mode
+    @matrix(min_per_vcluster=[20, 33, 50])
     def producer_id_stress_namespaces_test(self, min_per_vcluster):
         max_producer_ids = 100
         v_clusters = 3

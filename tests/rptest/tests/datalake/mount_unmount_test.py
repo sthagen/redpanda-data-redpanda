@@ -99,8 +99,8 @@ class MountUnmountIcebergTest(RedpandaTest, DataMigrationTestMixin):
         self.dl.tearDown()
 
     @cluster(num_nodes=6)
-    @matrix(cloud_storage_type=supported_storage_types())
     @skip_debug_mode
+    @matrix(cloud_storage_type=supported_storage_types())
     def test_simple_unmount(self, cloud_storage_type):
         self.dl.create_iceberg_enabled_topic(
             self.TOPIC_NAME,
@@ -152,8 +152,8 @@ class MountUnmountIcebergTest(RedpandaTest, DataMigrationTestMixin):
         verifier.wait(progress_timeout_sec=10 * self.SLOW_COMMIT_INTVL_S)
 
     @cluster(num_nodes=6)
-    @matrix(cloud_storage_type=supported_storage_types())
     @skip_debug_mode
+    @matrix(cloud_storage_type=supported_storage_types())
     def test_simple_remount(self, cloud_storage_type):
         self.dl.create_iceberg_enabled_topic(
             self.TOPIC_NAME,

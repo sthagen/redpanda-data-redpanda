@@ -1218,3 +1218,182 @@ TEST(SimpleMetastoreTest, TestEpochForOffset) {
     EXPECT_FALSE(res.has_value());
     EXPECT_EQ(metastore::errc::missing_ntp, res.error());
 }
+
+TEST(SimpleMetastoreTest, TestSetStartAlignedWithExtent) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid2, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 2000_t, 0, 99).build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
+
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Set start offset to be aligned with the second extent.
+    auto set_start_res = m.set_start_offset(tp, 11_o).get();
+    ASSERT_TRUE(set_start_res.has_value());
+
+    auto offsets_res = m.get_offsets(tp).get();
+    ASSERT_TRUE(offsets_res.has_value());
+    ASSERT_EQ(11_o, offsets_res->start_offset);
+    ASSERT_EQ(31_o, offsets_res->next_offset);
+
+    // Getting objects below the new start (11) should return the earliest
+    // object, as should extents that actually point to that object.
+    for (const auto& o : {0_o, 5_o, 10_o, 11_o, 15_o, 20_o}) {
+        auto get_res = m.get_first_ge(tp, o).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid2);
+    }
+
+    // Sanity check getting the object after.
+    for (const auto& o : {21_o, 25_o, 30_o}) {
+        auto get_res = m.get_first_ge(tp, o).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid3);
+    }
+}
+
+TEST(SimpleMetastoreTest, TestSetStartNotAlignedWithExtent) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid2, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build());
+    os.emplace_back(
+      om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 2000_t, 0, 99).build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
+
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Set start offset to be not aligned with any extent (offset 15 is in the
+    // middle of second extent)
+    auto set_start_res = m.set_start_offset(tp, 15_o).get();
+    ASSERT_TRUE(set_start_res.has_value());
+
+    auto offsets_res = m.get_offsets(tp).get();
+    ASSERT_TRUE(offsets_res.has_value());
+    ASSERT_EQ(15_o, offsets_res->start_offset);
+    ASSERT_EQ(31_o, offsets_res->next_offset);
+
+    // Getting objects below the start (15) should return the earliest object,
+    // as should extents that actually point to that object.
+    for (const auto& o : {0_o, 5_o, 10_o, 14_o, 15_o, 16_o, 20_o}) {
+        auto get_res = m.get_first_ge(tp, o).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid2);
+    }
+
+    // Sanity check getting the object after.
+    for (const auto& o : {21_o, 25_o, 30_o}) {
+        auto get_res = m.get_first_ge(tp, o).get();
+        ASSERT_TRUE(get_res.has_value());
+        ASSERT_EQ(get_res->oid, oid3);
+    }
+}
+
+TEST(SimpleMetastoreTest, TestSetStartEmptyWithTerms) {
+    simple_metastore m;
+    auto ometa
+      = om_builder(oid1, 100).add(tid_a, 0_o, 9_o, 2000_t, 0, 99).build();
+    auto add_res = m.add_objects(
+                      om_list_t::single(std::move(ometa)),
+                      terms_builder()
+                        .add(tid_a, 1_tm, 0_o)
+                        .add(tid_a, 2_tm, 3_o)
+                        .add(tid_a, 5_tm, 7_o)
+                        .build())
+                     .get();
+    ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
+
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Set start offset beyond the end of all extents to make log effectively
+    // empty
+    auto set_start_res = m.set_start_offset(tp, 10_o).get();
+    ASSERT_TRUE(set_start_res.has_value());
+
+    auto offsets_res = m.get_offsets(tp).get();
+    ASSERT_TRUE(offsets_res.has_value());
+    ASSERT_EQ(10_o, offsets_res->start_offset);
+    ASSERT_EQ(10_o, offsets_res->next_offset);
+
+    // Getting objects should return out_of_range since log is effectively empty
+    auto get_res = m.get_first_ge(tp, 10_o).get();
+    ASSERT_FALSE(get_res.has_value());
+    ASSERT_EQ(metastore::errc::out_of_range, get_res.error());
+
+    // We should still be able to get the term for the next offset The term at
+    // next offset should be the last term from the extent
+    auto term_res = m.get_term_for_offset(tp, 10_o).get();
+    ASSERT_TRUE(term_res.has_value());
+    ASSERT_EQ(5_tm, term_res.value());
+}
+
+TEST(SimpleMetastoreTest, TestSetStartWithCompactionState) {
+    simple_metastore m;
+    om_list_t os;
+    os.emplace_back(
+      om_builder(oid1, 100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+
+    // Clean range is [5, 15].
+    {
+        om_list_t new_os;
+        new_os.emplace_back(
+          om_builder(oid2, 100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
+
+        auto cmb = cm_builder();
+        cmb.clean(tid_a, 5_o, 15_o, 3000_t);
+        auto compact_res = m.compact_objects(new_os, cmb.build()).get();
+        ASSERT_TRUE(compact_res.has_value());
+    }
+
+    auto tp = model::topic_id_partition::from(tid_a);
+
+    // Verify initial compaction state and dirty ranges: [0, 4] and [16, 20].
+    auto cmp_before = m.get_compaction_offsets(tp, 3000_t).get();
+    ASSERT_TRUE(cmp_before.has_value());
+    EXPECT_THAT(
+      cmp_before->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(0_o, 4_o), MatchesRange(16_o, 20_o)));
+    EXPECT_THAT(
+      cmp_before->removable_tombstone_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(5_o, 15_o)));
+
+    // Set start offset to fall within the cleaned range.
+    auto set_start_res = m.set_start_offset(tp, 10_o).get();
+    ASSERT_TRUE(set_start_res.has_value());
+
+    // Check that offsets are updated.
+    auto offsets_res = m.get_offsets(tp).get();
+    ASSERT_TRUE(offsets_res.has_value());
+    ASSERT_EQ(10_o, offsets_res->start_offset);
+    ASSERT_EQ(21_o, offsets_res->next_offset);
+
+    // Only the [16, 20] should remain dirty.
+    auto cmp_after = m.get_compaction_offsets(tp, 3000_t).get();
+    ASSERT_TRUE(cmp_after.has_value());
+    EXPECT_THAT(
+      cmp_after->dirty_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(16_o, 20_o)));
+
+    // Removable tombstone ranges should also be adjusted to reflect the new
+    // start.
+    EXPECT_THAT(
+      cmp_after->removable_tombstone_ranges.to_vec(),
+      testing::ElementsAre(MatchesRange(10_o, 15_o)));
+}

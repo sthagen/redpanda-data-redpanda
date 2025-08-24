@@ -23,6 +23,7 @@ namespace cloud_topics::l1 {
 enum class update_key : uint8_t {
     add_objects = 0,
     replace_objects = 1,
+    set_start_offset = 2,
 };
 
 using stm_update_error = named_type<ss::sstring, struct update_error_tag>;
@@ -159,6 +160,27 @@ struct replace_objects_update
       compaction_updates;
 };
 
+struct set_start_offset_update
+  : public serde::envelope<
+      set_start_offset_update,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    friend bool
+    operator==(const set_start_offset_update&, const set_start_offset_update&)
+      = default;
+    auto serde_fields() { return std::tie(tp, new_start_offset); }
+
+    static constexpr auto key{update_key::set_start_offset};
+    static std::expected<set_start_offset_update, stm_update_error>
+    build(const state&, const model::topic_id_partition&, kafka::offset);
+
+    std::expected<std::monostate, stm_update_error> can_apply(const state&);
+    std::expected<std::monostate, stm_update_error> apply(state&);
+
+    model::topic_id_partition tp;
+    kafka::offset new_start_offset;
+};
+
 } // namespace cloud_topics::l1
 
 template<>
@@ -172,6 +194,8 @@ struct fmt::formatter<cloud_topics::l1::update_key> final
             return formatter<string_view>::format("add_objects", ctx);
         case cloud_topics::l1::update_key::replace_objects:
             return formatter<string_view>::format("replace_objects", ctx);
+        case cloud_topics::l1::update_key::set_start_offset:
+            return formatter<string_view>::format("set_start_offset", ctx);
         }
     }
 };

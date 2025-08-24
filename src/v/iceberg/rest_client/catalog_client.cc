@@ -280,6 +280,11 @@ ss::future<expected<std::monostate>> catalog_client::maybe_add_bearer_auth(
         // AWS SigV4 signing will be handled after build() is called
         break;
     }
+    case config::datalake_catalog_auth_mode::gcp: {
+        // GCP credentials are handled by the credential manager and will be
+        // applied after build() is called
+        break;
+    }
     }
     co_return std::monostate{};
 }
@@ -330,17 +335,15 @@ ss::future<expected<iobuf>> catalog_client::perform_request(
             co_return tl::unexpected(request.error());
         }
 
-        // Apply AWS SigV4 authentication if needed
-        if (_auth_mode == config::datalake_catalog_auth_mode::aws_sigv4) {
-            auto auth_result = co_await _credential_manager.maybe_sign(
-              payload, request.value());
-            if (auth_result.has_error()) {
-                co_return tl::unexpected(
-                  domain_error{http_call_error{fmt::format(
-                    "Failed to sign request with credential manager: {}",
-                    auth_result.error().message())}});
-            }
+        auto auth_result = co_await _credential_manager.maybe_sign(
+          payload, request.value());
+        if (auth_result.has_error()) {
+            co_return tl::unexpected(
+              domain_error{http_call_error{fmt::format(
+                "Failed to sign request with credential manager: {}",
+                auth_result.error().message())}});
         }
+
         auto request_target = ss::sstring{
           request->target().begin(), request->target().end()};
 

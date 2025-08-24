@@ -167,7 +167,7 @@ std::expected<std::monostate, stm_update_error> add_objects_update::can_apply(
         // First do a basic check that the incoming term entries can be
         // appended to our state without violating ordering requirements.
         if (p_state.has_value() && !p_state->get().term_starts.empty()) {
-            auto p_last_entry = p_state->get().term_starts.back();
+            auto p_last_entry = *p_state->get().term_starts.rbegin();
             auto req_first_entry = req_entries.begin();
 
             // NOTE: it's valid for the first requested term to be equal to the
@@ -267,15 +267,12 @@ add_objects_update::apply(state& state) {
             if (
               !p_state.term_starts.empty()
               && req_terms.begin()->term_id
-                   <= p_state.term_starts.back().term_id) {
+                   <= p_state.term_starts.rbegin()->term_id) {
                 // If the first added term matches the back of the latest
                 // tracked term, it isn't a new term.
                 ++new_term_it;
             }
-            std::copy(
-              new_term_it,
-              req_terms.end(),
-              std::back_inserter(p_state.term_starts));
+            p_state.term_starts.insert(new_term_it, req_terms.end());
         } else {
             // The incoming extents don't align with the next position. "Drop"
             // them all.
@@ -572,6 +569,90 @@ replace_objects_update::build(
         return std::unexpected(allowed.error());
     }
     return update;
+}
+
+std::expected<set_start_offset_update, stm_update_error>
+set_start_offset_update::build(
+  const state& state, const model::topic_id_partition& tp, kafka::offset o) {
+    set_start_offset_update update{
+      .tp = tp,
+      .new_start_offset = o,
+    };
+    auto allowed = update.can_apply(state);
+    if (!allowed.has_value()) {
+        return std::unexpected(allowed.error());
+    }
+    return update;
+}
+
+std::expected<std::monostate, stm_update_error>
+set_start_offset_update::can_apply(const state& state) {
+    auto prt_ref = state.partition_state(tp);
+    if (!prt_ref.has_value()) {
+        return std::unexpected(stm_update_error(
+          fmt::format("Partition {} not tracked by state", tp)));
+    }
+    auto& prt = prt_ref->get();
+    if (new_start_offset < prt.start_offset) {
+        return std::unexpected(stm_update_error(
+          fmt::format(
+            "Requested start offset for {} is below the current start: {} < {}",
+            tp,
+            new_start_offset,
+            prt.start_offset)));
+    }
+    if (new_start_offset > prt.next_offset) {
+        return std::unexpected(stm_update_error(
+          fmt::format(
+            "Requested start offset for {} is above the next start: {} < {}",
+            tp,
+            new_start_offset,
+            prt.next_offset)));
+    }
+    return std::monostate{};
+}
+
+std::expected<std::monostate, stm_update_error>
+set_start_offset_update::apply(state& state) {
+    auto allowed = can_apply(state);
+    if (!allowed.has_value()) {
+        return std::unexpected(allowed.error());
+    }
+    auto& p_state
+      = state.topic_to_state[tp.topic_id].pid_to_state[tp.partition];
+    if (p_state.start_offset == new_start_offset) {
+        return std::monostate{};
+    }
+    p_state.start_offset = new_start_offset;
+    while (!p_state.extents.empty()) {
+        if (p_state.extents.begin()->last_offset >= new_start_offset) {
+            break;
+        }
+        // The front extent falls entirely below the new start offset, meaning
+        // it's can be removed.
+        auto begin_it = p_state.extents.begin();
+        auto oid = begin_it->oid;
+        auto obj_it = state.objects.find(oid);
+        if (obj_it == state.objects.end()) {
+            // Unexpected, but benign.
+            continue;
+        }
+        obj_it->second.removed_data_size += begin_it->len;
+        p_state.extents.erase(begin_it);
+    }
+    // Now remove terms. Note that the removal should always leave at least one
+    // term start, enough to cover `next_offset`, even if the log is empty.
+    while (p_state.term_starts.size() > 1) {
+        if (p_state.term_starts.begin()->start_offset < new_start_offset) {
+            p_state.term_starts.erase(p_state.term_starts.begin());
+        }
+    }
+    // Finally, remove any compaction state that falls below the start offset.
+    if (p_state.compaction_state.has_value()) {
+        auto& c_state = *p_state.compaction_state;
+        c_state.truncate_with_new_start_offset(new_start_offset);
+    }
+    return std::monostate{};
 }
 
 } // namespace cloud_topics::l1

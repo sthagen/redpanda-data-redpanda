@@ -13,6 +13,18 @@
 
 #include <gmock/gmock.h>
 
+namespace {
+chunked_vector<model::record_batch>
+copy_batches(const chunked_vector<model::record_batch>& batches) {
+    chunked_vector<model::record_batch> copy;
+    for (auto& batch : batches) {
+        copy.push_back(batch.copy());
+    }
+    return copy;
+};
+
+} // namespace
+
 static ss::logger t_log{"test_log"};
 using namespace testing;
 struct WriteAtOffsetStmFixture
@@ -26,11 +38,24 @@ struct WriteAtOffsetStmFixture
           model::offset_translator_batch_types());
     }
 
-    chunked_vector<model::record_batch> generate_batches(
-      kafka::offset starting_at, size_t batch_count, size_t records_per_batch) {
-        chunked_vector<model::record_batch> batches;
+    chunked_vector<kafka::offset>
+    start_offsets(const chunked_vector<model::record_batch>& batches) {
+        chunked_vector<kafka::offset> offsets;
+        for (const auto& batch : batches) {
+            offsets.push_back(kafka::offset{batch.base_offset()()});
+        }
+        return offsets;
+    }
 
+    chunked_vector<chunked_vector<model::record_batch>> generate_data(
+      kafka::offset starting_at, size_t batch_count, size_t records_per_batch) {
+        chunked_vector<chunked_vector<model::record_batch>> batches;
+
+        // randomly split batches into multiple batch groups
         for (auto _ : boost::irange(batch_count)) {
+            if (batches.empty() || tests::random_bool()) {
+                batches.emplace_back();
+            }
             storage::record_batch_builder builder(
               model::record_batch_type::raft_data, model::offset(starting_at));
 
@@ -40,7 +65,7 @@ struct WriteAtOffsetStmFixture
                   serde::to_iobuf(starting_at()));
                 starting_at++;
             }
-            batches.push_back(std::move(builder).build());
+            batches.back().push_back(std::move(builder).build());
         }
         return batches;
     }
@@ -105,22 +130,33 @@ struct WriteAtOffsetStmFixture
         return count;
     }
 
-    chunked_vector<model::record_batch>
-    make_gaps(chunked_vector<model::record_batch> batches) {
-        chunked_vector<model::record_batch> filtered_batches;
+    chunked_vector<chunked_vector<model::record_batch>>
+    make_gaps(chunked_vector<chunked_vector<model::record_batch>> data) {
+        chunked_vector<chunked_vector<model::record_batch>> filtered_data;
 
         /**
-         * Drop some batches
+         * Drop some batches randomly. Sometimes the entire vector of batches
+         * are dropped and sometimes individual batches from within the vector
+         * are dropped.
          */
-        for (auto& batch : batches) {
+        for (auto& batches : data) {
             if (random_generators::get_int(0, 100) < 50) {
-                filtered_batches.push_back(std::move(batch));
+                chunked_vector<model::record_batch> inner_filtered;
+                for (auto& batch : batches) {
+                    if (random_generators::get_int(0, 100) < 70) {
+                        inner_filtered.push_back(std::move(batch));
+                    }
+                }
+                if (inner_filtered.empty()) {
+                    inner_filtered.push_back(std::move(batches[0]));
+                }
+                filtered_data.push_back(std::move(inner_filtered));
             }
         }
-        if (filtered_batches.empty()) {
-            filtered_batches.push_back(std::move(batches[0]));
+        if (filtered_data.empty()) {
+            filtered_data.push_back(std::move(data[0]));
         }
-        return filtered_batches;
+        return filtered_data;
     }
 
     std::optional<ss::shared_ptr<kafka::write_at_offset_stm>> get_leader_stm() {
@@ -140,22 +176,24 @@ TEST_F(WriteAtOffsetStmFixture, test_write_at_offset_happy_path) {
     initialize_state_machines(3).get();
     wait_for_leader(10s).get();
     auto stm = get_leader_stm();
-    kafka::offset expected_offset{0};
+    kafka::offset gen_offset{0};
 
     for (int i = 0; i < 10; ++i) {
-        auto batches = generate_batches(
-          expected_offset,
-          random_generators::get_int(1, 10),
-          random_generators::get_int(1, 10));
-
-        for (auto& batch : batches) {
-            auto bsz = batch.record_count();
+        auto num_batches = random_generators::get_int(1, 10);
+        auto records_per_batch = random_generators::get_int(1, 10);
+        auto data = generate_data(gen_offset, num_batches, records_per_batch);
+        gen_offset = model::offset_cast(
+          model::next_offset(data.back().back().last_offset()));
+        for (auto& batches : data) {
+            auto expected_offsets = start_offsets(batches);
             auto stages = stm->get()->replicate(
-              std::move(batch), expected_offset, std::nullopt, 10s);
+              std::move(batches),
+              std::move(expected_offsets),
+              std::nullopt,
+              10s);
             stages.request_enqueued.get();
             auto result = stages.replicate_finished.get();
-            ASSERT_FALSE(result.has_error());
-            expected_offset += bsz;
+            ASSERT_FALSE(result.has_error()) << result.error();
         }
     }
 
@@ -168,16 +206,18 @@ TEST_F(WriteAtOffsetStmFixture, test_write_at_offset_gaps) {
     wait_for_leader(10s).get();
     auto stm = get_leader_stm();
 
-    auto batches = make_gaps(generate_batches(
-      kafka::offset{0}, 200, random_generators::get_int(1, 10)));
+    auto data = make_gaps(
+      generate_data(kafka::offset{0}, 200, random_generators::get_int(1, 10)));
 
     kafka::offset expected_prev_offset{};
-    for (auto& batch : batches) {
-        auto o = model::offset_cast(batch.last_offset());
-        auto expected_offset = model::offset_cast(batch.base_offset());
-
+    for (auto& batches : data) {
+        auto o = model::offset_cast(batches.back().last_offset());
+        auto expected_offsets = start_offsets(batches);
         auto stages = (*stm)->replicate(
-          std::move(batch), expected_offset, expected_prev_offset, 10s);
+          std::move(batches),
+          std::move(expected_offsets),
+          expected_prev_offset,
+          10s);
         expected_prev_offset = o;
         stages.request_enqueued.get();
         auto result = stages.replicate_finished.get();
@@ -193,16 +233,18 @@ TEST_F(WriteAtOffsetStmFixture, test_start_offset_advancement) {
     wait_for_leader(10s).get();
     auto stm = get_leader_stm();
     // generate a batch that stars at non zero offset
-    auto batches = generate_batches(
+    auto data = generate_data(
       kafka::offset{1000123}, 10, random_generators::get_int(1, 10));
 
     kafka::offset expected_prev_offset{};
-    for (auto& batch : batches) {
-        auto o = model::offset_cast(batch.last_offset());
-        auto expected_offset = model::offset_cast(batch.base_offset());
-
+    for (auto& batches : data) {
+        auto o = model::offset_cast(batches.back().last_offset());
+        auto expected_offsets = start_offsets(batches);
         auto stages = (*stm)->replicate(
-          std::move(batch), expected_offset, expected_prev_offset, 10s);
+          std::move(batches),
+          std::move(expected_offsets),
+          expected_prev_offset,
+          10s);
         expected_prev_offset = o;
         stages.request_enqueued.get();
         auto result = stages.replicate_finished.get();
@@ -218,16 +260,18 @@ TEST_F(WriteAtOffsetStmFixture, test_concurrent_writes) {
     wait_for_leader(10s).get();
     auto stm = get_leader_stm();
 
-    auto batches = make_gaps(generate_batches(
-      kafka::offset{0}, 200, random_generators::get_int(1, 10)));
+    auto data = make_gaps(
+      generate_data(kafka::offset{0}, 200, random_generators::get_int(1, 10)));
     chunked_vector<raft::replicate_stages> all_stages;
     kafka::offset expected_prev_offset{};
-    for (auto& batch : batches) {
-        auto o = model::offset_cast(batch.last_offset());
-        auto expected_offset = model::offset_cast(batch.base_offset());
-
+    for (auto& batches : data) {
+        auto o = model::offset_cast(batches.back().last_offset());
+        auto expected_offsets = start_offsets(batches);
         auto stages = (*stm)->replicate(
-          std::move(batch), expected_offset, expected_prev_offset, 10s);
+          std::move(batches),
+          std::move(expected_offsets),
+          expected_prev_offset,
+          10s);
         expected_prev_offset = o;
         all_stages.push_back(std::move(stages));
     }
@@ -249,28 +293,34 @@ TEST_F(WriteAtOffsetStmFixture, test_writes_out_of_order) {
                  ->stm_manager()
                  ->get<kafka::write_at_offset_stm>();
 
-    auto batches = make_gaps(generate_batches(
-      kafka::offset{0}, 30, random_generators::get_int(1, 10)));
+    auto num_records_per_batch = random_generators::get_int(1, 10);
+    constexpr auto num_batches = 30;
+    auto total_records = num_batches * num_records_per_batch;
+
+    auto data = make_gaps(
+      generate_data(kafka::offset{0}, num_batches, num_records_per_batch));
 
     std::vector<size_t> indicies;
-    indicies.reserve(batches.size());
-    for (size_t i = 0; i < batches.size(); ++i) {
+    indicies.reserve(total_records);
+    for (size_t i = 0; i < data.size(); ++i) {
         indicies.push_back(i);
     }
     // randomize the order of batches, finally we should replicate all of them,
     // this simulate gaps & duplicates
     while (!indicies.empty()) {
         auto idx = random_generators::random_choice(indicies);
-        auto b_cp = batches[idx].copy();
-        auto o = model::offset_cast(b_cp.last_offset());
-        auto expected_offset = model::offset_cast(b_cp.base_offset());
+        auto b_cp = copy_batches(data[idx]);
+        auto o = model::offset_cast(b_cp.back().last_offset());
         auto expected_prev_offset = idx == 0
                                       ? kafka::offset{}
                                       : model::offset_cast(
-                                          batches[idx - 1].last_offset());
-
+                                          data[idx - 1].back().last_offset());
+        auto expected_offsets = start_offsets(b_cp);
         auto stages = stm->replicate(
-          std::move(b_cp), expected_offset, expected_prev_offset, 10s);
+          std::move(b_cp),
+          std::move(expected_offsets),
+          expected_prev_offset,
+          10s);
         expected_prev_offset = o;
         stages.request_enqueued.get();
         auto result = stages.replicate_finished.get();
@@ -305,12 +355,12 @@ TEST_P(WriteAtOffsetConcurrentWritesTest, TestConcurrentWrites) {
     initialize_state_machines(replication_factor).get();
     wait_for_leader(10s).get();
 
-    auto batches = make_gaps(generate_batches(
-      kafka::offset{0}, 1000, random_generators::get_int(1, 10)));
+    auto data = make_gaps(
+      generate_data(kafka::offset{0}, 1000, random_generators::get_int(1, 10)));
 
     std::vector<size_t> indicies;
-    indicies.reserve(batches.size());
-    for (size_t i = 0; i < batches.size(); ++i) {
+    indicies.reserve(data.size());
+    for (size_t i = 0; i < data.size(); ++i) {
         indicies.push_back(i);
     }
 
@@ -321,13 +371,13 @@ TEST_P(WriteAtOffsetConcurrentWritesTest, TestConcurrentWrites) {
           [&] { return indicies.empty(); },
           [&] {
               auto idx = random_generators::random_choice(indicies);
-              auto b_cp = batches[idx].copy();
-              auto o = model::offset_cast(b_cp.last_offset());
-              auto expected_offset = model::offset_cast(b_cp.base_offset());
-              auto expected_prev_offset = idx == 0
-                                            ? kafka::offset{}
-                                            : model::offset_cast(
-                                                batches[idx - 1].last_offset());
+              auto b_cp = copy_batches(data[idx]);
+              auto o = model::offset_cast(b_cp.back().last_offset());
+              auto expected_offsets = start_offsets(b_cp);
+              auto expected_prev_offset
+                = idx == 0
+                    ? kafka::offset{}
+                    : model::offset_cast(data[idx - 1].back().last_offset());
               auto maybe_stm = get_leader_stm();
               if (!maybe_stm) {
                   return ss::sleep(50ms);
@@ -335,7 +385,7 @@ TEST_P(WriteAtOffsetConcurrentWritesTest, TestConcurrentWrites) {
               auto stages = (*maybe_stm)
                               ->replicate(
                                 std::move(b_cp),
-                                expected_offset,
+                                std::move(expected_offsets),
                                 expected_prev_offset,
                                 10s);
               expected_prev_offset = o;
@@ -380,7 +430,7 @@ TEST_P(WriteAtOffsetConcurrentWritesTest, TestConcurrentWrites) {
 
     ASSERT_EQ(
       node(leader_id).raft()->log()->from_log_offset(dirty_offset),
-      batches.back().last_offset());
+      data.back().back().last_offset());
     ASSERT_TRUE(logs_content_is_valid().get());
 }
 
@@ -394,24 +444,27 @@ TEST_F(WriteAtOffsetStmFixture, test_recovery_from_snapshot) {
     initialize_state_machines(3).get();
     auto leader_id = wait_for_leader(10s).get();
     auto stm = get_leader_stm();
-    kafka::offset expected_offset{0};
+    kafka::offset gen_offset{0};
     // store the truncation point, it is the base offset of second replicated
     // batch.
     model::offset snapshot_offset{};
     for (int i = 0; i < 10; ++i) {
-        auto batches = generate_batches(
-          expected_offset,
+        auto data = generate_data(
+          gen_offset,
           random_generators::get_int(1, 10),
           random_generators::get_int(1, 10));
-
-        for (auto& batch : batches) {
-            auto bsz = batch.record_count();
+        gen_offset = model::offset_cast(
+          model::next_offset(data.back().back().last_offset()));
+        for (auto& batches : data) {
+            auto expected_offsets = start_offsets(batches);
             auto stages = stm->get()->replicate(
-              std::move(batch), expected_offset, std::nullopt, 10s);
+              std::move(batches),
+              std::move(expected_offsets),
+              std::nullopt,
+              10s);
             stages.request_enqueued.get();
             auto result = stages.replicate_finished.get();
             ASSERT_FALSE(result.has_error());
-            expected_offset += bsz;
         }
         if (snapshot_offset == model::offset{}) {
             snapshot_offset = node(leader_id).raft()->dirty_offset();
@@ -450,22 +503,25 @@ TEST_F(WriteAtOffsetStmFixture, test_failed_replication) {
     initialize_state_machines(3).get();
     wait_for_leader(10s).get();
     auto stm = get_leader_stm();
-    kafka::offset expected_offset{0};
+    kafka::offset gen_offset{0};
     // replicate some batches
     for (int i = 0; i < 10; ++i) {
-        auto batches = generate_batches(
-          expected_offset,
+        auto data = generate_data(
+          gen_offset,
           random_generators::get_int(1, 10),
           random_generators::get_int(1, 10));
-
-        for (auto& batch : batches) {
-            auto bsz = batch.record_count();
+        gen_offset = model::offset_cast(
+          model::next_offset(data.back().back().last_offset()));
+        for (auto& batches : data) {
+            auto expected_offsets = start_offsets(batches);
             auto stages = stm->get()->replicate(
-              std::move(batch), expected_offset, std::nullopt, 10s);
+              std::move(batches),
+              std::move(expected_offsets),
+              std::nullopt,
+              10s);
             stages.request_enqueued.get();
             auto result = stages.replicate_finished.get();
             ASSERT_FALSE(result.has_error());
-            expected_offset += bsz;
         }
     }
     auto leader_id = wait_for_leader(10s).get();
@@ -480,18 +536,17 @@ TEST_F(WriteAtOffsetStmFixture, test_failed_replication) {
         return ss::now();
     });
     stm = get_leader_stm();
-    auto err_expected_offset = expected_offset;
-    auto batches = generate_batches(
+    auto err_expected_offset = gen_offset;
+    auto data = generate_data(
       err_expected_offset, 10, random_generators::get_int(1, 10));
 
     std::vector<ss::future<result<raft::replicate_result>>> results;
-    for (auto& batch : batches) {
-        auto bsz = batch.record_count();
+    for (auto& batches : data) {
+        auto expected_offsets = start_offsets(batches);
         auto stages = stm->get()->replicate(
-          std::move(batch), err_expected_offset, std::nullopt, 10s);
+          std::move(batches), std::move(expected_offsets), std::nullopt, 10s);
         stages.request_enqueued.get();
         results.push_back(std::move(stages.replicate_finished));
-        err_expected_offset += bsz;
     }
 
     leader.raft()->block_new_leadership();
@@ -511,19 +566,18 @@ TEST_F(WriteAtOffsetStmFixture, test_failed_replication) {
           .group = leader.raft()->group(), .target = leader_id, .timeout = 10s})
       .get();
     // Go back to batches with previous expected offsets
-    auto new_batches = generate_batches(
-      expected_offset, 10, random_generators::get_int(1, 10));
+    auto new_data = generate_data(
+      gen_offset, 10, random_generators::get_int(1, 10));
     leader_id = wait_for_leader(10s).get();
     stm = get_leader_stm();
 
-    for (auto& batch : new_batches) {
-        auto bsz = batch.record_count();
+    for (auto& batches : new_data) {
+        auto expected_offsets = start_offsets(batches);
         auto stages = stm->get()->replicate(
-          std::move(batch), expected_offset, std::nullopt, 10s);
+          std::move(batches), std::move(expected_offsets), std::nullopt, 10s);
         stages.request_enqueued.get();
         auto res = stages.replicate_finished.get();
         ASSERT_FALSE(res.has_error());
-        expected_offset += bsz;
     }
     ASSERT_TRUE(logs_content_is_valid().get());
 }

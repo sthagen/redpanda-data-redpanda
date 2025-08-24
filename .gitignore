@@ -44,7 +44,7 @@ _helm_e2e_artifacts/
 *.test
 
 # bazel
-bazel-*
+/bazel-*
 user.bazelrc
 /external
 

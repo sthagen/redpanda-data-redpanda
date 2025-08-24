@@ -11,11 +11,13 @@ from rptest.util import wait_until_result
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, LoggingConfig
-from rptest.services.redpanda_installer import wait_for_num_versions, RedpandaInstaller
+from rptest.services.redpanda_installer import wait_for_num_versions
 from rptest.clients.kcl import RawKCL
 
 
 class TopicIDUpgradeTest(RedpandaTest):
+    TARGET_VERSION = (25, 2)
+
     def __init__(self, test_ctx, **kwargs):
         super().__init__(test_ctx,
                          num_brokers=7,
@@ -31,7 +33,7 @@ class TopicIDUpgradeTest(RedpandaTest):
     def setUp(self):
         # 25.2.x is when topic ids went live, so start with 25.1.x
         self.old_version = self.redpanda._installer.highest_from_prior_feature_version(
-            RedpandaInstaller.HEAD)
+            self.TARGET_VERSION)
         self.installer.install(self.redpanda.nodes, self.old_version)
         super(TopicIDUpgradeTest, self).setUp()
 
@@ -57,8 +59,7 @@ class TopicIDUpgradeTest(RedpandaTest):
             assert t['ErrorCode'] in {0, 36}, f"Failed to create topic: {t}"
 
         # Update all nodes to newest version
-        # TODO: replace HEAD with (25, 2) once available
-        self.installer.install(self.redpanda.nodes, RedpandaInstaller.HEAD)
+        self.installer.install(self.redpanda.nodes, self.TARGET_VERSION)
         self.redpanda.restart_nodes(self.redpanda.nodes)
         _ = wait_for_num_versions(self.redpanda, 1)
 

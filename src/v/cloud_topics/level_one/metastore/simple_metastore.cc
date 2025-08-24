@@ -200,6 +200,22 @@ simple_metastore::replace_objects(
     co_return std::expected<void, metastore::errc>{};
 }
 
+ss::future<std::expected<void, metastore::errc>>
+simple_metastore::set_start_offset(
+  const model::topic_id_partition& tp, kafka::offset requested_o) {
+    auto update_res = set_start_offset_update::build(state_, tp, requested_o);
+    if (!update_res.has_value()) {
+        vlog(cd_log.debug, "Set start offset failed: {}", update_res.error());
+        co_return std::unexpected(metastore::errc::invalid_request);
+    }
+    auto apply_res = update_res->apply(state_);
+    vassert(
+      apply_res.has_value(),
+      "Apply must succeed if can_apply() is true: {}",
+      apply_res.error());
+    co_return std::expected<void, metastore::errc>{};
+}
+
 ss::future<std::expected<metastore::object_response, metastore::errc>>
 simple_metastore::get_first_ge(
   const model::topic_id_partition& tpr, kafka::offset o) {

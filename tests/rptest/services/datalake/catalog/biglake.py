@@ -52,7 +52,8 @@ class BiglakeMetastore(CatalogService):
     def _configure_client(self, conf: Dict[str, Any]) -> None:
         conf["header.x-goog-user-project"] = self.gcp_context.project_id
         conf["header.X-Iceberg-Access-Delegation"] = "remote-signing"
-        conf["py-io-impl"] = "pyiceberg.io.fsspec.FsspecFileIO"
+        # Use gcsfs explicitly if you find issues with the default implementation (Arrow fs).
+        # conf["py-io-impl"] = "pyiceberg.io.fsspec.FsspecFileIO"
         conf["auth"] = {
             "type": "custom",
             "impl": "rptest.services.datalake.catalog.biglake.BiglakeAuth",

@@ -33,6 +33,12 @@ ss::future<replace_objects_reply> service::replace_objects(
       std::move(request), frontend::local_only::yes);
 }
 
+ss::future<set_start_offset_reply> service::set_start_offset(
+  set_start_offset_request request, ::rpc::streaming_context&) {
+    return _frontend->local().set_start_offset(
+      std::move(request), frontend::local_only::yes);
+}
+
 ss::future<get_first_offset_ge_reply> service::get_first_offset_ge(
   get_first_offset_ge_request request, ::rpc::streaming_context&) {
     return _frontend->local().get_first_offset_ge(

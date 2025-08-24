@@ -154,8 +154,13 @@ class ClusterRateQuotaTest(RedpandaTest):
         }
         super().__init__(*args,
                          extra_rp_conf=additional_options,
-                         log_config=LoggingConfig(
-                             'info', logger_levels={'kafka': 'trace'}),
+                         log_config=LoggingConfig('info',
+                                                  logger_levels={
+                                                      'kafka': 'trace',
+                                                      'kafka_quotas': 'trace',
+                                                      'cluster': 'trace',
+                                                      'raft': 'trace'
+                                                  }),
                          resource_settings=ResourceSettings(num_cpus=1),
                          **kwargs)
         self.rpk = RpkTool(self.redpanda)

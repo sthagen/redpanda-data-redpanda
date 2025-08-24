@@ -128,8 +128,7 @@ def wait_until_result(condition: Callable[[], Any], *args: Any,
 
 
 def wait_until_with_progress_check(check: Callable[[], Any],
-                                   condition: Callable[[Callable[[], Any]],
-                                                       Any],
+                                   condition: Callable[[], Any],
                                    timeout_sec: int,
                                    progress_sec: int,
                                    backoff_sec: int,
@@ -148,16 +147,7 @@ def wait_until_with_progress_check(check: Callable[[], Any],
 
     params:
       - check: the value we expect to change after each 'progress_sec'
-      - condition: the condition we are waiting for. should be written in terms
-        of the check function, e.g.
-        check:
-           def get_val():
-               return admin.stuff()['val']
-        condition:
-           def condition(check: Callable):
-               return check() > 10
-           # used like
-           condition(get_val)
+      - condition: passed to wait_until
       - timeout_sec (see above)
       - progress_sec (see above)
       - err_msg: Passed down to wait_until
@@ -166,7 +156,7 @@ def wait_until_with_progress_check(check: Callable[[], Any],
     val = check()
     while timeout_sec > 0:
         try:
-            wait_until(lambda: condition(check),
+            wait_until(condition,
                        timeout_sec=progress_sec,
                        backoff_sec=backoff_sec,
                        err_msg=err_msg)

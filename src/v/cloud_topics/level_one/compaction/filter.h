@@ -1,0 +1,43 @@
+/*
+ * Copyright 2025 Redpanda Data, Inc.
+ *
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
+ */
+
+#pragma once
+
+#include "compaction/filter.h"
+#include "compaction/key_offset_map.h"
+
+namespace cloud_topics::l1 {
+
+class compaction_filter : public compaction::filter {
+public:
+    compaction_filter(
+      compaction::sliding_window_reducer::sink& sink,
+      const compaction::key_offset_map& map,
+      model::ntp ntp)
+      : filter(sink, std::move(ntp))
+      , _map(map) {}
+
+private:
+    ss::future<> maybe_index_offset_delta(
+      const model::record_batch& b,
+      const model::record& r,
+      std::vector<int32_t>& offset_deltas) const;
+
+    ss::future<std::vector<int32_t>>
+    compute_offset_deltas_to_keep(const model::record_batch& b) const final;
+
+    ss::future<std::optional<model::record_batch>>
+    filter_batch_with_offset_deltas(
+      model::record_batch b, std::vector<int32_t> offset_deltas) const final;
+
+    const compaction::key_offset_map& _map;
+};
+
+} // namespace cloud_topics::l1

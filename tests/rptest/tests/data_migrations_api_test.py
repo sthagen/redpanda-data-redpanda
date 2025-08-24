@@ -742,9 +742,10 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
         try:
             result = operation(topic, group)
         except Exception as e:
-            self.logger.info(f"Operation {op_name} executed against"
-                             f" {topic=} {group=} failed - {e}")
-            self.logger.exception(e)
+            self.logger.info(
+                f"Operation {op_name} executed against"
+                f" {topic=} {group=} failed - {e} (full exception follows)",
+                exc_info=True)
             result = False  # assume real op cannot return False
         success = result is not False
 

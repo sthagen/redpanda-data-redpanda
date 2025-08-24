@@ -332,8 +332,8 @@ class SingleTopicTest(SingleFaultTestBase):
         workload.wait_progress(timeout_sec=timings.wait_progress_timeout_s)
 
     @cluster(num_nodes=4)
-    @matrix(case_id=LIST_OFFSETS_CASES.keys())
     @skip_debug_mode
+    @matrix(case_id=LIST_OFFSETS_CASES.keys())
     def test_list_offsets(self, case_id):
         case = self.LIST_OFFSETS_CASES[case_id]
         workload = workloads.ListOffsetsWorkload(self.test_context,
@@ -492,8 +492,8 @@ class TxSubscribeTest(SingleFaultTestBase):
         workload.wait_progress(timeout_sec=timings.wait_progress_timeout_s)
 
     @cluster(num_nodes=8)
-    @matrix(case_id=CASES.keys())
     @skip_debug_mode
+    @matrix(case_id=CASES.keys())
     def test(self, case_id):
         case = self.CASES[case_id]
         workload = workloads.TxSubscribeWorkload(

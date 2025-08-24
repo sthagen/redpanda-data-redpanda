@@ -34,6 +34,9 @@ public:
     ss::future<std::expected<void, errc>>
       replace_objects(std::unique_ptr<object_metadata_builder>) override;
 
+    ss::future<std::expected<void, errc>>
+    set_start_offset(const model::topic_id_partition&, kafka::offset) override;
+
     ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, kafka::offset) override;
 

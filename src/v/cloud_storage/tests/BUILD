@@ -409,7 +409,7 @@ redpanda_cc_btest(
 
 redpanda_cc_btest(
     name = "remote_partition_test",
-    timeout = "short",
+    timeout = "moderate",
     srcs = [
         "remote_partition_test.cc",
     ],

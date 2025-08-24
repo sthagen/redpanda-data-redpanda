@@ -44,6 +44,11 @@
             "name": "get_compaction_offsets",
             "input_type": "get_compaction_offsets_request",
             "output_type": "get_compaction_offsets_reply"
+        },
+        {
+            "name": "set_start_offset",
+            "input_type": "set_start_offset_request",
+            "output_type": "set_start_offset_reply"
         }
     ]
 }

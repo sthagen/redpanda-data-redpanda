@@ -69,13 +69,14 @@ class BiglakeTest(RedpandaTest):
             num_brokers=1,
             si_settings=SISettings(test_context),
             extra_rp_conf={
-                #  "iceberg_enabled": "true",
+                "iceberg_enabled": "true",
                 "iceberg_catalog_commit_interval_ms": 5000
             },
             schema_registry_config=SchemaRegistryConfig(),
             pandaproxy_config=PandaproxyConfig(),
             *args,
-            **kwargs)
+            **kwargs,
+        )
         self.test_context = test_context
         self.topic_name = "test"
 
@@ -84,39 +85,33 @@ class BiglakeTest(RedpandaTest):
         pass
 
     @gcp_only_test
-    @cluster(num_nodes=1)
+    @cluster(num_nodes=2)
     @matrix(cloud_storage_type=supported_storage_types())
     def test_e2e_basic(self, cloud_storage_type):
-        """
-        This is not a real e2e test yet.
-        It only checks pyiceberg connectivity to blms.
-        """
-        # count = 100
+        count = 100
         with DatalakeServices(self.test_context,
                               redpanda=self.redpanda,
                               include_query_engines=[],
                               catalog_type=CatalogType.BIGLAKE) as dl:
-            self.logger.info(
-                f"Namespaces: {dl.catalog_client().list_namespaces()}")
 
-            # dl.create_iceberg_enabled_topic(self.topic_name, partitions=10)
-            # dl.produce_to_topic(self.topic_name, 1024, count)
+            dl.create_iceberg_enabled_topic(self.topic_name, partitions=10)
+            dl.produce_to_topic(self.topic_name, 1024, count)
 
-            # wait_until(
-            #     lambda: dl.catalog_client().table_exists(
-            #         f"redpanda.{self.topic_name}"),
-            #     timeout_sec=30,
-            #     backoff_sec=1,
-            # )
+            wait_until(
+                lambda: dl.catalog_client().table_exists(
+                    f"redpanda.{self.topic_name}"),
+                timeout_sec=30,
+                backoff_sec=1,
+            )
 
-            # def count_rows():
-            #     t = dl.catalog_client().load_table(
-            #         f"redpanda.{self.topic_name}")
-            #     df = t.scan().to_duckdb("data")
-            #     r = df.sql("SELECT count(*) FROM data").fetchone()
-            #     self.logger.info(f"Row count for {self.topic_name}: {r[0]}")
-            #     return r[0]
+            def count_rows():
+                t = dl.catalog_client().load_table(
+                    f"redpanda.{self.topic_name}")
+                df = t.scan().to_duckdb("data")
+                r = df.sql("SELECT count(*) FROM data").fetchone()
+                self.logger.info(f"Row count for {self.topic_name}: {r[0]}")
+                return r[0]
 
-            # wait_until(lambda: count_rows() == count,
-            #            timeout_sec=60,
-            #            backoff_sec=1)
+            wait_until(lambda: count_rows() == count,
+                       timeout_sec=60,
+                       backoff_sec=1)

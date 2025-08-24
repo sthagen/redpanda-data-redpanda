@@ -162,6 +162,10 @@ public:
     virtual ss::future<std::expected<void, errc>>
       replace_objects(std::unique_ptr<object_metadata_builder>) = 0;
 
+    // Moves the start offset of the given partition's log to the given offset.
+    virtual ss::future<std::expected<void, errc>>
+    set_start_offset(const model::topic_id_partition&, kafka::offset) = 0;
+
     // Finds the first object of a given partition with data greater than or
     // equal to the given offset. If no such offset exists, returns
     // `out_of_range`.

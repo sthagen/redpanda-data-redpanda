@@ -126,12 +126,15 @@ class DatalakeServices():
                 raise ValueError(f"Unsupported credentials type {type(creds)}")
 
         if self.catalog_service.catalog_type() == CatalogType.BIGLAKE:
+            ctx = GCPContext.from_context(self.test_ctx)
             self.redpanda.add_extra_rp_conf({
-                # WIP: We're not yet writing to blms
-                "iceberg_catalog_type":
-                "object_storage",
                 "iceberg_rest_catalog_warehouse":
                 self.warehouse_name,
+                "iceberg_rest_catalog_authentication_mode":
+                "gcp",
+                # We use the same user project ID for billing in testing.
+                "iceberg_rest_catalog_gcp_user_project":
+                ctx.project_id,
             })
 
         self.redpanda.start(start_si=False)
@@ -390,7 +393,7 @@ class DatalakeServices():
                 "Unexpected customization of warehouse name in databricks unity test. We need to create one with a random name."
 
             # Override.
-            # self.warehouse_name = f"gs://{self._cloud_storage_bucket}"
+            self.warehouse_name = f"gs://{self._cloud_storage_bucket}"
 
             self.catalog_service = BiglakeMetastore(
                 self.test_ctx,

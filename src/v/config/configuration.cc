@@ -4073,15 +4073,19 @@ configuration::configuration()
       "`aws_sigv4` mode, the same AWS credentials used for cloud storage "
       "(see `cloud_storage_region`, `cloud_storage_access_key`, "
       "`cloud_storage_secret_key`, and `cloud_storage_credentials_source`) "
-      "are used to sign requests to AWS Glue catalog with SigV4.",
+      "are used to sign requests to AWS Glue catalog with SigV4."
+      "In `gcp` mode Redpanda will use VM metadata for authentication.",
       {.needs_restart = needs_restart::yes,
        .example = "none",
        .visibility = visibility::user},
       datalake_catalog_auth_mode::none,
-      {datalake_catalog_auth_mode::none,
-       datalake_catalog_auth_mode::bearer,
-       datalake_catalog_auth_mode::oauth2,
-       datalake_catalog_auth_mode::aws_sigv4})
+      {
+        datalake_catalog_auth_mode::none,
+        datalake_catalog_auth_mode::bearer,
+        datalake_catalog_auth_mode::oauth2,
+        datalake_catalog_auth_mode::aws_sigv4,
+        datalake_catalog_auth_mode::gcp,
+      })
   , iceberg_rest_catalog_aws_service_name(
       *this,
       "iceberg_rest_catalog_aws_service_name",
@@ -4143,6 +4147,14 @@ configuration::configuration()
         model::cloud_credentials_source::azure_aks_oidc_federation,
         model::cloud_credentials_source::azure_vm_instance_metadata,
       })
+  , iceberg_rest_catalog_gcp_user_project(
+      *this,
+      "iceberg_rest_catalog_gcp_user_project",
+      "The GCP project that is billed for charges associated with Iceberg REST "
+      "Catalog requests.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      std::nullopt,
+      &validate_non_empty_string_opt)
   , iceberg_backlog_controller_p_coeff(
       *this,
       "iceberg_backlog_controller_p_coeff",

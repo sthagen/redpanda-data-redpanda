@@ -512,3 +512,51 @@ TEST_F(ReplicatedMetastoreTest, TestGetEndOffsetForTerm) {
     ASSERT_FALSE(end_missing.has_value());
     ASSERT_EQ(end_missing.error(), metastore::errc::missing_ntp);
 }
+
+TEST_F(ReplicatedMetastoreTest, TestSetStartOffset) {
+    auto& app = get_ct_app(model::node_id{0});
+    replicated_metastore meta(app.get_sharded_l1_metastore_fe()->local());
+
+    // Create initial objects for testing
+    ASSERT_NO_FATAL_FAILURE(add_initial_objects(meta, 3, 99).get());
+
+    auto tp = make_tp(0);
+    auto assert_get_offsets =
+      [&](kafka::offset expected_start, kafka::offset expected_next) {
+          auto offsets = meta.get_offsets(tp).get();
+          ASSERT_TRUE(offsets.has_value());
+          ASSERT_EQ(expected_start, offsets->start_offset);
+          ASSERT_EQ(expected_next, offsets->next_offset);
+      };
+
+    // Get initial offsets
+    ASSERT_NO_FATAL_FAILURE(assert_get_offsets(o{0}, o{100}));
+
+    // Set start offset to a value within the extent
+    auto set_start_res = meta.set_start_offset(tp, o{50}).get();
+    ASSERT_TRUE(set_start_res.has_value());
+    ASSERT_NO_FATAL_FAILURE(assert_get_offsets(o{50}, o{100}));
+
+    // Test setting below the start.
+    auto set_start_invalid = meta.set_start_offset(tp, o{0}).get();
+    ASSERT_FALSE(set_start_invalid.has_value());
+    ASSERT_EQ(set_start_invalid.error(), metastore::errc::invalid_request);
+    ASSERT_NO_FATAL_FAILURE(assert_get_offsets(o{50}, o{100}));
+
+    // Test setting start offset for missing ntp
+    auto missing_tp = make_tp(999);
+    auto set_start_missing = meta.set_start_offset(missing_tp, o{10}).get();
+    ASSERT_FALSE(set_start_missing.has_value());
+    ASSERT_EQ(set_start_missing.error(), metastore::errc::invalid_request);
+    ASSERT_NO_FATAL_FAILURE(assert_get_offsets(o{50}, o{100}));
+
+    // Set start so it's totally empty
+    set_start_res = meta.set_start_offset(tp, o{100}).get();
+    ASSERT_TRUE(set_start_res.has_value());
+    ASSERT_NO_FATAL_FAILURE(assert_get_offsets(o{100}, o{100}));
+
+    // Sanity check that getting the term for the next offset is still valid.
+    auto term_res = meta.get_term_for_offset(tp, o{100}).get();
+    ASSERT_TRUE(term_res.has_value());
+    ASSERT_EQ(term_res.value(), model::term_id{0});
+}

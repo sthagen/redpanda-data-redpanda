@@ -10,13 +10,66 @@
 
 #include "cloud_topics/object_utils.h"
 
+#include "base/vassert.h"
 #include "ssx/sformat.h"
+
+#include <charconv>
+
+constexpr auto level_zero_data_dir_str = "level_zero/data/";
+
+/*
+ * We are using full-width int64 padding here. Using that many digits means
+ * we don't need to think at all about the choice in terms of future growth.
+ * We can revisit the width if for some reason we want a lower limit.
+ */
+constexpr size_t epoch_digits = 18;
+static_assert(std::numeric_limits<int64_t>::digits10 == epoch_digits);
 
 namespace cloud_topics {
 
 cloud_storage_clients::object_key
 object_path_factory::level_zero_path(object_id id) {
-    return cloud_storage_clients::object_key(ssx::sformat("{}", id));
+    vassert(id.epoch() >= 0, "level zero object has negative epoch: {}", id);
+    return cloud_storage_clients::object_key(
+      ssx::sformat(
+        "{0}{2:0{1}}/{3}",
+        level_zero_data_dir_str,
+        epoch_digits,
+        id.epoch(),
+        id.name));
+}
+
+cloud_storage_clients::object_key object_path_factory::level_zero_data_dir() {
+    return cloud_storage_clients::object_key(level_zero_data_dir_str);
+}
+
+std::expected<cluster_epoch, std::string>
+object_path_factory::level_zero_path_to_epoch(std::string_view key) {
+    // find the level zero prefix and chop it off
+    auto name = key;
+    auto it = name.find(level_zero_data_dir_str);
+    if (it == std::string_view::npos) {
+        return std::unexpected(
+          fmt::format("L0 object name missing prefix: {}", key));
+    }
+    name.remove_prefix(it + std::strlen(level_zero_data_dir_str));
+    if (name.size() < epoch_digits) {
+        return std::unexpected(
+          fmt::format("L0 object name is too short: {}", key));
+    }
+
+    // remove the tail so that all should be left is the epoch
+    name.remove_suffix(name.size() - epoch_digits);
+
+    // parse the epoch into an integer
+    int64_t epoch{0};
+    auto res = std::from_chars(name.data(), name.data() + name.size(), epoch);
+    if (res.ptr != name.data() + name.size() || res.ec != std::errc{}) {
+        return std::unexpected(
+          fmt::format("L0 object name has invalid epoch: {}", key));
+    }
+
+    return cluster_epoch(epoch);
 }
 
 } // namespace cloud_topics

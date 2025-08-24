@@ -423,6 +423,9 @@ class RawKCL(KCL):
 
     Callers should expect raw kafka responses json encoded with franz-go key naming scheme
     """
+    def _controller_id(self):
+        return self._redpanda.node_id(self._redpanda.controller())
+
     def create_topics(self,
                       version,
                       topics: list[dict] = [],
@@ -467,8 +470,10 @@ class RawKCL(KCL):
                 'ReplicationFactor': t.replication_factor
             } for t in topics]
         }
-        return self._cmd(['misc', 'raw-req', '-k', '19'],
-                         input=json.dumps(create_topics_request))
+        return self._cmd(
+            ['misc', 'raw-req', '-b',
+             str(self._controller_id()), '-k', '19'],
+            input=json.dumps(create_topics_request))
 
     def raw_delete_topics(self, version, topics):
         assert version >= 0 and version <= 5, "version out of supported redpanda range for this API"
@@ -477,8 +482,10 @@ class RawKCL(KCL):
             'TimeoutMillis': 15000,
             'TopicNames': topics
         }
-        return self._cmd(['misc', 'raw-req', '-k', '20'],
-                         input=json.dumps(delete_topics_request))
+        return self._cmd(
+            ['misc', 'raw-req', '-b',
+             str(self._controller_id()), '-k', '20'],
+            input=json.dumps(delete_topics_request))
 
     def raw_create_partitions(self, version, topics):
         assert version >= 0 and version <= 3, "version out of supported redpanda range for this API"
@@ -491,20 +498,20 @@ class RawKCL(KCL):
                 'Count': t.count
             } for t in topics]
         }
-        return self._cmd(['misc', 'raw-req', '-k', '37'],
-                         input=json.dumps(create_partitions_request))
+        return self._cmd(
+            ['misc', 'raw-req', '-b',
+             str(self._controller_id()), '-k', '37'],
+            input=json.dumps(create_partitions_request))
 
     def raw_alter_topic_config(self, version, topic, configs):
         assert version >= 0 and version <= 1, "version out of supported redpanda range for this API"
         alter_configs_request = {
             'Version':
             version,
-            'ValidateOnly':
-            False,
             'TimeoutMillis':
             15000,
             'Resources': [{
-                'ResourceType': 2,
+                'ResourceType': 'TOPIC',
                 'ResourceName': topic,
                 'Configs': []
             }],
@@ -512,29 +519,45 @@ class RawKCL(KCL):
             False
         }
 
-        for k, v in configs.items():
+        alter_configs_request['Resources'][0]['Configs'] = [{
+            "Name": k,
+            "Value": str(v)
+        } for k, v in configs.items()]
 
-            alter_configs_request['Resources'][0]['Configs'].append({
-                "Name":
-                k,
-                "Value":
-                str(v)
-            })
         self._redpanda.logger.info(f"DBG: {json.dumps(alter_configs_request)}")
-        return self._cmd(['misc', 'raw-req', '-k', '33'],
-                         input=json.dumps(alter_configs_request))
+        return self._cmd(
+            ['misc', 'raw-req', '-b',
+             str(self._controller_id()), '-k', '33'],
+            input=json.dumps(alter_configs_request))
 
     def raw_alter_quotas(self, body):
-        res = self._cmd(['misc', 'raw-req', '-k', '49'],
-                        input=json.dumps(body))
+        res = self._cmd(
+            ['misc', 'raw-req', '-b',
+             str(self._controller_id()), '-k', '49'],
+            input=json.dumps(body))
         return json.loads(res)
 
     def raw_describe_quotas(self, body):
-        res = self._cmd(['misc', 'raw-req', '-k', '48'],
+        res = self._cmd(
+            ['misc', 'raw-req', '-b',
+             str(self._controller_id()), '-k', '48'],
+            input=json.dumps(body))
+        return json.loads(res)
+
+    def raw_find_coordinator(self, body):
+        res = self._cmd(['misc', 'raw-req', '-k', '10'],
                         input=json.dumps(body))
         return json.loads(res)
 
     def raw_join_group(self, body):
-        res = self._cmd(['misc', 'raw-req', '-k', '11'],
-                        input=json.dumps(body))
+        res = self.raw_find_coordinator({
+            "Version": 3,
+            "CoordinatorKey": body["Group"],
+            "CoordinatorType": 0
+        })
+
+        res = self._cmd(
+            ['misc', 'raw-req', '-b',
+             str(res["NodeID"]), '-k', '11'],
+            input=json.dumps(body))
         return json.loads(res)

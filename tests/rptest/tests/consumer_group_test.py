@@ -696,6 +696,7 @@ class ConsumerGroupTest(RedpandaTest):
         group = 'test-gr-1'
 
         self.redpanda._admin.set_log_level("kafka", "trace")
+        self.redpanda._admin.set_log_level("kafka-cg", "trace")
 
         self.redpanda.logger.info("Starting my-consumer-1")
         consumer1 = self.create_consumer(topic=self.topic_spec.name,

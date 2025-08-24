@@ -102,7 +102,7 @@ class DirectConsumerVerifierTest(RedpandaTest):
 
             wait_until_with_progress_check(
                 get_consumption,
-                condition=lambda fn: fn() >= msg_count,
+                condition=lambda: get_consumption() >= msg_count,
                 timeout_sec=60,
                 progress_sec=10,
                 backoff_sec=2,

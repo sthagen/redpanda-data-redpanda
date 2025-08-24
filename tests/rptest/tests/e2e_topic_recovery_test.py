@@ -218,13 +218,13 @@ class EndToEndTopicRecovery(RedpandaTest):
         assert consume_valid >= produce_acked, f"produced {produce_acked}, consumed {consume_valid}"
 
     @cluster(num_nodes=5, log_allow_list=ALLOWED_ERROR_LOG_LINES)
+    @skip_debug_mode
     @matrix(recovery_overrides=[{}, {
         'retention.local.target.bytes': 1024,
         'redpanda.remote.write': True,
         'redpanda.remote.read': True,
     }],
             cloud_storage_type=get_cloud_storage_type())
-    @skip_debug_mode
     def test_restore_with_aborted_tx(self, recovery_overrides,
                                      cloud_storage_type):
         """Produce data using transactions including some percentage of aborted

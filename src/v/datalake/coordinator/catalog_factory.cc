@@ -188,6 +188,10 @@ rest_catalog_factory::make_credentials_or_token() {
         // background refresh op.
         break;
     }
+    case config::datalake_catalog_auth_mode::gcp: {
+        // GCP credentials are handled by the applier and background refresh op.
+        break;
+    }
     }
     return creds_and_token;
 }

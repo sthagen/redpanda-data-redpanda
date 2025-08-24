@@ -449,7 +449,7 @@ Quota configs for client-id 'custom-producer' are producer_byte_rate=20480.0"""
         describe_body = {
             "Components": [{
                 "EntityType": "client-id-prefix",
-                "MatchType": 1,  # default
+                "MatchType": "DEFAULT",
             }],
         }
         res = self.kcl.raw_describe_quotas(describe_body)
@@ -464,7 +464,7 @@ Quota configs for client-id 'custom-producer' are producer_byte_rate=20480.0"""
         describe_body = {
             "Components": [{
                 "EntityType": "client-id",
-                "MatchType": 0,  # exact match
+                "MatchType": "EXACT",
                 # "Match": "missing"
             }],
         }

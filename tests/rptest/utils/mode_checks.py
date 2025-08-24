@@ -63,7 +63,7 @@ def skip_debug_mode(*args, **kwargs):
             ...
     """
     if is_debug_mode():
-        return ignore(args, kwargs)
+        return ignore(*args, **kwargs)
     else:
         return args[0]
 
@@ -120,6 +120,6 @@ def skip_fips_mode(*args, **kwargs):
             ...
     """
     if in_fips_environment():
-        return ignore(args, kwargs)
+        return ignore(*args, **kwargs)
     else:
         return args[0]

@@ -1526,9 +1526,9 @@ class DatalakeDelayedEnablementTest(RedpandaTest):
 
     @cluster(num_nodes=6)
     # this test doesn't have to run with different catalog types
+    @skip_debug_mode
     @matrix(cloud_storage_type=supported_storage_types(),
             catalog_type=[CatalogType.REST_JDBC])
-    @skip_debug_mode
     def test_enabling_iceberg_in_existing_cluster(self, cloud_storage_type,
                                                   catalog_type):
         with DatalakeServices(self.test_ctx,

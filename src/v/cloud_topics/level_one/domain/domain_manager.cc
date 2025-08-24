@@ -363,4 +363,50 @@ domain_manager::get_end_offset_for_term(
     };
 }
 
+ss::future<rpc::set_start_offset_reply>
+domain_manager::set_start_offset(rpc::set_start_offset_request req) {
+    auto gate = maybe_gate();
+    if (!gate.has_value()) {
+        co_return rpc::set_start_offset_reply{.ec = rpc::errc::not_leader};
+    }
+
+    auto sync_res = co_await stm_->sync(10s);
+    if (!sync_res.has_value()) {
+        co_return rpc::set_start_offset_reply{
+          .ec = convert_stm_errc(sync_res.error())};
+    }
+    auto update_res = set_start_offset_update::build(
+      stm_->state(), req.tp, req.start_offset);
+    if (!update_res.has_value()) {
+        vlog(
+          cd_log.debug,
+          "Rejecting request to set start offset: {}",
+          update_res.error());
+        co_return rpc::set_start_offset_reply{
+          .ec = rpc::errc::concurrent_requests,
+        };
+    }
+    storage::record_batch_builder builder(
+      model::record_batch_type::l1_stm, model::offset{0});
+    builder.add_raw_kv(
+      serde::to_iobuf(set_start_offset_update::key),
+      serde::to_iobuf(std::move(update_res.value())));
+    auto repl_res = co_await stm_->replicate_and_wait(
+      sync_res.value(), std::move(builder).build(), as_);
+    if (!repl_res.has_value()) {
+        co_return rpc::set_start_offset_reply{
+          .ec = convert_stm_errc(repl_res.error()),
+        };
+    }
+    auto prt_ref = stm_->state().partition_state(req.tp);
+    if (
+      !prt_ref.has_value() || prt_ref->get().start_offset != req.start_offset) {
+        co_return rpc::set_start_offset_reply{
+          .ec = rpc::errc::concurrent_requests,
+        };
+    }
+
+    co_return rpc::set_start_offset_reply{.ec = rpc::errc::ok};
+}
+
 } // namespace cloud_topics::l1

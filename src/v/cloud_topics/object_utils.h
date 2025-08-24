@@ -12,6 +12,8 @@
 #include "cloud_storage_clients/types.h"
 #include "cloud_topics/types.h"
 
+#include <expected>
+
 namespace cloud_topics {
 
 /*
@@ -23,6 +25,17 @@ public:
      * Generate the path of a level-zero object.
      */
     static cloud_storage_clients::object_key level_zero_path(object_id id);
+
+    /*
+     * Level-zero object data root directory. Contains a trailing "/".
+     */
+    static cloud_storage_clients::object_key level_zero_data_dir();
+
+    /*
+     * Extract the epoch from an L0 object key.
+     */
+    static std::expected<cluster_epoch, std::string>
+      level_zero_path_to_epoch(std::string_view);
 };
 
 } // namespace cloud_topics

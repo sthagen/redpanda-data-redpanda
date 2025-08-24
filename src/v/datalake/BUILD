@@ -123,7 +123,6 @@ redpanda_cc_library(
         ":logger",
         "//src/v/base",
         "//src/v/cloud_io:auth_refresh_bg_op",
-        "//src/v/cloud_io:remote",
         "//src/v/cloud_roles",
         "//src/v/cloud_roles:types",
         "//src/v/cloud_storage_clients",

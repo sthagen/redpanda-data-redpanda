@@ -9,226 +9,22 @@
  * by the Apache License, Version 2.0
  */
 
-#include "cluster/tests/cluster_test_fixture.h"
-#include "container/chunked_vector.h"
-#include "kafka/client/direct_consumer/direct_consumer.h"
-#include "kafka/client/direct_consumer/fetcher.h"
-#include "kafka/protocol/types.h"
-#include "kafka/server/tests/produce_consume_utils.h"
+#include "kafka/client/direct_consumer/tests/direct_consumer_fixture.h"
 #include "redpanda/tests/fixture.h"
 
 #include <seastar/util/defer.hh>
 
 #include <fmt/format.h>
 
-#include <map>
-#include <unordered_map>
-#include <vector>
-
 using namespace kafka::client;
+using ConsumerFixture = kafka::client::tests::consumer_fixture;
+using BasicConsumerFixture = kafka::client::tests::basic_consumer_fixture;
 
 namespace {
 ss::logger logger{"direct-consumer-test"};
 }
-class consumer_fixture : public cluster_test_fixture {
-public:
-    kafka::client::connection_configuration make_connection_config() {
-        kafka::client::connection_configuration config;
-        config.client_id = "test-client";
-        config.initial_brokers
-          = std::views::transform(
-              instance_ids(),
-              [this](model::node_id id) { return instance(id); })
-            | std::views::transform(
-              [](const redpanda_thread_fixture* f) { return f->kafka_port; })
-            | std::views::transform([](int port) {
-                  return net::unresolved_address("localhost", port);
-              })
-            | std::ranges::to<std::vector<net::unresolved_address>>();
-        return config;
-    }
 
-    ss::future<std::unique_ptr<kafka::client::cluster>> create_client_cluster(
-      std::optional<std::unique_ptr<kafka::client::broker_factory>>
-        broker_factory
-      = std::nullopt) {
-        auto cluster = [&]() {
-            if (broker_factory.has_value()) {
-                vassert(
-                  broker_factory.value() != nullptr,
-                  "expected non-null broker factory if provided");
-                return std::make_unique<kafka::client::cluster>(
-                  make_connection_config(), std::move(broker_factory.value()));
-            }
-            return std::make_unique<kafka::client::cluster>(
-              make_connection_config());
-        }();
-        co_await cluster->start();
-        co_return cluster;
-    }
-
-    topic_assignment make_assignment(
-      const model::topic& topic,
-      std::vector<int> partitions,
-      std::optional<kafka::offset> initial_offset = std::nullopt) {
-        topic_assignment assignment;
-        assignment.topic = topic;
-        for (const auto& p : partitions) {
-            partition_assignment part;
-            part.partition_id = model::partition_id(p);
-            part.next_offset = initial_offset;
-            assignment.partitions.push_back(part);
-        }
-        return assignment;
-    }
-
-    model::node_id get_partition_leader(const model::ntp& ntp) {
-        std::optional<model::node_id> leader_id;
-        model::timeout_clock::time_point deadline = model::timeout_clock::now()
-                                                    + 10s;
-        while (!leader_id) {
-            if (model::timeout_clock::now() > deadline) {
-                throw std::runtime_error(
-                  fmt::format("Timeout while waiting for leader for {}", ntp));
-            }
-            leader_id = instance(model::node_id{0})
-                          ->app.controller->get_partition_leaders()
-                          .local()
-                          .get_leader(ntp);
-
-            ss::sleep(100ms).get();
-        }
-        return leader_id.value();
-    }
-
-    void produce_to_partition(
-      const model::topic& topic, int partition, size_t record_count) {
-        model::ntp ntp(
-          model::kafka_namespace, topic, model::partition_id(partition));
-
-        auto leader_id = get_partition_leader(ntp);
-
-        vlog(
-          logger.debug,
-          "[broker: {}] Produce {} records to {}",
-          leader_id,
-          record_count,
-          ntp);
-
-        tests::kafka_produce_transport producer(
-          instance(leader_id)->make_kafka_client().get());
-        producer.start().get();
-        auto deferred_close = ss::defer([&producer] { producer.stop().get(); });
-
-        auto records = tests::kv_t::sequence(0, record_count, partition);
-        producer
-          .produce_to_partition(topic, model::partition_id(partition), records)
-          .get();
-    }
-
-    chunked_hash_map<
-      model::topic_partition,
-      chunked_vector<model::record_batch>>
-    fetch_until_empty(direct_consumer& consumer) {
-        chunked_hash_map<
-          model::topic_partition,
-          chunked_vector<model::record_batch>>
-          ret;
-
-        while (true) {
-            auto fetched = consumer.fetch_next(1000ms).get();
-
-            if (fetched.value().empty()) {
-                break;
-            }
-            for (auto& topic_data : fetched.value()) {
-                for (auto& partition_data : topic_data.partitions) {
-                    auto& batches = ret[model::topic_partition(
-                      topic_data.topic, partition_data.partition_id)];
-
-                    std::ranges::move(
-                      partition_data.data, std::back_inserter(batches));
-                }
-            }
-        }
-        return ret;
-    }
-
-    void assign_partitions(topic_assignment assgn) {
-        consumer
-          ->assign_partitions(
-            chunked_vector<topic_assignment>::single(std::move(assgn)))
-          .get();
-    }
-
-    void unassign_partition(model::topic_partition tp) {
-        consumer
-          ->unassign_partitions(
-            chunked_vector<model::topic_partition>::single(std::move(tp)))
-          .get();
-    }
-
-    void unassign_topic(model::topic topic) {
-        consumer
-          ->unassign_topics(
-            chunked_vector<model::topic>::single(std::move(topic)))
-          .get();
-    }
-
-    redpanda_thread_fixture* rp;
-    std::unique_ptr<kafka::client::cluster> cluster;
-    std::unique_ptr<kafka::client::direct_consumer> consumer;
-    model::topic topic{"test-topic"};
-};
-
-namespace {
-
-enum class session_config : uint8_t {
-    with_sessions,
-    without_sessions,
-    toggle_sessions,
-};
-
-[[maybe_unused]] auto format_as(session_config c) { return fmt::underlying(c); }
-
-class basic_consume_fixture
-  : public consumer_fixture
-  , public testing::TestWithParam<session_config> {
-public:
-    void SetUp() override {
-        create_node_application(model::node_id{0});
-        create_node_application(model::node_id{1});
-        create_node_application(model::node_id{2});
-        auto* rp = instance(model::node_id{0});
-        wait_for_all_members(3s).get();
-        rp->add_topic({model::kafka_namespace, topic}, 3, std::nullopt, 3)
-          .get();
-        cluster = create_client_cluster().get();
-        consumer = std::make_unique<kafka::client::direct_consumer>(
-          *cluster,
-          direct_consumer::configuration{
-            .with_sessions = fetch_sessions_enabled{
-              GetParam() == session_config::with_sessions}});
-        consumer->start().get();
-    }
-
-    void TearDown() override {
-        consumer->stop().get();
-        cluster->stop().get();
-    }
-
-    void maybe_toggle_fetch_sessions() {
-        if (GetParam() == session_config::toggle_sessions) {
-            consumer->update_configuration(
-              direct_consumer::configuration{
-                .with_sessions = fetch_sessions_enabled::yes});
-        }
-    }
-};
-
-} // namespace
-
-TEST_P(basic_consume_fixture, TestBasicConsumption) {
+TEST_P(BasicConsumerFixture, TestBasicConsumption) {
     assign_partitions(make_assignment(topic, {0, 1, 2}));
 
     // no data should be available immediately, as the topic is empty
@@ -284,7 +80,7 @@ TEST_P(basic_consume_fixture, TestBasicConsumption) {
       model::offset(1019));
 }
 
-TEST_P(basic_consume_fixture, TestUnassignPartition) {
+TEST_P(BasicConsumerFixture, TestUnassignPartition) {
     assign_partitions(make_assignment(topic, {0, 1}));
 
     constexpr size_t n = 100;
@@ -360,7 +156,7 @@ TEST_P(basic_consume_fixture, TestUnassignPartition) {
     }
 }
 
-TEST_P(basic_consume_fixture, TestUnassignTopic) {
+TEST_P(BasicConsumerFixture, TestUnassignTopic) {
     assign_partitions(make_assignment(topic, {0, 1, 2}));
 
     constexpr size_t n = 100;
@@ -396,7 +192,7 @@ TEST_P(basic_consume_fixture, TestUnassignTopic) {
     }
 }
 
-TEST_P(basic_consume_fixture, TestBogusPartitionIds) {
+TEST_P(BasicConsumerFixture, TestBogusPartitionIds) {
     // test that providing non-existent or ill formed partition IDs to the
     // consumer doesn't cause issues. we wouldn't expect this to happen in
     // practice.
@@ -443,9 +239,10 @@ TEST_P(basic_consume_fixture, TestBogusPartitionIds) {
     }
 }
 
+using session_config = kafka::client::tests::session_config;
 INSTANTIATE_TEST_SUITE_P(
   test_with_basic_consume_fixture,
-  basic_consume_fixture,
+  BasicConsumerFixture,
   testing::Values(
     session_config::with_sessions,
     session_config::without_sessions,
@@ -635,9 +432,9 @@ private:
     std::unique_ptr<remote_broker_factory> _factory;
 };
 
-class fetch_session_fixture
-  : public consumer_fixture
-  , public testing::Test {
+class FetchSessionFixture
+  : public ConsumerFixture
+  , public ::testing::Test {
 public:
     void wait_for_leadership() {
         for (auto i : std::views::iota(0, n_partitions)) {
@@ -695,7 +492,7 @@ public:
     constexpr static int n_partitions{10};
 };
 
-TEST_F(fetch_session_fixture, TestFetchRequestContents) {
+TEST_F(FetchSessionFixture, TestFetchRequestContents) {
     // This test
     //   - Assigns some partitions the consumer
     //   - Produce to all partitions and fetch until empty
@@ -785,7 +582,7 @@ TEST_F(fetch_session_fixture, TestFetchRequestContents) {
     vlog(logger.debug, "CAPTURE: {}", _capture);
 }
 
-TEST_F(fetch_session_fixture, TestFetchRequestUnassignContents) {
+TEST_F(FetchSessionFixture, TestFetchRequestUnassignContents) {
     // similar to the previous test, but this time forget partitions some
     // partitions and verify that this is reflected in the subsequent
     // incremental fetch request

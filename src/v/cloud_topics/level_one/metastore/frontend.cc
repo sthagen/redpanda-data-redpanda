@@ -115,6 +115,17 @@ ss::future<rpc::get_end_offset_for_term_reply> do_get_end_offset_for_term(
     co_return co_await domain_mgr->get_end_offset_for_term(std::move(req));
 }
 
+ss::future<rpc::set_start_offset_reply> do_set_start_offset(
+  domain_supervisor& domain_supervisor,
+  const model::ntp& ntp,
+  rpc::set_start_offset_request req) {
+    auto domain_mgr = domain_supervisor.get(ntp);
+    if (!domain_mgr) {
+        co_return rpc::set_start_offset_reply{.ec = rpc::errc::not_leader};
+    }
+    co_return co_await domain_mgr->set_start_offset(std::move(req));
+}
+
 } // namespace
 
 template<auto Func, typename req_t>
@@ -252,6 +263,13 @@ template ss::future<rpc::get_end_offset_for_term_reply> frontend::process<
   &frontend::get_end_offset_for_term_locally,
   &frontend::client::get_end_offset_for_term>(
   rpc::get_end_offset_for_term_request, bool);
+
+template ss::future<rpc::set_start_offset_reply>
+  frontend::remote_dispatch<&frontend::client::set_start_offset>(
+    rpc::set_start_offset_request, model::node_id);
+template ss::future<rpc::set_start_offset_reply> frontend::process<
+  &frontend::set_start_offset_locally,
+  &frontend::client::set_start_offset>(rpc::set_start_offset_request, bool);
 
 frontend::frontend(
   model::node_id self,
@@ -447,6 +465,25 @@ frontend::get_end_offset_for_term(
       &frontend::get_end_offset_for_term_locally,
       &client::get_end_offset_for_term>(
       std::move(request), bool(local_only_exec));
+}
+
+ss::future<rpc::set_start_offset_reply> frontend::set_start_offset_locally(
+  rpc::set_start_offset_request request,
+  const model::ntp& metastore_ntp,
+  ss::shard_id shard) {
+    co_return co_await container().invoke_on(
+      shard, [metastore_ntp, req = std::move(request)](frontend& fe) mutable {
+          return do_set_start_offset(
+            *(fe._domain_supervisor), metastore_ntp, std::move(req));
+      });
+}
+
+ss::future<rpc::set_start_offset_reply> frontend::set_start_offset(
+  rpc::set_start_offset_request request, local_only local_only_exec) {
+    auto holder = _gate.hold();
+    co_return co_await process<
+      &frontend::set_start_offset_locally,
+      &client::set_start_offset>(std::move(request), bool(local_only_exec));
 }
 
 } // namespace cloud_topics::l1

@@ -72,6 +72,40 @@ bool compaction_state::erase_contiguous_range_with_tombstones(
     return true;
 }
 
+void compaction_state::truncate_with_new_start_offset(
+  kafka::offset new_start_offset) {
+    cleaned_ranges.truncate_with_new_start_offset(new_start_offset);
+
+    // TODO: below is basically identical to offset_interval_set's
+    // truncate_with_new_start_offset impl. Figure out a way to unify the code.
+
+    // First, remove all intervals that are fully below the new start.
+    while (!cleaned_ranges_with_tombstones.empty()) {
+        auto begin_it = cleaned_ranges_with_tombstones.begin();
+        if (begin_it->last_offset >= new_start_offset) {
+            // This interval is partially or entirely above the new start.
+            // Handle below.
+            break;
+        }
+        // This interval is entirely below the new start.
+        cleaned_ranges_with_tombstones.erase(begin_it);
+    }
+    if (cleaned_ranges_with_tombstones.empty()) {
+        return;
+    }
+    auto begin_it = cleaned_ranges_with_tombstones.begin();
+    if (begin_it->base_offset >= new_start_offset) {
+        // This interval starts above or is aligned exactly with the new start.
+        return;
+    }
+    // This interval is partially below the new start. Replace it with an
+    // interval that is aligned with the new start.
+    auto truncated_begin = *begin_it;
+    truncated_begin.base_offset = new_start_offset;
+    cleaned_ranges_with_tombstones.erase(begin_it);
+    cleaned_ranges_with_tombstones.insert(truncated_begin);
+}
+
 bool compaction_state::may_add(
   const cleaned_range_with_tombstones& new_range) const {
     if (cleaned_ranges_with_tombstones.empty()) {

@@ -146,6 +146,9 @@ redpanda_cc_library(
     hdrs = [
         "object_utils.h",
     ],
+    implementation_deps = [
+        "//src/v/base",
+    ],
     visibility = [
         ":__subpackages__",
         "//src/v/cloud_topics/reconciler:__pkg__",

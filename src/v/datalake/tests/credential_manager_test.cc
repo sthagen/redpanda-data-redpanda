@@ -292,4 +292,39 @@ TEST_F(CredentialManagerTest, SigningErrorPropagation) {
     EXPECT_TRUE(_test_impl->add_auth_called());
 }
 
+TEST_F(CredentialManagerTest, GCP) {
+    scoped_config cfg;
+    cfg.get("iceberg_rest_catalog_authentication_mode")
+      .set_value(config::datalake_catalog_auth_mode::gcp);
+
+    // Set up GCP user project
+    const std::optional<ss::sstring> test_project = "test-gcp-project-123";
+    cfg.get("iceberg_rest_catalog_gcp_user_project").set_value(test_project);
+
+    setup_test_credentials();
+
+    auto req = create_test_request();
+    std::string_view test_content = "test gcp payload content";
+
+    auto result = _manager
+                    ->maybe_sign(
+                      std::make_optional(create_test_payload(test_content)),
+                      req)
+                    .get();
+    EXPECT_TRUE(result.has_value());
+
+    // Verify credential applier was called (this adds the authorization header)
+    EXPECT_TRUE(_test_impl->add_auth_called());
+
+    constexpr auto goog_user_project = "x-goog-user-project";
+
+    // Verify GCP user project header is set correctly
+    EXPECT_TRUE(req.count(goog_user_project));
+    EXPECT_EQ(std::string(req.at(goog_user_project)), test_project);
+
+    // GCP mode should not set the x-amz-content-sha256 header (that's only for
+    // AWS)
+    EXPECT_FALSE(req.count("x-amz-content-sha256"));
+}
+
 } // namespace datalake

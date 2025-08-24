@@ -149,13 +149,14 @@ class Minio:
 
 
 class Redpanda:
-    def __init__(self, binary, cores: int, node_meta: NodeMetadata,
-                 extra_args):
+    def __init__(self, binary, cores: int, node_meta: NodeMetadata, extra_args,
+                 env):
         self.binary = binary
         self.cores = cores
         self.node_meta = node_meta
         self.process = None
         self.extra_args = extra_args
+        self.env = env
 
     def stop(self):
         print(f"node-{self.node_meta.index}: dev_cluster stop requested")
@@ -189,7 +190,8 @@ class Redpanda:
         self.process = await asyncio.create_subprocess_shell(
             f"{self.binary} --redpanda-cfg {self.node_meta.config_path} {cores_args} {memory_args} {extra_args} 2>&1 | tee -i {log_path}",
             stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.STDOUT)
+            stderr=asyncio.subprocess.STDOUT,
+            env=self.env)
 
         while True:
             line = await self.process.stdout.readline()
@@ -259,6 +261,12 @@ async def main():
                         type=pathlib.Path,
                         help="path to redpanda executable",
                         default="redpanda")
+    parser.add_argument("--ubsan_suppression_file",
+                        type=pathlib.Path,
+                        help="path to ubsan_suppressions.txt")
+    parser.add_argument("--lsan_suppression_file",
+                        type=pathlib.Path,
+                        help="path to lsan_suppressions.txt")
     parser.add_argument("--nodes", type=int, help="number of nodes", default=3)
     parser.add_argument("--cores",
                         type=int,
@@ -431,8 +439,18 @@ async def main():
         # gives each node 4 cores.
         cores = max((3 * (psutil.cpu_count(logical=False) // 4)) // args.nodes,
                     1)
+    env = os.environ.copy()
+    if "ASAN_OPTIONS" not in env:
+        env["ASAN_OPTIONS"] = "disable_coredump=0:abort_on_error=1"
+    if "UBSAN_OPTIONS" not in env:
+        env["UBSAN_OPTIONS"] = f"halt_on_error=1:abort_on_error=1:report_error_type=1"
+        if args.ubsan_suppression_file:
+            env["UBSAN_OPTIONS"] += f":suppressions={args.ubsan_suppression_file}"
+    if args.lsan_suppression_file and "LSAN_OPTIONS" not in env:
+        env["LSAN_OPTIONS"] = f"suppressions={args.lsan_suppression_file}"
     nodes = [
-        Redpanda(args.executable, cores, m, extra_args) for m in node_metas
+        Redpanda(args.executable, cores, m, extra_args, env)
+        for m in node_metas
     ]
 
     redpanda_coros = [r.run() for r in nodes]

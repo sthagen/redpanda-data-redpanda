@@ -511,9 +511,9 @@ class CreateTopicsResponseTest(RedpandaTest):
         np = self.get_np(topic)
         assert np == expected_np, f"Expected partition count {expected_np}, got {np}"
         rf = self.get_rf(topic)
-        assert rf == expected_rf, f"Expected partition count {expected_rf}, got {rf}"
+        assert rf == expected_rf, f"Expected replication factor {expected_rf}, got {rf}"
         ec = self.get_ec(topic)
-        assert ec == expected_ec, f"Expected partition count {expected_ec}, got {ec}"
+        assert ec == expected_ec, f"Expected error code {expected_ec}, got {ec}"
 
     @cluster(num_nodes=3)
     @matrix(

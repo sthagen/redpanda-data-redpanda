@@ -1,15 +1,19 @@
 #!/usr/bin/env bash
 
-# Hide a bunch of Bazel's built in output.
-# So it's as close to a proxy for a clang tool
-# executable as possible. Just symlink this file
-# to the name of the clang tool you want.
+# Make a symlink named the same as a clang tool pointing to this
+# shim and that tool will be invoked via bazel run.
+#
 
-script_name=$(basename "$0")
+tools_dir="$(cd -- "$(dirname -- "$(realpath "${BASH_SOURCE[0]}")")" &>/dev/null && pwd)"
 
-bazel run "@current_llvm_toolchain_llvm//:bin/$script_name" \
-  --noshow_progress \
-  --ui_event_filters=,+error,+fail \
-  --show_result=0 \
-  --logging=0 \
-  -- $@
+export BAZEL_TOOL_TRAMPOLINE_TARGET="@current_llvm_toolchain_llvm//:bin/$(basename "$0")"
+
+if [[ ${BAZEL_TRAMPOLINE_DEBUG:-0} -gt 0 ]]; then
+  echo "DEBUG: clang-tool.sh: CWD        : $(pwd)" >&2
+  echo "DEBUG: clang-tool.sh: tools_dir  : $tools_dir" >&2
+  echo "DEBUG: clang-tool.sh: target     : $BAZEL_TOOL_TRAMPOLINE_TARGET" >&2
+fi
+
+# This shim just calls the general bazel-tool-trampoline.sh script
+# with the target set appropriately.
+exec "$tools_dir/bazel-tools/support/bazel-tool-trampoline.sh" "$@"

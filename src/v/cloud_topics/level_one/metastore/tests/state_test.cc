@@ -17,6 +17,17 @@ using namespace cloud_topics::l1;
 using o = kafka::offset;
 using ts = model::timestamp;
 
+namespace {
+compaction_state::cleaned_range_with_tombstones
+tombstone_range(int base, int last, int t) {
+    return {
+      .base_offset = o{base},
+      .last_offset = o{last},
+      .cleaned_with_tombstones_at = ts{t},
+    };
+}
+} // namespace
+
 // Simple test that makes sure we can build serde serialization.
 TEST(StateTest, TestSerde) {
     state s;
@@ -263,4 +274,96 @@ TEST(CompactionStateTest, TestAddContiguousTombstoneRanges) {
             ASSERT_FALSE(s.may_add(range(base, last)));
         }
     }
+}
+
+TEST(CompactionStateTest, TestTruncateWithNewStartOffsetEmpty) {
+    compaction_state s;
+    s.truncate_with_new_start_offset(o{50});
+    EXPECT_TRUE(s.cleaned_ranges_with_tombstones.empty());
+}
+
+TEST(CompactionStateTest, TestTruncateWithNewStartOffsetRemovesAll) {
+    compaction_state s;
+    s.cleaned_ranges_with_tombstones = {
+      tombstone_range(10, 20, 1000),
+      tombstone_range(30, 40, 2000),
+    };
+
+    s.truncate_with_new_start_offset(o{50});
+    EXPECT_TRUE(s.cleaned_ranges_with_tombstones.empty());
+}
+
+TEST(CompactionStateTest, TestTruncateWithNewStartOffsetNoOp) {
+    compaction_state s;
+    s.cleaned_ranges_with_tombstones = {
+      tombstone_range(10, 20, 1000),
+      tombstone_range(30, 40, 2000),
+    };
+    auto expected = s.cleaned_ranges_with_tombstones;
+
+    s.truncate_with_new_start_offset(o{10});
+    EXPECT_EQ(s.cleaned_ranges_with_tombstones, expected);
+}
+
+TEST(CompactionStateTest, TestTruncateRemovePartialRange) {
+    compaction_state s;
+    s.cleaned_ranges_with_tombstones = {
+      tombstone_range(10, 20, 1000),
+      tombstone_range(25, 30, 1500),
+      tombstone_range(35, 45, 2000),
+    };
+
+    // Cut somewhere in the middle of a range.
+    s.truncate_with_new_start_offset(o{26});
+
+    compaction_state::tombstone_range_set_t expected = {
+      tombstone_range(26, 30, 1500),
+      tombstone_range(35, 45, 2000),
+    };
+    EXPECT_EQ(s.cleaned_ranges_with_tombstones, expected);
+}
+
+TEST(CompactionStateTest, TestTruncateRemoveExactBoundary) {
+    compaction_state s;
+    s.cleaned_ranges_with_tombstones = {
+      tombstone_range(10, 20, 1000),
+      tombstone_range(30, 40, 2000),
+    };
+
+    // Cut exactly at the start of a range.
+    s.truncate_with_new_start_offset(o{30});
+
+    compaction_state::tombstone_range_set_t expected = {
+      tombstone_range(30, 40, 2000),
+    };
+    EXPECT_EQ(s.cleaned_ranges_with_tombstones, expected);
+}
+
+TEST(CompactionStateTest, TestTruncateCleanedRanges) {
+    compaction_state s;
+
+    // Add some intervals to cleaned_ranges along with the tombstone ranges.
+    s.cleaned_ranges.insert(o{10}, o{20});
+    s.cleaned_ranges.insert(o{25}, o{35});
+    s.cleaned_ranges.insert(o{40}, o{50});
+    s.cleaned_ranges_with_tombstones = {
+      tombstone_range(10, 20, 1000),
+      tombstone_range(25, 35, 1500),
+      tombstone_range(40, 50, 2000),
+    };
+
+    // They should both be truncated following set_start_offset().
+    s.truncate_with_new_start_offset(o{27});
+    auto vec = s.cleaned_ranges.to_vec();
+    EXPECT_EQ(vec.size(), 2);
+    EXPECT_EQ(vec[0].base_offset, o{27});
+    EXPECT_EQ(vec[0].last_offset, o{35});
+    EXPECT_EQ(vec[1].base_offset, o{40});
+    EXPECT_EQ(vec[1].last_offset, o{50});
+
+    compaction_state::tombstone_range_set_t expected = {
+      tombstone_range(27, 35, 1500),
+      tombstone_range(40, 50, 2000),
+    };
+    EXPECT_EQ(s.cleaned_ranges_with_tombstones, expected);
 }

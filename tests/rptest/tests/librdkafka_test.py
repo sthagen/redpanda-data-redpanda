@@ -83,8 +83,8 @@ class LibrdkafkaTest(RedpandaTest):
 
     @ignore  # https://github.com/redpanda-data/redpanda/issues/7148
     @cluster(num_nodes=4)
-    @matrix(test_num=tests_to_run())
     @skip_debug_mode
+    @matrix(test_num=tests_to_run())
     def test_librdkafka(self, test_num):
         tc = LibrdkafkaTestcase(self.test_context, self.redpanda, test_num)
         tc.start()

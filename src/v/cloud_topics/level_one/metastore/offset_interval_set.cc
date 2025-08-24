@@ -60,4 +60,34 @@ offset_interval_set::to_vec() const {
     return ret;
 }
 
+void offset_interval_set::truncate_with_new_start_offset(
+  kafka::offset new_start_offset) {
+    // First, remove all intervals that are fully below the new start.
+    while (!iset_.empty()) {
+        auto begin_it = iset_.begin();
+        auto begin_last_offset = kafka::offset{iset_.to_end(begin_it) - 1};
+        if (begin_last_offset >= new_start_offset) {
+            // This interval is partially or entirely above the new start.
+            // Handle below.
+            break;
+        }
+        // This interval is entirely below the new start.
+        iset_.erase(begin_it);
+    }
+    if (iset_.empty()) {
+        return;
+    }
+    auto begin_it = iset_.begin();
+    auto begin_base_offset = kafka::offset{iset_.to_start(begin_it)};
+    if (begin_base_offset >= new_start_offset) {
+        // This interval starts above or is aligned exactly with the new start.
+        return;
+    }
+    // This interval is partially below the new start. Replace it with an
+    // interval that is aligned with the new start.
+    auto begin_last_offset = kafka::offset{iset_.to_end(begin_it) - 1};
+    iset_.erase(begin_it);
+    insert(new_start_offset, begin_last_offset);
+}
+
 } // namespace cloud_topics::l1

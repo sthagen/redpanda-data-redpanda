@@ -51,6 +51,9 @@ public:
     ss::future<rpc::get_end_offset_for_term_reply>
       get_end_offset_for_term(rpc::get_end_offset_for_term_request);
 
+    ss::future<rpc::set_start_offset_reply>
+      set_start_offset(rpc::set_start_offset_request);
+
 private:
     std::optional<ss::gate::holder> maybe_gate();
 

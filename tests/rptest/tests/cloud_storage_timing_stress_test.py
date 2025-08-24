@@ -477,9 +477,9 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
             r"failed to hydrate chunk.*Connection reset by peer",
             r"failed to hydrate chunk.*NotFound",
         ])
+    @skip_debug_mode
     @parametrize(cleanup_policy="delete")
     @parametrize(cleanup_policy="compact,delete")
-    @skip_debug_mode
     def test_cloud_storage(self, cleanup_policy):
         """
         This is the baseline test. It runs the workload and performs the checks
@@ -502,9 +502,9 @@ class CloudStorageTimingStressTest(RedpandaTest, PartitionMovementMixin):
             r"failed to hydrate chunk.*NotFound",
             r"cluster.*Can't add segment",
         ])
+    @skip_debug_mode
     @parametrize(cleanup_policy="delete")
     @parametrize(cleanup_policy="compact,delete")
-    @skip_debug_mode
     def test_cloud_storage_with_partition_moves(self, cleanup_policy):
         """
         This test adds partition moves on top of the baseline cloud storage workload.

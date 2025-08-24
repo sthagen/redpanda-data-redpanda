@@ -51,8 +51,8 @@ class ShadowIndexingTxTest(RedpandaTest):
             rpk.alter_topic_config(topic.name, 'redpanda.remote.read', 'true')
 
     @cluster(num_nodes=4)
-    @matrix(cloud_storage_type=get_cloud_storage_type())
     @skip_debug_mode
+    @matrix(cloud_storage_type=get_cloud_storage_type())
     def test_shadow_indexing_aborted_txs(self, cloud_storage_type):
         """Check that messages belonging to aborted transaction are not seen by clients
         when fetching from remote segments."""
@@ -105,8 +105,8 @@ class ShadowIndexingTxTest(RedpandaTest):
         assert status.validator.out_of_scope_invalid_reads == 0
 
     @cluster(num_nodes=4)
-    @matrix(cloud_storage_type=get_cloud_storage_type())
     @skip_debug_mode
+    @matrix(cloud_storage_type=get_cloud_storage_type())
     def test_txless_segments(self, cloud_storage_type):
         """
         Check that for segments _without_ aborted transactions, we don't

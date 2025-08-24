@@ -348,6 +348,10 @@ validate_iceberg_rest_catalog_auth_mode(const config::configuration& config) {
         }
         break;
     }
+    case datalake_catalog_auth_mode::gcp: {
+        // We implicitly use instance metadata when GCP auth mode is chosen.
+        break;
+    }
     }
     return std::nullopt;
 }

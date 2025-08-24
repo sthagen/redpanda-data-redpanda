@@ -33,8 +33,8 @@ class MultiRestartTest(EndToEndTest):
                                                extra_rp_conf=extra_rp_conf)
 
     @cluster(num_nodes=5, log_allow_list=CHAOS_LOG_ALLOW_LIST)
-    @matrix(cloud_storage_type=get_cloud_storage_type())
     @skip_debug_mode
+    @matrix(cloud_storage_type=get_cloud_storage_type())
     def test_recovery_after_multiple_restarts(self, cloud_storage_type):
         partition_count = 60
 
