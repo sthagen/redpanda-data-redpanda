@@ -129,6 +129,37 @@ void fill_raft_state(
         vlog(adminlog.info, "Backtrace:\n{}", ss::current_backtrace());
     }
 }
+// Trigger a variety of different crash types, used in ducktape testing.
+void trigger_crash(std::unique_ptr<ss::http::request> req) {
+    auto crash_type = req->get_query_param("type");
+
+    if (crash_type == "segfault") {
+        vlog(adminlog.info, "Triggering segfault from /trigger_crash API");
+        // This will cause a segmentation fault
+        volatile int* p = nullptr;
+        *p = 42;
+    } else if (crash_type == "abort") {
+        vlog(adminlog.info, "Triggering abort from /trigger_crash API");
+        std::abort();
+    } else if (crash_type == "assert") {
+        vlog(adminlog.info, "Triggering assert from /trigger_crash API");
+        vassert(false, "Intentional assert triggered by admin request");
+    } else if (crash_type == "asan_crash") {
+        volatile char* p = new char[1];
+        p[1] = 42; // deliberate out-of-bounds write
+        delete[] p;
+    } else if (crash_type == "ubsan_crash") {
+        // triggers integer overflow
+        volatile int max_int = std::numeric_limits<int>::max(), one = 1, sink{};
+        sink = max_int + one + sink;
+    } else {
+        throw ss::httpd::bad_request_exception(
+          fmt::format("invalid crash type: {}", crash_type));
+    }
+
+    // if we get here, the crash failed, we will just return an empty json
+    // object
+}
 
 } // namespace
 
@@ -533,6 +564,18 @@ void admin_server::register_debug_routes() {
           log_backtrace(std::move(req));
           co_return ss::json::json_void{};
       });
+
+#ifndef NDEBUG
+    register_route<superuser>(
+      ss::httpd::debug_json::trigger_crash,
+      [](std::unique_ptr<ss::http::request> req)
+        -> ss::future<ss::json::json_return_type> {
+          trigger_crash(std::move(req));
+          co_return ss::json::json_void{};
+      });
+#else
+    std::ignore = trigger_crash; // silence unused function warning
+#endif
 
     if constexpr (admin_server::is_store_message_enabled()) {
         register_route_raw_async<superuser>(

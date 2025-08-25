@@ -38,6 +38,22 @@ def is_debug_mode():
     return os.environ.get('BUILD_TYPE', None) in ['debug', 'sanitizer']
 
 
+def is_ubsan():
+    """
+    Returns True if redpanda is built with UBSAN enabled.
+    """
+    # For now, we just assume ubsan is only in debug mode
+    return is_debug_mode()
+
+
+def is_asan():
+    """
+    Returns True if redpanda is built with ASAN enabled.
+    """
+    # For now, we just assume asan is only in debug mode
+    return is_debug_mode()
+
+
 def skip_debug_mode(*args, **kwargs):
     """
     Test method decorator which signals to the test runner to ignore a given test.
@@ -63,6 +79,28 @@ def skip_debug_mode(*args, **kwargs):
             ...
     """
     if is_debug_mode():
+        return ignore(*args, **kwargs)
+    else:
+        return args[0]
+
+
+def ignore_if_not_ubsan(*args, **kwargs):
+    """
+    Test method decorator which ignores (skips) a test if redpanda is not built
+    with UBSAN enabled.
+    """
+    if not is_ubsan():
+        return ignore(*args, **kwargs)
+    else:
+        return args[0]
+
+
+def ignore_if_not_asan(*args, **kwargs):
+    """
+    Test method decorator which ignores (skips) a test if redpanda is not built
+    with ASAN enabled.
+    """
+    if not is_asan():
         return ignore(*args, **kwargs)
     else:
         return args[0]

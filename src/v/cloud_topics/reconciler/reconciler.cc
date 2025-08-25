@@ -210,7 +210,8 @@ ss::future<std::optional<reconciler::object>> reconciler::build_object() {
     object object;
     auto size_budget = max_object_size;
     for (const auto& partition : partitions) {
-        auto reader = co_await make_reader(partition, size_budget);
+        frontend fe(partition->partition, _data_plane);
+        auto reader = co_await make_reader(&fe, partition->lro, size_budget);
         auto range = co_await std::move(reader).consume(
           range_batch_consumer{}, model::no_timeout);
         if (range.has_value()) {
@@ -268,30 +269,26 @@ ss::future<> reconciler::commit_object(
     co_return;
 }
 
-ss::future<model::record_batch_reader>
-reconciler::make_reader(const attached_partition& partition, size_t max_bytes) {
-    auto& cluster_partition = partition->partition;
-    frontend fe(partition->partition, _data_plane);
-
-    auto effective_start = co_await fe.sync_effective_start(5s);
+ss::future<model::record_batch_reader> reconciler::make_reader(
+  frontend* fe, kafka::offset start_offset, size_t max_bytes) {
+    auto effective_start = co_await fe->sync_effective_start(5s);
     if (!effective_start.has_value()) {
         vlog(
           lg.info,
           "Error querying partition start offset ({}): {}",
-          cluster_partition->ntp(),
+          fe->ntp(),
           effective_start.error());
         co_return model::make_empty_record_batch_reader();
     }
 
-    kafka::offset start_offset = std::max(
-      effective_start.value(), partition->lro);
+    start_offset = std::max(effective_start.value(), start_offset);
 
-    auto maybe_lso = fe.last_stable_offset();
+    auto maybe_lso = fe->last_stable_offset();
     if (!maybe_lso.has_value()) {
         vlog(
           lg.info,
           "Error querying partition LSO ({}): {}",
-          cluster_partition->ntp(),
+          fe->ntp(),
           maybe_lso.error());
         co_return model::make_empty_record_batch_reader();
     }
@@ -304,7 +301,7 @@ reconciler::make_reader(const attached_partition& partition, size_t max_bytes) {
         co_return model::make_empty_record_batch_reader();
     }
 
-    auto reader = co_await fe.make_reader(
+    auto reader = co_await fe->make_reader(
       cloud_topic_log_reader_config(
         start_offset,
         max_offset,
@@ -316,7 +313,7 @@ reconciler::make_reader(const attached_partition& partition, size_t max_bytes) {
       /*debounce_deadline=*/std::nullopt);
 
     auto tracker = std::make_unique<aborted_transaction_tracker_impl>(
-      &fe, std::move(reader.ot_state));
+      fe, std::move(reader.ot_state));
 
     co_return model::make_record_batch_reader<kafka::read_committed_reader>(
       std::move(tracker), std::move(reader.reader));

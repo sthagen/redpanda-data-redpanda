@@ -9,6 +9,7 @@
 
 import signal
 from subprocess import CalledProcessError
+from ducktape.cluster.cluster import ClusterNode
 from ducktape.cluster.remoteaccount import RemoteCommandError
 from ducktape.mark import matrix
 from ducktape.mark.resource import cluster as dt_cluster
@@ -23,11 +24,12 @@ from rptest.services.failure_injector import FailureSpec, make_failure_injector
 from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.kgo_repeater_service import repeater_traffic
 from rptest.services.kgo_verifier_services import KgoVerifierRandomConsumer, KgoVerifierSeqConsumer, KgoVerifierConsumerGroupConsumer, KgoVerifierProducer
-from rptest.services.redpanda import RedpandaService, RedpandaServiceCloud, SISettings, CloudStorageType, get_cloud_storage_type, make_redpanda_service, make_redpanda_mixed_service
+from rptest.services.redpanda import LogSearchLocal, RedpandaService, RedpandaServiceCloud, SISettings, CloudStorageType, get_cloud_storage_type, make_redpanda_service, make_redpanda_mixed_service
+from rptest.services.admin import CrashType
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.utils.si_utils import BucketView
 from rptest.util import expect_exception
-from rptest.utils.mode_checks import skip_debug_mode
+from rptest.utils.mode_checks import ignore_if_not_asan, ignore_if_not_ubsan, skip_debug_mode
 from rptest.services.producer_swarm import ProducerSwarm
 
 
@@ -504,6 +506,45 @@ class RedpandaServiceSelfTest(RedpandaTest):
             # expected when the inner test passed, as if the inner test passed,
             # the backtrace capture file should not exist
             assert not fail_test
+
+    @cluster(num_nodes=1, check_allowed_error_logs=False)
+    @ignore_if_not_asan
+    def test_asan_backtrace(self):
+        """This test checks that we correctly backtrace from an ASAN crash. This
+        backtrace is the one done by ASAN itself, not the decode_backtrace() one
+        we do in ducktape in test teardown."""
+        self._crash_test_impl(CrashType.ASAN_CRASH)
+
+    @cluster(num_nodes=1, check_allowed_error_logs=False)
+    @ignore_if_not_ubsan
+    def test_ubsan_backtrace(self):
+        """This test checks that we correctly backtrace from a UBSAN crash. This
+        backtrace is the one done by UBSAN itself, not the decode_backtrace() one
+        we do in ducktape in test teardown."""
+        self._crash_test_impl(CrashType.UBSAN_CRASH)
+
+    def _crash_test_impl(self, crash_type: CrashType):
+        """This test checks that we correctly capture a backtrace from a crash
+        of the given type."""
+        rp = self.redpanda
+        node = rp.nodes[0]
+        rp._admin.trigger_crash(node, crash_type)
+        # look for this snipptet which will appear at the top of the backtrace
+        # if it was properly decoded
+        self._assert_log_content(node,
+                                 "in (anonymous namespace)::trigger_crash")
+
+    def _assert_log_content(self, node: ClusterNode, needle: str):
+        """
+        Assert that the redpanda log contains the expected content.
+        """
+        log_searcher = LogSearchLocal(self.test_context, [],
+                                      self.redpanda.logger,
+                                      self.redpanda.STDOUT_STDERR_CAPTURE)
+
+        lines = list(log_searcher._capture_log(node, f"'{needle}'"))
+        assert lines, f"Did not find expected string '{needle}' in redpanda log"
+        self.logger.debug(f"Found matching log line: {lines[0]}")
 
     def _assert_expected_backtrace_contents(self):
         """

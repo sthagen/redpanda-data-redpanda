@@ -28,7 +28,8 @@
 
 namespace cloud_topics {
 class data_plane_api;
-}
+class frontend;
+} // namespace cloud_topics
 
 namespace cloud_topics::reconciler {
 
@@ -148,7 +149,7 @@ private:
      * needs to be reconciled then an empty reader is returned.
      */
     ss::future<model::record_batch_reader>
-    make_reader(const attached_partition&, size_t);
+    make_reader(frontend*, kafka::offset start_offset, size_t);
 
 private:
     ss::sharded<cluster::partition_manager>* _partition_manager;

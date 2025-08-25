@@ -27,6 +27,7 @@ from requests.exceptions import HTTPError, RequestException
 from urllib3.util.retry import Retry
 from rptest.util import wait_until_result
 from rptest.services.redpanda_types import SaslCredentials
+from rptest.utils.mode_checks import is_debug_mode
 
 DEFAULT_TIMEOUT = 30
 
@@ -453,6 +454,14 @@ class DebugBundleStartConfigParams(NamedTuple):
 class DebugBundleStartConfig(NamedTuple):
     job_id: UUID
     config: Optional[DebugBundleStartConfigParams] = None
+
+
+class CrashType(Enum):
+    SEGFAULT = "segfault"
+    ABORT = "abort"
+    ASSERT = "assert"
+    ASAN_CRASH = "asan_crash"
+    UBSAN_CRASH = "ubsan_crash"
 
 
 class Admin:
@@ -1994,3 +2003,21 @@ class Admin:
         """
         path = f"debug/log_backtrace?simple={str(simple_backtrace).lower()}"
         return self._request('post', path, node=node)
+
+    def trigger_crash(self, node: ClusterNode, crash_type: CrashType):
+        """
+        Trigger an immediate crash of the given type on the specified node.
+
+        This admin API is only available in debug mode, this function throws if
+        called in non-debug mode.
+        """
+        assert is_debug_mode(), \
+            "trigger_crash is only available in debug mode"
+        path = f"debug/trigger_crash?type={crash_type.value}"
+        try:
+            self._request('post', path, node=node)
+            raise RuntimeError("trigger_crash did not crash the node")
+        except requests.exceptions.ConnectionError:
+            # this is the expected error as the node will go down,
+            # requests will retry and throw connection error
+            return

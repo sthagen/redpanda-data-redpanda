@@ -4249,33 +4249,32 @@ class RedpandaService(RedpandaServiceBase):
             return
 
         def _metrics_sum(name: str) -> int:
-            try:
-                samples = self.metrics_sample(name, [node])
-                if samples is None:
-                    return 0
-                return sum(s.value for s in samples.samples)
-            except Exception as e:
-                self.logger.warning(f"Cannot check metrics - {e}")
+            samples = self.metrics_sample(name, [node])
+            if samples is None:
                 return 0
+            return sum(s.value for s in samples.samples)
 
-        self._usage_stats.disk_bytes_read += _metrics_sum(
-            "vectorized_io_queue_total_read_bytes_total")
+        try:
+            self._usage_stats.disk_bytes_read += _metrics_sum(
+                "vectorized_io_queue_total_read_bytes_total")
 
-        self._usage_stats.disk_bytes_written += _metrics_sum(
-            "vectorized_io_queue_total_write_bytes_total")
-        self._usage_stats.batches_read += _metrics_sum(
-            "vectorized_storage_log_batches_read")
+            self._usage_stats.disk_bytes_written += _metrics_sum(
+                "vectorized_io_queue_total_write_bytes_total")
+            self._usage_stats.batches_read += _metrics_sum(
+                "vectorized_storage_log_batches_read")
 
-        self._usage_stats.batches_written += _metrics_sum(
-            "vectorized_storage_log_batches_written")
-        self._usage_stats.internal_rpc_bytes_sent += _metrics_sum(
-            "vectorized_internal_rpc_sent_bytes")
-        self._usage_stats.internal_rpc_bytes_recv += _metrics_sum(
-            "vectorized_internal_rpc_received_bytes")
-        self._usage_stats.cloud_storage_puts += _metrics_sum(
-            "vectorized_cloud_client_total_uploads")
-        self._usage_stats.cloud_storage_gets += _metrics_sum(
-            "vectorized_cloud_client_total_downloads")
+            self._usage_stats.batches_written += _metrics_sum(
+                "vectorized_storage_log_batches_written")
+            self._usage_stats.internal_rpc_bytes_sent += _metrics_sum(
+                "vectorized_internal_rpc_sent_bytes")
+            self._usage_stats.internal_rpc_bytes_recv += _metrics_sum(
+                "vectorized_internal_rpc_received_bytes")
+            self._usage_stats.cloud_storage_puts += _metrics_sum(
+                "vectorized_cloud_client_total_uploads")
+            self._usage_stats.cloud_storage_gets += _metrics_sum(
+                "vectorized_cloud_client_total_downloads")
+        except Exception as e:
+            self.logger.warning(f"Cannot check metrics - {e}")
 
     def stop_node(self, node, timeout=None, forced=False):
         # collect usage stats before the node is stopped, the usage stats

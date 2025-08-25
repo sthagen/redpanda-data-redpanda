@@ -126,6 +126,17 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "topic_rules",
+    hdrs = [
+        "topic_rules.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/model",
+    ],
+)
+
+redpanda_cc_library(
     name = "nt_revision",
     hdrs = [
         "nt_revision.h",
@@ -655,6 +666,7 @@ redpanda_cc_library(
         ":self_test_rpc",
         ":state_machine_registry",
         ":topic_recovery_status_rpc",
+        ":topic_rules",
         ":tx_gateway_rpc",
         ":tx_manager_migrator_rpc",
         "//src/v/base",

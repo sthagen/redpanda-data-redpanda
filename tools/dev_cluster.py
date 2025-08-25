@@ -218,8 +218,8 @@ async def run_command(cmd):
     return proc.returncode == 0
 
 
-async def post_start_configure(rpk):
-    while True:
+async def post_start_configure(stop_event: asyncio.Event, rpk):
+    while not stop_event.is_set():
         if await run_command(
                 f"{rpk} cluster config set development_enable_cloud_topics true"
         ):
@@ -453,11 +453,13 @@ async def main():
         for m in node_metas
     ]
 
+    stop_event = asyncio.Event()
     redpanda_coros = [r.run() for r in nodes]
-    other_coros = [post_start_configure(args.rpk)]
+    other_coros = [post_start_configure(stop_event, args.rpk)]
     all_coros = redpanda_coros + other_coros
 
     def stop():
+        stop_event.set()
         for n in nodes:
             n.stop()
         if minio:

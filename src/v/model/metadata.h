@@ -324,6 +324,10 @@ struct topic_namespace_view {
         return std::make_tuple(ns, tp) < std::make_tuple(other.ns, other.tp);
     }
 
+    bool operator==(const topic_namespace_view& other) const {
+        return std::tie(ns, tp) == std::tie(other.ns, other.tp);
+    }
+
     const model::ns& ns;
     const model::topic& tp;
 

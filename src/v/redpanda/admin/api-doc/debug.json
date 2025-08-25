@@ -809,6 +809,36 @@
                     ]
                 }
             ]
+        },
+        {
+            "path": "/v1/debug/trigger_crash",
+            "operations": [
+                {
+                    "method": "POST",
+                    "summary": "Trigger various internal failure scenarios.",
+                    "type": "void",
+                    "nickname": "trigger_crash",
+                    "produces": [
+                        "application/json"
+                    ],
+                    "parameters": [
+                        {
+                            "name": "type",
+                            "in": "query",
+                            "required": true,
+                            "allowMultiple": false,
+                            "type": "string",
+                            "enum": [
+                                "segfault",
+                                "abort",
+                                "assert",
+                                "asan_crash",
+                                "ubsan_crash"
+                            ]
+                        }
+                    ]
+                }
+            ]
         }
     ],
     "models": {

@@ -53,6 +53,7 @@
 #include "ssx/sformat.h"
 #include "topic_configuration.h"
 #include "topic_properties.h"
+#include "topic_rules.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
@@ -1631,7 +1632,7 @@ ss::future<std::error_code> topics_frontend::set_topic_partitions_disabled(
         co_return errc::feature_disabled;
     }
 
-    if (!model::is_user_topic(ns_tp)) {
+    if (!topic_rules::can_be_disabled(ns_tp)) {
         co_return errc::invalid_partition_operation;
     }
 
