@@ -17,6 +17,7 @@ from rptest.clients.admin.v2 import Admin as AdminV2, admin_pb
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import SaslCredentials, SecurityConfig
 from rptest.util import expect_exception, expect_http_error
+from connectrpc.errors import ConnectError, ConnectErrorCode
 
 from ducktape.utils.util import wait_until
 
@@ -108,15 +109,44 @@ class AdminApiAuthTest(RedpandaTest):
         # Hit an endpoint requiring superuser
         charles_admin.get_cluster_config()
 
+    @cluster(num_nodes=3)
+    def test_admin_v2(self):
+        """
+        Check that admin v2 works, as well as auth for it.
+        """
+
+        charles = SaslCredentials("charles", "highEntropyHipster",
+                                  "SCRAM-SHA-512")
+        create_user_and_wait(self.redpanda, self.superuser_admin, charles)
+        self.redpanda.set_cluster_config({
+            'superusers':
+            [charles.username, self.redpanda.SUPERUSER_CREDENTIALS.username]
+        })
+
+        is_denied = False
+        try:
+            unauthed = AdminV2(self.redpanda)
+            unauthed.admin().list_build_info(admin_pb.ListBuildInfoRequest())
+            is_denied = False
+        except ConnectError as e:
+            is_denied = e.code == ConnectErrorCode.PERMISSION_DENIED
+        assert is_denied, "Expected unauthenticated admin v2 request to be denied"
+
         for protocol in ['json', 'proto']:
             admin_v2 = AdminV2(self.redpanda,
                                auth=(charles.username, charles.password),
                                protocol=protocol)
-            build_info = admin_v2.admin().get_build_info(
-                admin_pb.GetBuildInfoRequest())
-            self.logger.info(
-                f"Build info: version={build_info.version}, sha={build_info.build_sha}"
-            )
+            resp = admin_v2.admin().list_build_info(
+                admin_pb.ListBuildInfoRequest())
+            assert len(
+                resp.build_infos
+            ) == self.redpanda.num_nodes, "Expected to get build info for all nodes"
+            self.logger.info(f"Build info={resp}")
+            for node in self.redpanda.nodes:
+                resp = admin_v2.admin().list_rpc_routes(
+                    admin_pb.ListRPCRoutesRequest(
+                        node_id=self.redpanda.node_id(node)))
+                assert len(resp.routes) > 1, "Expected at least 2 routes"
 
     @cluster(num_nodes=3)
     def test_public_get_license(self):

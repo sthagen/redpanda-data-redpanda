@@ -11,6 +11,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "//src/v/bytes:iostream",
         "//src/v/json",
         "//src/v/kafka/client:cluster",
         "//src/v/kafka/client:errors",

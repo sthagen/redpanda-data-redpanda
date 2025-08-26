@@ -66,6 +66,7 @@ redpanda_cc_gtest(
     srcs = [
         "direct_consumer_fixture_test.cc",
     ],
+    cpu = 1,
     deps = [
         ":direct_consumer_fixture",
         "//src/v/model",

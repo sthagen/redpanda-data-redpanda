@@ -1,0 +1,14 @@
+{
+    "namespace": "admin::proxy",
+    "service_name": "proxy",
+    "includes": [
+        "redpanda/admin/proxy/types.h"
+    ],
+    "methods": [
+      {
+        "name": "proxy_rpc",
+        "input_type": "proxy_request",
+        "output_type": "proxy_response"
+      }
+    ]
+}

@@ -322,10 +322,6 @@ std::vector<std::exception_ptr> flatten_exception(const std::exception_ptr& e) {
     return result;
 }
 
-ss::sstring make_index_path(const remote_segment_path& segment_path) {
-    return fmt::format("{}.index", segment_path().native());
-}
-
 } // namespace
 
 ntp_archiver::ntp_archiver(
@@ -1661,7 +1657,7 @@ ss::future<ntp_archiver_upload_result> ntp_archiver::upload_segment(
     retry_chain_logger ctxlog(archival_log, rtc, _ntp.path());
     auto h = _gate.hold();
     auto path = manifest().generate_segment_path(meta, remote_path_provider());
-    auto index_path = make_index_path(path);
+    auto index_path = cloud_storage::generate_index_path(path).string();
     auto lazy_abort = lazy_abort_source{
       [this]() { return upload_should_abort(); }};
     auto stream = strm.create_input_stream();

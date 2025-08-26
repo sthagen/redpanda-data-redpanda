@@ -2,6 +2,7 @@
 
 #include "absl/strings/strip.h"
 #include "base/vlog.h"
+#include "bytes/iostream.h"
 #include "net/dns.h"
 #include "serde/protobuf/rpc.h"
 #include "ssx/future-util.h"
@@ -94,6 +95,13 @@ ss::future<> consumer_runner::do_fetch() {
             if (fetched_partition_data.data.empty()) {
                 continue; // no data to process
             }
+
+            vlog(
+              v_logger.info,
+              "found data for ntp: {}/{}",
+              fetched_topic_data.topic,
+              fetched_partition_data.partition_id);
+
             auto& partition_stats = _stats[fetched_topic_data.topic]
                                           [fetched_partition_data.partition_id];
             if (fetched_partition_data.error != kafka::error_code::none) {
@@ -115,6 +123,31 @@ ss::future<> consumer_runner::do_fetch() {
             _total_records += totals.count;
             auto last_fetched_offset = model::offset_cast(
               fetched_partition_data.data.back().last_offset());
+
+            vlog(
+              v_logger.info,
+              "fetched ntp: {}/{}, offset: {}",
+              fetched_topic_data.topic,
+              fetched_partition_data.partition_id,
+              last_fetched_offset);
+
+            auto first_fetched_offset = model::offset_cast(
+              fetched_partition_data.data.front().last_offset());
+            if (first_fetched_offset <= partition_stats.last_fetched_offset) {
+                // this is legal but too much of this is undesirable
+                vlog(
+                  v_logger.info,
+                  "[client: {}] duplicate offsets detected for topic: {}, "
+                  "partition: {}, fetched start: {}, fetched end: {}, "
+                  "application last fetched offset: {}",
+                  _id,
+                  fetched_topic_data.topic,
+                  fetched_partition_data.partition_id,
+                  first_fetched_offset,
+                  last_fetched_offset,
+                  partition_stats.last_fetched_offset);
+            }
+
             if (last_fetched_offset <= partition_stats.last_fetched_offset) {
                 _non_monotonic_fetches++;
                 vlog(
@@ -139,13 +172,13 @@ inline verifier::api_response success() { return verifier::api_response{}; }
  * Service
  */
 
-seastar::future<verifier::api_response>
-verifier_service_impl::status(verifier::status_request) {
+seastar::future<verifier::api_response> verifier_service_impl::status(
+  serde::pb::rpc::context, verifier::status_request) {
     co_return success();
 }
 
 seastar::future<verifier::api_response> verifier_service_impl::create_consumer(
-  verifier::create_direct_consumer_request req) {
+  serde::pb::rpc::context, verifier::create_direct_consumer_request req) {
     if (req.get_client_id().empty()) {
         throw serde::pb::rpc::invalid_argument_exception(
           "Client ID must be provided");
@@ -177,7 +210,7 @@ seastar::future<verifier::api_response> verifier_service_impl::create_consumer(
 
 seastar::future<verifier::api_response>
 verifier_service_impl::assign_partitions(
-  verifier::assign_partitions_request req) {
+  serde::pb::rpc::context, verifier::assign_partitions_request req) {
     auto it = _consumers.find(kafka::client_id(req.get_client_id()));
     if (it == _consumers.end()) {
         throw serde::pb::rpc::not_found_exception(
@@ -208,7 +241,7 @@ verifier_service_impl::assign_partitions(
 }
 
 ss::future<verifier::api_response> verifier_service_impl::unassign_partitions(
-  verifier::unassign_partitions_request req) {
+  serde::pb::rpc::context, verifier::unassign_partitions_request req) {
     auto it = _consumers.find(kafka::client_id(req.get_client_id()));
     if (it == _consumers.end()) {
         throw serde::pb::rpc::not_found_exception(
@@ -231,7 +264,7 @@ ss::future<verifier::api_response> verifier_service_impl::unassign_partitions(
 
 ss::future<verifier::consumer_state_response>
 verifier_service_impl::get_consumer_state(
-  verifier::get_consumer_state_request req) {
+  serde::pb::rpc::context, verifier::get_consumer_state_request req) {
     verifier::consumer_state_response resp;
     kafka::client_id client_id(req.get_client_id());
     auto it = _consumers.find(client_id);
@@ -296,28 +329,56 @@ verifier_server::verifier_server(
 
 ss::future<> verifier_server::stop() { co_await _httpd.stop(); }
 
-verifier_server::handler_impl::handler_impl(verifier_server* s, handler_fun h)
+verifier_server::handler_impl::handler_impl(
+  verifier_server* s, serde::pb::rpc::route_descriptor rd)
   : server(s)
-  , handler(std::move(h)) {}
+  , descriptor(std::move(rd)) {}
 
 ss::future<std::unique_ptr<ss::http::reply>>
 verifier_server::handler_impl::handle(
   const ss::sstring&,
   std::unique_ptr<ss::http::request> req,
   std::unique_ptr<ss::http::reply> reply) {
-    return ss::with_gate(
-      server->_gate,
-      [this, req = std::move(req), reply = std::move(reply)]() mutable {
-          return ss::smp::submit_to(
-            0,
-            [this, req = std::move(req), reply = std::move(reply)]() mutable {
-                vlog(
-                  v_logger.debug,
-                  "Handling request: {}",
-                  absl::StripTrailingAsciiWhitespace(req->request_line()));
-                return handler(std::move(req), std::move(reply));
+    auto payload = co_await read_iobuf_exactly(*req->content_stream, 10_MiB);
+    serde::pb::rpc::context ctx{
+      .service_name = descriptor.service_name,
+      .method_name = descriptor.method_name,
+      .content_type = serde::pb::rpc::content_type::json,
+    };
+    try {
+        payload = co_await descriptor.handler(
+          std::move(ctx), std::move(payload));
+    } catch (const serde::pb::rpc::base_exception& e) {
+        vlog(
+          v_logger.error,
+          "Error handling request for {}: {}",
+          descriptor.path,
+          e.what());
+        reply = e.handle(std::move(reply));
+        co_return reply;
+    } catch (...) {
+        vlog(
+          v_logger.error,
+          "Unhandled exception while processing request for {}: {}",
+          descriptor.path,
+          std::current_exception());
+        reply = serde::pb::rpc::internal_exception().handle(std::move(reply));
+        co_return reply;
+    }
+    reply->write_body(
+      "json",
+      [b = std::move(payload)](
+        ss::output_stream<char>&& output_stream) mutable {
+          return ss::do_with(
+            std::move(output_stream),
+            [&b](ss::output_stream<char>& os) mutable {
+                return write_iobuf_to_output_stream(
+                         b.share(0, b.size_bytes()), os)
+                  .finally([&os] { return os.close(); });
             });
       });
+    reply->done();
+    co_return reply;
 }
 
 ss::shard_id verifier_server::client_shard_id() const { return 0; }
@@ -326,7 +387,7 @@ void verifier_server::setup_routes() {
     for (auto& route : _service->all_routes()) {
         // Handler is deleted by the httpd server, so we need to
         // use a raw pointer here.
-        auto h = new handler_impl(this, route.handler);
+        auto h = new handler_impl(this, route);
 
         vlog(v_logger.info, "Adding route: {}", route.path);
         _httpd._routes.add(

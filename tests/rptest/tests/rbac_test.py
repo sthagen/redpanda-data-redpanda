@@ -827,7 +827,7 @@ class RBACEndToEndTest(RBACTestBase):
             "Since No permissions have been added to either role, expect authZ failed"
         )
         with expect_exception(RpkException,
-                              lambda e: 'AUTHORIZATION_FAILED' in str(e)):
+                              lambda e: 'AUTHORIZATION_FAILED' in e.stderr):
             self.alice_rpk.produce(self.topic0, 'foo', 'bar')
 
         self.logger.debug("Now add topic access rights for user")
@@ -884,7 +884,7 @@ class RBACEndToEndTest(RBACTestBase):
                    retry_on_exc=True)
 
         with expect_exception(RpkException,
-                              lambda e: 'AUTHORIZATION_FAILED' in str(e)):
+                              lambda e: 'AUTHORIZATION_FAILED' in e.stderr):
             self.alice_rpk.consume(self.topic1, n=1)
 
         self.logger.debug(

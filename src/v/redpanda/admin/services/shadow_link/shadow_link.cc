@@ -16,36 +16,37 @@
 namespace admin {
 ss::future<proto::admin::create_shadow_link_response>
 shadow_link_service_impl::create_shadow_link(
-  proto::admin::create_shadow_link_request) {
+  serde::pb::rpc::context, proto::admin::create_shadow_link_request) {
     throw serde::pb::rpc::unimplemented_exception();
 }
 
 ss::future<proto::admin::delete_shadow_link_response>
 shadow_link_service_impl::delete_shadow_link(
-  proto::admin::delete_shadow_link_request) {
+  serde::pb::rpc::context, proto::admin::delete_shadow_link_request) {
     throw serde::pb::rpc::unimplemented_exception();
 }
 
 ss::future<proto::admin::get_shadow_link_response>
 shadow_link_service_impl::get_shadow_link(
-  proto::admin::get_shadow_link_request) {
+  serde::pb::rpc::context, proto::admin::get_shadow_link_request) {
     throw serde::pb::rpc::unimplemented_exception();
 }
 
 ss::future<proto::admin::list_shadow_links_response>
 shadow_link_service_impl::list_shadow_links(
-  proto::admin::list_shadow_links_request) {
+  serde::pb::rpc::context, proto::admin::list_shadow_links_request) {
     throw serde::pb::rpc::unimplemented_exception();
 }
 
 ss::future<proto::admin::update_shadow_link_response>
 shadow_link_service_impl::update_shadow_link(
-  proto::admin::update_shadow_link_request) {
+  serde::pb::rpc::context, proto::admin::update_shadow_link_request) {
     throw serde::pb::rpc::unimplemented_exception();
 }
 
 ss::future<proto::admin::fail_over_response>
-shadow_link_service_impl::fail_over(proto::admin::fail_over_request) {
+shadow_link_service_impl::fail_over(
+  serde::pb::rpc::context, proto::admin::fail_over_request) {
     throw serde::pb::rpc::unimplemented_exception();
 }
 } // namespace admin

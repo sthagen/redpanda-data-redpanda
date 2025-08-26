@@ -50,8 +50,16 @@ class RpkException(Exception):
         self.parsed_output: list[RpkOffsetDeleteResponsePartition] | None = None
 
     def __str__(self):
+        def last_two(input: str):
+            lines = input.splitlines()
+            if len(lines) > 2:
+                return f"... ({len(lines)-2} lines skipped)\n" + "\n".join(
+                    lines[-2:])
+            else:
+                return input
+
         if self.stderr:
-            err = f"; stderr: {self.stderr}"
+            err = f"; stderr: {last_two(self.stderr)}"
         else:
             err = ""
         if self.returncode:
@@ -59,7 +67,7 @@ class RpkException(Exception):
         else:
             retcode = ""
         if self.stdout:
-            stdout = f"; stdout: {self.stdout}"
+            stdout = f"; stdout: {last_two(self.stdout)}"
         else:
             stdout = ""
         return f"RpkException<{self.msg}{err}{stdout}{retcode}>"
@@ -1258,18 +1266,24 @@ class RpkTool:
                              stderr=subprocess.PIPE,
                              env=env,
                              text=True)
+
+        def _log_rpk_output(stdout, stderr):
+            self._redpanda.logger.debug(f'rpk stdout: \n{stdout}')
+            self._redpanda.logger.debug(f'rpk stderr: \n{stderr}')
+
         try:
             output, stderror = p.communicate(input=stdin, timeout=timeout)
         except subprocess.TimeoutExpired:
             p.kill()
-            output, stderr = p.communicate()
-            raise RpkException(f"command `{' '.join(cmd)}' timed out",
-                               stdout=output,
-                               stderr=stderr)
+            output, stderror = p.communicate()
+            msg = f"command `{' '.join(cmd)}' timed out"
+            _log_rpk_output(output, stderror)
+            raise RpkException(msg, stdout=output, stderr=stderror)
 
         self._redpanda.logger.debug(f'\n{output}')
 
         if p.returncode:
+            _log_rpk_output(output, stderror)
             raise RpkException(
                 'command %s returned %d, output: %s' %
                 (' '.join(cmd) if log_cmd else '[redacted]', p.returncode,

@@ -24,31 +24,51 @@ import typing
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
 @typing.final
-class GetBuildInfoRequest(google.protobuf.message.Message):
-    """GetBuildInfoRequest is used to request the build information of the Redpanda
+class ListBuildInfoRequest(google.protobuf.message.Message):
+    """ListBuildInfoRequest is used to request the build information of the Redpanda
     cluster.
     """
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
 
     def __init__(self) -> None:
         ...
-global___GetBuildInfoRequest = GetBuildInfoRequest
+global___ListBuildInfoRequest = ListBuildInfoRequest
+
+@typing.final
+class ListBuildInfoResponse(google.protobuf.message.Message):
+    """ListBuildInfoResponse contains the build information of the Redpanda cluster."""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    BUILD_INFOS_FIELD_NUMBER: builtins.int
+
+    @property
+    def build_infos(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___BuildInfo]:
+        """The list of build information for each Redpanda node in the cluster."""
+
+    def __init__(self, *, build_infos: collections.abc.Iterable[global___BuildInfo] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['build_infos', b'build_infos']) -> None:
+        ...
+global___ListBuildInfoResponse = ListBuildInfoResponse
 
 @typing.final
 class BuildInfo(google.protobuf.message.Message):
     """BuildInfo contains information about the Redpanda build."""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NODE_ID_FIELD_NUMBER: builtins.int
     VERSION_FIELD_NUMBER: builtins.int
     BUILD_SHA_FIELD_NUMBER: builtins.int
+    node_id: builtins.int
+    'The node ID of the Redpanda node.'
     version: builtins.str
     'A version string of Redpanda like "v25.2.1" '
     build_sha: builtins.str
     'The git commit SHA of the build.'
 
-    def __init__(self, *, version: builtins.str=..., build_sha: builtins.str=...) -> None:
+    def __init__(self, *, node_id: builtins.int=..., version: builtins.str=..., build_sha: builtins.str=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['build_sha', b'build_sha', 'version', b'version']) -> None:
+    def ClearField(self, field_name: typing.Literal['build_sha', b'build_sha', 'node_id', b'node_id', 'version', b'version']) -> None:
         ...
 global___BuildInfo = BuildInfo
 
@@ -76,8 +96,14 @@ class ListRPCRoutesRequest(google.protobuf.message.Message):
     the Admin API.
     """
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NODE_ID_FIELD_NUMBER: builtins.int
+    node_id: builtins.int
+    'The node ID to get the routes for. If the node ID is set to -1, then the\n    routes for the broker serving the request is returned.\n    '
 
-    def __init__(self) -> None:
+    def __init__(self, *, node_id: builtins.int=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['node_id', b'node_id']) -> None:
         ...
 global___ListRPCRoutesRequest = ListRPCRoutesRequest
 

@@ -11,6 +11,7 @@
 #pragma once
 #include "base/seastarx.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
+#include "serde/protobuf/rpc.h"
 #include "src/v/kafka/client/direct_consumer/verifier/proto/verifier.proto.h"
 
 #include <seastar/http/api_docs.hh>
@@ -92,20 +93,20 @@ class verifier_service_impl : public kafka::client::verifier::verifier_service {
 public:
     verifier_service_impl() = default;
 
-    ss::future<verifier::api_response>
-      create_consumer(verifier::create_direct_consumer_request) final;
+    ss::future<verifier::api_response> create_consumer(
+      serde::pb::rpc::context, verifier::create_direct_consumer_request) final;
 
-    ss::future<verifier::api_response>
-      assign_partitions(verifier::assign_partitions_request) final;
+    ss::future<verifier::api_response> assign_partitions(
+      serde::pb::rpc::context, verifier::assign_partitions_request) final;
 
-    ss::future<verifier::api_response>
-      unassign_partitions(verifier::unassign_partitions_request) final;
+    ss::future<verifier::api_response> unassign_partitions(
+      serde::pb::rpc::context, verifier::unassign_partitions_request) final;
 
-    ss::future<verifier::consumer_state_response>
-      get_consumer_state(verifier::get_consumer_state_request) final;
+    ss::future<verifier::consumer_state_response> get_consumer_state(
+      serde::pb::rpc::context, verifier::get_consumer_state_request) final;
 
     seastar::future<verifier::api_response>
-      status(verifier::status_request) final;
+      status(serde::pb::rpc::context, verifier::status_request) final;
 
     ss::future<> stop();
 
@@ -121,9 +122,6 @@ struct listener_configuration {
     int16_t port;
 };
 
-using request_handler_fn
-  = ss::noncopyable_function<ss::future<std::unique_ptr<ss::http::reply>>(
-    std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>)>;
 /**
  * Class responsible for setting up the HTTP server and dispatching requests
  * to the verifier service.
@@ -136,13 +134,11 @@ public:
     ss::future<> stop();
 
 private:
-    using handler_fun
-      = std::function<ss::future<std::unique_ptr<ss::http::reply>>(
-        std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>)>;
     struct handler_impl : public ss::httpd::handler_base {
         using handler_base::handler_base;
 
-        explicit handler_impl(verifier_server*, handler_fun);
+        explicit handler_impl(
+          verifier_server*, serde::pb::rpc::route_descriptor);
 
         ss::future<std::unique_ptr<ss::http::reply>> handle(
           const ss::sstring& path,
@@ -150,7 +146,7 @@ private:
           std::unique_ptr<ss::http::reply> reply) final;
 
         verifier_server* server;
-        handler_fun handler;
+        serde::pb::rpc::route_descriptor descriptor;
     };
 
     void setup_routes();

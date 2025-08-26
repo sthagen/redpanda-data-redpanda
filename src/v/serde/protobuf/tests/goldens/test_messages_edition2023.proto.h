@@ -62,10 +62,10 @@ public:
   foreign_message_edition2023(foreign_message_edition2023&&) noexcept;
   foreign_message_edition2023& operator=(foreign_message_edition2023&&) noexcept;
   ~foreign_message_edition2023() noexcept;
-  
+
   bool operator==(const foreign_message_edition2023&) const;
   fmt::iterator format_to(fmt::iterator) const;
-  
+
   // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.ForeignMessageEdition2023 into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -80,15 +80,15 @@ public:
   // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
   // Use the iobuf version instead.
   static seastar::future<> from_json(serde::pb::json::peekable_parser*, foreign_message_edition2023*);
-  
+
   int32_t get_c() const;
   void set_c(int32_t v);
-  
+
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   void apply_field_path_from(std::span<const ss::sstring> path, foreign_message_edition2023* update);
-  
+
 private:
   int32_t c_{};
 };
@@ -102,10 +102,10 @@ public:
   test_all_types_edition2023_group_like_type(test_all_types_edition2023_group_like_type&&) noexcept;
   test_all_types_edition2023_group_like_type& operator=(test_all_types_edition2023_group_like_type&&) noexcept;
   ~test_all_types_edition2023_group_like_type() noexcept;
-  
+
   bool operator==(const test_all_types_edition2023_group_like_type&) const;
   fmt::iterator format_to(fmt::iterator) const;
-  
+
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.GroupLikeType into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.GroupLikeType into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -120,17 +120,17 @@ public:
   // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
   // Use the iobuf version instead.
   static seastar::future<> from_json(serde::pb::json::peekable_parser*, test_all_types_edition2023_group_like_type*);
-  
+
   int32_t get_group_int32() const;
   void set_group_int32(int32_t v);
   uint32_t get_group_uint32() const;
   void set_group_uint32(uint32_t v);
-  
+
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   void apply_field_path_from(std::span<const ss::sstring> path, test_all_types_edition2023_group_like_type* update);
-  
+
 private:
   int32_t group_int32_{};
   uint32_t group_uint32_{};
@@ -144,10 +144,10 @@ public:
   test_all_types_edition2023_nested_message(test_all_types_edition2023_nested_message&&) noexcept;
   test_all_types_edition2023_nested_message& operator=(test_all_types_edition2023_nested_message&&) noexcept;
   ~test_all_types_edition2023_nested_message() noexcept;
-  
+
   bool operator==(const test_all_types_edition2023_nested_message&) const;
   fmt::iterator format_to(fmt::iterator) const;
-  
+
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023.NestedMessage into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -162,18 +162,18 @@ public:
   // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
   // Use the iobuf version instead.
   static seastar::future<> from_json(serde::pb::json::peekable_parser*, test_all_types_edition2023_nested_message*);
-  
+
   int32_t get_a() const;
   void set_a(int32_t v);
   std::unique_ptr<test_all_types_edition2023>& get_corecursive();
   const std::unique_ptr<test_all_types_edition2023>& get_corecursive() const;
   void set_corecursive(std::unique_ptr<test_all_types_edition2023>&& v);
-  
+
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   void apply_field_path_from(std::span<const ss::sstring> path, test_all_types_edition2023_nested_message* update);
-  
+
 private:
   int32_t a_{};
   std::unique_ptr<test_all_types_edition2023> corecursive_;
@@ -187,10 +187,10 @@ public:
   test_all_types_edition2023(test_all_types_edition2023&&) noexcept;
   test_all_types_edition2023& operator=(test_all_types_edition2023&&) noexcept;
   ~test_all_types_edition2023() noexcept;
-  
+
   bool operator==(const test_all_types_edition2023&) const;
   fmt::iterator format_to(fmt::iterator) const;
-  
+
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023 into a protocol buffer, in a way that will not cause stalls for large messages.
   seastar::future<iobuf> to_proto() const;
   // Serializes protobuf_test_messages.editions.TestAllTypesEdition2023 into proto3 JSON, in a way that will not cause stalls for large messages.
@@ -205,7 +205,7 @@ public:
   // Note: This factory function should not be used directly, it's exposed for other protobuf parsers to use.
   // Use the iobuf version instead.
   static seastar::future<> from_json(serde::pb::json::peekable_parser*, test_all_types_edition2023*);
-  
+
   // Singular
   int32_t get_optional_int32() const;
   void set_optional_int32(int32_t v);
@@ -504,12 +504,12 @@ public:
   test_all_types_edition2023_group_like_type& get_delimited_field();
   const test_all_types_edition2023_group_like_type& get_delimited_field() const;
   void set_delimited_field(test_all_types_edition2023_group_like_type&& v);
-  
+
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   void apply_field_path_from(std::span<const ss::sstring> path, test_all_types_edition2023* update);
-  
+
 private:
   int32_t optional_int32_{};
   int64_t optional_int64_{};

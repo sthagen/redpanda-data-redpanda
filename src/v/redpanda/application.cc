@@ -134,6 +134,7 @@
 #include "raft/coordinated_recovery_throttle.h"
 #include "raft/group_manager.h"
 #include "raft/service.h"
+#include "redpanda/admin/proxy/service.h"
 #include "redpanda/admin/server.h"
 #include "redpanda/admin/services/internal/debug.h"
 #include "redpanda/admin/services/shadow_link/shadow_link.h"
@@ -180,6 +181,7 @@
 #include <seastar/util/log.hh>
 
 #include <fmt/format.h>
+
 #if __has_include(<google/protobuf/runtime_version.h>)
 #include <google/protobuf/runtime_version.h>
 #endif
@@ -3350,6 +3352,18 @@ void application::start_runtime_services(
                   smp_service_groups.datalake_sg(),
                   cloud_topics_app->get_sharded_l1_metastore_fe()));
           }
+          runtime_services.push_back(
+            std::make_unique<admin::proxy::service_impl>(
+              sched_groups.admin_sg(),
+              smp_service_groups.cluster_smp_sg(),
+              [this](serde::pb::rpc::context ctx, iobuf buf) {
+                  if (!_admin.local_is_initialized()) {
+                      throw std::runtime_error(
+                        "admin service is not initialized");
+                  }
+                  return _admin.local().handle_rpc_request(
+                    std::move(ctx), std::move(buf));
+              }));
 
           s.add_services(std::move(runtime_services));
 

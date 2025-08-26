@@ -80,6 +80,46 @@ TEST_P(BasicConsumerFixture, TestBasicConsumption) {
       model::offset(1019));
 }
 
+TEST_P(BasicConsumerFixture, TestBasicLeadershipTransfer) {
+    // constants
+    constexpr uint first_produce_count = 10;
+    constexpr uint second_produce_count = 20;
+    const auto test_partition_number = 0;
+    const auto test_partition_id = model::partition_id(test_partition_number);
+    const auto test_ntp = model::ntp(
+      model::kafka_namespace, topic, test_partition_id);
+
+    assign_partitions(make_assignment(topic, {test_partition_number}));
+
+    produce_to_partition(topic, test_partition_number, first_produce_count);
+
+    { // fist fetch and assert
+        auto fetched = fetch_until_empty(*consumer);
+
+        ASSERT_EQ(
+          fetched[model::topic_partition(topic, test_partition_id)]
+            .back()
+            .last_offset(),
+          model::offset(first_produce_count - 1));
+    }
+
+    // kick off a leadership shuffle and wait for the effect to be noticable
+    wait_for_visible_leadership_shuffle(test_ntp);
+
+    produce_to_partition(topic, test_partition_number, second_produce_count);
+
+    { // second fetch and assert
+        auto fetched = fetch_until_empty(*consumer);
+        ASSERT_EQ(fetched.size(), 1);
+
+        ASSERT_EQ(
+          fetched[model::topic_partition(topic, test_partition_id)]
+            .back()
+            .last_offset(),
+          model::offset(first_produce_count + second_produce_count - 1));
+    }
+}
+
 TEST_P(BasicConsumerFixture, TestUnassignPartition) {
     assign_partitions(make_assignment(topic, {0, 1}));
 

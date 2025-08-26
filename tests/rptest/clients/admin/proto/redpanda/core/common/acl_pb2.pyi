@@ -34,19 +34,41 @@ class _ACLResourceEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._En
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     ACL_RESOURCE_UNSPECIFIED: _ACLResource.ValueType
     ACL_RESOURCE_ANY: _ACLResource.ValueType
+    'Wildcard for selecting any ACL resource'
     ACL_RESOURCE_CLUSTER: _ACLResource.ValueType
+    'Cluster wide resource'
     ACL_RESOURCE_GROUP: _ACLResource.ValueType
+    'Consumer group resource'
     ACL_RESOURCE_TOPIC: _ACLResource.ValueType
+    'Topic resource'
     ACL_RESOURCE_TXN_ID: _ACLResource.ValueType
+    'Transaction ID resource'
+    ACL_RESOURCE_SR_SUBJECT: _ACLResource.ValueType
+    'Schema Registry subject resource'
+    ACL_RESOURCE_SR_REGISTRY: _ACLResource.ValueType
+    'Schema Registry wide resource'
+    ACL_RESOURCE_SR_ANY: _ACLResource.ValueType
+    'Wildcard to match any SR ACL resource'
 
 class ACLResource(_ACLResource, metaclass=_ACLResourceEnumTypeWrapper):
     """/ The ACL resource types"""
 ACL_RESOURCE_UNSPECIFIED: ACLResource.ValueType
 ACL_RESOURCE_ANY: ACLResource.ValueType
+'Wildcard for selecting any ACL resource'
 ACL_RESOURCE_CLUSTER: ACLResource.ValueType
+'Cluster wide resource'
 ACL_RESOURCE_GROUP: ACLResource.ValueType
+'Consumer group resource'
 ACL_RESOURCE_TOPIC: ACLResource.ValueType
+'Topic resource'
 ACL_RESOURCE_TXN_ID: ACLResource.ValueType
+'Transaction ID resource'
+ACL_RESOURCE_SR_SUBJECT: ACLResource.ValueType
+'Schema Registry subject resource'
+ACL_RESOURCE_SR_REGISTRY: ACLResource.ValueType
+'Schema Registry wide resource'
+ACL_RESOURCE_SR_ANY: ACLResource.ValueType
+'Wildcard to match any SR ACL resource'
 global___ACLResource = ACLResource
 
 class _ACLPattern:
@@ -57,19 +79,25 @@ class _ACLPatternEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._Enu
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
     ACL_PATTERN_UNSPECIFIED: _ACLPattern.ValueType
     ACL_PATTERN_ANY: _ACLPattern.ValueType
+    'Wildcard to match any pattern'
     ACL_PATTERN_LITERAL: _ACLPattern.ValueType
+    'Match a literal string'
     ACL_PATTERN_PREFIXED: _ACLPattern.ValueType
+    'Match a prefix'
     ACL_PATTERN_MATCH: _ACLPattern.ValueType
-    '/ Match serves as a catch-all for all the names of a topic\n    / the principal is authorized to access\n    '
+    'Match serves as a catch-all for all the names of a topic\n    the principal is authorized to access\n    '
 
 class ACLPattern(_ACLPattern, metaclass=_ACLPatternEnumTypeWrapper):
     """/ The ACL pattern type"""
 ACL_PATTERN_UNSPECIFIED: ACLPattern.ValueType
 ACL_PATTERN_ANY: ACLPattern.ValueType
+'Wildcard to match any pattern'
 ACL_PATTERN_LITERAL: ACLPattern.ValueType
+'Match a literal string'
 ACL_PATTERN_PREFIXED: ACLPattern.ValueType
+'Match a prefix'
 ACL_PATTERN_MATCH: ACLPattern.ValueType
-'/ Match serves as a catch-all for all the names of a topic\n/ the principal is authorized to access\n'
+'Match serves as a catch-all for all the names of a topic\nthe principal is authorized to access\n'
 global___ACLPattern = ACLPattern
 
 class _ACLOperation:
@@ -113,15 +141,15 @@ class _ACLPermissionType:
 
 class _ACLPermissionTypeEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper._EnumTypeWrapper[_ACLPermissionType.ValueType], builtins.type):
     DESCRIPTOR: google.protobuf.descriptor.EnumDescriptor
-    ACL_PERMISSION_UNSPECIFIED: _ACLPermissionType.ValueType
-    ACL_PERMISSION_ANY: _ACLPermissionType.ValueType
-    ACL_PERMISSION_ALLOW: _ACLPermissionType.ValueType
-    ACL_PERMISSION_DENY: _ACLPermissionType.ValueType
+    ACL_PERMISSION_TYPE_UNSPECIFIED: _ACLPermissionType.ValueType
+    ACL_PERMISSION_TYPE_ANY: _ACLPermissionType.ValueType
+    ACL_PERMISSION_TYPE_ALLOW: _ACLPermissionType.ValueType
+    ACL_PERMISSION_TYPE_DENY: _ACLPermissionType.ValueType
 
 class ACLPermissionType(_ACLPermissionType, metaclass=_ACLPermissionTypeEnumTypeWrapper):
     """/ ACL permission types"""
-ACL_PERMISSION_UNSPECIFIED: ACLPermissionType.ValueType
-ACL_PERMISSION_ANY: ACLPermissionType.ValueType
-ACL_PERMISSION_ALLOW: ACLPermissionType.ValueType
-ACL_PERMISSION_DENY: ACLPermissionType.ValueType
+ACL_PERMISSION_TYPE_UNSPECIFIED: ACLPermissionType.ValueType
+ACL_PERMISSION_TYPE_ANY: ACLPermissionType.ValueType
+ACL_PERMISSION_TYPE_ALLOW: ACLPermissionType.ValueType
+ACL_PERMISSION_TYPE_DENY: ACLPermissionType.ValueType
 global___ACLPermissionType = ACLPermissionType

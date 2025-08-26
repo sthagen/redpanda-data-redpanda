@@ -27,6 +27,8 @@
 
 #include <fmt/format.h>
 
+#include <optional>
+
 namespace kafka::client {
 class direct_consumer;
 
@@ -220,7 +222,7 @@ private:
         kafka::fetch_session_id session_id{0};
     };
 
-    static assignment_epoch find_assignment_epoch(
+    static std::optional<assignment_epoch> find_assignment_epoch(
       const model::topic& topic,
       model::partition_id partition,
       const topic_partition_map<assignment_epoch>& epochs);
@@ -250,7 +252,7 @@ private:
       model::partition_id,
       kafka::offset,
       kafka::offset,
-      assignment_epoch);
+      std::optional<assignment_epoch>);
 
     ss::future<kafka_result<chunked_vector<topic_partition_offsets>>>
       do_list_offsets(list_offsets_request);

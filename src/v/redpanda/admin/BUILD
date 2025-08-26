@@ -210,6 +210,7 @@ redpanda_cc_library(
         ":transform",
         ":usage",
         "//src/v/base",
+        "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
         "//src/v/cloud_storage",
         "//src/v/cloud_storage:cache",

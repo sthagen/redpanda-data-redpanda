@@ -9,9 +9,16 @@
 
 from typing import Any
 
+import time
+import random
+import threading
+from typing import Callable
+
 from rptest.services.cluster import cluster
+from rptest.services.admin import Admin
 from ducktape.utils.util import wait_until
 from ducktape.tests.test import TestContext
+from ducktape.errors import TimeoutError
 
 from rptest.services.direct_consumer_verifier import (
     DirectConsumerVerifier, CreateDirectConsumerRequest, BrokerAddress,
@@ -24,13 +31,55 @@ from rptest.tests.redpanda_test import RedpandaTest
 from rptest.util import wait_until_with_progress_check
 
 
+class LoopThread(threading.Thread):
+    """Run loop func until graceful cancellation is requested"""
+    def _loop(self, *args, **kwargs):
+        while not self.stopped():
+            self._loop_func(*args, **kwargs)
+
+    def __init__(self, *args, loop_func: Callable[[], None], **kwargs):
+        super(LoopThread, self).__init__(*args, target=self._loop, **kwargs)
+        self._stop_event = threading.Event()
+        self._loop_func = loop_func
+
+    def stop(self):
+        self._stop_event.set()
+
+    def stopped(self):
+        return self._stop_event.is_set()
+
+
 #TODO: This test must be enabled once the direct consumer verifier support
 # is added to vtools.
 class DirectConsumerVerifierTest(RedpandaTest):
     def __init__(self, test_context: TestContext, **kwargs: Any):
         super().__init__(test_context, **kwargs)
 
-    @cluster(num_nodes=4)
+    def shuffle_one_leader(self, topic_spec: TopicSpec) -> None:
+        '''randomly chooses a partition in the given topic spec and moves its leader one replica over'''
+        namespace = "kafka"
+        topic_name = topic_spec.name
+        partition_number = random.choice(range(topic_spec.partition_count))
+        admin = Admin(self.redpanda)
+        # logs to debug
+        transfer_succeeded = admin.transfer_leadership_to(
+            namespace="kafka",
+            topic=topic_spec.name,
+            partition=random.randrange(0, topic_spec.partition_count))
+        self.redpanda.logger.debug(
+            f"transfer of ntp {namespace}/{topic_name}/{partition_number} success? {transfer_succeeded}"
+        )
+
+    def create_troublemaker_thread(self,
+                                   topic_spec: TopicSpec,
+                                   thread_name="stream_thread") -> LoopThread:
+        '''creates a background thread to drive paritition leadership transfers'''
+        thread = LoopThread(name=thread_name,
+                            loop_func=self.shuffle_one_leader,
+                            args=(topic_spec, ))
+        return thread
+
+    @cluster(num_nodes=5)
     def test_basic_consuming_from_topic(self):
         topic_name = "test-topic"
         msg_count = 200000
@@ -43,14 +92,18 @@ class DirectConsumerVerifierTest(RedpandaTest):
 
         self.client().create_topic(topic_spec)
 
-        KgoVerifierProducer.oneshot(self.test_context,
-                                    self.redpanda,
-                                    topic_name,
-                                    msg_size=msg_size,
-                                    msg_count=msg_count)
+        producer = KgoVerifierProducer(self.test_context,
+                                       self.redpanda,
+                                       topic_name,
+                                       msg_size=msg_size,
+                                       msg_count=msg_count)
+        producer.start()
 
         verifier = DirectConsumerVerifier(self.test_context, log_level="DEBUG")
         verifier.start()
+
+        troublemaker = self.create_troublemaker_thread(topic_spec=topic_spec)
+        troublemaker.start()
 
         try:
             # check if the verifier is alive
@@ -95,15 +148,15 @@ class DirectConsumerVerifierTest(RedpandaTest):
 
             def get_consumption():
                 state = verifier.get_consumer_state(state_request)
-                self.logger.info(
-                    f"Consumer state: consumed {state.total_consumed_messages} messages"
+                self.logger.debug(
+                    f"Expecting: {msg_count} Consumer state: consumed {state.total_consumed_messages} messages"
                 )
                 return state.total_consumed_messages
 
             wait_until_with_progress_check(
                 get_consumption,
                 condition=lambda: get_consumption() >= msg_count,
-                timeout_sec=60,
+                timeout_sec=600,
                 progress_sec=10,
                 backoff_sec=2,
                 err_msg=f"Stopped consuming",
@@ -111,12 +164,21 @@ class DirectConsumerVerifierTest(RedpandaTest):
             )
 
             final_state = verifier.get_consumer_state(state_request)
-            assert final_state.total_consumed_messages == msg_count, \
+
+            # assertions
+            # must have seen at least msg_count, duplicate offsets are legal but undesirable
+            assert final_state.total_consumed_messages >= msg_count, \
                 f"Expected {msg_count} messages, got {final_state.total_consumed_messages}"
+
+            assert int(final_state.non_monotonic_fetches) == 0, \
+                f"Non-monotonic fetches found, number of nm fetches: {final_state.non_monotonic_fetches}"
 
             self.logger.info(
                 f"Successfully consumed {final_state.total_consumed_messages} messages"
             )
 
         finally:
+            troublemaker.stop()
+            producer.stop()
             verifier.stop()
+            producer.wait(timeout_sec=600)

@@ -12,17 +12,22 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "model/fundamental.h"
 
 #include <seastar/core/future.hh>
 #include <seastar/core/sstring.hh>
 #include <seastar/util/log.hh>
 
+#include <algorithm>
 #include <memory>
 
 namespace seastar::http {
 struct request;
 struct reply;
 } // namespace seastar::http
+namespace seastar::httpd {
+class routes;
+} // namespace seastar::httpd
 
 // Supporting functions for ConnectRPC protocol support in seastar
 //
@@ -41,22 +46,53 @@ enum class authz_level : uint8_t {
     superuser,
 };
 
+enum class content_type : uint8_t {
+    json,
+    proto,
+};
+
+// Context about an RPC request being handled.
+struct context {
+    ss::sstring service_name;
+    ss::sstring method_name;
+    content_type content_type;
+    // A list of nodes that have proxied this request.
+    //
+    // This is used to service similar purposes as the `Via` HTTP header.
+    //
+    // https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Via
+    std::vector<model::node_id> proxied_nodes;
+
+    // If the request is being proxied from another broker or not.
+    bool is_proxied() const { return !proxied_nodes.empty(); }
+    // Return true if the given node has already proxied this request.
+    bool has_visited_node(model::node_id node) const {
+        return std::ranges::contains(proxied_nodes, node);
+    }
+};
+
 // A small descriptor for a route, as well as a method for handling a route
 //
 // All routes should be POST requests, but the request/reply parsing will be
 // handled by the handler method.
 struct route_descriptor {
-    // Name of the method such as "redpanda.core.admin.AdminService.GetRoutes"
-    ss::sstring name;
+    // Name of the method such as "redpanda.core.admin.AdminService"
+    ss::sstring service_name;
+    // Name of the method such as "GetRoutes"
+    ss::sstring method_name;
     // Path of the route such as "/redpanda.core.admin.AdminService/GetRoutes"
     ss::sstring path;
     // The authentication and authorization level required to access this
     // handler.
     authz_level authz_level;
 
-    std::function<ss::future<std::unique_ptr<ss::http::reply>>(
-      std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>)>
-      handler;
+    // The handler function that will be called to handle the request.
+    // This takes a context and the message body as an iobuf, and returns a
+    // the resulting serialized iobuf.
+    //
+    // The resulting future may fail only with exception type inheriting from
+    // `serde::pb::rpc::base_exception`.
+    std::function<ss::future<iobuf>(context, iobuf)> handler;
 };
 
 // A base class that all ConnectRPC services inherit from to provide a discovery

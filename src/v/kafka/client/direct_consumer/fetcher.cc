@@ -274,7 +274,7 @@ bool fetcher::maybe_update_fetch_offset(
   model::partition_id partition_id,
   kafka::offset last_received,
   kafka::offset high_watermark,
-  assignment_epoch assignment_epoch) {
+  std::optional<assignment_epoch> maybe_response_epoch) {
     auto t_it = _partitions.find(topic);
     if (t_it == _partitions.end()) {
         return false;
@@ -283,7 +283,28 @@ bool fetcher::maybe_update_fetch_offset(
     if (p_it == t_it->second.end()) {
         return false;
     }
-    if (p_it->second.assignment_epoch != assignment_epoch) {
+
+    // possible in a tight race
+    // 1. unassign from A
+    // 2. begin fetch
+    // 3. assign to A
+    // 4. broker receives update
+    // 5. the fetch will receive a response for which it did not have an epoch
+    // this is logically the same as epoch mismatch
+    if (!maybe_response_epoch) {
+        vlog(
+          logger().info,
+          "[broker: {}] Ignoring unbidden {}/{} current epoch: {}",
+          _id,
+          topic,
+          partition_id,
+          p_it->second.assignment_epoch);
+        return false;
+    }
+
+    const auto response_epoch = maybe_response_epoch.value();
+
+    if (p_it->second.assignment_epoch != response_epoch) {
         vlog(
           logger().trace,
           "[broker: {}] Ignoring {}/{} reply, assignment epoch changed, "
@@ -291,7 +312,7 @@ bool fetcher::maybe_update_fetch_offset(
           _id,
           topic,
           partition_id,
-          assignment_epoch,
+          response_epoch,
           p_it->second.assignment_epoch);
         return false;
     }
@@ -406,22 +427,24 @@ ss::future<> fetcher::do_fetch() {
     }
 }
 
-fetcher::assignment_epoch fetcher::find_assignment_epoch(
+std::optional<fetcher::assignment_epoch> fetcher::find_assignment_epoch(
   const model::topic& topic,
   model::partition_id partition,
   const topic_partition_map<assignment_epoch>& epochs) {
-    auto it = epochs.find(topic);
-    vassert(
-      it != epochs.end(), "assignment epoch for topic {} not found", topic);
+    auto topic_iterator = epochs.find(topic);
 
-    auto p_it = it->second.find(partition);
-    vassert(
-      p_it != it->second.end(),
-      "assignment epoch for partition {}/{} not found",
-      topic,
-      partition);
+    if (topic_iterator == epochs.end()) {
+        return std::nullopt;
+    }
 
-    return p_it->second;
+    const auto& partition_map = topic_iterator->second;
+    auto partition_iterator = partition_map.find(partition);
+
+    if (partition_iterator == partition_map.end()) {
+        return std::nullopt;
+    }
+
+    return partition_iterator->second;
 }
 
 ss::future<kafka_result<fetcher::fetch_response_content>>
@@ -432,8 +455,10 @@ fetcher::process_fetch_response(
     if (resp.data.error_code != kafka::error_code::none) {
         co_return resp.data.error_code;
     }
+
     // Hold the lock here as the fetch response processing updates the fetch
     // offsets, we do not want this to interfere with assignment updates.
+
     auto lock = co_await _state_lock.get_units();
 
     // For fetch session maintenance, the goal is to omit partitions from each
@@ -522,17 +547,24 @@ fetcher::process_fetch_response(
                 part_data.data = co_await reader_to_chunked_vector(
                   std::move(part_response.records.value()));
 
+                auto maybe_response_epoch = find_assignment_epoch(
+                  topic_data.topic, part_data.partition_id, epochs);
+
                 bool updated_offset = maybe_update_fetch_offset(
                   topic_data.topic,
                   part_data.partition_id,
                   model::offset_cast(part_data.data.back().last_offset()),
                   part_data.high_watermark,
-                  find_assignment_epoch(
-                    topic_data.topic, part_data.partition_id, epochs));
-                if (updated_offset) {
-                    dirty_partitions[topic_data.topic].insert(
-                      part_data.partition_id);
+                  maybe_response_epoch);
+                if (!updated_offset) {
+                    // case when partition is either
+                    // 1. partition is not assigned to this fetcher
+                    // 2. assignment epoch changed
+                    // for either skip
+                    continue;
                 }
+                dirty_partitions[topic_data.topic].insert(
+                  part_data.partition_id);
             }
             topic_data.partitions.push_back(std::move(part_data));
         }
@@ -560,20 +592,57 @@ fetcher::process_fetch_response(
           "partitions, not both");
 
         if (!included.empty()) {
-            auto tp_it = _partitions.find(topic);
-            if (tp_it == _partitions.end()) {
+            // _partitions maps topic -> parition map
+            // partition map maps partition -> subscription info
+            // get an iterator to the topic map
+            auto topic_iterator = _partitions.find(topic);
+            if (topic_iterator == _partitions.end()) {
                 continue;
             }
+
             auto errs_it = dirty_partitions.find(topic);
             bool topic_err = errs_it != dirty_partitions.end();
-            auto& ps = tp_it->second;
+
+            auto& partition_map = topic_iterator->second;
+
             for (const auto& p : included) {
                 bool partition_err = topic_err
                                      && errs_it->second.contains(
                                        p.partition_id);
-                auto p_it = ps.find(p.partition_id);
-                if (p_it != ps.end() && !partition_err) {
-                    p_it->second.incremental_include = false;
+                auto partition_iterator = partition_map.find(p.partition_id);
+                if (
+                  partition_iterator != partition_map.end() && !partition_err) {
+                    // compare the epochs before we make an edit
+                    const auto assigned_epoch
+                      = partition_iterator->second.assignment_epoch;
+
+                    auto maybe_request_epoch = find_assignment_epoch(
+                      topic, p.partition_id, epochs);
+
+                    if (!maybe_request_epoch) {
+                        // see maybe_update_fetch_offset for explanation
+                        vlog(
+                          logger().info,
+                          "unbidden response on ntp: {}/{}",
+                          topic,
+                          p.partition_id);
+                        continue;
+                    }
+
+                    const auto request_epoch = maybe_request_epoch.value();
+
+                    if (assigned_epoch == request_epoch) {
+                        partition_iterator->second.incremental_include = false;
+                    } else {
+                        vlog(
+                          logger().trace,
+                          "disclusion epoch mismatch on ntp: {}, "
+                          "fetched_epoch, {}, current_epoch: {}",
+                          topic,
+                          p.partition_id,
+                          request_epoch,
+                          assigned_epoch);
+                    }
                 }
             }
         }
@@ -649,78 +718,94 @@ ss::future<kafka::error_code> fetcher::maybe_initialise_fetch_offsets(
         co_return error_code::none;
     }
 
-    auto offsets = co_await do_list_offsets(std::move(req));
-    if (offsets.has_error()) {
-        if (is_retriable_error(offsets.error())) {
+    auto list_offsets_response = co_await do_list_offsets(std::move(req));
+    if (list_offsets_response.has_error()) {
+        if (is_retriable_error(list_offsets_response.error())) {
             vlog(
               logger().info,
               "list_offsets request failed with retriable error: {}",
-              offsets.error());
+              list_offsets_response.error());
         } else {
             vlog(
               logger().warn,
               "list_offsets request failed with an error: {}",
-              offsets.error());
+              list_offsets_response.error());
         }
-        co_return offsets.error();
+        co_return list_offsets_response.error();
     }
     // TODO: what should we do with the error code in the response?
     kafka::error_code error = kafka::error_code::none;
-    for (auto& topic : offsets.value()) {
-        for (auto& partition_offset : topic.offsets) {
-            if (partition_offset.error_code != kafka::error_code::none) {
-                if (is_retriable_error(partition_offset.error_code)) {
+    for (auto& response_topic : list_offsets_response.value()) {
+        for (auto& response_partition : response_topic.offsets) {
+            if (response_partition.error_code != kafka::error_code::none) {
+                if (is_retriable_error(response_partition.error_code)) {
                     vlog(
                       logger().debug,
                       "[broker: {}] {}/{} retriable list_offsets error: {}",
                       _id,
-                      topic.topic,
-                      partition_offset.partition_id,
-                      partition_offset.error_code);
+                      response_topic.topic,
+                      response_partition.partition_id,
+                      response_partition.error_code);
                 }
                 // Only overwrite if we don't have an error, or if current error
                 // is retriable but new error is not retriable
                 if (error == kafka::error_code::none ||
-                  (is_retriable_error(error) && !is_retriable_error(partition_offset.error_code))) {
-                    error = partition_offset.error_code;
+                  (is_retriable_error(error) && !is_retriable_error(response_partition.error_code))) {
+                    error = response_partition.error_code;
                 }
                 continue;
             }
 
-            auto t_it = _partitions.find(topic.topic);
+            // global state may have changed, we're not locked
+            auto t_it = _partitions.find(response_topic.topic);
             if (t_it == _partitions.end()) {
                 continue;
             }
-            auto p_it = t_it->second.find(partition_offset.partition_id);
+            auto p_it = t_it->second.find(response_partition.partition_id);
             if (p_it == t_it->second.end()) {
                 continue;
             }
-            auto request_epoch = find_assignment_epoch(
-              topic.topic, partition_offset.partition_id, epochs);
-            if (
-              find_assignment_epoch(
-                topic.topic, partition_offset.partition_id, epochs)
-              != p_it->second.assignment_epoch) {
+
+            const auto assigned_epoch = p_it->second.assignment_epoch;
+
+            auto maybe_response_epoch = find_assignment_epoch(
+              response_topic.topic, response_partition.partition_id, epochs);
+
+            if (!maybe_response_epoch) {
+                vlog(
+                  logger().warn,
+                  "[broker: {} received a list topics response which was not "
+                  "requested on ntp: {}/{}",
+                  _id,
+                  response_topic.topic,
+                  response_partition.partition_id);
+                continue;
+            }
+
+            const auto request_epoch = maybe_response_epoch.value();
+
+            if (request_epoch != assigned_epoch) {
                 vlog(
                   logger().trace,
                   "[broker: {}] Skipping partition {}/{} list offset response "
                   "as assignment epoch has changed. request_epoch: {}, "
                   "current_epoch: {}",
                   _id,
-                  topic.topic,
-                  partition_offset.partition_id,
-                  partition_offset.offset,
+                  response_topic.topic,
+                  response_partition.partition_id,
+                  response_partition.offset,
                   request_epoch,
                   p_it->second.assignment_epoch);
+                continue;
             }
             vlog(
               logger().info,
               "[broker: {}] Resetting partition {}/{} fetch offset to: {}",
               _id,
-              topic.topic,
-              partition_offset.partition_id,
-              partition_offset.offset);
-            p_it->second.fetch_offset = partition_offset.offset;
+              response_topic.topic,
+              response_partition.partition_id,
+              response_partition.offset);
+            p_it->second.fetch_offset = response_partition.offset;
             p_it->second.high_watermark.reset();
             p_it->second.incremental_include = true;
         }
@@ -764,7 +849,28 @@ ss::future<> fetcher::assign_partition(
       .partition_id = tp.partition,
       .fetch_offset = offset,
       .assignment_epoch = next_epoch(),
-    };
+      .incremental_include = true};
+
+    // in the case of fast leadership transfers, we may have a partition both
+    // being added and forgotten, in which case, make sure that it is only being
+    // added
+    auto forget_topic_iterator = _partitions_to_forget.find(tp.topic);
+    if (forget_topic_iterator != _partitions_to_forget.end()) {
+        // topic is in the 'to forget map', now is the partition in the topic's
+        // map
+        auto& partitions_to_forget = forget_topic_iterator->second;
+        auto forget_partition_iterator = partitions_to_forget.find(
+          tp.partition);
+        if (forget_partition_iterator != partitions_to_forget.end()) {
+            // the ntp is both being added and forgotten, make sure its only
+            // added
+            partitions_to_forget.erase(forget_partition_iterator);
+            if (partitions_to_forget.empty()) {
+                // cleanup if this was the last partition
+                _partitions_to_forget.erase(forget_topic_iterator);
+            }
+        }
+    }
 
     _partitions_updated.signal();
     co_return;

@@ -27,7 +27,7 @@ option (redpanda.pbgen.cpp_namespace) = "proto::admin";
 // Admin API, other APIs should be split out into seperate services.
 service AdminService {
     // Return the build version and git commit SHA of the Redpanda cluster.
-    rpc GetBuildInfo(GetBuildInfoRequest) returns (BuildInfo) {
+    rpc ListBuildInfo(ListBuildInfoRequest) returns (ListBuildInfoResponse) {
         option (redpanda.pbgen.rpc) = {
             authz: SUPERUSER
         };
@@ -41,15 +41,22 @@ service AdminService {
     }
 }
 
-// GetBuildInfoRequest is used to request the build information of the Redpanda
+// ListBuildInfoRequest is used to request the build information of the Redpanda
 // cluster.
-message GetBuildInfoRequest {}
+message ListBuildInfoRequest {}
+// ListBuildInfoResponse contains the build information of the Redpanda cluster.
+message ListBuildInfoResponse {
+    // The list of build information for each Redpanda node in the cluster.
+    repeated BuildInfo build_infos = 1;
+}
 // BuildInfo contains information about the Redpanda build.
 message BuildInfo {
+    // The node ID of the Redpanda node.
+    int32 node_id = 1;
     // A version string of Redpanda like "v25.2.1"
-    string version = 1;
+    string version = 2;
     // The git commit SHA of the build.
-    string build_sha = 2;
+    string build_sha = 3;
 }
 
 // A route in the Admin API RPC server.
@@ -65,7 +72,11 @@ message RPCRoute {
 }
 // ListRPCRoutesRequest is used to request the list of available RPC routes in
 // the Admin API.
-message ListRPCRoutesRequest {}
+message ListRPCRoutesRequest {
+    // The node ID to get the routes for. If the node ID is set to -1, then the
+    // routes for the broker serving the request is returned.
+    int32 node_id = 1;
+}
 // ListRPCRoutesResponse contains the list of available RPC routes in the Admin
 // API.
 message ListRPCRoutesResponse {

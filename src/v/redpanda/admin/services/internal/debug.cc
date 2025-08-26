@@ -30,7 +30,8 @@ ss::logger log{"admin_api_server/internal_debug_service"};
 } // namespace
 
 seastar::future<proto::start_stress_fiber_response>
-debug_service_impl::start_stress_fiber(proto::start_stress_fiber_request req) {
+debug_service_impl::start_stress_fiber(
+  serde::pb::rpc::context, proto::start_stress_fiber_request req) {
     auto validate_min_max_settings =
       [](std::string_view name, int32_t min, int32_t max) -> bool {
         bool has_min = min != 0;
@@ -104,7 +105,8 @@ debug_service_impl::start_stress_fiber(proto::start_stress_fiber_request req) {
 }
 
 seastar::future<proto::stop_stress_fiber_response>
-debug_service_impl::stop_stress_fiber(proto::stop_stress_fiber_request) {
+debug_service_impl::stop_stress_fiber(
+  serde::pb::rpc::context, proto::stop_stress_fiber_request) {
     co_await _stress_fiber_manager.invoke_on_all(
       [](stress_fiber_manager& m) { return m.stop(); });
     co_return proto::stop_stress_fiber_response{};

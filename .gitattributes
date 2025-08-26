@@ -1,0 +1,4 @@
+# Mark generated files as so. This allows Github to flag them as generated in PR reviews.
+src/v/serde/protobuf/goldens/* linguist-generated=true
+tests/rptest/clients/admin/google/** linguist-generated=true
+tests/rptest/clients/admin/proto/** linguist-generated=true

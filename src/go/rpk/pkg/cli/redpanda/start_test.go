@@ -1748,11 +1748,12 @@ func Test_buildRedpandaFlags(t *testing.T) {
 						ReadBandwidth:  3,
 						WriteIops:      4,
 						WriteBandwidth: 5,
+						Duplex:         true,
 					}, nil
 				},
 			},
 			exp: map[string]string{
-				"io-properties": `{"disks":[{"mountpoint":"/mnt/","read_iops":2,"read_bandwidth":3,"write_iops":4,"write_bandwidth":5}]}`,
+				"io-properties": `{"disks":[{"mountpoint":"/mnt/","read_iops":2,"read_bandwidth":3,"write_iops":4,"write_bandwidth":5,"duplex":true}]}`,
 				// These 2 are false because of the empty config
 				"overprovisioned": "false",
 				"lock-memory":     "false",

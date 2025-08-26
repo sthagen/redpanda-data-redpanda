@@ -11,6 +11,10 @@
 #include "serde/json/writer.h"
 #include "serde/json/parser.h"
 #include "utils/to_string.h"
+#include "bytes/iostream.h"
+#include "base/units.h"
+#include <seastar/http/request.hh>
+#include <seastar/http/reply.hh>
 
 #include <algorithm>
 #include <fmt/format.h>
@@ -1174,6 +1178,226 @@ void well_known_protos::apply_field_path_from(std::span<const ss::sstring> path,
   }
 }
 
+say_greeting_request::say_greeting_request() noexcept = default;
+say_greeting_request::say_greeting_request(say_greeting_request&&) noexcept = default;
+say_greeting_request& say_greeting_request::operator=(say_greeting_request&&) noexcept = default;
+say_greeting_request::~say_greeting_request() noexcept = default;
+ss::sstring& say_greeting_request::get_greeting() { return greeting_; }
+const ss::sstring& say_greeting_request::get_greeting() const { return greeting_; }
+void say_greeting_request::set_greeting(ss::sstring&& v) { greeting_ = std::move(v); }
+bool say_greeting_request::operator==(const say_greeting_request& other) const {
+  return (greeting_ == other.greeting_);
+}
+fmt::iterator say_greeting_request::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{greeting: {}}}", greeting_);
+}
+seastar::future<> say_greeting_request::from_proto(serde::pb::wire_format_parser* parser, say_greeting_request* self) {
+  while (parser->bytes_left() > 0) {
+    auto tag = parser->read_tag();
+    switch (tag.field_number) {
+    case 1: { // greeting
+      self->set_greeting(parser->read_string<"example.SayGreetingRequest.greeting">(tag));
+      break;
+    }
+    default:
+      parser->skip_unknown(tag);
+      break;
+    }
+  }
+  co_return;
+}
+seastar::future<say_greeting_request> say_greeting_request::from_proto(iobuf buf) {
+  say_greeting_request self;
+  serde::pb::wire_format_parser parser{std::move(buf)};
+  co_await from_proto(&parser, &self);
+  parser.check_empty();
+  co_return self;
+}
+seastar::future<iobuf> say_greeting_request::to_proto() const {
+  iobuf buf;
+  // greeting
+  serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+  serde::pb::write_length(static_cast<int32_t>(get_greeting().size()), &buf);
+  buf.append(get_greeting().data(), get_greeting().size());
+  co_return buf;
+}
+seastar::future<iobuf> say_greeting_request::to_json() const {
+  serde::json::writer w;
+  w.begin_object();
+  w.key("greeting");
+  w.string(get_greeting());
+  w.end_object();
+  co_return std::move(w).finish();
+}
+seastar::future<> say_greeting_request::from_json(serde::pb::json::peekable_parser* parser, say_greeting_request* self) {
+  constexpr static auto key_to_field_number = std::to_array<std::pair<std::string_view, int32_t>>({
+    {"greeting", 1},
+  });
+  auto entries = serde::pb::json::object_key_generator(parser);
+  while (auto key = co_await entries()) {
+    auto fields = std::ranges::equal_range(key_to_field_number, *key, std::less<>(), [](const auto& pair) { return pair.first; });
+    if (fields.empty()) {
+      co_await parser->skip_value();
+      continue;
+    }
+    switch (fields.front().second) {
+    case 1: { // greeting
+      co_await parser->next();
+      self->set_greeting(serde::pb::json::read_string(parser));
+      break;
+    }
+    default:
+      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+    }
+  }
+  co_return;
+}
+seastar::future<say_greeting_request> say_greeting_request::from_json(iobuf data) {
+  say_greeting_request self;
+  serde::pb::json::peekable_parser parser(std::move(data));
+  co_await from_json(&parser, &self);
+  co_await serde::pb::json::check_next_eof(&parser);
+  co_return self;
+}
+bool say_greeting_request::is_valid_field_path(std::span<const ss::sstring> path) {
+  if (path.empty()) { return true; }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, bool(*)(decltype(path))>>({
+    {"greeting", [](auto path) { return path.empty(); }},
+  });
+  for (const auto& [name, is_valid] : fields) {
+    if (path.front() == name) {
+      return is_valid(path.subspan(1));
+    }
+  }
+  return false;
+}
+void say_greeting_request::apply_field_path_from(std::span<const ss::sstring> path, say_greeting_request* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
+    {"greeting", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->set_greeting(std::move(update->get_greeting()));
+    }},
+  });
+  for (const auto& [name, apply] : fields) {
+    if (path.front() == name) {
+      return apply(path.subspan(1), this, update);
+    }
+  }
+}
+
+say_greeting_response::say_greeting_response() noexcept = default;
+say_greeting_response::say_greeting_response(say_greeting_response&&) noexcept = default;
+say_greeting_response& say_greeting_response::operator=(say_greeting_response&&) noexcept = default;
+say_greeting_response::~say_greeting_response() noexcept = default;
+ss::sstring& say_greeting_response::get_response() { return response_; }
+const ss::sstring& say_greeting_response::get_response() const { return response_; }
+void say_greeting_response::set_response(ss::sstring&& v) { response_ = std::move(v); }
+bool say_greeting_response::operator==(const say_greeting_response& other) const {
+  return (response_ == other.response_);
+}
+fmt::iterator say_greeting_response::format_to(fmt::iterator it) const {
+  return fmt::format_to(it, "{{response: {}}}", response_);
+}
+seastar::future<> say_greeting_response::from_proto(serde::pb::wire_format_parser* parser, say_greeting_response* self) {
+  while (parser->bytes_left() > 0) {
+    auto tag = parser->read_tag();
+    switch (tag.field_number) {
+    case 1: { // response
+      self->set_response(parser->read_string<"example.SayGreetingResponse.response">(tag));
+      break;
+    }
+    default:
+      parser->skip_unknown(tag);
+      break;
+    }
+  }
+  co_return;
+}
+seastar::future<say_greeting_response> say_greeting_response::from_proto(iobuf buf) {
+  say_greeting_response self;
+  serde::pb::wire_format_parser parser{std::move(buf)};
+  co_await from_proto(&parser, &self);
+  parser.check_empty();
+  co_return self;
+}
+seastar::future<iobuf> say_greeting_response::to_proto() const {
+  iobuf buf;
+  // response
+  serde::pb::tag::write({.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+  serde::pb::write_length(static_cast<int32_t>(get_response().size()), &buf);
+  buf.append(get_response().data(), get_response().size());
+  co_return buf;
+}
+seastar::future<iobuf> say_greeting_response::to_json() const {
+  serde::json::writer w;
+  w.begin_object();
+  w.key("response");
+  w.string(get_response());
+  w.end_object();
+  co_return std::move(w).finish();
+}
+seastar::future<> say_greeting_response::from_json(serde::pb::json::peekable_parser* parser, say_greeting_response* self) {
+  constexpr static auto key_to_field_number = std::to_array<std::pair<std::string_view, int32_t>>({
+    {"response", 1},
+  });
+  auto entries = serde::pb::json::object_key_generator(parser);
+  while (auto key = co_await entries()) {
+    auto fields = std::ranges::equal_range(key_to_field_number, *key, std::less<>(), [](const auto& pair) { return pair.first; });
+    if (fields.empty()) {
+      co_await parser->skip_value();
+      continue;
+    }
+    switch (fields.front().second) {
+    case 1: { // response
+      co_await parser->next();
+      self->set_response(serde::pb::json::read_string(parser));
+      break;
+    }
+    default:
+      vassert(false, "codegen error unexpected field number: {}", fields.front().second);
+    }
+  }
+  co_return;
+}
+seastar::future<say_greeting_response> say_greeting_response::from_json(iobuf data) {
+  say_greeting_response self;
+  serde::pb::json::peekable_parser parser(std::move(data));
+  co_await from_json(&parser, &self);
+  co_await serde::pb::json::check_next_eof(&parser);
+  co_return self;
+}
+bool say_greeting_response::is_valid_field_path(std::span<const ss::sstring> path) {
+  if (path.empty()) { return true; }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, bool(*)(decltype(path))>>({
+    {"response", [](auto path) { return path.empty(); }},
+  });
+  for (const auto& [name, is_valid] : fields) {
+    if (path.front() == name) {
+      return is_valid(path.subspan(1));
+    }
+  }
+  return false;
+}
+void say_greeting_response::apply_field_path_from(std::span<const ss::sstring> path, say_greeting_response* update) {
+  if (path.empty()) {
+    *this = std::move(*update);
+    return;
+  }
+  constexpr auto fields = std::to_array<std::pair<std::string_view, void(*)(decltype(path), decltype(this), decltype(update))>>({
+    {"response", []([[maybe_unused]] auto path, auto* self, auto* update) {
+      self->set_response(std::move(update->get_response()));
+    }},
+  });
+  for (const auto& [name, apply] : fields) {
+    if (path.front() == name) {
+      return apply(path.subspan(1), this, update);
+    }
+  }
+}
+
 void enum_from_proto(iobuf_parser* p, corpus* e) {
   auto v = serde::pb::read_varint<int32_t, serde::pb::zigzag::no>(p);
   constexpr static auto values = std::to_array<int32_t>({
@@ -1404,6 +1628,51 @@ void enum_from_json(serde::pb::json::peekable_parser* p, proto3_test* e) {
   }
 }
 int32_t format_as(proto3_test e) { return std::to_underlying(e); }
+
+std::vector<serde::pb::rpc::route_descriptor> test_service::all_routes() {
+  return {
+    {
+      .service_name = "TestService",
+      .method_name = "SayGreeting",
+      .path = "/example.TestService/SayGreeting",
+      .authz_level = serde::pb::rpc::authz_level::superuser,
+      .handler = std::bind_front(&test_service::say_greeting_handler_impl, this),
+    },
+  };
+}
+seastar::future<iobuf> test_service::say_greeting_handler_impl(serde::pb::rpc::context ctx, iobuf payload) {
+  bool is_json = ctx.content_type == serde::pb::rpc::content_type::json;
+  say_greeting_request input;
+  try {
+    if (is_json) {
+      input = co_await say_greeting_request::from_json(std::move(payload));
+    } else {
+      input = co_await say_greeting_request::from_proto(std::move(payload));
+    }
+  } catch (...) {
+    serde::pb::rpc::logger.debug("error parsing request example.TestService.SayGreeting RPC: {}", std::current_exception());
+    throw serde::pb::rpc::invalid_argument_exception("invalid request input");
+  }
+  say_greeting_response output;
+  try {
+    output = co_await this->say_greeting(std::move(ctx), std::move(input));
+  } catch (const serde::pb::rpc::base_exception& e) {
+    throw;
+  } catch (...) {
+    serde::pb::rpc::logger.warn("unhandled exception in example.TestService.SayGreeting RPC: {}", std::current_exception());
+    throw serde::pb::rpc::internal_exception();
+  }
+  co_return is_json ? co_await output.to_json() : co_await output.to_proto();
+}
+
+seastar::future<say_greeting_response> test_service_client::say_greeting(serde::pb::rpc::context ctx, say_greeting_request input) {
+  iobuf payload = co_await input.to_proto();
+  ctx.service_name = "example.TestService";
+  ctx.method_name = "SayGreeting";
+  ctx.content_type = serde::pb::rpc::content_type::proto;
+  payload = co_await send_rpc_fn_(std::move(ctx), std::move(payload));
+  co_return co_await say_greeting_response::from_proto(std::move(payload));
+}
 
 } // proto::example
 // NOLINTEND(*-avoid-magic-numbers)

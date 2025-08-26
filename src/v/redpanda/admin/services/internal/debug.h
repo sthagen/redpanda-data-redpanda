@@ -29,10 +29,13 @@ public:
       : _stress_fiber_manager(stress_fiber_manager) {}
 
     seastar::future<proto::admin::start_stress_fiber_response>
-      start_stress_fiber(proto::admin::start_stress_fiber_request) override;
+      start_stress_fiber(
+        serde::pb::rpc::context,
+        proto::admin::start_stress_fiber_request) override;
 
-    seastar::future<proto::admin::stop_stress_fiber_response>
-      stop_stress_fiber(proto::admin::stop_stress_fiber_request) override;
+    seastar::future<proto::admin::stop_stress_fiber_response> stop_stress_fiber(
+      serde::pb::rpc::context,
+      proto::admin::stop_stress_fiber_request) override;
 
 private:
     ss::sharded<stress_fiber_manager>& _stress_fiber_manager;

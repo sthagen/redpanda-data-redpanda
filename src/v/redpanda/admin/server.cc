@@ -12,6 +12,7 @@
 #include "redpanda/admin/server.h"
 
 #include "base/vlog.h"
+#include "bytes/iostream.h"
 #include "cloud_storage/cache_service.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote_path_provider.h"
@@ -92,6 +93,7 @@
 #include "security/audit/schemas/iam.h"
 #include "security/audit/schemas/types.h"
 #include "security/audit/types.h"
+#include "serde/protobuf/rpc.h"
 #include "ssx/sformat.h"
 #include "strings/string_switch.h"
 #include "strings/utf8.h"
@@ -141,6 +143,7 @@
 #include <algorithm>
 #include <charconv>
 #include <chrono>
+#include <exception>
 #include <iterator>
 #include <limits>
 #include <memory>
@@ -341,35 +344,118 @@ admin_server::admin_server(
   , _default_blocked_reactor_notify(
       ss::engine().get_blocked_reactor_notify_ms()) {
     _server.set_content_streaming(true);
-    // NOTE: This isn't normally where services should be registered
-    // but this service is special as it has some reflection based methods.
-    add_service(std::make_unique<admin::admin_service_impl>(&_services));
 }
 
 namespace {
 class rpc_handler : public ss::httpd::handler_base {
 public:
     rpc_handler(
-      std::function<ss::future<std::unique_ptr<ss::http::reply>>(
-        std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>)>
-        h)
-      : _handler(std::move(h)) {}
+      ss::noncopyable_function<void(const ss::http::request&)>
+        authenticate_request,
+      serde::pb::rpc::route_descriptor descriptor)
+      : _authenticate_request(std::move(authenticate_request))
+      , _descriptor(std::move(descriptor)) {}
 
     ss::future<std::unique_ptr<ss::http::reply>> handle(
       const ss::sstring&,
       std::unique_ptr<ss::http::request> req,
       std::unique_ptr<ss::http::reply> rep) override {
-        rep = co_await _handler(std::move(req), std::move(rep));
-        // The normal function handler in seastar sets the Content-Type here
-        // but we do that in the handler itself (and it's dynamic).
+        try {
+            check_authentication(*req);
+            auto ctx = make_context(*req);
+            auto is_proto = ctx.content_type
+                            == serde::pb::rpc::content_type::proto;
+            iobuf request_payload = co_await extract_payload(std::move(req));
+            iobuf reply_payload = co_await _descriptor.handler(
+              std::move(ctx), std::move(request_payload));
+            // Write the content type as binary, as seastar doesn't have an
+            // application type for `application/proto`. We'll overwrite the
+            // correct content-type in the next line.
+            rep->write_body(
+              "bin",
+              [this, payload = std::move(reply_payload)](
+                ss::output_stream<char>&& writer) mutable {
+                  return write_payload(
+                    std::move(writer), payload.share(0, payload.size_bytes()));
+              });
+            rep->set_mime_type(
+              is_proto ? "application/proto" : "application/json");
+        } catch (const serde::pb::rpc::base_exception& e) {
+            rep = e.handle(std::move(rep));
+        } catch (...) {
+            vlog(
+              adminlog.warn,
+              "Unhandled exception in RPC handler for {}/{}: {}",
+              _descriptor.service_name,
+              _descriptor.method_name,
+              std::current_exception());
+            rep = serde::pb::rpc::internal_exception().handle(std::move(rep));
+        }
         rep->done();
         co_return rep;
     }
 
 private:
-    std::function<ss::future<std::unique_ptr<ss::http::reply>>(
-      std::unique_ptr<ss::http::request>, std::unique_ptr<ss::http::reply>)>
-      _handler;
+    void check_authentication(const ss::http::request& req) {
+        try {
+            _authenticate_request(req);
+        } catch (const ss::httpd::base_exception& e) {
+            switch (e.status()) {
+            case seastar::http::reply::status_type::unauthorized:
+                throw serde::pb::rpc::unauthenticated_exception(e.str());
+            case seastar::http::reply::status_type::forbidden:
+                throw serde::pb::rpc::permission_denied_exception(e.str());
+            case seastar::http::reply::status_type::service_unavailable:
+                throw serde::pb::rpc::unavailable_exception(e.str());
+            default:
+                throw serde::pb::rpc::internal_exception(e.str());
+            }
+        } catch (...) {
+            throw serde::pb::rpc::internal_exception();
+        }
+    }
+    serde::pb::rpc::context make_context(const ss::http::request& req) {
+        serde::pb::rpc::context ctx;
+        auto ct = req.get_header("Content-Type");
+        if (ct != "application/proto" && ct != "application/json") {
+            throw serde::pb::rpc::unimplemented_exception(
+              ss::format(
+                "Only application/proto and application/json Content-Type is "
+                "supported, got: {}",
+                ct));
+        }
+        ctx.content_type = ct == "application/proto"
+                             ? serde::pb::rpc::content_type::proto
+                             : serde::pb::rpc::content_type::json;
+        ctx.service_name = _descriptor.service_name;
+        ctx.method_name = _descriptor.method_name;
+        return ctx;
+    }
+    ss::future<iobuf> extract_payload(std::unique_ptr<ss::http::request> req) {
+        constexpr auto max_request_size = 10_MiB;
+        if (req->content_length > max_request_size) {
+            throw serde::pb::rpc::invalid_argument_exception(
+              "request too large");
+        }
+        // Despite the name, this does not read exactly, but up to.
+        auto payload = co_await read_iobuf_exactly(
+          *req->content_stream, max_request_size);
+        if (!req->content_stream->eof()) {
+            throw serde::pb::rpc::invalid_argument_exception(
+              "request too large");
+        }
+        co_return payload;
+    }
+
+    ss::future<>
+    write_payload(ss::output_stream<char> output_stream, iobuf payload) {
+        co_await write_iobuf_to_output_stream(std::move(payload), output_stream)
+          .finally([&output_stream] { return output_stream.close(); });
+    }
+
+    ss::noncopyable_function<void(const ss::http::request&)>
+      _authenticate_request;
+    serde::pb::rpc::route_descriptor _descriptor;
 };
 } // namespace
 
@@ -377,47 +463,77 @@ void admin_server::add_service(
   std::unique_ptr<serde::pb::rpc::base_service> service) {
     vlog(adminlog.debug, "Registering RPC service: {}", service->name());
     for (auto& route : service->all_routes()) {
-        vlog(adminlog.debug, "Registering RPC route: {}", route.name);
+        vlog(adminlog.debug, "Registering RPC route: {}", route.path);
         ss::httpd::path_description path{
           fmt::format("/v2{}", route.path),
           ss::httpd::operation_type::POST,
-          route.name,
+          route.path,
           /*path_parameters=*/{},
           /*mandatory_params=*/{},
         };
-        auto wrapped_handler =
-          [this, authz = route.authz_level, handler = route.handler](
-            std::unique_ptr<ss::http::request> req,
-            std::unique_ptr<ss::http::reply> rep)
-          -> ss::future<std::unique_ptr<ss::http::reply>> {
-            std::optional<request_auth_result> auth_state;
-            switch (authz) {
-            case serde::pb::rpc::authz_level::unauthenticated:
-                auth_state.emplace(apply_auth<publik>(*req));
-                break;
-            case serde::pb::rpc::authz_level::user:
-                auth_state.emplace(apply_auth<user>(*req));
-                break;
-            case serde::pb::rpc::authz_level::superuser:
-                auth_state.emplace(apply_auth<superuser>(*req));
-                break;
-            }
-            // Note: a request is only logged if it does not throw
-            // from authenticate().
-            log_request(*req, auth_state.value());
-            ss::sstring url = req->get_url();
-            return handler(std::move(req), std::move(rep))
-              .handle_exception(
-                exception_intercepter<std::remove_reference_t<
-                  decltype(handler(std::move(req), std::move(rep)).get())>>(
-                  url, auth_state.value()));
-        };
-        path.set(_server._routes, new rpc_handler(std::move(wrapped_handler)));
+        ss::noncopyable_function<void(const ss::http::request&)> auth_handler;
+        switch (route.authz_level) {
+        case serde::pb::rpc::authz_level::unauthenticated:
+            auth_handler = [this](const ss::http::request& req) {
+                std::optional<request_auth_result> auth_state;
+                auth_state.emplace(apply_auth<publik>(req));
+                log_request(req, auth_state.value());
+            };
+            break;
+        case serde::pb::rpc::authz_level::user:
+            auth_handler = [this](const ss::http::request& req) {
+                std::optional<request_auth_result> auth_state;
+                auth_state.emplace(apply_auth<user>(req));
+                log_request(req, auth_state.value());
+            };
+            break;
+        case serde::pb::rpc::authz_level::superuser:
+            auth_handler = [this](const ss::http::request& req) {
+                std::optional<request_auth_result> auth_state;
+                auth_state.emplace(apply_auth<superuser>(req));
+                log_request(req, auth_state.value());
+            };
+            break;
+        }
+        path.set(
+          _server._routes,
+          new rpc_handler(std::move(auth_handler), std::move(route)));
     }
     _services.push_back(std::move(service));
 }
 
+ss::future<iobuf>
+admin_server::handle_rpc_request(serde::pb::rpc::context ctx, iobuf buf) {
+    auto it = std::ranges::find(
+      _services,
+      ctx.service_name,
+      [](const std::unique_ptr<serde::pb::rpc::base_service>& service) {
+          return service->name();
+      });
+    if (it == _services.end()) {
+        throw serde::pb::rpc::unimplemented_exception(
+          fmt::format("Service {} not found", ctx.service_name));
+    }
+    for (const auto& route : (*it)->all_routes()) {
+        if (route.method_name == ctx.method_name) {
+            return route.handler(std::move(ctx), std::move(buf));
+        }
+    }
+    throw serde::pb::rpc::unimplemented_exception(
+      fmt::format("Method {}.{} not found", ctx.service_name, ctx.method_name));
+}
+
 ss::future<> admin_server::start() {
+    // NOTE: This isn't normally where services should be registered
+    // but this service is special as it has some reflection based methods.
+    admin::proxy::client client(
+      _controller->self(), &_connection_cache, [this] {
+          return _controller->get_members_table().local().node_ids();
+      });
+    add_service(
+      std::make_unique<admin::admin_service_impl>(
+        std::move(client), &_services));
+
     co_await _debug_bundle_file_handler.start();
 
     _blocked_reactor_notify_reset_timer.set_callback([this] {
@@ -425,6 +541,7 @@ ss::future<> admin_server::start() {
             ss::engine().update_blocked_reactor_notify_ms(ms);
         });
     });
+
     configure_metrics_route();
     configure_admin_routes();
 

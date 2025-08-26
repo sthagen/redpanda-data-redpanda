@@ -229,21 +229,41 @@ class CreateShadowLinkRequest(google.protobuf.message.Message):
     Create a new shadow link
     """
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    CLUSTER_LINK_FIELD_NUMBER: builtins.int
+    SHADOW_LINK_FIELD_NUMBER: builtins.int
 
     @property
-    def cluster_link(self) -> global___ShadowLink:
+    def shadow_link(self) -> global___ShadowLink:
         """The shadow link to create"""
 
-    def __init__(self, *, cluster_link: global___ShadowLink | None=...) -> None:
+    def __init__(self, *, shadow_link: global___ShadowLink | None=...) -> None:
         ...
 
-    def HasField(self, field_name: typing.Literal['cluster_link', b'cluster_link']) -> builtins.bool:
+    def HasField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['cluster_link', b'cluster_link']) -> None:
+    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> None:
         ...
 global___CreateShadowLinkRequest = CreateShadowLinkRequest
+
+@typing.final
+class CreateShadowLinkResponse(google.protobuf.message.Message):
+    """Response to creating a shadow link"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_LINK_FIELD_NUMBER: builtins.int
+
+    @property
+    def shadow_link(self) -> global___ShadowLink:
+        """The shadow link that was created"""
+
+    def __init__(self, *, shadow_link: global___ShadowLink | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> None:
+        ...
+global___CreateShadowLinkResponse = CreateShadowLinkResponse
 
 @typing.final
 class DeleteShadowLinkRequest(google.protobuf.message.Message):
@@ -285,6 +305,26 @@ class GetShadowLinkRequest(google.protobuf.message.Message):
 global___GetShadowLinkRequest = GetShadowLinkRequest
 
 @typing.final
+class GetShadowLinkResponse(google.protobuf.message.Message):
+    """Response to getting a shadow link"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_LINK_FIELD_NUMBER: builtins.int
+
+    @property
+    def shadow_link(self) -> global___ShadowLink:
+        """The shadow link that was retrieved"""
+
+    def __init__(self, *, shadow_link: global___ShadowLink | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> None:
+        ...
+global___GetShadowLinkResponse = GetShadowLinkResponse
+
+@typing.final
 class ListShadowLinksRequest(google.protobuf.message.Message):
     """Request to list all shadow links"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
@@ -297,16 +337,16 @@ global___ListShadowLinksRequest = ListShadowLinksRequest
 class ListShadowLinksResponse(google.protobuf.message.Message):
     """All shadow links on the cluster"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    CLUSTER_LINKS_FIELD_NUMBER: builtins.int
+    SHADOW_LINKS_FIELD_NUMBER: builtins.int
 
     @property
-    def cluster_links(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShadowLink]:
+    def shadow_links(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[global___ShadowLink]:
         """The shadow links"""
 
-    def __init__(self, *, cluster_links: collections.abc.Iterable[global___ShadowLink] | None=...) -> None:
+    def __init__(self, *, shadow_links: collections.abc.Iterable[global___ShadowLink] | None=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['cluster_links', b'cluster_links']) -> None:
+    def ClearField(self, field_name: typing.Literal['shadow_links', b'shadow_links']) -> None:
         ...
 global___ListShadowLinksResponse = ListShadowLinksResponse
 
@@ -314,11 +354,11 @@ global___ListShadowLinksResponse = ListShadowLinksResponse
 class UpdateShadowLinkRequest(google.protobuf.message.Message):
     """Updates a shadow link"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
-    CLUSTER_LINK_FIELD_NUMBER: builtins.int
+    SHADOW_LINK_FIELD_NUMBER: builtins.int
     UPDATE_MASK_FIELD_NUMBER: builtins.int
 
     @property
-    def cluster_link(self) -> global___ShadowLink:
+    def shadow_link(self) -> global___ShadowLink:
         """The shadow link to update"""
 
     @property
@@ -327,15 +367,35 @@ class UpdateShadowLinkRequest(google.protobuf.message.Message):
         See [AIP-134](https://google.aip.dev/134) for how to use `field_mask`
         """
 
-    def __init__(self, *, cluster_link: global___ShadowLink | None=..., update_mask: google.protobuf.field_mask_pb2.FieldMask | None=...) -> None:
+    def __init__(self, *, shadow_link: global___ShadowLink | None=..., update_mask: google.protobuf.field_mask_pb2.FieldMask | None=...) -> None:
         ...
 
-    def HasField(self, field_name: typing.Literal['cluster_link', b'cluster_link', 'update_mask', b'update_mask']) -> builtins.bool:
+    def HasField(self, field_name: typing.Literal['shadow_link', b'shadow_link', 'update_mask', b'update_mask']) -> builtins.bool:
         ...
 
-    def ClearField(self, field_name: typing.Literal['cluster_link', b'cluster_link', 'update_mask', b'update_mask']) -> None:
+    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link', 'update_mask', b'update_mask']) -> None:
         ...
 global___UpdateShadowLinkRequest = UpdateShadowLinkRequest
+
+@typing.final
+class UpdateShadowLinkResponse(google.protobuf.message.Message):
+    """Response to the update shadow link request"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_LINK_FIELD_NUMBER: builtins.int
+
+    @property
+    def shadow_link(self) -> global___ShadowLink:
+        """The shadow link that was updated"""
+
+    def __init__(self, *, shadow_link: global___ShadowLink | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> None:
+        ...
+global___UpdateShadowLinkResponse = UpdateShadowLinkResponse
 
 @typing.final
 class FailOverRequest(google.protobuf.message.Message):
@@ -354,6 +414,26 @@ class FailOverRequest(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal['name', b'name', 'shadow_topic_name', b'shadow_topic_name']) -> None:
         ...
 global___FailOverRequest = FailOverRequest
+
+@typing.final
+class FailOverResponse(google.protobuf.message.Message):
+    """The response to the FailOverRequest"""
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    SHADOW_LINK_FIELD_NUMBER: builtins.int
+
+    @property
+    def shadow_link(self) -> global___ShadowLink:
+        """The shadow link that was failed over"""
+
+    def __init__(self, *, shadow_link: global___ShadowLink | None=...) -> None:
+        ...
+
+    def HasField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> builtins.bool:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['shadow_link', b'shadow_link']) -> None:
+        ...
+global___FailOverResponse = FailOverResponse
 
 @typing.final
 class ShadowLinkConfigurations(google.protobuf.message.Message):

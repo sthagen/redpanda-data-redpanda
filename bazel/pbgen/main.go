@@ -128,7 +128,12 @@ func (b *codewriter) Printf(msg string, args ...any) {
 }
 
 func (b *codewriter) Println(args ...any) {
-	_, _ = b.content.WriteString(b.indent + fmt.Sprintln(args...))
+	if len(args) == 0 {
+		// Don't add indentation for blank lines.
+		b.content.WriteString("\n")
+	} else {
+		_, _ = b.content.WriteString(b.indent + fmt.Sprintln(args...))
+	}
 }
 
 func (b *codewriter) PreludePrintf(msg string, args ...any) {
@@ -395,6 +400,7 @@ func (g *headerGenerator) generateFile(w *codewriter) {
 	for i := range g.file.Services().Len() {
 		service := g.file.Services().Get(i)
 		g.generateService(service, w)
+		g.generateClient(service, w)
 	}
 }
 
@@ -425,7 +431,7 @@ func (g *headerGenerator) generateService(service protoreflect.ServiceDescriptor
 		method := service.Methods().Get(i)
 		g.leadingComments(method, w)
 		w.Printf(
-			"virtual seastar::future<%s> %s(%s) = 0;\n",
+			"virtual seastar::future<%s> %s(serde::pb::rpc::context, %s) = 0;\n",
 			cppTypeName(method.Output()),
 			pascalToSnakeCase(string(method.Name())),
 			cppTypeName(method.Input()),
@@ -438,10 +444,53 @@ func (g *headerGenerator) generateService(service protoreflect.ServiceDescriptor
 	for i := range service.Methods().Len() {
 		method := service.Methods().Get(i)
 		w.Printf(
-			"seastar::future<std::unique_ptr<seastar::http::reply>> %s_handler_impl(std::unique_ptr<seastar::http::request>, std::unique_ptr<seastar::http::reply>);\n",
+			"seastar::future<iobuf> %s_handler_impl(serde::pb::rpc::context, iobuf);\n",
 			pascalToSnakeCase(string(method.Name())),
 		)
 	}
+}
+
+func (g *headerGenerator) generateClient(service protoreflect.ServiceDescriptor, w *codewriter) {
+	g.needsRpcs = true
+	g.leadingComments(service, w)
+	cppName := cppTypeName(service)
+	w.Printf("class %s_client {\n", cppName)
+	defer w.Println("};")
+	w.Println("public:")
+	w.Indent()
+	defer w.Dedent()
+	w.Println("// This defines the transport layer for the RPC client.")
+	w.Println("//")
+	w.Println("// This function should take a context with the RPC metadata and the iobuf containing the request.")
+	w.Println("// It should only throw subclasses of serde::pb::rpc::base_exception.")
+	w.Println("// NOTE: This RPC client only uses protobuf serialization at the moment.")
+	w.Println("using send_rpc_fn_t = std::function<seastar::future<iobuf>(serde::pb::rpc::context, iobuf)>;")
+	w.Println()
+	w.Printf("%s_client(send_rpc_fn_t fn) : send_rpc_fn_(std::move(fn)) {}\n", cppName)
+	w.Printf("%s_client& operator=(const %s_client&) noexcept = delete;\n", cppName, cppName)
+	w.Printf("%s_client(const %s_client&) noexcept = delete;\n", cppName, cppName)
+	w.Printf("%s_client& operator=(%s_client&&) noexcept = default;\n", cppName, cppName)
+	w.Printf("%s_client(%s_client&&) noexcept = default;\n", cppName, cppName)
+	w.Printf("virtual ~%s_client() noexcept = default;\n", cppName)
+	w.Println()
+	w.Println("// Return the name of this RPC service")
+	w.Printf("std::string_view name() const { return %q; }\n", service.FullName())
+	w.Println()
+	for i := range service.Methods().Len() {
+		method := service.Methods().Get(i)
+		g.leadingComments(method, w)
+		w.Printf(
+			"seastar::future<%s> %s(serde::pb::rpc::context, %s);\n",
+			cppTypeName(method.Output()),
+			pascalToSnakeCase(string(method.Name())),
+			cppTypeName(method.Input()),
+		)
+	}
+	w.Dedent()
+	w.Println()
+	w.Println("private:")
+	w.Indent()
+	w.Println("send_rpc_fn_t send_rpc_fn_;")
 }
 
 func (g *headerGenerator) generateEnumSerde(msg protoreflect.EnumDescriptor, w *codewriter) {
@@ -659,6 +708,7 @@ func (g *implGenerator) generateFile(w *codewriter) {
 		service := g.file.Services().Get(i)
 		g.generateServiceRoutes(service, w)
 		g.generateServiceHandlers(service, w)
+		g.generateServiceClient(service, w)
 		w.Println()
 	}
 }
@@ -824,7 +874,8 @@ func (g *implGenerator) generateServiceRoutes(service protoreflect.ServiceDescri
 		for _, path := range paths {
 			w.Println("{")
 			w.Indent()
-			w.Printf(".name = %q,\n", method.FullName())
+			w.Printf(".service_name = %q,\n", service.Name())
+			w.Printf(".method_name = %q,\n", method.Name())
 			w.Printf(".path = %q,\n", path)
 			w.Printf(".authz_level = serde::pb::rpc::authz_level::%s,\n", rpcAuthzLevel(method))
 			w.Printf(".handler = std::bind_front(&%s::%s_handler_impl, this),\n", cppTypeName(service), pascalToSnakeCase(string(method.Name())))
@@ -838,87 +889,71 @@ func (g *implGenerator) generateServiceHandlers(service protoreflect.ServiceDesc
 	for i := range service.Methods().Len() {
 		method := service.Methods().Get(i)
 		w.Printf(
-			"seastar::future<std::unique_ptr<seastar::http::reply>> %s::%s_handler_impl(std::unique_ptr<seastar::http::request> req, std::unique_ptr<seastar::http::reply> reply) {\n",
+			"seastar::future<iobuf> %s::%s_handler_impl(serde::pb::rpc::context ctx, iobuf payload) {\n",
 			cppTypeName(service),
 			pascalToSnakeCase(string(method.Name())),
 		)
 		w.Indent()
-		w.Println(`if (auto ct = req->get_header("Content-Type"); ct != "application/proto" && ct != "application/json") {`)
-		w.Indent()
-		w.Println(`co_return serde::pb::rpc::unimplemented_exception("only application/proto or application/json content-type is supported").handle(std::move(reply));`)
-		w.Dedent()
-		w.Println("}")
-		w.Println(`if (auto enc = req->get_header("Content-Encoding"); enc != "identity" && enc != "") {`)
-		w.Indent()
-		w.Println(`co_return serde::pb::rpc::unimplemented_exception("only identity content-encoding is supported").handle(std::move(reply));`)
-		w.Dedent()
-		w.Println("}")
-		w.Println(`bool is_json = req->get_header("Content-Type") == "application/json";`)
-		w.Println("constexpr auto max_request_size = 10_MiB;")
-		w.Println("if (req->content_length > max_request_size) {")
-		w.Indent()
-		w.Println(`co_return serde::pb::rpc::invalid_argument_exception("request too large").handle(std::move(reply));`)
-		w.Dedent()
-		w.Println("}")
-		w.Println("// Despite the name, this does not read exactly, but up to.")
-		w.Println("iobuf req_body = co_await read_iobuf_exactly(*req->content_stream, max_request_size);")
-		w.Println("if (!req->content_stream->eof()) {")
-		w.Indent()
-		w.Println(`co_return serde::pb::rpc::invalid_argument_exception("request too large").handle(std::move(reply));`)
-		w.Dedent()
-		w.Println("}")
+		w.Println("bool is_json = ctx.content_type == serde::pb::rpc::content_type::json;")
 		w.Printf("%s input;\n", cppTypeName(method.Input()))
 		w.Println("try {")
 		w.Indent()
 		w.Println(`if (is_json) {`)
 		w.Indent()
-		w.Printf("input = co_await %s::from_json(std::move(req_body));\n", cppTypeName(method.Input()))
+		w.Printf("input = co_await %s::from_json(std::move(payload));\n", cppTypeName(method.Input()))
 		w.Dedent()
 		w.Println("} else {")
 		w.Indent()
-		w.Printf("input = co_await %s::from_proto(std::move(req_body));\n", cppTypeName(method.Input()))
+		w.Printf("input = co_await %s::from_proto(std::move(payload));\n", cppTypeName(method.Input()))
 		w.Dedent()
 		w.Println("}")
 		w.Dedent()
 		w.Println("} catch (...) {")
 		w.Indent()
 		w.Println(`serde::pb::rpc::logger.debug("error parsing request`, method.FullName(), `RPC: {}", std::current_exception());`)
-		w.Println(`co_return serde::pb::rpc::invalid_argument_exception("invalid request input").handle(std::move(reply));`)
+		w.Println(`throw serde::pb::rpc::invalid_argument_exception("invalid request input");`)
 		w.Dedent()
 		w.Println("}")
 		w.Printf("%s output;\n", cppTypeName(method.Output()))
 		w.Println("try {")
 		w.Indent()
-		w.Printf("output = co_await this->%s(std::move(input));\n", pascalToSnakeCase(string(method.Name())))
+		w.Printf("output = co_await this->%s(std::move(ctx), std::move(input));\n", pascalToSnakeCase(string(method.Name())))
 		w.Dedent()
 		w.Println("} catch (const serde::pb::rpc::base_exception& e) {")
 		w.Indent()
-		w.Println("co_return e.handle(std::move(reply));")
+		w.Println("throw;")
 		w.Dedent()
 		w.Println("} catch (...) {")
 		w.Indent()
 		w.Println(`serde::pb::rpc::logger.warn("unhandled exception in`, method.FullName(), `RPC: {}", std::current_exception());`)
-		w.Println(`co_return serde::pb::rpc::internal_exception().handle(std::move(reply));`)
+		w.Println(`throw serde::pb::rpc::internal_exception();`)
 		w.Dedent()
 		w.Println("}")
-		w.Println("iobuf reply_body = is_json ? co_await output.to_json() : co_await output.to_proto();")
-		w.Println("// Seastar doesn't support the content-type we want, so just supply `bin` and overwrite it after")
-		w.Println(`reply->write_body("bin", [b = std::move(reply_body)](seastar::output_stream<char>&& reply_stream) mutable {`)
-		w.Indent()
-		w.Println(`return seastar::do_with(std::move(reply_stream), [b = std::move(b)](seastar::output_stream<char>& reply_stream) mutable {`)
-		w.Indent()
-		w.Println("return write_iobuf_to_output_stream(std::move(b), reply_stream)")
-		w.Indent()
-		w.Println(".finally([&reply_stream]() { return reply_stream.close(); });")
-		w.Dedent()
-		w.Dedent()
-		w.Println("});")
-		w.Dedent()
-		w.Println("});")
-		w.Println(`reply->set_mime_type(is_json ? "application/json" : "application/proto");`)
-		w.Println("co_return reply;")
+		w.Println("co_return is_json ? co_await output.to_json() : co_await output.to_proto();")
 		w.Dedent()
 		w.Println("}\n")
+	}
+}
+
+func (g *implGenerator) generateServiceClient(service protoreflect.ServiceDescriptor, w *codewriter) {
+	for i := range service.Methods().Len() {
+		method := service.Methods().Get(i)
+		w.Printf(
+			"seastar::future<%s> %s_client::%s(serde::pb::rpc::context ctx, %s input) {\n",
+			cppTypeName(method.Output()),
+			cppTypeName(service),
+			pascalToSnakeCase(string(method.Name())),
+			cppTypeName(method.Input()),
+		)
+		w.Indent()
+		w.Println("iobuf payload = co_await input.to_proto();")
+		w.Printf("ctx.service_name = %q;\n", service.FullName())
+		w.Printf("ctx.method_name = %q;\n", method.Name())
+		w.Println("ctx.content_type = serde::pb::rpc::content_type::proto;")
+		w.Println("payload = co_await send_rpc_fn_(std::move(ctx), std::move(payload));")
+		w.Printf("co_return co_await %s::from_proto(std::move(payload));\n", cppTypeName(method.Output()))
+		w.Dedent()
+		w.Println("}")
 	}
 }
 

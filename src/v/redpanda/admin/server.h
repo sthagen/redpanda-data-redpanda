@@ -99,6 +99,8 @@ public:
 
     // Add a ConnectRPC service to the admin server.
     void add_service(std::unique_ptr<serde::pb::rpc::base_service>);
+    // Handle a ConnectRPC request that has been proxied from another node.
+    ss::future<iobuf> handle_rpc_request(serde::pb::rpc::context, iobuf);
 
     ss::future<> start();
     ss::future<> stop();

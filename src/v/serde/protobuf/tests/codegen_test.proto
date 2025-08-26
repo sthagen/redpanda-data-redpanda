@@ -6,6 +6,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "google/protobuf/field_mask.proto";
 import "proto/redpanda/pbgen/options.proto";
+import "proto/redpanda/pbgen/rpc.proto";
 
 option (redpanda.pbgen.cpp_namespace) = "proto::example";
 
@@ -67,4 +68,20 @@ message WellKnownProtos {
     google.protobuf.Timestamp single_timestamp = 7;
     repeated google.protobuf.Timestamp repeated_timestamp = 8;
     map<string, google.protobuf.Timestamp> timestamp_map = 9;
+}
+
+message SayGreetingRequest {
+    string greeting = 1;
+}
+
+message SayGreetingResponse {
+    string response = 1;
+}
+
+service TestService {
+    rpc SayGreeting(SayGreetingRequest) returns (SayGreetingResponse) {
+        option (redpanda.pbgen.rpc) = {
+            authz: SUPERUSER
+        };
+    }
 }

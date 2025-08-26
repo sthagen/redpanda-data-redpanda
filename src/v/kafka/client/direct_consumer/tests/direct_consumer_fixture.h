@@ -47,6 +47,10 @@ public:
     void unassign_partition(model::topic_partition tp);
     void unassign_topic(model::topic topic);
 
+    // shuffle leadership, wait for leadership change to become visible to the
+    // test
+    void wait_for_visible_leadership_shuffle(const model::ntp& ntp);
+
 protected:
     redpanda_thread_fixture* rp;
     std::unique_ptr<kafka::client::cluster> cluster;

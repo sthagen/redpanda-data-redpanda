@@ -156,6 +156,28 @@ void consumer_fixture::unassign_topic(model::topic topic) {
       .get();
 }
 
+// shuffle leadership, wait for leadership change to become visible to the
+// test
+void consumer_fixture::wait_for_visible_leadership_shuffle(
+  const model::ntp& ntp) {
+    constexpr auto leadership_swap_wait = 300ms;
+    const auto original_leader = get_leader(ntp);
+    auto current_leader = original_leader;
+
+    shuffle_leadership(ntp).get();
+
+    for (const auto iteration : std::array{0, 1, 2, 3, 4, 5}) {
+        logger.info("polling for leadership change iteration: {}", iteration);
+        current_leader = get_leader(ntp);
+        ss::sleep(leadership_swap_wait).get();
+        if (current_leader != original_leader) {
+            break;
+        }
+    }
+    ASSERT_NE(current_leader, original_leader)
+      << "never detected leadership change, test precondition failed";
+}
+
 void basic_consumer_fixture::SetUp() {
     create_node_application(model::node_id{0});
     create_node_application(model::node_id{1});

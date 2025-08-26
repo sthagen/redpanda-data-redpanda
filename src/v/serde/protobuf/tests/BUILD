@@ -47,6 +47,7 @@ proto_library(
     srcs = ["codegen_test.proto"],
     deps = [
         "//proto/redpanda/pbgen:options_proto",
+        "//proto/redpanda/pbgen:rpc_proto",
         "@protobuf//:duration_proto",
         "@protobuf//:field_mask_proto",
         "@protobuf//:timestamp_proto",
