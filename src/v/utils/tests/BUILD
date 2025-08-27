@@ -575,3 +575,16 @@ redpanda_cc_btest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "unresolved_address_test",
+    timeout = "short",
+    srcs = [
+        "unresolved_address_test.cc",
+    ],
+    deps = [
+        "//src/v/test_utils:gtest",
+        "//src/v/utils:unresolved_address",
+        "@googletest//:gtest",
+    ],
+)

@@ -62,6 +62,8 @@ std::string errc_category::message(int c) const {
         return "Topic filter is invalid";
     case errc::topic_property_excluded_from_mirroring:
         return "Topic property is excluded from mirroring";
+    case errc::scram_configuration_invalid:
+        return "SCRAM configuration invalid";
     }
     return "cluster::cluster_link::unknown";
 }
@@ -150,5 +152,9 @@ auto fmt::formatter<cluster::cluster_link::errc>::format(
           ctx.out(),
           "cluster::cluster_link::errc::topic_property_excluded_from_"
           "mirroring");
+    case cluster::cluster_link::errc::scram_configuration_invalid:
+        return fmt::format_to(
+          ctx.out(),
+          "cluster::cluster_link::errc::scram_configuration_invalid");
     }
 }

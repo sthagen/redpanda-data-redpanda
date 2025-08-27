@@ -31,6 +31,11 @@ public:
     explicit link_registry_adapter(frontend* plf)
       : _plf(plf) {}
 
+    ss::future<::cluster::cluster_link::errc> upsert_link(
+      model::metadata md, ::model::timeout_clock::time_point timeout) override {
+        return _plf->upsert_cluster_link(std::move(md), timeout);
+    }
+
     std::optional<std::reference_wrapper<const model::metadata>>
     find_link_by_id(model::id_t id) const override {
         return _plf->find_link_by_id(id);
@@ -142,7 +147,22 @@ ss::future<> service::start() {
 ss::future<> service::stop() {
     vlog(cllog.info, "Stopping cluster link service");
 
-    co_await _manager->stop();
+    if (_manager) {
+        co_await _manager->stop();
+    }
+}
+
+ss::future<result<model::metadata>>
+service::upsert_cluster_link(model::metadata md) {
+    return _manager->upsert_cluster_link(std::move(md));
+}
+
+result<model::metadata> service::get_cluster_link(const model::name_t& name) {
+    return _manager->get_cluster_link(name);
+}
+
+result<chunked_vector<model::metadata>> service::list_cluster_links() {
+    return _manager->list_cluster_links();
 }
 
 void service::register_notifications() {

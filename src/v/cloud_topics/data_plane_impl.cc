@@ -111,10 +111,15 @@ public:
       size_t output_size_estimate,
       chunked_vector<extent_meta> metadata,
       model::timeout_clock::time_point timeout) override {
+        if (metadata.empty()) {
+            co_return chunked_vector<model::record_batch>{};
+        }
         auto res = co_await _read_pipeline.local().make_reader(
           ntp,
-          {.output_size_estimate = output_size_estimate,
-           .meta = std::move(metadata)},
+          {
+            .output_size_estimate = output_size_estimate,
+            .meta = std::move(metadata),
+          },
           timeout);
         if (!res) {
             co_return res.error();

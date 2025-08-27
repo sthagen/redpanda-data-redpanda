@@ -15,7 +15,9 @@
 #include "cluster/cluster_link/fwd.h"
 #include "cluster/fwd.h"
 #include "cluster/utils/partition_change_notifier.h"
+#include "cluster_link/errc.h"
 #include "cluster_link/fwd.h"
+#include "cluster_link/model/types.h"
 #include "model/fundamental.h"
 #include "raft/fundamental.h"
 
@@ -47,6 +49,27 @@ public:
 
     ss::future<> start();
     ss::future<> stop();
+    /**
+     * @brief Upserts a cluster link (creation or update)
+     *
+     * @param md The metadata containing the settings for the new or existing
+     * cluster link
+     * @return Result containing either the created/updated link or an error
+     */
+    ss::future<result<model::metadata>> upsert_cluster_link(model::metadata md);
+    /**
+     * @brief Get the cluster link object
+     *
+     * @param name The name of the link
+     * @return Either the existing link or an error
+     */
+    result<model::metadata> get_cluster_link(const model::name_t& name);
+    /**
+     * @brief Returns a list of existing cluster links
+     *
+     * @return List of cluster links
+     */
+    result<chunked_vector<model::metadata>> list_cluster_links();
 
 private:
     void register_notifications();
@@ -54,7 +77,8 @@ private:
 
 private:
     ss::gate _gate;
-    model::node_id _self;
+    // Need explicit namespace due to having a `cluster_link::model` namespace
+    ::model::node_id _self;
     ss::sharded<::cluster::cluster_link::frontend>* _plf;
     std::unique_ptr<cluster::partition_change_notifier> _notifications;
     ss::sharded<cluster::partition_manager>* _partition_manager;

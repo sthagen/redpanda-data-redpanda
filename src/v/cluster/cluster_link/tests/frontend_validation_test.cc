@@ -24,6 +24,7 @@ using ::cluster_link::model::id_t;
 using ::cluster_link::model::metadata;
 using ::cluster_link::model::mirror_topic_state;
 using ::cluster_link::model::name_t;
+using ::cluster_link::model::scram_credentials;
 using ::cluster_link::model::tls_file_path;
 using ::cluster_link::model::tls_value;
 using ::cluster_link::model::update_mirror_topic_properties_cmd;
@@ -273,6 +274,58 @@ TEST_F_CORO(
     EXPECT_EQ(
       co_await upsert_cluster_link(std::move(m)),
       cluster::cluster_link::errc::tls_configuration_invalid);
+}
+
+TEST_F_CORO(frontend_validation_test, valid_scram_creds_256) {
+    auto m = create_base_metadata();
+    m.connection.authn_config = scram_credentials{
+      .username = "user", .password = "password", .mechanism = "SCRAM-SHA-256"};
+
+    EXPECT_EQ(
+      co_await upsert_cluster_link(std::move(m)),
+      cluster::cluster_link::errc::success);
+}
+
+TEST_F_CORO(frontend_validation_test, valid_scram_creds_512) {
+    auto m = create_base_metadata();
+    m.connection.authn_config = scram_credentials{
+      .username = "user", .password = "password", .mechanism = "SCRAM-SHA-512"};
+
+    EXPECT_EQ(
+      co_await upsert_cluster_link(std::move(m)),
+      cluster::cluster_link::errc::success);
+}
+
+TEST_F_CORO(frontend_validation_test, invalid_scram_creds) {
+    {
+        auto m = create_base_metadata();
+        m.connection.authn_config = scram_credentials{
+          .username = "", .password = "password", .mechanism = "SCRAM-SHA-256"};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m)),
+          cluster::cluster_link::errc::scram_configuration_invalid);
+    }
+    {
+        auto m = create_base_metadata();
+        m.connection.authn_config = scram_credentials{
+          .username = "user", .password = "", .mechanism = "SCRAM-SHA-256"};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m)),
+          cluster::cluster_link::errc::scram_configuration_invalid);
+    }
+    {
+        auto m = create_base_metadata();
+        m.connection.authn_config = scram_credentials{
+          .username = "user",
+          .password = "pass",
+          .mechanism = "SCRAM-SHA-256-NON_EXISTANT"};
+
+        EXPECT_EQ(
+          co_await upsert_cluster_link(std::move(m)),
+          cluster::cluster_link::errc::scram_configuration_invalid);
+    }
 }
 
 TEST_F_CORO(frontend_validation_test, add_mirror_topic_success) {

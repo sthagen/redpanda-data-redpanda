@@ -557,3 +557,7 @@ class RedpandaServiceSelfTest(RedpandaTest):
         # the method in the admin API that was called to capture the backtrace
         assert "::log_backtrace" in backtrace_contents, \
             "Didn't find expected string in backtrace (see debug log for contents)"
+
+    @cluster(num_nodes=1)
+    def test_start(self):
+        pass

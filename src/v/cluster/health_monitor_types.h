@@ -104,7 +104,7 @@ struct followers_stats
 };
 struct partition_status
   : serde::
-      envelope<partition_status, serde::version<4>, serde::compat_version<0>> {
+      envelope<partition_status, serde::version<5>, serde::compat_version<0>> {
     static constexpr size_t invalid_size_bytes = size_t(-1);
     static constexpr uint32_t invalid_shard_id = uint32_t(-1);
 
@@ -136,6 +136,13 @@ struct partition_status
     // present on leaders only
     std::optional<followers_stats> followers_stats;
 
+    /**
+     * Kafka high watermark of partition replica, this offset is only populated
+     * for Kafka partitions. For other partitions the offset stays not
+     * initialized.
+     */
+    kafka::offset high_watermark;
+
     auto serde_fields() {
         return std::tie(
           id,
@@ -146,7 +153,8 @@ struct partition_status
           under_replicated_replicas,
           reclaimable_size_bytes,
           shard,
-          followers_stats);
+          followers_stats,
+          high_watermark);
     }
 
     friend std::ostream& operator<<(std::ostream&, const partition_status&);
@@ -155,6 +163,8 @@ struct partition_status
 };
 
 using partition_statuses_t = chunked_vector<partition_status>;
+using partition_statuses_map_t
+  = chunked_hash_map<model::partition_id, partition_status>;
 
 struct topic_status
   : serde::envelope<topic_status, serde::version<0>, serde::compat_version<0>> {
@@ -183,7 +193,7 @@ struct topic_status
 struct node_health_report {
     using topics_t = chunked_hash_map<
       model::topic_namespace,
-      partition_statuses_t,
+      partition_statuses_map_t,
       model::topic_namespace_hash,
       model::topic_namespace_eq>;
 
@@ -608,5 +618,12 @@ struct get_cluster_health_reply
 
     auto serde_fields() { return std::tie(error, report); }
 };
+
+partition_statuses_map_t
+copy_partition_statuses(const partition_statuses_map_t& ps);
+partition_statuses_t copy_to_vector(const partition_statuses_map_t&);
+partition_statuses_t move_to_vector(partition_statuses_map_t&&);
+partition_statuses_map_t move_to_map(partition_statuses_t&&);
+partition_statuses_map_t copy_to_map(const partition_statuses_t&);
 
 } // namespace cluster

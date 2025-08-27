@@ -13,11 +13,13 @@
 package redpanda
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
 	"strings"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/adminapi"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/cobraext"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	vnet "github.com/redpanda-data/redpanda/src/go/rpk/pkg/net"
@@ -34,8 +36,44 @@ func NewConfigCommand(fs afero.Fs, p *config.Params) *cobra.Command {
 	cmd.AddCommand(
 		set(fs, p),
 		bootstrap(fs, p),
+		printCommand(fs, p),
 		cobraext.DeprecatedCmd("init", 0),
 	)
+	return cmd
+}
+
+func printCommand(fs afero.Fs, p *config.Params) *cobra.Command {
+	var host string
+	cmd := &cobra.Command{
+		Use:     "print",
+		Aliases: []string{"dump"},
+		Short:   "Display the selected node configuration",
+		Args:    cobra.ExactArgs(0),
+		Run: func(cmd *cobra.Command, _ []string) {
+			p, err := p.LoadVirtualProfile(fs)
+			out.MaybeDie(err, "rpk unable to load config: %v", err)
+			config.CheckExitCloudAdmin(p)
+
+			if len(host) == 0 {
+				host, err = selectHost(p)
+				out.MaybeDie(err, "unable to select a host")
+			}
+
+			hostClient, err := adminapi.NewHostClient(fs, p, host)
+			out.MaybeDie(err, "unable to initialize the admin client: %v", err)
+
+			conf, err := hostClient.GetNodeConfig(cmd.Context())
+			out.MaybeDie(err, "unable to retrieve node %v configuration: %v", host, err)
+
+			marshaled, err := json.MarshalIndent(conf, "", "  ")
+			out.MaybeDie(err, "unable to json encode the configuration: %v", err)
+
+			fmt.Println(string(marshaled))
+		},
+	}
+
+	cmd.Flags().StringVar(&host, "host", "", "a hostname or the index (0-based) of the configured Kafka broker list")
+
 	return cmd
 }
 
@@ -317,4 +355,18 @@ func parseAdvertisedRPC(adv string, defHost string) (*config.SocketAddress, erro
 		Address: host,
 		Port:    port,
 	}, nil
+}
+
+func selectHost(p *config.RpkProfile) (string, error) {
+	addresses := p.AdminAPI.Addresses
+	if len(addresses) == 0 {
+		return "", errors.New("no Redpanda Admin API addresses configured in your rpk profile, for more information see 'rpk profile set --help'")
+	}
+
+	i, err := out.PickIndex(addresses, "Please select an Admin API address:")
+	if err != nil {
+		return "", err
+	}
+
+	return addresses[i], nil
 }

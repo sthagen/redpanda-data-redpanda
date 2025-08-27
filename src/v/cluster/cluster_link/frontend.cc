@@ -589,6 +589,41 @@ errc frontend::validator::validate_connection_config(
         return errc::tls_configuration_invalid;
     }
 
+    if (config.authn_config.has_value()) {
+        auto ec = ss::visit(
+          config.authn_config.value(),
+          [](const ::cluster_link::model::scram_credentials& c) {
+              if (c.username.empty()) {
+                  vlog(
+                    cluster::clusterlog.warn,
+                    "Username for SCRAM credentials is empty");
+                  return errc::scram_configuration_invalid;
+              }
+
+              if (c.password.empty()) {
+                  vlog(
+                    cluster::clusterlog.warn,
+                    "Password for SCRAM credentials is empty");
+                  return errc::scram_configuration_invalid;
+              }
+
+              if (
+                c.mechanism != "SCRAM-SHA-256"
+                && c.mechanism != "SCRAM-SHA-512") {
+                  vlog(
+                    cluster::clusterlog.warn,
+                    "Unsupported SCRAM mechanism: {}",
+                    c.mechanism);
+                  return errc::scram_configuration_invalid;
+              }
+              return errc::success;
+          });
+
+        if (ec != errc::success) {
+            return ec;
+        }
+    }
+
     return errc::success;
 }
 

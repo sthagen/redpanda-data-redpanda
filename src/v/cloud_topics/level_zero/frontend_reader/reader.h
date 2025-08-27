@@ -98,9 +98,25 @@ private:
 
     state _current{state::empty_state};
 
-    chunked_circular_buffer<cloud_topics::extent_meta> _meta;
-    chunked_circular_buffer<model::record_batch_header> _headers;
-    chunked_vector<model::record_batch> _batches;
+    // A batch read from the local log, these can be either placeholder batches
+    // with pointers to the actual data in cloud storage, or it can be control
+    // batches from the local log (i.e. transaction markers). We need to
+    // preserve transactional markers because clients expect to be able to read
+    // them.
+    struct local_log_batch {
+        model::record_batch_header header;
+        // For control batches, we preserve the batch record data, but for
+        // placeholder batches we extract out the extent_meta to be hydrated
+        // later.
+        using payload = iobuf;
+        std::variant<cloud_topics::extent_meta, payload> data;
+    };
+
+    // Data from the local log that is not yet hydrated from data in L0
+    chunked_circular_buffer<local_log_batch> _unhydrated;
+    // Data that has been hydrated from L0 and is ready to be returned.
+    chunked_circular_buffer<model::record_batch> _hydrated;
+
     cloud_topic_log_reader_config _config;
     ss::lw_shared_ptr<cluster::partition> _underlying;
     data_plane_api* _ct_api;

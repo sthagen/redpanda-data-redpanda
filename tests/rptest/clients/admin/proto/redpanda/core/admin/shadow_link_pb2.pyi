@@ -176,6 +176,8 @@ class _ShadowTopicStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrappe
     'Shadow topic has been promoted'
     SHADOW_TOPIC_STATE_FAULTED: _ShadowTopicState.ValueType
     'Shadow topic has faulted'
+    SHADOW_TOPIC_STATE_PAUSED: _ShadowTopicState.ValueType
+    'Shadow topic has been paused'
 
 class ShadowTopicState(_ShadowTopicState, metaclass=_ShadowTopicStateEnumTypeWrapper):
     """State of a shadow topic"""
@@ -186,6 +188,8 @@ SHADOW_TOPIC_STATE_PROMOTED: ShadowTopicState.ValueType
 'Shadow topic has been promoted'
 SHADOW_TOPIC_STATE_FAULTED: ShadowTopicState.ValueType
 'Shadow topic has faulted'
+SHADOW_TOPIC_STATE_PAUSED: ShadowTopicState.ValueType
+'Shadow topic has been paused'
 global___ShadowTopicState = ShadowTopicState
 
 @typing.final
@@ -514,10 +518,10 @@ class ShadowLinkClientOptions(google.protobuf.message.Message):
         """TLS settings"""
 
     @property
-    def authentication_configuration(self) -> global___AuthenticationConfig:
+    def authentication_configuration(self) -> global___AuthenticationConfiguration:
         """Authentication settings"""
 
-    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: global___TLSSettings | None=..., authentication_configuration: global___AuthenticationConfig | None=..., metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=...) -> None:
+    def __init__(self, *, bootstrap_servers: collections.abc.Iterable[builtins.str] | None=..., client_id: builtins.str=..., source_cluster_id: builtins.str=..., tls_settings: global___TLSSettings | None=..., authentication_configuration: global___AuthenticationConfiguration | None=..., metadata_max_age_ms: builtins.int=..., connection_timeout_ms: builtins.int=..., retry_backoff_ms: builtins.int=..., fetch_wait_max_ms: builtins.int=..., fetch_min_bytes: builtins.int=..., fetch_max_bytes: builtins.int=...) -> None:
         ...
 
     def HasField(self, field_name: typing.Literal['_authentication_configuration', b'_authentication_configuration', '_tls_settings', b'_tls_settings', 'authentication_configuration', b'authentication_configuration', 'tls_settings', b'tls_settings']) -> builtins.bool:
@@ -669,7 +673,7 @@ class TLSSettings(google.protobuf.message.Message):
 global___TLSSettings = TLSSettings
 
 @typing.final
-class AuthenticationConfig(google.protobuf.message.Message):
+class AuthenticationConfiguration(google.protobuf.message.Message):
     """Authentication config.  Currently only supporting SASL/SCRAM,
     however made as a oneof for expansion
     """
@@ -691,7 +695,7 @@ class AuthenticationConfig(google.protobuf.message.Message):
 
     def WhichOneof(self, oneof_group: typing.Literal['authentication', b'authentication']) -> typing.Literal['scram_configuration'] | None:
         ...
-global___AuthenticationConfig = AuthenticationConfig
+global___AuthenticationConfiguration = AuthenticationConfiguration
 
 @typing.final
 class TLSFileSettings(google.protobuf.message.Message):

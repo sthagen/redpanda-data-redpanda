@@ -166,7 +166,7 @@ node_health_report::topics_t filter_topic_status(
         node_health_report::topics_t ret;
         ret.reserve(topics.bucket_count());
         for (const auto& [tp_ns, partitions] : topics) {
-            ret.emplace(tp_ns, partitions.copy());
+            ret.emplace(tp_ns, copy_partition_statuses(partitions));
         }
         return ret;
     }
@@ -174,10 +174,10 @@ node_health_report::topics_t filter_topic_status(
     node_health_report::topics_t filtered;
 
     for (auto& [tp_ns, partitions] : topics) {
-        partition_statuses_t filtered_partitions;
-        for (auto& pl : partitions) {
-            if (filter.matches(tp_ns, pl.id)) {
-                filtered_partitions.push_back(pl);
+        partition_statuses_map_t filtered_partitions;
+        for (auto& [p_id, status] : partitions) {
+            if (filter.matches(tp_ns, p_id)) {
+                filtered_partitions.emplace(p_id, status);
             }
         }
         if (!filtered_partitions.empty()) {
@@ -454,7 +454,8 @@ ss::future<errc> health_monitor_backend::walk_local_and_remote_reports(
           counter,
           partitions,
           [&unclaimed_partitions, nt, &local_leader_handler](
-            const auto& partition_status) {
+            const auto& partition_status_pair) {
+              const auto& partition_status = partition_status_pair.second;
               if (const auto& fs = partition_status.followers_stats) {
                   vlog(
                     clusterlog.trace,
@@ -486,7 +487,8 @@ ss::future<errc> health_monitor_backend::walk_local_and_remote_reports(
               counter,
               partitions,
               [&unclaimed_partitions, nt, node_id, &remote_leader_handler](
-                const auto& partition_status) {
+                const auto& partition_status_pair) {
+                  const auto& partition_status = partition_status_pair.second;
                   auto nt_it = unclaimed_partitions.find(nt);
                   if (nt_it == unclaimed_partitions.end()) {
                       return;
@@ -936,65 +938,85 @@ health_monitor_backend::get_current_node_health() {
 
 namespace {
 
-struct ntp_report {
-    model::topic_namespace tp_ns;
+partition_status build_partition_status(const partition& p) {
     partition_status status;
+    status.id = p.ntp().tp.partition;
+    status.term = p.term();
+    status.leader_id = p.get_leader_id();
+    status.revision_id = p.get_revision_id();
+    status.size_bytes = p.size_bytes() + p.non_log_disk_size_bytes();
+    status.reclaimable_size_bytes = p.reclaimable_size_bytes();
+    status.shard = ss::this_shard_id();
 
-    explicit ntp_report(const partition& p)
-      : tp_ns(model::topic_namespace(p.ntp().ns, p.ntp().tp.topic)) {
-        status.id = p.ntp().tp.partition;
-        status.term = p.term();
-        status.leader_id = p.get_leader_id();
-        status.revision_id = p.get_revision_id();
-        status.size_bytes = p.size_bytes() + p.non_log_disk_size_bytes();
-        status.reclaimable_size_bytes = p.reclaimable_size_bytes();
-        status.shard = ss::this_shard_id();
+    if (p.ntp().ns == model::kafka_namespace) {
+        status.high_watermark = model::offset_cast(
+          p.log()->from_log_offset(p.high_watermark()));
+    }
 
-        if (p.raft()->is_elected_leader()) {
-            const auto fms = p.raft()->get_follower_metrics();
+    if (p.raft()->is_elected_leader()) {
+        const auto fms = p.raft()->get_follower_metrics();
 
-            status.followers_stats.emplace();
-            status.under_replicated_replicas = 0;
-            for (const auto& fm : fms) {
-                if (fm.is_learner) {
-                    continue;
-                }
-                if (fm.is_live) {
-                    if (fm.under_replicated) {
-                        status.followers_stats->out_of_sync.push_back(fm.id);
-                        ++*status.under_replicated_replicas;
-                    } else {
-                        ++status.followers_stats->in_sync;
-                    }
+        status.followers_stats.emplace();
+        status.under_replicated_replicas = 0;
+        for (const auto& fm : fms) {
+            if (fm.is_learner) {
+                continue;
+            }
+            if (fm.is_live) {
+                if (fm.under_replicated) {
+                    status.followers_stats->out_of_sync.push_back(fm.id);
+                    ++*status.under_replicated_replicas;
                 } else {
-                    status.followers_stats->down.push_back(fm.id);
-                    if (fm.under_replicated) {
-                        ++*status.under_replicated_replicas;
-                    }
+                    ++status.followers_stats->in_sync;
+                }
+            } else {
+                status.followers_stats->down.push_back(fm.id);
+                if (fm.under_replicated) {
+                    ++*status.under_replicated_replicas;
                 }
             }
         }
     }
+    return status;
+}
+
+struct shard_report {
+    chunked_hash_map<
+      model::topic_namespace,
+      chunked_vector<partition_status>,
+      model::topic_namespace_hash,
+      model::topic_namespace_eq>
+      topics;
 };
 
-chunked_vector<ntp_report> collect_shard_local_reports(partition_manager& pm) {
+shard_report collect_shard_local_reports(partition_manager& pm) {
     auto partitions = pm.partitions() | std::views::values;
 
-    chunked_vector<ntp_report> reports;
-    reports.reserve(partitions.size());
+    shard_report report;
+
     for (const auto& p : partitions) {
-        reports.emplace_back(*p);
+        const auto& ntp = p->ntp();
+        auto it = report.topics.find(model::topic_namespace_view{ntp});
+        if (it == report.topics.end()) {
+            it = report.topics
+                   .emplace(
+                     model::topic_namespace{ntp.ns, ntp.tp.topic},
+                     chunked_vector<partition_status>{})
+                   .first;
+        }
+        it->second.push_back(build_partition_status(*p));
     }
-    return reports;
+    return report;
 }
 
 using reports_acc_t
-  = absl::node_hash_map<model::topic_namespace, partition_statuses_t>;
+  = chunked_hash_map<model::topic_namespace, partition_statuses_t>;
 
-reports_acc_t reduce_reports_map(
-  reports_acc_t acc, chunked_vector<cluster::ntp_report> current_reports) {
-    for (auto& ntpr : current_reports) {
-        acc[ntpr.tp_ns].push_back(ntpr.status);
+reports_acc_t reduce_reports_map(reports_acc_t acc, shard_report shard_report) {
+    for (auto& [tp_ns, statuses] : shard_report.topics) {
+        auto& reduced_topic = acc[tp_ns];
+        reduced_topic.reserve(reduced_topic.size() + statuses.size());
+        std::ranges::move(statuses, std::back_inserter(reduced_topic));
     }
     return acc;
 }
@@ -1132,12 +1154,12 @@ health_monitor_backend::aggregate_reports(const report_cache_t& reports) {
             auto& leaderless_this_topic = leaderless.t_to_p[tp_ns];
             auto& urp_this_topic = urp.t_to_p[tp_ns];
 
-            for (const auto& partition : partitions) {
-                if (!partition.leader_id.has_value()) {
-                    leaderless_this_topic.emplace(partition.id);
+            for (const auto& [partition_id, status] : partitions) {
+                if (!status.leader_id.has_value()) {
+                    leaderless_this_topic.emplace(partition_id);
                 }
-                if (partition.under_replicated_replicas.value_or(0) > 0) {
-                    urp_this_topic.emplace(partition.id);
+                if (status.under_replicated_replicas.value_or(0) > 0) {
+                    urp_this_topic.emplace(partition_id);
                 }
             }
         }

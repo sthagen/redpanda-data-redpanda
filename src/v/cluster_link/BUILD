@@ -128,6 +128,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":errc",
         ":fwd",
         "//src/v/base",
         "//src/v/cluster",

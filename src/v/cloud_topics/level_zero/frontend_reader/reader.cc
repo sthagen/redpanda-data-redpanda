@@ -20,6 +20,7 @@
 #include <exception>
 #include <iterator>
 #include <utility>
+#include <variant>
 
 namespace cloud_topics {
 
@@ -86,20 +87,20 @@ level_zero_log_reader_impl::maybe_load_slices_from_cache() {
     if (_config.skip_cache) {
         return std::nullopt;
     }
-    auto last_offset = model::offset_cast(
-      _underlying->get_offset_translator_state()->from_log_offset(
-        _underlying->committed_offset()));
     chunked_circular_buffer<model::record_batch> ret;
     size_t materialized_bytes = 0;
     auto current = _config.start_offset;
     while (materialized_bytes < _config.max_bytes
-           && current < _config.max_offset && current <= last_offset) {
+           && current <= _config.max_offset) {
         auto batch = _ct_api->cache_get(
           _underlying->ntp(), kafka::offset_cast(current));
         size_t batch_size = 0;
         if (!batch.has_value()) {
             // We hit a gap in the cache and have to download objects
             // from S3.
+            //
+            // NOTE: this can also happen when transactions are used and
+            // we would encounter reading a control batch from the local log.
             break;
         }
         vlog(
@@ -131,16 +132,14 @@ level_zero_log_reader_impl::maybe_load_slices_from_cache() {
           model::next_offset(ret.back().last_offset()));
     }
     _config.start_offset = current;
-    if (
-      _config.start_offset == _config.max_offset
-      || _config.start_offset > last_offset) {
+    if (_config.start_offset > _config.max_offset) {
         vlog(
           cd_log.debug,
           "reached end of stream, start offset: {}, max offset: {}, "
-          "last offset: {}",
+          "current: {}",
           _config.start_offset,
           _config.max_offset,
-          last_offset);
+          current);
         _current = state::end_of_stream_state;
     }
     if (!ret.empty()) {
@@ -155,7 +154,7 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
       _current == state::empty_state || _current == state::materialized_state,
       "Invalid state transition, unexpected current state: {}",
       std::to_underlying(_current));
-    if (_meta.size() > 0) {
+    if (_unhydrated.size() > 0) {
         // If we already have metadata, we can skip fetching it again.
         _current = state::ready_state;
         co_return;
@@ -172,7 +171,11 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
           max_offset,
           _config.min_bytes,
           _config.max_bytes,
-          {model::record_batch_type::dl_placeholder},
+          // We need to fetch both raft data batches for transaction control
+          // markers as well as placeholder batches to hydrate from object
+          // storage, so we don't include a typefilter and instead postfilter
+          // here.
+          /*type_filter=*/std::nullopt,
           _config.first_timestamp,
           _config.abort_source,
           _config.client_address);
@@ -192,10 +195,21 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
           std::move(reader), deadline);
 
         // Convert L0 meta batches to extent_meta structures.
-        chunked_circular_buffer<cloud_topics::extent_meta> meta;
-        chunked_circular_buffer<model::record_batch_header> headers;
         for (auto&& batch : placeholders) {
-            headers.push_back(batch.header());
+            auto& header = batch.header();
+            if (header.type == model::record_batch_type::raft_data) {
+                vassert(
+                  batch.header().attrs.is_control(),
+                  "expect all raft data batches to be control batches, got: {}",
+                  batch.header());
+                local_log_batch local_batch{.header = header};
+                local_batch.data = std::move(batch).release_data();
+                _unhydrated.push_back(std::move(local_batch));
+                continue;
+            }
+            if (header.type != model::record_batch_type::dl_placeholder) {
+                continue;
+            }
             cloud_topics::extent_meta e{
               .base_offset = model::offset_cast(batch.base_offset()),
               .last_offset = model::offset_cast(batch.last_offset()),
@@ -209,23 +223,35 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
             e.id = placeholder.id;
             e.first_byte_offset = placeholder.offset;
             e.byte_range_size = placeholder.size_bytes;
-            meta.push_back(e);
+            _unhydrated.push_back(local_log_batch{.header = header, .data = e});
         }
-        vassert(
-          meta.size() == headers.size(),
-          "Expected the same number of headers and meta batches, got {} and {}",
-          meta.size(),
-          headers.size());
-        _meta = std::move(meta);
-        _headers = std::move(headers);
-        if (!_meta.empty()) {
-            vlog(
-              cd_log.debug,
-              "Fetched {} L0 meta batches from the underlying partition, "
-              "first byte offset: {}, last byte offset: {}",
-              _meta.size(),
-              _meta.front().first_byte_offset,
-              _meta.back().last_offset);
+        if (!_unhydrated.empty()) {
+            if (cd_log.is_enabled(ss::log_level::debug)) {
+                auto pred = [](const local_log_batch& b) -> bool {
+                    return std::holds_alternative<cloud_topics::extent_meta>(
+                      b.data);
+                };
+                auto first_extent = std::ranges::find_if(_unhydrated, pred);
+                auto last_extent = std::ranges::find_if(
+                  std::views::reverse(_unhydrated), pred);
+                if (first_extent == _unhydrated.end()) {
+                    vlog(
+                      cd_log.debug,
+                      "Fetched {} L0 meta batches from the underlying "
+                      "partition, but all of them are control batches",
+                      _unhydrated.size());
+                } else {
+                    vlog(
+                      cd_log.debug,
+                      "Fetched {} L0 meta batches from the underlying "
+                      "partition, first offset: {}, last offset: {}",
+                      _unhydrated.size(),
+                      std::get<cloud_topics::extent_meta>(first_extent->data)
+                        .base_offset,
+                      std::get<cloud_topics::extent_meta>(last_extent->data)
+                        .last_offset);
+                }
+            }
         } else {
             vlog(
               cd_log.debug,
@@ -234,16 +260,16 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
               cfg.start_offset,
               cfg.max_offset);
         }
-
     } catch (...) {
         vlog(
           cd_log.info,
           "Failed to fetch metadata from the underlying partition: {}",
           std::current_exception());
         _current = state::end_of_stream_state;
-        co_return;
+        throw;
     }
-    _current = _meta.empty() ? state::end_of_stream_state : state::ready_state;
+    _current = _unhydrated.empty() ? state::end_of_stream_state
+                                   : state::ready_state;
 }
 
 ss::future<> level_zero_log_reader_impl::materialize_batches(
@@ -258,7 +284,7 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
       "Invalid state transition, unexpected current state: {}",
       std::to_underlying(_current));
 
-    if (_batches.size() > 0) {
+    if (_hydrated.size() > 0) {
         // We're already materialized.
         _current = state::materialized_state;
         vlog(
@@ -267,22 +293,31 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
         co_return;
     }
 
+    if (_unhydrated.empty()) {
+        // Nothing to materialize.
+        _current = state::end_of_stream_state;
+        vlog(cd_log.trace, "Materialize batches without unhydrated batches");
+        co_return;
+    }
+
     // Cherry-pick enough L0 meta batches to materialize.
-    vassert(
-      _meta.size() == _headers.size(),
-      "Expected the same number of headers and meta batches, got {} and {}",
-      _meta.size(),
-      _headers.size());
     try {
         chunked_vector<cloud_topics::extent_meta> to_materialize;
-        chunked_vector<model::record_batch_header> to_materialize_headers;
+        auto unhydrated_it = _unhydrated.begin();
         size_t materialize_bytes = 0;
-        while (_config.bytes_consumed < _config.max_bytes && !_meta.empty()) {
-            auto meta = _meta.front();
-            auto header = _headers.front();
+        while (_config.bytes_consumed < _config.max_bytes
+               && unhydrated_it != _unhydrated.end()) {
+            size_t hydrated_batch_size = ss::visit(
+              unhydrated_it->data,
+              [](const local_log_batch::payload& payload) {
+                  return payload.size_bytes();
+              },
+              [](const cloud_topics::extent_meta& meta) {
+                  return meta.byte_range_size();
+              });
             if (
               (_config.strict_max_bytes || _config.bytes_consumed > 0)
-              && (_config.bytes_consumed + meta.byte_range_size)
+              && (_config.bytes_consumed + hydrated_batch_size)
                    > _config.max_bytes) {
                 // If the next meta batch exceeds the max bytes limit, we stop
                 // materializing. The only exception is if we didn't collect any
@@ -294,33 +329,33 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
                 vlog(
                   cd_log.trace,
                   "Materialize batches overshot at {} bytes, config: {}, last "
-                  "extent size: {}",
+                  "hydrated batch size: {}",
                   materialize_bytes,
                   _config,
-                  meta.byte_range_size);
+                  hydrated_batch_size);
                 break;
             }
-            _meta.pop_front();
-            _headers.pop_front();
-            _config.bytes_consumed += meta.byte_range_size;
-            materialize_bytes += meta.byte_range_size;
-            to_materialize.push_back(meta);
-            to_materialize_headers.push_back(header);
-            vlog(
-              cd_log.trace, "Materialize {} bytes total...", materialize_bytes);
+            _config.bytes_consumed += hydrated_batch_size;
+            if (
+              auto* meta = std::get_if<cloud_topics::extent_meta>(
+                &unhydrated_it->data)) {
+                materialize_bytes += meta->byte_range_size;
+                to_materialize.push_back(*meta);
+                vlog(
+                  cd_log.trace,
+                  "Materialize {} bytes total...",
+                  materialize_bytes);
+            }
+            ++unhydrated_it;
         }
 
-        // we reached max_bytes limit and nothing is collected
-        if (materialize_bytes == 0) {
-            _current = state::end_of_stream_state;
-            co_return;
-        }
-
+        size_t materialize_count = to_materialize.size();
         vlog(
           cd_log.trace,
-          "Invoking 'materialize' for {}, {} bytes to materialize",
+          "Invoking 'materialize' for {}: {} bytes, {} batches to materialize",
           _underlying->ntp(),
-          materialize_bytes);
+          materialize_bytes,
+          materialize_count);
         // Ask data layer to bring data from the cloud storage.
         auto mat_res = co_await _ct_api->materialize(
           _underlying->ntp(),
@@ -335,44 +370,68 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
             _current = state::end_of_stream_state;
             co_return;
         }
-
-        // Patch materialized record batches
         auto batches = std::move(mat_res.value());
-        for (size_t i = 0; i < batches.size(); i++) {
-            auto& data_hdr = batches.at(i).header();
-            auto size = data_hdr.size_bytes;
-            auto crc = data_hdr.crc;
-            data_hdr = to_materialize_headers.at(i);
-            data_hdr.type = model::record_batch_type::raft_data;
-            data_hdr.size_bytes = size;
-            data_hdr.crc = crc;
-            // Recalculate the header crc
-            data_hdr.header_crc = model::internal_header_only_crc(data_hdr);
+        if (batches.size() != materialize_count) {
+            throw std::runtime_error(
+              fmt::format(
+                "Materialized unexpected number of batches: {}, expected: {}",
+                batches.size(),
+                materialize_count));
         }
-
-        // Propagate batches to the record batch cache
-        if (cache_enabled()) {
-            for (const auto& b : batches) {
-                _ct_api->cache_put(_underlying->ntp(), b.copy());
+        // Merge our selected subset of unhydrated batches with the materialized
+        // batches, preserving control batches from the local log.
+        auto batches_it = batches.begin();
+        chunked_circular_buffer<model::record_batch> hydrated;
+        for (auto it = _unhydrated.begin(); it != unhydrated_it; ++it) {
+            model::record_batch batch = ss::visit(
+              it->data,
+              [&it, &batches_it](const cloud_topics::extent_meta&) {
+                  model::record_batch batch = std::move(*batches_it);
+                  ++batches_it;
+                  auto size = batch.header().size_bytes;
+                  auto crc = batch.header().crc;
+                  batch.header() = it->header;
+                  batch.header().type = model::record_batch_type::raft_data;
+                  batch.header().size_bytes = size;
+                  batch.header().crc = crc;
+                  // Recalculate the header crc
+                  batch.header().header_crc = model::internal_header_only_crc(
+                    batch.header());
+                  return batch;
+              },
+              [&it](local_log_batch::payload& payload) {
+                  return model::record_batch(
+                    it->header,
+                    std::move(payload),
+                    model::record_batch::tag_ctor_ng{});
+              });
+            // Propagate materialized batches to the record batch cache
+            if (cache_enabled() && !batch.header().attrs.is_control()) {
+                _ct_api->cache_put(_underlying->ntp(), batch.copy());
             }
+            hydrated.push_back(std::move(batch));
         }
-
-        _batches = std::move(batches);
+        vassert(
+          batches_it == batches.end(),
+          "All materialized batches should be used");
+        _unhydrated.erase(_unhydrated.begin(), unhydrated_it);
+        _hydrated = std::move(hydrated);
         // Materialize batches from the L0 meta batches.
         vlog(
           cd_log.debug,
           "Materialized {} batches from the L0 meta batches",
-          _batches.size());
+          _hydrated.size());
     } catch (...) {
         vlog(
           cd_log.info,
           "Failed to materialize batches {}",
           std::current_exception());
         _current = state::end_of_stream_state;
-        co_return;
+        throw;
     }
 
-    _current = state::materialized_state;
+    _current = _hydrated.empty() ? state::end_of_stream_state
+                                 : state::materialized_state;
 }
 
 bool level_zero_log_reader_impl::cache_enabled() const {
@@ -393,13 +452,12 @@ void level_zero_log_reader_impl::consume_materialized_batches(
     vlog(
       cd_log.debug,
       "consuming {} materialized batches, cached {} extents",
-      _batches.size(),
-      _meta.size());
-    std::move(_batches.begin(), _batches.end(), std::back_inserter(*dest));
-    _batches.clear();
+      _hydrated.size(),
+      _unhydrated.size());
+    *dest = std::exchange(_hydrated, {});
     _config.start_offset = model::offset_cast(
       model::next_offset(dest->back().last_offset()));
-    _current = _meta.empty() ? state::empty_state : state::ready_state;
+    _current = _unhydrated.empty() ? state::empty_state : state::ready_state;
 }
 
 void level_zero_log_reader_impl::print(std::ostream& o) {

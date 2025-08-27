@@ -3,7 +3,6 @@ A rule to create a redpanda tarball given inputs from the build system.
 """
 
 load("@bazel_skylib//lib:collections.bzl", "collections")
-load("@bazel_skylib//rules:common_settings.bzl", "BuildSettingInfo")
 load("@bazel_tools//tools/cpp:toolchain_utils.bzl", "find_cpp_toolchain")
 
 def _is_versioned(file, starts_with):
@@ -26,8 +25,17 @@ def _is_versioned_so(file):
 def _is_dynamic_loader(file):
     return _is_versioned(file, "ld")
 
+def _patched_file(ctx, original, suffix):
+    """Return a new File for patching.
+
+    Based on an input File, declare a new File with a given suffix, in a directory
+    named by the target name (so that patched files from different targets do not
+    collide."""
+    name = "patched/{}/{}_{}".format(ctx.label.name, original.basename, suffix)
+    return ctx.actions.declare_file(name)
+
 def _override_binary_rpath(ctx, path_override, original_binary):
-    patched_binary = ctx.actions.declare_file("{}_patched".format(original_binary.path))
+    patched_binary = _patched_file(ctx, original_binary, "patched")
 
     ctx.actions.run(
         inputs = [original_binary],
@@ -41,7 +49,7 @@ def _override_binary_rpath(ctx, path_override, original_binary):
 
 def _set_dynamic_loader(ctx, binary, loader, interpreter_path):
     """Uses provided dynamic loader as the interpreter for the binary"""
-    patched_binary = ctx.actions.declare_file("{}_ld".format(binary.path))
+    patched_binary = _patched_file(ctx, binary, "ld")
     ctx.actions.run(
         inputs = [binary, loader],
         outputs = [patched_binary],
@@ -52,7 +60,7 @@ def _set_dynamic_loader(ctx, binary, loader, interpreter_path):
     )
     return patched_binary
 
-def _prepare_package_binaries(ctx, binaries, dynamic_loader_path = "/opt/redpanda/lib"):
+def _prepare_package_binaries(ctx, binaries, dynamic_loader_path):
     """
     Prepares binaries for packaging, collecting shared libraries setting rpath and dynamic loader.
 
@@ -103,7 +111,7 @@ def _prepare_package_binaries(ctx, binaries, dynamic_loader_path = "/opt/redpand
 
     return struct(binary_files = ret_binaries, shared_libraries = collections.uniq(shared_libraries))
 
-def _prepare_redpanda_package_content(ctx, dynamic_loader_path = "/opt/redpanda/lib"):
+def _prepare_redpanda_package_content(ctx, dynamic_loader_path):
     # Collect all the shared libraries that we built as part of each binary.
     # NOTE: We don't need to do this for `rpk` because it's a static binary,
     # this is only needed for binaries with shared libraries.
@@ -245,10 +253,7 @@ def _tarball_package_configuration(ctx, package_content, fips_enabled):
 def _impl(ctx):
     use_dir = not ctx.attr.out.endswith(".tar.gz")
     out = ctx.actions.declare_directory(ctx.attr.out) if use_dir else ctx.actions.declare_file(ctx.attr.out)
-    interpreter_path = "/opt/redpanda/lib"
-    if ctx.attr.install_path:
-        interpreter_path = "{}/lib".format(ctx.attr.install_path[BuildSettingInfo].value)
-    package_content = _prepare_redpanda_package_content(ctx, interpreter_path)
+    package_content = _prepare_redpanda_package_content(ctx, "{}/lib".format(ctx.attr.install_path))
 
     fips_enabled = ctx.file.fips_module != None
     if fips_enabled != (ctx.file.fips_config != None):
@@ -339,7 +344,10 @@ redpanda_package = rule(
         ),
         "include_sysroot_libs": attr.bool(),
         "rpath_override": attr.string(mandatory = False),
-        "install_path": attr.label(),
+        "install_path": attr.string(
+            default = "/opt/redpanda",
+            doc = "The path where the package will be installed, used to set the interpreter path.",
+        ),
         "_tool": attr.label(
             executable = True,
             allow_files = True,
@@ -364,11 +372,11 @@ def _prepapare_package_conent(ctx):
     ]
     for b in ctx.attr.cc_binaries:
         cc_binaries += [struct(attr = b, file = file) for file in b.files.to_list()]
-    install_path_value = ctx.attr.install_path[BuildSettingInfo].value if ctx.attr.install_path else "/opt/{}".format(ctx.attr.name)
+
     package_cc_binaries = _prepare_package_binaries(
         ctx,
         cc_binaries,
-        "{}/lib".format(install_path_value),
+        "{}/lib".format(ctx.attr.install_path),
     )
 
     return struct(
@@ -437,10 +445,17 @@ native_package = rule(
         "out": attr.string(
             mandatory = True,
         ),
-        "include_sysroot_libs": attr.bool(),
-        "rpath_override": attr.string(mandatory = False),
+        "include_sysroot_libs": attr.bool(
+            default = True,
+        ),
+        "rpath_override": attr.string(
+            default = "$ORIGIN/../lib",
+        ),
         "owner": attr.int(),
-        "install_path": attr.label(),
+        "install_path": attr.string(
+            mandatory = True,
+            doc = "The path where the package will be installed, used to set the interpreter path.",
+        ),
         "_tool": attr.label(
             executable = True,
             allow_files = True,

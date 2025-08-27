@@ -16,6 +16,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = select({
         "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/adminapi",
             "//src/go/rpk/pkg/cli/redpanda/admin",
             "//src/go/rpk/pkg/cli/redpanda/tune",
             "//src/go/rpk/pkg/cloud",
@@ -49,6 +50,7 @@ go_library(
             "@com_github_spf13_cobra//:cobra",
         ],
         "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/adminapi",
             "//src/go/rpk/pkg/cli/redpanda/admin",
             "//src/go/rpk/pkg/cli/redpanda/tune",
             "//src/go/rpk/pkg/cloud",

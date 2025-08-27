@@ -82,6 +82,7 @@
 #include "cluster/tx_topic_manager.h"
 #include "cluster/types.h"
 #include "cluster/utils/partition_change_notifier_impl.h"
+#include "cluster_link/service.h"
 #include "compression/async_stream_zstd.h"
 #include "compression/lz4_decompression_buffers.h"
 #include "compression/stream_zstd.h"
@@ -1152,7 +1153,9 @@ void application::configure_admin_server() {
           // Add RPC services
           s.add_service(
             std::make_unique<admin::debug_service_impl>(stress_fiber_manager));
-          s.add_service(std::make_unique<admin::shadow_link_service_impl>());
+          s.add_service(
+            std::make_unique<admin::shadow_link_service_impl>(
+              &_cluster_link_service));
       })
       .get();
 }
@@ -1505,6 +1508,23 @@ void application::wire_up_runtime_services(
           .invoke_on_all(&kafka::datalake_throttle_manager::start)
           .get();
     }
+
+    construct_service(
+      _cluster_link_service,
+      node_id,
+      &controller->get_cluster_link_frontend(),
+      ss::sharded_parameter([this] {
+          return cluster::partition_change_notifier_impl::make_default(
+            raft_group_manager,
+            partition_manager,
+            controller->get_topics_state());
+      }),
+      &partition_manager,
+      &controller->get_partition_leaders(),
+      &controller->get_shard_table(),
+      &metadata_cache,
+      smp_service_groups.cluster_link_smp_sg())
+      .get();
 
     syschecks::systemd_message("Creating kafka usage manager frontend").get();
     construct_service(
@@ -3075,6 +3095,8 @@ void application::wire_up_and_start(::stop_signal& app_signal, bool test_mode) {
           .get();
         _transform_service.invoke_on_all(&transform::service::start).get();
     }
+
+    _cluster_link_service.invoke_on_all(&cluster_link::service::start).get();
 
     construct_service(_aggregate_metrics_watcher).get();
 
