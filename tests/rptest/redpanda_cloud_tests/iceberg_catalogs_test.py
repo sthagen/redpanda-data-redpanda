@@ -43,13 +43,15 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
     """
     Verify that cluster infra/config matches config profile used to launch - only applies to cloudv2
     """
+
     def __init__(self, test_context):
         super().__init__(test_context=test_context)
         self._ctx = test_context
         self._ipClient = InstallPackClient(
             self.redpanda._cloud_cluster.config.install_pack_url_template,
             self.redpanda._cloud_cluster.config.install_pack_auth_type,
-            self.redpanda._cloud_cluster.config.install_pack_auth)
+            self.redpanda._cloud_cluster.config.install_pack_auth,
+        )
 
     def setUp(self):
         super().setUp()
@@ -58,8 +60,9 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
         install_pack_version = cloud_cluster.get_install_pack_version()
         self._ip = self._ipClient.getInstallPack(install_pack_version)
         self._clusterId = cloud_cluster.cluster_id
-        self._configProfile = self._ip['config_profiles'][
-            cloud_cluster.config.config_profile_name]
+        self._configProfile = self._ip["config_profiles"][
+            cloud_cluster.config.config_profile_name
+        ]
 
     def test_healthy(self):
         r = self.redpanda.cluster_unhealthy_reason()
@@ -79,7 +82,7 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
         - That each update succeeds without errors.
         - That the update completes within a reasonable amount of time.
         - That polling for the operation status correctly identifies completion.
-        
+
         This test helps to catch regressions in update logic, API response handling, and operation polling.
 
         Raises:
@@ -89,34 +92,24 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
         secret_id = f"UNITY_CLIENT_SECRET_{random.randint(10000, 99999)}"
         secret_data = "fake_secret"
         # Encode secret as base64
-        encoded_secret_data = base64.b64encode(
-            secret_data.encode("utf-8")).decode("utf-8")
+        encoded_secret_data = base64.b64encode(secret_data.encode("utf-8")).decode(
+            "utf-8"
+        )
         # Create encoded Redpanda secret with random ID
-        create_resp = cloud_cluster.create_secret(secret_id,
-                                                  encoded_secret_data)
+        create_resp = cloud_cluster.create_secret(secret_id, encoded_secret_data)
         self.logger.debug(f"Create secret response: {create_resp}")
 
         properties = {
-            "iceberg_enabled":
-            True,
-            "iceberg_rest_catalog_endpoint":
-            "https://fake.cloud.databricks.com/api/2.1/unity-catalog/iceberg-rest",
-            "iceberg_rest_catalog_authentication_mode":
-            "oauth2",
-            "iceberg_rest_catalog_client_id":
-            "iceberg_rest_catalog_client_id",
-            "iceberg_rest_catalog_client_secret":
-            f"${{secrets.{secret_id}}}",
-            "iceberg_rest_catalog_warehouse":
-            "fake_catalog_name",
-            "iceberg_catalog_type":
-            "rest",
-            "iceberg_disable_snapshot_tagging":
-            "true",
-            "iceberg_rest_catalog_oauth2_scope":
-            "all-apis",
-            "iceberg_rest_catalog_oauth2_server_uri":
-            "https://dbc-0f5177e3-6aa4.cloud.databricks.com/oidc/v1/token"
+            "iceberg_enabled": True,
+            "iceberg_rest_catalog_endpoint": "https://fake.cloud.databricks.com/api/2.1/unity-catalog/iceberg-rest",
+            "iceberg_rest_catalog_authentication_mode": "oauth2",
+            "iceberg_rest_catalog_client_id": "iceberg_rest_catalog_client_id",
+            "iceberg_rest_catalog_client_secret": f"${{secrets.{secret_id}}}",
+            "iceberg_rest_catalog_warehouse": "fake_catalog_name",
+            "iceberg_catalog_type": "rest",
+            "iceberg_disable_snapshot_tagging": "true",
+            "iceberg_rest_catalog_oauth2_scope": "all-apis",
+            "iceberg_rest_catalog_oauth2_server_uri": "https://dbc-0f5177e3-6aa4.cloud.databricks.com/oidc/v1/token",
         }
 
         self.logger.debug(f"Properties to be sent: {properties}")
@@ -124,10 +117,12 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
         num_iterations = 10
         for i in range(num_iterations):
             self.logger.info(
-                f"Starting cluster update iteration {i + 1}/{num_iterations}")
+                f"Starting cluster update iteration {i + 1}/{num_iterations}"
+            )
             try:
                 response = cloud_cluster.update_cluster_property_public(
-                    self._clusterId, properties)
+                    self._clusterId, properties
+                )
                 if not response:
                     self.logger.error("Failed to update cluster properties.")
                     return
@@ -143,7 +138,8 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
                 self.logger.debug(f"Operation id: {operation_id}")
 
                 success = cloud_cluster.wait_for_operation_complete(
-                    self._clusterId, operation_id)
+                    self._clusterId, operation_id
+                )
                 if not success:
                     self.logger.error(
                         f"Operation {operation_id} did not complete successfully."
@@ -160,7 +156,7 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
         dbx_ctx = DatabricksContext.from_context(self._ctx)
 
         cloud_cluster = self.redpanda._cloud_cluster
-        #client: RpCloudApiClient = cloud_cluster.public_api
+        # client: RpCloudApiClient = cloud_cluster.public_api
 
         databricks_client = DatabricksWorkspace(context=self._ctx)
         bucket = f"redpanda-cloud-storage-{self._clusterId}"
@@ -180,38 +176,29 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
             databricks_client_id = None
         self.logger.debug(f"Databricks client ID: {databricks_client_id}")
         # Encode secret as base64
-        encoded_secret_data = base64.b64encode(
-            secret_data.encode("utf-8")).decode("utf-8")
+        encoded_secret_data = base64.b64encode(secret_data.encode("utf-8")).decode(
+            "utf-8"
+        )
         # Create Redpanda secret
-        create_resp = cloud_cluster.create_secret(secret_id,
-                                                  encoded_secret_data)
+        create_resp = cloud_cluster.create_secret(secret_id, encoded_secret_data)
         self.logger.debug(f"Create secret response: {create_resp}")
 
         iceberg_rest_catalog_endpoint = dbx_ctx.iceberg_rest_url
 
         # Construct the payload for the request
         properties = {
-            "iceberg_enabled":
-            True,
-            "iceberg_rest_catalog_endpoint":
-            iceberg_rest_catalog_endpoint,
-            "iceberg_rest_catalog_authentication_mode":
-            "oauth2"
-            if isinstance(dbx_ctx.credentials, OauthCredentials) else "bearer",
-            "iceberg_rest_catalog_client_id":
-            str(databricks_client_id),
-            "iceberg_rest_catalog_client_secret":
-            f"${{secrets.{secret_id}}}",
-            "iceberg_rest_catalog_warehouse":
-            catalog_info.name,
-            "iceberg_catalog_type":
-            "rest",
-            "iceberg_disable_snapshot_tagging":
-            "true",
-            "iceberg_rest_catalog_oauth2_scope":
-            "all-apis",
-            "iceberg_rest_catalog_oauth2_server_uri":
-            "https://dbc-0f5177e3-6aa4.cloud.databricks.com/oidc/v1/token"
+            "iceberg_enabled": True,
+            "iceberg_rest_catalog_endpoint": iceberg_rest_catalog_endpoint,
+            "iceberg_rest_catalog_authentication_mode": "oauth2"
+            if isinstance(dbx_ctx.credentials, OauthCredentials)
+            else "bearer",
+            "iceberg_rest_catalog_client_id": str(databricks_client_id),
+            "iceberg_rest_catalog_client_secret": f"${{secrets.{secret_id}}}",
+            "iceberg_rest_catalog_warehouse": catalog_info.name,
+            "iceberg_catalog_type": "rest",
+            "iceberg_disable_snapshot_tagging": "true",
+            "iceberg_rest_catalog_oauth2_scope": "all-apis",
+            "iceberg_rest_catalog_oauth2_server_uri": "https://dbc-0f5177e3-6aa4.cloud.databricks.com/oidc/v1/token",
         }
 
         # Log the constructed payload for debugging
@@ -220,7 +207,8 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
         try:
             # Send the HTTP PATCH request
             response = cloud_cluster.update_cluster_property_public(
-                self._clusterId, properties)
+                self._clusterId, properties
+            )
 
             if response:
                 self.logger.debug(f"Update successful: {response}")
@@ -229,7 +217,8 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
 
         except Exception as e:
             self.logger.error(
-                f"An error occurred while updating cluster properties: {e}")
+                f"An error occurred while updating cluster properties: {e}"
+            )
 
         # Extract operation ID
         operation = response.get("operation", {})
@@ -243,19 +232,21 @@ class IcebergCloudCatalogsTest(RedpandaCloudTest):
 
         # Poll for operation completion
         success = cloud_cluster.wait_for_operation_complete(
-            self._clusterId, operation_id)
+            self._clusterId, operation_id
+        )
 
         if not success:
             self.logger.error(
-                f"Operation {operation_id} did not complete successfully.")
+                f"Operation {operation_id} did not complete successfully."
+            )
 
         # Create topic(s) and produce data
         self.rpk = RpkTool(self.redpanda)
-        test_topic = 'test_topic'
+        test_topic = "test_topic"
         self.rpk.create_topic(test_topic)
-        self.rpk.alter_topic_config(test_topic,
-                                    TopicSpec.PROPERTY_ICEBERG_MODE,
-                                    'key_value')
+        self.rpk.alter_topic_config(
+            test_topic, TopicSpec.PROPERTY_ICEBERG_MODE, "key_value"
+        )
 
         MESSAGE_COUNT = 10
         for i in range(MESSAGE_COUNT):

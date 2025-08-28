@@ -1611,9 +1611,9 @@ archival_metadata_stm::get_segments_to_cleanup() const {
       source_backlog.begin(),
       source_backlog.end(),
       std::back_inserter(backlog),
-      [this](const lw_segment_meta& m) {
+      [this, end_it = _manifest->end()](const lw_segment_meta& m) {
           auto it = _manifest->find(m.base_offset);
-          if (it == _manifest->end()) {
+          if (it == end_it) {
               return true;
           }
           auto m_name = _manifest->generate_remote_segment_name(

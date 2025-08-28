@@ -366,16 +366,8 @@ verifier_server::handler_impl::handle(
         co_return reply;
     }
     reply->write_body(
-      "json",
-      [b = std::move(payload)](
-        ss::output_stream<char>&& output_stream) mutable {
-          return ss::do_with(
-            std::move(output_stream),
-            [&b](ss::output_stream<char>& os) mutable {
-                return write_iobuf_to_output_stream(
-                         b.share(0, b.size_bytes()), os)
-                  .finally([&os] { return os.close(); });
-            });
+      "json", [b = std::move(payload)](ss::output_stream<char>& os) mutable {
+          return write_iobuf_to_output_stream(b.share(0, b.size_bytes()), os);
       });
     reply->done();
     co_return reply;

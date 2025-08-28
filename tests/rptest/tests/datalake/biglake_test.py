@@ -33,9 +33,9 @@ class GCPOnlyTestMark(Mark):
         Apply the mark to the test context list.
         This will skip the test if the GCP context is not available.
         """
-        assert len(
-            context_list
-        ) > 0, "ignore annotation is not being applied to any test cases"
+        assert len(context_list) > 0, (
+            "ignore annotation is not being applied to any test cases"
+        )
 
         should_ignore_test = False
         if not GCPContext.available(seed_context):
@@ -63,14 +63,13 @@ def gcp_only_test(func, /):
 
 class BiglakeTest(RedpandaTest):
     def __init__(self, test_context, *args, **kwargs):
-
         super().__init__(
             test_context,
             num_brokers=1,
             si_settings=SISettings(test_context),
             extra_rp_conf={
                 "iceberg_enabled": "true",
-                "iceberg_catalog_commit_interval_ms": 5000
+                "iceberg_catalog_commit_interval_ms": 5000,
             },
             schema_registry_config=SchemaRegistryConfig(),
             pandaproxy_config=PandaproxyConfig(),
@@ -89,29 +88,26 @@ class BiglakeTest(RedpandaTest):
     @matrix(cloud_storage_type=supported_storage_types())
     def test_e2e_basic(self, cloud_storage_type):
         count = 100
-        with DatalakeServices(self.test_context,
-                              redpanda=self.redpanda,
-                              include_query_engines=[],
-                              catalog_type=CatalogType.BIGLAKE) as dl:
-
+        with DatalakeServices(
+            self.test_context,
+            redpanda=self.redpanda,
+            include_query_engines=[],
+            catalog_type=CatalogType.BIGLAKE,
+        ) as dl:
             dl.create_iceberg_enabled_topic(self.topic_name, partitions=10)
             dl.produce_to_topic(self.topic_name, 1024, count)
 
             wait_until(
-                lambda: dl.catalog_client().table_exists(
-                    f"redpanda.{self.topic_name}"),
+                lambda: dl.catalog_client().table_exists(f"redpanda.{self.topic_name}"),
                 timeout_sec=30,
                 backoff_sec=1,
             )
 
             def count_rows():
-                t = dl.catalog_client().load_table(
-                    f"redpanda.{self.topic_name}")
+                t = dl.catalog_client().load_table(f"redpanda.{self.topic_name}")
                 df = t.scan().to_duckdb("data")
                 r = df.sql("SELECT count(*) FROM data").fetchone()
                 self.logger.info(f"Row count for {self.topic_name}: {r[0]}")
                 return r[0]
 
-            wait_until(lambda: count_rows() == count,
-                       timeout_sec=60,
-                       backoff_sec=1)
+            wait_until(lambda: count_rows() == count, timeout_sec=60, backoff_sec=1)

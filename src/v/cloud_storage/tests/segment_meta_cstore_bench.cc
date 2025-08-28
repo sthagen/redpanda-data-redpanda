@@ -285,6 +285,33 @@ void cs_deserialize_test(auto& store, size_t sz) {
     store.from_iobuf(std::move(buf));
     perf_tests::stop_measuring_time();
 }
+
+void cs_iteration_recompute_end_test(auto& store, size_t sz) {
+    for (auto manifest = generate_metadata(sz); auto& s : manifest) {
+        store.insert(s);
+    }
+
+    perf_tests::start_measuring_time();
+    for (auto it = store.begin(); it != store.end(); ++it) {
+        auto v = it->size_bytes;
+        perf_tests::do_not_optimize(v);
+    }
+    perf_tests::stop_measuring_time();
+}
+
+void cs_iteration_precompute_end_test(auto& store, size_t sz) {
+    for (auto manifest = generate_metadata(sz); auto& s : manifest) {
+        store.insert(s);
+    }
+
+    perf_tests::start_measuring_time();
+    for (auto it = store.begin(), e_it = store.end(); it != e_it; ++it) {
+        auto v = it->size_bytes;
+        perf_tests::do_not_optimize(v);
+    }
+    perf_tests::stop_measuring_time();
+}
+
 PERF_TEST(cstore_bench, column_store_append_baseline) {
     baseline_column_store store;
     cs_append_test(store, 10000);
@@ -372,4 +399,24 @@ PERF_TEST(cstore_bench, column_store_deserialize_baseline) {
 PERF_TEST(cstore_bench, column_store_deserialize_result) {
     segment_meta_cstore store;
     cs_deserialize_test(store, 10000);
+}
+
+PERF_TEST(cstore_bench, cs_iteration_recompute_end_test_1000) {
+    segment_meta_cstore store;
+    cs_iteration_recompute_end_test(store, 1000);
+}
+
+PERF_TEST(cstore_bench, cs_iteration_recompute_end_test_10000) {
+    segment_meta_cstore store;
+    cs_iteration_recompute_end_test(store, 10000);
+}
+
+PERF_TEST(cstore_bench, cs_iteration_precompute_end_test_1000) {
+    segment_meta_cstore store;
+    cs_iteration_precompute_end_test(store, 1000);
+}
+
+PERF_TEST(cstore_bench, cs_iteration_precompute_end_test_10000) {
+    segment_meta_cstore store;
+    cs_iteration_precompute_end_test(store, 10000);
 }

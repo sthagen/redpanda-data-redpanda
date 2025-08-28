@@ -174,7 +174,7 @@ void writer::integer_string(uint64_t i) {
 }
 void writer::base64_string(const iobuf& b) {
     append_delimiter();
-    append_string(base64_to_iobuf(b));
+    append_string(iobuf_to_base64(b));
     _next_delimiter = ',';
 }
 } // namespace serde::json

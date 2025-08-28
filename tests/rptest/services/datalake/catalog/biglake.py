@@ -18,6 +18,7 @@ class BiglakeMetastore(CatalogService):
     """
     https://cloud.google.com/bigquery/docs/blms-rest-catalog
     """
+
     def __init__(
         self,
         ctx,
@@ -57,9 +58,7 @@ class BiglakeMetastore(CatalogService):
         conf["auth"] = {
             "type": "custom",
             "impl": "rptest.services.datalake.catalog.biglake.BiglakeAuth",
-            "custom": {
-                "token_fetcher": lambda: self.gcp_context.fetch_iam_token()
-            }
+            "custom": {"token_fetcher": lambda: self.gcp_context.fetch_iam_token()},
         }
 
 

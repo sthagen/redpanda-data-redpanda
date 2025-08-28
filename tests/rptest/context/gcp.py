@@ -33,6 +33,7 @@ class GCPContext:
     - https://cloud.google.com/compute/docs/authentication
     - https://cloud.google.com/compute/docs/access/authenticate-workloads#applications
     """
+
     def __init__(self, *, project_id: str):
         self.project_id = project_id
         self._gcp_token_cache = ExpiringValue[str]()
@@ -42,33 +43,32 @@ class GCPContext:
         if token is not None:
             return token
 
-        logger.info('Getting gcp iam token')
+        logger.info("Getting gcp iam token")
         s = requests.Session()
-        s.mount('http://169.254.169.254', HTTPAdapter(max_retries=5))
+        s.mount("http://169.254.169.254", HTTPAdapter(max_retries=5))
         res = s.request(
             "GET",
             "http://169.254.169.254/computeMetadata/v1/instance/service-accounts/default/token",
-            headers={"Metadata-Flavor": "Google"})
-        res.raise_for_status()
-        logger.info(
-            f"Got gcp iam token expiring in {res.json()['expires_in']} seconds"
+            headers={"Metadata-Flavor": "Google"},
         )
+        res.raise_for_status()
+        logger.info(f"Got gcp iam token expiring in {res.json()['expires_in']} seconds")
         # GCP guarantees that tokens are valid for at least 5 minutes so it is
         # safe to subtract 60 seconds and still assume a valid token.
-        self._gcp_token_cache.update(res.json()["access_token"],
-                                     expire_at=time.time() +
-                                     res.json()["expires_in"] - 60)
+        self._gcp_token_cache.update(
+            res.json()["access_token"],
+            expire_at=time.time() + res.json()["expires_in"] - 60,
+        )
         return res.json()["access_token"]
 
     @staticmethod
     def available(test_context: TestContext) -> bool:
         # Cloud provider is always set and if it is GCP then we always should
         # be able to provide a context.
-        return CloudProviderType.from_context(
-            test_context) == CloudProviderType.GCP
+        return CloudProviderType.from_context(test_context) == CloudProviderType.GCP
 
     @staticmethod
-    def from_context(test_context: TestContext) -> 'GCPContext':
+    def from_context(test_context: TestContext) -> "GCPContext":
         if not GCPContext.available(test_context):
             raise ValueError("GCP context is not available")
 

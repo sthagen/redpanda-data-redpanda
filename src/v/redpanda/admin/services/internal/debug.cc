@@ -29,6 +29,25 @@ namespace {
 ss::logger log{"admin_api_server/internal_debug_service"};
 } // namespace
 
+seastar::future<proto::admin::throw_structured_exception_response>
+debug_service_impl::throw_structured_exception(
+  serde::pb::rpc::context ctx,
+  proto::admin::throw_structured_exception_request req) {
+    auto target = model::node_id(req.get_node_id());
+    if (target != model::node_id(-1) && target != _client.self_node_id()) {
+        co_return co_await _client
+          .make_client_for_node<proto::admin::debug_service_client>(target)
+          .throw_structured_exception(ctx, std::move(req));
+    }
+    serde::pb::rpc::error_info info;
+    info.reason = std::move(req.get_reason());
+    if (info.reason.empty()) {
+        info.reason = "UNKNOWN";
+    }
+    info.metadata = std::move(req.get_metadata());
+    throw serde::pb::rpc::unknown_exception("test exception", std::move(info));
+}
+
 seastar::future<proto::start_stress_fiber_response>
 debug_service_impl::start_stress_fiber(
   serde::pb::rpc::context, proto::start_stress_fiber_request req) {

@@ -135,6 +135,7 @@
 #include "raft/coordinated_recovery_throttle.h"
 #include "raft/group_manager.h"
 #include "raft/service.h"
+#include "redpanda/admin/proxy/client.h"
 #include "redpanda/admin/proxy/service.h"
 #include "redpanda/admin/server.h"
 #include "redpanda/admin/services/internal/debug.h"
@@ -1114,7 +1115,7 @@ admin_server_cfg_from_global_cfg(scheduling_groups& sgs) {
       .sg = sgs.admin_sg()};
 }
 
-void application::configure_admin_server() {
+void application::configure_admin_server(model::node_id node_id) {
     if (config::node().admin().empty()) {
         return;
     }
@@ -1149,13 +1150,17 @@ void application::configure_admin_server() {
       std::ref(_debug_bundle_service))
       .get();
     _admin
-      .invoke_on_all([this](admin_server& s) {
+      .invoke_on_all([this, node_id](admin_server& s) {
+          admin::proxy::client client(node_id, &_connection_cache, [this] {
+              return controller->get_members_table().local().node_ids();
+          });
           // Add RPC services
-          s.add_service(
-            std::make_unique<admin::debug_service_impl>(stress_fiber_manager));
           s.add_service(
             std::make_unique<admin::shadow_link_service_impl>(
               &_cluster_link_service));
+          s.add_service(
+            std::make_unique<admin::debug_service_impl>(
+              std::move(client), stress_fiber_manager));
       })
       .get();
 }
@@ -1542,7 +1547,7 @@ void application::wire_up_runtime_services(
 
     construct_single_service(_host_metrics_watcher, std::ref(_log));
 
-    configure_admin_server();
+    configure_admin_server(node_id);
 }
 
 void application::wire_up_redpanda_services(

@@ -21,6 +21,23 @@ namespace admin::proxy {
 namespace {
 // NOLINTNEXTLINE(*-non-const-global-variables,*-err58-cpp)
 ss::logger log{"admin/proxy/service"};
+
+void handle_exception(
+  errc ec, const serde::pb::rpc::base_exception& ex, proxy_response* resp) {
+    resp->error_code = ec;
+    resp->payload = iobuf::from(ex.message());
+    if (const auto& ei = ex.info()) {
+        proxy_response::error_info copy{
+          .reason = ei->reason,
+          .domain = ei->domain,
+        };
+        for (const auto& [k, v] : ei->metadata) {
+            copy.metadata.emplace(k, v);
+        }
+        resp->info = std::move(copy);
+    }
+}
+
 } // namespace
 
 ss::future<proxy_response>
@@ -39,53 +56,37 @@ service_impl::proxy_rpc(proxy_request req, rpc::streaming_context&) {
         response.payload = std::move(payload);
         co_return response;
     } catch (const serde::pb::rpc::cancelled_exception& e) {
-        response.error_code = errc::cancelled;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::cancelled, e, &response);
     } catch (const serde::pb::rpc::unknown_exception& e) {
-        response.error_code = errc::unknown;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::unknown, e, &response);
     } catch (const serde::pb::rpc::invalid_argument_exception& e) {
-        response.error_code = errc::invalid_argument;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::invalid_argument, e, &response);
     } catch (const serde::pb::rpc::deadline_exceeded_exception& e) {
-        response.error_code = errc::deadline_exceeded;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::deadline_exceeded, e, &response);
     } catch (const serde::pb::rpc::not_found_exception& e) {
-        response.error_code = errc::not_found;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::not_found, e, &response);
     } catch (const serde::pb::rpc::already_exists_exception& e) {
-        response.error_code = errc::already_exists;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::already_exists, e, &response);
     } catch (const serde::pb::rpc::permission_denied_exception& e) {
-        response.error_code = errc::permission_denied;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::permission_denied, e, &response);
     } catch (const serde::pb::rpc::resource_exhausted_exception& e) {
-        response.error_code = errc::resource_exhausted;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::resource_exhausted, e, &response);
     } catch (const serde::pb::rpc::failed_precondition_exception& e) {
-        response.error_code = errc::failed_precondition;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::failed_precondition, e, &response);
     } catch (const serde::pb::rpc::aborted_exception& e) {
-        response.error_code = errc::aborted;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::aborted, e, &response);
     } catch (const serde::pb::rpc::out_of_range_exception& e) {
-        response.error_code = errc::out_of_range;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::out_of_range, e, &response);
     } catch (const serde::pb::rpc::unimplemented_exception& e) {
-        response.error_code = errc::unimplemented;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::unimplemented, e, &response);
     } catch (const serde::pb::rpc::internal_exception& e) {
-        response.error_code = errc::internal_error;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::internal_error, e, &response);
     } catch (const serde::pb::rpc::unavailable_exception& e) {
-        response.error_code = errc::unavailable;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::unavailable, e, &response);
     } catch (const serde::pb::rpc::data_loss_exception& e) {
-        response.error_code = errc::data_loss;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::data_loss, e, &response);
     } catch (const serde::pb::rpc::unauthenticated_exception& e) {
-        response.error_code = errc::unauthenticated;
-        response.payload = iobuf::from(e.what());
+        handle_exception(errc::unauthenticated, e, &response);
     } catch (...) {
         vlog(
           log.warn,

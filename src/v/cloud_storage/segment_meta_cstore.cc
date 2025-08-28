@@ -1120,7 +1120,8 @@ bool segment_meta_cstore::operator==(const segment_meta_cstore& oth) const {
     if (size() != oth.size()) {
         return false;
     }
-    for (auto lhs = begin(), rhs = oth.begin(); lhs != end(); ++lhs, ++rhs) {
+    for (auto lhs = begin(), rhs = oth.begin(), e = end(); lhs != e;
+         ++lhs, ++rhs) {
         if (*lhs != *rhs) {
             return false;
         }

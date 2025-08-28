@@ -27,15 +27,25 @@ namespace {
 ss::logger log{"admin/proxy/client"};
 
 template<typename T>
-[[noreturn]] void throw_rpc_exception(iobuf payload) {
-    if (payload.empty()) {
-        throw T();
+[[noreturn]] void throw_rpc_exception(proxy_response resp) {
+    auto ei = resp.info.transform([](const proxy_response::error_info& ei) {
+        serde::pb::rpc::error_info copy{
+          .reason = ei.reason,
+          .domain = ei.domain,
+        };
+        for (const auto& [k, v] : ei.metadata) {
+            copy.metadata.emplace(k, v);
+        }
+        return copy;
+    });
+    if (resp.payload.empty()) {
+        throw T(std::move(ei));
     }
-    iobuf_parser parser(std::move(payload));
+    iobuf_parser parser(std::move(resp.payload));
     constexpr size_t max_error_message_size = 4_KiB;
     auto msg = parser.read_string_safe(
       std::min(parser.bytes_left(), max_error_message_size));
-    throw T(std::move(msg));
+    throw T(std::move(msg), std::move(ei));
 }
 
 } // namespace
@@ -96,52 +106,52 @@ ss::future<iobuf> client::send(
         co_return std::move(proxy_resp.payload);
     case errc::cancelled:
         throw_rpc_exception<serde::pb::rpc::cancelled_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::unknown:
         throw_rpc_exception<serde::pb::rpc::unknown_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::invalid_argument:
         throw_rpc_exception<serde::pb::rpc::invalid_argument_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::deadline_exceeded:
         throw_rpc_exception<serde::pb::rpc::deadline_exceeded_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::not_found:
         throw_rpc_exception<serde::pb::rpc::not_found_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::already_exists:
         throw_rpc_exception<serde::pb::rpc::already_exists_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::permission_denied:
         throw_rpc_exception<serde::pb::rpc::permission_denied_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::resource_exhausted:
         throw_rpc_exception<serde::pb::rpc::resource_exhausted_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::failed_precondition:
         throw_rpc_exception<serde::pb::rpc::failed_precondition_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::aborted:
         throw_rpc_exception<serde::pb::rpc::aborted_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::out_of_range:
         throw_rpc_exception<serde::pb::rpc::out_of_range_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::unimplemented:
         throw_rpc_exception<serde::pb::rpc::unimplemented_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::internal_error:
         throw_rpc_exception<serde::pb::rpc::internal_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::unavailable:
         throw_rpc_exception<serde::pb::rpc::unavailable_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::data_loss:
         throw_rpc_exception<serde::pb::rpc::data_loss_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     case errc::unauthenticated:
         throw_rpc_exception<serde::pb::rpc::unauthenticated_exception>(
-          std::move(proxy_resp.payload));
+          std::move(proxy_resp));
     }
     std::unreachable();
 }

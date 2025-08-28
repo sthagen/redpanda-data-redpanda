@@ -123,6 +123,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
     //   doesn't have any data. The 'segment_containing' method of the
     //   manifest takes this into account.
     // - find materialized segment or materialize the new one
+    const auto manifest_end = manifest.end();
     auto mit = manifest.end();
     if (hint == model::offset{}) {
         // This code path is only used for the first lookup. It
@@ -139,7 +140,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
             // skip segments without data batches (the logic is implemented
             // inside the partition_manifest).
             mit = manifest.segment_containing(ko);
-            if (mit == manifest.end()) {
+            if (mit == manifest_end) {
                 // Segment that matches exactly can't be found in the manifest.
                 // In this case we want to start scanning from the beginning of
                 // the partition if the start of the manifest is contained by
@@ -153,7 +154,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
         }
     } else {
         mit = manifest.segment_containing(hint);
-        while (mit != manifest.end()) {
+        while (mit != manifest_end) {
             // The segment 'mit' points to might not have any
             // data batches. In this case we need to move iterator forward.
             // The check can only be done if we have 'delta_offset_end'.
@@ -173,7 +174,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
     }
     const auto partition_start_offset
       = _manifest_view->stm_manifest().full_log_start_offset();
-    while (mit != manifest.end()
+    while (mit != manifest_end
            && mit->committed_offset < partition_start_offset) {
         // Make sure to skip segments that have been removed via archival GC,
         // which wouldn't be reflected in a spillover manifest's segment list.
@@ -182,7 +183,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
         // before getting here, but that isn't the case for timequeries.
         ++mit;
     }
-    if (mit == manifest.end()) {
+    if (mit == manifest_end) {
         // No such segment
         return borrow_result_t{};
     }
@@ -206,7 +207,7 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
     }
     auto mit_committed_offset = mit->committed_offset;
     auto next_it = std::next(std::move(mit));
-    while (next_it != manifest.end()) {
+    while (next_it != manifest_end) {
         // Normally, the segments in the manifest do not overlap.
         // But in some cases we may see them overlapping, for instance
         // if they were produced by older version of redpanda.
@@ -217,9 +218,8 @@ remote_partition::borrow_result_t remote_partition::borrow_next_segment_reader(
         }
         ++next_it;
     }
-    model::offset next_offset = next_it == manifest.end()
-                                  ? model::offset{}
-                                  : next_it->base_offset;
+    model::offset next_offset = next_it == manifest_end ? model::offset{}
+                                                        : next_it->base_offset;
     return borrow_result_t{
       .reader = iter->second->borrow_reader(
         config, _ctxlog, _probe, _ts_probe, std::move(segment_reader_unit)),
@@ -1056,8 +1056,9 @@ remote_partition::aborted_transactions(offset_range offsets) {
         // redpanda offsets to extract aborted transactions metadata because
         // tx-manifests contains redpanda offsets.
         std::deque<ss::lw_shared_ptr<remote_segment>> remote_segs;
-        for (auto it = stm_manifest.segment_containing(offsets.begin);
-             it != stm_manifest.end();
+        for (auto it = stm_manifest.segment_containing(offsets.begin),
+                  end_it = stm_manifest.end();
+             it != end_it;
              ++it) {
             if (it->base_offset > offsets.end_rp) {
                 break;
@@ -1105,8 +1106,9 @@ remote_partition::aborted_transactions(offset_range offsets) {
           std::move(cursor),
           [&offsets, &meta_to_materialize, this](
             ssx::task_local_ptr<const partition_manifest> manifest) {
-              for (auto it = manifest->segment_containing(offsets.begin);
-                   it != manifest->end();
+              for (auto it = manifest->segment_containing(offsets.begin),
+                        end_it = manifest->end();
+                   it != end_it;
                    ++it) {
                   if (it->base_offset > offsets.end_rp) {
                       return ss::stop_iteration::yes;

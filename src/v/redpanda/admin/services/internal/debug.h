@@ -12,6 +12,7 @@
 #pragma once
 
 #include "proto/redpanda/core/admin/internal/debug.proto.h"
+#include "redpanda/admin/proxy/client.h"
 
 #include <seastar/core/distributed.hh>
 
@@ -25,8 +26,15 @@ namespace admin {
 class debug_service_impl : public proto::admin::debug_service {
 public:
     explicit debug_service_impl(
+      admin::proxy::client client,
       ss::sharded<stress_fiber_manager>& stress_fiber_manager)
-      : _stress_fiber_manager(stress_fiber_manager) {}
+      : _client(std::move(client))
+      , _stress_fiber_manager(stress_fiber_manager) {}
+
+    seastar::future<proto::admin::throw_structured_exception_response>
+      throw_structured_exception(
+        serde::pb::rpc::context,
+        proto::admin::throw_structured_exception_request) override;
 
     seastar::future<proto::admin::start_stress_fiber_response>
       start_stress_fiber(
@@ -38,6 +46,7 @@ public:
       proto::admin::stop_stress_fiber_request) override;
 
 private:
+    admin::proxy::client _client;
     ss::sharded<stress_fiber_manager>& _stress_fiber_manager;
 };
 

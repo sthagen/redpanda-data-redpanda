@@ -269,7 +269,8 @@ std::optional<kafka::offset>
 partition_manifest::compute_start_kafka_offset_local() const {
     std::optional<kafka::offset> local_start_offset;
     auto iter = _segments.find(_start_offset);
-    if (iter != _segments.end()) {
+    auto segments_end = _segments.end();
+    if (iter != segments_end) {
         auto delta = iter->delta_offset;
         local_start_offset = _start_offset - delta;
     } else {
@@ -277,7 +278,7 @@ partition_manifest::compute_start_kafka_offset_local() const {
         // translate it.  If there are any segments ahead of it, then
         // those may be considered the start of the remote log.
         if (auto front_it = _segments.begin();
-            front_it != _segments.end()
+            front_it != segments_end
             && front_it->base_offset >= _start_offset) {
             local_start_offset = front_it->base_offset - front_it->delta_offset;
         }
@@ -851,6 +852,7 @@ size_t partition_manifest::safe_segment_meta_to_add(
       .last_segment = last_segment(),
     };
 
+    auto segments_end = _segments.end();
     for (const auto& m : meta_list) {
         if (_segments.empty() && !subst.last_segment.has_value()) {
             // The empty manifest can be started from any offset. If we deleted
@@ -896,7 +898,7 @@ size_t partition_manifest::safe_segment_meta_to_add(
               };
 
             auto it = _segments.find(m.base_offset);
-            if (it == _segments.end()) {
+            if (it == segments_end) {
                 // Segment added to tip of the log
                 const auto last_seg = subst.last_segment;
                 vassert(
@@ -968,7 +970,7 @@ size_t partition_manifest::safe_segment_meta_to_add(
                 // *not valid*.
                 ++it;
                 bool boundary_found = false;
-                while (it != _segments.end()) {
+                while (it != segments_end) {
                     if (it->committed_offset == m.committed_offset) {
                         boundary_found = true;
                         break;
@@ -2323,7 +2325,8 @@ void partition_manifest::serialize_segments(
     }
     if (!_segments.empty()) {
         auto it = _segments.lower_bound(cursor->next_offset);
-        for (; it != _segments.end(); ++it) {
+        auto end_it = _segments.end();
+        for (; it != end_it; ++it) {
             serialize_segment_meta(*it, cursor);
             cursor->segments_serialized++;
             if (cursor->segments_serialized >= cursor->max_segments_per_call) {
@@ -2332,7 +2335,7 @@ void partition_manifest::serialize_segments(
                 break;
             }
         }
-        if (it == _segments.end()) {
+        if (it == end_it) {
             cursor->next_offset = _last_offset;
         } else {
             // We hit the limit on number of serialized segment
@@ -2384,7 +2387,8 @@ void partition_manifest::serialize_spillover(
 
     if (!_spillover_manifests.empty()) {
         auto it = _spillover_manifests.lower_bound(cursor->next_spill_offset);
-        for (; it != _spillover_manifests.end(); ++it) {
+        auto end_it = _spillover_manifests.end();
+        for (; it != end_it; ++it) {
             serialize_spillover_manifest_meta(*it, cursor);
             cursor->spills_serialized++;
             if (cursor->spills_serialized >= cursor->max_segments_per_call) {
@@ -2393,7 +2397,7 @@ void partition_manifest::serialize_spillover(
                 break;
             }
         }
-        if (it == _spillover_manifests.end()) {
+        if (it == end_it) {
             cursor->next_spill_offset = _last_offset;
         } else {
             cursor->next_spill_offset = it->base_offset;
@@ -2706,13 +2710,14 @@ void partition_manifest::process_anomalies(
 
     const auto archive_start_offset = get_archive_start_offset();
     absl::erase_if(
-      missing_spills, [this, &archive_start_offset](const auto& spill_comp) {
+      missing_spills,
+      [this, &archive_start_offset, end_it = _spillover_manifests.end()](
+        const auto& spill_comp) {
           // Remove the missing spill if lies below the start offset of the
           // archive or if it doesn't match with any of the entries in the
           // manifest.
           return spill_comp.last < archive_start_offset
-                 || _spillover_manifests.find(spill_comp.base)
-                      == _spillover_manifests.end();
+                 || _spillover_manifests.find(spill_comp.base) == end_it;
       });
 
     auto first_kafka_offset = full_log_start_kafka_offset();

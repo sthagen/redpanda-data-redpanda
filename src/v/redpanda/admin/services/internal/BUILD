@@ -12,6 +12,7 @@ redpanda_cc_library(
         "//proto/redpanda/core/admin/internal:debug_redpanda_proto",
         "//src/v/base",
         "//src/v/finjector",
+        "//src/v/redpanda/admin/proxy:client",
         "//src/v/serde/protobuf:rpc",
         "//src/v/utils:to_string",
         "@fmt",

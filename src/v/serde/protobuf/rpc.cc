@@ -11,161 +11,161 @@
 
 #include "serde/protobuf/rpc.h"
 
+#include "bytes/iostream.h"
+#include "serde/json/writer.h"
+#include "serde/protobuf/wire_format.h"
+
 #include <seastar/http/reply.hh>
 #include <seastar/json/formatter.hh>
-
-#include <unordered_map>
 
 namespace serde::pb::rpc {
 
 // NOLINTNEXTLINE(*-non-const-global-variables,cert-err58-cpp)
 ss::logger logger{"connectrpc"};
 
+namespace {
+iobuf error_info_to_proto(const error_info& ei) {
+    iobuf buf;
+    // reason
+    serde::pb::tag::write(
+      {.wire_type = serde::pb::wire_type::length, .field_number = 1}, &buf);
+    write_length(static_cast<int32_t>(ei.reason.size()), &buf);
+    buf.append_str(ei.reason);
+    // domain
+    serde::pb::tag::write(
+      {.wire_type = serde::pb::wire_type::length, .field_number = 2}, &buf);
+    write_length(static_cast<int32_t>(ei.domain.size()), &buf);
+    buf.append_str(ei.domain);
+    // metadata
+    for (const auto& [key, value] : ei.metadata) {
+        iobuf entry;
+        {
+            // key
+            serde::pb::tag::write(
+              {.wire_type = serde::pb::wire_type::length, .field_number = 1},
+              &entry);
+            write_length(static_cast<int32_t>(key.size()), &entry);
+            entry.append_str(key);
+            // value
+            serde::pb::tag::write(
+              {.wire_type = serde::pb::wire_type::length, .field_number = 2},
+              &entry);
+            write_length(static_cast<int32_t>(value.size()), &entry);
+            entry.append_str(value);
+        }
+        serde::pb::tag::write(
+          {.wire_type = serde::pb::wire_type::length, .field_number = 3}, &buf);
+        write_length(static_cast<int32_t>(entry.size_bytes()), &buf);
+        buf.append(std::move(entry));
+    }
+    return buf;
+}
+
+void error_info_to_json(const error_info& ei, serde::json::writer* w) {
+    w->begin_object();
+    w->key("reason");
+    w->string(ei.reason);
+    w->key("domain");
+    w->string(ei.domain);
+    if (!ei.metadata.empty()) {
+        w->key("metadata");
+        w->begin_object();
+        for (const auto& [k, v] : ei.metadata) {
+            w->key(k);
+            w->string(v);
+        }
+        w->end_object();
+    }
+    w->end_object();
+}
+
+} // namespace
+
 base_exception::base_exception(
-  int status_code, ss::sstring code, ss::sstring message)
+  int status_code,
+  ss::sstring code,
+  ss::sstring message,
+  std::optional<error_info> error_info)
   : _status_code(status_code)
   , _code(std::move(code))
-  , _message(std::move(message)) {}
+  , _message(std::move(message))
+  , _error_info(std::move(error_info)) {}
+
+const char* base_exception::what() const noexcept { return _message.c_str(); }
+const ss::sstring& base_exception::message() const { return _message; }
+const std::optional<error_info>& base_exception::info() const {
+    return _error_info;
+}
 
 std::unique_ptr<ss::http::reply>
 base_exception::handle(std::unique_ptr<ss::http::reply> reply) const {
-    std::unordered_map<ss::sstring, ss::sstring> body = {
-      {"code", _code},
-      {"message", _message},
-    };
+    serde::json::writer w;
+    w.begin_object();
+    w.key("code");
+    w.string(_code);
+    w.key("message");
+    w.string(_message);
+    if (_error_info) {
+        w.key("details");
+        w.begin_array();
+        {
+            w.begin_object();
+            w.key("type");
+            w.string("google.rpc.ErrorInfo");
+            w.key("value");
+            w.base64_string(error_info_to_proto(*_error_info));
+            w.key("debug");
+            error_info_to_json(*_error_info, &w);
+            w.end_object();
+        }
+        w.end_array();
+    }
+    w.end_object();
     reply->set_status(static_cast<ss::http::reply::status_type>(_status_code));
-    reply->write_body("json", ss::json::formatter::to_json(body));
+    reply->write_body(
+      "json", [b = std::move(w).finish()](ss::output_stream<char>& w) mutable {
+          return write_iobuf_to_output_stream(std::move(b), w);
+      });
     return reply;
 }
 
-cancelled_exception::cancelled_exception()
-  : cancelled_exception("Canceled") {}
-cancelled_exception::cancelled_exception(ss::sstring message)
-  : base_exception(
-      // TODO(rpc): Should be 499
-      static_cast<int>(ss::http::reply::status_type::unprocessable_entity),
-      "canceled",
-      std::move(message)) {}
+#define CONNECTRPC_EXCEPTION_IMPL(name, default_message, http_code)            \
+    name##_exception::name##_exception()                                       \
+      : name##_exception(default_message) {}                                   \
+    name##_exception::name##_exception(ss::sstring message)                    \
+      : name##_exception(std::move(message), std::nullopt) {}                  \
+    name##_exception::name##_exception(std::optional<error_info> ei)           \
+      : name##_exception(default_message, std::move(ei)) {}                    \
+    name##_exception::name##_exception(                                        \
+      ss::sstring message, std::optional<error_info> ei)                       \
+      : base_exception(                                                        \
+          static_cast<int>(ss::http::reply::status_type::http_code),           \
+          #name,                                                               \
+          std::move(message),                                                  \
+          std::move(ei)) {}
 
-unknown_exception::unknown_exception()
-  : unknown_exception("Unknown error") {}
-unknown_exception::unknown_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::internal_server_error),
-      "unknown",
-      std::move(message)) {}
+// TODO(rpc): Use 499 when supported by seastar
+CONNECTRPC_EXCEPTION_IMPL(cancelled, "Canceled", unprocessable_entity)
+CONNECTRPC_EXCEPTION_IMPL(unknown, "Unknown error", internal_server_error)
+CONNECTRPC_EXCEPTION_IMPL(invalid_argument, "Invalid argument", bad_request)
+CONNECTRPC_EXCEPTION_IMPL(
+  deadline_exceeded, "Deadline exceeded", gateway_timeout)
+CONNECTRPC_EXCEPTION_IMPL(not_found, "Resource not found", not_found)
+CONNECTRPC_EXCEPTION_IMPL(already_exists, "Resource already exists", conflict)
+CONNECTRPC_EXCEPTION_IMPL(permission_denied, "Permission denied", forbidden)
+CONNECTRPC_EXCEPTION_IMPL(
+  resource_exhausted, "Resource exhausted", too_many_requests)
+CONNECTRPC_EXCEPTION_IMPL(
+  failed_precondition, "Failed precondition", bad_request)
+CONNECTRPC_EXCEPTION_IMPL(aborted, "Operation aborted", conflict)
+CONNECTRPC_EXCEPTION_IMPL(out_of_range, "Out of range", bad_request)
+CONNECTRPC_EXCEPTION_IMPL(unimplemented, "Not implemented", not_implemented)
+CONNECTRPC_EXCEPTION_IMPL(internal, "Internal error", internal_server_error)
+CONNECTRPC_EXCEPTION_IMPL(
+  unavailable, "Service unavailable", service_unavailable)
+CONNECTRPC_EXCEPTION_IMPL(data_loss, "Data loss", internal_server_error)
+CONNECTRPC_EXCEPTION_IMPL(unauthenticated, "Unauthenticated", unauthorized)
 
-invalid_argument_exception::invalid_argument_exception()
-  : invalid_argument_exception("Invalid argument") {}
-invalid_argument_exception::invalid_argument_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::bad_request),
-      "invalid_argument",
-      std::move(message)) {}
-
-deadline_exceeded_exception::deadline_exceeded_exception()
-  : deadline_exceeded_exception("Deadline exceeded") {}
-deadline_exceeded_exception::deadline_exceeded_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::gateway_timeout),
-      "deadline_exceeded",
-      std::move(message)) {}
-
-not_found_exception::not_found_exception()
-  : not_found_exception("Resource not found") {}
-not_found_exception::not_found_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::not_found),
-      "not_found",
-      std::move(message)) {}
-
-already_exists_exception::already_exists_exception()
-  : already_exists_exception("Resource already exists") {}
-already_exists_exception::already_exists_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::conflict),
-      "already_exists",
-      std::move(message)) {}
-
-permission_denied_exception::permission_denied_exception()
-  : permission_denied_exception("Permission denied") {}
-permission_denied_exception::permission_denied_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::forbidden),
-      "permission_denied",
-      std::move(message)) {}
-
-resource_exhausted_exception::resource_exhausted_exception()
-  : resource_exhausted_exception("Resource exhausted") {}
-resource_exhausted_exception::resource_exhausted_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::too_many_requests),
-      "resource_exhausted",
-      std::move(message)) {}
-
-failed_precondition_exception::failed_precondition_exception()
-  : failed_precondition_exception("Failed precondition") {}
-failed_precondition_exception::failed_precondition_exception(
-  ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::bad_request),
-      "failed_precondition",
-      std::move(message)) {}
-
-aborted_exception::aborted_exception()
-  : aborted_exception("Operation aborted") {}
-aborted_exception::aborted_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::conflict),
-      "aborted",
-      std::move(message)) {}
-
-out_of_range_exception::out_of_range_exception()
-  : out_of_range_exception("Out of range") {}
-out_of_range_exception::out_of_range_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::bad_request),
-      "out_of_range",
-      std::move(message)) {}
-
-unimplemented_exception::unimplemented_exception()
-  : unimplemented_exception("Not implemented") {}
-unimplemented_exception::unimplemented_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::not_implemented),
-      "unimplemented",
-      std::move(message)) {}
-
-internal_exception::internal_exception()
-  : internal_exception("Internal error") {}
-internal_exception::internal_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::internal_server_error),
-      "internal",
-      std::move(message)) {}
-
-unavailable_exception::unavailable_exception()
-  : unavailable_exception("Service unavailable") {}
-unavailable_exception::unavailable_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::service_unavailable),
-      "unavailable",
-      std::move(message)) {}
-
-data_loss_exception::data_loss_exception()
-  : data_loss_exception("Data loss") {}
-data_loss_exception::data_loss_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::internal_server_error),
-      "data_loss",
-      std::move(message)) {}
-
-unauthenticated_exception::unauthenticated_exception()
-  : unauthenticated_exception("Unauthenticated") {}
-unauthenticated_exception::unauthenticated_exception(ss::sstring message)
-  : base_exception(
-      static_cast<int>(ss::http::reply::status_type::unauthorized),
-      "unauthenticated",
-      std::move(message)) {}
+#undef CONNECTRPC_DEFINE_EXCEPTION
 
 } // namespace serde::pb::rpc

@@ -50,7 +50,7 @@ public:
         absl::flat_hash_map<model::node_id, ProtobufServiceClient> clients;
         clients.reserve(node_ids.size() - 1);
         for (const auto& node : node_ids) {
-            if (node == _self) {
+            if (node == self_node_id()) {
                 continue;
             }
             clients.emplace(

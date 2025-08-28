@@ -13,3 +13,6 @@ fc822009898f760092ba69ceac439de88d2ade90
 
 # upgraded to clang-format 20
 b079582532df982b81190a34fd0b1f9621ba8213
+
+# Switched from yapf to ruff
+6c71a11d23fdb05457996994f865dd17c10e2318

@@ -489,17 +489,17 @@ model::offset segment_collector::find_replacement_boundary(
 
         // manifest: 10-19, 25-29
         // _begin_inclusive (in gap): 22.
-        if (it == _manifest.end()) {
+        auto manifest_end = _manifest.end();
+        if (it == manifest_end) {
             // first segment after gap: 25-29
-            for (it = _manifest.begin(); it != _manifest.end(); ++it) {
+            for (it = _manifest.begin(); it != manifest_end; ++it) {
                 const auto& entry = *it;
                 if (entry.base_offset > _begin_inclusive) {
                     break;
                 }
             }
             // The collection is valid if it can reach the end of the gap: 24
-            vassert(
-              it != _manifest.end(), "Trying to dereference end iterator");
+            vassert(it != manifest_end, "Trying to dereference end iterator");
             replace_boundary = it->base_offset - model::offset{1};
         } else {
             replace_boundary = it->committed_offset;
@@ -797,16 +797,16 @@ void segment_collector::align_begin_offset_to_manifest() {
     }
 
     auto it = _manifest.find(_begin_inclusive);
-
+    auto end_it = _manifest.end();
     // If iterator points to a segment, it means that _begin_inclusive is
     // aligned on manifest segment boundary, so do nothing. Otherwise, skip
     // _begin_inclusive to the start of the next manifest segment.
-    if (it == _manifest.end()) {
+    if (it == end_it) {
         it = _manifest.segment_containing(_begin_inclusive);
 
         // manifest: 10-19, 25-29
         // _begin_inclusive (in gap): before: 22, after: 22
-        if (it == _manifest.end()) {
+        if (it == end_it) {
             vlog(
               archival_log.debug,
               "_begin_inclusive lies in manifest gap for ntp: {} "

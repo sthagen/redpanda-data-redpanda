@@ -78,6 +78,11 @@ public:
     /// replenished
     uint64_t rate() const { return _bucket.rate(); }
 
+    /// Returns the time point that the last replenishment happened
+    clock::time_point replenished_ts() const noexcept {
+        return _bucket.replenished_ts();
+    }
+
 private:
     template<typename delay_t>
     delay_t delay_for(uint64_t grab_result) {

@@ -36,12 +36,29 @@ message StopStressFiberRequest {}
 
 message StopStressFiberResponse {}
 
+message ThrowStructuredExceptionRequest {
+    int32 node_id = 1;
+    string reason = 2;
+    map<string, string> metadata = 3;
+}
+message ThrowStructuredExceptionResponse {}
+
 // The DebugService provides access to internal debugging information and debug
 // operations for the cluster or node.
 //
 // NOTE: if you're adding a larger group of RPCs here, please consider splitting
 // it out into another service.
 service DebugService {
+    // This RPC throws a structured exception with the given reason and
+    // metadata, it should be accessible as an exception in the RPC protocol.
+    //
+    // This is used to test the RPC framework itself.
+    rpc ThrowStructuredException(ThrowStructuredExceptionRequest)
+        returns (ThrowStructuredExceptionResponse) {
+        option (redpanda.pbgen.rpc) = {
+            authz: SUPERUSER,
+        };
+    }
     rpc StartStressFiber(StartStressFiberRequest)
         returns (StartStressFiberResponse) {
         option (redpanda.pbgen.rpc) = {

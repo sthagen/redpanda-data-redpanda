@@ -16,7 +16,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 """
 import builtins
+import collections.abc
 import google.protobuf.descriptor
+import google.protobuf.internal.containers
 import google.protobuf.message
 import typing
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
@@ -67,3 +69,45 @@ class StopStressFiberResponse(google.protobuf.message.Message):
     def __init__(self) -> None:
         ...
 global___StopStressFiberResponse = StopStressFiberResponse
+
+@typing.final
+class ThrowStructuredExceptionRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    @typing.final
+    class MetadataEntry(google.protobuf.message.Message):
+        DESCRIPTOR: google.protobuf.descriptor.Descriptor
+        KEY_FIELD_NUMBER: builtins.int
+        VALUE_FIELD_NUMBER: builtins.int
+        key: builtins.str
+        value: builtins.str
+
+        def __init__(self, *, key: builtins.str=..., value: builtins.str=...) -> None:
+            ...
+
+        def ClearField(self, field_name: typing.Literal['key', b'key', 'value', b'value']) -> None:
+            ...
+    NODE_ID_FIELD_NUMBER: builtins.int
+    REASON_FIELD_NUMBER: builtins.int
+    METADATA_FIELD_NUMBER: builtins.int
+    node_id: builtins.int
+    reason: builtins.str
+
+    @property
+    def metadata(self) -> google.protobuf.internal.containers.ScalarMap[builtins.str, builtins.str]:
+        ...
+
+    def __init__(self, *, node_id: builtins.int=..., reason: builtins.str=..., metadata: collections.abc.Mapping[builtins.str, builtins.str] | None=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['metadata', b'metadata', 'node_id', b'node_id', 'reason', b'reason']) -> None:
+        ...
+global___ThrowStructuredExceptionRequest = ThrowStructuredExceptionRequest
+
+@typing.final
+class ThrowStructuredExceptionResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+
+    def __init__(self) -> None:
+        ...
+global___ThrowStructuredExceptionResponse = ThrowStructuredExceptionResponse

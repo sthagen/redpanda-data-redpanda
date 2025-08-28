@@ -24,7 +24,7 @@ class CloudProviderType(str, Enum):
         return self.value
 
     @staticmethod
-    def from_context(test_context: TestContext) -> 'CloudProviderType':
+    def from_context(test_context: TestContext) -> "CloudProviderType":
         cloud_provider = test_context.globals.get(GLOBAL_CLOUD_PROVIDER)
         if not cloud_provider:
             return CloudProviderType.DOCKER

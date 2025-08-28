@@ -21,7 +21,7 @@ import json
 
 def to_json_case(input_str: str):
     s = sub(r"(_|-)+", " ", input_str).title().replace(" ", "")
-    return ''.join([s[0].lower(), s[1:]])
+    return "".join([s[0].lower(), s[1:]])
 
 
 def as_dict(obj):
@@ -40,7 +40,7 @@ def as_dict(obj):
     elif isinstance(obj, list):
         # Handle lists recursively
         return [as_dict(item) for item in obj if item is not None]
-    elif hasattr(obj, 'value'):
+    elif hasattr(obj, "value"):
         # Handle enum objects
         return obj.value
     else:
@@ -174,7 +174,6 @@ class DirectConsumerVerifier(Service):
         self._cores = 1
 
     def clean_node(self, node):
-
         self._node = None
         node.account.kill_process(self.EXE, clean_shutdown=True)
 
@@ -187,14 +186,17 @@ class DirectConsumerVerifier(Service):
         This is used to construct the full path to the executable.
         """
         self.logger.info("globals: %s", self.context.globals)
-        return self.context.globals.get("direct_consumer_verifier_root",
-                                        "/opt/direct_consumer_verifier")
+        return self.context.globals.get(
+            "direct_consumer_verifier_root", "/opt/direct_consumer_verifier"
+        )
 
     def start_node(self, node, clean=None):
-        node.account.ssh("mkdir -p %s" %
-                         DirectConsumerVerifier.PERSISTENT_ROOT,
-                         allow_fail=False)
-        assert self._node is None or self._node == node, f'started on more than one node? {self._node} {node}'
+        node.account.ssh(
+            "mkdir -p %s" % DirectConsumerVerifier.PERSISTENT_ROOT, allow_fail=False
+        )
+        assert self._node is None or self._node == node, (
+            f"started on more than one node? {self._node} {node}"
+        )
         self._node = node
 
         cmd = f"{self._root_path()}/bin/{self.EXE}"
@@ -206,11 +208,13 @@ class DirectConsumerVerifier(Service):
 
         final_cmd = f"nohup {cmd} > {self.LOG_PATH} 2>&1 &"
         node.account.ssh(final_cmd)
-        wait_until(lambda: self.is_alive(),
-                   timeout_sec=15,
-                   backoff_sec=2,
-                   err_msg="Direct Consumer Verifier did not start",
-                   retry_on_exc=True)
+        wait_until(
+            lambda: self.is_alive(),
+            timeout_sec=15,
+            backoff_sec=2,
+            err_msg="Direct Consumer Verifier did not start",
+            retry_on_exc=True,
+        )
 
     def is_alive(self):
         self.status()
@@ -219,9 +223,9 @@ class DirectConsumerVerifier(Service):
     def wait_node(self, node, timeout_sec=600) -> bool:
         assert self._node == node
         try:
-            wait_until(lambda: not self.is_alive(),
-                       timeout_sec=timeout_sec,
-                       backoff_sec=5)
+            wait_until(
+                lambda: not self.is_alive(), timeout_sec=timeout_sec, backoff_sec=5
+            )
         except TimeoutError:
             return False
         return True
@@ -241,10 +245,8 @@ class DirectConsumerVerifier(Service):
         message = as_dict(req)
         self.logger.info(f"Sending request to {url} with message: {message}")
 
-        headers = {'Content-Type': 'application/json'}
-        response = requests.post(url,
-                                 data=json.dumps(message),
-                                 headers=headers)
+        headers = {"Content-Type": "application/json"}
+        response = requests.post(url, data=json.dumps(message), headers=headers)
         response.raise_for_status()
         resp = response.json()
         self.logger.debug(f"Response from {url}: {resp}")
@@ -263,7 +265,8 @@ class DirectConsumerVerifier(Service):
         return self.request("consumers/partitions/unassign", request)
 
     def get_consumer_state(
-            self, request: GetConsumerStateRequest) -> ConsumerStateResponse:
+        self, request: GetConsumerStateRequest
+    ) -> ConsumerStateResponse:
         response = self.request("consumers/state", request)
 
         assigned_topics = []
@@ -273,23 +276,25 @@ class DirectConsumerVerifier(Service):
                 partitions.append(
                     PartitionState(
                         partition_id=partition_data["partitionId"],
-                        last_fetch_timestamp=partition_data[
-                            "lastFetchTimestamp"],
+                        last_fetch_timestamp=partition_data["lastFetchTimestamp"],
                         last_fetch_offset=partition_data["lastFetchOffset"],
                         fetched_bytes=partition_data["fetchedBytes"],
                         fetched_records=partition_data["fetchedRecords"],
-                        error_code=partition_data["errorCode"]))
+                        error_code=partition_data["errorCode"],
+                    )
+                )
             assigned_topics.append(
-                TopicState(topic=topic_data["topic"], partitions=partitions))
+                TopicState(topic=topic_data["topic"], partitions=partitions)
+            )
 
         return ConsumerStateResponse(
             client_id=response.get("client_id", ""),
             assigned_topics=assigned_topics,
             total_consumed_bytes=int(response.get("totalConsumedBytes", 0)),
-            total_consumed_messages=int(
-                response.get("totalConsumedMessages", 0)),
+            total_consumed_messages=int(response.get("totalConsumedMessages", 0)),
             last_error_code=response.get("lastErrorCode", 0),
-            non_monotonic_fetches=response.get("nonMonotonicFetches", 0))
+            non_monotonic_fetches=response.get("nonMonotonicFetches", 0),
+        )
 
     def _url(self, path) -> str:
         return f"http://{self._node.account.hostname}:{self._listener_port}/{path}"

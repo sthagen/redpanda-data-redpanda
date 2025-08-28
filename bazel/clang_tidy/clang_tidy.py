@@ -10,9 +10,7 @@ import yaml
 
 def main():
     if len(sys.argv) < 3:
-        print(
-            f"Usage: {sys.argv[0]} <CLANG_TIDY_BIN> <FAKE_OUTPUT> <CONFIG> [ARGS...]"
-        )
+        print(f"Usage: {sys.argv[0]} <CLANG_TIDY_BIN> <FAKE_OUTPUT> <CONFIG> [ARGS...]")
         sys.exit(1)
 
     clang_tidy_bin = sys.argv[1]
@@ -32,22 +30,19 @@ def main():
 
     try:
         verify_command = [
-            clang_tidy_bin, f"--config-file={final_config_file.name}",
-            "--quiet", "--verify-config"
+            clang_tidy_bin,
+            f"--config-file={final_config_file.name}",
+            "--quiet",
+            "--verify-config",
         ]
-        _ = subprocess.run(verify_command,
-                           check=True,
-                           capture_output=True,
-                           text=True)
+        _ = subprocess.run(verify_command, check=True, capture_output=True, text=True)
 
         run_command = [
-            clang_tidy_bin, f"--config-file={final_config_file.name}"
+            clang_tidy_bin,
+            f"--config-file={final_config_file.name}",
         ] + remaining_args
 
-        _ = subprocess.run(run_command,
-                           check=True,
-                           capture_output=True,
-                           text=True)
+        _ = subprocess.run(run_command, check=True, capture_output=True, text=True)
 
     except subprocess.CalledProcessError as e:
         print("clang-tidy command failed.", file=sys.stderr)
@@ -64,7 +59,7 @@ def strip_warning_checks(config) -> None:
     """
     Strip warning checks to keep only error-generating checks for CI speed.
     """
-    config['Checks'] = config['WarningsAsErrors']
+    config["Checks"] = config["WarningsAsErrors"]
 
 
 if __name__ == "__main__":

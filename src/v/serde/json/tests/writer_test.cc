@@ -175,6 +175,12 @@ TEST_F(JsonWriterTest, Primatives) {
       R"({"pi":3.14159,"null":null,"boolean":true,"integer":42,"array":[2.71828,false,null,-42]})");
 }
 
+TEST_F(JsonWriterTest, Base64) {
+    auto result = serialize_value(
+      [](serde::json::writer& w) { w.base64_string(iobuf::from("testing")); });
+    EXPECT_EQ(result, R"("dGVzdGluZw==")");
+}
+
 TEST_F(JsonWriterTest, EmptyArrayAndObject) {
     auto result = serialize_object([](serde::json::writer& w) {
         w.key("emptyArr");

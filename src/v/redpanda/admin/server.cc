@@ -373,10 +373,10 @@ public:
             // correct content-type in the next line.
             rep->write_body(
               "bin",
-              [this, payload = std::move(reply_payload)](
-                ss::output_stream<char>&& writer) mutable {
-                  return write_payload(
-                    std::move(writer), payload.share(0, payload.size_bytes()));
+              [payload = std::move(reply_payload)](
+                ss::output_stream<char>& writer) mutable {
+                  return write_iobuf_to_output_stream(
+                    payload.share(0, payload.size_bytes()), writer);
               });
             rep->set_mime_type(
               is_proto ? "application/proto" : "application/json");
@@ -445,12 +445,6 @@ private:
               "request too large");
         }
         co_return payload;
-    }
-
-    ss::future<>
-    write_payload(ss::output_stream<char> output_stream, iobuf payload) {
-        co_await write_iobuf_to_output_stream(std::move(payload), output_stream)
-          .finally([&output_stream] { return output_stream.close(); });
     }
 
     ss::noncopyable_function<void(const ss::http::request&)>

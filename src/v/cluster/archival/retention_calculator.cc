@@ -127,7 +127,7 @@ std::optional<retention_calculator> retention_calculator::factory(
               overshot_by);
         }
     }
-
+    auto manifest_end = manifest.end();
     if (ntp_config.retention_duration()) {
         model::timestamp oldest_allowed_timestamp{
           model::timestamp::now().value()
@@ -136,7 +136,7 @@ std::optional<retention_calculator> retention_calculator::factory(
         if (manifest.size() > 0) {
             auto first_seg = manifest.first_addressable_segment();
             if (
-              first_seg != manifest.end()
+              first_seg != manifest_end
               && first_seg->max_timestamp < oldest_allowed_timestamp) {
                 strats.push_back(
                   std::make_unique<time_based_strategy>(
@@ -156,7 +156,7 @@ std::optional<retention_calculator> retention_calculator::factory(
     if (start_kafka_override > kafka::offset(0)) {
         auto first_seg = manifest.first_addressable_segment();
         if (
-          first_seg != manifest.end()
+          first_seg != manifest_end
           && start_kafka_override > first_seg->last_kafka_offset()) {
             // The user has passed in a start override via DeleteRecords, and
             // there exists at least one segment below this offset. Remove up
@@ -191,7 +191,8 @@ retention_calculator::retention_calculator(
 
 std::optional<model::offset> retention_calculator::next_start_offset() {
     auto it = _manifest.first_addressable_segment();
-    for (; it != _manifest.end(); ++it) {
+    auto end_it = _manifest.end();
+    for (; it != end_it; ++it) {
         const auto& entry = *it;
         if (_pinned_offset && entry.last_kafka_offset() >= *_pinned_offset) {
             // The pin is blocking us from removing this segment and beyond.
@@ -219,7 +220,7 @@ std::optional<model::offset> retention_calculator::next_start_offset() {
 
     // We made it to the end of our strategies and our policies are still not
     // satisfied. Return just past the end -- we will truncate all segments.
-    if (it == _manifest.end()) {
+    if (it == end_it) {
         return model::next_offset(_manifest.get_last_offset());
     }
 

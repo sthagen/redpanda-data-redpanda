@@ -12,6 +12,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 
 #include <seastar/core/future.hh>
@@ -25,9 +26,6 @@ namespace seastar::http {
 struct request;
 struct reply;
 } // namespace seastar::http
-namespace seastar::httpd {
-class routes;
-} // namespace seastar::httpd
 
 // Supporting functions for ConnectRPC protocol support in seastar
 //
@@ -114,14 +112,74 @@ public:
     virtual std::vector<route_descriptor> all_routes() = 0;
 };
 
+// Describes the cause of the error with structured details.
+//
+// Example of an error when contacting the "pubsub.googleapis.com" API when it
+// is not enabled:
+//     { "reason":   "API_DISABLED"
+//       "domain": "googleapis.com"
+//       "metadata": {
+//         "resource": "projects/123",
+//         "service": "pubsub.googleapis.com"
+//       }
+//     }
+// This response indicates that the pubsub.googleapis.com API is not enabled.
+//
+// Example of an error that is returned when attempting to create a Spanner
+// instance in a region that is out of stock:
+//     { "reason":   "STOCKOUT"
+//       "domain": "spanner.googleapis.com",
+//       "metadata": {
+//         "availableRegions": "us-central1,us-east2"
+//       }
+//     }
+struct error_info {
+    // The reason of the error. This is a constant value that identifies the
+    // proximate cause of the error. Error reasons are unique within a
+    // particular domain of errors. This should be at most 63 characters and
+    // match
+    // /[A-Z0-9_]+/.
+    ss::sstring reason;
+
+    // The domain of errors that originate from Redpanda core.
+    constexpr static std::string_view redpanda_core_domain
+      = "redpanda.com/core";
+
+    // The logical grouping to which the "reason" belongs.  Often "domain" will
+    // contain the registered service name of the tool or product that is the
+    // source of the error. Example: "pubsub.googleapis.com". If the error is
+    // common across many APIs, the first segment of the example above will be
+    // omitted.  The value will be, "googleapis.com".
+    ss::sstring domain = ss::sstring(redpanda_core_domain);
+
+    // Additional structured details about this error.
+    //
+    // Keys should match /[a-zA-Z0-9-_]/ and be limited to 64 characters in
+    // length. When identifying the current value of an exceeded limit, the
+    // units should be contained in the key, not the value.  For example, rather
+    // than
+    // {"instanceLimit": "100/request"}, should be returned as,
+    // {"instanceLimitPerRequest": "100"}, if the client exceeds the number of
+    // instances that can be created in a single (batch) request.
+    chunked_hash_map<ss::sstring, ss::sstring> metadata;
+};
+
 // Base Exception when handling RPC requests.
 //
 // See: https://connectrpc.com/docs/protocol#error-codes
 class base_exception : public std::exception {
 protected:
-    base_exception(int status_code, ss::sstring code, ss::sstring message);
+    base_exception(
+      int status_code,
+      ss::sstring code,
+      ss::sstring message,
+      std::optional<error_info> error_info);
 
 public:
+    const char* what() const noexcept override;
+    const ss::sstring& message() const;
+    const std::optional<error_info>& info() const;
+
     // Handle the HTTP reply to report the error as suggested.
     std::unique_ptr<ss::http::reply>
       handle(std::unique_ptr<ss::http::reply>) const;
@@ -130,126 +188,74 @@ private:
     int _status_code;
     ss::sstring _code;
     ss::sstring _message;
+    std::optional<error_info> _error_info;
 };
 
+#define CONNECTRPC_DECLARE_EXCEPTION(name)                                     \
+    class name##_exception : public base_exception {                           \
+    public:                                                                    \
+        name##_exception();                                                    \
+        explicit name##_exception(ss::sstring message);                        \
+        explicit name##_exception(std::optional<error_info>);                  \
+        name##_exception(ss::sstring message, std::optional<error_info>);      \
+    }
+
 // RPC canceled, usually by the caller.
-class cancelled_exception : public base_exception {
-public:
-    cancelled_exception();
-    explicit cancelled_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(cancelled);
 
 // Catch-all for errors of unclear origin and errors without a more appropriate
 // code.
-class unknown_exception : public base_exception {
-public:
-    unknown_exception();
-    explicit unknown_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(unknown);
 
 // Request is invalid, regardless of system state.
-class invalid_argument_exception : public base_exception {
-public:
-    invalid_argument_exception();
-    explicit invalid_argument_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(invalid_argument);
 
 // Deadline expired before RPC could complete or before the client received the
 // response.
-class deadline_exceeded_exception : public base_exception {
-public:
-    deadline_exceeded_exception();
-    explicit deadline_exceeded_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(deadline_exceeded);
 
 // User requested a resource (for example, a file or directory) that can't be
 // found.
-class not_found_exception : public base_exception {
-public:
-    not_found_exception();
-    explicit not_found_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(not_found);
 
 // Caller attempted to create a resource that already exists.
-class already_exists_exception : public base_exception {
-public:
-    already_exists_exception();
-    explicit already_exists_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(already_exists);
 
 // Caller isn't authorized to perform the operation.
-class permission_denied_exception : public base_exception {
-public:
-    permission_denied_exception();
-    explicit permission_denied_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(permission_denied);
 
 // Operation can't be completed because some resource is exhausted. Use
 // unavailable if the server is temporarily overloaded and the caller should
 // retry later.
-class resource_exhausted_exception : public base_exception {
-public:
-    resource_exhausted_exception();
-    explicit resource_exhausted_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(resource_exhausted);
 
 // Operation can't be completed because the system isn't in the required state.
-class failed_precondition_exception : public base_exception {
-public:
-    failed_precondition_exception();
-    explicit failed_precondition_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(failed_precondition);
 
 // The operation was aborted, often because of concurrency issues like a
 // database transaction abort.
-class aborted_exception : public base_exception {
-public:
-    aborted_exception();
-    explicit aborted_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(aborted);
 
 // The operation was attempted past the valid range.
-class out_of_range_exception : public base_exception {
-public:
-    out_of_range_exception();
-    explicit out_of_range_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(out_of_range);
 
 // The operation isn't implemented, supported, or enabled.
-class unimplemented_exception : public base_exception {
-public:
-    unimplemented_exception();
-    explicit unimplemented_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(unimplemented);
 
 // An invariant expected by the underlying system has been broken. Reserved for
 // serious errors.
-class internal_exception : public base_exception {
-public:
-    internal_exception();
-    explicit internal_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(internal);
 
 // The service is currently unavailable, usually transiently. Clients should
 // back off and retry idempotent operations.
-class unavailable_exception : public base_exception {
-public:
-    unavailable_exception();
-    explicit unavailable_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(unavailable);
 
 // Unrecoverable data loss or corruption.
-class data_loss_exception : public base_exception {
-public:
-    data_loss_exception();
-    explicit data_loss_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(data_loss);
 
 // Caller doesn't have valid authentication credentials for the operation.
-class unauthenticated_exception : public base_exception {
-public:
-    unauthenticated_exception();
-    explicit unauthenticated_exception(ss::sstring message);
-};
+CONNECTRPC_DECLARE_EXCEPTION(unauthenticated);
+
+#undef CONNECTRPC_DECLARE_EXCEPTION
 
 } // namespace serde::pb::rpc

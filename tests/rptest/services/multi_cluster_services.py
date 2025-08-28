@@ -24,17 +24,17 @@ KAFKA_VERSION = kafkatest.version.KafkaVersion("3.7.0")
 
 
 class ServiceType(str, Enum):
-    REDPANDA = 'redpanda'
-    KAFKA = 'kafka'
+    REDPANDA = "redpanda"
+    KAFKA = "kafka"
 
 
 Service = RedpandaService | KafkaServiceAdapter
-C = TypeVar('C', bound='Cluster')
-KC = TypeVar('KC', bound='KafkaCluster')
-RC = TypeVar('RC', bound='RedpandaCluster')
+C = TypeVar("C", bound="Cluster")
+KC = TypeVar("KC", bound="KafkaCluster")
+RC = TypeVar("RC", bound="RedpandaCluster")
 
 
-class Cluster():
+class Cluster:
     _service: Service
 
     def __init__(self, service: Service):
@@ -82,10 +82,8 @@ class KafkaCluster(Cluster):
         zk = ZookeeperService(test_ctx, num_nodes=1, version=KAFKA_VERSION)
         svc = KafkaServiceAdapter(
             test_ctx,
-            KafkaService(test_ctx,
-                         num_nodes=num_brokers,
-                         zk=zk,
-                         version=KAFKA_VERSION))
+            KafkaService(test_ctx, num_nodes=num_brokers, zk=zk, version=KAFKA_VERSION),
+        )
         return cls(svc, zk)
 
     @property
@@ -124,28 +122,28 @@ class RedpandaCluster(Cluster):
         return f"Redpanda cluster of {len(self.service.nodes)} nodes"
 
 
-class MultiClusterServices():
-    def __init__(self,
-                 test_ctx,
-                 logger,
-                 redpanda: RedpandaService,
-                 secondary_type: ServiceType = ServiceType.REDPANDA,
-                 num_brokers=3):
+class MultiClusterServices:
+    def __init__(
+        self,
+        test_ctx,
+        logger,
+        redpanda: RedpandaService,
+        secondary_type: ServiceType = ServiceType.REDPANDA,
+        num_brokers=3,
+    ):
         self.test_ctx = test_ctx
         self.logger = logger
         self._clusters: list[Cluster] = [RedpandaCluster(redpanda)]
         if secondary_type is ServiceType.REDPANDA:
-            self._clusters.append(
-                RedpandaCluster.create(self.test_ctx, num_brokers))
+            self._clusters.append(RedpandaCluster.create(self.test_ctx, num_brokers))
         elif secondary_type is ServiceType.KAFKA:
-            self._clusters.append(
-                KafkaCluster.create(self.test_ctx, num_brokers))
-        assert len(self._clusters) == 2, \
-            f"Expected two clusters, got {self._clusters=}"
+            self._clusters.append(KafkaCluster.create(self.test_ctx, num_brokers))
+        assert len(self._clusters) == 2, f"Expected two clusters, got {self._clusters=}"
 
     def setUp(self):
-        assert len(self.primary.service.started_nodes()) == 0, \
+        assert len(self.primary.service.started_nodes()) == 0, (
             f"{str(c)}: MultiClusterServices expects to start itself"
+        )
 
         # TODO: extra configs?
 
@@ -164,16 +162,17 @@ class MultiClusterServices():
     def secondary(self):
         return self._clusters[1]
 
-    def create_topic(self,
-                     cluster: Cluster,
-                     name: str,
-                     partitions: int = 1,
-                     replicas: int = 1,
-                     config: dict[str, Any] = dict()):
-        cluster.rpk.create_topic(topic=name,
-                                 partitions=partitions,
-                                 replicas=replicas,
-                                 config=config)
+    def create_topic(
+        self,
+        cluster: Cluster,
+        name: str,
+        partitions: int = 1,
+        replicas: int = 1,
+        config: dict[str, Any] = dict(),
+    ):
+        cluster.rpk.create_topic(
+            topic=name, partitions=partitions, replicas=replicas, config=config
+        )
 
     def list_topics(self, cluster: Cluster, detailed: bool = False):
         return list(cluster.rpk.list_topics(detailed))

@@ -13,11 +13,15 @@
 
 #include "base/format_to.h"
 #include "bytes/iobuf.h"
+#include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 #include "serde/envelope.h"
 #include "serde/rw/enum.h"
 #include "serde/rw/envelope.h"
 #include "serde/rw/iobuf.h"
+#include "serde/rw/map.h"
+#include "serde/rw/optional.h"
+#include "utils/to_string.h"
 
 namespace admin::proxy {
 
@@ -75,13 +79,32 @@ struct proxy_response
     // response. Otherwise, this will be the error message for the error_code.
     iobuf payload;
 
-    auto serde_fields() { return std::tie(error_code, payload); }
+    struct error_info
+      : serde::
+          envelope<error_info, serde::version<0>, serde::compat_version<0>> {
+        ss::sstring reason;
+        ss::sstring domain;
+        chunked_hash_map<ss::sstring, ss::sstring> metadata;
+        auto serde_fields() { return std::tie(reason, domain, metadata); }
+        fmt::iterator format_to(fmt::iterator it) const {
+            return fmt::format_to(
+              it,
+              "{{reason={}, domain={}, metadata={}}}",
+              reason,
+              domain,
+              metadata);
+        }
+    };
+    std::optional<error_info> info;
+
+    auto serde_fields() { return std::tie(error_code, payload, info); }
     fmt::iterator format_to(fmt::iterator it) const {
         return fmt::format_to(
           it,
-          "{{error_code={}, message={}}}",
+          "{{error_code={}, message={}, error_info={}}}",
           std::to_underlying(error_code),
-          payload);
+          payload,
+          info);
     }
 };
 

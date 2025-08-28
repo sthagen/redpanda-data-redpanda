@@ -34,6 +34,21 @@ class DebugServiceClient:
         self.base_url = base_url
         self._connect_client = ConnectClient(http_client, protocol)
 
+    def call_throw_structured_exception(self, req: proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionResponse]:
+        """Low-level method to call ThrowStructuredException, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.internal.DebugService/ThrowStructuredException'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionResponse, extra_headers, timeout_seconds)
+
+    def throw_structured_exception(self, req: proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionResponse:
+        response = self.call_throw_structured_exception(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     def call_start_stress_fiber(self, req: proto.redpanda.core.admin.internal.debug_pb2.StartStressFiberRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.debug_pb2.StartStressFiberResponse]:
         """Low-level method to call StartStressFiber, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.internal.DebugService/StartStressFiber'
@@ -70,6 +85,21 @@ class AsyncDebugServiceClient:
         self.base_url = base_url
         self._connect_client = AsyncConnectClient(http_client, protocol)
 
+    async def call_throw_structured_exception(self, req: proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionResponse]:
+        """Low-level method to call ThrowStructuredException, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.internal.DebugService/ThrowStructuredException'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionResponse, extra_headers, timeout_seconds)
+
+    async def throw_structured_exception(self, req: proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionResponse:
+        response = await self.call_throw_structured_exception(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
     async def call_start_stress_fiber(self, req: proto.redpanda.core.admin.internal.debug_pb2.StartStressFiberRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.internal.debug_pb2.StartStressFiberResponse]:
         """Low-level method to call StartStressFiber, granting access to errors and metadata"""
         url = self.base_url + '/redpanda.core.admin.internal.DebugService/StartStressFiber'
@@ -103,6 +133,9 @@ class AsyncDebugServiceClient:
 @typing.runtime_checkable
 class DebugServiceProtocol(typing.Protocol):
 
+    def throw_structured_exception(self, req: ClientRequest[proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionRequest]) -> ServerResponse[proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionResponse]:
+        ...
+
     def start_stress_fiber(self, req: ClientRequest[proto.redpanda.core.admin.internal.debug_pb2.StartStressFiberRequest]) -> ServerResponse[proto.redpanda.core.admin.internal.debug_pb2.StartStressFiberResponse]:
         ...
 
@@ -112,6 +145,7 @@ DEBUG_SERVICE_PATH_PREFIX = '/redpanda.core.admin.internal.DebugService'
 
 def wsgi_debug_service(implementation: DebugServiceProtocol) -> WSGIApplication:
     app = ConnectWSGI()
+    app.register_unary_rpc('/redpanda.core.admin.internal.DebugService/ThrowStructuredException', implementation.throw_structured_exception, proto.redpanda.core.admin.internal.debug_pb2.ThrowStructuredExceptionRequest)
     app.register_unary_rpc('/redpanda.core.admin.internal.DebugService/StartStressFiber', implementation.start_stress_fiber, proto.redpanda.core.admin.internal.debug_pb2.StartStressFiberRequest)
     app.register_unary_rpc('/redpanda.core.admin.internal.DebugService/StopStressFiber', implementation.stop_stress_fiber, proto.redpanda.core.admin.internal.debug_pb2.StopStressFiberRequest)
     return app

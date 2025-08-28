@@ -64,7 +64,9 @@ ss::future<anomalies_detector::result> anomalies_detector::run(
 
     std::deque<ss::sstring> spill_manifest_paths;
     const auto& spillovers = manifest.get_spillover_map();
-    for (auto iter = spillovers.begin(); iter != spillovers.end(); ++iter) {
+    for (auto iter = spillovers.begin(), end_it = spillovers.end();
+         iter != end_it;
+         ++iter) {
         spillover_manifest_path_components comp{
           .base = iter->base_offset,
           .last = iter->committed_offset,
@@ -242,15 +244,16 @@ anomalies_detector::check_manifest(
         co_return stop_detector::no;
     }
     std::optional<segment_meta> previous_seg_meta;
+    auto manifest_end = manifest.end();
     if (scrub_from && manifest.get_last_offset() > scrub_from) {
         if (auto iter = manifest.segment_containing(*scrub_from);
-            iter != manifest.end()) {
+            iter != manifest_end) {
             previous_seg_meta = *iter;
             seg_iter = std::move(++iter);
         }
     }
 
-    for (; seg_iter != manifest.end(); ++seg_iter) {
+    for (; seg_iter != manifest_end; ++seg_iter) {
         if (should_stop()) {
             _result.status = scrub_status::partial;
             co_return stop_detector::yes;

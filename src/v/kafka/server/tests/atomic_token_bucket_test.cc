@@ -23,10 +23,24 @@ using std::chrono::milliseconds;
 // compensate for this.
 const auto epsilon = 100ms;
 
+using time_point = atomic_token_bucket::clock::time_point;
+
+namespace {
+// seastar makes use of compare_exchange_weak inside the replenish call
+// which may spuriously fail on arm. As a workaround, to ensure test stability
+// we guard against it here.
+void strong_replenish(atomic_token_bucket& bucket, const time_point& tp) {
+    while (bucket.replenished_ts() != tp) {
+        bucket.replenish(tp);
+    }
+}
+} // namespace
+
 BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_limit) {
     auto now = ss::lowres_clock::now();
 
     atomic_token_bucket bucket{10, 10, 1, true};
+    strong_replenish(bucket, now);
 
     // Observe that the bucket starts returning a positive delay proportional to
     // the bucket deficit once the limit is crossed
@@ -40,11 +54,11 @@ BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_limit) {
     BOOST_CHECK_EQUAL(1000ms, bucket.calculate_delay<milliseconds>());
 
     // "Wait" 1 second to refill by 10 units as per the bucket rate
-    bucket.replenish(now + 1s + epsilon);
+    strong_replenish(bucket, now + 1s + epsilon);
     BOOST_CHECK_EQUAL(0ms, bucket.calculate_delay<milliseconds>());
 
     // "Wait" a long time to refill the bucket as much as possible
-    bucket.replenish(now + 10s + 2 * epsilon);
+    strong_replenish(bucket, now + 10s + 2 * epsilon);
     BOOST_CHECK_EQUAL(0ms, bucket.calculate_delay<milliseconds>());
     bucket.record(11);
     BOOST_CHECK_EQUAL(100ms, bucket.calculate_delay<milliseconds>());
@@ -54,6 +68,7 @@ BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_start_full) {
     // start_full=true should ensure that we start with a bucket filled up to
     // the limit
     atomic_token_bucket full_bucket{10, 10, 1, true};
+    strong_replenish(full_bucket, ss::lowres_clock::now());
 
     full_bucket.record(10 + 1);
     BOOST_CHECK_EQUAL(100ms, full_bucket.calculate_delay<milliseconds>());
@@ -67,7 +82,7 @@ BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_start_full) {
     empty_bucket.record(10 + 1);
     BOOST_CHECK_EQUAL(1100ms, empty_bucket.calculate_delay<milliseconds>());
 
-    empty_bucket.replenish(now + 1100ms + 1s + epsilon);
+    strong_replenish(empty_bucket, now + 1100ms + 1s + epsilon);
     BOOST_CHECK_EQUAL(0ms, empty_bucket.calculate_delay<milliseconds>());
 
     empty_bucket.record(10 + 1);
@@ -77,23 +92,26 @@ BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_start_full) {
 BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_threshold) {
     auto now = ss::lowres_clock::now();
     atomic_token_bucket bucket{10, 10, 10, true};
+    strong_replenish(bucket, now);
 
     bucket.record(10 + 1);
     BOOST_CHECK_EQUAL(100ms, bucket.calculate_delay<milliseconds>());
 
     // Replenishing before we have the threshold's worth of tokens
-    // re-accumulated should have no effect
+    // re-accumulated should have no effect. Since the replenished_ts is not
+    // updated, the strong_replenish workaround can't be used here.
     bucket.replenish(now + 100ms + epsilon);
     BOOST_CHECK_EQUAL(100ms, bucket.calculate_delay<milliseconds>());
 
     // Replenishing once we are above the threshold updates the deficit
-    bucket.replenish(now + 1s + 2 * epsilon);
+    strong_replenish(bucket, now + 1s + 2 * epsilon);
     BOOST_CHECK_EQUAL(0ms, bucket.calculate_delay<milliseconds>());
 }
 
 BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_burst) {
     auto now = ss::lowres_clock::now();
     atomic_token_bucket bucket{10, 100, 1, true};
+    strong_replenish(bucket, now);
 
     // There should be no limit applied until the burst capacity is reached
     bucket.record(11);
@@ -106,9 +124,9 @@ BOOST_AUTO_TEST_CASE(test_atomic_token_bucket_burst) {
     BOOST_CHECK_EQUAL(200ms, bucket.calculate_delay<milliseconds>());
 
     // The bucket gets refilled based on the rate, up to the burst capacity
-    bucket.replenish(now + 200ms + epsilon);
+    strong_replenish(bucket, now + 200ms + epsilon);
     BOOST_CHECK_EQUAL(0ms, bucket.calculate_delay<milliseconds>());
-    bucket.replenish(now + 10s + 2 * epsilon);
+    strong_replenish(bucket, now + 10s + 2 * epsilon);
     bucket.record(100);
     BOOST_CHECK_EQUAL(0ms, bucket.calculate_delay<milliseconds>());
 }

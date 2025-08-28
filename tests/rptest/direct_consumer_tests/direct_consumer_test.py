@@ -21,10 +21,17 @@ from ducktape.tests.test import TestContext
 from ducktape.errors import TimeoutError
 
 from rptest.services.direct_consumer_verifier import (
-    DirectConsumerVerifier, CreateDirectConsumerRequest, BrokerAddress,
-    DirectConsumerConfiguration, OffsetResetPolicy, IsolationLevel,
-    AssignPartitionsRequest, TopicAssignment, PartitionAssignment,
-    GetConsumerStateRequest)
+    DirectConsumerVerifier,
+    CreateDirectConsumerRequest,
+    BrokerAddress,
+    DirectConsumerConfiguration,
+    OffsetResetPolicy,
+    IsolationLevel,
+    AssignPartitionsRequest,
+    TopicAssignment,
+    PartitionAssignment,
+    GetConsumerStateRequest,
+)
 from rptest.services.kgo_verifier_services import KgoVerifierProducer
 from rptest.clients.types import TopicSpec
 from rptest.tests.redpanda_test import RedpandaTest
@@ -33,6 +40,7 @@ from rptest.util import wait_until_with_progress_check
 
 class LoopThread(threading.Thread):
     """Run loop func until graceful cancellation is requested"""
+
     def _loop(self, *args, **kwargs):
         while not self.stopped():
             self._loop_func(*args, **kwargs)
@@ -49,14 +57,14 @@ class LoopThread(threading.Thread):
         return self._stop_event.is_set()
 
 
-#TODO: This test must be enabled once the direct consumer verifier support
+# TODO: This test must be enabled once the direct consumer verifier support
 # is added to vtools.
 class DirectConsumerVerifierTest(RedpandaTest):
     def __init__(self, test_context: TestContext, **kwargs: Any):
         super().__init__(test_context, **kwargs)
 
     def shuffle_one_leader(self, topic_spec: TopicSpec) -> None:
-        '''randomly chooses a partition in the given topic spec and moves its leader one replica over'''
+        """randomly chooses a partition in the given topic spec and moves its leader one replica over"""
         namespace = "kafka"
         topic_name = topic_spec.name
         partition_number = random.choice(range(topic_spec.partition_count))
@@ -65,18 +73,19 @@ class DirectConsumerVerifierTest(RedpandaTest):
         transfer_succeeded = admin.transfer_leadership_to(
             namespace="kafka",
             topic=topic_spec.name,
-            partition=random.randrange(0, topic_spec.partition_count))
+            partition=random.randrange(0, topic_spec.partition_count),
+        )
         self.redpanda.logger.debug(
             f"transfer of ntp {namespace}/{topic_name}/{partition_number} success? {transfer_succeeded}"
         )
 
-    def create_troublemaker_thread(self,
-                                   topic_spec: TopicSpec,
-                                   thread_name="stream_thread") -> LoopThread:
-        '''creates a background thread to drive paritition leadership transfers'''
-        thread = LoopThread(name=thread_name,
-                            loop_func=self.shuffle_one_leader,
-                            args=(topic_spec, ))
+    def create_troublemaker_thread(
+        self, topic_spec: TopicSpec, thread_name="stream_thread"
+    ) -> LoopThread:
+        """creates a background thread to drive paritition leadership transfers"""
+        thread = LoopThread(
+            name=thread_name, loop_func=self.shuffle_one_leader, args=(topic_spec,)
+        )
         return thread
 
     @cluster(num_nodes=5)
@@ -86,17 +95,19 @@ class DirectConsumerVerifierTest(RedpandaTest):
         msg_size = 128
         client_id = "test-consumer"
 
-        topic_spec = TopicSpec(name=topic_name,
-                               partition_count=128,
-                               replication_factor=3)
+        topic_spec = TopicSpec(
+            name=topic_name, partition_count=128, replication_factor=3
+        )
 
         self.client().create_topic(topic_spec)
 
-        producer = KgoVerifierProducer(self.test_context,
-                                       self.redpanda,
-                                       topic_name,
-                                       msg_size=msg_size,
-                                       msg_count=msg_count)
+        producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            topic_name,
+            msg_size=msg_size,
+            msg_count=msg_count,
+        )
         producer.start()
 
         verifier = DirectConsumerVerifier(self.test_context, log_level="DEBUG")
@@ -122,12 +133,14 @@ class DirectConsumerVerifierTest(RedpandaTest):
                 max_wait_time_ms=5000,
                 isolation_level=IsolationLevel.READ_UNCOMMITTED,
                 max_buffered_bytes=10 * 1024 * 1024,
-                max_buffered_elements=200)
+                max_buffered_elements=200,
+            )
 
             create_request = CreateDirectConsumerRequest(
                 client_id=client_id,
                 initial_brokers=brokers,
-                consumer_configuration=consumer_config)
+                consumer_configuration=consumer_config,
+            )
 
             verifier.create_consumer(create_request)
 
@@ -136,15 +149,18 @@ class DirectConsumerVerifierTest(RedpandaTest):
                 partitions=[
                     PartitionAssignment(partition_id=i)
                     for i in range(topic_spec.partition_count)
-                ])
+                ],
+            )
 
             assign_request = AssignPartitionsRequest(
-                client_id=client_id, topic_assignments=[topic_assignment])
+                client_id=client_id, topic_assignments=[topic_assignment]
+            )
 
             verifier.assign_partitions(assign_request)
 
             state_request = GetConsumerStateRequest(
-                client_id=client_id, include_partition_states=True)
+                client_id=client_id, include_partition_states=True
+            )
 
             def get_consumption():
                 state = verifier.get_consumer_state(state_request)
@@ -167,11 +183,13 @@ class DirectConsumerVerifierTest(RedpandaTest):
 
             # assertions
             # must have seen at least msg_count, duplicate offsets are legal but undesirable
-            assert final_state.total_consumed_messages >= msg_count, \
+            assert final_state.total_consumed_messages >= msg_count, (
                 f"Expected {msg_count} messages, got {final_state.total_consumed_messages}"
+            )
 
-            assert int(final_state.non_monotonic_fetches) == 0, \
+            assert int(final_state.non_monotonic_fetches) == 0, (
                 f"Non-monotonic fetches found, number of nm fetches: {final_state.non_monotonic_fetches}"
+            )
 
             self.logger.info(
                 f"Successfully consumed {final_state.total_consumed_messages} messages"

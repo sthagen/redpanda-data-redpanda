@@ -13,8 +13,7 @@ from connectrpc.client_protocol import ConnectProtocol
 
 
 class RedpandaServiceProto(Protocol):
-    def started_nodes(self) -> list[ClusterNode]:
-        ...
+    def started_nodes(self) -> list[ClusterNode]: ...
 
 
 # Re-export some protobufs for convenience
@@ -55,15 +54,16 @@ class Admin:
     """
     Wrapper for the Redpanda Admin v2 client.
     """
+
     def __init__(
-            self,
-            redpanda: RedpandaServiceProto,
-            auth: tuple[str, str] | None = None,
-            protocol: Literal['json'] | Literal['proto'] = 'json') -> None:
+        self,
+        redpanda: RedpandaServiceProto,
+        auth: tuple[str, str] | None = None,
+        protocol: Literal["json"] | Literal["proto"] = "json",
+    ) -> None:
         self._rp = redpanda
         if auth != None:
-            self._headers = urllib3.util.make_headers(
-                basic_auth=f'{auth[0]}:{auth[1]}')
+            self._headers = urllib3.util.make_headers(basic_auth=f"{auth[0]}:{auth[1]}")
         else:
             self._headers = {}
         self._protocol = protocol
@@ -73,10 +73,12 @@ class Admin:
         client = service_clazz(
             base_url=f"http://{node.account.hostname}:9644/v2",
             protocol=ConnectProtocol.CONNECT_PROTOBUF
-            if self._protocol == 'proto' else ConnectProtocol.CONNECT_JSON,
+            if self._protocol == "proto"
+            else ConnectProtocol.CONNECT_JSON,
         )
-        client._connect_client = HeaderInjectingClient(client._connect_client,
-                                                       self._headers.copy())
+        client._connect_client = HeaderInjectingClient(
+            client._connect_client, self._headers.copy()
+        )
         return client
 
     def admin(self) -> admin_pb2_connect.AdminServiceClient:
@@ -86,5 +88,4 @@ class Admin:
         return self._make_service(debug_pb2_connect.DebugServiceClient)
 
     def shadow_link(self) -> shadow_link_pb2_connect.ShadowLinkServiceClient:
-        return self._make_service(
-            shadow_link_pb2_connect.ShadowLinkServiceClient)
+        return self._make_service(shadow_link_pb2_connect.ShadowLinkServiceClient)
