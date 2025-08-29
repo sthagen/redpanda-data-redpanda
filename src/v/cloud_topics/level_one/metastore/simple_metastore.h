@@ -32,7 +32,8 @@ public:
     get_or_create_object_for(const model::topic_id_partition&) override;
     std::expected<void, error>
       add(object_id, metastore::object_metadata::ntp_metadata) override;
-    std::expected<void, error> finish(object_id, size_t footer_pos) override;
+    std::expected<void, error>
+    finish(object_id, size_t footer_pos, size_t object_size) override;
 
     std::expected<chunked_vector<metastore::object_metadata>, error> release();
 

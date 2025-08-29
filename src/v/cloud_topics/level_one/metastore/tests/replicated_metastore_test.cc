@@ -63,7 +63,7 @@ public:
                 .size = 500,
               });
             ASSERT_TRUE(add_res.has_value()) << add_res.error();
-            auto fin_res = ret->finish(oid, 500);
+            auto fin_res = ret->finish(oid, 500, 1000);
             ASSERT_TRUE(fin_res.has_value()) << fin_res.error();
         }
         *objs = std::move(ret);
@@ -320,7 +320,7 @@ TEST_F(ReplicatedMetastoreTest, TestNotLeader) {
             .size = 500,
           });
         ASSERT_TRUE(add_res.has_value()) << add_res.error();
-        auto fin_res = obj_builder->finish(oid, 500);
+        auto fin_res = obj_builder->finish(oid, 500, 1000);
         ASSERT_TRUE(fin_res.has_value()) << fin_res.error();
 
         metastore::term_offset_map_t terms;
@@ -416,7 +416,7 @@ TEST_F(ReplicatedMetastoreTest, TestGetTermForOffset) {
         .size = 500,
       });
     ASSERT_TRUE(add_res1.has_value()) << add_res1.error();
-    auto fin_res1 = obj_builder->finish(oid1, 500);
+    auto fin_res1 = obj_builder->finish(oid1, 500, 1000);
     ASSERT_TRUE(fin_res1.has_value()) << fin_res1.error();
 
     // Add a couple terms.
@@ -475,7 +475,7 @@ TEST_F(ReplicatedMetastoreTest, TestGetEndOffsetForTerm) {
         .size = 500,
       });
     ASSERT_TRUE(add_res1.has_value()) << add_res1.error();
-    auto fin_res1 = obj_builder->finish(oid1, 500);
+    auto fin_res1 = obj_builder->finish(oid1, 500, 1000);
     ASSERT_TRUE(fin_res1.has_value()) << fin_res1.error();
 
     // Add a couple terms.

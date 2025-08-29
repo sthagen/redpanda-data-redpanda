@@ -27,6 +27,10 @@ const absl::flat_hash_set<ss::sstring> required_topic_properties{
   ss::sstring{kafka::topic_property_timestamp_type},
 };
 
+const absl::flat_hash_set<::model::topic> topic_denylist{
+  ::model::kafka_consumer_offsets_topic,
+};
+
 bool has_required_permissions(
   kafka::topic_authorized_operations permissions_to_check,
   kafka::topic_authorized_operations required_permissions) {
@@ -480,8 +484,15 @@ source_topic_syncer::find_candidate_topics_for_update(
     candidate_topics.reserve(mirror_topics->size());
 
     for (auto& [topic, mirror_metadata] : *mirror_topics) {
-        vlog(logger().trace, "Checking metadata cache for topic {}", topic);
+        if (topic_denylist.contains(topic)) {
+            vlog(
+              logger().trace,
+              "Skipping mirroring of {} topic, it is in the denylist",
+              topic);
+            continue;
+        }
 
+        vlog(logger().trace, "Checking metadata cache for topic {}", topic);
         auto metadata_value = validate_topic_cache_entry(
           logger(), cluster.get_topics(), topic);
 
@@ -524,6 +535,13 @@ source_topic_syncer::find_candidate_topics_for_creation(
 
     for (const auto& topic : topics) {
         vlog(logger().trace, "Checking topic: {}", topic);
+        if (topic_denylist.contains(topic)) {
+            vlog(
+              logger().trace,
+              "Skipping mirroring of {} topic, it is in the denylist",
+              topic);
+            continue;
+        }
 
         auto metadata_value = validate_topic_cache_entry(
           logger(), topic_cache, topic);

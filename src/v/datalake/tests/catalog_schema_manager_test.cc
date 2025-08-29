@@ -265,13 +265,20 @@ TEST_F(CatalogSchemaManagerTest, TestOptionalMismatch) {
       = schema_mgr.ensure_table_schema(table_ident, type, empty_pspec).get();
     ASSERT_FALSE(res.has_error());
 
-    // Make the destinations both required. We don't support upgrading optional
-    // fields to required (though it is allowed by the iceberg spec).
-    type.fields[0]->required = field_required::yes;
-    type.fields[1]->required = field_required::yes;
-    res = schema_mgr.ensure_table_schema(table_ident, type, empty_pspec).get();
-    ASSERT_TRUE(res.has_error());
-    EXPECT_EQ(res.error(), schema_manager::errc::not_supported);
+    // Make the destinations both required. This is a no-op.
+    {
+        auto all_req = type.copy();
+
+        all_req.fields[0]->required = field_required::yes;
+        all_req.fields[1]->required = field_required::yes;
+        res = schema_mgr.ensure_table_schema(table_ident, all_req, empty_pspec)
+                .get();
+        ASSERT_FALSE(res.has_error());
+    }
+
+    auto info = schema_mgr.get_table_info(table_ident).get();
+    ASSERT_TRUE(info.has_value());
+    ASSERT_EQ(info.value().schema.schema_struct, type);
 }
 
 TEST_F(CatalogSchemaManagerTest, TestTypeMismatch) {
@@ -322,6 +329,23 @@ TEST_F(CatalogSchemaManagerTest, AcceptsValidTypePromotion) {
     auto loaded_table = load_table_schema(table_ident).get();
     ASSERT_TRUE(loaded_table.has_value());
     ASSERT_EQ(loaded_table.value().schema_struct, type);
+
+    // test that ensuring schema with original types is a no-op because the
+    // current schema can host pre-promotion data types without a problem
+    {
+        auto ensure_orig_res_later
+          = schema_mgr
+              .ensure_table_schema(table_ident, original_type, empty_pspec)
+              .get();
+        ASSERT_FALSE(ensure_orig_res_later.has_error())
+          << ensure_orig_res_later.error();
+
+        auto latest_schema = load_table_schema(table_ident).get();
+        ASSERT_TRUE(latest_schema.has_value());
+        ASSERT_EQ(
+          latest_schema.value().schema_struct,
+          loaded_table.value().schema_struct);
+    }
 }
 
 TEST_F(CatalogSchemaManagerTest, RejectsInvalidTypePromotion) {
@@ -405,6 +429,10 @@ TEST_F(CatalogSchemaManagerTest, GetTableInfo) {
     second.fields.emplace_back(
       nested_field::create(2, "bar", field_required::no, string_type{}));
 
+    auto third = first.copy();
+    third.fields.emplace_back(
+      nested_field::create(2, "baz", field_required::no, float_type{}));
+
     // set schema to 'first'
     auto ensure_res
       = schema_mgr.ensure_table_schema(table_ident, first, empty_pspec).get();
@@ -412,11 +440,6 @@ TEST_F(CatalogSchemaManagerTest, GetTableInfo) {
 
     // get_table_info returns current schema by default
     auto info_res = schema_mgr.get_table_info(table_ident).get();
-    ASSERT_FALSE(info_res.has_error());
-    ASSERT_EQ(info_res.value().schema.schema_struct, first);
-
-    // we can also retrieve 'first' by equivalence match
-    info_res = schema_mgr.get_table_info(table_ident, first).get();
     ASSERT_FALSE(info_res.has_error());
     ASSERT_EQ(info_res.value().schema.schema_struct, first);
 
@@ -430,13 +453,25 @@ TEST_F(CatalogSchemaManagerTest, GetTableInfo) {
     ASSERT_FALSE(info_res.has_error());
     ASSERT_EQ(info_res.value().schema.schema_struct, second);
 
-    // or by equivalence match, as before
-    info_res = schema_mgr.get_table_info(table_ident, second).get();
-    ASSERT_FALSE(info_res.has_error());
-    ASSERT_EQ(info_res.value().schema.schema_struct, second);
+    // set schema to 'third'
+    ensure_res
+      = schema_mgr.ensure_table_schema(table_ident, third, empty_pspec).get();
+    ASSERT_FALSE(ensure_res.has_error());
 
-    // but now we can retrieve 'first' as well
-    info_res = schema_mgr.get_table_info(table_ident, first).get();
+    // 'third' is current, so get_table_info returns this by default
+    info_res = schema_mgr.get_table_info(table_ident).get();
     ASSERT_FALSE(info_res.has_error());
-    ASSERT_EQ(info_res.value().schema.schema_struct, first);
+    ASSERT_EQ(
+      info_res.value().schema.schema_struct,
+      [] {
+          struct_type s{};
+          s.fields.emplace_back(
+            nested_field::create(1, "foo", field_required::no, int_type{}));
+          s.fields.emplace_back(
+            nested_field::create(2, "bar", field_required::no, string_type{}));
+          s.fields.emplace_back(
+            nested_field::create(3, "baz", field_required::no, float_type{}));
+          return s;
+      }())
+      << "Expect merged schema";
 }

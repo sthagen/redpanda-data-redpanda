@@ -41,13 +41,17 @@ const model::revision_id topic_rev{123};
 constexpr std::string_view avro_schema_v1_str = R"({
     "type": "record",
     "name": "RootRecord",
-    "fields": [ { "name": "mylong", "doc": "mylong field doc.", "type": "long" } ]
+    "fields": [
+      { "name": "mynum", "doc": "mynum field doc.", "type": "int" },
+      { "name": "mylong", "doc": "mylong field doc.", "type": "long" }
+    ]
 })";
-// v2: v1 schema + several others in the struct.
+// v2: v1 schema + a field promotion + several others in the struct.
 constexpr std::string_view avro_schema_v2_str = R"({
     "type": "record",
     "name": "RootRecord",
     "fields": [
+        { "name": "mynum", "doc": "mynum field doc.", "type": "long" },
         { "name": "mylong", "doc": "mylong field doc.", "type": "long" },
         {
             "name": "nestedrecord",
@@ -289,7 +293,7 @@ TEST_P(RecordMultiplexerParamTest, TestSimpleAvroRecords) {
 
     // 4 default columns + RootRecord + mylong
     auto schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 10);
+    EXPECT_EQ(schema->highest_field_id(), 11);
 
     // No DLQ table when all records are valid.
     assert_dlq_table(ntp.tp.topic, false);
@@ -328,7 +332,7 @@ TEST_P(RecordMultiplexerParamTest, TestAvroRecordsMultipleSchemas) {
     }
     EXPECT_EQ(hrs.size(), GetParam().hrs);
     auto schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 20);
+    EXPECT_EQ(schema->highest_field_id(), 21);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -433,7 +437,7 @@ TEST_F(RecordMultiplexerTest, TestBadData) {
           buf.append("\0", 1);
           int32_t encoded_id = ss::cpu_to_be(schema_id());
           buf.append((const uint8_t*)(&encoded_id), 4);
-          buf.append("\1\1", 2);
+          buf.append("\1\1\1", 3);
           b.add_raw_kv(std::nullopt, std::move(buf));
       });
     ASSERT_TRUE(res.has_value());
@@ -477,7 +481,7 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
 
     // This should have registered the valid schema.
     auto schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 10);
+    EXPECT_EQ(schema->highest_field_id(), 11);
 
     // Now try writing with an incompatible schema.
     res = mux(
@@ -497,7 +501,7 @@ TEST_F(RecordMultiplexerTest, TestBadSchemaChange) {
 
     // The schema for the main table should not have changed.
     schema = get_current_schema();
-    EXPECT_EQ(schema->highest_field_id(), 10);
+    EXPECT_EQ(schema->highest_field_id(), 11);
 
     // Metrics updated.
     EXPECT_EQ(

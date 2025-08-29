@@ -292,17 +292,17 @@ TEST(DatatypeTest, TestStruct) {
     // NOLINTEND(bugprone-use-after-move)
 
     ASSERT_EQ(t1_move, t1_dup);
-    ASSERT_EQ("struct[foo<string>]", fmt::format("{}", t2));
-    ASSERT_EQ("struct[food<string>]", fmt::format("{}", t3));
-    ASSERT_EQ("struct[foo<string>]", fmt::format("{}", t4));
-    ASSERT_EQ("struct[foo<boolean>]", fmt::format("{}", t5));
-    ASSERT_EQ("struct[foo<string>]", fmt::format("{}", t1_dup));
-    ASSERT_EQ("struct[foo<string>]", fmt::format("{}", t1_move));
+    ASSERT_EQ("struct[1:foo<string>]", fmt::format("{}", t2));
+    ASSERT_EQ("struct[0:food<string>]", fmt::format("{}", t3));
+    ASSERT_EQ("struct[0:foo<?string>]", fmt::format("{}", t4));
+    ASSERT_EQ("struct[0:foo<boolean>]", fmt::format("{}", t5));
+    ASSERT_EQ("struct[0:foo<string>]", fmt::format("{}", t1_dup));
+    ASSERT_EQ("struct[0:foo<string>]", fmt::format("{}", t1_move));
     // struct with two fields
     auto t6 = struct_single(0, "foo", field_required::yes, boolean_type{});
     std::get<struct_type>(t6).fields.push_back(
       nested_field::create(2, "bar", field_required::yes, int_type{}));
-    ASSERT_EQ("struct[foo<boolean>, bar<int>]", fmt::to_string(t6));
+    ASSERT_EQ("struct[0:foo<boolean>, 2:bar<int>]", fmt::to_string(t6));
 }
 
 TEST(DatatypeTest, TestBasicCopy) {

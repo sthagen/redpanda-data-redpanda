@@ -13,7 +13,7 @@ from rptest.services.admin import Admin
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.tests.schema_registry_test import SchemaRegistryEndpoints
 from rptest.clients.rpk import RpkTool
-from rptest.clients.admin.v2 import Admin as AdminV2, admin_pb, debug_pb
+from rptest.clients.admin.v2 import Admin as AdminV2, broker_pb, debug_pb
 from rptest.services.cluster import cluster
 from rptest.services.redpanda import SaslCredentials, SecurityConfig
 from rptest.util import expect_exception, expect_http_error
@@ -130,14 +130,12 @@ class AdminApiAuthTest(RedpandaTest):
             }
         )
 
-        is_denied = False
-        try:
-            unauthed = AdminV2(self.redpanda)
-            unauthed.admin().list_build_info(admin_pb.ListBuildInfoRequest())
-            is_denied = False
-        except ConnectError as e:
-            is_denied = e.code == ConnectErrorCode.PERMISSION_DENIED
-        assert is_denied, "Expected unauthenticated admin v2 request to be denied"
+        unauthed = AdminV2(self.redpanda)
+        resp = unauthed.broker().call_list_brokers(broker_pb.ListBrokersRequest())
+        assert resp.error() != None, f"expected an error response, got {resp}"
+        assert resp.error().code == ConnectErrorCode.PERMISSION_DENIED, (
+            f"Expected unauthenticated admin v2 request to be denied, got: {resp.error()}"
+        )
 
         for protocol in ["json", "proto"]:
             admin_v2 = AdminV2(
@@ -145,16 +143,19 @@ class AdminApiAuthTest(RedpandaTest):
                 auth=(charles.username, charles.password),
                 protocol=protocol,
             )
-            resp = admin_v2.admin().list_build_info(admin_pb.ListBuildInfoRequest())
-            assert len(resp.build_infos) == self.redpanda.num_nodes, (
-                "Expected to get build info for all nodes"
+            resp = admin_v2.broker().list_brokers(broker_pb.ListBrokersRequest())
+            assert len(resp.brokers) == self.redpanda.num_nodes, (
+                "Expected to get broker info for all nodes"
             )
-            self.logger.info(f"Build info={resp}")
+            self.logger.info(f"Brokers={resp}")
             for node in self.redpanda.nodes:
-                resp = admin_v2.admin().list_rpc_routes(
-                    admin_pb.ListRPCRoutesRequest(node_id=self.redpanda.node_id(node))
+                id = self.redpanda.node_id(node)
+                resp = admin_v2.broker().get_broker(
+                    broker_pb.GetBrokerRequest(node_id=id)
                 )
-                assert len(resp.routes) > 1, "Expected at least 2 routes"
+                assert resp.broker.node_id == id, (
+                    f"expected to get back the right node_id={id}, got: {resp.broker.node_id}"
+                )
 
     @cluster(num_nodes=3)
     def test_admin_v2_errors(self):

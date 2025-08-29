@@ -31,7 +31,7 @@ public:
       manager* manager,
       ss::lowres_clock::duration task_reconciler_interval,
       model::metadata config,
-      kafka::client::cluster cluster_connection);
+      std::unique_ptr<kafka::client::cluster> cluster_connection);
     link(const link&) = delete;
     link(link&&) = delete;
     link& operator=(const link&) = delete;
@@ -108,7 +108,7 @@ private:
     manager* _manager;
     chunked_hash_map<ss::sstring, std::unique_ptr<task>> _tasks;
     model::metadata _config;
-    kafka::client::cluster _cluster_connection;
+    std::unique_ptr<kafka::client::cluster> _cluster_connection;
 
     notification_list<task_state_change_cb, task_state_notification_id>
       _task_state_change_notifications;

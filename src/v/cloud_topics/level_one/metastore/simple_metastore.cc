@@ -59,7 +59,8 @@ simple_object_builder::add(
 }
 
 std::expected<void, metastore::object_metadata_builder::error>
-simple_object_builder::finish(object_id oid, size_t footer_pos) {
+simple_object_builder::finish(
+  object_id oid, size_t footer_pos, size_t object_size) {
     auto it = pending_objects_.find(oid);
     if (it == pending_objects_.end()) {
         return std::unexpected(
@@ -69,6 +70,7 @@ simple_object_builder::finish(object_id oid, size_t footer_pos) {
       metastore::object_metadata{
         .oid = oid,
         .footer_pos = footer_pos,
+        .object_size = object_size,
         .ntp_metas = std::move(it->second),
       });
     pending_objects_.erase(it);
@@ -91,6 +93,7 @@ new_object make_new_object(const metastore::object_metadata& o) {
     new_object new_o{
       .oid = o.oid,
       .footer_pos = o.footer_pos,
+      .object_size = o.object_size,
     };
     for (const auto& c : o.ntp_metas) {
         auto& extents = new_o.extent_metas[c.tidp.topic_id];
@@ -239,9 +242,11 @@ simple_metastore::get_first_ge(
             return std::unexpected(metastore::errc::out_of_range);
         }
         auto footer_pos = object_it->second.footer_pos;
+        auto object_size = object_it->second.object_size;
         return metastore::object_response{
           .oid = it->oid,
           .footer_pos = footer_pos,
+          .object_size = object_size,
         };
     }
     return std::unexpected(metastore::errc::out_of_range);
@@ -271,9 +276,11 @@ simple_metastore::get_first_ge(
                 return std::unexpected(metastore::errc::out_of_range);
             }
             auto footer_pos = object_it->second.footer_pos;
+            auto object_size = object_it->second.object_size;
             return metastore::object_response{
               .oid = obj.oid,
               .footer_pos = footer_pos,
+              .object_size = object_size,
             };
         }
     }

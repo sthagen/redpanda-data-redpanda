@@ -13,6 +13,7 @@
 #include "cloud_topics/cluster_services.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/data_plane_impl.h"
+#include "cloud_topics/manager/manager.h"
 #include "cluster/cluster_epoch_service.h"
 #include "cluster/controller.h"
 #include "ssx/sharded_service_container.h"
@@ -60,6 +61,12 @@ ss::future<> app::construct(
       shard_table,
       connection_cache,
       &domain_supervisor);
+
+    manager = std::make_unique<cloud_topics_manager>(
+      &remote->local(),
+      bucket,
+      &controller->get_partition_manager().local(),
+      &controller->get_raft_manager().local());
 }
 
 ss::future<> app::start() {
@@ -67,12 +74,13 @@ ss::future<> app::start() {
     co_await reconciler.invoke_on_all([](auto& r) { return r.start(); });
     co_await domain_supervisor.invoke_on_all(
       [](auto& ds) { return ds.start(); });
+    co_await manager->start();
 }
 
 ss::future<> app::stop() {
     ssx::sharded_service_container::shutdown();
+    co_await manager->stop();
     co_await data_plane->stop();
-    co_return;
 }
 
 ss::sharded<l1::frontend>* app::get_sharded_l1_metastore_fe() {

@@ -1,13 +1,33 @@
-# For details on buf.yaml configuration, visit https://buf.build/docs/configuration/v2/buf-yaml
+# When running buf locally it's important to pass the flag `--paths proto`
+# to the CLI otherwise it will try and scan the entire repo and it will
+# take forever. I'm not sure why `includes` doesn't also do this, but here
+# we are :shrug:
 version: v2
 modules:
-  - name: buf.build/rockwoodredpanda/redpanda-admin-test
+  - name: buf.build/redpandadata/core
     path: .
     includes:
       - proto
+    excludes:
+      - proto/redpanda/core/admin/v2/internal
+      - proto/redpanda/core/testing
+deps:
+  - buf.build/googleapis/googleapis
 lint:
   use:
     - STANDARD
+  except:
+    # the proto directory doesn't play well
+    # with the package we use.
+    - PACKAGE_VERSION_SUFFIX
+    - PACKAGE_DIRECTORY_MATCH
+  ignore:
+    - proto/redpanda/core/testing
+  ignore_only:
+    # This is an annotation, we want
+    # it to be easy to write.
+    ENUM_VALUE_PREFIX:
+      - proto/redpanda/pbgen
 breaking:
   use:
     - FILE

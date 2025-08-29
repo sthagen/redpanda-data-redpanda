@@ -9,6 +9,11 @@
 
 from connectrpc.errors import ConnectError, ConnectErrorCode
 
+from rptest.clients.admin.v2 import Admin as AdminV2
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
+    shadow_link_pb2,
+    shadow_link_pb2_connect,
+)
 from rptest.services.cluster import cluster
 from rptest.services.multi_cluster_services import (
     Cluster,

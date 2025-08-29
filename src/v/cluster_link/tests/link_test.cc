@@ -39,7 +39,7 @@ public:
       ss::lowres_clock::duration task_reconciler_interval,
       link_test* link_test,
       model::metadata metadata,
-      kafka::client::cluster cluster_connection);
+      std::unique_ptr<kafka::client::cluster> cluster_connection);
 
     ss::future<> start() override;
     ss::future<> stop() override;
@@ -60,7 +60,7 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata metadata,
-      kafka::client::cluster cluster_connection) override {
+      std::unique_ptr<kafka::client::cluster> cluster_connection) override {
         return std::make_unique<test_link>(
           self,
           link_id,
@@ -211,7 +211,7 @@ test_link::test_link(
   ss::lowres_clock::duration task_reconciler_interval,
   link_test* link_test,
   model::metadata metadata,
-  kafka::client::cluster cluster_connection)
+  std::unique_ptr<kafka::client::cluster> cluster_connection)
   : link(
       self,
       link_id,
@@ -371,7 +371,7 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata metadata,
-      kafka::client::cluster cluster_connection) override {
+      std::unique_ptr<kafka::client::cluster> cluster_connection) override {
         return std::make_unique<evil_link>(
           self,
           link_id,

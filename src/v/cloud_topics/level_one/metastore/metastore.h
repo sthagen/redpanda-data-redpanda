@@ -71,11 +71,13 @@ public:
 
         object_id oid;
         size_t footer_pos;
+        size_t object_size;
         ntp_metas_list_t ntp_metas;
     };
     struct object_response {
         object_id oid;
         size_t footer_pos;
+        size_t object_size;
     };
 
     // Interface to build object metadata for the L1 metastore. Meant to be
@@ -102,7 +104,7 @@ public:
         // Tracks the given object as finished. Further calls to
         // get_or_create_object_for() will not return the finished object ID.
         virtual std::expected<void, error>
-        finish(object_id, size_t footer_pos) = 0;
+        finish(object_id, size_t footer_pos, size_t object_size) = 0;
     };
 
     struct offsets_response {

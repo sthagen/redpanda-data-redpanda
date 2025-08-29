@@ -3,12 +3,12 @@ from typing import Literal, Protocol, final
 import urllib3
 import urllib3.util
 from ducktape.cluster.cluster import ClusterNode
-from rptest.clients.admin.proto.redpanda.core.admin import admin_pb2
-from rptest.clients.admin.proto.redpanda.core.admin import admin_pb2_connect
-from rptest.clients.admin.proto.redpanda.core.admin import shadow_link_pb2
-from rptest.clients.admin.proto.redpanda.core.admin import shadow_link_pb2_connect
-from rptest.clients.admin.proto.redpanda.core.admin.internal import debug_pb2
-from rptest.clients.admin.proto.redpanda.core.admin.internal import debug_pb2_connect
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import broker_pb2
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import broker_pb2_connect
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import shadow_link_pb2_connect
+from rptest.clients.admin.proto.redpanda.core.admin.v2.internal import debug_pb2
+from rptest.clients.admin.proto.redpanda.core.admin.v2.internal import debug_pb2_connect
 from connectrpc.client_protocol import ConnectProtocol
 
 
@@ -17,7 +17,7 @@ class RedpandaServiceProto(Protocol):
 
 
 # Re-export some protobufs for convenience
-admin_pb = admin_pb2
+broker_pb = broker_pb2
 shadow_link_pb = shadow_link_pb2
 debug_pb = debug_pb2
 
@@ -71,7 +71,7 @@ class Admin:
     def _make_service(self, service_clazz):
         node = random.choice(self._rp.started_nodes())
         client = service_clazz(
-            base_url=f"http://{node.account.hostname}:9644/v2",
+            base_url=f"http://{node.account.hostname}:9644",
             protocol=ConnectProtocol.CONNECT_PROTOBUF
             if self._protocol == "proto"
             else ConnectProtocol.CONNECT_JSON,
@@ -81,8 +81,8 @@ class Admin:
         )
         return client
 
-    def admin(self) -> admin_pb2_connect.AdminServiceClient:
-        return self._make_service(admin_pb2_connect.AdminServiceClient)
+    def broker(self) -> broker_pb2_connect.BrokerServiceClient:
+        return self._make_service(broker_pb2_connect.BrokerServiceClient)
 
     def debug(self) -> debug_pb2_connect.DebugServiceClient:
         return self._make_service(debug_pb2_connect.DebugServiceClient)

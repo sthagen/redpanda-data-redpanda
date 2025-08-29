@@ -9,7 +9,7 @@ redpanda_cc_library(
     srcs = ["debug.cc"],
     hdrs = ["debug.h"],
     deps = [
-        "//proto/redpanda/core/admin/internal:debug_redpanda_proto",
+        "//proto/redpanda/core/admin/v2/internal:debug_redpanda_proto",
         "//src/v/base",
         "//src/v/finjector",
         "//src/v/redpanda/admin/proxy:client",

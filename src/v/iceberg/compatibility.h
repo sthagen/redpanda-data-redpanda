@@ -142,24 +142,48 @@ schema_evolution_result evolve_schema(
   const struct_type& source, struct_type& dest, const partition_spec& spec);
 
 /**
- * try_fill_field_ids - Try to fill all dest fields with IDs from source.
+ * Fill all writer struct field IDs from host struct by name while following
+ * Iceberg schema evolution rules for types:
+ * - writer_struct_type fields must exist in the host struct (by name)
+ * - writer_struct_type can be a subset of host_struct_type (not all
+ * host_struct_type fields required to be present)
+ * - Field types must be identical or promotable (e.g., int -> bigint)
+ * - Required fields in host_struct_type cannot be optional (i.e. contain nulls)
+ * in the writer_struct_type.
  *
- * Operates similarly to evolve_schema, annotating both structs and evaluating
- * for correctness, differing only in the semantics of the returned result.
- * Preconditions:
- *   - Both input structs are un-annotated. That is, none of their
- *     fields have the optional ::meta filled in.
+ * Notation:
+ * - host_struct_type: the table's existing schema (the one we want to write
+ * data to).
+ * - writer_struct_type: schema derived from the incoming record/write.
  *
- * Postconditions:
- *   - Either each field in dest is assigned a unique ID carried over
- *     from source, or function returns ids_filled::no (or an error).
- *
- * @param source - The source (i.e original) schema
- * @param dest   - The schema to fill
- *
- * @return Whether all fields got an ID, or an error
+ * On success, destination fields are assigned the corresponding source field
+ * IDs. On failure, destination struct is in an undefined state and should be
+ * thrown away.
  */
-fill_ids_result
-try_fill_field_ids(const struct_type& source, struct_type& dest);
+ids_filled try_fill_field_ids(
+  const struct_type& host_struct_type, struct_type& writer_struct_type);
+
+using schema_merge_result = checked<void, schema_evolution_errc>;
+
+/**
+ * Merge the writer struct type into host struct using Iceberg schema evolution
+ * rules such that on successful result the host struct can accept writes using
+ * the writer struct.
+ *
+ * Notation:
+ * - writer_struct_type: schema derived from the incoming record/write.
+ * - host_struct_type: the table's existing schema (the one we are merging
+ * into).
+ *
+ * Conflict resolution:
+ * - Non-structural metadata (e.g., field comments, field order):
+ * `host_struct_type` wins.
+ * - Structural incompatibilities: return an error.
+ *
+ * On error, `host_struct_type` may be partially updated; discard it in that
+ * case.
+ */
+schema_merge_result merge_struct_types(
+  const struct_type& writer_struct_type, struct_type& host_struct_type);
 
 } // namespace iceberg

@@ -12,7 +12,7 @@
 #pragma once
 
 #include "cluster_link/fwd.h"
-#include "proto/redpanda/core/admin/shadow_link.proto.h"
+#include "proto/redpanda/core/admin/v2/shadow_link.proto.h"
 
 #include <seastar/core/sharded.hh>
 

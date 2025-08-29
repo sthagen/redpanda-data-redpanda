@@ -27,9 +27,16 @@ public:
       = ss::noncopyable_function<void(const metadata_response_data&)>;
 
     explicit cluster(connection_configuration config);
+
     cluster(
       connection_configuration config,
       std::unique_ptr<broker_factory> broker_factory);
+
+    cluster(cluster&&) = delete;
+    cluster(const cluster&) = delete;
+    cluster& operator=(cluster&&) = delete;
+    cluster& operator=(const cluster&) = delete;
+    ~cluster() noexcept = default;
 
     ss::future<> start();
     ss::future<> stop();

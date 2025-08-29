@@ -211,6 +211,7 @@ domain_manager::get_first_offset_ge(rpc::get_first_offset_ge_request req) {
         .object = rpc::object_metadata{
             .oid = obj.oid,
             .footer_pos = obj.footer_pos,
+            .object_size = obj.object_size,
         },
     };
 }
@@ -243,6 +244,7 @@ domain_manager::get_first_timestamp_ge(
         .object = rpc::object_metadata{
             .oid = obj.oid,
             .footer_pos = obj.footer_pos,
+            .object_size = obj.object_size,
         },
     };
 }

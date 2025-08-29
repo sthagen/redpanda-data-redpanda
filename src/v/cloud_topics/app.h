@@ -32,6 +32,7 @@ class api;
 
 namespace cloud_topics {
 class data_plane_api;
+class cloud_topics_manager;
 
 class app : public ssx::sharded_service_container {
 public:
@@ -74,6 +75,7 @@ private:
     ss::sharded<reconciler::reconciler> reconciler;
     ss::sharded<l1::domain_supervisor> domain_supervisor;
     ss::sharded<l1::frontend> l1_metastore_fe;
+    std::unique_ptr<cloud_topics_manager> manager;
 };
 
 } // namespace cloud_topics

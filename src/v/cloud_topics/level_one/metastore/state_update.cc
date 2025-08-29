@@ -233,6 +233,7 @@ add_objects_update::apply(state& state) {
             .total_data_size = 0,
             .removed_data_size = 0,
             .footer_pos = o.footer_pos,
+            .object_size = o.object_size,
           });
     }
     for (const auto& [tidp, extents] : extents_by_tp) {
@@ -464,6 +465,7 @@ replace_objects_update::apply(state& state) {
             .total_data_size = 0,
             .removed_data_size = 0,
             .footer_pos = o.footer_pos,
+            .object_size = o.object_size,
           });
     }
     for (const auto& [tidp, new_extents] : new_extents_by_tp) {

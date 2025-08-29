@@ -33,16 +33,12 @@ public:
 
     ss::future<> start() {
         vlog(_task->logger().debug, "Beginning task runner");
-        _timer.set_callback([this] {
-            ssx::spawn_with_gate(_gate, [this] {
-                return run_task().finally(
-                  [this] { _timer.arm(_task->_run_interval); });
-            });
-        });
-        // Before arming the timer, run the task once initially
-        co_await run_task();
-        _timer.arm(_task->_run_interval);
+        _timer.set_callback([this] { run_task_in_background(); });
+        // Run task and arm timer
+        run_task_in_background();
+        co_return;
     }
+
     ss::future<> stop() {
         vlog(_task->logger().debug, "Stopping task runner");
         _timer.cancel();
@@ -92,6 +88,15 @@ public:
     }
 
 private:
+    void run_task_in_background() {
+        ssx::spawn_with_gate(_gate, [this] {
+            return run_task().finally([this] {
+                if (!_gate.is_closed()) {
+                    _timer.arm(_task->_run_interval);
+                }
+            });
+        });
+    }
     ss::future<> run_task() {
         vlog(_task->logger().trace, "run_task started");
         try {

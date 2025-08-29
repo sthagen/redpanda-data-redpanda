@@ -57,21 +57,21 @@ client::client(
   , _consumer_config(cfg.consumer_cfg)
   , _logger(kclog, cfg.connection_cfg.client_id.value_or("kafka-client"))
   , _external_mitigate(std::move(mitigater))
-  , _cluster(cfg.connection_cfg)
+  , _cluster(std::make_unique<cluster>(cfg.connection_cfg))
   , _producer(
       _producer_config,
       _retries_config,
-      _cluster.get_topics(),
-      _cluster.get_brokers(),
+      _cluster->get_topics(),
+      _cluster->get_brokers(),
       _logger,
       [this](std::exception_ptr ex) { return mitigate_error(std::move(ex)); }) {
-    _metadata_callback_id = _cluster.register_metadata_cb(
+    _metadata_callback_id = _cluster->register_metadata_cb(
       [this](const metadata_response_data& res) { on_metadata_update(res); });
 }
 
 ss::future<> client::connect() {
     if (!_is_started) {
-        co_await _cluster.start();
+        co_await _cluster->start();
         _is_started = true;
     }
 }
@@ -91,7 +91,7 @@ ss::future<> catch_and_log(const prefix_logger& logger, Func&& f) noexcept {
 ss::future<> client::stop() noexcept {
     _as.request_abort();
     co_await catch_and_log(_logger, [this]() { return _producer.stop(); });
-    _cluster.unregister_metadata_cb(_metadata_callback_id);
+    _cluster->unregister_metadata_cb(_metadata_callback_id);
     co_await _gate.close();
     for (auto& [id, group] : _consumers) {
         while (!group.empty()) {
@@ -103,7 +103,7 @@ ss::future<> client::stop() noexcept {
             });
         }
     }
-    co_await catch_and_log(_logger, [this]() { return _cluster.stop(); });
+    co_await catch_and_log(_logger, [this]() { return _cluster->stop(); });
 }
 
 void client::on_metadata_update(const metadata_response_data& res) {
@@ -112,7 +112,7 @@ void client::on_metadata_update(const metadata_response_data& res) {
 
 void client::set_credentials(std::optional<sasl_configuration> creds) {
     vlog(_logger.debug, "Setting credentials: {}", creds);
-    _cluster.set_sasl_configuration(std::move(creds));
+    _cluster->set_sasl_configuration(std::move(creds));
 }
 
 ss::future<> client::external_mitigate_error(std::exception_ptr ex) const {
@@ -131,7 +131,7 @@ ss::future<> client::update_metadata() {
           fmt::format(
             "max retries of {} exceeded", _retries_config.max_retries));
     }
-    return _cluster.request_metadata_update()
+    return _cluster->request_metadata_update()
       .then([this] {
           // reset retry counter after a successful metadata update
           _current_reconnect_retry = 0;
@@ -296,7 +296,7 @@ ss::future<produce_response> client::produce_records(
 ss::future<metadata_response> client::fetch_metadata(metadata_request req) {
     co_return co_await gated_retry_with_mitigation(
       [this, req = std::move(req)]() {
-          return _cluster.dispatch_to_any(
+          return _cluster->dispatch_to_any(
             req.copy(), api_version_for(metadata_api::key));
       });
 }
@@ -304,11 +304,11 @@ ss::future<metadata_response> client::fetch_metadata(metadata_request req) {
 ss::future<create_topics_response>
 client::create_topic(kafka::creatable_topic req) {
     return gated_retry_with_mitigation([this, req{std::move(req)}]() {
-        auto controller = _cluster.get_controller_id().value_or(
+        auto controller = _cluster->get_controller_id().value_or(
           unknown_node_id);
         chunked_vector<kafka::creatable_topic> cv;
         cv.push_back(std::move(req));
-        return _cluster.dispatch_to(controller, kafka::create_topics_request{
+        return _cluster->dispatch_to(controller, kafka::create_topics_request{
                 .data = {
                   .topics = std::move(cv),
                 }}, api_version_for(create_topics_api::key))
@@ -394,7 +394,7 @@ client::do_list_offsets(const list_offsets_request& unsharded_req) {
     for (const auto& topic : unsharded_req.data.topics) {
         for (const auto& partition : topic.partitions) {
             model::topic_partition tp{topic.name, partition.partition_index};
-            auto node_id = _cluster.get_topics().leader(tp);
+            auto node_id = _cluster->get_topics().leader(tp);
             if (!node_id) {
                 throw partition_error(
                   tp, error_code::unknown_topic_or_partition);
@@ -413,7 +413,7 @@ client::do_list_offsets(const list_offsets_request& unsharded_req) {
 
     auto mapper = [this](auto kv) {
         auto node_id = kv.first;
-        return _cluster.dispatch_to(
+        return _cluster->dispatch_to(
           node_id,
           std::move(kv.second),
           api_version_for(list_offsets_api::key));
@@ -495,14 +495,14 @@ ss::future<fetch_response> client::fetch_partition(
       std::move(tp),
       [this](auto& build_request, model::topic_partition& tp) {
           return gated_retry_with_mitigation([this, &tp, &build_request]() {
-                     auto leader_id = _cluster.get_topics().leader(tp);
+                     auto leader_id = _cluster->get_topics().leader(tp);
                      if (!leader_id) {
                          return ss::make_exception_future<fetch_response>(
                            partition_error(
                              tp, error_code::unknown_topic_or_partition));
                      }
                      return _cluster
-                       .dispatch_to(
+                       ->dispatch_to(
                          *leader_id,
                          build_request(tp),
                          api_version_for(fetch_api::key))
@@ -523,7 +523,7 @@ client::create_consumer(const group_id& group_id, member_id name) {
              _gate,
              _retries_config.max_retries,
              _retries_config.retry_base_backoff,
-             _cluster.get_brokers(),
+             _cluster->get_brokers(),
              group_id,
              name,
              [this](std::exception_ptr ex) { return mitigate_error(ex); })
@@ -534,8 +534,8 @@ client::create_consumer(const group_id& group_id, member_id name) {
           return make_consumer(
             _consumer_config,
             _retries_config,
-            _cluster.get_topics(),
-            _cluster.get_brokers(),
+            _cluster->get_topics(),
+            _cluster->get_brokers(),
             std::move(coordinator),
             std::move(group_id),
             std::move(name),
@@ -657,7 +657,7 @@ ss::future<kafka::fetch_response> client::consumer_fetch(
                           return p.error_code != error_code::none;
                       });
                 });
-              return (has_error ? _cluster.request_metadata_update()
+              return (has_error ? _cluster->request_metadata_update()
                                 : ss::now())
                 .then(
                   [res{std::move(res)}]() mutable { return std::move(res); });
@@ -692,7 +692,7 @@ ss::future<kafka::describe_configs_response> client::do_describe_topics(
           });
     }
 
-    co_return co_await _cluster.dispatch_to_any(
+    co_return co_await _cluster->dispatch_to_any(
       describe_configs_request{.data = {.resources = std::move(dcr)}},
       api_version_for(describe_configs_request::api_type::key));
 }

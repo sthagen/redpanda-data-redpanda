@@ -8,7 +8,7 @@
 # by the Apache License, Version 2.0
 
 from rptest.clients.admin.v2 import Admin as AdminV2
-from rptest.clients.admin.proto.redpanda.core.admin import (
+from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
     shadow_link_pb2_connect,
 )

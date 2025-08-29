@@ -16,9 +16,10 @@
 
 namespace cluster_link {
 
-kafka::client::cluster
+std::unique_ptr<kafka::client::cluster>
 cluster_factory::create_cluster(const model::metadata& md) {
-    return kafka::client::cluster(metadata_to_kafka_config(md));
+    return std::make_unique<kafka::client::cluster>(
+      metadata_to_kafka_config(md));
 }
 
 } // namespace cluster_link

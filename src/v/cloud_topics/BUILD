@@ -79,6 +79,7 @@ redpanda_cc_library(
     implementation_deps = [
         ":cluster_services_interface",
         ":data_plane_impl",
+        "//src/v/cloud_topics/manager",
     ],
     visibility = [
         "//src/v/cloud_topics/frontend:__pkg__",

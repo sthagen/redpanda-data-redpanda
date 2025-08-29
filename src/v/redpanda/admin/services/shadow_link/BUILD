@@ -6,7 +6,7 @@ redpanda_cc_library(
     hdrs = ["converter.h"],
     visibility = ["//src/v/redpanda/admin/services/shadow_link:__subpackages__"],
     deps = [
-        "//proto/redpanda/core/admin:shadow_link_redpanda_proto",
+        "//proto/redpanda/core/admin/v2:shadow_link_redpanda_proto",
         "//src/v/cluster_link/model",
     ],
 )
@@ -21,7 +21,7 @@ redpanda_cc_library(
     ],
     visibility = ["//src/v/redpanda:__subpackages__"],
     deps = [
-        "//proto/redpanda/core/admin:shadow_link_redpanda_proto",
+        "//proto/redpanda/core/admin/v2:shadow_link_redpanda_proto",
         "//src/v/cluster_link:fwd",
         "//src/v/serde/protobuf:rpc",
         "@seastar",

@@ -86,10 +86,11 @@ struct replace_objects_request
 struct object_metadata
   : serde::
       envelope<object_metadata, serde::version<0>, serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(oid, footer_pos); }
+    auto serde_fields() { return std::tie(oid, footer_pos, object_size); }
 
     object_id oid;
     size_t footer_pos;
+    size_t object_size;
 };
 
 struct get_first_offset_ge_reply

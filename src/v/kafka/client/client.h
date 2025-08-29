@@ -98,7 +98,7 @@ public:
     dispatch(Func func) {
         using api_type = std::invoke_result_t<Func>::api_type;
         return gated_retry_with_mitigation([this, func{std::move(func)}]() {
-            return _cluster.dispatch_to_any(
+            return _cluster->dispatch_to_any(
               func(), api_version_for(api_type::key));
         });
     }
@@ -176,7 +176,7 @@ public:
 
     ss::future<> update_metadata();
 
-    bool is_connected() const { return !_cluster.is_connected(); }
+    bool is_connected() const { return !_cluster->is_connected(); }
 
     void set_credentials(std::optional<sasl_configuration> creds);
 
@@ -201,7 +201,7 @@ public:
     }
 
     const std::optional<sasl_configuration>& get_credentials() const {
-        return _cluster.get_sasl_configuration();
+        return _cluster->get_sasl_configuration();
     }
 
 private:
@@ -244,7 +244,7 @@ private:
     consumer_configuration _consumer_config;
     prefix_logger _logger;
     std::optional<external_mitigate> _external_mitigate;
-    cluster _cluster;
+    std::unique_ptr<cluster> _cluster;
     /// \brief Batching producer.
     producer _producer;
     /// \brief Consumers

@@ -48,10 +48,13 @@ struct new_object
     };
 
     friend bool operator==(const new_object&, const new_object&) = default;
-    auto serde_fields() { return std::tie(oid, extent_metas); }
+    auto serde_fields() {
+        return std::tie(oid, footer_pos, object_size, extent_metas);
+    }
 
     object_id oid;
     size_t footer_pos;
+    size_t object_size;
     chunked_hash_map<
       model::topic_id,
       chunked_hash_map<model::partition_id, metadata>>

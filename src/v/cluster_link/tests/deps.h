@@ -31,7 +31,7 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata metadata,
-      kafka::client::cluster cluster_connection) override {
+      std::unique_ptr<kafka::client::cluster> cluster_connection) override {
         auto name = metadata.name;
         auto created_link = std::make_unique<link>(
           self,
@@ -282,10 +282,11 @@ public:
     explicit cluster_mock_factory(kafka::client::cluster_mock* cluster_mock)
       : _cluster_mock(cluster_mock) {}
 
-    kafka::client::cluster create_cluster(const model::metadata& md) final {
-        return {
+    std::unique_ptr<kafka::client::cluster>
+    create_cluster(const model::metadata& md) final {
+        return std::make_unique<kafka::client::cluster>(
           metadata_to_kafka_config(md),
-          std::make_unique<kafka::client::broker_mock_factory>(_cluster_mock)};
+          std::make_unique<kafka::client::broker_mock_factory>(_cluster_mock));
     }
 
 private:

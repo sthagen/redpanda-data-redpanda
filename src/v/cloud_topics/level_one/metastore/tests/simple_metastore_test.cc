@@ -64,9 +64,10 @@ using om_list_t = chunked_vector<metastore::object_metadata>;
 using cmap_t = metastore::compaction_map_t;
 class om_builder {
 public:
-    om_builder(object_id oid, size_t footer_pos) {
+    om_builder(object_id oid, size_t footer_pos, size_t object_size) {
         out.oid = oid;
         out.footer_pos = footer_pos;
+        out.object_size = object_size;
     }
     om_builder& add(
       std::string_view tpr_str,
@@ -140,7 +141,7 @@ TEST(SimpleMetastoreTest, TestGetMissingPartition) {
     ASSERT_FALSE(get_res.has_value());
     ASSERT_EQ(metastore::errc::missing_ntp, get_res.error());
 
-    auto ometa = om_builder(oid1, 200)
+    auto ometa = om_builder(oid1, 200, 1200)
                    .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                    .add(tid_b, 0_o, 10_o, 2000_t, 100, 199)
                    .build();
@@ -175,13 +176,15 @@ TEST(SimpleMetastoreTest, TestGetMissingPartition) {
     ASSERT_TRUE(get_res.has_value()) << int(get_res.error());
     ASSERT_EQ(get_res->oid, oid1);
     ASSERT_EQ(get_res->footer_pos, 200);
+    ASSERT_EQ(get_res->object_size, 1200);
 }
 
 TEST(SimpleMetastoreTest, TestAddWithGap) {
     simple_metastore m;
     {
-        auto ometa
-          = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+        auto ometa = om_builder(oid1, 100, 1100)
+                       .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                       .build();
         auto add_res = m.add_objects(
                           om_list_t::single(std::move(ometa)),
                           terms_builder().add(tid_a, 0_tm, 0_o).build())
@@ -198,8 +201,9 @@ TEST(SimpleMetastoreTest, TestAddWithGap) {
 
     {
         // Add another object just past where we expect it.
-        auto ometa
-          = om_builder(oid2, 100).add(tid_a, 12_o, 20_o, 2000_t, 0, 99).build();
+        auto ometa = om_builder(oid2, 100, 1100)
+                       .add(tid_a, 12_o, 20_o, 2000_t, 0, 99)
+                       .build();
         auto add_res = m.add_objects(
                           om_list_t::single(std::move(ometa)),
                           terms_builder().add(tid_a, 0_tm, 12_o).build())
@@ -216,8 +220,9 @@ TEST(SimpleMetastoreTest, TestAddWithGap) {
     }
 
     // Now add the object right at the end, where it should be.
-    auto ometa
-      = om_builder(oid3, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build();
+    auto ometa = om_builder(oid3, 100, 1100)
+                   .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
+                   .build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder().add(tid_a, 0_tm, 11_o).build())
@@ -235,8 +240,9 @@ TEST(SimpleMetastoreTest, TestAddWithGap) {
 TEST(SimpleMetastoreTest, TestAddWithOverlap) {
     simple_metastore m;
     {
-        auto ometa
-          = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+        auto ometa = om_builder(oid1, 100, 1100)
+                       .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                       .build();
         auto add_res = m.add_objects(
                           chunked_vector<metastore::object_metadata>::single(
                             std::move(ometa)),
@@ -248,8 +254,9 @@ TEST(SimpleMetastoreTest, TestAddWithOverlap) {
 
     {
         // Add another object just below where we expect it.
-        auto ometa
-          = om_builder(oid2, 100).add(tid_a, 10_o, 20_o, 2000_t, 0, 99).build();
+        auto ometa = om_builder(oid2, 100, 1100)
+                       .add(tid_a, 10_o, 20_o, 2000_t, 0, 99)
+                       .build();
         auto add_res = m.add_objects(
                           chunked_vector<metastore::object_metadata>::single(
                             std::move(ometa)),
@@ -260,8 +267,9 @@ TEST(SimpleMetastoreTest, TestAddWithOverlap) {
     }
     {
         // Add another object that fully overlaps with what exists.
-        auto ometa
-          = om_builder(oid3, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+        auto ometa = om_builder(oid3, 100, 1100)
+                       .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                       .build();
         auto add_res = m.add_objects(
                           om_list_t::single(std::move(ometa)),
                           terms_builder().add(tid_a, 0_tm, 0_o).build())
@@ -274,8 +282,9 @@ TEST(SimpleMetastoreTest, TestAddWithOverlap) {
 TEST(SimpleMetastoreTest, TestAddPastBeginning) {
     simple_metastore m;
     // Add the first object so it doesn't start at 0.
-    auto ometa
-      = om_builder(oid1, 100).add(tid_a, 1_o, 10_o, 2000_t, 0, 99).build();
+    auto ometa = om_builder(oid1, 100, 1100)
+                   .add(tid_a, 1_o, 10_o, 2000_t, 0, 99)
+                   .build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder().add(tid_a, 0_tm, 0_o).build())
@@ -288,11 +297,13 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid2, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    os.emplace_back(om_builder(oid2, 100, 1100)
+                      .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
+                      .build());
+    os.emplace_back(om_builder(oid3, 100, 1100)
+                      .add(tid_a, 21_o, 30_o, 2000_t, 0, 99)
+                      .build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -304,25 +315,29 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     for (const auto& o : std::views::iota(11, 21)) {
         auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     for (const auto& o : std::views::iota(21, 31)) {
         auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
 }
 
 TEST(SimpleMetastoreTest, TestAddGetOffsetBelowStart) {
     simple_metastore m;
-    auto ometa
-      = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+    auto ometa = om_builder(oid1, 100, 1100)
+                   .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                   .build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder().add(tid_a, 0_tm, 0_o).build())
@@ -336,12 +351,14 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBelowStart) {
     ASSERT_TRUE(get_res.has_value());
     ASSERT_EQ(get_res->oid, oid1);
     ASSERT_EQ(get_res->footer_pos, 100);
+    ASSERT_EQ(get_res->object_size, 1100);
 }
 
 TEST(SimpleMetastoreTest, TestAddGetOffsetOutOfRange) {
     simple_metastore m;
-    auto ometa
-      = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+    auto ometa = om_builder(oid1, 100, 1100)
+                   .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                   .build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder().add(tid_a, 0_tm, 0_o).build())
@@ -360,11 +377,13 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 1999_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid2, 100).add(tid_a, 11_o, 20_o, 2999_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 3999_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 1999_t, 0, 99).build());
+    os.emplace_back(om_builder(oid2, 100, 1100)
+                      .add(tid_a, 11_o, 20_o, 2999_t, 0, 99)
+                      .build());
+    os.emplace_back(om_builder(oid3, 100, 1100)
+                      .add(tid_a, 21_o, 30_o, 3999_t, 0, 99)
+                      .build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -376,25 +395,29 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     for (const auto& t : {2000_t, 2999_t}) {
         auto get_res = m.get_first_ge(tpr, t).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     for (const auto& t : {3000_t, 3999_t}) {
         auto get_res = m.get_first_ge(tpr, t).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
 }
 
 TEST(SimpleMetastoreTest, TestAddGetTimestampBelowStart) {
     simple_metastore m;
-    auto ometa
-      = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+    auto ometa = om_builder(oid1, 100, 1100)
+                   .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                   .build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder().add(tid_a, 0_tm, 0_o).build())
@@ -410,8 +433,9 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBelowStart) {
 
 TEST(SimpleMetastoreTest, TestAddGetTimestampOutOfRange) {
     simple_metastore m;
-    auto ometa
-      = om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build();
+    auto ometa = om_builder(oid1, 100, 1100)
+                   .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                   .build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder().add(tid_a, 0_tm, 0_o).build())
@@ -429,7 +453,7 @@ TEST(StateUpdateTest, TestReplaceBasic) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -437,7 +461,7 @@ TEST(StateUpdateTest, TestReplaceBasic) {
 
     om_list_t new_os;
     new_os.emplace_back(
-      om_builder(oid2, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid2, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto replace_res = m.replace_objects(new_os).get();
     ASSERT_TRUE(replace_res.has_value());
 
@@ -452,11 +476,11 @@ TEST(StateUpdateTest, TestReplaceBasic) {
 TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
     simple_metastore m;
     om_list_t os;
-    os.emplace_back(om_builder(oid1, 100)
+    os.emplace_back(om_builder(oid1, 100, 1100)
                       .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                       .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
                       .build());
-    os.emplace_back(om_builder(oid2, 100)
+    os.emplace_back(om_builder(oid2, 100, 1100)
                       .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
                       .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
                       .build());
@@ -469,7 +493,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
 
     om_list_t new_os;
     new_os.emplace_back(
-      om_builder(oid3, 100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
+      om_builder(oid3, 100, 1100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
     auto replace_res = m.replace_objects(new_os).get();
     ASSERT_TRUE(replace_res.has_value());
 
@@ -480,6 +504,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     // Others should be served from oid1 or oid2.
     tpr = model::topic_id_partition::from(tid_b);
@@ -488,12 +513,14 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     for (const auto& o : std::views::iota(11, 21)) {
         auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     // Sanity check that replacement leaves us with expected offsets.
     for (const auto& tid : {tid_a, tid_b}) {
@@ -508,11 +535,11 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
 TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
     simple_metastore m;
     om_list_t os;
-    os.emplace_back(om_builder(oid1, 100)
+    os.emplace_back(om_builder(oid1, 100, 1100)
                       .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                       .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
                       .build());
-    os.emplace_back(om_builder(oid2, 100)
+    os.emplace_back(om_builder(oid2, 100, 1100)
                       .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
                       .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
                       .build());
@@ -527,7 +554,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
     // For one partition, replace the entire range. For another, replace part
     // of the range. As long as they're both aligned this should succeed.
     om_list_t new_os;
-    new_os.emplace_back(om_builder(oid3, 100)
+    new_os.emplace_back(om_builder(oid3, 100, 1100)
                           .add(tid_a, 0_o, 20_o, 2000_t, 0, 99)
                           .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
                           .build());
@@ -541,6 +568,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     tpr = model::topic_id_partition::from(tid_b);
     for (const auto& o : std::views::iota(11, 21)) {
@@ -548,6 +576,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     // Others should be served from oid1 or oid2.
     for (const auto& o : std::views::iota(0, 11)) {
@@ -555,6 +584,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
+        ASSERT_EQ(get_res->object_size, 1100);
     }
     // Sanity check that replacement leaves us with expected offsets.
     for (const auto& tid : {tid_a, tid_b}) {
@@ -570,7 +600,7 @@ TEST(StateUpdateTest, TestReplaceEmptyRequest) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -594,8 +624,9 @@ TEST(StateUpdateTest, TestReplaceEmptyState) {
     {
         // Now try with an actual object. It should be rejected.
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid1, 100, 1100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
         auto replace_res = m.replace_objects(new_os).get();
         ASSERT_FALSE(replace_res.has_value());
         EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
@@ -606,7 +637,7 @@ TEST(StateUpdateTest, TestReplaceMisaligned) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -615,7 +646,7 @@ TEST(StateUpdateTest, TestReplaceMisaligned) {
          std::initializer_list<std::pair<kafka::offset, kafka::offset>>{
            {0_o, 11_o}, {1_o, 11_o}, {1_o, 10_o}, {1_o, 9_o}}) {
         om_list_t new_os;
-        new_os.emplace_back(om_builder(oid2, 100)
+        new_os.emplace_back(om_builder(oid2, 100, 1100)
                               .add(tid_a, base_o, last_o, 2000_t, 0, 99)
                               .build());
         auto replace_res = m.replace_objects(new_os).get();
@@ -628,7 +659,7 @@ TEST(StateUpdateTest, TestReplaceOneWithMultipleMisaligned) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -637,7 +668,7 @@ TEST(StateUpdateTest, TestReplaceOneWithMultipleMisaligned) {
         // Even though one extent overlaps, the complete range for tid_a does
         // not align.
         om_list_t new_os;
-        new_os.emplace_back(om_builder(oid2, 100)
+        new_os.emplace_back(om_builder(oid2, 100, 1100)
                               .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                               .add(tid_a, 11_o, 12_o, 2000_t, 0, 99)
                               .build());
@@ -648,7 +679,7 @@ TEST(StateUpdateTest, TestReplaceOneWithMultipleMisaligned) {
     {
         // Even though tid_a overlaps exactly, tid_b does not exist.
         om_list_t new_os;
-        new_os.emplace_back(om_builder(oid2, 100)
+        new_os.emplace_back(om_builder(oid2, 100, 1100)
                               .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                               .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
                               .build());
@@ -661,11 +692,11 @@ TEST(StateUpdateTest, TestReplaceOneWithMultipleMisaligned) {
 TEST(StateUpdateTest, TestReplaceMultipleMisaligned) {
     simple_metastore m;
     om_list_t os;
-    os.emplace_back(om_builder(oid1, 100)
+    os.emplace_back(om_builder(oid1, 100, 1100)
                       .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                       .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
                       .build());
-    os.emplace_back(om_builder(oid2, 100)
+    os.emplace_back(om_builder(oid2, 100, 1100)
                       .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
                       .add(tid_b, 11_o, 20_o, 2000_t, 0, 99)
                       .build());
@@ -678,8 +709,9 @@ TEST(StateUpdateTest, TestReplaceMultipleMisaligned) {
 
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid3, 100).add(tid_a, 0_o, 19_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid3, 100, 1100)
+                              .add(tid_a, 0_o, 19_o, 2000_t, 0, 99)
+                              .build());
         auto replace_res = m.replace_objects(new_os).get();
         ASSERT_FALSE(replace_res.has_value());
         EXPECT_EQ(replace_res.error(), metastore::errc::invalid_request);
@@ -687,7 +719,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMisaligned) {
     {
         // Even though tid_a overlaps exactly, tid_b is misaligned.
         om_list_t new_os;
-        new_os.emplace_back(om_builder(oid3, 100)
+        new_os.emplace_back(om_builder(oid3, 100, 1100)
                               .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                               .add(tid_b, 0_o, 19_o, 2000_t, 0, 99)
                               .build());
@@ -701,7 +733,7 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsMissingPartition) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_b, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_b, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_b, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -717,7 +749,7 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsMissingPartition) {
 TEST(SimpleMetastoreTest, TestCompactionOffsetsAllDirty) {
     simple_metastore m;
     om_list_t os;
-    os.emplace_back(om_builder(oid1, 100)
+    os.emplace_back(om_builder(oid1, 100, 1100)
                       .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
                       .add(tid_b, 0_o, 10_o, 2000_t, 0, 99)
                       .build());
@@ -742,7 +774,7 @@ TEST(SimpleMetastoreTest, TestCompactionOffsets) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -750,8 +782,9 @@ TEST(SimpleMetastoreTest, TestCompactionOffsets) {
     // Simple compaction to clean offsets [3, 5].
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid2, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid2, 100, 1100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
 
         auto cmb = cm_builder();
         cmb.clean(tid_a, 3_o, 5_o, 3000_t);
@@ -793,8 +826,9 @@ TEST(SimpleMetastoreTest, TestCompactionOffsets) {
     // Now perform another replacement and remove some tombstones.
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid3, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid3, 100, 1100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
 
         auto cmb = cm_builder();
         cmb.clean(tid_a, 0_o, 2_o);
@@ -816,8 +850,9 @@ TEST(SimpleMetastoreTest, TestCompactionOffsets) {
     // Remove the rest of the tombstones and dirty ranges.
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid4, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid4, 100, 1100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
 
         auto cmb = cm_builder();
         cmb.clean(tid_a, 6_o, 10_o);
@@ -838,7 +873,7 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsNoTombstones) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -846,8 +881,9 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsNoTombstones) {
     // Simple compaction to clean offsets [3, 5].
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid2, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid2, 100, 1100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
 
         auto cmb = cm_builder();
         cmb.clean(tid_a, 3_o, 5_o);
@@ -888,8 +924,9 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsNoTombstones) {
     // Now perform another replacement.
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid3, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid3, 100, 1100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
 
         auto cmb = cm_builder();
         cmb.clean(tid_a, 0_o, 2_o);
@@ -909,8 +946,9 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsNoTombstones) {
     // Remove the rest of the dirty ranges.
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid4, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid4, 100, 1100)
+                              .add(tid_a, 0_o, 10_o, 2000_t, 0, 99)
+                              .build());
 
         auto cmb = cm_builder();
         cmb.clean(tid_a, 6_o, 10_o);
@@ -948,14 +986,14 @@ TEST(SimpleMetastoreTest, TestObjectBuilder) {
     ASSERT_TRUE(ob->add(o_a, {}).has_value());
 
     // Finish the current object. The next object will be different.
-    ASSERT_TRUE(ob->finish(o_a, 0).has_value());
+    ASSERT_TRUE(ob->finish(o_a, 0, 1000).has_value());
 
     auto o_a_3 = ob->get_or_create_object_for(tp_a);
     ASSERT_NE(o_a_2, o_a_3);
 
     // We can't release the result until we finish all objects.
     ASSERT_FALSE(dynamic_cast<simple_object_builder*>(ob.get())->release());
-    ASSERT_TRUE(ob->finish(o_a_3, 0).has_value());
+    ASSERT_TRUE(ob->finish(o_a_3, 0, 1000).has_value());
 
     auto release_res
       = dynamic_cast<simple_object_builder*>(ob.get())->release();
@@ -972,7 +1010,7 @@ TEST(SimpleMetastoreTest, TestObjectBuilderBadObjects) {
     auto add_res = ob->add(create_object_id(), {});
     ASSERT_FALSE(add_res.has_value());
 
-    auto finish_res = ob->finish(create_object_id(), 0);
+    auto finish_res = ob->finish(create_object_id(), 0, 1000);
     ASSERT_FALSE(finish_res.has_value());
 
     // Both operations failed -- the builder should be empty.
@@ -999,7 +1037,7 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
             .size = 0,
           });
         ASSERT_TRUE(add_res.has_value());
-        auto fin_res = ob->finish(o_a, 0);
+        auto fin_res = ob->finish(o_a, 0, 1000);
         ASSERT_TRUE(fin_res.has_value());
         auto add_obj_res = m.add_objects(
                               std::move(ob),
@@ -1026,7 +1064,7 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
             .size = 0,
           });
         ASSERT_TRUE(add_res.has_value());
-        auto fin_res = ob->finish(o_a, 0);
+        auto fin_res = ob->finish(o_a, 0, 1000);
         ASSERT_TRUE(fin_res.has_value());
         auto add_obj_res = m.add_objects(
                               std::move(ob),
@@ -1053,7 +1091,7 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
             .size = 0,
           });
         ASSERT_TRUE(add_res.has_value());
-        auto fin_res = ob->finish(o_a, 0);
+        auto fin_res = ob->finish(o_a, 0, 1000);
         ASSERT_TRUE(fin_res.has_value());
         auto replace_obj_res = m.replace_objects(std::move(ob)).get();
         ASSERT_TRUE(replace_obj_res.has_value());
@@ -1077,7 +1115,7 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
             .size = 0,
           });
         ASSERT_TRUE(add_res.has_value());
-        auto fin_res = ob->finish(o_a, 0);
+        auto fin_res = ob->finish(o_a, 0, 1000);
         ASSERT_TRUE(fin_res.has_value());
 
         cm_builder cmb;
@@ -1101,7 +1139,7 @@ TEST(SimpleMetastoreState, TestInvalidTermRequest) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
     // Make the term misaligned with the extent.
     auto add_res = m.add_objects(
                       os, terms_builder().add(tid_a, 0_tm, 1337_o).build())
@@ -1112,8 +1150,9 @@ TEST(SimpleMetastoreState, TestInvalidTermRequest) {
 
 TEST(SimpleMetastoreTest, TestEndOffsetForEpoch) {
     simple_metastore m;
-    auto ometa
-      = om_builder(oid1, 200).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build();
+    auto ometa = om_builder(oid1, 200, 1200)
+                   .add(tid_a, 0_o, 20_o, 2000_t, 0, 99)
+                   .build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder()
@@ -1168,7 +1207,7 @@ TEST(SimpleMetastoreTest, TestEndOffsetForEpoch) {
 TEST(SimpleMetastoreTest, TestEpochForOffset) {
     simple_metastore m;
     auto ometa
-      = om_builder(oid1, 200).add(tid_a, 0_o, 9_o, 2000_t, 0, 99).build();
+      = om_builder(oid1, 200, 1200).add(tid_a, 0_o, 9_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder()
@@ -1223,11 +1262,13 @@ TEST(SimpleMetastoreTest, TestSetStartAlignedWithExtent) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid2, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    os.emplace_back(om_builder(oid2, 100, 1100)
+                      .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
+                      .build());
+    os.emplace_back(om_builder(oid3, 100, 1100)
+                      .add(tid_a, 21_o, 30_o, 2000_t, 0, 99)
+                      .build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -1264,11 +1305,13 @@ TEST(SimpleMetastoreTest, TestSetStartNotAlignedWithExtent) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid2, 100).add(tid_a, 11_o, 20_o, 2000_t, 0, 99).build());
-    os.emplace_back(
-      om_builder(oid3, 100).add(tid_a, 21_o, 30_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    os.emplace_back(om_builder(oid2, 100, 1100)
+                      .add(tid_a, 11_o, 20_o, 2000_t, 0, 99)
+                      .build());
+    os.emplace_back(om_builder(oid3, 100, 1100)
+                      .add(tid_a, 21_o, 30_o, 2000_t, 0, 99)
+                      .build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -1305,7 +1348,7 @@ TEST(SimpleMetastoreTest, TestSetStartNotAlignedWithExtent) {
 TEST(SimpleMetastoreTest, TestSetStartEmptyWithTerms) {
     simple_metastore m;
     auto ometa
-      = om_builder(oid1, 100).add(tid_a, 0_o, 9_o, 2000_t, 0, 99).build();
+      = om_builder(oid1, 100, 1100).add(tid_a, 0_o, 9_o, 2000_t, 0, 99).build();
     auto add_res = m.add_objects(
                       om_list_t::single(std::move(ometa)),
                       terms_builder()
@@ -1345,7 +1388,7 @@ TEST(SimpleMetastoreTest, TestSetStartWithCompactionState) {
     simple_metastore m;
     om_list_t os;
     os.emplace_back(
-      om_builder(oid1, 100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
     auto add_res
       = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
     ASSERT_TRUE(add_res.has_value());
@@ -1353,8 +1396,9 @@ TEST(SimpleMetastoreTest, TestSetStartWithCompactionState) {
     // Clean range is [5, 15].
     {
         om_list_t new_os;
-        new_os.emplace_back(
-          om_builder(oid2, 100).add(tid_a, 0_o, 20_o, 2000_t, 0, 99).build());
+        new_os.emplace_back(om_builder(oid2, 100, 1100)
+                              .add(tid_a, 0_o, 20_o, 2000_t, 0, 99)
+                              .build());
 
         auto cmb = cm_builder();
         cmb.clean(tid_a, 5_o, 15_o, 3000_t);

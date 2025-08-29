@@ -1,0 +1,100 @@
+---
+# ---------------------------------------------------------------------------
+# Buf CI
+# ---------------------------------------------------------------------------
+# 1. validate -> lint + breaking checks (runs on both push & pull_request)
+# 2. push-to-registry -> push to Buf registry only (runs after validation passes)
+# 3. archive-label -> archive label in registry when branch/tag deleted (with error handling)
+# ---------------------------------------------------------------------------
+name: Buf CI
+on:
+  push:
+    branches:
+      - 'dev'
+      - 'v*'
+    paths:
+      - 'proto/**/*.proto'
+      - '**/buf.yaml'
+      - '**/buf.gen.openapi.yaml'
+      - '**/buf.gen.yaml'
+      - '**/buf.lock'
+      - '.github/workflows/buf.yml'
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - 'proto/**/*.proto'
+      - '**/buf.yaml'
+      - '**/buf.gen.openapi.yaml'
+      - '**/buf.gen.yaml'
+      - '**/buf.lock'
+      - '.github/workflows/buf.yml'
+  delete:
+permissions:
+  contents: read  # checkout + annotations
+  pull-requests: write  # inline lint / breaking comments
+  id-token: write  # OIDC to assume AWS role (push job)
+# ===========================================================================
+# Job: validate (both push and pull_request - comprehensive validation)
+# ===========================================================================
+jobs:
+  validate:
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Buf – lint & breaking
+        uses: bufbuild/buf-action@v1
+        with:
+          paths: proto
+          lint: true
+          format: false  # We use clang-tidy
+          breaking: true
+          push: false  # Only validate, don't push to registry
+  # ===========================================================================
+  # Job: push-to-registry (push events only - registry operations only)
+  # ===========================================================================
+  push-to-registry:
+    if: |
+      github.event_name == 'push' &&
+      github.repository == 'redpanda-data/redpanda'
+    needs: validate  # Only run after validation passes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ vars.RP_AWS_CRED_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.RP_AWS_CRED_ACCOUNT_ID }}:role/${{ vars.RP_AWS_CRED_BASE_ROLE_NAME }}${{ github.event.repository.name }}
+      - uses: aws-actions/aws-secretsmanager-get-secrets@v2
+        with:
+          secret-ids: |
+            ,sdlc/prod/github/buf_token
+          parse-json-secrets: true
+      - uses: actions/checkout@v4
+      - name: Preprocess proto files for buf publishing
+        run: |
+          # WORKAROUND: Our Bazel structure puts proto files to live under a "proto/"
+          # directory, but when publishing to Buf's BCR this creates undesirable import paths
+          # like "proto/redpanda/..." instead of "redpanda/..." paths, which doesn't work with
+          # Buf.
+          #
+          # This preprocessing step:
+          # 1. Updates buf.yaml to use path: proto instead of includes
+          # 2. Strips "proto/" prefixes from buf.yaml paths and proto file imports
+          # 3. Allows buf to publish with import paths that match protoc plugin expectations
+
+          sed -i 's|path: \.|path: proto|' buf.yaml
+          sed -i '/includes:/,/- proto/d' buf.yaml
+          # Fix proto file imports to remove proto/ prefix
+          find proto -name "*.proto" -exec sed -i 's|import "proto/|import "|g' {} \;
+      - name: Buf – login to registry
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          token: ${{ env.BUF_TOKEN }}
+      - name: Buf - push to registry
+        run: |
+          buf push --error-format github-actions \
+            --exclude-unnamed \
+            --label ${{ github.ref_name }} \
+            --source-control-url https://github.com/redpanda-data/redpanda/commit/${{ github.sha }} \
+            --create

@@ -91,7 +91,7 @@ public:
       model::id_t link_id,
       manager* manager,
       model::metadata config,
-      kafka::client::cluster cluster_connection) override {
+      std::unique_ptr<kafka::client::cluster> cluster_connection) override {
         return std::make_unique<link>(
           self,
           link_id,

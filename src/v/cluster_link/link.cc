@@ -56,7 +56,7 @@ link::link(
   manager* manager,
   ss::lowres_clock::duration task_reconciler_interval,
   model::metadata config,
-  kafka::client::cluster cluster_connection)
+  std::unique_ptr<kafka::client::cluster> cluster_connection)
   : _self(self)
   , _link_id(link_id)
   , _manager(manager)
@@ -68,7 +68,7 @@ ss::future<> link::start() {
     vlog(
       cllog.info, "Starting cluster link {} ({})", _config.name, _config.uuid);
     // Allow exception to propagate to the caller
-    co_await _cluster_connection.start();
+    co_await _cluster_connection->start();
     co_await run_task_reconciler();
     _task_reconciler.set_callback([this] {
         ssx::spawn_with_gate(_gate, [this] { return run_task_reconciler(); });
@@ -104,7 +104,7 @@ ss::future<> link::stop() {
     }
 
     try {
-        co_await _cluster_connection.stop();
+        co_await _cluster_connection->stop();
     } catch (const std::exception& e) {
         vlog(cllog.warn, "Error shutting down cluster connection: {}", e);
     }
@@ -225,7 +225,7 @@ const partition_manager& link::partition_manager() const noexcept {
 }
 
 kafka::client::cluster& link::get_cluster_connection() noexcept {
-    return _cluster_connection;
+    return *_cluster_connection;
 }
 
 std::optional<chunked_hash_map<::model::topic, model::mirror_topic_metadata>>

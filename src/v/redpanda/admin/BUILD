@@ -235,7 +235,7 @@ redpanda_cc_library(
         "//src/v/pandaproxy/schema_registry:config",
         "//src/v/pandaproxy/schema_registry:server",
         "//src/v/raft",
-        "//src/v/redpanda/admin/services:admin",
+        "//src/v/redpanda/admin/services:broker",
         "//src/v/reflection:type_traits",
         "//src/v/resource_mgmt:cpu_profiler",
         "//src/v/resource_mgmt:memory_sampling",

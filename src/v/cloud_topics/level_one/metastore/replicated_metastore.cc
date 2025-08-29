@@ -42,6 +42,7 @@ new_object meta_to_rpc_obj(const metastore::object_metadata& obj) {
     new_object rpc_obj;
     rpc_obj.oid = obj.oid;
     rpc_obj.footer_pos = obj.footer_pos;
+    rpc_obj.object_size = obj.object_size;
 
     for (const auto& ntp_meta : obj.ntp_metas) {
         auto& topic_map = rpc_obj.extent_metas[ntp_meta.tidp.topic_id];
@@ -93,7 +94,8 @@ public:
     get_or_create_object_for(const model::topic_id_partition&) override;
     std::expected<void, error>
       add(object_id, metastore::object_metadata::ntp_metadata) override;
-    std::expected<void, error> finish(object_id, size_t footer_pos) override;
+    std::expected<void, error>
+    finish(object_id, size_t footer_pos, size_t object_size) override;
 
 private:
     friend class cloud_topics::l1::replicated_metastore;
@@ -144,7 +146,8 @@ replicated_object_builder::add(
 }
 
 std::expected<void, replicated_object_builder::error>
-replicated_object_builder::finish(object_id oid, size_t footer_pos) {
+replicated_object_builder::finish(
+  object_id oid, size_t footer_pos, size_t object_size) {
     auto p_it = std::find_if(
       partitions_.begin(), partitions_.end(), [oid](auto& p) {
           return p.second.pending_objects_.contains(oid);
@@ -163,6 +166,7 @@ replicated_object_builder::finish(object_id oid, size_t footer_pos) {
       metastore::object_metadata{
         .oid = oid,
         .footer_pos = footer_pos,
+        .object_size = object_size,
         .ntp_metas = std::move(it->second),
       });
     objects.pending_objects_.erase(it);
@@ -386,6 +390,7 @@ replicated_metastore::get_first_ge(
     metastore::object_response resp;
     resp.oid = reply.object.oid;
     resp.footer_pos = reply.object.footer_pos;
+    resp.object_size = reply.object.object_size;
     co_return resp;
 }
 
@@ -412,6 +417,7 @@ replicated_metastore::get_first_ge(
     metastore::object_response resp;
     resp.oid = reply.object.oid;
     resp.footer_pos = reply.object.footer_pos;
+    resp.object_size = reply.object.object_size;
     co_return resp;
 }
 

@@ -14,7 +14,7 @@
 
 syntax = "proto3";
 
-package redpanda.core.admin;
+package redpanda.core.admin.v2;
 
 import "proto/redpanda/pbgen/options.proto";
 import "proto/redpanda/pbgen/rpc.proto";

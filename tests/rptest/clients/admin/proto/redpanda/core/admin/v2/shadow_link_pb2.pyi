@@ -24,7 +24,7 @@ import google.protobuf.internal.containers
 import google.protobuf.internal.enum_type_wrapper
 import google.protobuf.message
 import google.protobuf.timestamp_pb2
-from ..... import proto
+from ...... import proto
 import sys
 import typing
 if sys.version_info >= (3, 10):

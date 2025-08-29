@@ -43,9 +43,10 @@ model::term_id operator""_tm(unsigned long long t) {
 
 class new_obj_builder {
 public:
-    new_obj_builder(object_id oid, size_t footer_pos) {
+    new_obj_builder(object_id oid, size_t footer_pos, size_t object_size) {
         out.oid = oid;
         out.footer_pos = footer_pos;
+        out.object_size = object_size;
     }
     new_obj_builder(const new_obj_builder&) = delete;
     new_obj_builder(new_obj_builder&&) = default;
@@ -133,7 +134,7 @@ TEST(StateUpdateTest, TestAddBasic) {
     state s;
     {
         auto update = add_objects_builder()
-                        .add(new_obj_builder(oid1, 100)
+                        .add(new_obj_builder(oid1, 100, 1100)
                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                                .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                                .build())
@@ -147,7 +148,7 @@ TEST(StateUpdateTest, TestAddBasic) {
     }
     {
         auto update = add_objects_builder()
-                        .add(new_obj_builder(oid2, 100)
+                        .add(new_obj_builder(oid2, 100, 1100)
                                .add(tidp_c, 0_o, 10_o, 1999_t, 0, 99)
                                .add(tidp_b, 11_o, 20_o, 1999_t, 100, 199)
                                .build())
@@ -164,10 +165,10 @@ TEST(StateUpdateTest, TestAddBasic) {
 TEST(StateUpdateTest, TestDuplicateAddSingleUpdate) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
-                    .add(new_obj_builder(oid2, 100)
+                    .add(new_obj_builder(oid2, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 0_tm, 0_o)
@@ -182,7 +183,7 @@ TEST(StateUpdateTest, TestDuplicateAddSingleUpdate) {
 
 TEST(StateUpdateTest, TestStartAfterZero) {
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 0_tm, 11_o)
@@ -200,7 +201,7 @@ TEST(StateUpdateTest, TestStartAfterZero) {
 
 TEST(StateUpdateTest, TestDuplicateObject) {
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                            .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
@@ -226,7 +227,7 @@ TEST(StateUpdateTest, TestDuplicateObject) {
 
 TEST(StateUpdateTest, TestDuplicateAddMultipleUpdates) {
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                            .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
@@ -265,7 +266,7 @@ TEST(StateUpdateTest, TestOverlapSomePartitions) {
     state s;
     {
         auto update = add_objects_builder()
-                        .add(new_obj_builder(oid1, 100)
+                        .add(new_obj_builder(oid1, 100, 1100)
                                .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                                .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                                .build())
@@ -285,7 +286,7 @@ TEST(StateUpdateTest, TestOverlapSomePartitions) {
     // Now send a bogus range for one of the partitions, but a correct extent
     // for another.
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid2, 100)
+                    .add(new_obj_builder(oid2, 100, 1100)
                            .add(tidp_a, 1337_o, 1337_o, 1999_t, 0, 5)
                            .add(tidp_b, 11_o, 20_o, 1999_t, 100, 199)
                            .build())
@@ -330,12 +331,12 @@ MATCHER_P2(MatchesTermStart, term, offset, "") {
 TEST(StateUpdateTest, TestReplaceBasic) {
     using testing::ElementsAre;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
                         .build())
-                 .add(new_obj_builder(oid2, 100)
+                 .add(new_obj_builder(oid2, 100, 1100)
                         .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                         .add(tidp_c, 11_o, 20_o, 1999_t, 0, 99)
                         .build())
@@ -349,7 +350,7 @@ TEST(StateUpdateTest, TestReplaceBasic) {
 
     // Fully replace partition a, partially replace c.
     auto replace = replace_objects_builder()
-                     .add(new_obj_builder(oid3, 100)
+                     .add(new_obj_builder(oid3, 100, 1100)
                             .add(tidp_a, 0_o, 20_o, 1999_t, 0, 99)
                             .add(tidp_c, 0_o, 10_o, 1999_t, 100, 199)
                             .build())
@@ -384,7 +385,7 @@ TEST(StateUpdateTest, TestReplaceBasic) {
 TEST(StateUpdateTest, TestReplaceEmptyState) {
     state s;
     auto replace = replace_objects_builder()
-                     .add(new_obj_builder(oid1, 100)
+                     .add(new_obj_builder(oid1, 100, 1100)
                             .add(tidp_a, 0_o, 20_o, 1999_t, 0, 99)
                             .build())
                      .build();
@@ -399,7 +400,7 @@ TEST(StateUpdateTest, TestReplaceEmptyState) {
 TEST(StateUpdateTest, TestReplaceDuplicate) {
     using testing::ElementsAre;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 100)
+                 .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
@@ -409,7 +410,7 @@ TEST(StateUpdateTest, TestReplaceDuplicate) {
     ASSERT_TRUE(add_res.has_value());
 
     auto replace = replace_objects_builder()
-                     .add(new_obj_builder(oid1, 100)
+                     .add(new_obj_builder(oid1, 100, 1100)
                             .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                             .build())
                      .build();
@@ -424,7 +425,7 @@ TEST(StateUpdateTest, TestReplaceDuplicate) {
 TEST(StateUpdateTest, TestReplaceMisaligned) {
     using testing::ElementsAre;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 100)
+                 .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
@@ -434,7 +435,7 @@ TEST(StateUpdateTest, TestReplaceMisaligned) {
     ASSERT_TRUE(add_res.has_value());
 
     auto replace = replace_objects_builder()
-                     .add(new_obj_builder(oid2, 100)
+                     .add(new_obj_builder(oid2, 100, 1100)
                             .add(tidp_a, 0_o, 9_o, 1999_t, 0, 99)
                             .build())
                      .build();
@@ -450,7 +451,7 @@ TEST(StateUpdateTest, TestReplaceMisaligned) {
 TEST(StateUpdateTest, TestReplaceBadOrdering) {
     using testing::ElementsAre;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 100)
+                 .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
@@ -461,10 +462,10 @@ TEST(StateUpdateTest, TestReplaceBadOrdering) {
 
     // Make the replacement overlap with itself.
     auto replace = replace_objects_builder()
-                     .add(new_obj_builder(oid2, 100)
+                     .add(new_obj_builder(oid2, 100, 1100)
                             .add(tidp_a, 0_o, 7_o, 1999_t, 0, 99)
                             .build())
-                     .add(new_obj_builder(oid3, 100)
+                     .add(new_obj_builder(oid3, 100, 1100)
                             .add(tidp_a, 5_o, 10_o, 1999_t, 0, 99)
                             .build())
                      .build();
@@ -479,7 +480,7 @@ TEST(StateUpdateTest, TestReplaceBadOrdering) {
 TEST(StateUpdateTest, TestEmptyReplace) {
     using testing::ElementsAre;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 100)
+                 .add(new_obj_builder(oid1, 100, 1100)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .build())
                  .add_term_start(tidp_a, 0_tm, 0_o)
@@ -501,7 +502,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .add(tidp_c, 0_o, 10_o, 1999_t, 200, 299)
@@ -517,7 +518,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
     // Fully replace partition a and clean part of it.
     auto replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid2, 100)
+          .add(new_obj_builder(oid2, 100, 1100)
                  .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -545,7 +546,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
     // Compact an extent, marking [3, 4] cleaned with tombstones.
     replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid3, 100)
+          .add(new_obj_builder(oid3, 100, 1100)
                  .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -567,7 +568,7 @@ TEST(StateUpdateTest, TestReplaceWithCompaction) {
 
     // Now mark [3, 8] as having removed tombstones.
     replace = replace_objects_builder()
-                .add(new_obj_builder(oid4, 100)
+                .add(new_obj_builder(oid4, 100, 1100)
                        .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                        .build())
                 .clean_tombstones(tidp_a, 3_o, 8_o)
@@ -588,7 +589,7 @@ TEST(StateUpdateTest, TestCompactionMissingExtent) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
@@ -602,7 +603,7 @@ TEST(StateUpdateTest, TestCompactionMissingExtent) {
     // Add a clean range for tidp_a but only supply an extent with tidp_b.
     auto replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid2, 100)
+          .add(new_obj_builder(oid2, 100, 1100)
                  .add(tidp_b, 0_o, 10_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -623,7 +624,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
@@ -636,7 +637,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtents) {
 
     auto replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid3, 100)
+          .add(new_obj_builder(oid3, 100, 1100)
                  .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -658,7 +659,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
@@ -669,7 +670,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
     auto add_res = add.apply(s);
     ASSERT_TRUE(add_res.has_value());
     add = add_objects_builder()
-            .add(new_obj_builder(oid2, 300)
+            .add(new_obj_builder(oid2, 300, 1300)
                    .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                    .build())
             .add_term_start(tidp_a, 0_tm, 11_o)
@@ -680,7 +681,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceExtentsStart) {
     // Add a replacement extent and claim that it cleans a larger offset range.
     auto replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid3, 100)
+          .add(new_obj_builder(oid3, 100, 1100)
                  .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -701,7 +702,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
@@ -712,7 +713,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
     auto add_res = add.apply(s);
     ASSERT_TRUE(add_res.has_value());
     add = add_objects_builder()
-            .add(new_obj_builder(oid2, 300)
+            .add(new_obj_builder(oid2, 300, 1300)
                    .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                    .build())
             .add_term_start(tidp_a, 0_tm, 11_o)
@@ -723,7 +724,7 @@ TEST(StateUpdateTest, TestCompactionDoesntReplaceLogStart) {
     // Add a replacement extent and claim that it makes a larger range clean.
     auto replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid3, 100)
+          .add(new_obj_builder(oid3, 100, 1100)
                  .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -744,7 +745,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
     using testing::ElementsAre;
     using range = struct compaction_state_update::cleaned_range;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
@@ -757,7 +758,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
 
     auto replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid2, 100)
+          .add(new_obj_builder(oid2, 100, 1100)
                  .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -771,7 +772,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
 
     replace
       = replace_objects_builder()
-          .add(new_obj_builder(oid3, 100)
+          .add(new_obj_builder(oid3, 100, 1100)
                  .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                  .build())
           .clean(
@@ -792,7 +793,7 @@ TEST(StateUpdateTest, TestOverlappingTombstones) {
 TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
     using testing::ElementsAre;
     auto add = add_objects_builder()
-                 .add(new_obj_builder(oid1, 300)
+                 .add(new_obj_builder(oid1, 300, 1300)
                         .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                         .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                         .build())
@@ -804,7 +805,7 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
     ASSERT_TRUE(add_res.has_value());
 
     auto replace = replace_objects_builder()
-                     .add(new_obj_builder(oid2, 100)
+                     .add(new_obj_builder(oid2, 100, 1100)
                             .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                             .build())
                      .clean_tombstones(tidp_a, 5_o, 10_o)
@@ -821,7 +822,7 @@ TEST(StateUpdateTest, TestRemoveNonExistingTombstones) {
 TEST(StateUpdateTest, TestAddIncreasingTerms) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 1_tm, 0_o)
@@ -832,7 +833,7 @@ TEST(StateUpdateTest, TestAddIncreasingTerms) {
     EXPECT_EQ(1, s.topic_to_state.size());
 
     update = add_objects_builder()
-               .add(new_obj_builder(oid2, 100)
+               .add(new_obj_builder(oid2, 100, 1100)
                       .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                       .build())
                .add_term_start(tidp_a, 3_tm, 11_o)
@@ -857,7 +858,7 @@ TEST(StateUpdateTest, TestAddIncreasingTerms) {
 TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 1_tm, 0_o)
@@ -877,7 +878,7 @@ TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
 
     // The start of term 2 shouldn't be changed, but term 3 should be added.
     update = add_objects_builder()
-               .add(new_obj_builder(oid2, 100)
+               .add(new_obj_builder(oid2, 100, 1100)
                       .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                       .build())
                .add_term_start(tidp_a, 2_tm, 11_o)
@@ -900,7 +901,7 @@ TEST(StateUpdateTest, TestAddSameSubsequentTerm) {
 TEST(StateUpdateTest, TestAddNoTerms) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .build();
@@ -915,7 +916,7 @@ TEST(StateUpdateTest, TestAddNoTerms) {
 TEST(StateUpdateTest, TestAddMissingTermsForPartition) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .add(tidp_b, 0_o, 10_o, 1999_t, 100, 199)
                            .build())
@@ -931,7 +932,7 @@ TEST(StateUpdateTest, TestAddMissingTermsForPartition) {
 TEST(StateUpdateTest, TestAddDecreasingTermInUpdate) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 2_tm, 0_o)
@@ -945,7 +946,7 @@ TEST(StateUpdateTest, TestAddDecreasingTermInUpdate) {
 TEST(StateUpdateTest, TestAddDecreasingTerm) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 2_tm, 0_o)
@@ -954,7 +955,7 @@ TEST(StateUpdateTest, TestAddDecreasingTerm) {
     EXPECT_TRUE(res.has_value());
 
     update = add_objects_builder()
-               .add(new_obj_builder(oid2, 100)
+               .add(new_obj_builder(oid2, 100, 1100)
                       .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                       .build())
                .add_term_start(tidp_a, 1_tm, 11_o)
@@ -967,7 +968,7 @@ TEST(StateUpdateTest, TestAddDecreasingTerm) {
 
 TEST(StateUpdateTest, TestAllowBogusTermWithBogusExtent) {
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 10_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 2_tm, 10_o)
@@ -993,7 +994,7 @@ TEST(StateUpdateTest, TestAllowBogusTermWithBogusExtent) {
 
 TEST(StateUpdateTest, TestTermsWithNoExtent) {
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 0_tm, 0_o)
@@ -1011,7 +1012,7 @@ TEST(StateUpdateTest, TestTermsWithNoExtent) {
 TEST(StateUpdateTest, TestAddMismatchedStartOffset) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 1_tm, 0_o)
@@ -1021,7 +1022,7 @@ TEST(StateUpdateTest, TestAddMismatchedStartOffset) {
 
     // Add an update where the term's start offset doesn't match the extent.
     update = add_objects_builder()
-               .add(new_obj_builder(oid2, 100)
+               .add(new_obj_builder(oid2, 100, 1100)
                       .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                       .build())
                .add_term_start(tidp_a, 2_tm, 0_o)
@@ -1036,7 +1037,7 @@ TEST(StateUpdateTest, TestAddMismatchedStartOffset) {
 TEST(StateUpdateTest, TestAddExtentEndsBelowLastTermStart) {
     state s;
     auto update = add_objects_builder()
-                    .add(new_obj_builder(oid1, 100)
+                    .add(new_obj_builder(oid1, 100, 1100)
                            .add(tidp_a, 0_o, 10_o, 1999_t, 0, 99)
                            .build())
                     .add_term_start(tidp_a, 1_tm, 0_o)
@@ -1047,7 +1048,7 @@ TEST(StateUpdateTest, TestAddExtentEndsBelowLastTermStart) {
     EXPECT_TRUE(res.has_value());
 
     update = add_objects_builder()
-               .add(new_obj_builder(oid2, 100)
+               .add(new_obj_builder(oid2, 100, 1100)
                       .add(tidp_a, 11_o, 20_o, 1999_t, 0, 99)
                       .build())
                .add_term_start(tidp_a, 3_tm, 11_o)
@@ -1065,13 +1066,13 @@ TEST(StateUpdateTest, TestSetStartOffsetAlignedWithExtent) {
     state s;
     // Add some extents
     auto add_update = add_objects_builder()
-                        .add(new_obj_builder(oid1, 100)
+                        .add(new_obj_builder(oid1, 100, 1100)
                                .add(tidp_a, 0_o, 10_o, 2000_t, 0, 99)
                                .build())
-                        .add(new_obj_builder(oid2, 100)
+                        .add(new_obj_builder(oid2, 100, 1100)
                                .add(tidp_a, 11_o, 20_o, 2000_t, 0, 99)
                                .build())
-                        .add(new_obj_builder(oid3, 100)
+                        .add(new_obj_builder(oid3, 100, 1100)
                                .add(tidp_a, 21_o, 30_o, 2000_t, 0, 99)
                                .build())
                         .add_term_start(tidp_a, 0_tm, 0_o)
@@ -1106,13 +1107,13 @@ TEST(StateUpdateTest, TestSetStartOffsetNotAlignedWithExtent) {
     state s;
     // Add some extents
     auto add_update = add_objects_builder()
-                        .add(new_obj_builder(oid1, 100)
+                        .add(new_obj_builder(oid1, 100, 1100)
                                .add(tidp_a, 0_o, 10_o, 2000_t, 0, 99)
                                .build())
-                        .add(new_obj_builder(oid2, 100)
+                        .add(new_obj_builder(oid2, 100, 1100)
                                .add(tidp_a, 11_o, 20_o, 2000_t, 0, 99)
                                .build())
-                        .add(new_obj_builder(oid3, 100)
+                        .add(new_obj_builder(oid3, 100, 1100)
                                .add(tidp_a, 21_o, 30_o, 2000_t, 0, 99)
                                .build())
                         .add_term_start(tidp_a, 0_tm, 0_o)
@@ -1148,7 +1149,7 @@ TEST(StateUpdateTest, TestSetStartOffsetEmptyWithTerms) {
     state s;
     // Add extents with various terms
     auto add_update = add_objects_builder()
-                        .add(new_obj_builder(oid1, 100)
+                        .add(new_obj_builder(oid1, 100, 1100)
                                .add(tidp_a, 0_o, 9_o, 2000_t, 0, 99)
                                .build())
                         .add_term_start(tidp_a, 1_tm, 0_o)
@@ -1191,7 +1192,7 @@ TEST(StateUpdateTest, TestSetStartOffsetWithCompactionState) {
     state s;
     // Add an extent and then compact it
     auto add_update = add_objects_builder()
-                        .add(new_obj_builder(oid1, 100)
+                        .add(new_obj_builder(oid1, 100, 1100)
                                .add(tidp_a, 0_o, 20_o, 2000_t, 0, 99)
                                .build())
                         .add_term_start(tidp_a, 0_tm, 0_o)
@@ -1202,7 +1203,7 @@ TEST(StateUpdateTest, TestSetStartOffsetWithCompactionState) {
     // Compact part of the extent (clean offsets [5, 15])
     auto replace_update
       = replace_objects_builder()
-          .add(new_obj_builder(oid2, 100)
+          .add(new_obj_builder(oid2, 100, 1100)
                  .add(tidp_a, 0_o, 20_o, 2000_t, 0, 99)
                  .build())
           .clean(
