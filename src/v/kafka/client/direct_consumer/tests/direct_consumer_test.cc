@@ -366,7 +366,7 @@ TEST_F(consumer_test_mock, TestAssignUnassignPartitions) {
                         == 5;
         });
     });
-    validate_offsets_monotonicity(all_batches);
+    ASSERT_TRUE(validate_offsets_monotonicity(all_batches));
     // unassign partition 0
     consumer
       .unassign_partitions(
