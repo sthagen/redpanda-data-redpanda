@@ -20,11 +20,9 @@
 #include "model/metadata.h"
 #include "random/generators.h"
 #include "redpanda/tests/fixture.h"
+#include "security/acl.h"
 
 #include <seastar/testing/perf_tests.hh>
-
-#include <boost/test/tools/old/interface.hpp>
-#include <boost/test/unit_test_log.hpp>
 
 static ss::logger fpt_logger("fpt_test");
 
@@ -49,55 +47,166 @@ struct fixture {
     }
 };
 
-struct fetch_plan_fixture : redpanda_thread_fixture {
-    static constexpr size_t topic_name_length = 30;
+static constexpr size_t topic_name_length = 30;
 #ifdef SEASTAR_DEFAULT_ALLOCATOR
-    static constexpr size_t total_partition_count = 100;
+static constexpr size_t max_partition_count = 100;
 #else
-    static constexpr size_t total_partition_count = 800;
+static constexpr size_t max_partition_count = 1000;
 #endif
-    static constexpr size_t session_partition_count = 100;
 
-    model::topic t;
-
-    fetch_plan_fixture() {
-        BOOST_TEST_CHECKPOINT("before leadership");
-
-        wait_for_controller_leadership().get();
-
-        BOOST_TEST_CHECKPOINT("HERE");
-
-        t = model::topic(
-          random_generators::gen_alphanum_string(topic_name_length));
-        auto tp = model::topic_partition(t, model::partition_id(0));
-        add_topic(
-          model::topic_namespace_view(model::kafka_namespace, t),
-          total_partition_count)
-          .get();
-
-        BOOST_TEST_CHECKPOINT("HERE");
-    }
+struct test_args {
+    size_t topic_count;
+    size_t partitions_per_topic;
+    bool use_authz;
+    bool operator==(const test_args&) const = default;
 };
 
-PERF_TEST_F(fetch_plan_fixture, test_fetch_plan) {
-    auto make_fetch_req = [this]() {
-        // make the fetch topic
-        kafka::fetch_topic ft;
-        ft.topic = t;
+struct fixture_state {
+    std::vector<model::topic> topics;
+    kafka::fetch_metadata_cache* mdc;
+    std::unique_ptr<kafka::op_context> octx;
+};
 
-        // add the partitions to the fetch request
-        for (size_t pid = 0; pid < session_partition_count; pid++) {
-            kafka::fetch_partition fp;
-            fp.partition = model::partition_id(static_cast<int32_t>(pid));
-            fp.fetch_offset = model::offset(0);
-            fp.current_leader_epoch = kafka::leader_epoch(-1);
-            fp.log_start_offset = model::offset(-1);
-            fp.partition_max_bytes = 1048576;
-            ft.partitions.push_back(std::move(fp));
+struct fetch_plan : redpanda_thread_fixture {
+    test_args _args;
+    std::optional<fixture_state> _state;
+
+    fetch_plan()
+      : _args{} {}
+
+    // get a wildcard topic read acl binding
+    static auto get_wildcard_bindings() {
+        security::acl_entry acl(
+          security::acl_wildcard_user,
+          security::acl_wildcard_host,
+          security::acl_operation::all,
+          security::acl_permission::allow);
+
+        security::resource_pattern resource(
+          security::resource_type::topic,
+          security::resource_pattern::wildcard,
+          security::pattern_type::literal);
+
+        std::vector<security::acl_binding> bindings{
+          security::acl_binding{resource, acl}};
+        return bindings;
+    }
+
+    ss::future<fixture_state&> init_bench(test_args args) {
+        if (_state) {
+            vassert(_args == args, "args mismatch");
+            co_return *_state;
         }
 
-        BOOST_TEST_CHECKPOINT("HERE");
+        _args = args;
+        auto [tcount, pcount, use_authz] = args;
 
+        co_await wait_for_controller_leadership();
+
+        _state.emplace();
+
+        co_await ss::parallel_for_each(boost::irange(tcount), [&, this](int) {
+            auto name = model::topic(
+              random_generators::gen_alphanum_string(topic_name_length));
+            _state->topics.push_back(name);
+            return add_topic(
+              model::topic_namespace_view(model::kafka_namespace, name),
+              pcount);
+        });
+
+        auto fetch_req = make_fetch_req();
+
+        // we need to share a connection among any requests here since the
+        // session cache is associated with a connection
+        auto conn = make_connection_context(use_authz);
+
+        if (use_authz) {
+            conn->server().authorizer().add_bindings(get_wildcard_bindings());
+        }
+
+        kafka::request_header header{
+          .key = kafka::fetch_handler::api::key,
+          .version = kafka::fetch_handler::max_supported};
+
+        // use this initial request to populate the fetch session
+        // in the session cache
+        kafka::fetch_session_id sess_id;
+        {
+            auto rctx = make_request_context(make_fetch_req(), header, conn);
+            // set up a fetch session
+            auto ctx = rctx.fetch_sessions().maybe_get_session(fetch_req);
+            vassert(
+              ctx.has_error() == false,
+              "Expected ctx.has_error() == false, got {}",
+              ctx.has_error());
+            // first fetch has to be full fetch
+            vassert(
+              ctx.is_full_fetch() == true,
+              "Expected ctx.is_full_fetch() == true, got {}",
+              ctx.is_full_fetch());
+            vassert(
+              ctx.is_sessionless() == false,
+              "Expected ctx.is_sessionless() == false, got {}",
+              ctx.is_sessionless());
+
+            vassert(
+              ctx.session()->partitions().size() == pcount * tcount,
+              "Expected session()->partitions().size() == "
+              "session_partition_count, got {} vs {}",
+              ctx.session()->partitions().size(),
+              pcount);
+
+            sess_id = ctx.session()->id();
+            vassert(sess_id > 0, "Expected sess_id > 0, got {}", sess_id);
+        }
+
+        fetch_req.data.session_id = sess_id;
+        fetch_req.data.session_epoch = 1;
+        fetch_req.data.topics.clear();
+
+        auto rctx = make_request_context(std::move(fetch_req), header, conn);
+        vassert(
+          rctx.fetch_sessions().size() == 1,
+          "Expected fetch_sessions().size() == 1, got {}",
+          rctx.fetch_sessions().size());
+
+        // add all partitions to fetch metadata
+        auto& mdc = rctx.get_fetch_metadata_cache();
+        _state->mdc = &mdc;
+
+        for (auto& topic : _state->topics) {
+            for (unsigned i = 0; i < args.partitions_per_topic; i++) {
+                mdc.insert_or_assign(
+                  {topic, model::partition_id(i)},
+                  model::offset(0),
+                  model::offset(100),
+                  model::offset(100));
+            }
+        }
+
+        vassert(
+          mdc.size() == args.partitions_per_topic * args.topic_count,
+          "mdc.size(): {}",
+          mdc.size());
+
+        auto octx = std::make_unique<kafka::op_context>(
+          std::move(rctx), ss::default_smp_service_group());
+
+        vassert(
+          !octx->session_ctx.is_sessionless(),
+          "Expected !session_ctx.is_sessionless(), got {}",
+          octx->session_ctx.is_sessionless());
+        vassert(
+          octx->session_ctx.session()->id() == sess_id,
+          "Expected session()->id() == sess_id, got {} vs {}",
+          octx->session_ctx.session()->id(),
+          sess_id);
+
+        _state->octx = std::move(octx);
+        co_return *_state;
+    }
+
+    kafka::fetch_request make_fetch_req() {
         // create a request
         kafka::fetch_request_data frq_data;
         frq_data.replica_id = kafka::client::consumer_replica_id;
@@ -107,104 +216,66 @@ PERF_TEST_F(fetch_plan_fixture, test_fetch_plan) {
         frq_data.isolation_level = model::isolation_level::read_uncommitted;
         frq_data.session_id = kafka::invalid_fetch_session_id;
         frq_data.session_epoch = kafka::initial_fetch_session_epoch;
-        frq_data.topics.push_back(std::move(ft));
+
+        for (auto& topic : _state->topics) {
+            // make the fetch topic
+            kafka::fetch_topic ft;
+            ft.topic = topic;
+
+            // add the partitions to the fetch request
+            for (size_t pid = 0; pid < _args.partitions_per_topic; pid++) {
+                kafka::fetch_partition fp;
+                fp.partition = model::partition_id(static_cast<int32_t>(pid));
+                fp.fetch_offset = model::offset(0);
+                fp.current_leader_epoch = kafka::leader_epoch(-1);
+                fp.log_start_offset = model::offset(-1);
+                fp.partition_max_bytes = 1048576;
+                ft.partitions.push_back(std::move(fp));
+            }
+
+            frq_data.topics.push_back(std::move(ft));
+        }
 
         return kafka::fetch_request{std::move(frq_data)};
     };
 
-    auto fetch_req = make_fetch_req();
+    ss::future<size_t> run_bench(size_t tcount, size_t pcount, bool authz) {
+#ifdef NDEBUG
+        const size_t iters = 1000000 / (tcount * pcount);
+#else
+        // keep things speedy in slow debug builds
+        const size_t iters = 1;
+#endif
 
-    BOOST_TEST_CHECKPOINT("HERE");
+        auto& state = co_await init_bench({tcount, pcount, authz});
 
-    // we need to share a connection among any requests here since the
-    // session cache is associated with a connection
-    auto conn = make_connection_context();
+        perf_tests::start_measuring_time();
+        for (size_t i = 0; i < iters; i++) {
+            auto plan = kafka::testing::make_simple_fetch_plan(*state.octx);
+            perf_tests::do_not_optimize(plan);
+        }
+        perf_tests::stop_measuring_time();
 
-    BOOST_TEST_CHECKPOINT("HERE");
+        // check that nothing was evicted
+        vassert(
+          state.mdc->size() == tcount * pcount,
+          "mdc->size(): {}",
+          state.mdc->size());
 
-    kafka::request_header header{
-      .key = kafka::fetch_handler::api::key,
-      .version = kafka::fetch_handler::max_supported};
-
-    // use this initial request to populate the fetch session
-    // in the session cache
-    kafka::fetch_session_id sess_id;
-    {
-        auto rctx = make_request_context(make_fetch_req(), header, conn);
-        // set up a fetch session
-        auto ctx = rctx.fetch_sessions().maybe_get_session(fetch_req);
-        BOOST_REQUIRE_EQUAL(ctx.has_error(), false);
-        // first fetch has to be full fetch
-        BOOST_REQUIRE_EQUAL(ctx.is_full_fetch(), true);
-        BOOST_REQUIRE_EQUAL(ctx.is_sessionless(), false);
-
-        BOOST_REQUIRE_EQUAL(
-          ctx.session()->partitions().size(), session_partition_count);
-
-        sess_id = ctx.session()->id();
-        BOOST_REQUIRE(sess_id > 0);
+        co_return iters;
     }
+};
 
-    BOOST_TEST_CHECKPOINT("HERE");
+PERF_TEST_F(fetch_plan, t1p1_no_auth) { return run_bench(1, 1, false); }
+PERF_TEST_F(fetch_plan, t1p1_yes_auth) { return run_bench(1, 1, true); }
+PERF_TEST_F(fetch_plan, t1p100_no_auth) { return run_bench(1, 100, false); }
+PERF_TEST_F(fetch_plan, t1p100_yes_auth) { return run_bench(1, 100, true); }
+PERF_TEST_F(fetch_plan, t100p1_no_auth) { return run_bench(100, 1, false); }
+PERF_TEST_F(fetch_plan, t100p1_yes_auth) { return run_bench(100, 1, true); }
 
-    fetch_req.data.session_id = sess_id;
-    fetch_req.data.session_epoch = 1;
-    fetch_req.data.topics.clear();
-
-    auto rctx = make_request_context(std::move(fetch_req), header);
-    BOOST_REQUIRE_EQUAL(rctx.fetch_sessions().size(), 1);
-
-    // add all partitions to fetch metadata
-    auto& mdc = rctx.get_fetch_metadata_cache();
-    for (size_t i = 0; i < total_partition_count; i++) {
-        mdc.insert_or_assign(
-          {t, static_cast<int32_t>(i)},
-          model::offset(0),
-          model::offset(100),
-          model::offset(100));
-    }
-
-    vassert(mdc.size() == total_partition_count, "mdc.size(): {}", mdc.size());
-
-    auto octx = kafka::op_context(
-      std::move(rctx), ss::default_smp_service_group());
-
-    BOOST_REQUIRE(!octx.session_ctx.is_sessionless());
-    BOOST_REQUIRE_EQUAL(octx.session_ctx.session()->id(), sess_id);
-
-    BOOST_TEST_CHECKPOINT("HERE");
-
-    constexpr size_t iters = 10000; // 0000000U;
-
-    perf_tests::start_measuring_time();
-    for (size_t i = 0; i < iters; i++) {
-        auto plan = kafka::testing::make_simple_fetch_plan(octx);
-        perf_tests::do_not_optimize(plan);
-    }
-    perf_tests::stop_measuring_time();
-
-    vassert(
-      mdc.size() == total_partition_count,
-      "mdc.size(): {}",
-      mdc.size()); // check that nothing was evicted
-
-    // double micros_per_iter = timer._total_duration / 1ns / 1000.
-    //                          / timer._total_timings;
-    // fmt::print(
-    //   "FPT {} iters, {} micros/iter micros/part {}\n",
-    //   timer._total_timings,
-    //   micros_per_iter,
-    //   micros_per_iter / session_partition_count);
-
-    // auto plan = kafka::make_simple_fetch_plan(octx);
-    // auto& pfps = plan.fetches_per_shard;
-    // fmt::print("FPT plan count: {}\n", pfps.size());
-    // if (pfps.size()) {
-    //     fmt::print("FPT plan[0] parts: {}\n", pfps[0].requests.size());
-    // }
-
-    // for (auto& sf : plan.fetches_per_shard) {
-    //     fmt::print("FPT plan: {}\n", sf);
-    // }
-    return (size_t)(session_partition_count * iters);
+PERF_TEST_F(fetch_plan, max_no_auth) {
+    return run_bench(1, max_partition_count, false);
+}
+PERF_TEST_F(fetch_plan, max_yes_auth) {
+    return run_bench(1, max_partition_count, true);
 }

@@ -81,8 +81,7 @@ public:
       , _handler(uploader) {}
 
     ss::future<> start() { co_return; }
-    void request_stop() { leader_router::request_shutdown(); }
-    ss::future<> stop() { return leader_router::shutdown(); }
+    void request_stop() { leader_router::request_stop(); }
 
     ss::future<offsets_upload_reply> request_upload(
       offsets_upload_request req,

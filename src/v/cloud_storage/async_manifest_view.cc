@@ -19,14 +19,11 @@
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/spillover_manifest.h"
 #include "cloud_storage/types.h"
-#include "cloud_storage_clients/types.h"
 #include "config/configuration.h"
-#include "fmt/chrono.h"
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 #include "ssx/future-util.h"
 #include "ssx/sformat.h"
-#include "utils/human.h"
 #include "utils/retry_chain_node.h"
 
 #include <seastar/core/abort_source.hh>
@@ -42,7 +39,6 @@
 
 #include <exception>
 #include <functional>
-#include <iterator>
 #include <optional>
 #include <system_error>
 #include <variant>
@@ -247,7 +243,8 @@ async_manifest_view_cursor::seek(async_view_search_query_t q) {
           _end);
         co_return false;
     }
-    _current = res.value();
+    set_current(std::move(res.value()));
+
     if (std::holds_alternative<stm_manifest_t>(_current)) {
         // Invariant: if cursor points to the STM manifest _stm_start_offset is
         //            set to expected base offset
@@ -259,12 +256,9 @@ async_manifest_view_cursor::seek(async_view_search_query_t q) {
     co_return true;
 }
 
-bool async_manifest_view_cursor::manifest_in_range(
-  const manifest_section_t& m) {
+bool async_manifest_view_cursor::manifest_in_range(const data_manifest& m) {
     return ss::visit(
       m,
-      [](std::monostate) { return false; },
-      [](stale_manifest) { return false; },
       [this](std::reference_wrapper<const partition_manifest> p) {
           auto so = p.get().get_start_offset().value_or(model::offset{});
           auto lo = p.get().get_last_offset();
@@ -313,7 +307,8 @@ async_manifest_view_cursor::next() {
     if (unlikely(!manifest_in_range(manifest.value()))) {
         co_return error_outcome::out_of_range;
     }
-    _current = manifest.value();
+    set_current(std::move(manifest.value()));
+
     if (std::holds_alternative<stm_manifest_t>(_current)) {
         // Invariant: if cursor points to the STM manifest _stm_start_offset is
         //            set to expected base offset
@@ -443,17 +438,12 @@ ss::future<> async_manifest_view::run_bg_loop() {
                   "Processing spillover manifest request {}, path: {}",
                   front.search_vec,
                   path);
-                if (in_stm(front.search_vec.base_offset)) {
-                    vlog(
-                      _ctxlog.warn,
-                      "Request {} refers to STM manifest",
-                      front.search_vec);
-                    // Normally, the request shouldn't contain the STM
-                    // request but nothing prevents us from handling this
-                    // just in case.
-                    front.promise.set_value(std::ref(_stm_manifest));
-                    continue;
-                }
+
+                vassert(
+                  !in_stm(front.search_vec.base_offset),
+                  "Request {} refers to STM manifest",
+                  front.search_vec);
+
                 if (!_manifest_cache.contains(
                       std::make_tuple(
                         get_ntp(), front.search_vec.base_offset))) {
@@ -1373,7 +1363,7 @@ async_manifest_view::size_based_retention(size_t size_limit) noexcept {
     co_return result;
 }
 
-ss::future<result<manifest_section_t, error_outcome>>
+ss::future<result<data_manifest, error_outcome>>
 async_manifest_view::get_materialized_manifest(
   async_view_search_query_t q) noexcept {
     try {

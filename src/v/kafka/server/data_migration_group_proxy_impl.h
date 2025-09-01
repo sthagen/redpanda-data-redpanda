@@ -43,8 +43,14 @@ public:
       const model::ntp& co_ntp,
       const chunked_vector<kafka::group_id>& groups) override;
 
-    virtual ss::future<bool>
+    ss::future<bool>
     assure_topic_exists(model::timeout_clock::time_point deadline) override;
+
+    ss::future<cluster::get_group_offsets_reply>
+    get_group_offsets(cluster::get_group_offsets_request&& req) override;
+
+    ss::future<cluster::set_group_offsets_reply>
+    set_group_offsets(cluster::set_group_offsets_request&& req) override;
 
 private:
     coordinator_ntp_mapper& _coordinator_ntp_mapper;

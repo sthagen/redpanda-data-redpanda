@@ -832,9 +832,7 @@ redpanda_cc_bench(
     srcs = [
         "fetch_plan_bench.cc",
     ],
-    duration = 1,
     memory = "4GiB",
-    runs = 1,
     deps = [
         "//src/v/base",
         "//src/v/kafka/client:types",
@@ -845,6 +843,7 @@ redpanda_cc_bench(
         "//src/v/model",
         "//src/v/random:generators",
         "//src/v/redpanda/tests:fixture",
+        "//src/v/security",
         "@boost//:test",
         "@seastar//:benchmark",
     ],

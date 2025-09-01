@@ -21,7 +21,6 @@
 #include "cluster/cloud_metadata/offsets_recoverer.h"
 #include "cluster/cloud_metadata/offsets_recovery_manager.h"
 #include "cluster/cloud_metadata/offsets_recovery_router.h"
-#include "cluster/cloud_metadata/offsets_snapshot.h"
 #include "cluster/cloud_metadata/offsets_upload_router.h"
 #include "cluster/cloud_metadata/offsets_uploader.h"
 #include "cluster/cloud_metadata/tests/cluster_metadata_utils.h"
@@ -29,6 +28,7 @@
 #include "cluster/cloud_metadata/uploader.h"
 #include "cluster/commands.h"
 #include "cluster/controller.h"
+#include "cluster/offsets_snapshot.h"
 #include "cluster/types.h"
 #include "config/node_config.h"
 #include "kafka/client/client.h"
@@ -186,7 +186,7 @@ public:
         auto& gm = app._group_manager.local();
         absl::flat_hash_map<model::ntp, size_t> groups_per_ntp;
         for (const auto& ntp : offset_ntps) {
-            auto res = gm.snapshot_groups(ntp).get();
+            auto res = gm.snapshot_groups_for_upload(ntp).get();
             BOOST_REQUIRE(res.has_value());
             for (const auto& snap : res.value()) {
                 groups_per_ntp[ntp] += snap.groups.size();
@@ -221,7 +221,7 @@ public:
         auto holder = gate.hold();
         while (!gate.is_closed()) {
             for (const auto& ntp : offset_ntps) {
-                auto res = co_await gm.snapshot_groups(ntp);
+                auto res = co_await gm.snapshot_groups_for_upload(ntp);
                 if (res.has_value()) {
                     size_t num_groups = 0;
                     for (const auto& snap : res.value()) {
@@ -242,8 +242,8 @@ public:
     ss::future<bool> validate_group_counts_exactly(
       absl::flat_hash_map<model::ntp, size_t> groups_per_ntp) {
         for (const auto& ntp : offset_ntps) {
-            auto snaps = co_await app._group_manager.local().snapshot_groups(
-              ntp);
+            auto snaps = co_await app._group_manager.local()
+                           .snapshot_groups_for_upload(ntp);
             if (!snaps.has_value()) {
                 co_return false;
             }
@@ -342,7 +342,8 @@ FIXTURE_TEST(test_snapshot_basic, offsets_recovery_fixture) {
     // empty snapshots.
     size_t snapped_groups = 0;
     for (const auto& ntp : offset_ntps) {
-        auto snap = app._group_manager.local().snapshot_groups(ntp).get();
+        auto snap
+          = app._group_manager.local().snapshot_groups_for_upload(ntp).get();
         BOOST_REQUIRE(snap.has_value());
         BOOST_REQUIRE_EQUAL(snap.value().size(), 1);
         snapped_groups += snap.value()[0].groups.size();
@@ -358,7 +359,8 @@ FIXTURE_TEST(test_snapshot_basic, offsets_recovery_fixture) {
     // Now snapshot again and ensure that the correct offsets were snapshotted.
     snapped_groups = 0;
     for (const auto& ntp : offset_ntps) {
-        auto snap = app._group_manager.local().snapshot_groups(ntp).get();
+        auto snap
+          = app._group_manager.local().snapshot_groups_for_upload(ntp).get();
         BOOST_REQUIRE(snap.has_value());
         BOOST_REQUIRE_EQUAL(snap.value().size(), 1);
         snapped_groups += snap.value()[0].groups.size();
@@ -411,7 +413,7 @@ FIXTURE_TEST(test_snapshot_group_removal, offsets_recovery_fixture) {
     auto groups_per_ntp = snap_num_group_per_offsets_ntp();
     std::vector<std::pair<model::ntp, kafka::group_id>> to_delete;
     for (const auto& ntp : offset_ntps) {
-        auto snap = gm.snapshot_groups(ntp).get();
+        auto snap = gm.snapshot_groups_for_upload(ntp).get();
         BOOST_REQUIRE(snap.has_value());
         BOOST_REQUIRE_EQUAL(snap.value().size(), 1);
         auto& groups = snap.value()[0].groups;
@@ -602,7 +604,7 @@ FIXTURE_TEST(
     // shouldn't be restored.
     for (const auto& ntp : offset_ntps) {
         auto snapshot_res
-          = app._group_manager.local().snapshot_groups(ntp).get();
+          = app._group_manager.local().snapshot_groups_for_upload(ntp).get();
         BOOST_REQUIRE(snapshot_res.has_value());
         BOOST_REQUIRE_EQUAL(snapshot_res.value().size(), 1);
         for (const auto& group : snapshot_res.value()[0].groups) {
@@ -792,7 +794,8 @@ FIXTURE_TEST(test_recover_offsets, offsets_recovery_fixture) {
     validate_group_counts_exactly(num_groups_per_ntp).get();
     absl::flat_hash_map<kafka::group_id, int> restored_offsets_per_group;
     for (const auto& ntp : offset_ntps) {
-        auto snap = app._group_manager.local().snapshot_groups(ntp).get();
+        auto snap
+          = app._group_manager.local().snapshot_groups_for_upload(ntp).get();
         BOOST_REQUIRE(snap.has_value());
 
         // All groups should have committed one offset.

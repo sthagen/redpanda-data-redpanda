@@ -11,6 +11,7 @@
 
 #include "kafka/server/data_migration_group_proxy_impl.h"
 
+#include "model/fundamental.h"
 #include "model/timeout_clock.h"
 
 namespace kafka {
@@ -48,6 +49,18 @@ ss::future<std::error_code> data_migration_group_proxy_impl::delete_groups(
 ss::future<bool> data_migration_group_proxy_impl::assure_topic_exists(
   model::timeout_clock::time_point deadline) {
     return _group_initializer.assure_topic_exists(true, deadline);
+}
+
+ss::future<cluster::get_group_offsets_reply>
+data_migration_group_proxy_impl::get_group_offsets(
+  cluster::get_group_offsets_request&& req) {
+    return _group_manager.get_group_offsets(std::move(req));
+}
+
+ss::future<cluster::set_group_offsets_reply>
+data_migration_group_proxy_impl::set_group_offsets(
+  cluster::set_group_offsets_request&& req) {
+    return _group_manager.set_group_offsets(std::move(req));
 }
 
 } // namespace kafka

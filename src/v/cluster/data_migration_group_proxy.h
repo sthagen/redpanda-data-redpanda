@@ -11,7 +11,7 @@
 #pragma once
 
 #include "base/outcome.h"
-#include "cluster/errc.h"
+#include "cluster/offsets_snapshot.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/types.h"
 #include "model/fundamental.h"
@@ -42,5 +42,11 @@ public:
 
     virtual ss::future<bool>
     assure_topic_exists(model::timeout_clock::time_point deadline) = 0;
+
+    virtual ss::future<get_group_offsets_reply>
+    get_group_offsets(get_group_offsets_request&& req) = 0;
+
+    virtual ss::future<set_group_offsets_reply>
+    set_group_offsets(set_group_offsets_request&& req) = 0;
 };
 } // namespace cluster::data_migrations

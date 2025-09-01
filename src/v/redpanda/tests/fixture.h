@@ -846,7 +846,7 @@ public:
         const char* mechanism_name() const override { return "fake-mechanism"; }
     };
 
-    conn_ptr make_connection_context() {
+    conn_ptr make_connection_context(bool use_authz = false) {
         security::sasl_server sasl(security::sasl_server::sasl_state::complete);
         sasl.set_mechanism(std::make_unique<fake_sasl_mech>());
         return ss::make_lw_shared<kafka::connection_context>(
@@ -854,7 +854,7 @@ public:
           proto.local(),
           nullptr,
           std::move(sasl),
-          false,
+          use_authz,
           std::nullopt,
           config::mock_property<uint32_t>(100_MiB).bind(),
           config::mock_property<std::vector<ss::sstring>>({"produce", "fetch"})

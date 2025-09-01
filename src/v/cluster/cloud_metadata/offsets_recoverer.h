@@ -11,8 +11,8 @@
 
 #include "cloud_storage/fwd.h"
 #include "cluster/cloud_metadata/offsets_recovery_rpc_types.h"
-#include "cluster/cloud_metadata/offsets_snapshot.h"
 #include "cluster/fwd.h"
+#include "cluster/offsets_snapshot.h"
 #include "model/metadata.h"
 
 #include <seastar/core/future.hh>

@@ -13,8 +13,8 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/container/node_hash_map.h"
 #include "base/seastarx.h"
-#include "cluster/cloud_metadata/offsets_snapshot.h"
 #include "cluster/notification.h"
+#include "cluster/offsets_snapshot.h"
 #include "cluster/topic_table.h"
 #include "container/chunked_vector.h"
 #include "kafka/protocol/errors.h"
@@ -29,6 +29,7 @@
 #include "kafka/protocol/schemata/list_groups_response.h"
 #include "kafka/protocol/sync_group.h"
 #include "kafka/protocol/txn_offset_commit.h"
+#include "kafka/protocol/types.h"
 #include "kafka/server/fwd.h"
 #include "kafka/server/group.h"
 #include "kafka/server/group_recovery_consumer.h"
@@ -199,14 +200,23 @@ public:
       const chunked_vector<kafka::group_id>&,
       bool to_block);
 
+    using group_offsets_snapshot_result = result<
+      std::vector<cluster::group_offsets_snapshot>,
+      cluster::cloud_metadata::error_outcome>;
     // Returns the groups being managed by the attached partition of the given
     // NTP, returning an error if the partition is not serving groups on this
     // shard (e.g. not leader, still loading groups, etc).
-    ss::future<cluster::cloud_metadata::group_offsets_snapshot_result>
-    snapshot_groups(const model::ntp&, size_t max_num_groups_per_snap = 1000);
+    ss::future<group_offsets_snapshot_result> snapshot_groups_for_upload(
+      const model::ntp&, size_t max_num_groups_per_snap = 1000);
+
+    ss::future<cluster::get_group_offsets_reply>
+      get_group_offsets(cluster::get_group_offsets_request);
 
     ss::future<kafka::error_code>
-      recover_offsets(cluster::cloud_metadata::group_offsets_snapshot);
+      recover_offsets(cluster::group_offsets_snapshot);
+
+    ss::future<cluster::set_group_offsets_reply>
+      set_group_offsets(cluster::set_group_offsets_request);
 
     size_t attached_partitions_count() const { return _partitions.size(); }
 
@@ -293,6 +303,20 @@ private:
     ss::future<std::error_code> inject_noop(
       ss::lw_shared_ptr<cluster::partition> p,
       ss::lowres_clock::time_point timeout);
+
+    // If `group_filter` is provided the function will only succeed if all of
+    // them have been found in the partition.
+    ss::future<
+      result<std::vector<cluster::group_offsets_snapshot>, cluster::errc>>
+    do_snapshot_groups(
+      const model::ntp&,
+      size_t max_num_groups_per_snap,
+      std::optional<chunked_vector<group_id>> group_filter);
+
+    // if `merge` is true existing group offsets is saved with usual offset
+    // commit semantics, otherwise snapshot data for existing groups is ignored
+    ss::future<kafka::error_code>
+    do_bulk_write_offsets(cluster::group_offsets_snapshot, bool merge = false);
 
     ss::lw_shared_ptr<attached_partition>
     get_attached_partition(const model::ntp& ntp) {

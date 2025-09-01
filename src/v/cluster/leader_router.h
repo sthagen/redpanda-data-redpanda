@@ -92,7 +92,7 @@ public:
     ss::future<resp_t>
     find_shard_and_process(req_t req, model::ntp, duration timeout);
 
-    void request_shutdown() {
+    void request_stop() {
         vlog(
           clusterlog.debug,
           "Requesting shutdown of {} router",
@@ -100,7 +100,7 @@ public:
         _as.request_abort();
     }
 
-    ss::future<> shutdown() {
+    ss::future<> stop() {
         vlog(
           clusterlog.debug,
           "Shutting down {} router",

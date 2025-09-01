@@ -10,9 +10,9 @@
 #include "kafka/server/group_manager.h"
 
 #include "cluster/cloud_metadata/error_outcome.h"
-#include "cluster/cloud_metadata/offsets_snapshot.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/logger.h"
+#include "cluster/offsets_snapshot.h"
 #include "cluster/partition.h"
 #include "cluster/partition_manager.h"
 #include "cluster/simple_batch_builder.h"
@@ -52,13 +52,15 @@
 
 #include <fmt/ranges.h>
 
+#include <algorithm>
 #include <chrono>
+#include <limits>
+#include <optional>
 #include <ranges>
 #include <system_error>
 
-using cluster::cloud_metadata::group_offsets;
-using cluster::cloud_metadata::group_offsets_snapshot;
-using cluster::cloud_metadata::group_offsets_snapshot_result;
+using cluster::group_offsets;
+using cluster::group_offsets_snapshot;
 
 namespace kafka {
 
@@ -777,11 +779,58 @@ ss::future<result<model::offset>> group_manager::set_blocked_for_groups(
     co_return result.value().last_offset;
 }
 
-ss::future<group_offsets_snapshot_result> group_manager::snapshot_groups(
+ss::future<group_manager::group_offsets_snapshot_result>
+group_manager::snapshot_groups_for_upload(
   const model::ntp& ntp, size_t max_num_groups_per_snap) {
+    auto res = co_await do_snapshot_groups(
+      ntp, max_num_groups_per_snap, std::nullopt);
+    if (res.has_value()) {
+        co_return std::move(res.assume_value());
+    }
+    switch (res.error()) {
+    case cluster::errc::partition_not_exists:
+        co_return cluster::cloud_metadata::error_outcome::ntp_not_found;
+    case cluster::errc::update_in_progress:
+    case cluster::errc::not_leader:
+        co_return cluster::cloud_metadata::error_outcome::not_ready;
+    default:
+        vlog(
+          cg_klog.error,
+          "Unexpected error while snapshotting groups: {}",
+          res.error());
+        co_return cluster::cloud_metadata::error_outcome::not_ready;
+    }
+}
+
+ss::future<cluster::get_group_offsets_reply>
+group_manager::get_group_offsets(cluster::get_group_offsets_request req) {
+    model::ntp ntp{
+      model::kafka_namespace,
+      model::kafka_consumer_offsets_topic,
+      req.co_partition};
+    auto snap = co_await do_snapshot_groups(
+      ntp, std::numeric_limits<size_t>::max(), std::move(req.groups));
+    if (snap.has_value()) {
+        vassert(snap.assume_value().size() == 1, "Expected single snapshot");
+        co_return cluster::get_group_offsets_reply{
+          cluster::errc::success, std::move(snap.assume_value()[0].groups)};
+    }
+    co_return cluster::get_group_offsets_reply{snap.error(), {}};
+}
+
+ss::future<result<std::vector<group_offsets_snapshot>, cluster::errc>>
+group_manager::do_snapshot_groups(
+  const model::ntp& ntp,
+  size_t max_num_groups_per_snap,
+  std::optional<chunked_vector<group_id>> group_filter) {
+    vlog(
+      cg_klog.debug,
+      "Snapshotting groups from ntp={}, filter={}",
+      ntp,
+      group_filter);
     auto it = _partitions.find(ntp);
     if (it == _partitions.end()) {
-        co_return cluster::cloud_metadata::error_outcome::ntp_not_found;
+        co_return cluster::errc::partition_not_exists;
     }
     auto attached_partition = it->second;
     // Avoid overlapping with concurrent reloads of the partition.
@@ -790,22 +839,33 @@ ss::future<group_offsets_snapshot_result> group_manager::snapshot_groups(
     auto& catchup = attached_partition->catchup_lock;
     auto read_lock = co_await catchup->hold_read_lock();
     if (!attached_partition->partition->is_leader()) {
-        co_return cluster::cloud_metadata::error_outcome::not_ready;
+        co_return cluster::errc::not_leader;
     }
     if (attached_partition->loading) {
-        co_return cluster::cloud_metadata::error_outcome::not_ready;
+        co_return cluster::errc::update_in_progress;
     }
-    // Make a copy of the groups that we're about to snapshot, to avoid racing
-    // with removals during iteration.
+    // Make a copy of the group lw ptrs that we're about to snapshot, to avoid
+    // racing with removals during iteration.
     chunked_vector<std::pair<group_id, group_ptr>> groups;
-    std::copy_if(
-      _groups.begin(),
-      _groups.end(),
-      std::back_inserter(groups),
-      [&ntp](auto g_pair) {
-          const auto& [group_id, group] = g_pair;
-          return group->partition()->ntp().tp.partition == ntp.tp.partition;
-      });
+    auto predicate = [&ntp](const auto& g_pair) {
+        const auto& [group_id, group] = g_pair;
+        return group->partition()->ntp().tp.partition == ntp.tp.partition;
+    };
+    if (group_filter) {
+        groups.reserve(group_filter->size());
+        for (const auto& gid : *group_filter) {
+            auto it = _groups.find(gid);
+            if (it != _groups.end() && predicate(*it)) {
+                groups.push_back(*it);
+            } else {
+                vlog(cg_klog.warn, "Cannot find group={} in ntp={}", gid, ntp);
+            }
+        }
+    } else {
+        std::ranges::copy(
+          _groups | std::views::filter(predicate), std::back_inserter(groups));
+    }
+
     std::vector<group_offsets_snapshot> snapshots;
     snapshots.emplace_back();
     auto* cur_snap = &snapshots.back();
@@ -839,11 +899,43 @@ ss::future<group_offsets_snapshot_result> group_manager::snapshot_groups(
         cur_snap->groups.emplace_back(std::move(go));
         co_await ss::maybe_yield();
     }
-    co_return snapshots;
+    co_return std::move(snapshots);
 }
 
 ss::future<kafka::error_code>
 group_manager::recover_offsets(group_offsets_snapshot snap) {
+    return do_bulk_write_offsets(std::move(snap), false);
+}
+
+ss::future<cluster::set_group_offsets_reply>
+group_manager::set_group_offsets(cluster::set_group_offsets_request req) {
+    return do_bulk_write_offsets(std::move(req.group_offsets), true)
+      .then([](kafka::error_code ec) -> cluster::set_group_offsets_reply {
+          switch (ec) {
+          case kafka::error_code::none:
+              return {.ec = cluster::errc::success};
+          case kafka::error_code::coordinator_load_in_progress:
+              return {.ec = cluster::errc::update_in_progress};
+          case kafka::error_code::coordinator_not_available:
+          case kafka::error_code::fenced_instance_id:
+          case kafka::error_code::illegal_generation:
+          case kafka::error_code::not_coordinator:
+          case kafka::error_code::rebalance_in_progress:
+          case kafka::error_code::unknown_member_id:
+              return {.ec = cluster::errc::concurrent_modification_error};
+          case kafka::error_code::not_leader_for_partition:
+              return {.ec = cluster::errc::not_leader};
+          case kafka::error_code::request_timed_out:
+              return {.ec = cluster::errc::timeout};
+          case kafka::error_code::unknown_server_error:
+          default:
+              return {.ec = cluster::errc::unknown_update_interruption_error};
+          }
+      });
+}
+
+ss::future<kafka::error_code>
+group_manager::do_bulk_write_offsets(group_offsets_snapshot snap, bool merge) {
     vassert(!snap.groups.empty(), "Group data must not be empty");
     auto offsets_ntp = model::ntp{
       model::kafka_namespace,
@@ -852,12 +944,12 @@ group_manager::recover_offsets(group_offsets_snapshot snap) {
     };
     vlog(
       cg_klog.info,
-      "Received request to recover {} groups from snapshot on partition {}",
+      "Received request to restore {} groups from snapshot on partition {}",
       snap.groups.size(),
       offsets_ntp);
     auto it = _partitions.find(offsets_ntp);
     if (it == _partitions.end()) {
-        co_return cluster::cloud_metadata::error_outcome::ntp_not_found;
+        co_return kafka::error_code::not_leader_for_partition;
     }
     auto attached_partition = it->second;
     auto units = co_await ss::get_units(
@@ -872,7 +964,7 @@ group_manager::recover_offsets(group_offsets_snapshot snap) {
 
     vlog(
       cg_klog.info,
-      "Proceeding to recover {} groups on {}",
+      "Proceeding to restore {} groups on {}",
       snap.groups.size(),
       offsets_ntp);
     for (auto& g : snap.groups) {
@@ -887,12 +979,15 @@ group_manager::recover_offsets(group_offsets_snapshot snap) {
             // this is a destructive operation.
             vlog(
               cg_klog.info,
-              "Skipping restore of group {} from snapshot on {}, already "
-              "exists in state {}",
+              "Restoring group {} from snapshot on {}, group already exists in "
+              "state {}, {}",
               kafka_r.data.group_id,
               offsets_ntp,
-              group->state());
-            continue;
+              group->state(),
+              merge ? "committing offsets nevertheless" : "skipping");
+            if (!merge) {
+                continue;
+            }
         }
 
         auto& kafka_topics = kafka_data.topics;
@@ -910,7 +1005,7 @@ group_manager::recover_offsets(group_offsets_snapshot snap) {
         }
         vlog(
           cg_klog.info,
-          "Recovering group {} from snapshot on {}",
+          "Restoring group {} from snapshot on {}",
           kafka_r.data.group_id,
           offsets_ntp);
         auto stages = offset_commit(std::move(kafka_r));
@@ -922,7 +1017,7 @@ group_manager::recover_offsets(group_offsets_snapshot snap) {
                 if (kafka_p.error_code != kafka::error_code::none) {
                     vlog(
                       cg_klog.warn,
-                      "Error on {}/{} while recovering group {} on {}: {}",
+                      "Error on {}/{} while restoring group {} on {}: {}",
                       kafka_t.name,
                       kafka_p.partition_index,
                       kafka_r.data.group_id,

@@ -81,9 +81,7 @@ struct stale_manifest {
 
 /// Type that represents section of full metadata. It can either contain
 /// a materialized spillover manifest or reference to main STM manifest.
-using manifest_section_t = std::variant<
-  std::monostate,
-  stale_manifest,
+using data_manifest = std::variant<
   ss::shared_ptr<materialized_manifest>,
   std::reference_wrapper<const partition_manifest>>;
 
@@ -192,8 +190,8 @@ private:
     /// Returns true if the offset belongs to the archival STM manifest
     bool in_stm(async_view_search_query_t o);
 
-    /// Get spillover manifest by offset/timestamp
-    ss::future<result<manifest_section_t, error_outcome>>
+    /// Get manifest by offset/timestamp
+    ss::future<result<data_manifest, error_outcome>>
     get_materialized_manifest(async_view_search_query_t q) noexcept;
 
     /// Load manifest from the cloud
@@ -248,12 +246,13 @@ private:
 
     materialized_manifest_cache& _manifest_cache;
 
-    // BG loop state
+    using materialized_manifest_ptr = ss::shared_ptr<materialized_manifest>;
 
+    // BG loop state
     /// Materialization request which is sent to background fiber
     struct materialization_request_t {
         segment_meta search_vec;
-        ss::promise<result<manifest_section_t, error_outcome>> promise;
+        ss::promise<result<materialized_manifest_ptr, error_outcome>> promise;
         std::unique_ptr<ts_read_path_probe::hist_t::measurement> _measurement;
     };
     std::deque<materialization_request_t> _requests;
@@ -372,12 +371,29 @@ private:
     using stm_manifest_t = std::reference_wrapper<const partition_manifest>;
     void on_timeout();
 
-    bool manifest_in_range(const manifest_section_t& m);
+    template<typename T>
+    void set_current(T&& m) {
+        _current = std::visit(
+          [](auto&& m) -> current_manifest_t { return m; }, std::forward<T>(m));
+    }
+
+    bool manifest_in_range(const data_manifest& m);
 
     /// Manifest view ref
     async_manifest_view& _view;
 
-    manifest_section_t _current;
+    using current_manifest_t = std::variant<
+      // Uninitialized state.
+      std::monostate,
+      // Cursor points to STM manifest.
+      std::reference_wrapper<const partition_manifest>,
+      // Cursor points to spillover manifest.
+      ss::shared_ptr<materialized_manifest>,
+      // Cursor pointed to a spillover manifest that was evicted on idle
+      // timeout.
+      stale_manifest>;
+
+    current_manifest_t _current;
 
     ss::lowres_clock::duration _idle_timeout;
     ss::timer<ss::lowres_clock> _timer;

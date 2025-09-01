@@ -79,7 +79,6 @@ public:
       , _handler(offsets_recoverer) {}
 
     ss::future<> start() { co_return; }
-    ss::future<> stop() { return shutdown(); }
 
     ss::future<offsets_recovery_reply> request_recovery(
       offsets_recovery_request req, model::timeout_clock::duration timeout) {
