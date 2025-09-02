@@ -11,8 +11,11 @@
 #include "kafka/protocol/types.h"
 #include "kafka/server/handlers/fetch.h"
 #include "model/fundamental.h"
+#include "model/limits.h"
 #include "redpanda/tests/fixture.h"
+#include "storage/tests/utils/disk_log_builder.h"
 #include "test_utils/async.h"
+#include "test_utils/fixture.h"
 
 #include <seastar/core/smp.hh>
 

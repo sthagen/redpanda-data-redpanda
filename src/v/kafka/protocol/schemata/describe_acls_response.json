@@ -38,6 +38,8 @@
         "about": "The resource name." },
       { "name": "PatternType", "type": "int8", "versions": "1+", "default": "3", "ignorable": false,
         "about": "The resource pattern type." },
+      { "name": "RegistryResource", "type": "bool", "versions": "2+", "tag": 1000, "taggedVersions": "2+", "ignorable": true,
+        "about": "Response contains only Schema Registry resources."},
       { "name": "Acls", "type": "[]AclDescription", "versions": "0+",
         "about": "The ACLs.", "fields": [
         { "name": "Principal", "type": "string", "versions": "0+",

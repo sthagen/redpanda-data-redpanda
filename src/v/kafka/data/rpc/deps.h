@@ -96,11 +96,26 @@ public:
 
     /**
      * Create a topic.
+     *
+     * If `replication_factor` is not provided, it is up to the implementation
+     * to determine what the behavior should be
      */
     virtual ss::future<cluster::errc> create_topic(
       model::topic_namespace_view,
       int32_t partition_count,
-      cluster::topic_properties)
+      cluster::topic_properties,
+      std::optional<int16_t> replication_factor = std::nullopt)
+      = 0;
+
+    /**
+     * Create new partitions on a topic
+     *
+     * @param new_partition_count The new partition count for the topic
+     */
+    virtual ss::future<cluster::errc> create_partitions(
+      model::topic_namespace_view,
+      int32_t new_partition_count,
+      model::timeout_clock::time_point)
       = 0;
 
     /**

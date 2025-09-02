@@ -668,6 +668,7 @@ redpanda_cc_gtest(
         "//src/v/storage:disk",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:scoped_config",
+        "@boost//:algorithm",
         "@googletest//:gtest",
         "@seastar",
         "@seastar//:testing",

@@ -121,12 +121,14 @@ public:
     ss::future<cluster::errc> create_topic(
       model::topic_namespace_view tp_ns,
       int32_t partition_count,
-      cluster::topic_properties properties) final {
+      cluster::topic_properties properties,
+      std::optional<int16_t> replication_factor = std::nullopt) final {
         cluster::topic_configuration topic_cfg(
           tp_ns.ns,
           tp_ns.tp,
           partition_count,
-          _controller->internal_topic_replication());
+          replication_factor.value_or(
+            _controller->internal_topic_replication()));
         topic_cfg.properties = properties;
 
         try {
@@ -139,6 +141,31 @@ public:
             co_return res[0].ec;
         } catch (const std::exception& ex) {
             vlog(log.warn, "unable to create topic {}: {}", tp_ns, ex);
+            co_return cluster::errc::topic_operation_error;
+        }
+    }
+
+    ss::future<cluster::errc> create_partitions(
+      model::topic_namespace_view tp_ns,
+      int32_t new_partition_count,
+      model::timeout_clock::time_point timeout) override {
+        try {
+            auto res = co_await _controller->get_topics_frontend()
+                         .local()
+                         .create_partitions(
+                           {cluster::create_partitions_configuration(
+                             model::topic_namespace{tp_ns},
+                             new_partition_count)},
+                           timeout);
+            vassert(res.size() == 1, "expected a single result");
+            co_return res[0].ec;
+        } catch (const std::exception& ex) {
+            vlog(
+              log.warn,
+              "unable to set partition count to {} for {}: {}",
+              new_partition_count,
+              tp_ns,
+              ex);
             co_return cluster::errc::topic_operation_error;
         }
     }

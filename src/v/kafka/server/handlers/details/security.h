@@ -18,6 +18,9 @@
 #include "security/scram_credential.h"
 namespace kafka::details {
 
+constexpr auto sr_subject_wire_value = 100;
+constexpr auto sr_registry_wire_value = 101;
+
 using acl_conversion_error = security::acl_conversion_error;
 
 inline security::acl_principal to_acl_principal(const ss::sstring& principal) {
@@ -49,6 +52,18 @@ inline security::resource_type to_resource_type(int8_t type) {
     default:
         throw acl_conversion_error(
           fmt::format("Invalid resource type: {}", type));
+    }
+}
+
+inline security::resource_type to_registry_resource_type(int8_t type) {
+    switch (type) {
+    case sr_subject_wire_value:
+        return security::resource_type::sr_subject;
+    case sr_registry_wire_value:
+        return security::resource_type::sr_registry;
+    default:
+        throw acl_conversion_error(
+          fmt::format("Invalid registry resource type: {}", type));
     }
 }
 
@@ -156,7 +171,9 @@ to_resource_pattern_filter(const describe_acls_request_data& request) {
         // wildcard
         break;
     default:
-        resource_type = to_resource_type(request.resource_type);
+        resource_type = request.describe_registry_acls
+                          ? to_registry_resource_type(request.resource_type)
+                          : to_resource_type(request.resource_type);
     }
 
     std::optional<security::resource_pattern_filter::pattern_filter_type>
@@ -174,7 +191,12 @@ to_resource_pattern_filter(const describe_acls_request_data& request) {
     }
 
     return security::resource_pattern_filter(
-      resource_type, request.resource_name_filter, pattern_filter);
+      resource_type,
+      request.resource_name_filter,
+      pattern_filter,
+      request.describe_registry_acls
+        ? security::resource_pattern_filter::resource_subsystem::schema_registry
+        : security::resource_pattern_filter::resource_subsystem::kafka);
 }
 
 /*
@@ -238,7 +260,20 @@ inline int8_t to_kafka_resource_type(security::resource_type type) {
         vassert(
           false, "Schema Registry resources are not supported in kafka ACLs");
     }
-    __builtin_unreachable();
+}
+
+inline int8_t to_kafka_registry_resource_type(security::resource_type type) {
+    switch (type) {
+    case security::resource_type::sr_subject:
+        return sr_subject_wire_value;
+    case security::resource_type::sr_registry:
+        return sr_registry_wire_value;
+    case security::resource_type::topic:
+    case security::resource_type::group:
+    case security::resource_type::cluster:
+    case security::resource_type::transactional_id:
+        vassert(false, "Request only for Schema Registry resources");
+    }
 }
 
 inline int8_t to_kafka_pattern_type(security::pattern_type type) {

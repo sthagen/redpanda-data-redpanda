@@ -10,6 +10,7 @@
  */
 
 #include "base/vassert.h"
+#include "cluster/controller.h"
 #include "cluster/topics_frontend.h"
 #include "kafka/server/handlers/fetch.h"
 #include "kafka/server/request_context.h"
@@ -17,6 +18,7 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
+#include "random/generators.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/async.h"
 #include "test_utils/scoped_config.h"

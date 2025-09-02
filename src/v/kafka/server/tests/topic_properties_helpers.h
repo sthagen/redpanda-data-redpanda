@@ -8,6 +8,7 @@
 // by the Apache License, Version 2.0
 
 #include "cluster/config_frontend.h"
+#include "cluster/controller.h"
 #include "kafka/client/transport.h"
 #include "kafka/protocol/create_partitions.h"
 #include "kafka/protocol/create_topics.h"

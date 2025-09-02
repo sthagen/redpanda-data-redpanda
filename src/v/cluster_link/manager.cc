@@ -12,6 +12,8 @@
 #include "cluster_link/manager.h"
 
 #include "cluster_link/logger.h"
+#include "kafka/data/rpc/deps.h"
+#include "model/namespace.h"
 
 #include <seastar/coroutine/as_future.hh>
 
@@ -21,10 +23,12 @@ using namespace std::chrono_literals;
 
 using kafka::data::rpc::partition_leader_cache;
 using kafka::data::rpc::partition_manager;
+using kafka::data::rpc::topic_creator;
 using kafka::data::rpc::topic_metadata_cache;
 
 namespace cluster_link {
 namespace {
+
 errc map_cluster_errc(::cluster::cluster_link::errc ec) {
     switch (ec) {
     case cluster::cluster_link::errc::success:
@@ -62,13 +66,17 @@ errc map_cluster_errc(::cluster::cluster_link::errc ec) {
     }
     __builtin_unreachable();
 }
+
+constexpr auto topic_reconciler_interval = 30s;
 } // namespace
+
 manager::manager(
   ::model::node_id self,
   std::unique_ptr<kafka::data::rpc::partition_leader_cache>
     partition_leader_cache,
   std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager,
   std::unique_ptr<kafka::data::rpc::topic_metadata_cache> topic_metadata_cache,
+  std::unique_ptr<kafka::data::rpc::topic_creator> topic_creator,
   std::unique_ptr<link_registry> registry,
   std::unique_ptr<link_factory> link_factory,
   std::unique_ptr<cluster_factory> cluster_factory,
@@ -77,6 +85,7 @@ manager::manager(
   , _partition_leader_cache(std::move(partition_leader_cache))
   , _partition_manager(std::move(partition_manager))
   , _topic_metadata_cache(std::move(topic_metadata_cache))
+  , _topic_creator(std::move(topic_creator))
   , _registry(std::move(registry))
   , _link_factory(std::move(link_factory))
   , _cluster_factory(std::move(cluster_factory))
@@ -93,6 +102,24 @@ ss::future<> manager::start() {
     for (auto id : ids) {
         co_await handle_on_link_change(id);
     }
+
+    auto controller_node_leader = _partition_leader_cache->get_leader_node(
+      ::model::controller_ntp);
+    if (
+      controller_node_leader.has_value()
+      && controller_node_leader.value() == _self) {
+        auto controller_shard_leader = _partition_manager->shard_owner(
+          ::model::controller_ntp);
+        if (
+          controller_shard_leader.has_value()
+          && controller_shard_leader.value() == ss::this_shard_id()) {
+            vlog(
+              cllog.info, "Cluster link manager started on controller shard");
+            handle_partition_state_change(
+              ::model::controller_ntp, ntp_leader::yes);
+        }
+    }
+
     _link_task_reconciler_timer.set_callback([this] {
         ssx::spawn_with_gate(_g, [this] { return link_task_reconciler(); });
     });
@@ -102,6 +129,8 @@ ss::future<> manager::start() {
 
 ss::future<> manager::stop() {
     vlog(cllog.info, "Stopping cluster link manager");
+
+    co_await stop_topic_reconciler();
 
     co_await _queue.shutdown();
     _link_task_reconciler_timer.cancel();
@@ -187,6 +216,9 @@ result<chunked_vector<model::metadata>> manager::list_cluster_links() {
 
 void manager::on_link_change(model::id_t id) {
     vlog(cllog.trace, "Cluster link with id={} has changed", id);
+    if (_topic_reconciler && _is_controller_leader) {
+        _topic_reconciler->trigger(id);
+    }
     _queue.submit([this, id] { return handle_on_link_change(id); });
 }
 
@@ -321,6 +353,8 @@ const partition_manager& manager::partition_manager() const noexcept {
     return *_partition_manager;
 }
 
+topic_creator& manager::topic_creator() noexcept { return *_topic_creator; }
+
 ss::future<> manager::link_task_reconciler() {
     vlog(cllog.trace, "Reconciling tasks for all cluster links");
 
@@ -366,6 +400,20 @@ ss::future<> manager::handle_on_leadership_change(
       "Handling leadership change for NTP={}, is_ntp_leader={}",
       ntp,
       is_ntp_leader);
+
+    if (ntp == ::model::controller_ntp) {
+        if (is_ntp_leader == ntp_leader::yes && !_is_controller_leader) {
+            _is_controller_leader = ntp_leader::yes;
+            vlog(cllog.debug, "Starting topic reconciler on controller leader");
+            co_await start_topic_reconciler();
+        }
+        if (is_ntp_leader == ntp_leader::no && _is_controller_leader) {
+            _is_controller_leader = ntp_leader::no;
+            vlog(
+              cllog.debug, "Stopping topic reconciler on controller follower");
+            co_await stop_topic_reconciler();
+        }
+    }
 
     co_await ss::parallel_for_each(_links, [ntp, is_ntp_leader](auto& pair) {
         return pair.second->handle_on_leadership_change(ntp, is_ntp_leader);
@@ -415,5 +463,43 @@ model::cluster_link_task_status_report manager::get_task_status_report() const {
     }
 
     return report;
+}
+
+ss::future<> manager::start_topic_reconciler() {
+    if (!_is_controller_leader) {
+        co_return;
+    }
+    vlog(cllog.trace, "Starting topic reconciler");
+    if (!_topic_reconciler) {
+        _topic_reconciler = std::make_unique<topic_reconciler>(
+          _topic_creator.get(),
+          _topic_metadata_cache.get(),
+          _registry.get(),
+          topic_reconciler_interval);
+    }
+    try {
+        co_await _topic_reconciler->start();
+        vlog(cllog.debug, "Topic reconciler has started");
+    } catch (const std::exception& e) {
+        vlog(cllog.error, "Failed to start topic reconciler: {}", e);
+        // If it fails to start, enqueue a retry to start the reconciler
+        _queue.submit_delayed(10s, [this] { return start_topic_reconciler(); });
+    }
+}
+
+ss::future<> manager::stop_topic_reconciler() {
+    if (_topic_reconciler) {
+        vlog(cllog.trace, "Stopping topic reconciler");
+        try {
+            co_await _topic_reconciler->stop();
+            _topic_reconciler.reset();
+            vlog(cllog.debug, "Topic reconciler has stopped");
+        } catch (const std::exception& e) {
+            vlog(cllog.error, "Failed to stop topic reconciler: {}", e);
+            // If it fails to start, enqueue a retry to start the reconciler
+            _queue.submit_delayed(
+              10s, [this] { return stop_topic_reconciler(); });
+        }
+    }
 }
 } // namespace cluster_link

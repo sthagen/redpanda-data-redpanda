@@ -9,18 +9,16 @@
 
 #include "cluster/fwd.h"
 #include "cluster/types.h"
-#include "kafka/data/partition_proxy.h"
 #include "kafka/data/replicated_partition.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
-#include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
-#include "model/timeout_clock.h"
 #include "raft/replicate.h"
 #include "redpanda/tests/fixture.h"
 #include "storage/record_batch_builder.h"
 #include "test_utils/async.h"
+#include "test_utils/fixture.h"
 
 FIXTURE_TEST(test_replicated_partition_end_offset, redpanda_thread_fixture) {
     wait_for_controller_leadership().get();

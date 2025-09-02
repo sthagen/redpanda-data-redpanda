@@ -37,6 +37,8 @@
     { "name": "Operation", "type": "int8", "versions": "0+",
       "about": "The operation to match." },
     { "name": "PermissionType", "type": "int8", "versions": "0+",
-      "about": "The permission type to match." }
+      "about": "The permission type to match." },
+    { "name": "DescribeRegistryAcls", "type": "bool", "versions": "2+", "tag": 1000, "taggedVersions": "2+", "ignorable": true,
+      "about": "Request is to describe Schema Registry ACLs." }
   ]
 }

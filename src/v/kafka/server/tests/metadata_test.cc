@@ -7,6 +7,8 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cluster/config_frontend.h"
+#include "cluster/controller.h"
 #include "cluster/security_frontend.h"
 #include "cluster/topic_configuration.h"
 #include "kafka/client/transport.h"
@@ -21,9 +23,10 @@
 #include "security/acl.h"
 #include "security/scram_algorithm.h"
 #include "security/types.h"
+#include "test_utils/fixture.h"
 #include "test_utils/random_bytes.h"
 
-#include <boost/test/tools/old/interface.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <algorithm>
 

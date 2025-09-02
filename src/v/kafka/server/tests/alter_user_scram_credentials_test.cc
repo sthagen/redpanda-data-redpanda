@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cluster/controller.h"
 #include "cluster/security_frontend.h"
 #include "kafka/protocol/alter_user_scram_credentials.h"
 #include "kafka/protocol/types.h"
@@ -18,6 +19,7 @@
 #include "security/scram_authenticator.h"
 #include "security/scram_credential.h"
 #include "security/types.h"
+#include "test_utils/fixture.h"
 
 #include <algorithm>
 

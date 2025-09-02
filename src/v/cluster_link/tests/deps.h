@@ -17,6 +17,7 @@
 #include "cluster_link/utils.h"
 #include "kafka/client/test/cluster_mock.h"
 #include "kafka/data/rpc/deps.h"
+#include "kafka/data/rpc/test/deps.h"
 
 #include <seastar/util/defer.hh>
 namespace cluster_link::tests {
@@ -258,6 +259,19 @@ public:
         _leader_map.insert_or_assign(ntp, node_id);
     }
 
+    std::optional<int32_t>
+    partition_count(::model::topic_namespace_view tp_ns) const {
+        int32_t count = 0;
+        bool found_ntp = false;
+        for (const auto& [ntp, _] : _leader_map) {
+            if (ntp.ns == tp_ns.ns && ntp.tp.topic == tp_ns.tp) {
+                found_ntp = true;
+                count++;
+            }
+        }
+        return found_ntp ? std::make_optional(count) : std::nullopt;
+    }
+
 private:
     chunked_hash_map<::model::ntp, ::model::node_id> _leader_map;
 };
@@ -317,20 +331,42 @@ public:
               ss::format("unknown topic: {}", update.tp_ns));
         }
         auto& config = it->second;
-        // NOTE: We just support batch_max_bytes because that's all we use in
-        // tests.
-        const auto& prop_update = update.properties.batch_max_bytes;
-        switch (prop_update.op) {
-        case cluster::incremental_update_operation::none:
-            return;
-        case cluster::incremental_update_operation::set:
+        const auto& prop_update = update.properties;
+        if (
+          prop_update.batch_max_bytes.op
+          == cluster::incremental_update_operation::set) {
             config.properties.batch_max_bytes
-              = update.properties.batch_max_bytes.value;
-            break;
-        case cluster::incremental_update_operation::remove:
-            config.properties.batch_max_bytes.reset();
-            break;
+              = prop_update.batch_max_bytes.value;
         }
+
+        if (
+          prop_update.cleanup_policy_bitflags.op
+          == cluster::incremental_update_operation::set) {
+            config.properties.cleanup_policy_bitflags
+              = prop_update.cleanup_policy_bitflags.value;
+        }
+
+        if (
+          prop_update.timestamp_type.op
+          == cluster::incremental_update_operation::set) {
+            config.properties.timestamp_type = prop_update.timestamp_type.value;
+        }
+
+        if (
+          update.custom_properties.replication_factor.op
+          == cluster::incremental_update_operation::set) {
+            config.replication_factor
+              = update.custom_properties.replication_factor.value.value()();
+        }
+    }
+
+    void
+    set_partition_count(::model::topic_namespace_view tp_ns, int32_t count) {
+        auto it = _topic_cfgs.find(::model::topic_namespace(tp_ns));
+        if (it == _topic_cfgs.end()) {
+            throw std::runtime_error(ss::format("unknown topic: {}", tp_ns));
+        }
+        it->second.partition_count = count;
     }
 
     uint32_t get_default_batch_max_bytes() const final { return 1_MiB; };
@@ -370,6 +406,11 @@ public:
       const ::model::ntp& ntp,
       ::model::node_id node_id,
       std::optional<ss::shard_id> shard_id);
+
+    cluster::errc update_partition_count(
+      ::model::topic_namespace_view tp_ns,
+      int32_t partition_count,
+      ::model::node_id node_id);
 
     fake_partition_leader_cache_impl* partition_leader_cache() {
         return _fplci;
@@ -412,6 +453,7 @@ private:
     fake_partition_manager* _fpm{nullptr};
     fake_partition_leader_cache_impl* _fplci{nullptr};
     fake_topic_metadata_cache* _tmc{nullptr};
+    kafka::data::rpc::test::fake_topic_creator* _ftpc{nullptr};
     link_factory* _lf{nullptr};
     ss::sharded<manager> _manager;
 

@@ -33,6 +33,7 @@
 
 #include <seastar/coroutine/as_future.hh>
 
+#include <boost/algorithm/string.hpp>
 #include <gtest/gtest.h>
 
 #include <iterator>

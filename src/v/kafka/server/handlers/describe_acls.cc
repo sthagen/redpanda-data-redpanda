@@ -28,7 +28,8 @@ namespace kafka {
 static void fill_response(
   request_context& ctx,
   security::acl_binding_filter& filter,
-  describe_acls_response_data& response) {
+  describe_acls_response_data& response,
+  bool describing_registry_resource) {
     /*
      * collapse common acls by pattern
      */
@@ -47,10 +48,14 @@ static void fill_response(
         describe_acls_resource resource;
 
         // resource pattern
-        resource.type = details::to_kafka_resource_type(entry.first.resource());
+        resource.type
+          = describing_registry_resource
+              ? details::to_kafka_registry_resource_type(entry.first.resource())
+              : details::to_kafka_resource_type(entry.first.resource());
         resource.name = entry.first.name();
         resource.pattern_type = details::to_kafka_pattern_type(
           entry.first.pattern());
+        resource.registry_resource = describing_registry_resource;
 
         // acl entries
         for (auto& acl : entry.second) {
@@ -113,7 +118,7 @@ ss::future<response_ptr> describe_acls_handler::handle(
 
     try {
         auto filter = details::to_acl_binding_filter(request.data);
-        fill_response(ctx, filter, data);
+        fill_response(ctx, filter, data, request.data.describe_registry_acls);
     } catch (const details::acl_conversion_error& e) {
         vlog(klog.debug, "Error describing ACLs: {}", e.what());
         data.error_code = error_code::invalid_request;

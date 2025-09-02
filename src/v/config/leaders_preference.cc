@@ -69,4 +69,11 @@ leaders_preference leaders_preference::parse(std::string_view s) {
     }
 }
 
+std::istream& operator>>(std::istream& is, leaders_preference& res) {
+    std::stringstream ss;
+    ss << is.rdbuf();
+    res = leaders_preference::parse(ss.str());
+    return is;
+}
+
 } // namespace config

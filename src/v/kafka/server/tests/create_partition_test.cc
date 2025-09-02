@@ -11,10 +11,12 @@
 #include "config/configuration.h"
 #include "features/enterprise_feature_messages.h"
 #include "kafka/protocol/errors.h"
+#include "kafka/server/handlers/topics/types.h"
 #include "kafka/server/tests/topic_properties_helpers.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
+#include "test_utils/fixture.h"
 
 #include <seastar/core/loop.hh>
 #include <seastar/core/sstring.hh>

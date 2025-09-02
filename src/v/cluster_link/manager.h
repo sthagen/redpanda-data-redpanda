@@ -17,6 +17,7 @@
 #include "cluster_link/logger.h"
 #include "cluster_link/model/types.h"
 #include "cluster_link/task.h"
+#include "cluster_link/topic_reconciler.h"
 #include "cluster_link/types.h"
 #include "container/chunked_vector.h"
 #include "kafka/data/rpc/deps.h"
@@ -41,6 +42,7 @@ public:
       std::unique_ptr<kafka::data::rpc::partition_manager> partition_manager,
       std::unique_ptr<kafka::data::rpc::topic_metadata_cache>
         topic_metadata_cache,
+      std::unique_ptr<kafka::data::rpc::topic_creator> topic_creator,
       std::unique_ptr<link_registry> registry,
       std::unique_ptr<link_factory> link_factory,
       std::unique_ptr<cluster_factory> cluster_factory,
@@ -123,9 +125,13 @@ public:
     const kafka::data::rpc::partition_manager&
     partition_manager() const noexcept;
 
+    kafka::data::rpc::topic_creator& topic_creator() noexcept;
+
 private:
     /// Called periodically to reconcile registered tasks on created links
     ss::future<> link_task_reconciler();
+    ss::future<> start_topic_reconciler();
+    ss::future<> stop_topic_reconciler();
 
 private:
     ::model::node_id _self;
@@ -134,9 +140,11 @@ private:
     std::unique_ptr<kafka::data::rpc::partition_manager> _partition_manager;
     std::unique_ptr<kafka::data::rpc::topic_metadata_cache>
       _topic_metadata_cache;
+    std::unique_ptr<kafka::data::rpc::topic_creator> _topic_creator;
     std::unique_ptr<link_registry> _registry;
     std::unique_ptr<link_factory> _link_factory;
     std::unique_ptr<cluster_factory> _cluster_factory;
+    std::unique_ptr<topic_reconciler> _topic_reconciler;
     ssx::work_queue _queue;
 
     chunked_vector<std::unique_ptr<task_factory>> _task_factories;
@@ -149,5 +157,6 @@ private:
     ss::condition_variable _link_created_cv;
     ss::abort_source _as;
     ss::gate _g;
+    ntp_leader _is_controller_leader{ntp_leader::no};
 };
 } // namespace cluster_link

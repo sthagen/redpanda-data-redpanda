@@ -18,6 +18,7 @@
 #include "redpanda/application.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/async.h"
+#include "test_utils/fixture.h"
 
 #include <seastar/core/do_with.hh>
 #include <seastar/core/sleep.hh>

@@ -14,6 +14,7 @@
 #include "model/fundamental.h"
 #include "random/generators.h"
 #include "redpanda/tests/fixture.h"
+#include "test_utils/async.h"
 
 #include <seastar/core/sstring.hh>
 #include <seastar/coroutine/as_future.hh>

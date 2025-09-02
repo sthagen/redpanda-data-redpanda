@@ -32,6 +32,7 @@ struct leaders_preference
     static leaders_preference parse(std::string_view);
 
     friend std::ostream& operator<<(std::ostream&, const leaders_preference&);
+    friend std::istream& operator>>(std::istream&, leaders_preference&);
 
     friend bool operator==(const leaders_preference&, const leaders_preference&)
       = default;

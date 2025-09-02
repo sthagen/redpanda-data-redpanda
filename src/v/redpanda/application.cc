@@ -1528,6 +1528,7 @@ void application::wire_up_runtime_services(
       &controller->get_partition_leaders(),
       &controller->get_shard_table(),
       &metadata_cache,
+      controller.get(),
       smp_service_groups.cluster_link_smp_sg())
       .get();
 

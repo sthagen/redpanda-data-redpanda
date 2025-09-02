@@ -23,6 +23,8 @@
 
 using namespace std::chrono_literals;
 
+using kafka::data::rpc::test::fake_topic_creator;
+
 namespace cluster_link::tests {
 
 using ::cluster::cluster_link::table;
@@ -165,6 +167,13 @@ public:
           std::make_unique<fake_partition_manager>(
             _partition_manager_proxy.get()),
           std::make_unique<fake_topic_metadata_cache>(),
+          std::make_unique<fake_topic_creator>(
+            [](const cluster::topic_configuration&) {},
+            [](const cluster::topic_properties_update&) {},
+            [](const ::model::ntp&, ::model::node_id) {},
+            [](::model::topic_namespace_view, int32_t, ::model::node_id) {
+                return cluster::errc::success;
+            }),
           std::make_unique<test_link_registry>(&_table.local()),
           std::make_unique<link_test_factory>(this, 1s),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
@@ -396,6 +405,13 @@ public:
           std::make_unique<fake_partition_manager>(
             _partition_manager_proxy.get()),
           std::make_unique<fake_topic_metadata_cache>(),
+          std::make_unique<fake_topic_creator>(
+            [](const cluster::topic_configuration&) {},
+            [](const cluster::topic_properties_update&) {},
+            [](const ::model::ntp&, ::model::node_id) {},
+            [](::model::topic_namespace_view, int32_t, ::model::node_id) {
+                return cluster::errc::success;
+            }),
           std::make_unique<test_link_registry>(&_table.local()),
           std::move(elf),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),

@@ -9,7 +9,7 @@
 
 #include "kafka/protocol/find_coordinator.h"
 #include "redpanda/tests/fixture.h"
-#include "test_utils/async.h"
+#include "test_utils/fixture.h"
 
 #include <seastar/core/smp.hh>
 

@@ -24,6 +24,7 @@
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
+#include "test_utils/fixture.h"
 #include "test_utils/scoped_config.h"
 
 #include <seastar/core/loop.hh>
@@ -31,6 +32,7 @@
 #include <seastar/util/defer.hh>
 
 #include <boost/test/tools/context.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <functional>
 #include <optional>

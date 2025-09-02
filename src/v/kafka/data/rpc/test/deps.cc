@@ -48,6 +48,12 @@ void kafka_data_test_fixture::wire_up_and_start() {
       },
       [this](const model::ntp& ntp, model::node_id leader) {
           elect_leader(ntp, leader);
+      },
+      [this](
+        model::topic_namespace_view tp_ns,
+        int32_t partition_count,
+        model::node_id leader) {
+          return update_partition_count(tp_ns, partition_count, leader);
       });
     _ftpc = ftpc.get();
 
@@ -86,6 +92,22 @@ void kafka_data_test_fixture::elect_leader(
     } else {
         throw std::runtime_error(ss::format("unknown node_id {}", node_id));
     }
+}
+
+cluster::errc kafka_data_test_fixture::update_partition_count(
+  model::topic_namespace_view tp_ns,
+  int32_t new_partition_count,
+  model::node_id node_id) {
+    auto partition_count = partition_leader_cache()->partition_count(tp_ns);
+    if (partition_count.has_value()) {
+        for (int32_t i = partition_count.value(); i < new_partition_count;
+             ++i) {
+            auto ntp = model::ntp(tp_ns.ns, tp_ns.tp, model::partition_id(i));
+            elect_leader(ntp, node_id);
+        }
+    }
+
+    return cluster::errc::success;
 }
 
 void kafka_data_test_fixture::reset() {

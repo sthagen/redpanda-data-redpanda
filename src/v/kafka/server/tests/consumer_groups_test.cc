@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "cluster/controller.h"
 #include "cluster/controller_api.h"
 #include "kafka/client/client.h"
 #include "kafka/protocol/describe_groups.h"
@@ -23,6 +24,7 @@
 #include "model/timeout_clock.h"
 #include "redpanda/tests/fixture.h"
 #include "test_utils/async.h"
+#include "test_utils/fixture.h"
 #include "test_utils/scoped_config.h"
 #include "utils/base64.h"
 
