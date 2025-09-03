@@ -13,6 +13,7 @@
 #include "kafka/client/transport.h"
 #include "kafka/protocol/schemata/produce_request.h"
 #include "model/compression.h"
+#include "model/timestamp.h"
 
 #include <optional>
 
@@ -85,7 +86,7 @@ public:
     ss::future<pid_to_offset_map_t> produce(
       model::topic topic_name,
       pid_to_kvs_map_t records_per_partition,
-      std::optional<model::timestamp> ts = std::nullopt,
+      std::optional<model::timestamp> ts = model::timestamp::now(),
       model::compression compression_type = model::compression::none);
 
     // Produces the given records to the given topic partition.
@@ -93,7 +94,7 @@ public:
       model::topic topic_name,
       model::partition_id pid,
       std::vector<kv_t> records,
-      std::optional<model::timestamp> ts = std::nullopt,
+      std::optional<model::timestamp> ts = model::timestamp::now(),
       model::compression compression_type = model::compression::none);
 
 private:

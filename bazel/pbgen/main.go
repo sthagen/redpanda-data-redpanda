@@ -332,6 +332,8 @@ func (g *headerGenerator) generateFile(w *codewriter) {
 		w.PreludePrintln()
 		w.PreludePrintln(`#include "base/format_to.h"`)
 		w.PreludePrintln(`#include "bytes/iobuf.h"`)
+		w.PreludePrintln(`#include "serde/protobuf/base.h"`)
+		w.PreludePrintln(`#include "strings/static_str.h"`)
 		if g.needsChunkedHashMap {
 			w.PreludePrintln(`#include "container/chunked_hash_map.h"`)
 		}
@@ -498,7 +500,7 @@ func (g *headerGenerator) generateEnumSerde(msg protoreflect.EnumDescriptor, w *
 	w.Printf("void enum_to_proto(const %s&, iobuf*);\n", cppName)
 	w.Printf("void enum_from_proto(iobuf_parser*, %s*);\n", cppName)
 	w.Println("// Returns the name of the enum value")
-	w.Printf("std::string_view enum_to_string(const %s&);\n", cppName)
+	w.Printf("static_str enum_to_string(const %s&);\n", cppName)
 	w.Printf("void enum_from_json(serde::pb::json::peekable_parser*, %s*);\n", cppName)
 	// TODO: When we've upgraded to libfmt 11 we can change this to return std::string_view
 	w.Printf("int32_t format_as(%s);\n", cppName)
@@ -538,7 +540,7 @@ func (g *headerGenerator) generateEnum(enum protoreflect.EnumDescriptor, w *code
 func (g *headerGenerator) generateMessage(msg protoreflect.MessageDescriptor, w *codewriter) {
 	g.leadingComments(msg, w)
 	typeName := cppTypeName(msg)
-	w.Printf("class %s {\n", typeName)
+	w.Printf("class %s : public serde::pb::base_message {\n", typeName)
 	defer w.Println("};")
 	w.Println("public:")
 	w.Indent()
@@ -605,6 +607,14 @@ func (g *headerGenerator) generateMessage(msg protoreflect.MessageDescriptor, w 
 			}
 		}
 	}
+	w.Println()
+	w.Printf("std::string_view full_name() const override { return %q; }\n", msg.FullName())
+	w.Println("// Convert a field path into a path of field numbers.")
+	w.Println("static bool convert_field_path_to_numbers(std::span<std::string_view> field_path, std::vector<int32_t>* out);")
+	w.Println("// Convert a field path into a path of field numbers.")
+	w.Println("std::optional<std::vector<int32_t>> convert_field_path_to_numbers(std::span<std::string_view> field_path) const override;")
+	w.Println("// Look up a field based on the field numbers.")
+	w.Println("std::optional<serde::pb::field> lookup_field(std::span<int32_t> field_numbers) override;")
 	w.Println()
 	w.Println("// NOTE: This is intended to be used by field_mask only. Do not use directly.")
 	w.Println("static bool is_valid_field_path(std::span<const ss::sstring> path);")
@@ -694,6 +704,8 @@ func (g *implGenerator) generateFile(w *codewriter) {
 		g.generateMessageReadJsonHelper(msg, w)
 		g.generateMessageFieldMaskIsValidHelper(msg, w)
 		g.generateMessageFieldMaskApplyHelper(msg, w)
+		g.generateMessagePathToNumbersHelper(msg, w)
+		g.generateMessageTraversalHelper(msg, w)
 		w.Println()
 	}
 	for _, enum := range enums {
@@ -711,6 +723,142 @@ func (g *implGenerator) generateFile(w *codewriter) {
 		g.generateServiceClient(service, w)
 		w.Println()
 	}
+}
+
+func (g *implGenerator) generateMessagePathToNumbersHelper(msg protoreflect.MessageDescriptor, w *codewriter) {
+	w.Printf("std::optional<std::vector<int32_t>> %s::convert_field_path_to_numbers(std::span<std::string_view> field_path) const {\n", cppTypeName(msg))
+	w.Indent()
+	w.Println("std::vector<int32_t> numbers;")
+	w.Println("if (convert_field_path_to_numbers(field_path, &numbers)) { return numbers; }")
+	w.Println("return std::nullopt;")
+	w.Dedent()
+	w.Println("}")
+	w.Printf("bool %s::convert_field_path_to_numbers(std::span<std::string_view> field_path, std::vector<int32_t>* out) {\n", cppTypeName(msg))
+	defer w.Println("}")
+	w.Indent()
+	defer w.Dedent()
+	if msg.Fields().Len() == 0 {
+		w.Println("std::ignore = out;")
+		w.Println("return field_path.empty();")
+		return
+	}
+	w.Println("if (field_path.empty()) {")
+	w.Indent()
+	w.Println("return true;")
+	w.Dedent()
+	w.Println("}")
+	w.Printf("constexpr static auto key_to_field_number = std::to_array<std::pair<std::string_view, bool(*)(decltype(field_path), decltype(out))>>({\n")
+	w.Indent()
+	pairs := make([]string, 0, msg.Fields().Len()*2)
+	for i := range msg.Fields().Len() {
+		f := msg.Fields().Get(i)
+		msg := f.Message()
+		if f.Cardinality() == protoreflect.Repeated || msg == nil || isWellKnownType(msg) {
+			lambda := fmt.Sprintf("[](auto path, auto* out) { out->push_back(%d); return path.empty(); }", f.Number())
+			pairs = append(pairs, fmt.Sprintf("{%q, %s},", f.Name(), lambda))
+			continue
+		}
+		lambda := strings.Join([]string{
+			"[](auto path, auto* out) {",
+			fmt.Sprintf("out->push_back(%d);", f.Number()),
+			fmt.Sprintf("return %s::convert_field_path_to_numbers(path, out);", cppTypeName(msg)),
+			"}",
+		}, " ")
+		pairs = append(pairs, fmt.Sprintf("{%q, %s},", f.Name(), lambda))
+	}
+	// Sort the pairs for binary search.
+	slices.Sort(pairs)
+	for _, pair := range pairs {
+		w.Println(pair)
+	}
+	w.Dedent()
+	w.Println("});")
+	w.Println("auto fields = std::ranges::equal_range(key_to_field_number, field_path.front(), std::less<>(), [](const auto& pair) { return pair.first; });")
+	w.Println("if (fields.empty()) {")
+	w.Indent()
+	w.Println("return false;")
+	w.Dedent()
+	w.Println("}")
+	w.Println("return fields.front().second(field_path.subspan(1), out);")
+}
+
+func (g *implGenerator) generateMessageTraversalHelper(msg protoreflect.MessageDescriptor, w *codewriter) {
+	w.Printf("std::optional<serde::pb::field> %s::lookup_field(std::span<int32_t> field_numbers) {\n", cppTypeName(msg))
+	defer w.Println("}")
+	w.Indent()
+	defer w.Dedent()
+	w.Println()
+	w.Println("if (field_numbers.empty()) {")
+	w.Indent()
+	w.Println("return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};")
+	w.Dedent()
+	w.Println("}")
+	w.Println("serde::pb::field found;")
+	w.Println("switch (field_numbers.front()) {")
+	for i := range msg.Fields().Len() {
+		f := msg.Fields().Get(i)
+		func() {
+			w.Printf("case %v: { // %s\n", f.Number(), f.Name())
+			defer w.Println("}")
+			w.Indent()
+			defer w.Dedent()
+			defer w.Println("break;")
+			if f.IsMap() || f.IsList() {
+				base := "repeated_value"
+				if f.IsMap() {
+					base = "map_value"
+				}
+				w.Printf("struct %s_field_value : public serde::pb::field::%s {\n", f.Name(), base)
+				w.Indent()
+				typ, _ := g.translateType(f)
+				w.Printf("%s* value;\n", typ)
+				w.Dedent()
+				w.Println("};")
+				w.Printf("auto value = std::make_unique<%s_field_value>();\n", f.Name())
+				w.Printf("value->value = &get_%s();\n", f.Name())
+				w.Println("found.value = std::move(value);")
+				return
+			}
+			if oneof := f.ContainingOneof(); oneof != nil {
+				w.Printf("if (!has_%s()) {\n", f.Name())
+				w.Indent()
+				w.Printf("set_%s({});\n", f.Name())
+				w.Dedent()
+				w.Println("}")
+			}
+			if msg := f.Message(); msg != nil && !isWellKnownType(msg) {
+				if isPtr(f) {
+					w.Printf("if (!get_%s()) { set_%s(std::make_unique<%s>()); }\n", f.Name(), f.Name(), cppTypeName(msg))
+					w.Printf("found.value = get_%s().get();\n", f.Name())
+				} else {
+					w.Printf("found.value = &get_%s();\n", f.Name())
+				}
+			} else if enum := f.Enum(); enum != nil {
+				w.Println("found.value = serde::pb::raw_enum_value{")
+				w.Indent()
+				w.Printf(".number = static_cast<int32_t>(get_%s()),\n", f.Name())
+				w.Printf(".name = enum_to_string(get_%s()),\n", f.Name())
+				w.Dedent()
+				w.Println("};")
+			} else if f.Kind() == protoreflect.BytesKind {
+				w.Printf("found.value = get_%s().share();\n", f.Name())
+			} else {
+				w.Printf("found.value = get_%s();\n", f.Name())
+			}
+		}()
+	}
+	w.Println("default:")
+	w.Indent()
+	w.Println("return std::nullopt;")
+	w.Dedent()
+	w.Println("}")
+	w.Println("if (field_numbers.size() > 1) {")
+	w.Indent()
+	w.Println("if (!std::holds_alternative<serde::pb::base_message*>(found.value)) { return std::nullopt; }")
+	w.Println("return std::get<serde::pb::base_message*>(found.value)->lookup_field(field_numbers.subspan(1));")
+	w.Dedent()
+	w.Println("}")
+	w.Println("return found;")
 }
 
 func (g *implGenerator) generateMessageFieldMaskIsValidHelper(msg protoreflect.MessageDescriptor, w *codewriter) {
@@ -966,7 +1114,7 @@ func (g *implGenerator) generateEnumWrite(enum protoreflect.EnumDescriptor, w *c
 }
 
 func (g *implGenerator) generateEnumToString(enum protoreflect.EnumDescriptor, w *codewriter) {
-	w.Printf("std::string_view enum_to_string(const %s& e) {\n", cppTypeName(enum))
+	w.Printf("static_str enum_to_string(const %s& e) {\n", cppTypeName(enum))
 	defer w.Println("}")
 	w.Indent()
 	defer w.Dedent()

@@ -49,7 +49,9 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       "iceberg_target_lag_ms: {}, "
       "min_cleanable_dirty_ratio: {}, "
       "min_compaction_lag_ms: {}, "
-      "max_compaction_lag_ms: {}",
+      "max_compaction_lag_ms: {},"
+      "message_timestamp_before_max_ms: {},"
+      "message_timestamp_after_max_ms: {}",
       properties.compression,
       properties.cleanup_policy_bitflags,
       properties.compaction_strategy,
@@ -93,7 +95,9 @@ std::ostream& operator<<(std::ostream& o, const topic_properties& properties) {
       properties.iceberg_target_lag_ms,
       properties.min_cleanable_dirty_ratio,
       properties.min_compaction_lag_ms,
-      properties.max_compaction_lag_ms);
+      properties.max_compaction_lag_ms,
+      properties.message_timestamp_before_max_ms,
+      properties.message_timestamp_after_max_ms);
 
     if (config::shard_local_cfg().development_enable_cloud_topics()) {
         fmt::print(
@@ -145,7 +149,9 @@ bool topic_properties::has_overrides() const {
         || min_cleanable_dirty_ratio.is_engaged()
         || min_compaction_lag_ms.has_value()
         || max_compaction_lag_ms.has_value()
-        || remote_topic_allow_gaps.has_value();
+        || remote_topic_allow_gaps.has_value()
+        || message_timestamp_before_max_ms.has_value()
+        || message_timestamp_after_max_ms.has_value();
 
     if (config::shard_local_cfg().development_enable_cloud_topics()) {
         return overrides
@@ -289,6 +295,8 @@ adl<cluster::topic_properties>::from(iobuf_parser& parser) {
       std::nullopt,
       std::nullopt,
       tristate<double>{std::nullopt},
+      std::nullopt,
+      std::nullopt,
       std::nullopt,
       std::nullopt,
       std::nullopt,

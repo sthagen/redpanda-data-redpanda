@@ -129,6 +129,12 @@ inline constexpr std::string_view topic_property_min_compaction_lag_ms
 inline constexpr std::string_view topic_property_max_compaction_lag_ms
   = "max.compaction.lag.ms";
 
+inline constexpr std::string_view topic_property_message_timestamp_before_max_ms
+  = "message.timestamp.before.max.ms";
+
+inline constexpr std::string_view topic_property_message_timestamp_after_max_ms
+  = "message.timestamp.after.max.ms";
+
 // Kafka topic properties that is not relevant for Redpanda
 // Or cannot be altered with kafka alter handler
 inline constexpr std::array<std::string_view, 20> allowlist_topic_noop_confs = {

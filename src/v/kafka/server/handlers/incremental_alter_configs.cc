@@ -431,6 +431,26 @@ create_topic_properties_update(
                   max_compaction_lag_ms_validator);
                 continue;
             }
+
+            if (cfg.name == topic_property_message_timestamp_before_max_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.message_timestamp_before_max_ms,
+                  cfg.value,
+                  op,
+                  message_timestamp_before_max_ms_validator,
+                  /*clamp_to_duration_max=*/true);
+                continue;
+            }
+
+            if (cfg.name == topic_property_message_timestamp_after_max_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.message_timestamp_after_max_ms,
+                  cfg.value,
+                  op,
+                  message_timestamp_after_max_ms_validator,
+                  /*clamp_to_duration_max=*/true);
+                continue;
+            }
         } catch (const validation_error& e) {
             vlog(
               klog.debug,
@@ -486,6 +506,12 @@ inline std::string_view map_config_name(std::string_view input) {
       .match("log.compression.type", "log_compression_type")
       .match("log.roll.ms", "log_segment_ms")
       .match("log.cleaner.delete.retention.ms", "tombstone_retention_ms")
+      .match(
+        "log.message.timestamp.before.max.ms",
+        "log_message_timestamp_before_max_ms")
+      .match(
+        "log.message.timestamp.after.max.ms",
+        "log_message_timestamp_after_max_ms")
       .default_match(input);
 }
 

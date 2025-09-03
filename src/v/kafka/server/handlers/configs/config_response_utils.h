@@ -89,6 +89,12 @@ struct metadata_cache_info {
       = 0;
     virtual std::chrono::milliseconds get_default_max_compaction_lag_ms() const
       = 0;
+    virtual std::chrono::milliseconds
+    get_default_message_timestamp_before_max_ms() const
+      = 0;
+    virtual std::chrono::milliseconds
+    get_default_message_timestamp_after_max_ms() const
+      = 0;
 };
 /// This is the adapter to use cluster::metadata_cache
 struct metadata_cache_adapter : public metadata_cache_info {
@@ -135,6 +141,10 @@ public:
     get_default_min_compaction_lag_ms() const override;
     std::chrono::milliseconds
     get_default_max_compaction_lag_ms() const override;
+    std::chrono::milliseconds
+    get_default_message_timestamp_before_max_ms() const override;
+    std::chrono::milliseconds
+    get_default_message_timestamp_after_max_ms() const override;
 
 private:
     const cluster::metadata_cache& _metadata_cache;

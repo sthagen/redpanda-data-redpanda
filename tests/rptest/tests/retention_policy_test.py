@@ -852,6 +852,11 @@ class BogusTimestampTest(RedpandaTest):
             self.topic, "segment.bytes", str(self.segment_size)
         )
 
+        # Allow for messages up to a week in the future to be produced.
+        self.client().alter_topic_config(
+            self.topic, "message.timestamp.after.max.ms", 7 * 24 * 3600 * 1000
+        )
+
         # A fictional artificial timestamp base in milliseconds
         future_timestamp = (int(time.time()) + 24 * 3600) * 1000
 

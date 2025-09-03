@@ -328,6 +328,22 @@ frontend::timequery(storage::timequery_config cfg) {
 }
 
 namespace {
+
+raft::replicate_options update_replicate_options(raft::replicate_options opts) {
+    // We overwrite the consistency level in cloud topics. Since you're already
+    // willing to wait for object storage uploads, it's much safer to make sure
+    // metadata is written to a majority before acking the write as well. This
+    // *should* be very little extra latency compared to writing to object
+    // storage anyways.
+    //
+    // The primary motivation for this is that at the time of writing, lower
+    // consistency levels *also* modify the offsets that are visible to
+    // consumers - and to prevent situations where we have to suffix truncate
+    // the log, we just force a majority to persist the write before responding.
+    opts.consistency = raft::consistency_level::quorum_ack;
+    return opts;
+}
+
 struct upload_and_replicate_stages {
     model::ntp ntp;
     ss::lw_shared_ptr<cluster::partition> partition;
@@ -349,20 +365,21 @@ struct upload_and_replicate_stages {
       , ctp_stm_api(make_ctp_stm_api(rtc, this->partition))
       , batches(std::move(batches))
       , batch_id(batch_id)
-      , opts(opts)
+      , opts(update_replicate_options(opts))
       , timeout(timeout) {}
 
     ss::promise<> request_enqueued;
     ss::promise<result<raft::replicate_result>> replicate_finished;
 };
 
-static ss::future<> bg_upload_and_replicate(
+ss::future<> bg_upload_and_replicate(
   data_plane_api* api,
   ss::lw_shared_ptr<cluster::partition> partition,
   model::record_batch_header header,
   ss::lw_shared_ptr<upload_and_replicate_stages> op,
   bool cache_enabled) {
     vassert(api != nullptr, "cloud topics api is not initialized");
+
     auto fallback = ss::defer([op] {
         // This guarantees that the promises are set.
         // The error code used here does not represent the
@@ -471,7 +488,9 @@ static ss::future<> bg_upload_and_replicate(
                     }
                 }
                 return raft::replicate_result{
-                  kafka::offset_cast(res.value().last_offset)};
+                  .last_offset = kafka::offset_cast(res.value().last_offset),
+                  .last_term = res.value().last_term,
+                };
             });
 
     replicate_fut.forward_to(std::move(op->replicate_finished));
@@ -480,6 +499,7 @@ static ss::future<> bg_upload_and_replicate(
 
 ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
   chunked_vector<model::record_batch> batches, raft::replicate_options opts) {
+    opts = update_replicate_options(opts);
     chunked_vector<model::record_batch_header> headers;
     headers.reserve(batches.size());
     for (const auto& batch : batches) {

@@ -674,6 +674,8 @@ struct instance_generator<cluster::topic_properties> {
           std::nullopt,
           std::nullopt,
           std::nullopt,
+          std::nullopt,
+          std::nullopt,
         };
     }
 

@@ -116,6 +116,14 @@ std::chrono::milliseconds
 metadata_cache_adapter::get_default_max_compaction_lag_ms() const {
     return _metadata_cache.get_default_max_compaction_lag_ms();
 }
+std::chrono::milliseconds
+metadata_cache_adapter::get_default_message_timestamp_before_max_ms() const {
+    return _metadata_cache.get_default_message_timestamp_before_max_ms();
+}
+std::chrono::milliseconds
+metadata_cache_adapter::get_default_message_timestamp_after_max_ms() const {
+    return _metadata_cache.get_default_message_timestamp_after_max_ms();
+}
 
 bool config_property_requested(
   const config_key_t& configuration_keys,
@@ -1170,6 +1178,32 @@ config_response_container_t make_topic_configs(
         config::shard_local_cfg()
           .cloud_storage_enable_remote_allow_gaps.desc()),
       &describe_as_string<bool>);
+
+    add_topic_config_if_requested(
+      config_keys,
+      result,
+      topic_property_message_timestamp_before_max_ms,
+      metadata_cache.get_default_message_timestamp_before_max_ms(),
+      topic_property_message_timestamp_before_max_ms,
+      topic_properties.message_timestamp_before_max_ms,
+      include_synonyms,
+      maybe_make_documentation(
+        include_documentation,
+        config::shard_local_cfg().log_message_timestamp_before_max_ms.desc()),
+      describe_as_string<std::chrono::milliseconds>);
+
+    add_topic_config_if_requested(
+      config_keys,
+      result,
+      topic_property_message_timestamp_after_max_ms,
+      metadata_cache.get_default_message_timestamp_after_max_ms(),
+      topic_property_message_timestamp_after_max_ms,
+      topic_properties.message_timestamp_after_max_ms,
+      include_synonyms,
+      maybe_make_documentation(
+        include_documentation,
+        config::shard_local_cfg().log_message_timestamp_after_max_ms.desc()),
+      describe_as_string<std::chrono::milliseconds>);
 
     return result;
 }

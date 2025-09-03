@@ -873,17 +873,21 @@ FIXTURE_TEST(test_produce_bad_timestamps, prod_consume_fixture) {
     // timestamps. the drift is the same for all the messages, but a more
     // advaced test would be to have a range of drifts from start to finish
     auto produce_messages = [&](std::chrono::system_clock::duration drift) {
-        producer
-          .produce_to_partition(
-            ntp.tp.topic,
-            ntp.tp.partition,
-            {
-              {"key0", "val0"},
-              {"key1", "val1"},
-              {"key2", "val2"},
-            },
-            model::to_timestamp(std::chrono::system_clock::now() + drift))
-          .get();
+        try {
+            producer
+              .produce_to_partition(
+                ntp.tp.topic,
+                ntp.tp.partition,
+                {
+                  {"key0", "val0"},
+                  {"key1", "val1"},
+                  {"key2", "val2"},
+                },
+                model::to_timestamp(std::chrono::system_clock::now() + drift))
+              .get();
+        } catch (...) {
+            // Fall through
+        }
     };
 
     BOOST_TEST_INFO("expect produce_bad_create_time to be 0");
@@ -896,7 +900,7 @@ FIXTURE_TEST(test_produce_bad_timestamps, prod_consume_fixture) {
 
     BOOST_TEST_INFO(
       "messages with a skew towards the future trigger the probe");
-    config::shard_local_cfg().log_message_timestamp_alert_after_ms.set_value(
+    config::shard_local_cfg().log_message_timestamp_after_max_ms.set_value(
       std::chrono::duration_cast<std::chrono::milliseconds>(1h));
     produce_messages(2h);
     BOOST_CHECK_LT(bad_timestamps_metric, produce_bad_ts_count());
@@ -904,8 +908,8 @@ FIXTURE_TEST(test_produce_bad_timestamps, prod_consume_fixture) {
     bad_timestamps_metric = produce_bad_ts_count();
 
     BOOST_TEST_INFO("messages with a skew towards the past trigger the probe");
-    config::shard_local_cfg().log_message_timestamp_alert_before_ms.set_value(
-      std::optional{std::chrono::duration_cast<std::chrono::milliseconds>(1h)});
+    config::shard_local_cfg().log_message_timestamp_before_max_ms.set_value(
+      std::chrono::duration_cast<std::chrono::milliseconds>(1h));
     produce_messages(-2h);
     BOOST_CHECK_LT(bad_timestamps_metric, produce_bad_ts_count());
 
@@ -919,8 +923,8 @@ FIXTURE_TEST(test_produce_bad_timestamps, prod_consume_fixture) {
     BOOST_TEST_INFO(
       "disabling the alert for the past allows messages in the "
       "past without triggering the probe");
-    config::shard_local_cfg().log_message_timestamp_alert_before_ms.set_value(
-      std::optional<std::chrono::milliseconds>{});
+    config::shard_local_cfg().log_message_timestamp_before_max_ms.set_value(
+      std::chrono::milliseconds::max());
     produce_messages(-365 * 24h);
     BOOST_CHECK_EQUAL(bad_timestamps_metric, produce_bad_ts_count());
 }
@@ -942,7 +946,7 @@ FIXTURE_TEST(test_compression_metrics, prod_consume_fixture) {
             ntp.tp.topic,
             ntp.tp.partition,
             {{"key0", "val0"}},
-            std::nullopt,
+            model::timestamp::now(),
             compression)
           .get();
     };

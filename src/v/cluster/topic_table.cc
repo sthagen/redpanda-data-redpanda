@@ -1158,6 +1158,12 @@ topic_properties topic_table::update_topic_properties(
       overrides.max_compaction_lag_ms);
     incremental_update(
       updated_properties.remote_topic_allow_gaps, overrides.remote_allow_gaps);
+    incremental_update(
+      updated_properties.message_timestamp_before_max_ms,
+      overrides.message_timestamp_before_max_ms);
+    incremental_update(
+      updated_properties.message_timestamp_after_max_ms,
+      overrides.message_timestamp_after_max_ms);
     return updated_properties;
 }
 

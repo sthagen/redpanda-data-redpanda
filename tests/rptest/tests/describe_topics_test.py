@@ -303,6 +303,30 @@ class DescribeTopicsTest(RedpandaTest):
                 "for compaction. The topic property `max.compaction.lag.ms` overrides "
                 "this property.",
             ),
+            "message.timestamp.before.max.ms": ConfigProperty(
+                config_type="LONG",
+                value="9223372036854",
+                doc_string="The maximum allowable timestamp difference between the broker's "
+                "timestamp and a record's timestamp. For topics with "
+                "`message.timestamp.type` set to `CreateTime`, Redpanda rejects records "
+                "that have timestamps earlier than the broker timestamp and exceed this "
+                "difference. Redpanda ignores this property for topics with "
+                "`message.timestamp.type` set to `AppendTime`. The topic property "
+                "`message.timestamp.before.max.ms` overrides the value of "
+                "`log_message_timestamp_before_max_ms` at the topic level.",
+            ),
+            "message.timestamp.after.max.ms": ConfigProperty(
+                config_type="LONG",
+                value="3600000",
+                doc_string="The maximum allowable timestamp difference between the broker's "
+                "timestamp and a record's timestamp. For topics with "
+                "`message.timestamp.type` set to `CreateTime`, Redpanda rejects records "
+                "that have timestamps later than the broker timestamp and exceed this "
+                "difference. Redpanda ignores this property for topics with "
+                "`message.timestamp.type` set to `AppendTime`. The topic property "
+                "`message.timestamp.after.max.ms` overrides the value of "
+                "`log_message_timestamp_after_max_ms` at the topic level.",
+            ),
         }
 
         tp_spec = TopicSpec()

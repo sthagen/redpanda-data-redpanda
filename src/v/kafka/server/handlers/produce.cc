@@ -35,6 +35,8 @@
 #include <boost/container_hash/extensions.hpp>
 #include <fmt/ostream.h>
 
+#include <chrono>
+
 namespace kafka {
 namespace {
 static constexpr auto despam_interval = std::chrono::minutes(5);
@@ -201,84 +203,94 @@ ss::future<produce_response::partition> finalize_request_with_error_code(
 
 /**
  * @brief Validate the timestamps of the batch, they have to be within a window
- * to the broker's time. returns the new timestamp to set as max_timestamp to
- * the batch, if present
+ * to the broker's time. returns an optional containing an error message if the
+ * batch should be rejected, or may set the passed `batch`'s `max_timestamp` to
+ * the current timestamp if using `AppendTime`.
  */
 auto validate_batch_timestamps(
   const model::ntp& ntp,
-  const model::record_batch_header& header,
+  model::record_batch& batch,
   model::timestamp_type timestamp_type,
-  kafka::kafka_probe& probe) -> std::optional<model::timestamp> {
-    // we compute in std::chrono::timepoints, we print in model::timestamps
+  std::chrono::milliseconds message_timestamp_before_max_ms,
+  std::chrono::milliseconds message_timestamp_after_max_ms,
+  kafka::kafka_probe& probe) -> std::optional<ss::sstring> {
     auto broker_time = model::timestamp::now();
-    auto broker_timepoint = model::duration_since_epoch(broker_time);
-
-    // alert if first_timestamp is too far in the past
-    // default value for threshold basically disables this check, so it's
-    // wrapped in a if check
-    if (auto max_before = config::shard_local_cfg()
-                            .log_message_timestamp_alert_before_ms.value();
-        unlikely(max_before)) {
-        auto first_timepoint = model::duration_since_epoch(
-          header.first_timestamp);
-        if (
-          broker_timepoint > first_timepoint
-          && std::chrono::duration_cast<std::chrono::milliseconds>(
-               broker_timepoint - first_timepoint)
-               > max_before.value()) {
-            // generate an alert
-            thread_local static ss::logger::rate_limit rate(despam_interval);
-            klog.log(
-              ss::log_level::warn,
-              rate,
-              "produce request timestamp for {} was before the alert "
-              "threshold, broker time: {}, timestamp: {}",
-              ntp,
-              broker_time,
-              header.first_timestamp);
-            // it's expected that to debug this, the observer will need to check
-            // the logs for the npt that triggered the alert
-            probe.produce_bad_create_time();
-        }
-    }
-
-    // alert if max_timestamp is too far in the future
-    if (timestamp_type == model::timestamp_type::create_time) {
-        auto max_after = config::shard_local_cfg()
-                           .log_message_timestamp_alert_after_ms.value();
-        auto max_timepoint = model::duration_since_epoch(header.max_timestamp);
-        if (
-          broker_timepoint < max_timepoint
-          && std::chrono::duration_cast<std::chrono::milliseconds>(
-               max_timepoint - broker_timepoint)
-               > max_after) {
-            // same as above, generate an alert
-            thread_local static ss::logger::rate_limit rate(despam_interval);
-            klog.log(
-              ss::log_level::warn,
-              rate,
-              "produce request timestamp for {} was past the alert threshold, "
-              "broker time: {}, timestamp: {}",
-              ntp,
-              broker_time,
-              header.max_timestamp);
-            probe.produce_bad_create_time();
-        }
-    }
-
+    const auto& header = batch.header();
     /*
      * For append time setting we have to recompute
      * the CRC.
      */
     if (timestamp_type == model::timestamp_type::append_time) {
-        return broker_time;
-    } else {
+        batch.set_max_timestamp(
+          model::timestamp_type::append_time, broker_time);
         return std::nullopt;
     }
+
+    // `message.timestamp_type` is `CreateTime`. Validate record timestamps
+    // using `message.timestamp.before.max.ms` and
+    // `message.timestamp.after.max.ms`.
+
+    // reject if first_timestamp is too far in the past
+    if (
+      broker_time > header.first_timestamp
+      && (broker_time - header.first_timestamp)
+           > model::timestamp(message_timestamp_before_max_ms.count())) {
+        thread_local static ss::logger::rate_limit rate(despam_interval);
+        klog.log(
+          ss::log_level::warn,
+          rate,
+          "produce request timestamp for {} was before the threshold set by "
+          "message.timestamp.before.max.ms: {}, broker time: {}, timestamp: "
+          "{}. Rejecting batch {}",
+          ntp,
+          message_timestamp_before_max_ms,
+          broker_time,
+          header.first_timestamp,
+          header);
+        probe.produce_bad_create_time();
+        return ssx::sformat(
+          "Timestamp {} of message with offset {} is out of range. The "
+          "timestamp should be within [{}, {}] of the broker time.",
+          header.first_timestamp,
+          header.base_offset,
+          message_timestamp_before_max_ms,
+          message_timestamp_after_max_ms);
+    }
+
+    // reject if max_timestamp is too far in the future.
+    if (
+      broker_time < header.max_timestamp
+      && (header.max_timestamp - broker_time)
+           > model::timestamp(message_timestamp_after_max_ms.count())) {
+        thread_local static ss::logger::rate_limit rate(despam_interval);
+        klog.log(
+          ss::log_level::warn,
+          rate,
+          "produce request timestamp for {} was past the threshold set by "
+          "message.timestamp.after.max.ms: {}, broker time: {}, timestamp: {}. "
+          "Rejecting batch {}",
+          ntp,
+          message_timestamp_after_max_ms,
+          broker_time,
+          header.max_timestamp,
+          header);
+        probe.produce_bad_create_time();
+        return ssx::sformat(
+          "Timestamp {} of message with offset {} is out of range. The "
+          "timestamp should be within [{}, {}] of the broker time.",
+          header.max_timestamp,
+          header.last_offset(),
+          message_timestamp_before_max_ms,
+          message_timestamp_after_max_ms);
+    }
+
+    return std::nullopt;
 }
 struct topic_configuration_context {
     size_t batch_max_bytes;
     model::timestamp_type timestamp_type;
+    std::chrono::milliseconds message_timestamp_before_max_ms;
+    std::chrono::milliseconds message_timestamp_after_max_ms;
     const cluster::topic_properties* properties;
 };
 /**
@@ -310,11 +322,22 @@ partition_produce_stages produce_topic_partition(
       std::move(part.records->adapter.batch.value()));
 
     // validate the batch timestamps by checking skew against broker time
-    if (
-      auto new_timestamp = validate_batch_timestamps(
-        ntp, batch->header(), cfg_ctx.timestamp_type, octx.rctx.probe())) {
-        batch->set_max_timestamp(
-          model::timestamp_type::append_time, new_timestamp.value());
+    auto validate_timestamp = validate_batch_timestamps(
+      ntp,
+      *batch,
+      cfg_ctx.timestamp_type,
+      cfg_ctx.message_timestamp_before_max_ms,
+      cfg_ctx.message_timestamp_after_max_ms,
+      octx.rctx.probe());
+    if (validate_timestamp.has_value()) {
+        auto dispatch_f = ss::now();
+        auto f = ss::make_ready_future<produce_response::partition>(
+          produce_response::partition{
+            .partition_index = ntp.tp.partition,
+            .error_code = error_code::invalid_timestamp,
+            .error_message = std::move(validate_timestamp).value()});
+        return partition_produce_stages{
+          .dispatched = std::move(dispatch_f), .produced = std::move(f)};
     }
 
     const auto& hdr = batch->header();
@@ -526,6 +549,14 @@ produce_topic(produce_ctx& octx, produce_request::topic& topic) {
         octx.rctx.metadata_cache().get_default_batch_max_bytes()),
       .timestamp_type = topic_cfg.properties.timestamp_type.value_or(
         octx.rctx.metadata_cache().get_default_timestamp_type()),
+      .message_timestamp_before_max_ms
+      = topic_cfg.properties.message_timestamp_before_max_ms.value_or(
+        octx.rctx.metadata_cache()
+          .get_default_message_timestamp_before_max_ms()),
+      .message_timestamp_after_max_ms
+      = topic_cfg.properties.message_timestamp_after_max_ms.value_or(
+        octx.rctx.metadata_cache()
+          .get_default_message_timestamp_after_max_ms()),
       .properties = &topic_cfg.properties,
     };
 
@@ -660,6 +691,14 @@ partition_produce_stages produce_single_partition(
         octx.rctx.metadata_cache().get_default_batch_max_bytes()),
       .timestamp_type = topic_cfg.properties.timestamp_type.value_or(
         octx.rctx.metadata_cache().get_default_timestamp_type()),
+      .message_timestamp_before_max_ms
+      = topic_cfg.properties.message_timestamp_before_max_ms.value_or(
+        octx.rctx.metadata_cache()
+          .get_default_message_timestamp_before_max_ms()),
+      .message_timestamp_after_max_ms
+      = topic_cfg.properties.message_timestamp_after_max_ms.value_or(
+        octx.rctx.metadata_cache()
+          .get_default_message_timestamp_after_max_ms()),
       .properties = &topic_cfg.properties,
     };
     return produce_topic_partition(octx, topic, part, cfg_ctx);

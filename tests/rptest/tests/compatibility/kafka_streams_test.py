@@ -34,11 +34,13 @@ class KafkaStreamsTest(RedpandaTest):
         test_context,
         pandaproxy_config: PandaproxyConfig,
         schema_registry_config: SchemaRegistryConfig,
+        extra_rp_conf={},
     ):
         super(KafkaStreamsTest, self).__init__(
             test_context=test_context,
             pandaproxy_config=pandaproxy_config,
             schema_registry_config=schema_registry_config,
+            extra_rp_conf=extra_rp_conf,
         )
 
         self._ctx = test_context
@@ -71,11 +73,13 @@ class KafkaStreamsDriverBase(KafkaStreamsTest):
         test_context,
         pandaproxy_config: PandaproxyConfig,
         schema_registry_config: SchemaRegistryConfig,
+        extra_rp_conf={},
     ):
         super(KafkaStreamsDriverBase, self).__init__(
             test_context=test_context,
             pandaproxy_config=pandaproxy_config,
             schema_registry_config=schema_registry_config,
+            extra_rp_conf=extra_rp_conf,
         )
 
     @cluster(num_nodes=5)
@@ -197,6 +201,9 @@ class KafkaStreamsSessionWindow(KafkaStreamsDriverBase):
             test_context=test_context,
             pandaproxy_config=PandaproxyConfig(),
             schema_registry_config=SchemaRegistryConfig(),
+            # This example produces a message with a timestamp 1.5hours in the future:
+            # https://github.com/confluentinc/kafka-streams-examples/blob/57f5b4163c5e2e42959c8a4355736e1c8be08db1/src/main/java/io/confluent/examples/streams/SessionWindowsExampleDriver.java#L124
+            extra_rp_conf={"log_message_timestamp_after_max_ms": 2 * 3600 * 1000},
         )
 
 

@@ -83,7 +83,9 @@ bool is_supported(std::string_view name) {
        topic_property_min_cleanable_dirty_ratio,
        topic_property_min_compaction_lag_ms,
        topic_property_max_compaction_lag_ms,
-       topic_property_remote_allow_gaps});
+       topic_property_remote_allow_gaps,
+       topic_property_message_timestamp_before_max_ms,
+       topic_property_message_timestamp_after_max_ms});
 
     if (std::any_of(
           supported_configs.begin(),

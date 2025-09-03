@@ -562,7 +562,7 @@ struct property_update<tristate<T>>
 struct incremental_topic_updates
   : serde::envelope<
       incremental_topic_updates,
-      serde::version<8>,
+      serde::version<9>,
       serde::compat_version<0>> {
     static constexpr int8_t version_with_data_policy = -1;
     static constexpr int8_t version_with_shadow_indexing = -3;
@@ -648,6 +648,11 @@ struct incremental_topic_updates
     property_update<std::optional<std::chrono::milliseconds>>
       iceberg_target_lag_ms;
 
+    property_update<std::optional<std::chrono::milliseconds>>
+      message_timestamp_before_max_ms;
+    property_update<std::optional<std::chrono::milliseconds>>
+      message_timestamp_after_max_ms;
+
     // Not a regular topic property. Used to assign topic UUIDs to pre-25-2
     // topics that were created without one.
     property_update<std::optional<model::topic_id>> topic_id;
@@ -698,7 +703,9 @@ struct incremental_topic_updates
           remote_allow_gaps,
           topic_id,
           min_compaction_lag_ms,
-          max_compaction_lag_ms);
+          max_compaction_lag_ms,
+          message_timestamp_before_max_ms,
+          message_timestamp_after_max_ms);
     }
 
     friend std::ostream&

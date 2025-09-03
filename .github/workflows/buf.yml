@@ -48,7 +48,7 @@ jobs:
           paths: proto
           lint: true
           format: false  # We use clang-tidy
-          breaking: true
+          breaking: false # flip to true when we have a release
           push: false  # Only validate, don't push to registry
   # ===========================================================================
   # Job: push-to-registry (push events only - registry operations only)

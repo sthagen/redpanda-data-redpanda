@@ -634,6 +634,12 @@ inline void rjson_serialize(
     write_member(w, "min_cleanable_dirty_ratio", tps.min_cleanable_dirty_ratio);
     write_member(w, "min_compaction_lag_ms", tps.min_compaction_lag_ms);
     write_member(w, "max_compaction_lag_ms", tps.max_compaction_lag_ms);
+    write_member(
+      w,
+      "message_timestamp_before_max_ms",
+      tps.message_timestamp_before_max_ms);
+    write_member(
+      w, "message_timestamp_after_max_ms", tps.message_timestamp_after_max_ms);
     w.EndObject();
 }
 
@@ -712,6 +718,12 @@ inline void read_value(const json::Value& rd, cluster::topic_properties& obj) {
     read_member(rd, "min_cleanable_dirty_ratio", obj.min_cleanable_dirty_ratio);
     read_member(rd, "min_compaction_lag_ms", obj.min_compaction_lag_ms);
     read_member(rd, "max_compaction_lag_ms", obj.max_compaction_lag_ms);
+    read_member(
+      rd,
+      "message_timestamp_before_max_ms",
+      obj.message_timestamp_before_max_ms);
+    read_member(
+      rd, "message_timestamp_after_max_ms", obj.message_timestamp_after_max_ms);
 }
 
 inline void rjson_serialize(

@@ -228,10 +228,12 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds> alter_topic_cfg_timeout_ms;
     property<model::cleanup_policy_bitflags> log_cleanup_policy;
     enum_property<model::timestamp_type> log_message_timestamp_type;
-    bounded_property<std::optional<std::chrono::milliseconds>>
-      log_message_timestamp_alert_before_ms;
+    deprecated_property log_message_timestamp_alert_before_ms;
+    deprecated_property log_message_timestamp_alert_after_ms;
     bounded_property<std::chrono::milliseconds>
-      log_message_timestamp_alert_after_ms;
+      log_message_timestamp_before_max_ms;
+    bounded_property<std::chrono::milliseconds>
+      log_message_timestamp_after_max_ms;
     enum_property<model::compression> log_compression_type;
     property<size_t> fetch_max_bytes;
     property<bool> use_fetch_scheduler_group;

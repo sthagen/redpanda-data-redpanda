@@ -85,7 +85,7 @@ create_topic_properties_update(
     std::apply(apply_op(op_t::none), update.custom_properties.serde_fields());
 
     static_assert(
-      std::tuple_size_v<decltype(update.properties.serde_fields())> == 40,
+      std::tuple_size_v<decltype(update.properties.serde_fields())> == 42,
       "If you add a property, decide on its default alter config "
       "policy, and handle the update in the loop below");
     static_assert(
@@ -439,6 +439,26 @@ create_topic_properties_update(
                   update.properties.remote_allow_gaps,
                   cfg.value,
                   kafka::config_resource_operation::set);
+                continue;
+            }
+
+            if (cfg.name == topic_property_message_timestamp_before_max_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.message_timestamp_before_max_ms,
+                  cfg.value,
+                  kafka::config_resource_operation::set,
+                  message_timestamp_before_max_ms_validator,
+                  /*clamp_to_duration_max=*/true);
+                continue;
+            }
+
+            if (cfg.name == topic_property_message_timestamp_after_max_ms) {
+                parse_and_set_optional_duration(
+                  update.properties.message_timestamp_after_max_ms,
+                  cfg.value,
+                  kafka::config_resource_operation::set,
+                  message_timestamp_after_max_ms_validator,
+                  /*clamp_to_duration_max=*/true);
                 continue;
             }
 

@@ -115,6 +115,14 @@ public:
     get_default_max_compaction_lag_ms() const override {
         return _config->max_compaction_lag_ms();
     }
+    std::chrono::milliseconds
+    get_default_message_timestamp_before_max_ms() const override {
+        return _config->log_message_timestamp_before_max_ms();
+    }
+    std::chrono::milliseconds
+    get_default_message_timestamp_after_max_ms() const override {
+        return _config->log_message_timestamp_after_max_ms();
+    }
 
 private:
     config::configuration* _config;

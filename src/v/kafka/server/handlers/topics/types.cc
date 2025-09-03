@@ -338,6 +338,18 @@ cluster::topic_configuration to_topic_config(
         topic_property_max_compaction_lag_ms,
         /*clamp_to_duration_max=*/true);
 
+    cfg.properties.message_timestamp_before_max_ms
+      = get_duration_value<std::chrono::milliseconds>(
+        config_entries,
+        topic_property_message_timestamp_before_max_ms,
+        /*clamp_to_duration_max=*/true);
+
+    cfg.properties.message_timestamp_after_max_ms
+      = get_duration_value<std::chrono::milliseconds>(
+        config_entries,
+        topic_property_message_timestamp_after_max_ms,
+        /*clamp_to_duration_max=*/true);
+
     schema_id_validation_config_parser schema_id_validation_config_parser{
       cfg.properties};
 

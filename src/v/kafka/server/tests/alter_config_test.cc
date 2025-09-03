@@ -756,7 +756,9 @@ FIXTURE_TEST(
       "min.cleanable.dirty.ratio",
       "redpanda.remote.allowgaps",
       "min.compaction.lag.ms",
-      "max.compaction.lag.ms"};
+      "max.compaction.lag.ms",
+      "message.timestamp.before.max.ms",
+      "message.timestamp.after.max.ms"};
 
     // All properties_request
     auto all_describe_resp = describe_configs(test_tp);

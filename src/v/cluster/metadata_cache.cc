@@ -348,6 +348,16 @@ metadata_cache::get_default_max_compaction_lag_ms() const {
     return config::shard_local_cfg().max_compaction_lag_ms();
 }
 
+std::chrono::milliseconds
+metadata_cache::get_default_message_timestamp_before_max_ms() const {
+    return config::shard_local_cfg().log_message_timestamp_before_max_ms();
+}
+
+std::chrono::milliseconds
+metadata_cache::get_default_message_timestamp_after_max_ms() const {
+    return config::shard_local_cfg().log_message_timestamp_after_max_ms();
+}
+
 topic_properties metadata_cache::get_default_properties() const {
     topic_properties tp;
     tp.compression = {get_default_compression()};
@@ -371,6 +381,10 @@ topic_properties metadata_cache::get_default_properties() const {
       get_default_min_cleanable_dirty_ratio()};
     tp.min_compaction_lag_ms = get_default_min_compaction_lag_ms();
     tp.max_compaction_lag_ms = get_default_max_compaction_lag_ms();
+    tp.message_timestamp_before_max_ms
+      = get_default_message_timestamp_before_max_ms();
+    tp.message_timestamp_after_max_ms
+      = get_default_message_timestamp_after_max_ms();
 
     return tp;
 }

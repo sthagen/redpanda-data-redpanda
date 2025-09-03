@@ -236,6 +236,10 @@ const auto min_compaction_lag_ms_validator = duration_validator{
   .name = "min.compaction.lag.ms"};
 const auto max_compaction_lag_ms_validator = duration_validator{
   .name = "max.compaction.lag.ms", .min = 1ms};
+const auto message_timestamp_before_max_ms_validator = duration_validator{
+  .name = "message.timestamp.before.max.ms", .min = 0ms};
+const auto message_timestamp_after_max_ms_validator = duration_validator{
+  .name = "message.timestamp.after.max.ms", .min = 0ms};
 
 struct flush_bytes_validator {
     std::optional<ss::sstring>
