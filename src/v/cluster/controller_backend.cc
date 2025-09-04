@@ -1485,8 +1485,9 @@ ss::future<std::error_code> controller_backend::create_partition(
         }
 
         auto rtp = cfg.properties.remote_topic_properties;
-        const bool is_cloud_topic = ntp_config.is_archival_enabled()
-                                    || ntp_config.is_remote_fetch_enabled();
+        const bool is_tiered_storage_topic
+          = ntp_config.is_archival_enabled()
+            || ntp_config.is_remote_fetch_enabled();
         const bool is_internal = ntp.ns == model::kafka_internal_namespace;
         /**
          * Here we decide if a partition needs recovery from tiered storage, it
@@ -1495,7 +1496,7 @@ ss::future<std::error_code> controller_backend::create_partition(
          * from the tiered storage.
          */
         if (
-          is_force_reconfigured && is_cloud_topic && !is_internal
+          is_force_reconfigured && is_tiered_storage_topic && !is_internal
           && !ntp_config.get_overrides().recovery_enabled) {
             // topic being cloud enabled implies existence of overrides
             ntp_config.get_overrides().recovery_enabled

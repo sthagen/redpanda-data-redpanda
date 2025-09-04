@@ -149,20 +149,25 @@ public:
     ss::sstring& base_directory() { return _base_dir; }
 
     const default_overrides& get_overrides() const { return *_overrides; }
+
     default_overrides& get_overrides() { return *_overrides; }
 
     bool has_overrides() const { return _overrides != nullptr; }
 
-    bool has_compacted_override() const {
-        auto cp_override = cleanup_policy_override();
-        if (!cp_override) {
+    // If compaction is enabled for local storage.
+    bool is_locally_compacted() const {
+        if (cloud_topic_enabled()) {
             return false;
         }
-        return model::is_compaction_enabled(cp_override.value());
+        return model::is_compaction_enabled(cleanup_policy());
     }
 
-    bool is_compacted() const {
-        return model::is_compaction_enabled(cleanup_policy());
+    // If compaction is enabled for remote storage.
+    //
+    // NOTE: currently this is only supported for cloud topics
+    bool is_remotely_compacted() const {
+        return cloud_topic_enabled()
+               && model::is_compaction_enabled(cleanup_policy());
     }
 
     bool is_collectable() const {
@@ -218,6 +223,11 @@ public:
         }
 
         return config::shard_local_cfg().log_retention_ms();
+    }
+
+    topic_recovery_enabled recovery_enabled() const {
+        return _overrides != nullptr ? _overrides->recovery_enabled
+                                     : topic_recovery_enabled::no;
     }
 
     bool is_archival_enabled() const {

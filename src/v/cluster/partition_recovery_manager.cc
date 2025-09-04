@@ -91,12 +91,7 @@ ss::future<log_recovery_result> partition_recovery_manager::download_log(
   model::initial_revision_id remote_revision,
   int32_t remote_partition_count,
   cloud_storage::remote_path_provider& path_provider) {
-    if (!ntp_cfg.has_overrides()) {
-        vlog(
-          cst_log.debug, "No overrides for {} found, skipping", ntp_cfg.ntp());
-        co_return log_recovery_result{};
-    }
-    auto enabled = ntp_cfg.get_overrides().recovery_enabled;
+    auto enabled = ntp_cfg.recovery_enabled();
     if (!enabled) {
         vlog(
           cst_log.debug,

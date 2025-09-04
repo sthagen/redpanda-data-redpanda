@@ -174,7 +174,7 @@ adjacent_segment_merger::run(run_quota_t quota) {
         co_return result;
     }
 
-    if (_archiver.ntp_config().is_compacted()) {
+    if (_archiver.ntp_config().is_locally_compacted()) {
         // This should never happen because we should not have been constructed
         // for a compacted topic: this is a double-check for safety.
         vlog(

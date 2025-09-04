@@ -192,18 +192,10 @@ class RpCloudApiClient(object):
         # return it
         return _ret["clusters"]
 
-    def list_namespaces(self, include_deleted=False):
-        # Use local var to manupulate output
-        _ret = self._http_get(
+    def list_namespaces(self):
+        return self._http_get(
             self.namespace_endpoint(), base_url=self._config.public_api_url
         )["resource_groups"]
-        # Filter out deleted ones
-        if include_deleted:
-            _namespaces = _ret
-        else:
-            _namespaces = [n for n in _ret if not n["deleted"]]
-        # return it
-        return _namespaces
 
     def list_networks(self, ns_uuid=None):
         # get networks for a namespace
