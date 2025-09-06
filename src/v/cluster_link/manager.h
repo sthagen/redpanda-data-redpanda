@@ -72,12 +72,18 @@ public:
     /// Used to notify that a cluster link has been updated
     void on_link_change(model::id_t id);
     /// Used to notify manager in a change of NTP leadership
-    void
-    handle_partition_state_change(::model::ntp ntp, ntp_leader is_ntp_leader);
+    void handle_partition_state_change(
+      ::model::ntp ntp,
+      ntp_leader is_ntp_leader,
+      std::optional<::model::term_id>);
     /// Handles creation and start of a link
     ss::future<> handle_on_link_change(model::id_t id);
     /// Handles leadership changes for a given NTP
-    ss::future<> handle_on_leadership_change(::model::ntp, ntp_leader);
+    /// term will be set if partition still exists on the shard
+    /// Will definitely be set if is_ntp_leader == true because assuming
+    // leadership implies the partition is still present
+    ss::future<> handle_on_leadership_change(
+      ::model::ntp, ntp_leader, std::optional<::model::term_id>);
     /// Used to add a mirror topic to a cluster link
     ss::future<::cluster::cluster_link::errc>
     add_mirror_topic(model::id_t link_id, model::add_mirror_topic_cmd cmd);

@@ -12,6 +12,8 @@
 #pragma once
 
 #include "cluster_link/model/types.h"
+#include "cluster_link/replication/deps.h"
+#include "cluster_link/replication/link_replication_mgr.h"
 #include "cluster_link/task.h"
 #include "cluster_link/types.h"
 #include "kafka/client/cluster.h"
@@ -31,7 +33,9 @@ public:
       manager* manager,
       ss::lowres_clock::duration task_reconciler_interval,
       model::metadata config,
-      std::unique_ptr<kafka::client::cluster> cluster_connection);
+      std::unique_ptr<kafka::client::cluster> cluster_connection,
+      std::unique_ptr<replication::data_source_factory>,
+      std::unique_ptr<replication::data_sink_factory>);
     link(const link&) = delete;
     link(link&&) = delete;
     link& operator=(const link&) = delete;
@@ -39,14 +43,16 @@ public:
     virtual ~link() = default;
 
     virtual ss::future<> start();
-    virtual ss::future<> stop();
+    virtual ss::future<> stop() noexcept;
 
     ss::future<result<void>> register_task(task_factory*);
 
     void update_config(model::metadata);
 
-    ss::future<>
-    handle_on_leadership_change(::model::ntp ntp, ntp_leader is_ntp_leader);
+    ss::future<> handle_on_leadership_change(
+      ::model::ntp ntp,
+      ntp_leader is_ntp_leader,
+      std::optional<::model::term_id>);
 
     const model::metadata& config() const;
 
@@ -111,6 +117,7 @@ private:
     chunked_hash_map<ss::sstring, std::unique_ptr<task>> _tasks;
     model::metadata _config;
     std::unique_ptr<kafka::client::cluster> _cluster_connection;
+    replication::link_replication_manager _replication_mgr;
 
     notification_list<task_state_change_cb, task_state_notification_id>
       _task_state_change_notifications;

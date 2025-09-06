@@ -103,23 +103,6 @@ ss::future<> manager::start() {
         co_await handle_on_link_change(id);
     }
 
-    auto controller_node_leader = _partition_leader_cache->get_leader_node(
-      ::model::controller_ntp);
-    if (
-      controller_node_leader.has_value()
-      && controller_node_leader.value() == _self) {
-        auto controller_shard_leader = _partition_manager->shard_owner(
-          ::model::controller_ntp);
-        if (
-          controller_shard_leader.has_value()
-          && controller_shard_leader.value() == ss::this_shard_id()) {
-            vlog(
-              cllog.info, "Cluster link manager started on controller shard");
-            handle_partition_state_change(
-              ::model::controller_ntp, ntp_leader::yes);
-        }
-    }
-
     _link_task_reconciler_timer.set_callback([this] {
         ssx::spawn_with_gate(_g, [this] { return link_task_reconciler(); });
     });
@@ -223,10 +206,12 @@ void manager::on_link_change(model::id_t id) {
 }
 
 void manager::handle_partition_state_change(
-  ::model::ntp ntp, ntp_leader is_ntp_leader) {
+  ::model::ntp ntp,
+  ntp_leader is_ntp_leader,
+  std::optional<::model::term_id> term) {
     vlog(cllog.trace, "NTP={} leadership changed to {}", ntp, is_ntp_leader);
-    _queue.submit([this, ntp{std::move(ntp)}, is_ntp_leader]() mutable {
-        return handle_on_leadership_change(std::move(ntp), is_ntp_leader);
+    _queue.submit([this, ntp{std::move(ntp)}, is_ntp_leader, term]() mutable {
+        return handle_on_leadership_change(std::move(ntp), is_ntp_leader, term);
     });
 }
 
@@ -243,20 +228,17 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
             try {
                 vlog(cllog.debug, "Stopping cluster link with id={}", id);
                 co_await it->second->stop();
-                _links.erase(it);
             } catch (const std::exception& e) {
+                // generally not possible since stop() is noexcept
+                // but is not enforced for coroutines by the compiler.
                 vlog(
                   cllog.warn,
-                  "Failed to stop link {}: \"{}\".  Re-attempting link "
-                  "stop "
-                  "within {} seconds",
+                  "Failed to stop link {}: \"{}, going ahead and removing "
+                  "it\".",
                   id,
-                  e,
-                  retry_delay.count());
-                _queue.submit_delayed(retry_delay, [this, id] {
-                    return handle_on_link_change(id);
-                });
+                  e);
             }
+            _links.erase(it);
         } else {
             vlog(cllog.trace, "No link found for id={}", id);
         }
@@ -312,7 +294,30 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
                       e);
                 }
             }
-            co_await new_link->start();
+
+            std::exception_ptr start_eptr = nullptr;
+            try {
+                co_await new_link->start();
+            } catch (...) {
+                start_eptr = std::current_exception();
+            }
+            if (start_eptr) {
+                vlog(
+                  cllog.warn,
+                  "Failed to start link {}: \"{}\"",
+                  id,
+                  start_eptr);
+                try {
+                    co_await new_link->stop();
+                } catch (...) {
+                    vlog(
+                      cllog.warn,
+                      "Failed to stop link {}: \"{}\", ignoring..",
+                      id,
+                      std::current_exception());
+                }
+                std::rethrow_exception(start_eptr);
+            }
             _links.emplace(id, std::move(new_link));
             _link_created_cv.broadcast();
         } catch (const ss::semaphore_aborted&) {
@@ -394,7 +399,9 @@ ss::future<> manager::link_task_reconciler() {
 }
 
 ss::future<> manager::handle_on_leadership_change(
-  ::model::ntp ntp, ntp_leader is_ntp_leader) {
+  ::model::ntp ntp,
+  ntp_leader is_ntp_leader,
+  std::optional<::model::term_id> term) {
     vlog(
       cllog.trace,
       "Handling leadership change for NTP={}, is_ntp_leader={}",
@@ -415,9 +422,11 @@ ss::future<> manager::handle_on_leadership_change(
         }
     }
 
-    co_await ss::parallel_for_each(_links, [ntp, is_ntp_leader](auto& pair) {
-        return pair.second->handle_on_leadership_change(ntp, is_ntp_leader);
-    });
+    co_await ss::parallel_for_each(
+      _links, [ntp, is_ntp_leader, term](auto& pair) {
+          return pair.second->handle_on_leadership_change(
+            ntp, is_ntp_leader, term);
+      });
 }
 
 ss::future<::cluster::cluster_link::errc> manager::add_mirror_topic(

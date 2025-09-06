@@ -37,6 +37,10 @@ class ShadowLinkTestBase(RedpandaTest):
         super().__init__(
             test_context=test_context,
             num_brokers=3,
+            extra_rp_conf={
+                "enable_developmental_unrecoverable_data_corrupting_features": True,
+                "development_enable_cluster_link": True,
+            },
             log_config=LoggingConfig("info", logger_levels={"cluster_link": "trace"}),
             *args,
             **kwargs,
@@ -56,10 +60,6 @@ class ShadowLinkTestBase(RedpandaTest):
             num_brokers=3,
         )
         self.services.setUp()
-        self.target_cluster_service.enable_development_feature_support()
-        self.target_cluster_service.set_cluster_config(
-            values={"development_enable_cluster_link": True}
-        )
         self.admin_v2 = AdminV2(self.target_cluster_service)
         self.client = self.admin_v2.shadow_link()
 

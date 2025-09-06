@@ -49,10 +49,10 @@ ss::future<> partition_replicator::start() {
 ss::future<> partition_replicator::stop() {
     vlog(_log.trace, "Stopping replicator");
     _as.request_abort();
-    auto f = _gate.close();
-    co_await _source->stop();
-    co_await _sink->stop();
-    co_await std::move(f);
+    // closing the gate first ensures all the units are returned to the
+    // semaphores before the source is stopped.
+    co_await _gate.close();
+    co_await ss::when_all_succeed(_source->stop(), _sink->stop());
     vlog(_log.trace, "Stopped replicator");
 }
 

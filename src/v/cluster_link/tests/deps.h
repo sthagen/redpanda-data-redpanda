@@ -14,12 +14,18 @@
 #include "cluster/cluster_link/table.h"
 #include "cluster/cluster_link/tests/utils.h"
 #include "cluster_link/manager.h"
+#include "cluster_link/replication/tests/deps_test_impl.h"
 #include "cluster_link/utils.h"
 #include "kafka/client/test/cluster_mock.h"
 #include "kafka/data/rpc/deps.h"
 #include "kafka/data/rpc/test/deps.h"
 
 #include <seastar/util/defer.hh>
+
+using data_src_factory
+  = cluster_link::replication::tests::random_data_source_factory;
+using data_sink_factory
+  = cluster_link::replication::tests::accounting_sink_factory;
 namespace cluster_link::tests {
 
 class test_link_factory : public link_factory {
@@ -40,7 +46,9 @@ public:
           manager,
           _task_reconciler_interval,
           std::move(metadata),
-          std::move(cluster_connection));
+          std::move(cluster_connection),
+          std::make_unique<data_src_factory>(),
+          std::make_unique<data_sink_factory>());
 
         _links.emplace(std::move(name), created_link.get());
         return created_link;
@@ -459,5 +467,6 @@ private:
 
     ::model::node_id _self;
     model::id_t _next_link_id{0};
+    int64_t _term_counter{0};
 };
 } // namespace cluster_link::tests

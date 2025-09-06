@@ -105,10 +105,13 @@ void cluster_link_manager_test_fixture::elect_leader(
         auto shard = shard_id.value_or(ss::this_shard_id());
         partition_manager()->set_shard_owner(ntp, shard);
         _manager.local().handle_partition_state_change(
-          ntp, shard == ss::this_shard_id() ? ntp_leader::yes : ntp_leader::no);
+          ntp,
+          shard == ss::this_shard_id() ? ntp_leader::yes : ntp_leader::no,
+          ::model::term_id(_term_counter++));
     } else {
         partition_manager()->remove_shard_owner(ntp);
-        _manager.local().handle_partition_state_change(ntp, ntp_leader::no);
+        _manager.local().handle_partition_state_change(
+          ntp, ntp_leader::no, std::nullopt);
     }
 }
 

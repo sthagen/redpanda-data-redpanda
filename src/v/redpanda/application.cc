@@ -120,6 +120,7 @@
 #include "kafka/server/rm_group_frontend.h"
 #include "kafka/server/snc_quota_manager.h"
 #include "kafka/server/usage_manager.h"
+#include "kafka/server/write_at_offset_stm.h"
 #include "metrics/prometheus_sanitize.h"
 #include "migrations/migrators.h"
 #include "migrations/rbac_migrator.h"
@@ -3148,6 +3149,8 @@ void application::start_runtime_services(
               pm.register_factory<cloud_topics::ctp_stm_factory>();
               pm.register_factory<cloud_topics::l1::stm_factory>();
           }
+          pm.register_factory<kafka::write_at_offset_stm_factory>(
+            storage.local().kvs(), model::offset_translator_batch_types());
       })
       .get();
     partition_manager.invoke_on_all(&cluster::partition_manager::start).get();

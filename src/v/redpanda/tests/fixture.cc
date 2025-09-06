@@ -102,7 +102,8 @@ redpanda_thread_fixture::redpanda_thread_fixture(
   bool enable_data_transforms,
   bool enable_legacy_upload_mode,
   bool iceberg_enabled,
-  bool development_enable_cloud_topics)
+  bool development_enable_cloud_topics,
+  bool development_cluster_linking_enabled)
   : app(ssx::sformat("redpanda-{}", node_id()))
   , proxy_port(proxy_port)
   , schema_reg_port(schema_reg_port)
@@ -123,7 +124,8 @@ redpanda_thread_fixture::redpanda_thread_fixture(
       enable_data_transforms,
       enable_legacy_upload_mode,
       iceberg_enabled,
-      development_enable_cloud_topics);
+      development_enable_cloud_topics,
+      development_cluster_linking_enabled);
     app.initialize(
       proxy_config(proxy_port),
       proxy_client_config(kafka_port),
@@ -355,7 +357,8 @@ void redpanda_thread_fixture::configure(
   bool data_transforms_enabled,
   bool legacy_upload_mode_enabled,
   bool iceberg_enabled,
-  bool development_enable_cloud_topics) {
+  bool development_enable_cloud_topics,
+  bool development_cluster_linking_enabled) {
     auto base_path = std::filesystem::path(data_dir);
     ss::smp::invoke_on_all([=]() {
         auto& config = config::shard_local_cfg();
@@ -458,6 +461,9 @@ void redpanda_thread_fixture::configure(
 
             config.get("development_enable_cloud_topics").set_value(true);
         }
+
+        config.get("development_enable_cluster_link")
+          .set_value(development_cluster_linking_enabled);
     }).get();
 }
 
