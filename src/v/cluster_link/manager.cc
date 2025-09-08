@@ -80,6 +80,7 @@ manager::manager(
   std::unique_ptr<link_registry> registry,
   std::unique_ptr<link_factory> link_factory,
   std::unique_ptr<cluster_factory> cluster_factory,
+  std::unique_ptr<consumer_groups_router> group_router,
   ss::lowres_clock::duration task_reconciler_interval)
   : _self(self)
   , _partition_leader_cache(std::move(partition_leader_cache))
@@ -89,6 +90,7 @@ manager::manager(
   , _registry(std::move(registry))
   , _link_factory(std::move(link_factory))
   , _cluster_factory(std::move(cluster_factory))
+  , _group_router(std::move(group_router))
   , _queue(
       [](const std::exception_ptr& ex) {
           vlog(cllog.warn, "unexpected cluster link manager error: {}", ex);
@@ -510,5 +512,9 @@ ss::future<> manager::stop_topic_reconciler() {
               10s, [this] { return stop_topic_reconciler(); });
         }
     }
+}
+
+consumer_groups_router& manager::get_group_router() noexcept {
+    return *_group_router;
 }
 } // namespace cluster_link

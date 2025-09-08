@@ -107,4 +107,24 @@ public:
     virtual std::unique_ptr<kafka::client::cluster>
     create_cluster(const model::metadata& md);
 };
+
+/**
+ * Cluster linking entry point for consumer group operations in the cluster
+ */
+class consumer_groups_router {
+public:
+    consumer_groups_router() = default;
+    consumer_groups_router(const consumer_groups_router&) = delete;
+    consumer_groups_router(consumer_groups_router&&) = delete;
+    consumer_groups_router& operator=(const consumer_groups_router&) = delete;
+    consumer_groups_router& operator=(consumer_groups_router&&) = delete;
+    virtual ~consumer_groups_router() = default;
+
+    virtual std::optional<::model::partition_id>
+    partition_for(const kafka::group_id&) const = 0;
+
+    virtual ss::future<kafka::offset_commit_response>
+      offset_commit(kafka::offset_commit_request) = 0;
+};
+
 } // namespace cluster_link

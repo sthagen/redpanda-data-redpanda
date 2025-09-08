@@ -1431,7 +1431,8 @@ void application::wire_up_runtime_services(
             std::ref(cloud_io),
             std::ref(_datalake_credential_mgr)),
           std::ref(cloud_io),
-          std::ref(*bucket))
+          std::ref(*bucket),
+          ss::sharded_parameter([this] { return &feature_table.local(); }))
           .get();
         construct_service(
           _datalake_coordinator_fe,
@@ -1530,6 +1531,7 @@ void application::wire_up_runtime_services(
       &controller->get_shard_table(),
       &metadata_cache,
       controller.get(),
+      &group_router,
       smp_service_groups.cluster_link_smp_sg())
       .get();
 

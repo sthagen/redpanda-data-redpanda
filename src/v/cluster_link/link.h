@@ -11,6 +11,7 @@
 
 #pragma once
 
+#include "cluster_link/deps.h"
 #include "cluster_link/model/types.h"
 #include "cluster_link/replication/deps.h"
 #include "cluster_link/replication/link_replication_mgr.h"
@@ -100,9 +101,13 @@ public:
 
     kafka::client::cluster& get_cluster_connection() noexcept;
 
+    consumer_groups_router& get_group_router();
+
     std::optional<
       chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
     get_mirror_topics_for_link() const;
+
+    ::model::node_id self() const { return _self; }
 
 private:
     bool should_start_task(task* t) const;

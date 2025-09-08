@@ -46,6 +46,7 @@ public:
       std::unique_ptr<link_registry> registry,
       std::unique_ptr<link_factory> link_factory,
       std::unique_ptr<cluster_factory> cluster_factory,
+      std::unique_ptr<consumer_groups_router> group_router,
       ss::lowres_clock::duration task_reconciler_interval);
     manager(const manager&) = delete;
     manager(manager&&) = delete;
@@ -131,6 +132,8 @@ public:
     const kafka::data::rpc::partition_manager&
     partition_manager() const noexcept;
 
+    consumer_groups_router& get_group_router() noexcept;
+
     kafka::data::rpc::topic_creator& topic_creator() noexcept;
 
 private:
@@ -151,6 +154,7 @@ private:
     std::unique_ptr<link_factory> _link_factory;
     std::unique_ptr<cluster_factory> _cluster_factory;
     std::unique_ptr<topic_reconciler> _topic_reconciler;
+    std::unique_ptr<consumer_groups_router> _group_router;
     ssx::work_queue _queue;
 
     chunked_vector<std::unique_ptr<task_factory>> _task_factories;

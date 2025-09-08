@@ -130,3 +130,17 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "group_mirroring_task",
+    timeout = "short",
+    srcs = [
+        "group_mirroring_task_test.cc",
+    ],
+    deps = [
+        ":test_deps",
+        "//src/v/cluster_link:group_mirroring_task",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

@@ -182,6 +182,7 @@ public:
           std::make_unique<test_link_registry>(&_table.local()),
           std::make_unique<link_test_factory>(this, 1s),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
+          std::make_unique<test_consumer_group_router>(),
           task_reconciler_interval);
     }
 
@@ -414,6 +415,7 @@ public:
           std::make_unique<test_link_registry>(&_table.local()),
           std::move(elf),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
+          std::make_unique<test_consumer_group_router>(),
           task_reconciler_interval);
         co_await _manager->start();
     }

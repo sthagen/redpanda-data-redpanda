@@ -13,6 +13,7 @@
 
 #include "cluster/cluster_link/frontend.h"
 #include "cluster/partition_manager.h"
+#include "cluster_link/group_mirroring_task.h"
 #include "cluster_link/link.h"
 #include "cluster_link/logger.h"
 #include "cluster_link/manager.h"
@@ -21,6 +22,7 @@
 #include "cluster_link/replication/mux_remote_consumer.h"
 #include "cluster_link/source_topic_syncer.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
+#include "kafka/server/group_router.h"
 
 namespace cluster_link {
 
@@ -143,6 +145,48 @@ private:
     ss::sharded<cluster::partition_manager>* _partition_manager;
 };
 
+class kafka_consumer_groups_router : public consumer_groups_router {
+public:
+    explicit kafka_consumer_groups_router(
+      ss::sharded<kafka::group_router>* router)
+      : _router(router) {}
+    std::optional<::model::partition_id>
+    partition_for(const kafka::group_id& group) const final {
+        return _router->local().coordinator_mapper().local().partition_for(
+          group);
+    }
+
+    ss::future<kafka::offset_commit_response>
+    offset_commit(kafka::offset_commit_request req) final {
+        auto stages = _router->local().offset_commit(std::move(req));
+
+        auto dispatched = co_await ss::coroutine::as_future(
+          std::move(stages.dispatched));
+        auto result = co_await ss::coroutine::as_future(
+          std::move(stages.result));
+        std::exception_ptr error = nullptr;
+        if (dispatched.failed()) {
+            error = dispatched.get_exception();
+        }
+
+        if (result.failed()) {
+            auto r_err = result.get_exception();
+            if (error == nullptr) {
+                error = r_err;
+            }
+        }
+
+        if (error) {
+            std::rethrow_exception(error);
+        }
+
+        co_return result.get();
+    }
+
+private:
+    ss::sharded<kafka::group_router>* _router;
+};
+
 service::service(
   ::model::node_id self,
   ss::sharded<frontend>* plf,
@@ -152,6 +196,7 @@ service::service(
   ss::sharded<cluster::shard_table>* shard_table,
   ss::sharded<cluster::metadata_cache>* metadata_cache,
   cluster::controller* controller,
+  ss::sharded<kafka::group_router>* group_router,
   ss::smp_service_group smp_group)
   : _self(self)
   , _plf(plf)
@@ -161,6 +206,7 @@ service::service(
   , _shard_table(shard_table)
   , _metadata_cache(metadata_cache)
   , _controller(controller)
+  , _group_router(group_router)
   , _smp_group(smp_group) {}
 
 service::~service() = default;
@@ -177,9 +223,11 @@ ss::future<> service::start() {
       std::make_unique<link_registry_adapter>(&_plf->local()),
       std::make_unique<default_link_factory>(_partition_manager),
       std::make_unique<cluster_factory>(),
+      std::make_unique<kafka_consumer_groups_router>(_group_router),
       30s); // Temporary until we have a proper configuration for this
 
     co_await _manager->register_task_factory<source_topic_syncer_factory>();
+    co_await _manager->register_task_factory<group_mirroring_task_factory>();
 
     // Register notifications before the manager starts.  The manager will have
     // a constructed the underlying workqueue to start in a paused state and

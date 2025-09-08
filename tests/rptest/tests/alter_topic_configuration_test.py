@@ -553,9 +553,7 @@ class AlterConfigMixedNodeTest(EndToEndTest):
                 {"redpanda.remote.read": "true", "redpanda.remote.write": "false"},
             ]
             for props in props_list:
-                kcl.alter_topic_config(
-                    props, incremental_update, topic, node=self.redpanda.controller()
-                )
+                kcl.alter_topic_config(props, incremental_update, topic)
                 wait_until(
                     lambda: func(props) == True,
                     timeout_sec=10,

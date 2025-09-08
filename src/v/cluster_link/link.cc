@@ -269,6 +269,10 @@ kafka::client::cluster& link::get_cluster_connection() noexcept {
     return *_cluster_connection;
 }
 
+consumer_groups_router& link::get_group_router() {
+    return _manager->get_group_router();
+}
+
 std::optional<chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
 link::get_mirror_topics_for_link() const {
     return _manager->get_mirror_topics_for_link(_link_id);

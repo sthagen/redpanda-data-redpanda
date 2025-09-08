@@ -347,7 +347,6 @@ struct consumer_groups_mirroring_config
     enabled_t is_enabled{enabled_t::yes};
     // Task interval for consumer group mirroring
     std::optional<ss::lowres_clock::duration> task_interval;
-    // Default interval for task (30s)
     static constexpr auto default_task_interval = std::chrono::seconds(30);
 
     /// Filters
@@ -378,11 +377,16 @@ struct link_configuration
       serde::compat_version<0>> {
     /// Configuration for the auto mirror topic creation task
     topic_metadata_mirroring_config topic_metadata_mirroring_cfg;
+    /// Configuration for the consumer groups mirroring task
+    consumer_groups_mirroring_config consumer_groups_mirroring_cfg;
 
     friend bool operator==(const link_configuration&, const link_configuration&)
       = default;
 
-    auto serde_fields() { return std::tie(topic_metadata_mirroring_cfg); }
+    auto serde_fields() {
+        return std::tie(
+          topic_metadata_mirroring_cfg, consumer_groups_mirroring_cfg);
+    }
 
     link_configuration copy() const;
 };
@@ -701,6 +705,14 @@ struct fmt::formatter<cluster_link::model::topic_metadata_mirroring_config>
   : fmt::formatter<string_view> {
     auto format(
       const cluster_link::model::topic_metadata_mirroring_config& m,
+      format_context& ctx) const -> decltype(ctx.out());
+};
+
+template<>
+struct fmt::formatter<cluster_link::model::consumer_groups_mirroring_config>
+  : fmt::formatter<string_view> {
+    auto format(
+      const cluster_link::model::consumer_groups_mirroring_config& m,
       format_context& ctx) const -> decltype(ctx.out());
 };
 

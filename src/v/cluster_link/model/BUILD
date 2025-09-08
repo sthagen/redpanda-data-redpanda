@@ -16,6 +16,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/container:chunked_hash_map",
+        "//src/v/kafka/protocol",
         "//src/v/model",
         "//src/v/serde",
         "//src/v/serde:variant",
