@@ -411,7 +411,7 @@ private:
     size_t _offset = 0;
     ss::output_stream<char> _output;
     footer _index;
-    model::topic_id_partition _current_tidp;
+    model::topic_id_partition _current_tidp{};
     footer::partition _current_partition;
     options _opts;
 };

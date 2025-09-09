@@ -183,6 +183,10 @@ public:
         co_return result.get();
     }
 
+    ss::future<bool> assure_topic_exists() final {
+        return _router->local().group_initializer().assure_topic_exists(false);
+    }
+
 private:
     ss::sharded<kafka::group_router>* _router;
 };

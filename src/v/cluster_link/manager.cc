@@ -136,6 +136,8 @@ manager::upsert_cluster_link(model::metadata md) {
     auto name = md.name;
     vlog(cllog.info, "Attempting to create cluster link named '{}'", md.name);
     vlog(cllog.trace, "Cluster link metadata: {}", md);
+    const auto needs_consumer_offsets_topic
+      = md.configuration.consumer_groups_mirroring_cfg.is_enabled;
     auto ec = co_await _registry->upsert_link(
       std::move(md), ::model::timeout_clock::now() + 30s);
     auto err = map_cluster_errc(ec);
@@ -145,6 +147,9 @@ manager::upsert_cluster_link(model::metadata md) {
     }
 
     try {
+        if (needs_consumer_offsets_topic) {
+            co_await _group_router->assure_topic_exists();
+        }
         co_await _link_created_cv.wait(
           wait_for_link_creation_timeout, [this, name] {
               return _registry->find_link_by_name(name).has_value();

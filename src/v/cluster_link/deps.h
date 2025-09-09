@@ -125,6 +125,8 @@ public:
 
     virtual ss::future<kafka::offset_commit_response>
       offset_commit(kafka::offset_commit_request) = 0;
+
+    virtual ss::future<bool> assure_topic_exists() = 0;
 };
 
 } // namespace cluster_link

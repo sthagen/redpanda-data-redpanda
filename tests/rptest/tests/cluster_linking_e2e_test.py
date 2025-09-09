@@ -14,6 +14,7 @@ from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
     shadow_link_pb2_connect,
 )
+from rptest.clients.types import TopicSpec
 from rptest.services.cluster import cluster
 from rptest.services.multi_cluster_services import (
     Cluster,
@@ -22,7 +23,12 @@ from rptest.services.multi_cluster_services import (
 )
 from rptest.tests.cluster_linking_test_base import ShadowLinkTestBase
 from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import expect_exception, wait_until_result
+from rptest.util import expect_exception, wait_until, wait_until_result
+from rptest.services.kgo_verifier_services import (
+    KgoVerifierProducer,
+    KgoVerifierConsumerGroupConsumer,
+)
+from rptest.clients.rpk import RpkTool
 
 
 class MultiClusterTestBase(RedpandaTest):
@@ -180,3 +186,61 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             assert e.code == ConnectErrorCode.RESOURCE_EXHAUSTED, (
                 f"Expected {ConnectErrorCode.RESOURCE_EXHAUSTED}, got {e.code}"
             )
+
+    def create_source_consumer(self, topic, group_name="test_group", consumer_count=1):
+        return KgoVerifierConsumerGroupConsumer(
+            self.test_context,
+            self.source_cluster.service,
+            topic=topic,
+            group_name=group_name,
+            msg_size=128,
+            readers=consumer_count,
+        )
+
+    @cluster(num_nodes=7)
+    def test_consumer_groups_mirroring(self):
+        # Create a shadow link
+
+        topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
+
+        self.source_default_client().create_topic(topic)
+        # produce some data to the source cluster
+
+        KgoVerifierProducer.oneshot(
+            self.test_context, self.source_cluster.service, topic.name, 128, 10000
+        )
+
+        consumer = self.create_source_consumer(
+            topic=topic.name, group_name="test_group", consumer_count=1
+        )
+        consumer.start()
+        consumer.wait()
+        consumer.stop()
+        source_rpk = RpkTool(self.source_cluster.service)
+        description = source_rpk.group_describe(group="test_group")
+        self.logger.info(f">>> source_state: {description}")
+
+        self.create_link("test-link")
+
+        def _group_present_in_target_cluster():
+            target_rpk = RpkTool(self.target_cluster.service)
+            groups = target_rpk.group_list()
+
+            if not any(g.group == "test_group" for g in groups):
+                return False, None
+
+            desc = target_rpk.group_describe(
+                group="test_group", tolerant=True, summary=False
+            )
+
+            return True, desc
+
+        target_cluster_group = wait_until_result(
+            lambda: _group_present_in_target_cluster(),
+            timeout_sec=20,
+            err_msg="Failed to find consumer group in the target cluster",
+        )
+
+        assert target_cluster_group.state == "Empty", (
+            "Group test_group state expected to be empty on target cluster"
+        )

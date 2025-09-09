@@ -498,6 +498,7 @@ TEST(L1Objects, FullScan) {
       },
     };
     auto [info, object] = make_object(specs_by_tidp);
+    EXPECT_EQ(info.index.partitions.size(), 2);
     EXPECT_EQ(info.size_bytes, object.size_bytes());
     std::variant<footer, size_t> read_footer_result;
     ASSERT_NO_THROW(

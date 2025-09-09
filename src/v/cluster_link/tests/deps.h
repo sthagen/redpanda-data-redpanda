@@ -398,6 +398,8 @@ struct test_consumer_group_router : public consumer_groups_router {
     ss::future<kafka::offset_commit_response>
       offset_commit(kafka::offset_commit_request) override;
 
+    ss::future<bool> assure_topic_exists() override { co_return true; }
+
     chunked_hash_map<kafka::group_id, group_state> groups;
 
     int partition_count = 1;

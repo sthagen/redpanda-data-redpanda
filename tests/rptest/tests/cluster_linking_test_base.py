@@ -75,11 +75,35 @@ class ShadowLinkTestBase(RedpandaTest):
     def target_cluster(self) -> RedpandaCluster:
         return self.services.primary
 
-    def create_link(self, link_name: str):
-        topic_sync_options = shadow_link_pb2.TopicMetadataSyncOptions(
-            interval=google.protobuf.duration_pb2.Duration(seconds=1)
-        )
+    def create_link(
+        self,
+        link_name: str,
+        mirror_all_topics: bool = True,
+        mirror_all_groups: bool = True,
+    ):
+        if mirror_all_topics:
+            topic_sync_options = shadow_link_pb2.TopicMetadataSyncOptions(
+                interval=google.protobuf.duration_pb2.Duration(seconds=1),
+                topic_filters=[
+                    shadow_link_pb2.NameFilter(
+                        pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
+                        filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                        name="*",
+                    )
+                ],
+            )
 
+        if mirror_all_groups:
+            group_sync_options = shadow_link_pb2.ConsumerOffsetSyncOptions(
+                interval=google.protobuf.duration_pb2.Duration(seconds=1),
+                group_filters=[
+                    shadow_link_pb2.NameFilter(
+                        pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
+                        filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
+                        name="*",
+                    )
+                ],
+            )
         client_options = shadow_link_pb2.ShadowLinkClientOptions(
             bootstrap_servers=self.source_cluster.service.brokers_list()
         )
@@ -87,6 +111,7 @@ class ShadowLinkTestBase(RedpandaTest):
         link_cfg = shadow_link_pb2.ShadowLinkConfigurations(
             client_options=client_options,
             topic_metadata_sync_options=topic_sync_options,
+            consumer_offset_sync_options=group_sync_options,
         )
 
         link_resource = shadow_link_pb2.ShadowLink(configurations=link_cfg)
