@@ -1,5 +1,6 @@
 #pragma once
 
+#include "config/mock_property.h"
 #include "kafka/data/rpc/client.h"
 #include "kafka/data/rpc/deps.h"
 #include "kafka/data/rpc/service.h"
@@ -327,11 +328,13 @@ public:
         new_ntp_cb,
       ss::noncopyable_function<
         cluster::errc(model::topic_namespace_view, int32_t, model::node_id)>
-        new_partition_count_cb)
+        new_partition_count_cb,
+      config::binding<int16_t> default_topic_replication)
       : _new_topic_cb(std::move(new_topic_cb))
       , _update_topic_cb(std::move(update_topic_cb))
       , _new_ntp_cb(std::move(new_ntp_cb))
-      , _new_partition_count_cb(std::move(new_partition_count_cb)) {}
+      , _new_partition_count_cb(std::move(new_partition_count_cb))
+      , _default_topic_replication(std::move(default_topic_replication)) {}
 
     ss::future<cluster::errc> create_topic(
       model::topic_namespace_view tp_ns,
@@ -342,7 +345,7 @@ public:
           tp_ns.ns,
           tp_ns.tp,
           partition_count,
-          replication_factor.value_or(1),
+          replication_factor.value_or(_default_topic_replication()),
         };
         tcfg.properties = properties;
         _new_topic_cb(tcfg);
@@ -383,6 +386,7 @@ private:
     ss::noncopyable_function<cluster::errc(
       model::topic_namespace_view, int32_t, model::node_id)>
       _new_partition_count_cb;
+    config::binding<int16_t> _default_topic_replication;
 };
 
 class fake_partition_manager_proxy {
@@ -555,6 +559,7 @@ private:
     ss::sharded<local_service> _local_services;
     ss::sharded<local_service> _remote_services;
     ss::sharded<kafka::data::rpc::client> _client;
+    config::mock_property<int16_t> _default_topic_replication{1};
 
     model::node_id self_node;
     ss::sharded<::rpc::connection_cache>* _conn_cache;

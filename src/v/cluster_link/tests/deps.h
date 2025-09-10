@@ -16,6 +16,7 @@
 #include "cluster_link/manager.h"
 #include "cluster_link/replication/tests/deps_test_impl.h"
 #include "cluster_link/utils.h"
+#include "config/mock_property.h"
 #include "kafka/client/test/cluster_mock.h"
 #include "kafka/data/rpc/deps.h"
 #include "kafka/data/rpc/test/deps.h"
@@ -496,6 +497,7 @@ private:
     link_factory* _lf{nullptr};
     test_consumer_group_router* _consumer_group_router{nullptr};
     ss::sharded<manager> _manager;
+    config::mock_property<int16_t> _default_topic_replication{1};
 
     ::model::node_id _self;
     model::id_t _next_link_id{0};

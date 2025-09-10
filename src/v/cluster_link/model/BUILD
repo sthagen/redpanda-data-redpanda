@@ -20,6 +20,7 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/serde",
         "//src/v/serde:variant",
+        "//src/v/utils:absl_sstring_hash",
         "//src/v/utils:named_type",
         "//src/v/utils:unresolved_address",
         "//src/v/utils:uuid",

@@ -81,7 +81,8 @@ manager::manager(
   std::unique_ptr<link_factory> link_factory,
   std::unique_ptr<cluster_factory> cluster_factory,
   std::unique_ptr<consumer_groups_router> group_router,
-  ss::lowres_clock::duration task_reconciler_interval)
+  ss::lowres_clock::duration task_reconciler_interval,
+  config::binding<int16_t> default_topic_replication)
   : _self(self)
   , _partition_leader_cache(std::move(partition_leader_cache))
   , _partition_manager(std::move(partition_manager))
@@ -96,7 +97,8 @@ manager::manager(
           vlog(cllog.warn, "unexpected cluster link manager error: {}", ex);
       },
       ssx::work_queue::is_paused_t::yes)
-  , _task_reconciler_interval(task_reconciler_interval) {}
+  , _task_reconciler_interval(task_reconciler_interval)
+  , _default_topic_replication(std::move(default_topic_replication)) {}
 
 ss::future<> manager::start() {
     vlog(cllog.info, "Starting cluster link manager");
@@ -491,7 +493,8 @@ ss::future<> manager::start_topic_reconciler() {
           _topic_creator.get(),
           _topic_metadata_cache.get(),
           _registry.get(),
-          topic_reconciler_interval);
+          topic_reconciler_interval,
+          _default_topic_replication);
     }
     try {
         co_await _topic_reconciler->start();

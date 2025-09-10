@@ -1454,11 +1454,26 @@ class ManyTopicsTest(RedpandaTest):
 
         # Topic hwm getter
         def _get_hwm(topic):
-            _hwm = 0
-            for partition in self.rpk.describe_topic(topic):
-                # Add currect high watermark for topic
-                _hwm += partition.high_watermark
-            return _hwm
+            max_retries = 3
+            delay = 5
+            for attempt in range(1, max_retries + 1):
+                try:
+                    _hwm = 0
+                    for partition in self.rpk.describe_topic(topic):
+                        # Add currect high watermark for topic
+                        _hwm += partition.high_watermark
+                    return _hwm
+                except Exception as e:
+                    self.logger.debug(
+                        f"describe_topic failed for {topic} on attempt {attempt}: {e}"
+                    )
+                    if attempt < max_retries:
+                        time.sleep(delay)
+                    else:
+                        self.logger.error(
+                            f"Giving up on topic {topic} after {max_retries} attempts due to: {e}"
+                        )
+                        return 0
 
         # Validate high watermark
         target_messages_per_node = profile.message_count * pnode_client_count

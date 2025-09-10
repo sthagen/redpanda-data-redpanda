@@ -47,7 +47,8 @@ public:
       std::unique_ptr<link_factory> link_factory,
       std::unique_ptr<cluster_factory> cluster_factory,
       std::unique_ptr<consumer_groups_router> group_router,
-      ss::lowres_clock::duration task_reconciler_interval);
+      ss::lowres_clock::duration task_reconciler_interval,
+      config::binding<int16_t> default_topic_replication);
     manager(const manager&) = delete;
     manager(manager&&) = delete;
     manager& operator=(const manager&) = delete;
@@ -164,6 +165,7 @@ private:
     mutex _link_task_reconciler_mutex{
       "cluster_link::manager::link_task_reconciler"};
     ss::timer<ss::lowres_clock> _link_task_reconciler_timer;
+    config::binding<int16_t> _default_topic_replication;
     ss::condition_variable _link_created_cv;
     ss::abort_source _as;
     ss::gate _g;

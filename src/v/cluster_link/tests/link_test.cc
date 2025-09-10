@@ -143,6 +143,7 @@ protected:
     ss::sharded<table> _table;
 
     std::unique_ptr<manager> _manager;
+    config::mock_property<int16_t> _default_topic_replication{3};
 
     absl::flat_hash_map<notification_id, ss::noncopyable_function<void(uuid_t)>>
       _callbacks;
@@ -178,12 +179,14 @@ public:
             [](const ::model::ntp&, ::model::node_id) {},
             [](::model::topic_namespace_view, int32_t, ::model::node_id) {
                 return cluster::errc::success;
-            }),
+            },
+            _default_topic_replication.bind()),
           std::make_unique<test_link_registry>(&_table.local()),
           std::make_unique<link_test_factory>(this, 1s),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
           std::make_unique<test_consumer_group_router>(),
-          task_reconciler_interval);
+          task_reconciler_interval,
+          _default_topic_replication.bind());
     }
 
     virtual ss::future<> TearDownAsync() override {
@@ -411,12 +414,14 @@ public:
             [](const ::model::ntp&, ::model::node_id) {},
             [](::model::topic_namespace_view, int32_t, ::model::node_id) {
                 return cluster::errc::success;
-            }),
+            },
+            _default_topic_replication.bind()),
           std::make_unique<test_link_registry>(&_table.local()),
           std::move(elf),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
           std::make_unique<test_consumer_group_router>(),
-          task_reconciler_interval);
+          task_reconciler_interval,
+          _default_topic_replication.bind());
         co_await _manager->start();
     }
 

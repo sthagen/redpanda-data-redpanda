@@ -228,7 +228,8 @@ ss::future<> service::start() {
       std::make_unique<default_link_factory>(_partition_manager),
       std::make_unique<cluster_factory>(),
       std::make_unique<kafka_consumer_groups_router>(_group_router),
-      30s); // Temporary until we have a proper configuration for this
+      30s, // Temporary until we have a proper configuration for this
+      config::shard_local_cfg().default_topic_replication.bind());
 
     co_await _manager->register_task_factory<source_topic_syncer_factory>();
     co_await _manager->register_task_factory<group_mirroring_task_factory>();
@@ -290,7 +291,8 @@ void service::register_notifications() {
                 // TODO: once we have partition properties
                 break;
             }
-        });
+        },
+        cluster::partition_change_notifier::notify_current_state::yes);
     _notification_cleanups.emplace_back([this, partition_notifications_id] {
         _notifications->unregister_partition_notifications(
           partition_notifications_id);
