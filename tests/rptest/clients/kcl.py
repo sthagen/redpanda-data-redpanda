@@ -466,7 +466,7 @@ class RawKCL(KCL):
             return []
 
     def raw_create_topics(self, version, topics, validate_only=False):
-        assert version >= 0 and version <= 6, (
+        assert version >= 0 and version <= 7, (
             "version out of supported redpanda range for this API"
         )
         create_topics_request = {

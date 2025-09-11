@@ -81,6 +81,11 @@ ss::future<> cluster_link_manager_test_fixture::wire_up_and_start(
           _consumer_group_router = router.get();
           return router;
       }),
+      ss::sharded_parameter([this]() {
+          auto provider = std::make_unique<test_partition_metadata_provider>();
+          _partition_metadata_provider = provider.get();
+          return provider;
+      }),
       1s,
       _default_topic_replication.bind());
 
@@ -241,4 +246,14 @@ test_consumer_group_router::offset_commit(kafka::offset_commit_request req) {
 
     co_return resp;
 }
+
+ss::future<std::optional<kafka::offset>>
+test_partition_metadata_provider::get_partition_high_watermark(
+  ::model::topic_partition_view tp) {
+    auto it = hwms.find(::model::topic_partition(tp));
+    if (it != hwms.end()) {
+        co_return it->second;
+    }
+    co_return std::nullopt;
+};
 } // namespace cluster_link::tests

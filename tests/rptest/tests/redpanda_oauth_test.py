@@ -10,7 +10,7 @@
 import threading
 from ducktape.tests.test import Test
 from ducktape.utils.util import wait_until
-from ducktape.mark import parametrize
+from ducktape.mark import ignore, parametrize
 
 from rptest.clients.rpk import RpkTool, RpkException
 from rptest.clients.python_librdkafka import PythonLibrdkafka
@@ -608,6 +608,7 @@ class OIDCReauthTest(RedpandaOIDCTestBase):
             **kwargs,
         )
 
+    @ignore  # https://github.com/redpanda-data/redpanda/pull/26968 - broken by newer librdkafka
     @cluster(num_nodes=4)
     def test_oidc_reauth(self):
         kc_node = self.keycloak.nodes[0]

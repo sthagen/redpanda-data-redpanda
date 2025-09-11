@@ -47,6 +47,7 @@ public:
       std::unique_ptr<link_factory> link_factory,
       std::unique_ptr<cluster_factory> cluster_factory,
       std::unique_ptr<consumer_groups_router> group_router,
+      std::unique_ptr<partition_metadata_provider> partition_metadata_provider,
       ss::lowres_clock::duration task_reconciler_interval,
       config::binding<int16_t> default_topic_replication);
     manager(const manager&) = delete;
@@ -137,6 +138,8 @@ public:
 
     kafka::data::rpc::topic_creator& topic_creator() noexcept;
 
+    partition_metadata_provider& get_partition_metadata_provider() noexcept;
+
 private:
     /// Called periodically to reconcile registered tasks on created links
     ss::future<> link_task_reconciler();
@@ -156,6 +159,7 @@ private:
     std::unique_ptr<cluster_factory> _cluster_factory;
     std::unique_ptr<topic_reconciler> _topic_reconciler;
     std::unique_ptr<consumer_groups_router> _group_router;
+    std::unique_ptr<partition_metadata_provider> _partition_metadata_provider;
     ssx::work_queue _queue;
 
     chunked_vector<std::unique_ptr<task_factory>> _task_factories;

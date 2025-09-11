@@ -12,6 +12,7 @@
 #include "cluster_link/service.h"
 
 #include "cluster/cluster_link/frontend.h"
+#include "cluster/health_monitor_frontend.h"
 #include "cluster/partition_manager.h"
 #include "cluster_link/group_mirroring_task.h"
 #include "cluster_link/link.h"
@@ -191,6 +192,28 @@ private:
     ss::sharded<kafka::group_router>* _router;
 };
 
+class health_monitor_based_partition_metadata_provider
+  : public partition_metadata_provider {
+public:
+    explicit health_monitor_based_partition_metadata_provider(
+      ss::sharded<cluster::health_monitor_frontend>* hm_frontend)
+      : _hm_frontend(hm_frontend) {}
+
+    ss::future<std::optional<kafka::offset>>
+    get_partition_high_watermark(::model::topic_partition_view tp) final {
+        auto hwm = co_await _hm_frontend->local().get_partition_high_watermark(
+          ::model::topic_namespace_view(::model::kafka_namespace, tp.topic),
+          tp.partition);
+        if (!hwm) {
+            vlog(cllog.warn, "Error getting high watermark for {}", tp);
+            co_return std::nullopt;
+        }
+        co_return hwm.value();
+    }
+
+    ss::sharded<cluster::health_monitor_frontend>* _hm_frontend;
+};
+
 service::service(
   ::model::node_id self,
   ss::sharded<frontend>* plf,
@@ -201,6 +224,7 @@ service::service(
   ss::sharded<cluster::metadata_cache>* metadata_cache,
   cluster::controller* controller,
   ss::sharded<kafka::group_router>* group_router,
+  ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
   ss::smp_service_group smp_group)
   : _self(self)
   , _plf(plf)
@@ -211,6 +235,7 @@ service::service(
   , _metadata_cache(metadata_cache)
   , _controller(controller)
   , _group_router(group_router)
+  , _hm_frontend(hm_frontend)
   , _smp_group(smp_group) {}
 
 service::~service() = default;
@@ -228,6 +253,8 @@ ss::future<> service::start() {
       std::make_unique<default_link_factory>(_partition_manager),
       std::make_unique<cluster_factory>(),
       std::make_unique<kafka_consumer_groups_router>(_group_router),
+      std::make_unique<health_monitor_based_partition_metadata_provider>(
+        _hm_frontend),
       30s, // Temporary until we have a proper configuration for this
       config::shard_local_cfg().default_topic_replication.bind());
 

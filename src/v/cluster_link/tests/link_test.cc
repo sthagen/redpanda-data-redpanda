@@ -185,6 +185,7 @@ public:
           std::make_unique<link_test_factory>(this, 1s),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
           std::make_unique<test_consumer_group_router>(),
+          std::make_unique<test_partition_metadata_provider>(),
           task_reconciler_interval,
           _default_topic_replication.bind());
     }
@@ -420,6 +421,7 @@ public:
           std::move(elf),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
           std::make_unique<test_consumer_group_router>(),
+          std::make_unique<test_partition_metadata_provider>(),
           task_reconciler_interval,
           _default_topic_replication.bind());
         co_await _manager->start();

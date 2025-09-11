@@ -10,6 +10,7 @@
 from rptest.services.cluster import cluster
 from rptest.clients.types import TopicSpec
 
+from ducktape.mark import ignore
 from ducktape.utils.util import wait_until
 
 from rptest.transactions.util import (
@@ -128,6 +129,7 @@ class TransactionsAuthorizationTest(RedpandaTest, TransactionsMixin):
 
         producer = self.sasl_txn_producer(user, cfg=producer_cfg)
 
+    @ignore  # https://github.com/redpanda-data/redpanda/pull/26968 - broken by newer librdkafka
     @cluster(num_nodes=3)
     def simple_authz_test(self):
         consume_user = self.USER_1

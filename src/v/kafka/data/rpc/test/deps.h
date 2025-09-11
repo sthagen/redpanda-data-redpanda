@@ -430,7 +430,8 @@ public:
       ss::shard_id shard_id,
       const N& ntp,
       ss::noncopyable_function<
-        ss::future<result<R, cluster::errc>>(kafka::partition_proxy*)> fn) {
+        ss::future<result<R, cluster::errc>>(kafka::partition_proxy*)> fn,
+      require_leader = require_leader::yes) {
         auto owner = shard_owner(ntp);
         if (!owner || shard_id != *owner) {
             co_return cluster::errc::not_leader;
@@ -478,23 +479,25 @@ public:
       ss::shard_id shard_id,
       const model::ktp& ktp,
       ss::noncopyable_function<ss::future<result<model::offset, cluster::errc>>(
-        kafka::partition_proxy*)> fn) final {
+        kafka::partition_proxy*)> fn,
+      require_leader) final {
         return _fake_proxy->invoke_on_shard_impl(shard_id, ktp, std::move(fn));
     }
     ss::future<result<model::offset, cluster::errc>> invoke_on_shard(
       ss::shard_id shard_id,
       const model::ntp& ntp,
       ss::noncopyable_function<ss::future<result<model::offset, cluster::errc>>(
-        kafka::partition_proxy*)> fn) final {
+        kafka::partition_proxy*)> fn,
+      require_leader) final {
         return _fake_proxy->invoke_on_shard_impl(shard_id, ntp, std::move(fn));
     }
 
     ss::future<result<partition_offsets, cluster::errc>> get_offsets_from_shard(
       ss::shard_id shard_id,
       const model::ktp& ktp,
-      ss::noncopyable_function<
-        ss::future<result<partition_offsets, cluster::errc>>(
-          kafka::partition_proxy*)> fn) final {
+      ss::noncopyable_function<ss::future<
+        result<partition_offsets, cluster::errc>>(kafka::partition_proxy*)> fn,
+      require_leader) final {
         return _fake_proxy->invoke_on_shard_impl(shard_id, ktp, std::move(fn));
     }
 

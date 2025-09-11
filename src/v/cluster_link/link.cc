@@ -273,6 +273,10 @@ consumer_groups_router& link::get_group_router() {
     return _manager->get_group_router();
 }
 
+partition_metadata_provider& link::get_partition_metadata_provider() {
+    return _manager->get_partition_metadata_provider();
+}
+
 std::optional<chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
 link::get_mirror_topics_for_link() const {
     return _manager->get_mirror_topics_for_link(_link_id);

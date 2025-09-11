@@ -748,6 +748,7 @@ redpanda_cc_library(
         "//src/v/storage:record_batch_utils",
         "//src/v/strings:string_switch",
         "//src/v/strings:utf8",
+        "//src/v/utils:adjustable_semaphore",
         "//src/v/utils:auto_fmt",
         "//src/v/utils:available_promise",
         "//src/v/utils:directory_walker",

@@ -129,4 +129,26 @@ public:
     virtual ss::future<bool> assure_topic_exists() = 0;
 };
 
+/**
+ * Cluster linking entry point for retrieving partition metadata information
+ */
+class partition_metadata_provider {
+public:
+    partition_metadata_provider() = default;
+    partition_metadata_provider(const partition_metadata_provider&) = delete;
+    partition_metadata_provider(partition_metadata_provider&&) = delete;
+    partition_metadata_provider& operator=(const partition_metadata_provider&)
+      = delete;
+    partition_metadata_provider& operator=(partition_metadata_provider&&)
+      = delete;
+    virtual ~partition_metadata_provider() = default;
+
+    /**
+     * Returns the high watermark for a given topic partition. If the
+     * information is missing or error occurs, returns std::nullopt.
+     */
+    virtual ss::future<std::optional<kafka::offset>>
+      get_partition_high_watermark(::model::topic_partition_view) = 0;
+};
+
 } // namespace cluster_link

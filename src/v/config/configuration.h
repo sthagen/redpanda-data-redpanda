@@ -157,6 +157,7 @@ struct configuration final : public config_store {
     property<std::chrono::milliseconds>
       partition_manager_shutdown_watchdog_timeout;
     property<std::optional<size_t>> topic_label_aggregation_limit;
+    bounded_property<uint32_t> controller_backend_reconciliation_concurrency;
 
     // Admin API
     property<bool> admin_api_require_auth;

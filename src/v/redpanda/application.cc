@@ -1532,6 +1532,7 @@ void application::wire_up_runtime_services(
       &metadata_cache,
       controller.get(),
       &group_router,
+      &controller->get_health_monitor(),
       smp_service_groups.cluster_link_smp_sg())
       .get();
 

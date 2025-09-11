@@ -378,6 +378,15 @@ configuration::configuration()
       "limit.",
       {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
       std::nullopt)
+  , controller_backend_reconciliation_concurrency(
+      *this,
+      "controller_backend_reconciliation_concurrency",
+      "Maximum concurrent reconciliation operations the controller can run. "
+      "Higher values can speed up cluster state changes but use more "
+      "resources.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      1024u,
+      {.min = 1u, .max = 2048u})
   , admin_api_require_auth(
       *this,
       "admin_api_require_auth",

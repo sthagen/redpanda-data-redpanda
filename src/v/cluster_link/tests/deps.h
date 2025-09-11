@@ -193,7 +193,8 @@ public:
       ss::shard_id,
       const N&,
       ss::noncopyable_function<
-        ss::future<::result<R, cluster::errc>>(kafka::partition_proxy*)>) {
+        ss::future<::result<R, cluster::errc>>(kafka::partition_proxy*)>,
+      kafka::data::rpc::require_leader) {
         throw std::runtime_error("not implemented");
     }
 
@@ -225,18 +226,20 @@ public:
     ss::future<::result<::model::offset, cluster::errc>> invoke_on_shard(
       ss::shard_id shard_id,
       const ::model::ktp& ktp,
-      ss::noncopyable_function<
-        ss::future<::result<::model::offset, cluster::errc>>(
-          kafka::partition_proxy*)> fn) final {
-        return _impl->invoke_on_shard_impl(shard_id, ktp, std::move(fn));
+      ss::noncopyable_function<ss::future<
+        ::result<::model::offset, cluster::errc>>(kafka::partition_proxy*)> fn,
+      kafka::data::rpc::require_leader require_leader) final {
+        return _impl->invoke_on_shard_impl(
+          shard_id, ktp, std::move(fn), require_leader);
     }
     ss::future<::result<::model::offset, cluster::errc>> invoke_on_shard(
       ss::shard_id shard_id,
       const ::model::ntp& ntp,
-      ss::noncopyable_function<
-        ss::future<::result<::model::offset, cluster::errc>>(
-          kafka::partition_proxy*)> fn) final {
-        return _impl->invoke_on_shard_impl(shard_id, ntp, std::move(fn));
+      ss::noncopyable_function<ss::future<
+        ::result<::model::offset, cluster::errc>>(kafka::partition_proxy*)> fn,
+      kafka::data::rpc::require_leader require_leader) final {
+        return _impl->invoke_on_shard_impl(
+          shard_id, ntp, std::move(fn), require_leader);
     }
 
     ss::future<::result<kafka::data::rpc::partition_offsets, cluster::errc>>
@@ -245,8 +248,10 @@ public:
       const ::model::ktp& ktp,
       ss::noncopyable_function<ss::future<
         ::result<kafka::data::rpc::partition_offsets, cluster::errc>>(
-        kafka::partition_proxy*)> fn) final {
-        return _impl->invoke_on_shard_impl(shard_id, ktp, std::move(fn));
+        kafka::partition_proxy*)> fn,
+      kafka::data::rpc::require_leader require_leader) final {
+        return _impl->invoke_on_shard_impl(
+          shard_id, ktp, std::move(fn), require_leader);
     }
 
 private:
@@ -406,6 +411,13 @@ struct test_consumer_group_router : public consumer_groups_router {
     int partition_count = 1;
 };
 
+struct test_partition_metadata_provider : public partition_metadata_provider {
+    ss::future<std::optional<kafka::offset>>
+      get_partition_high_watermark(::model::topic_partition_view) final;
+
+    chunked_hash_map<::model::topic_partition, kafka::offset> hwms;
+};
+
 class cluster_link_manager_test_fixture {
 public:
     explicit cluster_link_manager_test_fixture(::model::node_id self);
@@ -474,6 +486,10 @@ public:
         return _consumer_group_router;
     }
 
+    test_partition_metadata_provider* partition_metadata_provider() {
+        return _partition_metadata_provider;
+    }
+
     ss::future<bool> wait_for_report_to_match(
       ss::lowres_clock::duration timeout,
       ss::lowres_clock::duration backoff,
@@ -496,6 +512,7 @@ private:
     kafka::data::rpc::test::fake_topic_creator* _ftpc{nullptr};
     link_factory* _lf{nullptr};
     test_consumer_group_router* _consumer_group_router{nullptr};
+    test_partition_metadata_provider* _partition_metadata_provider{nullptr};
     ss::sharded<manager> _manager;
     config::mock_property<int16_t> _default_topic_replication{1};
 

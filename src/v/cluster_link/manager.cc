@@ -81,6 +81,7 @@ manager::manager(
   std::unique_ptr<link_factory> link_factory,
   std::unique_ptr<cluster_factory> cluster_factory,
   std::unique_ptr<consumer_groups_router> group_router,
+  std::unique_ptr<partition_metadata_provider> partition_metadata_provider,
   ss::lowres_clock::duration task_reconciler_interval,
   config::binding<int16_t> default_topic_replication)
   : _self(self)
@@ -92,6 +93,7 @@ manager::manager(
   , _link_factory(std::move(link_factory))
   , _cluster_factory(std::move(cluster_factory))
   , _group_router(std::move(group_router))
+  , _partition_metadata_provider(std::move(partition_metadata_provider))
   , _queue(
       [](const std::exception_ptr& ex) {
           vlog(cllog.warn, "unexpected cluster link manager error: {}", ex);
@@ -524,5 +526,10 @@ ss::future<> manager::stop_topic_reconciler() {
 
 consumer_groups_router& manager::get_group_router() noexcept {
     return *_group_router;
+}
+
+partition_metadata_provider&
+manager::get_partition_metadata_provider() noexcept {
+    return *_partition_metadata_provider;
 }
 } // namespace cluster_link

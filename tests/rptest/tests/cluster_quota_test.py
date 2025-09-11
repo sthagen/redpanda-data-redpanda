@@ -90,9 +90,9 @@ class ClusterQuotaPartitionMutationTest(RedpandaTest):
         # Use KCL so that the details about the response can be examined, namely
         # this test must observe that the newly introduce 'throttle_quota_exceeded'
         # response code is used and that 'ThrottleMillis' was approprately set
-        response = self.kcl.raw_create_topics(6, exceed_quota_req)
+        response = self.kcl.raw_create_topics(7, exceed_quota_req)
         response = json.loads(response)
-        assert response["Version"] == 6
+        assert response["Version"] == 7
         baz_response = [t for t in response["Topics"] if t["Topic"] == "baz"]
         foo_response = [t for t in response["Topics"] if t["Topic"] == "foo"]
         bar_response = [t for t in response["Topics"] if t["Topic"] == "bar"]

@@ -246,6 +246,20 @@ public:
         }
     }
 
+    void set_source_cluster_high_watermark(
+      std::unordered_map<ss::sstring, std::unordered_map<int, int64_t>>
+        offsets) {
+        auto p_md = fixture()->partition_metadata_provider();
+
+        for (auto& [topic, partitions] : offsets) {
+            for (auto& [p, offset] : partitions) {
+                p_md->hwms[::model::topic_partition(
+                  ::model::topic(topic), ::model::partition_id(p))]
+                  = kafka::offset(offset);
+            }
+        }
+    }
+
     ss::future<kafka::client::response_t> handle_list_groups_request(
       ::model::node_id id, kafka::client::request_t, kafka::api_version) {
         kafka::list_groups_response resp{};
@@ -380,6 +394,8 @@ TEST_F(group_mirroring_task_test, test_happy_path_offsets_mirroring) {
 
     set_source_cluster_group_offsets(
       test_group, {{"t-topic", {{0, 100}, {4, 312}}}});
+    set_source_cluster_high_watermark(
+      {{"t-topic", {{0, 1000}, {1, 1000}, {4, 1000}}}});
     /**
      * Verify if offset is mirrored
      */
@@ -406,6 +422,8 @@ TEST_F(group_mirroring_task_test, test_updating_source_cluster_coordinator) {
     metadata.group_id = test_group;
     metadata.coordinator_id = ::model::node_id(0);
     source_cluster_group[test_group] = std::move(metadata);
+    set_source_cluster_high_watermark(
+      {{"t-topic", {{0, 1000}, {1, 1000}, {4, 1025}, {12, 1000}}}});
 
     set_source_cluster_group_offsets(
       test_group, {{"t-topic", {{0, 100}, {4, 312}}}});
@@ -423,6 +441,47 @@ TEST_F(group_mirroring_task_test, test_updating_source_cluster_coordinator) {
      */
     wait_for_mirrored_offsets(
       test_group, {{"t-topic", {{0, 100}, {4, 1024}, {12, 10}}}})
+      .get();
+}
+
+TEST_F(group_mirroring_task_test, test_offsets_trimming_to_hwm) {
+    make_current_node_leader_for({0, 1, 2, 3});
+    fixture()->upsert_link(get_default_metadata()).get();
+
+    bool is_active = wait_for_task_state(model::task_state::active).get();
+    ASSERT_TRUE(is_active);
+
+    // set consumer group offsets
+    kafka::group_id test_group("t-group");
+
+    consumer_group_metadata metadata;
+    metadata.group_id = test_group;
+    metadata.coordinator_id = ::model::node_id(0);
+    source_cluster_group[test_group] = std::move(metadata);
+
+    set_source_cluster_group_offsets(
+      test_group, {{"t-topic", {{0, 100}, {4, 312}}}});
+    set_source_cluster_high_watermark({{"t-topic", {{0, 80}}}});
+    /**
+     * Verify if offset is mirrored
+     */
+    wait_for_mirrored_offsets(test_group, {{"t-topic", {{0, 80}}}}).get();
+    // check that even after waiting for it, the offset for partition 0 is still
+    // below the high watermark
+    ASSERT_THROW(
+      wait_for_mirrored_offsets(test_group, {{"t-topic", {{0, 81}}}}).get(),
+      ss::timed_out_error);
+
+    auto& groups = fixture()->consumer_group_router()->groups;
+    auto it = groups.find(test_group);
+    // check that only one partition is present, there is no hwm for partition 4
+    // yet
+    ASSERT_EQ(it->second.offsets[::model::topic("t-topic")].size(), 1);
+
+    // update hwms
+    set_source_cluster_high_watermark({{"t-topic", {{0, 82}, {4, 500}}}});
+
+    wait_for_mirrored_offsets(test_group, {{"t-topic", {{0, 82}, {4, 312}}}})
       .get();
 }
 

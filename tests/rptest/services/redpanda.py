@@ -156,7 +156,7 @@ NodeConfigOverridesT = dict[ClusterNode, dict]
 AZURITE_HOSTNAME = "azurite"
 AZURITE_PORT = 10000
 
-DEFAULT_LOG_ALLOW_LIST = [
+DEFAULT_LOG_ALLOW_LIST: list[LogAllowListElem] = [
     # Tests may be run on workstations that do not have XFS filesystem volumes
     # for containers.
     # Pre-23.2 version of the message
@@ -307,21 +307,17 @@ class MetricsEndpoint(Enum):
 CloudStorageTypeAndUrlStyle = Tuple[CloudStorageType, Literal["virtual_host", "path"]]
 
 
-def prepare_allow_list(allow_list):
-    if allow_list is None:
-        allow_list = DEFAULT_LOG_ALLOW_LIST
-    else:
-        combined_allow_list = DEFAULT_LOG_ALLOW_LIST.copy()
-        # Accept either compiled or string regexes
-        for a in allow_list:
-            if should_compile(a):
-                a = re.compile(a)
-            combined_allow_list.append(a)
-        allow_list = combined_allow_list
-    return allow_list
+def prepare_allow_list(allow_list: LogAllowList) -> LogAllowList:
+    def maybe_compile(a: LogAllowListElem) -> LogAllowListElem:
+        if should_compile(a):
+            assert isinstance(a, str)
+            return re.compile(a)
+        return a
+
+    return DEFAULT_LOG_ALLOW_LIST + list(map(maybe_compile, allow_list))
 
 
-def one_or_many(value):
+def one_or_many(value: Any) -> Any:
     """
     Helper for reading `one_or_many_property` configs when
     we only care about getting one value out
@@ -1223,11 +1219,17 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
         return self._usage_stats
 
     @property
-    def usage_stats_dict(self) -> dict:
+    def usage_stats_dict(self) -> dict[str, Any]:
         return dataclasses.asdict(self._usage_stats)
 
     @abstractmethod
     def all_up(self):
+        pass
+
+    @abstractmethod
+    def raise_on_bad_logs(
+        self, allow_list: LogAllowList = (), test_start_time: float | None = None
+    ):
         pass
 
     @abstractmethod
@@ -1881,12 +1883,15 @@ class RedpandaServiceBase(RedpandaServiceABC, Service):
     def set_skip_if_no_redpanda_log(self, v: bool):
         self._skip_if_no_redpanda_log = v
 
-    def raise_on_bad_logs(self, allow_list=None):
+    def raise_on_bad_logs(
+        self, allow_list: LogAllowList = (), test_start_time: float | None = None
+    ):
         """
-        Raise a BadLogLines exception if any nodes' logs contain errors
-        not permitted by `allow_list`
+        Raise a BadLogLines exception if any nodes' logs contain errors not
+        permitted by `allow_list`
 
-        :param allow_list: list of compiled regexes, or None for default
+        :param allow_list: LogAllowList of additional lines to ignore (default
+            ignores are always included)
         :return: None
         """
         allow_list = prepare_allow_list(allow_list)
@@ -2377,7 +2382,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
             f"{consume_count} messages."
         )
 
-    def stop(self, **kwargs):
+    def stop(self, **kwargs: Any) -> None:
         if self._cloud_cluster.config.delete_cluster:
             self._cloud_cluster.delete()
         else:
@@ -2571,7 +2576,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
             f"were only {broker_count} brokers: {brokers}"
         )
 
-    def raise_on_crash(self, log_allow_list: Any = None):
+    def raise_on_crash(self, log_allow_list: LogAllowList = ()) -> None:
         """Function checks if active RP pods has restart counter changed since last check"""
 
         # Can't remove log_allow_list as it is present in the metadataaddeer call
@@ -2655,7 +2660,9 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
     def cluster_healthy(self) -> bool:
         return self.cluster_unhealthy_reason is not None
 
-    def raise_on_bad_logs(self, allow_list=None, test_start_time=None):
+    def raise_on_bad_logs(
+        self, allow_list: LogAllowList = (), test_start_time: float | None = None
+    ) -> None:
         """
         Raise a BadLogLines exception if any nodes' logs contain errors
         not permitted by `allow_list`
@@ -4032,7 +4039,7 @@ class RedpandaService(RedpandaServiceBase):
         assert node in self.nodes, f"Node {node.account.hostname} is not started"
         return node.account.monitor_log(RedpandaService.STDOUT_STDERR_CAPTURE)
 
-    def raise_on_crash(self, log_allow_list: LogAllowList | None = None):
+    def raise_on_crash(self, log_allow_list: LogAllowList | None = ()) -> None:
         """
         Check if any redpanda nodes are unexpectedly not running,
         or if any logs contain segfaults or assertions.
@@ -5905,7 +5912,7 @@ class RedpandaService(RedpandaServiceBase):
                     f"Oversized controller log detected!  {max_length} records"
                 )
 
-    def estimate_bytes_written(self):
+    def estimate_bytes_written(self) -> float | None:
         try:
             samples = self.metrics_sample(
                 "vectorized_io_queue_total_write_bytes_total",

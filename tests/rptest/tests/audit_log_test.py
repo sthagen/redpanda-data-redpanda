@@ -1288,7 +1288,7 @@ class AuditLogTestKafkaApi(AuditLogTestBase):
                     {"name": f"{topic_name}", "type": "topic"},
                     self.kafka_rpc_service_name,
                 ),
-                1,
+                2,  # expect two, describe and delete
             ),
             AbsoluteTestItem(
                 f"Create ACL",

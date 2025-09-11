@@ -375,10 +375,113 @@ void group_mirroring_task::handle_offset_commit_response(
 ss::future<chunked_vector<group_mirroring_task::group_offsets>>
 group_mirroring_task::trim_to_partition_highwatermark(
   chunked_vector<group_offsets> offsets) {
-    // TODO: add trimming implementation
-    co_return std::move(offsets);
-}
+    chunked_vector<group_offsets> trimmed_offsets;
+    trimmed_offsets.reserve(offsets.size());
 
+    for (auto& g_offsets : offsets) {
+        group_offsets trimmed_g_offsets;
+        trimmed_g_offsets.group_id = std::move(g_offsets.group_id);
+        trimmed_g_offsets.topic_offsets.reserve(g_offsets.topic_offsets.size());
+        for (auto& t_offsets : g_offsets.topic_offsets) {
+            topic_offsets trimmed_t_offsets;
+            trimmed_t_offsets.topic = std::move(t_offsets.topic);
+            trimmed_t_offsets.partition_offsets.reserve(
+              t_offsets.partition_offsets.size());
+            for (auto& po : t_offsets.partition_offsets) {
+                auto maybe_hw = co_await get_partition_high_watermark(
+                  trimmed_t_offsets.topic, po.partition);
+                vlog(
+                  logger().trace,
+                  "Offset trimming for group {}, partition: {}/{}, committed "
+                  "offset: {}, partition hwm: {}",
+                  trimmed_g_offsets.group_id,
+                  trimmed_t_offsets.topic,
+                  po.partition,
+                  po.committed_offset,
+                  maybe_hw);
+                if (!maybe_hw.has_value()) {
+                    vlog(
+                      logger().debug,
+                      "Group: {}, no high watermark for partition {}/{}, "
+                      "skipping offset commit",
+                      trimmed_g_offsets.group_id,
+                      trimmed_t_offsets.topic,
+                      po.partition);
+                    continue;
+                }
+                trimmed_t_offsets.partition_offsets.push_back(
+                  partition_committed_offset{
+                    .partition = po.partition,
+                    .committed_offset = std::min(
+                      *maybe_hw, po.committed_offset),
+                  });
+            }
+            if (!trimmed_t_offsets.partition_offsets.empty()) {
+                trimmed_g_offsets.topic_offsets.push_back(
+                  std::move(trimmed_t_offsets));
+            }
+        }
+        if (!trimmed_g_offsets.topic_offsets.empty()) {
+            trimmed_offsets.push_back(std::move(trimmed_g_offsets));
+        }
+    }
+
+    co_return std::move(trimmed_offsets);
+}
+ss::future<std::optional<kafka::offset>>
+group_mirroring_task::get_partition_high_watermark(
+  const ::model::topic& topic, ::model::partition_id p_id) {
+    auto& metadata_provider = get_link()->get_partition_metadata_provider();
+    auto hr_hwm = co_await metadata_provider.get_partition_high_watermark(
+      ::model::topic_partition_view(topic, p_id));
+
+    /**
+     * Check if the replica for partition is present on current node, if it is
+     * then query for its high watermark as it is most likely more up to date
+     * than the one from the health report.
+     */
+
+    auto& partition_manager = get_link()->partition_manager();
+    ::model::ktp ktp(topic, p_id);
+    auto owning_shard = partition_manager.shard_owner(
+      ktp); // ensure metadata is loaded
+    if (!owning_shard.has_value()) {
+        co_return hr_hwm;
+    }
+
+    if (owning_shard) {
+        vlog(
+          logger().trace,
+          "Fetching high watermark for partition {}/{} from replica on shard "
+          "{}",
+          topic,
+          p_id,
+          *owning_shard);
+        auto hw = co_await partition_manager.invoke_on_shard(
+          *owning_shard,
+          ktp,
+          [](kafka::partition_proxy* pp) {
+              return ssx::now<::result<::model::offset, cluster::errc>>(
+                pp->high_watermark());
+          },
+          kafka::data::rpc::require_leader::no);
+        if (hw) {
+            auto replica_hwm = ::model::offset_cast(hw.value());
+            if (hr_hwm) {
+                co_return std::max(replica_hwm, hr_hwm.value());
+            }
+            co_return replica_hwm;
+        }
+        vlog(
+          logger().info,
+          "Failed to get high watermark for partition {}/{} from replica - "
+          "{}",
+          topic,
+          p_id,
+          hw.error());
+    }
+    co_return hr_hwm;
+}
 ss::future<std::expected<
   chunked_vector<group_mirroring_task::group_offsets>,
   group_mirroring_task::error>>

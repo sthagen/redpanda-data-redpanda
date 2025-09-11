@@ -152,6 +152,7 @@ private:
  * - support incremental fetches
  * - support leader epochs
  * - support server side throttling and quotas
+ * - support topic identifiers
  */
 class fetcher {
 public:

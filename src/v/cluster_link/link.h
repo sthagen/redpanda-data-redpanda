@@ -103,6 +103,8 @@ public:
 
     consumer_groups_router& get_group_router();
 
+    partition_metadata_provider& get_partition_metadata_provider();
+
     std::optional<
       chunked_hash_map<::model::topic, model::mirror_topic_metadata>>
     get_mirror_topics_for_link() const;

@@ -148,6 +148,9 @@ private:
     void make_unavailable(const error& err);
     void make_active();
 
+    ss::future<std::optional<kafka::offset>> get_partition_high_watermark(
+      const ::model::topic& topic, ::model::partition_id p_id);
+
     model::consumer_groups_mirroring_config _config;
     chunked_hash_map<kafka::group_id, group_metadata> _groups_to_mirror;
 
