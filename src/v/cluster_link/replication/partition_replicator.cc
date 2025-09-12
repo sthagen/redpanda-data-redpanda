@@ -77,7 +77,8 @@ ss::future<bool> partition_replicator::handle_replication_result(
         }
         vlog(
           _log.trace,
-          "Replicated batches in range [{} - {}] with at offset: {}",
+          "Replicated batches in kafka range [{} - {}] ending at raft offset: "
+          "{}",
           begin,
           end,
           result.value().last_offset);
@@ -147,10 +148,12 @@ ss::future<> partition_replicator::fetch_and_replicate() {
     } catch (const ss::sleep_aborted&) {
         // ignore, sleep from fetch was aborted.
     } catch (...) {
-        vlog(
-          _log.error,
-          "Error in fetch_and_replicate: {}",
-          std::current_exception());
+        auto eptr = std::current_exception();
+        auto log_level = ssx::is_shutdown_exception(eptr)
+                           ? ss::log_level::debug
+                           : ss::log_level::error;
+        _log.log(log_level, "Error in fetch_and_replicate: {}", eptr);
+
         as.request_abort();
     }
     co_await gate.close();

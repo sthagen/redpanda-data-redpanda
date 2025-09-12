@@ -100,11 +100,9 @@ ss::future<> link::stop() noexcept {
           _config.name);
         auto res_f = co_await ss::coroutine::as_future(stop_task(t.get()));
         if (res_f.failed()) {
+            auto exception = res_f.get_exception();
             vlog(
-              cllog.warn,
-              "Failed to stop task {}: {}",
-              t->name(),
-              res_f.get_exception());
+              cllog.warn, "Failed to stop task {}: {}", t->name(), exception);
             continue;
         }
         auto res = res_f.get();

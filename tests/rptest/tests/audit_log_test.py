@@ -7,32 +7,30 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-import confluent_kafka as ck
-from functools import partial, reduce
-from enum import Enum
-import time
-import threading
 import json
-import random
 import re
-import requests
 import socket
+import threading
 import time
-import random
+from enum import Enum
+from functools import partial, reduce
 from typing import Any, Optional, Sequence, Union
+from urllib.parse import urlparse
 
+import confluent_kafka as ck
+import requests
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.errors import TimeoutError
-from ducktape.mark import matrix, ignore
+from ducktape.mark import ignore, matrix
 from keycloak import KeycloakOpenID
+
 from rptest.clients.default import DefaultClient
 from rptest.clients.kcl import KCL
 from rptest.clients.python_librdkafka import PythonLibrdkafka
-from rptest.clients.rpk import RpkTool, RpkException
-from rptest.services import tls
+from rptest.clients.rpk import RpkException, RpkTool
+from rptest.services import redpanda, tls
 from rptest.services.admin import Admin, RoleMember
 from rptest.services.cluster import cluster
-from rptest.services import redpanda
 from rptest.services.keycloak import DEFAULT_REALM, KeycloakService
 from rptest.services.ocsf_server import OcsfServer
 from rptest.services.redpanda import (
@@ -40,8 +38,7 @@ from rptest.services.redpanda import (
     LoggingConfig,
     MetricSamples,
     MetricsEndpoint,
-    PandaproxyConfig,
-    RedpandaServiceBase,
+    RedpandaService,
     SchemaRegistryConfig,
     SecurityConfig,
     TLSProvider,
@@ -51,39 +48,38 @@ from rptest.services.rpk_consumer import RpkConsumer
 from rptest.tests.cluster_config_test import wait_for_version_sync
 from rptest.tests.redpanda_test import RedpandaTest
 from rptest.tests.schema_registry_test import (
-    SchemaRegistryRedpandaClient,
     ACLTestEndpoint,
-    schema1_def,
-    schema2_def,
-    GetConfigEndpoint,
-    PutConfigEndpoint,
-    GetConfigSubjectEndpoint,
-    PutConfigSubjectEndpoint,
+    CompatibilitySubjectVersion,
     DeleteConfigSubject,
-    GetMode,
-    PutMode,
-    GetModeSubject,
-    PutModeSubject,
     DeleteModeSubject,
-    PostSubjectVersions,
-    GetSchemasIdsIdVersions,
-    GetSchemasIdsIdSubjects,
-    GetSubjectVersions,
-    PostSubject,
-    GetSubjectVersionsVersion,
-    GetSubjectVersionsVersionSchema,
-    GetSubjectVersionsVersionReferencedBy,
     DeleteSubject,
     DeleteSubjectVersion,
-    CompatibilitySubjectVersion,
+    GetConfigEndpoint,
+    GetConfigSubjectEndpoint,
+    GetMode,
+    GetModeSubject,
+    GetSchemasIdsIdSubjects,
+    GetSchemasIdsIdVersions,
     GetSchemasTypes,
     GetStatusReady,
+    GetSubjectVersions,
+    GetSubjectVersionsVersion,
+    GetSubjectVersionsVersionReferencedBy,
+    GetSubjectVersionsVersionSchema,
+    PostSubject,
+    PostSubjectVersions,
+    PutConfigEndpoint,
+    PutConfigSubjectEndpoint,
+    PutMode,
+    PutModeSubject,
+    SchemaRegistryRedpandaClient,
+    schema1_def,
+    schema2_def,
 )
 from rptest.util import expect_exception, wait_until, wait_until_result
 from rptest.utils.mode_checks import skip_fips_mode
 from rptest.utils.rpk_config import read_redpanda_cfg
 from rptest.utils.schema_registry_utils import Mode, get_subjects, put_mode
-from urllib.parse import urlparse
 
 
 class AuthorizationMatch(str, Enum):
@@ -1985,7 +1981,7 @@ class AuditLogTestInvalidConfigMTLS(AuditLogTestInvalidConfigBase):
         )
         self.admin_user_cert = self.tls.create_cert(
             socket.gethostname(),
-            common_name=RedpandaServiceBase.SUPERUSER_CREDENTIALS[0],
+            common_name=RedpandaService.SUPERUSER_CREDENTIALS[0],
             name="admin_client",
         )
         self._security_config = AuditLogTestSecurityConfig(
@@ -2041,7 +2037,7 @@ class AuditLogTestKafkaTlsApi(AuditLogTestBase):
         )
         self.admin_user_cert = self.tls.create_cert(
             socket.gethostname(),
-            common_name=RedpandaServiceBase.SUPERUSER_CREDENTIALS[0],
+            common_name=RedpandaService.SUPERUSER_CREDENTIALS[0],
             name="admin_client",
         )
 
@@ -2135,7 +2131,7 @@ class AuditLogTestOauth(AuditLogTestBase):
 
     def __init__(self, test_context):
         security = AuditLogTestSecurityConfig(
-            user_creds=RedpandaServiceBase.SUPERUSER_CREDENTIALS
+            user_creds=RedpandaService.SUPERUSER_CREDENTIALS
         )
         security.enable_sasl = True
         security.sasl_mechanisms = ["SCRAM"]
@@ -2301,7 +2297,7 @@ class AuditLogTestOauth(AuditLogTestBase):
         [ip_set.add(r["dst_endpoint"]["ip"]) for r in records]
 
         assert len(records) == len(ip_set), (
-            f"Expected one record but received {len(records)}"
+            f"Expected {len(ip_set)} record but received {len(records)}"
         )
 
         records = self.read_all_from_audit_log(
@@ -2315,7 +2311,10 @@ class AuditLogTestOauth(AuditLogTestBase):
             lambda records: self.aggregate_count(records) >= 1,
         )
 
-        assert 1 == len(records), f"Expected one record but received {len(records)}"
+        # The kafka client may have sent the metadata request to >1 node, so we may see >1 metadata record
+        assert len(records) >= 1, (
+            f"Expected at least one record but received {len(records)}"
+        )
 
     @skip_fips_mode
     @cluster(num_nodes=6)

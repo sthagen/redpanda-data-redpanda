@@ -1,6 +1,6 @@
-from typing import Any, Literal, overload
+from typing import Any, Literal, Union, overload
+
 import requests
-from typing import Union
 
 
 class RpCloudApiClient(object):
@@ -149,6 +149,13 @@ class RpCloudApiClient(object):
             _e += f"/{id}"
         return _e
 
+    @staticmethod
+    def serverless_cluster_endpoint(id=None):
+        _e = "/v1/serverless/clusters"
+        if id:
+            _e += f"/{id}"
+        return _e
+
     # delete for DEVPROD-2525
     @staticmethod
     def legacy_cluster_endpoint(id=None):
@@ -219,6 +226,13 @@ class RpCloudApiClient(object):
             self.cluster_endpoint(id=cluster_id), base_url=self._config.public_api_url
         )
         return _cluster["cluster"]
+
+    def get_serverless_cluster(self, cluster_id: str):
+        _cluster = self._http_get(
+            self.serverless_cluster_endpoint(id=cluster_id),
+            base_url=self._config.public_api_url,
+        )
+        return _cluster["serverless_cluster"]
 
     # delete for DEVPROD-2525
     def get_legacy_cluster(self, cluster_id: str):

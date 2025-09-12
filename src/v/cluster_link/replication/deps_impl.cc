@@ -40,6 +40,7 @@ remote_data_source_factory::make_source(const ::model::ntp& ntp) {
 }
 
 ss::future<> remote_partition_source::start() {
+    vlog(cllog.trace, "[{}] Starting remote partition source", _tp);
     auto result = _consumer.add(_tp);
     if (!result.has_value()) [[unlikely]] {
         // this is usually indicative of a bug in the manager where
@@ -126,6 +127,11 @@ ss::future<> local_partition_sink::start() {
             _partition->ntp(),
             sync_offset.error().message()));
     }
+    vlog(
+      cllog.trace,
+      "[{}] Starting local partition sink at offset {}",
+      _partition->ntp(),
+      sync_offset.value());
     _last_replicated_offset = sync_offset.value();
 }
 

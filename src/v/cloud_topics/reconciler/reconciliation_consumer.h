@@ -11,7 +11,7 @@
 #pragma once
 
 #include "absl/container/btree_map.h"
-#include "bytes/iobuf.h"
+#include "cloud_topics/level_one/common/object.h"
 #include "model/fundamental.h"
 #include "model/record.h"
 #include "model/timestamp.h"
@@ -23,38 +23,31 @@
 
 namespace cloud_topics::reconciler {
 
-/*
- * metadata about a range of batches.
- */
-struct range_info {
+// Metadata about a range of batches consumed by a reconciliation
+// consumer.
+struct partition_metadata {
     kafka::offset base_offset;
     kafka::offset last_offset;
     model::timestamp base_timestamp;
     model::timestamp last_timestamp;
-    // 'range_info' is not aligned by term boundary so this
-    // map is used to track term changes
     absl::btree_map<model::term_id, kafka::offset> terms;
 };
 
-/*
- * a materialized range of batches.
- */
-struct range {
-    iobuf data;
-    range_info info;
-};
-
-/*
- * Consumer that builds a range from a record batch reader.
- */
-class range_batch_consumer {
+/// Consumes record batches from a partition and writes them to an L1 object.
+/// Produces metadata about the consumed range including offsets, timestamps,
+/// and term transitions.
+class reconciliation_consumer {
 public:
+    reconciliation_consumer(
+      l1::object_builder* builder, model::topic_id_partition tidp);
+
     ss::future<ss::stop_iteration> operator()(model::record_batch);
-    std::optional<range> end_of_stream();
+    std::optional<partition_metadata> end_of_stream();
 
 private:
-    range _range;
-    std::optional<kafka::offset> _base_offset;
+    l1::object_builder* _builder;
+    model::topic_id_partition _tidp;
+    partition_metadata _metadata;
 };
 
 } // namespace cloud_topics::reconciler

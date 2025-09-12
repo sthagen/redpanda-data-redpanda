@@ -9,40 +9,41 @@
 
 from subprocess import CalledProcessError
 from typing import Any
+
 from ducktape.cluster.cluster import ClusterNode
 from ducktape.cluster.remoteaccount import RemoteCommandError
 from ducktape.mark import matrix
 from ducktape.mark.resource import cluster as dt_cluster
 from ducktape.tests.test import Test
 
-from rptest.services.utils import BadLogLines
-from rptest.tests.redpanda_test import RedpandaMixedTest, RedpandaTest
-from rptest.services.cluster import cluster
 from rptest.clients.kubectl import is_redpanda_pod
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
+from rptest.services.admin import CrashType
+from rptest.services.cluster import cluster
 from rptest.services.failure_injector import FailureSpec, make_failure_injector
-from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.kgo_repeater_service import repeater_traffic
 from rptest.services.kgo_verifier_services import (
-    KgoVerifierRandomConsumer,
-    KgoVerifierSeqConsumer,
     KgoVerifierConsumerGroupConsumer,
     KgoVerifierProducer,
+    KgoVerifierRandomConsumer,
+    KgoVerifierSeqConsumer,
 )
+from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
+from rptest.services.producer_swarm import ProducerSwarm
 from rptest.services.redpanda import (
+    CloudStorageType,
     LogSearchLocal,
     RedpandaService,
     RedpandaServiceCloud,
     SISettings,
-    CloudStorageType,
     get_cloud_storage_type,
-    make_redpanda_service,
     make_redpanda_mixed_service,
+    make_redpanda_service,
 )
-from rptest.services.admin import CrashType
+from rptest.services.utils import BadLogLines
 from rptest.tests.prealloc_nodes import PreallocNodesTest
-from rptest.utils.si_utils import BucketView
+from rptest.tests.redpanda_test import RedpandaMixedTest, RedpandaTest
 from rptest.util import expect_exception
 from rptest.utils.mode_checks import (
     ignore_if_not_asan,
@@ -50,7 +51,7 @@ from rptest.utils.mode_checks import (
     ignore_if_not_ubsan,
     skip_debug_mode,
 )
-from rptest.services.producer_swarm import ProducerSwarm
+from rptest.utils.si_utils import BucketView
 
 
 class OpenBenchmarkSelfTest(RedpandaTest):
@@ -359,9 +360,9 @@ class BucketScrubSelfTest(RedpandaTest):
 
 class SimpleSelfTest(Test):
     """
-    Verify instantiation of a RedpandaServiceBase subclass through the factory method.
+    Verify instantiation of a RedpandaServiceABC subclass through the factory method.
 
-    Runs a few methods of RedpandaServiceBase.
+    Runs a few methods of RedpandaService.
     """
 
     def __init__(self, test_context):

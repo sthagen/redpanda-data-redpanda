@@ -69,6 +69,7 @@ mux_remote_consumer::remove(const model::topic_partition& tp) {
         }
     }
     _cv.signal();
+    co_await _consumer->unassign_partitions({tp});
     co_await queue->stop();
     co_return result{};
 }
@@ -121,6 +122,11 @@ ss::future<> mux_remote_consumer::assign_pending_partitions() {
                   tp);
                 continue;
             }
+            vlog(
+              cllog.trace,
+              "Assigning partition {} at offset: {}",
+              tp,
+              queue->next());
             assignment.partitions.emplace_back(partition_id, queue->next());
         }
         if (assignment.partitions.empty()) {
@@ -208,12 +214,12 @@ ss::future<> mux_remote_consumer::process_fetched_data(
 ss::future<> mux_remote_consumer::fetch_loop() {
     while (!_gate.is_closed()) {
         co_await _cv.wait([this] { return !_partitions.empty(); });
-        co_await assign_pending_partitions();
         vlog(
           cllog.trace,
           "fetch loop iteration with {} partitions, unassigned: {}",
           _partitions.size(),
           _pending_assignment.size());
+        co_await assign_pending_partitions();
         auto fetch_result = co_await _consumer->fetch_next(_fetch_max_wait);
         if (fetch_result.has_error()) {
             vlog(cllog.warn, "Fetch failed: {}", fetch_result.error());

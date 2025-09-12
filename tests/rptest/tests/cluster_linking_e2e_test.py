@@ -7,28 +7,32 @@
 # the Business Source License, use of this software will be governed
 # by the Apache License, Version 2.0
 
-from connectrpc.errors import ConnectError, ConnectErrorCode
+import random
+import re
+from contextlib import nullcontext
 
-from rptest.clients.admin.v2 import Admin as AdminV2
-from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
-    shadow_link_pb2,
-    shadow_link_pb2_connect,
-)
+from connectrpc.errors import ConnectError, ConnectErrorCode
+from ducktape.mark import matrix
+
+from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
+from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
+from rptest.services.kgo_verifier_services import (
+    KgoVerifierConsumerGroupConsumer,
+    KgoVerifierProducer,
+)
 from rptest.services.multi_cluster_services import (
     Cluster,
     MultiClusterServices,
     ServiceType,
 )
-from rptest.tests.cluster_linking_test_base import ShadowLinkTestBase
-from rptest.tests.redpanda_test import RedpandaTest
-from rptest.util import expect_exception, wait_until, wait_until_result
-from rptest.services.kgo_verifier_services import (
-    KgoVerifierProducer,
-    KgoVerifierConsumerGroupConsumer,
+from rptest.tests.cluster_linking_test_base import (
+    ShadowLinkPreAllocTestBase,
+    ShadowLinkTestBase,
 )
-from rptest.clients.rpk import RpkTool
+from rptest.tests.redpanda_test import RedpandaTest
+from rptest.util import bg_thread_cm, expect_exception, wait_until, wait_until_result
 
 
 class MultiClusterTestBase(RedpandaTest):
@@ -286,3 +290,71 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
                 f"Expected cleanup policy {t.cleanup_policy} for topic {t.name}, "
                 f"got {target_configs['cleanup.policy']}"
             )
+
+
+class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
+    def leadership_shuffler(self, redpanda, topic: str, enabled: bool):
+        if not enabled:
+            return nullcontext()
+
+        @bg_thread_cm
+        def leadership_transfer_thread(redpanda, topic: str):
+            admin = Admin(redpanda, retry_codes=[503, 504])
+            while (yield):
+                try:
+                    partitions = admin.get_partitions(namespace="kafka", topic=topic)
+                    partition = random.choice(partitions)
+                    p_id = partition["partition_id"]
+                    admin.partition_transfer_leadership(
+                        namespace="kafka", topic=topic, partition=p_id
+                    )
+                except Exception as e:
+                    redpanda.logger.info(f"error transferring leadership: {e}")
+
+        return leadership_transfer_thread(redpanda, topic)
+
+    @cluster(num_nodes=7)
+    @matrix(shuffle_leadership=[True, False])
+    def test_replication_basic(self, shuffle_leadership):
+        topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
+
+        self.source_default_client().create_topic(topic)
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+        with self.leadership_shuffler(
+            self.target_cluster.service, topic.name, enabled=shuffle_leadership
+        ):
+            self.start_producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000)
+            self.verify()
+
+    @cluster(
+        num_nodes=7,
+        log_allow_list=[
+            re.compile(".*Failed to sync write_at_offset_stm for partition"),
+        ],
+    )
+    def test_replication_with_failures(self):
+        topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
+
+        self.source_default_client().create_topic(topic)
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        self.start_producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000)
+        with (
+            self.create_source_failure_injector(),
+            self.create_target_failure_injector(),
+        ):
+            self.verify()

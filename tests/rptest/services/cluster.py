@@ -10,9 +10,8 @@
 import dataclasses
 import functools
 import time
-from typing import Any, Protocol, Callable
-
 from dataclasses import dataclass
+from typing import Any, Callable, Protocol
 
 import psutil
 from ducktape.mark._mark import Mark
