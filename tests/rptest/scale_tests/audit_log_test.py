@@ -11,7 +11,7 @@ import threading
 import time
 
 from ducktape.errors import TimeoutError
-from ducktape.mark import ignore
+from ducktape.mark import ignore, matrix
 
 from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
@@ -155,6 +155,9 @@ class AuditLogTest(RedpandaTest):
             # enqueued
             # default: 1MiB
             "audit_queue_max_buffer_size_per_shard": 1000000 * 10,
+            # Use RPCs instead of kclient
+            "audit_use_rpc": ctx.injected_args
+            and ctx.injected_args.get("audit_use_rpc", False),
         }
 
         super().__init__(test_context=ctx, security=self.security, *args, **kwargs)
@@ -308,7 +311,13 @@ class AuditLogTest(RedpandaTest):
 
     @ignore  # https://github.com/redpanda-data/redpanda/issues/16199
     @cluster(num_nodes=5)
-    def test_audit_log(self):
+    @matrix(
+        audit_use_rpc=[
+            False,
+            True,
+        ]
+    )
+    def test_audit_log(self, audit_use_rpc):
         """
         This test attempts to create a worst-case-scenario for audit logging -
         what exactly would that be? It would be a case where many events are distinct

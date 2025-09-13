@@ -147,9 +147,23 @@ struct footer
     bool operator==(const footer&) const = default;
     fmt::iterator format_to(fmt::iterator) const;
 
+    // seek result is the result of asking the index where to start reading some
+    // data based on an offset or time query. Returned is the position or offset
+    // within the file to start reading from, as well as the remaining length of
+    // the partition data within that chunk.
+    struct seek_result {
+        size_t file_position = 0;
+        size_t length = 0;
+
+        bool operator==(const seek_result&) const = default;
+        fmt::iterator format_to(fmt::iterator) const;
+    };
     // The value returned when an index search doesn't have contain matching
     // data.
-    constexpr static size_t npos = std::numeric_limits<size_t>::max();
+    constexpr static seek_result npos = {
+      .file_position = std::numeric_limits<size_t>::max(),
+      .length = 0,
+    };
 
     // Return the file position of the latest record batch that has the offset
     // at or before the given offset. If the offset is not in this file then
@@ -165,7 +179,7 @@ struct footer
     // Searching for offset 5 would yield the position of the batch[0],
     // while a search for offsets 25 or 40 would yield batch[2]. Searching for
     // offset 50 would yield `npos`.
-    size_t file_position_before_kafka_offset(
+    seek_result file_position_before_kafka_offset(
       const model::topic_id_partition&, kafka::offset);
 
     // Return the file position of the latest record batch that has a
@@ -183,7 +197,7 @@ struct footer
     // the timestamp 1 would yield the position of batch[0].
     // While a search for timestamp 25 or 40 would yield batch[4] and the
     // timestamp 50 would yield `npos`.
-    size_t file_position_before_max_timestamp(
+    seek_result file_position_before_max_timestamp(
       const model::topic_id_partition&, model::timestamp);
 
     // Read the footer using the suffix of an L1 object.
@@ -268,6 +282,12 @@ public:
     //  - The offsets in this batch are > than the previous batch in this
     //    partition.
     virtual ss::future<> add_batch(model::record_batch) = 0;
+
+    // Return the size of file in bytes that has been built so far.
+    //
+    // After `finish` has been called, this will be the size of the fully
+    // constructed file.
+    virtual size_t file_size() const = 0;
 
     // Information about the finished object.
     struct object_info {

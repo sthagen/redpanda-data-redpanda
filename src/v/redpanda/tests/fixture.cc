@@ -368,6 +368,7 @@ void redpanda_thread_fixture::configure(
         config.get("members_backend_retry_ms").set_value(1000ms);
         config.get("disable_metrics").set_value(true);
         config.get("disable_public_metrics").set_value(true);
+        config.get("audit_use_rpc").set_value(true);
 
         auto& node_config = config::node();
         node_config.get("admin").set_value(

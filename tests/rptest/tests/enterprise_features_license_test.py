@@ -58,7 +58,6 @@ FEATURE_DEPENDENT_CONFIG = {
 }
 
 SKIP_FEATURES = [
-    Feature.audit_logging,  # NOTE(oren): omit due to shutdown issues
     Feature.cloud_storage,  # TODO(oren): initially omitted because it's a bit complicated to initialize infra
     Feature.datalake_iceberg,  # TODO: also depends on cloud infra
     Feature.fips,  # NOTE(oren): omit because it's too much of a pain for CDT
@@ -144,6 +143,7 @@ class EnterpriseFeaturesTest(EnterpriseFeaturesTestBase):
             self.redpanda.set_cluster_config(
                 {
                     "audit_enabled": True,
+                    "audit_use_rpc": True,
                 },
                 expect_restart=True,
             )

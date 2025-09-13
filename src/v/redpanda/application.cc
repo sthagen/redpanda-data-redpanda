@@ -2009,12 +2009,16 @@ void application::wire_up_redpanda_services(
     }
 
     syschecks::systemd_message("Creating auditing subsystem").get();
+    if (!_audit_log_client_config.has_value()) {
+        _audit_log_client_config.emplace();
+    }
     construct_service(
       audit_mgr,
       node_id,
       controller.get(),
-      std::ref(*_audit_log_client_config),
-      &metadata_cache)
+      &metadata_cache,
+      &_kafka_data_rpc_client,
+      std::ref(_audit_log_client_config.value()))
       .get();
 
     syschecks::systemd_message("Creating metadata dissemination service").get();
@@ -2571,7 +2575,8 @@ application::make_datalake_usage_aggregator() {
 }
 
 bool application::kafka_data_rpc_enabled() {
-    return wasm_data_transforms_enabled();
+    return wasm_data_transforms_enabled()
+           || config::shard_local_cfg().audit_use_rpc();
 }
 
 ss::future<>

@@ -189,7 +189,7 @@ ss::future<> footer::serde_async_write(iobuf& buf) const {
     }
 }
 
-size_t footer::file_position_before_kafka_offset(
+footer::seek_result footer::file_position_before_kafka_offset(
   const model::topic_id_partition& tidp, kafka::offset target) {
     auto [it, end] = partitions.equal_range(tidp);
     auto min_partition_after_target = end;
@@ -213,17 +213,28 @@ size_t footer::file_position_before_kafka_offset(
               return entry.kafka_offset;
           });
         if (index_it == rev.end()) {
-            return partition.file_position;
+            return {
+              .file_position = partition.file_position,
+              .length = partition.length,
+            };
         }
-        return index_it->file_position;
+        auto delta = index_it->file_position - partition.file_position;
+        return {
+          .file_position = index_it->file_position,
+          .length = partition.length - delta,
+        };
     }
     if (min_partition_after_target != end) {
-        return min_partition_after_target->second.file_position;
+        const auto& partition = min_partition_after_target->second;
+        return {
+          .file_position = partition.file_position,
+          .length = partition.length,
+        };
     }
     return npos;
 }
 
-size_t footer::file_position_before_max_timestamp(
+footer::seek_result footer::file_position_before_max_timestamp(
   const model::topic_id_partition& tidp, model::timestamp target) {
     auto [begin, end] = partitions.equal_range(tidp);
     auto filtered = std::views::filter(
@@ -237,7 +248,8 @@ size_t footer::file_position_before_max_timestamp(
     if (min_it == filtered.end()) {
         return npos;
     }
-    const auto& index = min_it->second.indexes;
+    const auto& partition = min_it->second;
+    const auto& index = partition.indexes;
     auto it = std::ranges::lower_bound(
       index, target, std::less<>{}, [](const auto& entry) {
           return entry.max_timestamp;
@@ -246,14 +258,21 @@ size_t footer::file_position_before_max_timestamp(
     // bounds, the best we can do is start at the last well known offset (the
     // last index entry).
     if (it == index.end()) {
-        return min_it->second.indexes.back().file_position;
+        --it;
     }
     // If at the first entry, we must start at the file beginning, because the
     // the max is inclusive of those entries.
     if (it == index.begin()) {
-        return min_it->second.file_position;
+        return {
+          .file_position = partition.file_position,
+          .length = partition.length,
+        };
     }
-    return it->file_position;
+    auto delta = it->file_position - partition.file_position;
+    return {
+      .file_position = it->file_position,
+      .length = partition.length - delta,
+    };
 }
 
 footer footer::copy() const {
@@ -370,10 +389,13 @@ public:
           = std::bit_cast<std::array<char, sizeof(uint32_t)>, uint32_t>(
             _offset - footer_start);
         co_await _output.write(footer_size.data(), footer_size.size());
+        _offset += footer_size.size();
         co_return info;
     }
 
     ss::future<> close() final { return _output.close(); }
+
+    size_t file_size() const final { return _offset; }
 
 private:
     void end_partition() {
@@ -558,6 +580,11 @@ fmt::iterator footer::format_to(fmt::iterator it) const {
           out, "{{tidp: {}, partition: {}}}, ", tidp, partition);
     }
     return fmt::format_to(out, "]}}");
+}
+
+fmt::iterator footer::seek_result::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{file_position:{},length:{}}}", file_position, length);
 }
 
 } // namespace cloud_topics::l1

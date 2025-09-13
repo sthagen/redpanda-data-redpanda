@@ -66,8 +66,12 @@ redpanda_cc_library(
     name = "abstract_io",
     srcs = ["abstract_io.cc"],
     hdrs = ["abstract_io.h"],
+    implementation_deps = [
+        "//src/v/bytes:iostream",
+    ],
     deps = [
         ":object_id",
+        "//src/v/bytes:iobuf",
         "//src/v/container:chunked_vector",
         "//src/v/utils:named_type",
         "@seastar",

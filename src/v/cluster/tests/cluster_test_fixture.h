@@ -101,6 +101,7 @@ public:
         // process won't work.
         set_configuration("disable_metrics", true);
         set_configuration("disable_public_metrics", true);
+        set_configuration("audit_use_rpc", true);
     }
 
     virtual ~cluster_test_fixture() {
