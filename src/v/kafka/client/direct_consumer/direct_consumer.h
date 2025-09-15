@@ -132,8 +132,9 @@ private:
     void on_metadata_update(const metadata_response_data&);
 
     ss::future<> handle_metadata_update();
-    ss::future<>
-    update_fetchers(topic_partition_map<subscription> removals = {});
+    ss::future<> update_fetchers(
+      mutex::units lock_holder,
+      topic_partition_map<subscription> removals = {});
 
     fetcher& get_fetcher(model::node_id id);
 

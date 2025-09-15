@@ -1016,6 +1016,7 @@ class KgoVerifierConsumerGroupConsumer(AbstractConsumer):
         continuous=False,
         tolerate_data_loss=False,
         group_name=None,
+        max_uncommitted=None,  # None means rely on auto commit
         use_transactions=False,
         compacted=False,
         validate_latest_values=False,
@@ -1038,6 +1039,10 @@ class KgoVerifierConsumerGroupConsumer(AbstractConsumer):
         self._max_msgs = max_msgs
         self._max_throughput_mb = max_throughput_mb
         self._group_name = group_name
+        assert max_uncommitted is None or max_uncommitted > 0, (
+            "max_uncommitted must be positive or None"
+        )
+        self._max_uncommitted = max_uncommitted
         self._continuous = continuous
         self._tolerate_data_loss = tolerate_data_loss
         self._use_transactions = use_transactions
@@ -1067,6 +1072,8 @@ class KgoVerifierConsumerGroupConsumer(AbstractConsumer):
             cmd += " --tolerate-data-loss"
         if self._group_name is not None:
             cmd += f" --consumer_group_name {self._group_name}"
+        if self._max_uncommitted is not None:
+            cmd += f" --max-uncommitted {self._max_uncommitted}"
         if self._use_transactions:
             cmd += " --use-transactions"
         if self._compacted:
