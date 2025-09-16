@@ -1152,16 +1152,18 @@ void application::configure_admin_server(model::node_id node_id) {
       .get();
     _admin
       .invoke_on_all([this, node_id](admin_server& s) {
-          admin::proxy::client client(node_id, &_connection_cache, [this] {
-              return controller->get_members_table().local().node_ids();
-          });
+          auto create_client = [node_id, this]() {
+              return admin::proxy::client(node_id, &_connection_cache, [this] {
+                  return controller->get_members_table().local().node_ids();
+              });
+          };
           // Add RPC services
           s.add_service(
             std::make_unique<admin::shadow_link_service_impl>(
-              &_cluster_link_service));
+              create_client(), &_cluster_link_service, &metadata_cache));
           s.add_service(
             std::make_unique<admin::debug_service_impl>(
-              std::move(client), stress_fiber_manager));
+              create_client(), stress_fiber_manager));
       })
       .get();
 }
@@ -1631,15 +1633,9 @@ void application::wire_up_redpanda_services(
                   .bind(),
             };
         },
-        [] {
-            return raft::recovery_memory_quota::configuration{
-              .max_recovery_memory
-              = config::shard_local_cfg().raft_max_recovery_memory.bind(),
-              .default_read_buffer_size
-              = config::shard_local_cfg()
-                  .raft_recovery_default_read_size.bind(),
-            };
-        },
+        ss::sharded_parameter([] {
+            return config::shard_local_cfg().raft_max_recovery_memory.bind();
+        }),
         std::ref(_connection_cache),
         std::ref(storage),
         std::ref(recovery_throttle),
@@ -2526,6 +2522,7 @@ void application::wire_up_redpanda_services(
         std::ref(controller->get_api()),
         std::ref(tx_gateway_frontend),
         std::ref(datalake_throttle_manager),
+        std::ref(controller->get_cluster_link_frontend()),
         qdc_config,
         std::ref(*thread_worker),
         std::ref(_schema_registry))

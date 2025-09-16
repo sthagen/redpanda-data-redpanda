@@ -1044,6 +1044,7 @@ class SecurityConfig:
         self.enable_sasl = False
         self.kafka_enable_authorization: Optional[bool] = None
         self.sasl_mechanisms: Optional[list[str]] = None
+        self.sasl_mechanisms_overrides: Optional[list] = None
         self.http_authentication: Optional[list[str]] = None
         self.endpoint_authn_method: Optional[str] = None
         self.tls_provider: Optional[TLSProvider] = None
@@ -4923,6 +4924,13 @@ class RedpandaService(RedpandaServiceABC, Service):
                 f"Setting sasl_mechanisms: {self._security.sasl_mechanisms} in cluster configuration"
             )
             conf.update(dict(sasl_mechanisms=self._security.sasl_mechanisms))
+        if self._security.sasl_mechanisms_overrides is not None:
+            self.logger.debug(
+                f"Setting sasl_mechanisms_overrides: {self._security.sasl_mechanisms_overrides} in cluster configuration"
+            )
+            conf.update(
+                dict(sasl_mechanisms_overrides=self._security.sasl_mechanisms_overrides)
+            )
 
         if self._security.http_authentication is not None:
             self.logger.debug(
@@ -6123,3 +6131,13 @@ def make_redpanda_mixed_service(context: TestContext, *, min_brokers: int | None
 
 
 AnyRedpandaService = RedpandaService | RedpandaServiceCloud
+
+
+class ValidationMode(str, Enum):
+    """
+    Redpanda validation modes (see cluster config `kafka_produce_batch_validation`).
+    """
+
+    LEGACY = "legacy"
+    RELAXED = "relaxed"
+    STRICT = "strict"

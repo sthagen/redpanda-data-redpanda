@@ -17,7 +17,76 @@
 
 #include <fmt/ranges.h>
 
+#include <ostream>
+
 namespace cluster_link::model {
+
+std::ostream& operator<<(std::ostream& os, mirror_topic_state s) {
+    return os << fmt::format("{}", s);
+}
+
+std::ostream& operator<<(std::ostream& os, task_state s) {
+    return os << fmt::format("{}", s);
+}
+
+std::ostream& operator<<(std::ostream& os, const scram_credentials& creds) {
+    return os << fmt::format("{}", creds);
+}
+
+std::ostream& operator<<(std::ostream& os, const tls_file_path& p) {
+    return os << fmt::format("{}", p());
+}
+
+std::ostream& operator<<(std::ostream& os, const tls_value& v) {
+    return os << fmt::format("{}", v());
+}
+
+std::ostream& operator<<(std::ostream& os, const tls_file_or_value& t) {
+    return os << fmt::format("{}", t);
+}
+
+std::ostream& operator<<(std::ostream& os, const connection_config& cfg) {
+    return os << fmt::format("{}", cfg);
+}
+
+std::ostream& operator<<(std::ostream& os, const mirror_topic_metadata& md) {
+    return os << fmt::format("{}", md);
+}
+
+std::ostream& operator<<(std::ostream& os, filter_pattern_type f) {
+    return os << fmt::format("{}", f);
+}
+
+std::ostream& operator<<(std::ostream& os, filter_type f) {
+    return os << fmt::format("{}", f);
+}
+
+std::ostream&
+operator<<(std::ostream& os, const resource_name_filter_pattern& p) {
+    return os << fmt::format("{}", p);
+}
+
+std::ostream&
+operator<<(std::ostream& os, const topic_metadata_mirroring_config& cfg) {
+    return os << fmt::format("{}", cfg);
+}
+
+std::ostream&
+operator<<(std::ostream& os, const consumer_groups_mirroring_config& cfg) {
+    return os << fmt::format("{}", cfg);
+}
+
+std::ostream& operator<<(std::ostream& os, const link_configuration& cfg) {
+    return os << fmt::format("{}", cfg);
+}
+
+std::ostream& operator<<(std::ostream& os, const link_state& ls) {
+    return os << fmt::format("{}", ls);
+}
+
+std::ostream& operator<<(std::ostream& os, const metadata& md) {
+    return os << fmt::format("{}", md);
+}
 
 mirror_topic_metadata mirror_topic_metadata::copy() const {
     mirror_topic_metadata copy;
@@ -114,6 +183,15 @@ update_mirror_topic_properties_cmd::copy() const {
     for (const auto& [key, value] : topic_configs) {
         copy.topic_configs.emplace(key, value);
     }
+    return copy;
+}
+
+update_cluster_link_configuration_cmd
+update_cluster_link_configuration_cmd::copy() const {
+    update_cluster_link_configuration_cmd copy;
+    copy.connection = connection;
+    copy.link_config = link_config.copy();
+
     return copy;
 }
 } // namespace cluster_link::model
@@ -401,4 +479,15 @@ auto fmt::formatter<cluster_link::model::link_configuration>::format(
       "{{topic_metadata_mirroring_cfg: {}, consumer_groups_mirroring_cfg: {}}}",
       cfg.topic_metadata_mirroring_cfg,
       cfg.consumer_groups_mirroring_cfg);
+}
+
+auto fmt::
+  formatter<cluster_link::model::update_cluster_link_configuration_cmd>::format(
+    const cluster_link::model::update_cluster_link_configuration_cmd& cfg,
+    format_context& ctx) const -> decltype(ctx.out()) {
+    return fmt::format_to(
+      ctx.out(),
+      "{{connection: {}, link_config: {}}}",
+      cfg.connection,
+      cfg.link_config);
 }

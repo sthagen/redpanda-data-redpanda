@@ -91,6 +91,11 @@ public:
         return _table->find_link_by_name(name);
     }
 
+    std::optional<model::id_t>
+    find_link_id_by_name(const model::name_t& name) const override {
+        return _table->find_id_by_name(name);
+    }
+
     chunked_vector<model::id_t> get_all_link_ids() const override {
         return _table->get_all_link_ids();
     }
@@ -157,6 +162,20 @@ public:
             mirror_topics.emplace(topic, metadata.copy());
         }
         return mirror_topics;
+    }
+
+    ss::future<::cluster::cluster_link::errc> update_cluster_link_configuration(
+      model::id_t id,
+      model::update_cluster_link_configuration_cmd cmd,
+      ::model::timeout_clock::time_point) override {
+        auto link = _table->find_link_by_id(id);
+        if (!link) {
+            co_return ::cluster::cluster_link::errc::does_not_exist;
+        }
+        auto batch = ::cluster::cluster_link::testing::
+          create_update_cluster_link_configuration_command(id, std::move(cmd));
+        auto ec = co_await _table->apply_update(std::move(batch));
+        co_return ec.value();
     }
 
 private:

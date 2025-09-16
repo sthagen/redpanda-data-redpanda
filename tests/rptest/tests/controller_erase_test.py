@@ -57,6 +57,7 @@ class ControllerEraseTest(RedpandaTest):
 
             # Move a leader to roll a segment
             leader_node = self.redpanda.controller()
+            assert leader_node
             next_leader = ((self.redpanda.idx(leader_node) + 1) % 3) + 1
             admin.partition_transfer_leadership(
                 "redpanda", "controller", 0, next_leader

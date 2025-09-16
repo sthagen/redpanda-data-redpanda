@@ -212,6 +212,7 @@ domain_manager::get_first_offset_ge(rpc::get_first_offset_ge_request req) {
             .oid = obj.oid,
             .footer_pos = obj.footer_pos,
             .object_size = obj.object_size,
+            .last_offset = obj.last_offset,
         },
     };
 }
@@ -245,6 +246,7 @@ domain_manager::get_first_timestamp_ge(
             .oid = obj.oid,
             .footer_pos = obj.footer_pos,
             .object_size = obj.object_size,
+            .last_offset = obj.last_offset,
         },
     };
 }

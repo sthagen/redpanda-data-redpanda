@@ -86,11 +86,16 @@ struct replace_objects_request
 struct object_metadata
   : serde::
       envelope<object_metadata, serde::version<0>, serde::compat_version<0>> {
-    auto serde_fields() { return std::tie(oid, footer_pos, object_size); }
+    auto serde_fields() {
+        return std::tie(oid, footer_pos, object_size, last_offset);
+    }
 
     object_id oid;
     size_t footer_pos;
     size_t object_size;
+
+    // The last offset (inclusive) that is within this object.
+    kafka::offset last_offset;
 };
 
 struct get_first_offset_ge_reply

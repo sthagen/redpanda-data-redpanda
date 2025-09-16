@@ -33,8 +33,9 @@ partition_replicator::partition_replicator(
 
 ss::future<> partition_replicator::start() {
     vlog(_log.trace, "Starting replicator");
-    co_await _source->start();
     co_await _sink->start();
+    co_await _source->start(
+      kafka::next_offset(_sink->last_replicated_offset()));
     ssx::repeat_until_gate_closed(_gate, [this] {
         return fetch_and_replicate().handle_exception(
           [this](const std::exception_ptr& e) {
@@ -126,8 +127,6 @@ ss::future<> partition_replicator::fetch_and_replicate() {
     // abort source for this iteration of fetch_and_replicate
     ss::abort_source as;
     auto subscription = _as.subscribe([&as] noexcept { as.request_abort(); });
-    co_await _source->reset(
-      kafka::next_offset(_sink->last_replicated_offset()));
     ss::gate gate;
     try {
         while (!_gate.is_closed() && !as.abort_requested()) {
@@ -158,6 +157,8 @@ ss::future<> partition_replicator::fetch_and_replicate() {
     }
     co_await gate.close();
     if (!_gate.is_closed() && !_as.abort_requested()) {
+        co_await _source->reset(
+          kafka::next_offset(_sink->last_replicated_offset()));
         auto sleep_for = _backoff_policy.current_backoff_duration();
         vlog(
           _log.trace,

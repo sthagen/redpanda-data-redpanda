@@ -122,6 +122,72 @@ TEST_P(BasicConsumerFixture, TestBasicLeadershipTransfer) {
     }
 }
 
+TEST_P(BasicConsumerFixture, TestBasicNodeRestart) {
+    // constants
+    constexpr uint first_produce_count = 10;
+    constexpr uint second_produce_count = 20;
+    const auto test_partition_number = 0;
+    const auto test_partition_id = model::partition_id(test_partition_number);
+    const auto test_ntp = model::ntp(
+      model::kafka_namespace, topic, test_partition_id);
+
+    assign_partitions(make_assignment(topic, {test_partition_number}));
+
+    produce_to_partition(topic, test_partition_number, first_produce_count)
+      .get();
+
+    { // fist fetch and assert
+        auto fetched = fetch_until_empty(*consumer);
+
+        ASSERT_EQ(
+          fetched[model::topic_partition(topic, test_partition_id)]
+            .back()
+            .last_offset(),
+          model::offset(first_produce_count - 1));
+    }
+
+    auto leader = this->get_partition_leader(test_ntp);
+
+    // restart the leader for the partition
+    this->remove_node_application(leader);
+    this->create_node_application(leader);
+
+    this->wait_for_all_members(5s).get();
+
+    // attempt to produce, with retry
+    bool did_produce{false};
+    for (int i{0}; i < 5; ++i) {
+        try {
+            produce_to_partition(
+              topic, test_partition_number, second_produce_count)
+              .get();
+            did_produce = true;
+            break;
+        } catch (...) {
+            vlog(
+              logger.info,
+              "attempt to produce failed for iteration: {} with: {}",
+              i,
+              std::current_exception());
+        }
+        // backoff
+        ss::sleep(1s).get();
+    }
+    ASSERT_TRUE(did_produce);
+    ASSERT_EQ(leader, this->get_partition_leader(test_ntp));
+
+    { // second fetch and assert
+        auto fetched = fetch_until_empty(*consumer);
+        ASSERT_EQ(fetched.size(), 1);
+
+        ASSERT_EQ(
+          fetched[model::topic_partition(topic, test_partition_id)]
+            .back()
+            .last_offset(),
+          model::offset(first_produce_count + second_produce_count - 1));
+    }
+}
+
 TEST_P(BasicConsumerFixture, TestUnassignPartition) {
     assign_partitions(make_assignment(topic, {0, 1}));
 

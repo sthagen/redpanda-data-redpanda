@@ -54,7 +54,7 @@ class data_source {
 public:
     virtual ~data_source() = default;
 
-    virtual ss::future<> start() = 0;
+    virtual ss::future<> start(kafka::offset) = 0;
     virtual ss::future<> stop() noexcept = 0;
 
     /**

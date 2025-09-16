@@ -10,6 +10,7 @@
 from contextlib import contextmanager
 
 import google.protobuf.duration_pb2
+import google.protobuf.field_mask_pb2
 from ducktape.utils.util import wait_until
 
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
@@ -28,6 +29,7 @@ from rptest.services.multi_cluster_services import (
     MultiClusterServices,
     RedpandaCluster,
     RedpandaService,
+    SecondaryClusterArgs,
     ServiceType,
 )
 from rptest.services.redpanda import LoggingConfig
@@ -43,16 +45,26 @@ class ShadowLinkTestBase(PreallocNodesTest):
     the target cluster. Secondary service is used as the source cluster.
     """
 
-    def __init__(self, test_context, num_prealloc_nodes=0, *args, **kwargs):
+    def __init__(
+        self,
+        test_context,
+        num_prealloc_nodes=0,
+        secondary_cluster_args: SecondaryClusterArgs = SecondaryClusterArgs(),
+        *args,
+        **kwargs,
+    ):
+        kwargs.setdefault("extra_rp_conf", {}).update(
+            {
+                "enable_developmental_unrecoverable_data_corrupting_features": True,
+                "development_enable_cluster_link": True,
+            }
+        )
+
         super().__init__(
             test_context=test_context,
             # For running kgo producer/consumer
             node_prealloc_count=num_prealloc_nodes,
             num_brokers=3,
-            extra_rp_conf={
-                "enable_developmental_unrecoverable_data_corrupting_features": True,
-                "development_enable_cluster_link": True,
-            },
             log_config=LoggingConfig(
                 "info",
                 logger_levels={
@@ -68,7 +80,8 @@ class ShadowLinkTestBase(PreallocNodesTest):
         self.test_context = test_context
         self.admin_v2: AdminV2
         self.services: MultiClusterServices
-        self.client: shadow_link_pb2_connect.ShadowLinkServiceClient
+        self.service_client: shadow_link_pb2_connect.ShadowLinkServiceClient
+        self.secondary_cluster_args: SecondaryClusterArgs = secondary_cluster_args
 
     def setUp(self):
         self.services = MultiClusterServices(
@@ -77,10 +90,11 @@ class ShadowLinkTestBase(PreallocNodesTest):
             self.redpanda,
             secondary_type=ServiceType.REDPANDA,
             num_brokers=3,
+            secondary_args=self.secondary_cluster_args,
         )
         self.services.setUp()
         self.admin_v2 = AdminV2(self.target_cluster_service)
-        self.client = self.admin_v2.shadow_link()
+        self.service_client = self.admin_v2.shadow_link()
 
     @property
     def source_cluster(self) -> Cluster:
@@ -91,6 +105,10 @@ class ShadowLinkTestBase(PreallocNodesTest):
         return self.services.secondary.service
 
     @property
+    def source_cluster_rpk(self) -> RpkTool:
+        return self.source_cluster.rpk
+
+    @property
     def target_cluster_service(self) -> RedpandaService:
         return self.services.primary.service
 
@@ -98,12 +116,27 @@ class ShadowLinkTestBase(PreallocNodesTest):
     def target_cluster(self) -> RedpandaCluster:
         return self.services.primary
 
-    def create_link(
+    @property
+    def target_cluster_rpk(self) -> RpkTool:
+        return self.target_cluster.rpk
+
+    def create_default_link_request(
         self,
         link_name: str,
         mirror_all_topics: bool = True,
         mirror_all_groups: bool = True,
-    ):
+    ) -> shadow_link_pb2.CreateShadowLinkRequest:
+        topic_sync_options: shadow_link_pb2.TopicMetadataSyncOptions = (
+            shadow_link_pb2.TopicMetadataSyncOptions(
+                interval=google.protobuf.duration_pb2.Duration(seconds=1)
+            )
+        )
+        group_sync_options: shadow_link_pb2.ConsumerOffsetSyncOptions = (
+            shadow_link_pb2.ConsumerOffsetSyncOptions(
+                interval=google.protobuf.duration_pb2.Duration(seconds=1)
+            )
+        )
+
         if mirror_all_topics:
             topic_sync_options = shadow_link_pb2.TopicMetadataSyncOptions(
                 interval=google.protobuf.duration_pb2.Duration(seconds=1),
@@ -142,16 +175,40 @@ class ShadowLinkTestBase(PreallocNodesTest):
 
         req = shadow_link_pb2.CreateShadowLinkRequest()
         req.shadow_link.CopyFrom(link_resource)
-        return self.client.create_shadow_link(req=req)
+        return req
+
+    def create_link(
+        self, link_name: str, *args, **kwargs
+    ) -> shadow_link_pb2.ShadowLink:
+        req = self.create_default_link_request(link_name=link_name, *args, **kwargs)
+        return self.create_link_with_request(req=req)
+
+    def create_link_with_request(
+        self, req: shadow_link_pb2.CreateShadowLinkRequest
+    ) -> shadow_link_pb2.ShadowLink:
+        return self.service_client.create_shadow_link(req=req).shadow_link
 
     def list_links(self) -> list[shadow_link_pb2.ShadowLink]:
-        resp = self.client.list_shadow_links(
+        resp = self.service_client.list_shadow_links(
             req=shadow_link_pb2.ListShadowLinksRequest()
         )
         return resp.shadow_links
 
+    def update_link(
+        self,
+        shadow_link: shadow_link_pb2.ShadowLink,
+        update_mask: google.protobuf.field_mask_pb2.FieldMask | None = None,
+    ) -> shadow_link_pb2.ShadowLink:
+        resp = self.service_client.update_shadow_link(
+            req=shadow_link_pb2.UpdateShadowLinkRequest(
+                shadow_link=shadow_link, update_mask=update_mask
+            )
+        )
+
+        return resp.shadow_link
+
     def get_link(self, name: str) -> shadow_link_pb2.ShadowLink:
-        resp = self.client.get_shadow_link(
+        resp = self.service_client.get_shadow_link(
             req=shadow_link_pb2.GetShadowLinkRequest(name=name)
         )
         return resp.shadow_link

@@ -208,6 +208,44 @@ result<chunked_vector<model::metadata>> manager::list_cluster_links() {
     return resp;
 }
 
+ss::future<result<model::metadata>> manager::update_cluster_link(
+  model::name_t name, model::update_cluster_link_configuration_cmd cmd) {
+    static constexpr auto model_timeout = 30s;
+    auto hold = _g.hold();
+    vlog(cllog.info, "Attempting to update cluster link '{}'", name);
+    vlog(cllog.trace, "Update command: {}", cmd);
+    const auto needs_consumer_offsets_topic
+      = cmd.link_config.consumer_groups_mirroring_cfg.is_enabled;
+
+    const auto id = _registry->find_link_id_by_name(name);
+    if (!id.has_value()) {
+        co_return err_info{
+          errc::link_id_not_found,
+          ssx::sformat("Unable to find link by name '{}'", name)};
+    }
+
+    auto ec = co_await _registry->update_cluster_link_configuration(
+      *id, std::move(cmd), ::model::timeout_clock::now() + model_timeout);
+    auto err = map_cluster_errc(ec);
+    if (err != errc::success) {
+        co_return err_info(
+          err, fmt::format("Failed to update cluster link {}: {}", name, ec));
+    }
+
+    if (needs_consumer_offsets_topic) {
+        co_await _group_router->assure_topic_exists();
+    }
+
+    auto metadata_resp = _registry->find_link_by_id(*id);
+    if (!metadata_resp) {
+        co_return err_info(
+          errc::link_id_not_found,
+          fmt::format("Failed to find cluster link with name '{}'", name));
+    }
+
+    co_return metadata_resp->get().copy();
+}
+
 void manager::on_link_change(model::id_t id) {
     vlog(cllog.trace, "Cluster link with id={} has changed", id);
     if (_topic_reconciler && _is_controller_leader) {

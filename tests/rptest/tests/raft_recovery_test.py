@@ -143,7 +143,7 @@ class RaftRecoveryUpgradeTest(RedpandaTest):
         self.logger.info(f"started node {node1.name}")
         wait_for_recovery_finished()
 
-    def _wait_for_underreplicated(self, nodes: [ClusterNode], target: int):
+    def _wait_for_underreplicated(self, nodes: list[ClusterNode], target: int):
         def ready():
             count = self.redpanda.metric_sum(
                 "vectorized_cluster_partition_under_replicated_replicas", nodes=nodes

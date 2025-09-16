@@ -177,6 +177,7 @@ TEST(SimpleMetastoreTest, TestGetMissingPartition) {
     ASSERT_EQ(get_res->oid, oid1);
     ASSERT_EQ(get_res->footer_pos, 200);
     ASSERT_EQ(get_res->object_size, 1200);
+    ASSERT_EQ(get_res->last_offset, 10_o);
 }
 
 TEST(SimpleMetastoreTest, TestAddWithGap) {
@@ -316,6 +317,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 10_o);
     }
     for (const auto& o : std::views::iota(11, 21)) {
         auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
@@ -323,6 +325,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 20_o);
     }
     for (const auto& o : std::views::iota(21, 31)) {
         auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
@@ -330,6 +333,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 30_o);
     }
 }
 
@@ -352,6 +356,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBelowStart) {
     ASSERT_EQ(get_res->oid, oid1);
     ASSERT_EQ(get_res->footer_pos, 100);
     ASSERT_EQ(get_res->object_size, 1100);
+    ASSERT_EQ(get_res->last_offset, 10_o);
 }
 
 TEST(SimpleMetastoreTest, TestAddGetOffsetOutOfRange) {
@@ -396,6 +401,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 10_o);
     }
     for (const auto& t : {2000_t, 2999_t}) {
         auto get_res = m.get_first_ge(tpr, t).get();
@@ -403,6 +409,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 20_o);
     }
     for (const auto& t : {3000_t, 3999_t}) {
         auto get_res = m.get_first_ge(tpr, t).get();
@@ -410,6 +417,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 30_o);
     }
 }
 
@@ -505,6 +513,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 20_o);
     }
     // Others should be served from oid1 or oid2.
     tpr = model::topic_id_partition::from(tid_b);
@@ -514,6 +523,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 10_o);
     }
     for (const auto& o : std::views::iota(11, 21)) {
         auto get_res = m.get_first_ge(tpr, kafka::offset{o}).get();
@@ -521,6 +531,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 20_o);
     }
     // Sanity check that replacement leaves us with expected offsets.
     for (const auto& tid : {tid_a, tid_b}) {
@@ -569,6 +580,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 20_o);
     }
     tpr = model::topic_id_partition::from(tid_b);
     for (const auto& o : std::views::iota(11, 21)) {
@@ -577,6 +589,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 20_o);
     }
     // Others should be served from oid1 or oid2.
     for (const auto& o : std::views::iota(0, 11)) {
@@ -585,6 +598,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->last_offset, 10_o);
     }
     // Sanity check that replacement leaves us with expected offsets.
     for (const auto& tid : {tid_a, tid_b}) {

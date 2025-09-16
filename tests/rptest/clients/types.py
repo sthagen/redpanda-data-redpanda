@@ -11,8 +11,6 @@ import string
 from enum import Enum
 from typing import Literal
 
-# pyright: strict
-
 
 class TopicSpec:
     """

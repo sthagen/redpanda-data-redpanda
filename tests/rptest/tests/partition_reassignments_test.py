@@ -612,10 +612,8 @@ class PartitionReassignmentsTest(RedpandaTest):
         # Try to add partitions to a single topic when there is no in-progress reassignment.
         # Expect success.
         def add_partition_when_no_inprogress_reassignment(topic: str, count: int):
-            assert (
-                re.search(r".*topic-[a-z]+\s+OK\s*$", try_add_partitions(topic, count))
-                is not None
-            ), (
+            out = try_add_partitions(topic, count)
+            assert re.search(r".*topic-[a-z]+\s+OK\s*$", out) is not None, (
                 f"Expected successful add-partitions: topic {topic}, partition count {count}, output {out}"
             )
 

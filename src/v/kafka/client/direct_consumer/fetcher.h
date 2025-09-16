@@ -260,6 +260,8 @@ private:
     prefix_logger& logger();
     assignment_epoch next_epoch() { return ++_epoch; }
 
+    void reset_partition_offset(model::topic_partition_view);
+
     direct_consumer* _parent;
     model::node_id _id;
     fetch_session_state _session_state;

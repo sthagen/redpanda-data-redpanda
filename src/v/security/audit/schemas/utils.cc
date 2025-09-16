@@ -255,7 +255,7 @@ actor result_to_actor(const security::auth_result& result) {
 
     if (result.authorization_disabled) {
         policy.desc = "authorization disabled";
-    } else if (result.is_superuser) {
+    } else if (result.is_superuser || result.required_superuser) {
         policy.desc = "superuser";
     } else if (result.empty_matches) {
         policy.desc = "no matches";

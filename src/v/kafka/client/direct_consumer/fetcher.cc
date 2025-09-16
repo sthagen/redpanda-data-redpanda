@@ -386,7 +386,17 @@ ss::future<> fetcher::do_fetch() {
           partitions_with_epochs.partitions);
 
         if (fetch_result.has_error()) {
-            if (is_retriable_error(fetch_result.error())) {
+            auto ec = fetch_result.error();
+
+            // no need for backoff, reset fetch session and rerequest
+            if (ec == kafka::error_code::fetch_session_id_not_found) {
+                vlog(logger().trace, "fetch session invalidated");
+                _session_state.reset();
+                co_return;
+            }
+
+            // retriable error, backoff
+            if (is_retriable_error(ec)) {
                 needs_backoff = true;
             } else {
                 // propagate non retriable error to the queue
@@ -495,6 +505,23 @@ fetcher::process_fetch_response(
             part_data.partition_id = part_response.partition_index;
 
             if (part_response.error_code != kafka::error_code::none) {
+                if (
+                  part_response.error_code
+                  == kafka::error_code::offset_out_of_range) {
+                    vlog(
+                      logger().warn,
+                      "[broker: {}] {}/{} fetch returned: {}, resetting "
+                      "offset with policy: {}",
+                      _id,
+                      topic_data.topic,
+                      part_data.partition_id,
+                      part_response.error_code,
+                      _parent->_config.reset_policy);
+                    reset_partition_offset(
+                      model::topic_partition_view(
+                        topic_data.topic, part_data.partition_id));
+                    continue;
+                }
                 if (is_retriable_error(part_response.error_code)) {
                     vlog(
                       logger().debug,
@@ -672,6 +699,19 @@ fetcher::process_fetch_response(
     }
 
     co_return result;
+}
+
+void fetcher::reset_partition_offset(model::topic_partition_view tp) {
+    auto t_it = _partitions.find(tp.topic);
+    if (t_it == _partitions.end()) {
+        return;
+    }
+    auto p_it = t_it->second.find(tp.partition);
+    if (p_it == t_it->second.end()) {
+        return;
+    }
+    p_it->second.fetch_offset = std::nullopt;
+    p_it->second.assignment_epoch = next_epoch();
 }
 
 namespace {

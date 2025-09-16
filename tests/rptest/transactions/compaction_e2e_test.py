@@ -189,7 +189,8 @@ class CompactionWithRecoveryTest(RedpandaTest, PartitionMovementMixin):
         self.num_moves = 50
         # keep read size low to ensure reads fall within a transaction
         extra_rp_conf = {
-            "raft_recovery_default_read_size": 1024,
+            "raft_recovery_concurrency_per_shard": 16384,
+            "raft_max_recovery_memory": 32 * 1024,
             "log_compaction_interval_ms": 2000,
             "min_cleanable_dirty_ratio": 0.0,
         }

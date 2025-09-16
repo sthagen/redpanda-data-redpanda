@@ -67,6 +67,9 @@ public:
     /// alone can't cause data loss.
     ss::future<std::optional<cluster_epoch>> get_inactive_epoch();
 
+    /// Return inactive epoch of the CTP
+    std::optional<cluster_epoch> estimate_inactive_epoch() const noexcept;
+
     /// Sync with the STM
     ///
     /// \brief The method is syncing the STM  to minimize races.

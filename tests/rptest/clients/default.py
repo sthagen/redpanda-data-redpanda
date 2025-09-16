@@ -16,8 +16,6 @@ from rptest.clients.rpk import RpkTool
 from rptest.clients.types import TopicSpec
 from rptest.services.redpanda_types import RedpandaServiceForClients
 
-# pyright: strict
-
 
 class PartitionDescription(typing.NamedTuple):
     id: int

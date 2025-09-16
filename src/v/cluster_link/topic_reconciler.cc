@@ -256,7 +256,8 @@ ss::future<> topic_reconciler::maybe_create_mirror_topic(
       {::model::kafka_namespace, topic},
       mirror_topic_config.partition_count,
       std::move(cfg.properties),
-      mirror_topic_config.replication_factor);
+      mirror_topic_config.replication_factor.value_or(
+        _default_topic_replication()));
 
     if (res != cluster::errc::success) {
         vlog(cllog.error, "Failed to create mirror topic {}: {}", topic, res);

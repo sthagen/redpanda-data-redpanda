@@ -522,17 +522,17 @@ class AuditLogTestBase(RedpandaTest):
         patch_result = self.admin.patch_cluster_config(upsert=upsert)
         wait_for_version_sync(self.admin, self.redpanda, patch_result["config_version"])
 
-    def modify_audit_event_types(self, events: [str]):
+    def modify_audit_event_types(self, events: list[str]):
         """Modifies the current audited events"""
         self._modify_cluster_config({"audit_enabled_event_types": events})
 
-    def modify_audit_excluded_topics(self, topics: [str]):
+    def modify_audit_excluded_topics(self, topics: list[str]):
         """
         Modifies list of excluded topics
         """
         self._modify_cluster_config({"audit_excluded_topics": topics})
 
-    def modify_audit_excluded_principals(self, principals: [str]):
+    def modify_audit_excluded_principals(self, principals: list[str]):
         """
         Modifies list of excluded principals
         """
@@ -1532,7 +1532,7 @@ class AuditLogTestKafkaApi(AuditLogTestBase):
         gen_event_thread = threading.Thread(target=generate_async_audit_events, args=())
         gen_event_thread.start()
 
-        def modify_auth_method(method, listeners: [str], node_cfg):
+        def modify_auth_method(method, listeners: list[str], node_cfg):
             node_kafka_cfg = node_cfg["redpanda"]["kafka_api"]
             for l in listeners:
                 listener = [e for e in node_kafka_cfg if e["name"] == l]
@@ -2979,6 +2979,7 @@ class AuditLogTestSchemaRegistryACLs(AuditLogTestSchemaRegistryBase):
             "authn attempt in sr",
         )
 
+    @skip_fips_mode
     @cluster(num_nodes=5)
     @matrix(
         endpoint_name=[e.name for e in PUBLIC_ENDPOINTS],
@@ -3232,6 +3233,7 @@ class AuditLogTestBypassBase(AuditLogTestBase):
     def setUp(self):
         super().setUp(wait_for_audit_log=self.expect_topic)
 
+    @skip_fips_mode
     @cluster(
         num_nodes=4,
         log_allow_list=[

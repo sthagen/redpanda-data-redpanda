@@ -315,6 +315,10 @@ static ss::future<chunked_vector<metadata_response::topic>> get_topic_metadata(
       *request.data.topics,
       [](const auto& topic) { return topic.topic_id != model::topic_id{}; });
 
+    auto superuser_required_to_create = ctx.is_cluster_link_active()
+                                          ? superuser_required::yes
+                                          : superuser_required::no;
+
     for (auto& topic : *request.data.topics) {
         const auto move_topic_name = [&topic]() {
             return std::move(topic.name).value_or(model::topic{});
@@ -385,7 +389,12 @@ static ss::future<chunked_vector<metadata_response::topic>> get_topic_metadata(
         /**
          * check if authorized to create
          */
-        if (!ctx.authorized(security::acl_operation::create, *topic.name)) {
+        if (!ctx.authorized(
+              security::acl_operation::create,
+              *topic.name,
+              authz_quiet::no,
+              audit_authz_check::yes,
+              superuser_required_to_create)) {
             res.push_back(make_error_topic_response(
               move_topic_name(), error_code::topic_authorization_failed));
             continue;

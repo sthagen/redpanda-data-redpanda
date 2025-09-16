@@ -247,6 +247,7 @@ simple_metastore::get_first_ge(
           .oid = it->oid,
           .footer_pos = footer_pos,
           .object_size = object_size,
+          .last_offset = it->last_offset,
         };
     }
     return std::unexpected(metastore::errc::out_of_range);
@@ -281,6 +282,7 @@ simple_metastore::get_first_ge(
               .oid = obj.oid,
               .footer_pos = footer_pos,
               .object_size = object_size,
+              .last_offset = obj.last_offset,
             };
         }
     }

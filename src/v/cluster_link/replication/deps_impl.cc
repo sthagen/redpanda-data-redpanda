@@ -39,9 +39,9 @@ remote_data_source_factory::make_source(const ::model::ntp& ntp) {
     return std::make_unique<remote_partition_source>(ntp.tp, *_consumer);
 }
 
-ss::future<> remote_partition_source::start() {
+ss::future<> remote_partition_source::start(kafka::offset offset) {
     vlog(cllog.trace, "[{}] Starting remote partition source", _tp);
-    auto result = _consumer.add(_tp);
+    auto result = _consumer.add(_tp, offset);
     if (!result.has_value()) [[unlikely]] {
         // this is usually indicative of a bug in the manager where
         // a previous source is not deregistered, bubble it up.

@@ -54,7 +54,7 @@ public:
     ss::future<> start();
     ss::future<> stop() noexcept;
 
-    result add(const ::model::topic_partition&);
+    result add(const ::model::topic_partition&, kafka::offset);
     ss::future<result> remove(const ::model::topic_partition&);
 
     /**

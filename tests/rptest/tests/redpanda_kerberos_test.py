@@ -10,6 +10,7 @@
 import json
 import os
 import time
+from typing import Any
 
 from ducktape.cluster.remoteaccount import RemoteAccountSSHConfig, RemoteCommandError
 from ducktape.cluster.windows_remoteaccount import WindowsRemoteAccount
@@ -258,11 +259,11 @@ class RedpandaKerberosRulesTesting(RedpandaKerberosTestBase):
     )
     def test_kerberos_mapping_rules(
         self,
-        rules: [str],
+        rules: list[str],
         kerberos_principal: str,
         rp_user: str,
-        expected_topics: [str],
-        acl: [(str, str)],
+        expected_topics: list[str],
+        acl: list[tuple[str, str]],
     ):
         self.client.add_primary(primary=kerberos_principal)
 
@@ -306,7 +307,9 @@ class RedpandaKerberosRulesTesting(RedpandaKerberosTestBase):
     @cluster(num_nodes=3)
     @parametrize(rules=["default"], expected_error="default")
     @parametrize(rules=["RULE:[1:$1]", "RUL"], expected_error="RUL")
-    def test_invalid_kerberos_mapping_rules(self, rules: [str], expected_error: str):
+    def test_invalid_kerberos_mapping_rules(
+        self, rules: list[str], expected_error: str
+    ):
         rpk = RpkTool(self.redpanda)
         try:
             rpk.cluster_config_set("sasl_kerberos_principal_mapping", json.dumps(rules))

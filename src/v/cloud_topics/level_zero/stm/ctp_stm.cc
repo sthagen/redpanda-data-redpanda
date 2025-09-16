@@ -96,6 +96,10 @@ ss::future<bool> ctp_stm::sync_in_term(ss::abort_source& as) {
     co_return true;
 }
 
+std::optional<cluster_epoch> ctp_stm::estimate_inactive_epoch() const noexcept {
+    return _state.estimate_min_epoch().transform(prev_cluster_epoch);
+}
+
 ss::future<std::optional<cluster_epoch>> ctp_stm::get_inactive_epoch() {
     // Consume the first epoch from the partition starting from
     // start offset if nothing was reconciled yet or from the last
@@ -176,7 +180,7 @@ ss::future<> ctp_stm::do_apply(const model::record_batch& batch) {
 
         auto placeholder = serde::from_iobuf<dl_placeholder>(std::move(value));
         auto id = placeholder.id;
-        _state.advance_epoch(id.epoch);
+        _state.advance_epoch(id.epoch, batch.header().base_offset);
 
     } else if (
       batch.header().type == model::record_batch_type::ctp_stm_command) {

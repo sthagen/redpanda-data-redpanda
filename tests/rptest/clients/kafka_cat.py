@@ -16,8 +16,6 @@ import rptest.utils.process_utils as process_utils
 from rptest.services.redpanda_types import RedpandaServiceForClients
 from rptest.util import wait_until_result
 
-# pyright: strict
-
 
 class KafkaCat:
     """

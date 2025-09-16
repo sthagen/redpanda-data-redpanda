@@ -11,6 +11,7 @@
 
 #include "redpanda/admin/services/shadow_link/shadow_link.h"
 
+#include "cluster/metadata_cache.h"
 #include "cluster_link/service.h"
 #include "redpanda/admin/services/shadow_link/converter.h"
 #include "serde/protobuf/rpc.h"
@@ -56,11 +57,33 @@ T handle_error(cluster_link::result<T> result) {
         throw serde::pb::rpc::resource_exhausted_exception(info.message());
     }
 }
+
+const std::vector<serde::pb::field_mask::path> disallowed_paths_in_update = {
+  {"configurations", "client_options", "bootstrap_servers"},
+  {"configurations", "client_options", "tls_settings"}};
+
+bool is_path_disallowed(
+  const serde::pb::field_mask::path_view& path,
+  const std::vector<serde::pb::field_mask::path>& disallowed_paths) {
+    for (const auto& disallowed : disallowed_paths) {
+        if (
+          path.size() >= disallowed.size()
+          && std::ranges::equal(
+            disallowed, path | std::views::take(disallowed.size()))) {
+            return true;
+        }
+    }
+    return false;
+}
 } // namespace
 
 shadow_link_service_impl::shadow_link_service_impl(
-  ss::sharded<cluster_link::service>* service)
-  : _service(service) {}
+  admin::proxy::client proxy_client,
+  ss::sharded<cluster_link::service>* service,
+  ss::sharded<cluster::metadata_cache>* md_cache)
+  : _proxy_client(std::move(proxy_client))
+  , _service(service)
+  , _md_cache(md_cache) {}
 
 ss::future<proto::admin::create_shadow_link_response>
 shadow_link_service_impl::create_shadow_link(
@@ -122,13 +145,66 @@ shadow_link_service_impl::list_shadow_links(
 
 ss::future<proto::admin::update_shadow_link_response>
 shadow_link_service_impl::update_shadow_link(
-  serde::pb::rpc::context, proto::admin::update_shadow_link_request) {
-    throw serde::pb::rpc::unimplemented_exception();
+  serde::pb::rpc::context ctx, proto::admin::update_shadow_link_request req) {
+    vlog(sllog.trace, "update_shadow_link: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .update_shadow_link(ctx, std::move(req));
+    }
+
+    auto link_name = cluster_link::model::name_t{
+      req.get_shadow_link().get_name()};
+
+    auto current_link = handle_error(
+      _service->local().get_cluster_link(link_name));
+
+    if (std::ranges::any_of(req.get_update_mask().paths, [](const auto& path) {
+            return is_path_disallowed(path, disallowed_paths_in_update);
+        })) {
+        throw serde::pb::rpc::invalid_argument_exception(
+          ssx::sformat(
+            "Attempted to update disallowed fields in shadow link {}",
+            link_name));
+    }
+
+    auto update_cmd = create_update_cluster_link_config_cmd(
+      std::move(req), std::move(current_link));
+
+    auto updated_md = handle_error(
+      co_await _service->local().update_cluster_link(
+        std::move(link_name), std::move(update_cmd)));
+
+    proto::admin::update_shadow_link_response resp;
+    resp.set_shadow_link(metadata_to_shadow_link(std::move(updated_md)));
+
+    co_return resp;
 }
 
 ss::future<proto::admin::fail_over_response>
 shadow_link_service_impl::fail_over(
   serde::pb::rpc::context, proto::admin::fail_over_request) {
     throw serde::pb::rpc::unimplemented_exception();
+}
+
+std::optional<model::node_id>
+shadow_link_service_impl::redirect_to(const model::ntp& ntp) {
+    auto leader_node = _md_cache->local().get_leader_id(ntp);
+    if (!leader_node) {
+        throw serde::pb::rpc::unavailable_exception{
+          ssx::sformat("Partition {} does not have a leader", ntp)};
+    }
+
+    if (*leader_node == _proxy_client.self_node_id()) {
+        return std::nullopt;
+    }
+    return *leader_node;
 }
 } // namespace admin

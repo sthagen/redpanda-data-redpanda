@@ -55,6 +55,11 @@ public:
         return _plf->find_link_by_name(name);
     }
 
+    std::optional<model::id_t>
+    find_link_id_by_name(const model::name_t& name) const final {
+        return _plf->find_link_id_by_name(name);
+    }
+
     chunked_vector<model::id_t> get_all_link_ids() const override {
         return _plf->get_all_link_ids();
     }
@@ -86,6 +91,14 @@ public:
       ::cluster_link::model::mirror_topic_metadata>>
     get_mirror_topics_for_link(model::id_t id) const override {
         return _plf->get_mirror_topics_for_link(id);
+    }
+
+    ss::future<::cluster::cluster_link::errc> update_cluster_link_configuration(
+      model::id_t id,
+      model::update_cluster_link_configuration_cmd cmd,
+      ::model::timeout_clock::time_point timeout) override {
+        return _plf->update_cluster_link_configuration(
+          id, std::move(cmd), timeout);
     }
 
 private:
@@ -287,6 +300,11 @@ result<model::metadata> service::get_cluster_link(const model::name_t& name) {
 
 result<chunked_vector<model::metadata>> service::list_cluster_links() {
     return _manager->list_cluster_links();
+}
+
+ss::future<result<model::metadata>> service::update_cluster_link(
+  model::name_t name, model::update_cluster_link_configuration_cmd cmd) {
+    return _manager->update_cluster_link(std::move(name), std::move(cmd));
 }
 
 void service::register_notifications() {

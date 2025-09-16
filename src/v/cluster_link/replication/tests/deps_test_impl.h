@@ -35,7 +35,7 @@ private:
 
 class random_data_source : public data_source {
 public:
-    ss::future<> start() noexcept override;
+    ss::future<> start(kafka::offset) noexcept override;
     ss::future<> stop() noexcept override;
     ss::future<> reset(kafka::offset) override;
     ss::future<data_source::data> fetch_next(ss::abort_source&) override;

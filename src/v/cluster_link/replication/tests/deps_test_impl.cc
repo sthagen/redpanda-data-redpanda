@@ -49,7 +49,11 @@ raft::replicate_stages accounting_sink::replicate(
 
 void accounting_sink::notify_replicator_failure(model::term_id) {}
 
-ss::future<> random_data_source::start() noexcept { return ss::now(); }
+ss::future<> random_data_source::start(kafka::offset offset) noexcept {
+    _next = offset;
+    return ss::now();
+}
+
 ss::future<> random_data_source::stop() noexcept { return _gate.close(); }
 ss::future<> random_data_source::reset(kafka::offset offset) {
     _next = offset;

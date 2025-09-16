@@ -26,7 +26,6 @@ from rptest.tests.redpanda_cloud_test import RedpandaCloudTest
 from rptest.tests.write_caching_test import WriteCachingMode
 from rptest.utils.type_utils import rcast
 
-# pyright: strict
 
 KiB = 1024
 MiB = KiB * KiB
@@ -349,22 +348,22 @@ class OMBValidationTest(RedpandaCloudTest):
 
         total_target = omb_connections + swarm_target_connections
 
-        self.logger.warn(
+        self.logger.warning(
             f"Connections (before start): {self._connection_count()}, target conn: {total_target} "
             f"(OMB: {omb_connections}, swarm: {swarm_target_connections}), per-broker: {total_target / self.num_brokers:.0f}"
         )
 
-        self.logger.warn(
+        self.logger.warning(
             f"OMB nodes: {OMB_WORKERS}, omb producers: {omb_producer_count}, omb consumers: "
             f"{omb_consumer_count}, producer rate: {producer_rate / 10**6} MB/s"
         )
 
-        self.logger.warn(
+        self.logger.warning(
             f"target_runtime: {target_runtime_s / 60:.2f}m, omb test_duration: {omb_test_duration}m, "
             f"OMB warmup: {warmup_duration}m, swarm warmup: {warm_up_time_s / 60:.2f}m"
         )
 
-        self.logger.warn(
+        self.logger.warning(
             f"Swarm nodes: {SWARM_WORKERS}, producers per node: {producer_per_swarm_node}, messages per producer: "
             f"{records_per_producer} Message rate: {messages_per_sec_per_producer} msg/s"
         )
@@ -471,7 +470,7 @@ class OMBValidationTest(RedpandaCloudTest):
 
         time_before_body = time()
 
-        self.logger.warn(
+        self.logger.warning(
             f"swarm startup complete in {time_before_body - time_before_swarm} (expected: {warm_up_time_s})"
         )
 
@@ -546,7 +545,7 @@ class OMBValidationTest(RedpandaCloudTest):
                 # rate. Normally this does not occur (except perhaps transiently when the swarm)
                 # is first starting up, and probably indicates that redpanda-data/redpanda#15475
                 # has occurred, so just log it and move on
-                self.logger.warn(
+                self.logger.warning(
                     f"On {sname} p0 rate was very slow, probably redpanda-data/redpanda#15475 : "
                     f"p0={metrics.p0}"
                 )
@@ -575,7 +574,7 @@ class OMBValidationTest(RedpandaCloudTest):
                     results.append(kv_str(key, val) + rule[1])
 
         if len(results) > 0:
-            self.logger.warn(str(results))
+            self.logger.warning(str(results))
 
     @cluster(num_nodes=CLUSTER_NODES)
     @matrix(write_caching=[WriteCachingMode.TRUE, WriteCachingMode.FALSE])

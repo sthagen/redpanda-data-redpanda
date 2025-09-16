@@ -7,7 +7,6 @@ from typing import Iterator, Protocol, Sequence
 
 from rptest.utils.allow_logs_on_predicate import AllowLogsOnPredicate
 
-# pyright: strict
 
 # Basic types shared between various redpanda service and test modes.
 

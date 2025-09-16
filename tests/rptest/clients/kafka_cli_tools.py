@@ -23,8 +23,6 @@ from rptest.services.redpanda_types import (
     check_username_password,
 )
 
-# pyright: strict
-
 
 class AuthenticationError(Exception):
     pass

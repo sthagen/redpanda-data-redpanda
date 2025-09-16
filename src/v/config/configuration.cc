@@ -14,6 +14,7 @@
 #include "config/base_property.h"
 #include "config/bounded_property.h"
 #include "config/node_config.h"
+#include "config/sasl_mechanisms.h"
 #include "config/types.h"
 #include "config/validators.h"
 #include "model/metadata.h"
@@ -437,14 +438,7 @@ configuration::configuration()
        .visibility = visibility::tunable},
       std::nullopt,
       {.min = 32_MiB})
-  , raft_recovery_default_read_size(
-      *this,
-      "raft_recovery_default_read_size",
-      "Specifies the default size of a read issued during Raft follower "
-      "recovery.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
-      512_KiB,
-      {.min = 128, .max = 5_MiB})
+  , raft_recovery_default_read_size(*this, "raft_recovery_default_read_size")
   , raft_enable_lw_heartbeat(
       *this,
       "raft_enable_lw_heartbeat",
@@ -865,6 +859,21 @@ configuration::configuration()
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       1h,
       {.min = 0ms, .max = serde::max_serializable_ms})
+  , kafka_produce_batch_validation(
+      *this,
+      "kafka_produce_batch_validation",
+      "Controls the level of validation performed on batches produced to "
+      "Redpanda. When set to `legacy`, there is minimal validation performed "
+      "on the produce path. When set to `relaxed`, full validation is "
+      "performed on uncompressed batches and on compressed batches with the "
+      "`max_timestamp` value left unset. When set to `strict`, full validation "
+      "of uncompressed and compressed batches is performed. This should be the "
+      "default in environments where producing clients are not trusted.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::tunable},
+      model::kafka_batch_validation_mode::relaxed,
+      {model::kafka_batch_validation_mode::legacy,
+       model::kafka_batch_validation_mode::relaxed,
+       model::kafka_batch_validation_mode::strict})
   , log_compression_type(
       *this,
       "log_compression_type",
@@ -1634,17 +1643,33 @@ configuration::configuration()
       false)
   , sasl_mechanisms(
       *this,
-      std::vector<ss::sstring>{"GSSAPI", "OAUTHBEARER"},
+      is_enterprise_sasl_mechanism,
       "sasl_mechanisms",
-      "A list of supported SASL mechanisms. Accepted values: `SCRAM`, "
-      "`GSSAPI`, `OAUTHBEARER`, `PLAIN`.  Note that in order to enable PLAIN, "
-      "you must also enable SCRAM.",
+      "A list of supported SASL mechanisms, if no override is defined in "
+      "`sasl_mechanisms_overrides` for each kafka listener. Accepted values: "
+      "`SCRAM`, `GSSAPI`, `OAUTHBEARER`, `PLAIN`.  Note that in order to "
+      "enable PLAIN, you must also enable SCRAM.",
       meta{
         .needs_restart = needs_restart::no,
         .visibility = visibility::user,
       },
-      std::vector<ss::sstring>{"SCRAM"},
+      std::vector<ss::sstring>{ss::sstring{scram}},
       validate_sasl_mechanisms)
+  , sasl_mechanisms_overrides(
+      *this,
+      is_enterprise_sasl_mechanisms_override,
+      "sasl_mechanisms_overrides",
+      "A list of overrides for SASL mechanisms, defined by listener. SASL "
+      "mechanisms defined here will replace the ones set in `sasl_mechanisms`. "
+      "The same limitations apply as for `sasl_mechanisms`.",
+      meta{
+        .needs_restart = needs_restart::no,
+        .example
+        = "[{'listener':'kafka_listener', 'sasl_mechanisms':['SCRAM']}]",
+        .visibility = visibility::user,
+      },
+      std::vector<sasl_mechanisms_override>{},
+      validate_sasl_mechanisms_overrides)
   , sasl_kerberos_config(
       *this,
       "sasl_kerberos_config",

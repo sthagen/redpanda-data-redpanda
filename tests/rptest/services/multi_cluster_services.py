@@ -106,8 +106,8 @@ class RedpandaCluster(Cluster):
         super().__init__(service)
 
     @classmethod
-    def create(cls: Type[RC], test_ctx, num_brokers) -> RC:
-        return cls(RedpandaService(test_ctx, num_brokers=num_brokers))
+    def create(cls: Type[RC], test_ctx, num_brokers, *args, **kwargs) -> RC:
+        return cls(RedpandaService(test_ctx, num_brokers=num_brokers, *args, **kwargs))
 
     @property
     def is_redpanda(self) -> bool:
@@ -121,6 +121,18 @@ class RedpandaCluster(Cluster):
         return f"Redpanda cluster of {len(self.service.nodes)} nodes"
 
 
+class SecondaryClusterArgs:
+    """
+    Container used to hold args and kwargs for the secondary cluster.
+
+    Will be passed to the secondary cluster's create method
+    """
+
+    def __init__(self, *args, **kwargs):
+        self.args = args
+        self.kwargs = kwargs
+
+
 class MultiClusterServices:
     def __init__(
         self,
@@ -129,12 +141,20 @@ class MultiClusterServices:
         redpanda: RedpandaService,
         secondary_type: ServiceType = ServiceType.REDPANDA,
         num_brokers=3,
+        secondary_args: SecondaryClusterArgs = SecondaryClusterArgs(),
     ):
         self.test_ctx = test_ctx
         self.logger = logger
         self._clusters: list[Cluster] = [RedpandaCluster(redpanda)]
         if secondary_type is ServiceType.REDPANDA:
-            self._clusters.append(RedpandaCluster.create(self.test_ctx, num_brokers))
+            self._clusters.append(
+                RedpandaCluster.create(
+                    self.test_ctx,
+                    num_brokers,
+                    *secondary_args.args,
+                    **secondary_args.kwargs,
+                )
+            )
         elif secondary_type is ServiceType.KAFKA:
             self._clusters.append(KafkaCluster.create(self.test_ctx, num_brokers))
         assert len(self._clusters) == 2, f"Expected two clusters, got {self._clusters=}"

@@ -78,6 +78,9 @@ public:
         object_id oid;
         size_t footer_pos;
         size_t object_size;
+        // The last offset available in the object (inclusive).
+        // This can be used to skip to the next offset.
+        kafka::offset last_offset;
     };
 
     // Interface to build object metadata for the L1 metastore. Meant to be

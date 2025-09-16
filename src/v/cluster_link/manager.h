@@ -71,6 +71,11 @@ public:
      * @brief Returns list of cluster links
      */
     result<chunked_vector<model::metadata>> list_cluster_links();
+    /**
+     * @brief Updates the configuration of a cluster link
+     */
+    ss::future<result<model::metadata>> update_cluster_link(
+      model::name_t name, model::update_cluster_link_configuration_cmd cmd);
 
     /// Used to notify that a cluster link has been updated
     void on_link_change(model::id_t id);

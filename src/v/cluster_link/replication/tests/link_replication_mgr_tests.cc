@@ -27,7 +27,7 @@ namespace cluster_link::replication {
 class test_data_source : public data_source {
 public:
     ss::future<> reset(kafka::offset) override { return ss::now(); }
-    ss::future<> start() override {
+    ss::future<> start(kafka::offset) override {
         if (tests::random_bool()) {
             return ss::make_exception_future<>(
               std::runtime_error("Simulated start failure"));

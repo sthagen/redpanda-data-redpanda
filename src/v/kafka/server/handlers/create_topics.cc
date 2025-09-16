@@ -18,6 +18,7 @@
 #include "kafka/protocol/logger.h"
 #include "kafka/protocol/timeout.h"
 #include "kafka/protocol/types.h"
+#include "kafka/server/connection_context.h"
 #include "kafka/server/handlers/configs/config_response_utils.h"
 #include "kafka/server/handlers/topics/topic_utils.h"
 #include "kafka/server/handlers/topics/types.h"
@@ -257,15 +258,28 @@ ss::future<response_ptr> create_topics_handler::handle(
         return topics;
     };
 
+    auto superuser_required = ctx.is_cluster_link_active()
+                                ? superuser_required::yes
+                                : superuser_required::no;
+
     const auto has_cluster_auth = ctx.authorized(
       security::acl_operation::create,
       security::default_cluster_name,
-      std::move(additional_resources_func));
+      std::move(additional_resources_func),
+      authz_quiet::no,
+      superuser_required);
 
     if (!has_cluster_auth) {
         auto unauthorized_it = std::partition(
-          begin, valid_range_end, [&ctx](const creatable_topic& t) {
-              return ctx.authorized(security::acl_operation::create, t.name);
+          begin,
+          valid_range_end,
+          [&ctx, superuser_required](const creatable_topic& t) {
+              return ctx.authorized(
+                security::acl_operation::create,
+                t.name,
+                authz_quiet::no,
+                audit_authz_check::yes,
+                superuser_required);
           });
         std::transform(
           unauthorized_it,

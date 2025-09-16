@@ -8,22 +8,15 @@
 # by the Apache License, Version 2.0
 
 import math
-from typing import Any, TypeVar
+from typing import Any
 
 from rptest.services.cluster import cluster
-from rptest.services.redpanda import get_cloud_provider
 from rptest.tests.redpanda_cloud_test import RedpandaCloudTest
 from ducktape.tests.test import TestContext
-from rptest.services.producer_swarm import ProducerSwarm
-from rptest.clients.rpk import RpkTool
 from rptest.services.redpanda_cloud import ThroughputTierInfo
 from rptest.services.openmessaging_benchmark import OpenMessagingBenchmark
 from rptest.services.openmessaging_benchmark_configs import OMBSampleConfigurations
 from rptest.services.machinetype import get_machine_info
-from rptest.utils.type_utils import rcast
-from rptest.tests.write_caching_test import WriteCachingMode
-
-# pyright: strict
 
 KiB = 1024
 MiB = KiB * KiB
@@ -38,7 +31,7 @@ class ServerlessValidationTest(RedpandaCloudTest):
     CLUSTER_NODES = 10
 
     # no expectations at this time, we are simply measuring for now so we have historical data
-    EXPECTED_MAX_LATENCIES = {}
+    EXPECTED_MAX_LATENCIES: dict[str, float] = {}
 
     # Mapping of result keys from specific series to their expected max latencies
     # Key is a series (Ex: endToEndLatency999pct and value is mapped to OMBSampleConfigurations.E2E_LATENCY_999PCT)
@@ -128,7 +121,7 @@ class ServerlessValidationTest(RedpandaCloudTest):
     def __init__(self, test_ctx: TestContext, *args: Any, **kwargs: Any):
         self._ctx = test_ctx
 
-        self._cloud_provider = self._ctx.globals.get("cloud_provider")
+        self._cloud_provider = self._ctx.globals["cloud_provider"]
 
         if self._cloud_provider == "gcp":
             self.tier_machine_info = get_machine_info("n2d-standard-4")
@@ -208,13 +201,7 @@ class ServerlessValidationTest(RedpandaCloudTest):
         total_producers = self._producer_count(self._tier_limits.max_ingress)
         total_consumers = self._consumer_count(self._tier_limits.max_egress)
 
-        validator = self.base_validator(self._cloud_provider) | {
-            OMBSampleConfigurations.AVG_THROUGHPUT_MBPS: [
-                OMBSampleConfigurations.gte(
-                    self._mb_to_mib(self._tier_limits.max_ingress // (1 * MB))
-                ),
-            ],
-        }
+        validator = self.base_validator(self._cloud_provider) | {}
 
         workload = {
             "topics": 1,

@@ -373,11 +373,8 @@ class LogCompactionTest(
                 reporter.exc = e
 
         def issue_partition_move():
-            try:
-                self._dispatch_random_partition_move(self.topic_spec.name, 0)
-                self._wait_for_move_in_progress(self.topic_spec.name, 0, timeout=5)
-            except Exception as e:
-                reporter.exc = e
+            self._dispatch_random_partition_move(self.topic_spec.name, 0)
+            self._wait_for_move_in_progress(self.topic_spec.name, 0, timeout=5)
 
         partition_move_thread = threading.Thread(
             target=background_test_loop,

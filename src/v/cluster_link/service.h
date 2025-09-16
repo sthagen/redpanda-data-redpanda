@@ -73,6 +73,15 @@ public:
      * @return List of cluster links
      */
     result<chunked_vector<model::metadata>> list_cluster_links();
+    /**
+     * @brief Updates the configuration of a cluster link
+     *
+     * @param name The name of the link
+     * @param cmd The command containing the new configuration
+     * @return Result containing the updated link
+     */
+    ss::future<result<model::metadata>> update_cluster_link(
+      model::name_t name, model::update_cluster_link_configuration_cmd cmd);
 
 private:
     void register_notifications();

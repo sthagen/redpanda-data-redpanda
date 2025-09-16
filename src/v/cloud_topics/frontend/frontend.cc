@@ -481,7 +481,8 @@ ss::future<> bg_upload_and_replicate(
                     for (const auto& b : inp) {
                         vlog(
                           cd_log.trace,
-                          "Putting batch to cache: {}, term: {}",
+                          "Putting batch for {} to cache: {}, term: {}",
+                          ntp,
                           b.base_offset(),
                           b.term());
                         api->cache_put(ntp, b);
@@ -567,7 +568,8 @@ ss::future<std::expected<kafka::offset, std::error_code>> frontend::replicate(
         for (const auto& b : rb_copy) {
             vlog(
               cd_log.trace,
-              "Putting batch to cache: {}, term: {}",
+              "Putting batch for {} to cache: {}, term: {}",
+              ntp(),
               b.base_offset(),
               b.term());
             _data_plane->cache_put(ntp(), b);

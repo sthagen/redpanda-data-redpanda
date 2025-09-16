@@ -30,7 +30,7 @@ public:
       ::model::topic_partition tp, mux_remote_consumer& consumer)
       : _tp(std::move(tp))
       , _consumer(consumer) {}
-    ss::future<> start() override;
+    ss::future<> start(kafka::offset) override;
     ss::future<> stop() noexcept override;
     ss::future<> reset(kafka::offset) override;
     ss::future<data_source::data> fetch_next(ss::abort_source&) override;
