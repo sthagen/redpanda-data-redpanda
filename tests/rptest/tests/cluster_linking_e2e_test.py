@@ -17,6 +17,7 @@ from contextlib import nullcontext
 
 from connectrpc.errors import ConnectError, ConnectErrorCode
 from ducktape.mark import matrix
+from ducktape.mark import ignore
 
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
@@ -32,6 +33,7 @@ from rptest.services.kgo_verifier_services import (
 from rptest.services.multi_cluster_services import (
     Cluster,
     MultiClusterServices,
+    SecondaryClusterSpec,
     ServiceType,
 )
 from rptest.tests.cluster_linking_test_base import (
@@ -113,7 +115,7 @@ class MultiClusterRedpandaTest(MultiClusterTestBase):
             self.test_context,
             self.logger,
             self.redpanda,
-            secondary_type=ServiceType.REDPANDA,
+            secondary_spec=SecondaryClusterSpec(ServiceType.REDPANDA),
             num_brokers=3,
         ) as services:
             assert services.secondary.is_redpanda, (
@@ -136,13 +138,15 @@ class MultiClusterKafkaTest(MultiClusterTestBase):
         # MultiClusterServices will set itself up
         pass
 
-    @cluster(num_nodes=7)
+    @cluster(num_nodes=6)
     def test_basic_ops(self):
         with MultiClusterServices(
             self.test_context,
             self.logger,
             self.redpanda,
-            secondary_type=ServiceType.KAFKA,
+            secondary_spec=SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
             num_brokers=3,
         ) as services:
             assert services.secondary.is_kafka, (
@@ -152,6 +156,18 @@ class MultiClusterKafkaTest(MultiClusterTestBase):
 
 
 class ShadowLinkBasicTests(ShadowLinkTestBase):
+    def _topics_are_present_in_target_cluster(self, topics):
+        target_rpk = RpkTool(self.target_cluster.service)
+        topics_in_target = {t for t in target_rpk.list_topics()}
+        self.logger.info(f"Topics in target cluster: {topics_in_target}")
+        if len(topics_in_target) < len(topics):
+            return False
+        for t in topics:
+            if t.name not in topics_in_target:
+                return False
+
+        return True
+
     @cluster(num_nodes=6)
     def test_create_simple_link(self):
         shadow_link = self.create_link("test-link")
@@ -220,20 +236,8 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
 
         self.create_link("test-link")
 
-        def _topics_are_present_in_target_cluster():
-            target_rpk = RpkTool(self.target_cluster.service)
-            topics_in_target = {t for t in target_rpk.list_topics()}
-            self.logger.info(f"Topics in target cluster: {topics_in_target}")
-            if len(topics_in_target) < len(topics):
-                return False
-            for t in topics:
-                if t.name not in topics_in_target:
-                    return False
-
-            return True
-
         wait_until(
-            lambda: _topics_are_present_in_target_cluster(),
+            lambda: self._topics_are_present_in_target_cluster(topics),
             timeout_sec=20,
             err_msg="Failed to find topics in the target cluster",
         )
@@ -337,7 +341,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         with expect_exception(ducktape.errors.TimeoutError, lambda _: True):
             wait_until(_any_topics_are_present_in_target_cluster, timeout_sec=5)
 
-        shadow_link.configurations.topic_metadata_sync_options.topic_filters.extend(
+        shadow_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters.extend(
             [
                 shadow_link_pb2.NameFilter(
                     pattern_type=shadow_link_pb2.PATTERN_TYPE_PREFIX,
@@ -352,10 +356,10 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             ]
         )
 
-        update_mask: google.protobuf.field_mask_pb2.FieldMask = (
-            google.protobuf.field_mask_pb2.FieldMask(
-                paths=["configurations.topic_metadata_sync_options.topic_filters"]
-            )
+        update_mask: google.protobuf.field_mask_pb2.FieldMask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=[
+                "configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters"
+            ]
         )
 
         updated_link = self.update_link(
@@ -394,7 +398,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
             "test-link", mirror_all_topics=False, mirror_all_groups=False
         )
 
-        shadow_link.configurations.topic_metadata_sync_options.topic_filters.extend(
+        shadow_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters.extend(
             [
                 shadow_link_pb2.NameFilter(
                     pattern_type=shadow_link_pb2.PATTERN_TYPE_PREFIX,
@@ -426,10 +430,12 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         )
 
         assert (
-            len(updated_link.configurations.topic_metadata_sync_options.topic_filters)
+            len(
+                updated_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters
+            )
             == 0
         ), (
-            f"Expected topic filters to not be updated, got {updated_link.configurations.topic_metadata_sync_options.topic_filters}"
+            f"Expected topic filters to not be updated, got {updated_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters}"
         )
 
     @cluster(num_nodes=6)
@@ -467,6 +473,64 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         ):
             self.update_link(shadow_link=shadow_link, update_mask=update_mask)
 
+    @cluster(num_nodes=6)
+    def test_delete_simple_link(self):
+        def get_links_by_name():
+            list_links = self.list_links()
+            return [l.name for l in list_links]
+
+        empty_link = "empty-link"
+        shadow_link = self.create_link(empty_link)
+        self.logger.info(f"Create shadow link result: {shadow_link}")
+
+        links = get_links_by_name()
+        assert len(links) == 1, (
+            f"Expected exactly one shadow link, got {len(links)}. Test setup failed"
+        )
+
+        # Verify that a request to delete a non-existent link will fail gracefully
+        bad_link_name = "non-existent-link"
+        with expect_exception(
+            ConnectError,
+            lambda e: str(e)
+            == f"[not_found] Failed to find cluster link with name '{bad_link_name}'",
+        ):
+            self.delete_link(bad_link_name)
+
+        # Verify that an empty link can and will be deleted
+        self.delete_link(empty_link)
+        wait_until(
+            lambda: empty_link not in get_links_by_name(),
+            timeout_sec=20,
+            err_msg=f"Failed to delete {empty_link}",
+        )
+
+        # Create some topics to be mirrored.
+        topics = []
+        for i in range(10):
+            topic = TopicSpec(
+                name=f"source-topic-{i}",
+            )
+            self.source_default_client().create_topic(topic)
+            topics.append(topic)
+
+        test_link = "test-link"
+        self.create_link(test_link)
+
+        wait_until(
+            lambda: self._topics_are_present_in_target_cluster(topics),
+            timeout_sec=20,
+            err_msg="Failed to find topics in the target cluster. Test setup failed",
+        )
+
+        # Verify that a request to delete a link with mirrored topics will fail
+        with expect_exception(
+            ConnectError,
+            lambda e: str(e)
+            == f"[failed_precondition] Failed to delete cluster link with name '{test_link}'. There are active shadow topics.",
+        ):
+            self.delete_link(test_link)
+
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
     def leadership_shuffler(self, redpanda, topic: str, enabled: bool):
@@ -490,8 +554,16 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
         return leadership_transfer_thread(redpanda, topic)
 
     @cluster(num_nodes=7)
-    @matrix(shuffle_leadership=[True, False])
-    def test_replication_basic(self, shuffle_leadership):
+    @matrix(
+        shuffle_leadership=[True, False],
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_replication_basic(self, shuffle_leadership, source_cluster_spec):
         topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
 
         self.source_default_client().create_topic(topic)
@@ -548,7 +620,15 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
         )
 
     @cluster(num_nodes=7)
-    def test_consumer_groups_mirroring(self):
+    @matrix(
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ]
+    )
+    def test_consumer_groups_mirroring(self, source_cluster_spec):
         topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
 
         self.source_default_client().create_topic(topic)
@@ -601,8 +681,22 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
             pass
 
     @cluster(num_nodes=7)
-    @matrix(with_failures=[True, False])
-    def test_continuous_group_sync(self, with_failures):
+    @ignore(
+        with_failures=True,
+        source_cluster_spec=SecondaryClusterSpec(
+            ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+        ),
+    )
+    @matrix(
+        with_failures=[True, False],
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_continuous_group_sync(self, with_failures, source_cluster_spec):
         partition_count = 120
         topic_count = 6
 

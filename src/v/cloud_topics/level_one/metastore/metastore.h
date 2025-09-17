@@ -17,6 +17,7 @@
 #include "model/fundamental.h"
 #include "model/timestamp.h"
 
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/future.hh>
 
 #include <expected>
@@ -229,7 +230,7 @@ public:
         // been removed.
         offset_interval_set removed_tombstones_ranges;
 
-        // Timsetamp at which the compaction operation happened.
+        // Timestamp at which the compaction operation happened.
         model::timestamp cleaned_at;
     };
     using compaction_map_t
@@ -294,6 +295,47 @@ public:
       const model::topic_id_partition&,
       model::timestamp tombstone_removal_upper_bound_ts)
       = 0;
+
+    // All the information required to query a `compaction_info_response` from
+    // the metastore. Parameters are used for call to
+    // `get_compaction_offsets()`.
+    struct sample_spec {
+        model::topic_id_partition tid_p;
+        model::timestamp tombstone_removal_upper_bound_ts;
+    };
+
+    struct compaction_info_response {
+        // The dirty ratio of the log/partition.
+        double dirty_ratio;
+        // The earliest dirty timestamp in the log. `std::nullopt` if there is
+        // no such timestamp.
+        std::optional<model::timestamp> earliest_dirty_ts;
+        // Compaction offsets returned by call to `get_compaction_offsets()`
+        // (see above).
+        compaction_offsets_response offsets_response;
+    };
+
+    // Obtains compaction state for a provided `sample_spec` on the basis of a
+    // single partition. Provides information relevant to determining if a
+    // partition requires compaction - e.g dirty ratio and earliest dirty
+    // timestamp, as well as compaction offsets (see `get_compaction_offsets()`
+    // above).
+    virtual ss::future<std::expected<compaction_info_response, errc>>
+    get_compaction_info(const sample_spec&) = 0;
+
+    // Vectorized RPC for obtaining compaction state for a number of partitions.
+    // Ensures `compaction_info_response`s for partitions are returned in the
+    // same order as requested in `to_sample`.
+    virtual ss::future<
+      chunked_vector<std::expected<compaction_info_response, errc>>>
+    get_compaction_infos(const chunked_vector<sample_spec>& to_sample) {
+        chunked_vector<std::expected<compaction_info_response, errc>> ret;
+        ret.reserve(to_sample.size());
+        for (const auto& log : to_sample) {
+            ret.push_back(co_await get_compaction_info(log));
+        }
+        co_return ret;
+    }
 };
 
 } // namespace cloud_topics::l1

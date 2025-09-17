@@ -755,6 +755,44 @@ class ClusterConfigTest(RedpandaTest, ClusterConfigHelpersMixin):
                 # Do this instead.
                 valid_value = 10000
 
+            if name == "tls_v1_2_cipher_suites":
+                valid_value = ":".join(
+                    random.sample(
+                        [
+                            "ECDHE-RSA-AES128-GCM-SHA256",
+                            "ECDHE-ECDSA-AES128-GCM-SHA256",
+                            "AES128-GCM-SHA256",
+                            "ECDHE-RSA-AES256-GCM-SHA384",
+                            "ECDHE-ECDSA-AES256-GCM-SHA384",
+                            "AES256-GCM-SHA384",
+                            "ECDHE-RSA-CHACHA20-POLY1305",
+                            "ECDHE-ECDSA-CHACHA20-POLY1305",
+                            "ECDHE-RSA-AES128-SHA",
+                            "ECDHE-ECDSA-AES128-SHA",
+                            "AES128-SHA",
+                            "AES128-CCM",
+                            "ECDHE-RSA-AES256-SHA",
+                            "ECDHE-ECDSA-AES256-SHA",
+                            "AES256-SHA",
+                            "AES256-CCM",
+                        ],
+                        random.randint(3, 8),
+                    )
+                )
+            if name == "tls_v1_3_cipher_suites":
+                valid_value = ":".join(
+                    random.sample(
+                        [
+                            "TLS_AES_256_GCM_SHA384",
+                            "TLS_CHACHA20_POLY1305_SHA256",
+                            "TLS_AES_128_GCM_SHA256",
+                            "TLS_AES_128_CCM_8_SHA256",
+                            "TLS_AES_128_CCM_SHA256",
+                        ],
+                        random.randint(1, 3),
+                    )
+                )
+
             updates[name] = valid_value
 
         patch_result = self.admin.patch_cluster_config(upsert=updates, remove=[])

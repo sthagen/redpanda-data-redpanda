@@ -19,6 +19,7 @@
 #include "config/validators.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
+#include "net/tls.h"
 #include "security/config.h"
 #include "security/oidc_url_parser.h"
 #include "serde/rw/chrono.h"
@@ -3934,6 +3935,36 @@ configuration::configuration()
       "connections as client-initiated renegotiation was removed.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       false)
+  , tls_v1_2_cipher_suites(
+      *this,
+      "tls_v1_2_cipher_suites",
+      "Specifies the TLS 1.2 cipher suites available for external client "
+      "connections as a colon-separated OpenSSL-compatible list. Configure "
+      "this property to support legacy clients.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      ss::sstring{net::tls_v1_2_cipher_suites},
+      [](ss::sstring s) -> std::optional<ss::sstring> {
+          if (!validate_tls_v1_2_cipher_suites(s)) {
+              return ssx::sformat("Invalid cipher suites: {}", s);
+          }
+          return std::nullopt;
+      })
+  , tls_v1_3_cipher_suites(
+      *this,
+      "tls_v1_3_cipher_suites",
+      "Specifies the TLS 1.3 cipher suites available for external client "
+      "connections as a colon-separated OpenSSL-compatible list. Most "
+      "deployments don't need to modify this setting. Configure this property "
+      "only for specific organizational security policies.",
+      {.needs_restart = needs_restart::yes, .visibility = visibility::user},
+      ss::sstring{net::tls_v1_3_cipher_suites},
+      [](ss::sstring s) -> std::optional<ss::sstring> {
+          if (!validate_tls_v1_3_cipher_suites(s)) {
+              return ssx::sformat("Invalid cipher suites: {}", s);
+          }
+          return std::nullopt;
+      })
+
   , iceberg_enabled(
       *this,
       true,

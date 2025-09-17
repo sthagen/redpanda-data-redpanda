@@ -246,6 +246,49 @@ ss::future<result<model::metadata>> manager::update_cluster_link(
     co_return metadata_resp->get().copy();
 }
 
+ss::future<result<void>> manager::delete_cluster_link(model::name_t name) {
+    vlog(cllog.info, "Attempting to delete cluster link named '{}'", name);
+    auto cl_resp = get_cluster_link(name);
+    if (cl_resp.has_error()) {
+        co_return cl_resp.assume_error();
+    }
+
+    const auto is_active = [](const model::mirror_topic_state s) {
+        switch (s) {
+        case model::mirror_topic_state::active:
+        case model::mirror_topic_state::paused:
+            return true;
+        case model::mirror_topic_state::failed:
+        case model::mirror_topic_state::promoted:
+            return false;
+        }
+    };
+
+    const auto mirror_topic_states = cl_resp.assume_value().state.mirror_topics
+                                     | std::views::values
+                                     | std::views::transform(
+                                       &model::mirror_topic_metadata::state);
+
+    if (std::ranges::any_of(mirror_topic_states, is_active)) {
+        co_return err_info(
+          errc::link_has_active_shadow_topics,
+          fmt::format(
+            "Failed to delete cluster link with name '{}'. There are active "
+            "shadow topics.",
+            name));
+    }
+
+    auto ec = co_await _registry->delete_link(
+      std::move(name), ::model::timeout_clock::now() + 30s);
+    auto err = map_cluster_errc(ec);
+    if (err != errc::success) {
+        co_return err_info(
+          err, fmt::format("Failed to delete cluster link: {}", ec));
+    }
+
+    co_return outcome::success();
+}
+
 void manager::on_link_change(model::id_t id) {
     vlog(cllog.trace, "Cluster link with id={} has changed", id);
     if (_topic_reconciler && _is_controller_leader) {

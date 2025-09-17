@@ -276,7 +276,7 @@ public:
         return _conn->server().credentials();
     }
 
-    bool audit() { return _audit_successful; }
+    bool audit() const { return _audit_successful; }
 
     bool audit_authn_failure(ss::sstring reason) {
         return audit_authn_failure(std::move(reason), "");

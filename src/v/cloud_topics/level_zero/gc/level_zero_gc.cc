@@ -13,6 +13,7 @@
 #include "cloud_io/remote.h"
 #include "cloud_topics/logger.h"
 #include "cloud_topics/object_utils.h"
+#include "cluster/health_monitor_frontend.h"
 
 #include <seastar/core/coroutine.hh>
 #include <seastar/core/sleep.hh>
@@ -69,6 +70,10 @@ private:
 
 class epoch_source_cluster_impl : public level_zero_gc::epoch_source {
 public:
+    explicit epoch_source_cluster_impl(
+      seastar::sharded<cluster::health_monitor_frontend>* health_monitor)
+      : health_monitor_(health_monitor) {}
+
     seastar::future<std::expected<std::optional<cluster_epoch>, std::string>>
     max_gc_eligible_epoch(seastar::abort_source*) override {
         /*
@@ -77,6 +82,10 @@ public:
          */
         co_return std::nullopt;
     }
+
+private:
+    [[maybe_unused]] seastar::sharded<cluster::health_monitor_frontend>*
+      health_monitor_;
 };
 
 level_zero_gc::level_zero_gc(
@@ -93,11 +102,12 @@ level_zero_gc::level_zero_gc(
 level_zero_gc::level_zero_gc(
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
+  seastar::sharded<cluster::health_monitor_frontend>* health_monitor,
   level_zero_gc_config config)
   : level_zero_gc(
       config,
       std::make_unique<object_storage_remote_impl>(remote, std::move(bucket)),
-      std::make_unique<epoch_source_cluster_impl>()) {}
+      std::make_unique<epoch_source_cluster_impl>(health_monitor)) {}
 
 void level_zero_gc::start() {
     vlog(cd_log.info, "Starting cloud topics L0 GC worker");

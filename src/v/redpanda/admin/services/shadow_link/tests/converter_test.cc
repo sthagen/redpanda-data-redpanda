@@ -409,7 +409,8 @@ TEST(converter_test, create_with_metadata_sync_options) {
       proto::admin::pattern_type::prefix,
       proto::admin::filter_type::exclude,
       "test-prefix-exclude"));
-    topic_metadata_sync_options.set_topic_filters(std::move(filters));
+    topic_metadata_sync_options.set_auto_create_shadow_topic_filters(
+      std::move(filters));
     topic_metadata_sync_options.set_shadowed_topic_properties({"prop"});
 
     shadow_link_client_options.set_bootstrap_servers({"localhost:9092"});
@@ -688,7 +689,8 @@ TEST(converter_test, metadata_to_shadow_link_topic_mirroring_cfg) {
       "test-prefix-exclude"));
 
     EXPECT_EQ(
-      topic_metadata_sync_options.get_topic_filters(), expected_filters);
+      topic_metadata_sync_options.get_auto_create_shadow_topic_filters(),
+      expected_filters);
 }
 
 proto::admin::shadow_topic_status create_shadow_topic_status(

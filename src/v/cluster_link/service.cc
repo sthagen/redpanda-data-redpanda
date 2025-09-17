@@ -45,6 +45,11 @@ public:
         return _plf->upsert_cluster_link(std::move(md), timeout);
     }
 
+    ss::future<::cluster::cluster_link::errc> delete_link(
+      model::name_t name, ::model::timeout_clock::time_point timeout) override {
+        return _plf->remove_cluster_link(std::move(name), timeout);
+    }
+
     std::optional<std::reference_wrapper<const model::metadata>>
     find_link_by_id(model::id_t id) const override {
         return _plf->find_link_by_id(id);
@@ -305,6 +310,11 @@ result<chunked_vector<model::metadata>> service::list_cluster_links() {
 ss::future<result<model::metadata>> service::update_cluster_link(
   model::name_t name, model::update_cluster_link_configuration_cmd cmd) {
     return _manager->update_cluster_link(std::move(name), std::move(cmd));
+}
+
+ss::future<result<void>>
+service::delete_cluster_link(const model::name_t& name) {
+    return _manager->delete_cluster_link(name);
 }
 
 void service::register_notifications() {

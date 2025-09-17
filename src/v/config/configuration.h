@@ -730,6 +730,8 @@ struct configuration final : public config_store {
 
     enum_property<tls_version> tls_min_version;
     property<bool> tls_enable_renegotiation;
+    property<ss::sstring> tls_v1_2_cipher_suites;
+    property<ss::sstring> tls_v1_3_cipher_suites;
 
     // datalake configurations
     enterprise<property<bool>> iceberg_enabled;

@@ -31,10 +31,17 @@ from rptest.services.multi_cluster_services import (
     RedpandaService,
     SecondaryClusterArgs,
     ServiceType,
+    SecondaryClusterSpec,
 )
 from rptest.services.redpanda import LoggingConfig
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.utils.node_operations import FailureInjectorBackgroundThread
+
+
+SOURCE_CLUSTER_SPEC = "source_cluster_spec"
+
+
+DEFAULT_SOURCE_CLUSTER_SPEC = SecondaryClusterSpec(ServiceType.REDPANDA)
 
 
 class ShadowLinkTestBase(PreallocNodesTest):
@@ -82,13 +89,22 @@ class ShadowLinkTestBase(PreallocNodesTest):
         self.services: MultiClusterServices
         self.service_client: shadow_link_pb2_connect.ShadowLinkServiceClient
         self.secondary_cluster_args: SecondaryClusterArgs = secondary_cluster_args
+        self.source_cluster_spec: SecondaryClusterSpec = self.get_source_cluster_spec()
+
+    def get_source_cluster_spec(self) -> SecondaryClusterSpec:
+        if not self.test_context.injected_args:
+            return DEFAULT_SOURCE_CLUSTER_SPEC
+
+        return self.test_context.injected_args.get(
+            SOURCE_CLUSTER_SPEC, DEFAULT_SOURCE_CLUSTER_SPEC
+        )
 
     def setUp(self):
         self.services = MultiClusterServices(
             self.test_context,
             self.logger,
             self.redpanda,
-            secondary_type=ServiceType.REDPANDA,
+            secondary_spec=self.source_cluster_spec,
             num_brokers=3,
             secondary_args=self.secondary_cluster_args,
         )
@@ -140,7 +156,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
         if mirror_all_topics:
             topic_sync_options = shadow_link_pb2.TopicMetadataSyncOptions(
                 interval=google.protobuf.duration_pb2.Duration(seconds=1),
-                topic_filters=[
+                auto_create_shadow_topic_filters=[
                     shadow_link_pb2.NameFilter(
                         pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
                         filter_type=shadow_link_pb2.FILTER_TYPE_INCLUDE,
@@ -177,6 +193,12 @@ class ShadowLinkTestBase(PreallocNodesTest):
         req.shadow_link.CopyFrom(link_resource)
         return req
 
+    def delete_link_request(
+        self, link_name: str
+    ) -> shadow_link_pb2.DeleteShadowLinkRequest:
+        req = shadow_link_pb2.DeleteShadowLinkRequest(name=link_name)
+        return req
+
     def create_link(
         self, link_name: str, *args, **kwargs
     ) -> shadow_link_pb2.ShadowLink:
@@ -187,6 +209,17 @@ class ShadowLinkTestBase(PreallocNodesTest):
         self, req: shadow_link_pb2.CreateShadowLinkRequest
     ) -> shadow_link_pb2.ShadowLink:
         return self.service_client.create_shadow_link(req=req).shadow_link
+
+    def delete_link(
+        self, link_name: str, *args, **kwargs
+    ) -> shadow_link_pb2.DeleteShadowLinkResponse:
+        req = self.delete_link_request(link_name=link_name, *args, **kwargs)
+        return self.delete_link_with_request(req=req)
+
+    def delete_link_with_request(
+        self, req: shadow_link_pb2.DeleteShadowLinkRequest
+    ) -> shadow_link_pb2.DeleteShadowLinkResponse:
+        return self.service_client.delete_shadow_link(req=req)
 
     def list_links(self) -> list[shadow_link_pb2.ShadowLink]:
         resp = self.service_client.list_shadow_links(

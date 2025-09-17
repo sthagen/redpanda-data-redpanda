@@ -96,7 +96,8 @@ create_topic_metadata_mirroring_config(
           options.get_interval());
     }
 
-    config.topic_name_filters = to_filter_patterns(options.get_topic_filters());
+    config.topic_name_filters = to_filter_patterns(
+      options.get_auto_create_shadow_topic_filters());
 
     std::ranges::copy(
       options.get_shadowed_topic_properties(),
@@ -467,7 +468,8 @@ topic_metadata_sync_options create_topic_metadata_sync_options(
     options.set_interval(
       absl::FromChrono(
         cfg.task_interval.value_or(ss::lowres_clock::duration::zero())));
-    options.set_topic_filters(to_name_filters(cfg.topic_name_filters));
+    options.set_auto_create_shadow_topic_filters(
+      to_name_filters(cfg.topic_name_filters));
 
     chunked_vector<ss::sstring> mirrored_properties;
     mirrored_properties.reserve(cfg.topic_properties_to_mirror.size());

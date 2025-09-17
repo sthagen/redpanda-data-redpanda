@@ -15,6 +15,7 @@
 
 #include <seastar/core/condition-variable.hh>
 #include <seastar/core/future.hh>
+#include <seastar/core/sharded.hh>
 
 #include <expected>
 
@@ -22,6 +23,10 @@ using namespace std::chrono_literals;
 
 namespace cloud_io {
 class remote;
+}
+
+namespace cluster {
+class health_monitor_frontend;
 }
 
 namespace cloud_topics {
@@ -207,6 +212,7 @@ public:
     level_zero_gc(
       cloud_io::remote*,
       cloud_storage_clients::bucket_name,
+      seastar::sharded<cluster::health_monitor_frontend>*,
       level_zero_gc_config = {});
 
     /*

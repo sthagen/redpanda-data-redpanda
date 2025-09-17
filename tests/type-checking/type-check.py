@@ -257,7 +257,7 @@ class TypeCheck:
                     f"  {rel_path}: {current_level.value} → {strictest_passing.value}"
                 )
             print(
-                f"{self.info} See https://github.com/redpanda-data/redpanda/blob/dev/tests/type-checking/README.md#failed-promo-check\n"
+                f"{self.info} See https://github.com/redpanda-data/redpanda/blob/dev/tests/type-checking/README.md#failed-promotion-check\n"
             )
         else:
             print("No files can be promoted to stricter levels.")

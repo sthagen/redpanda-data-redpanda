@@ -703,6 +703,7 @@ STRUCT_TYPES = [
     "ScramCredentialDeletion",
     "ScramCredentialUpsertion",
     "AlterUserScramCredentialsResult",
+    "Coordinator",
 ]
 
 # A list of StructTypes that are allowed to be not arrays in the schema.

@@ -559,4 +559,10 @@ replicated_metastore::get_compaction_offsets(
     co_return resp;
 }
 
+ss::future<std::expected<metastore::compaction_info_response, metastore::errc>>
+replicated_metastore::get_compaction_info(
+  [[maybe_unused]] const sample_spec& log) {
+    co_return compaction_info_response{};
+}
+
 } // namespace cloud_topics::l1

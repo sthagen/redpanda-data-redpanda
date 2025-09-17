@@ -85,10 +85,9 @@ ss::future<> app::construct(
       manager,
       ss::sharded_parameter([&] { return &remote->local(); }),
       bucket,
-      ss::sharded_parameter(
-        [&] { return &controller->get_partition_manager().local(); }),
-      ss::sharded_parameter(
-        [&] { return &controller->get_raft_manager().local(); }));
+      &controller->get_partition_manager(),
+      &controller->get_raft_manager(),
+      &controller->get_health_monitor());
 }
 
 ss::future<> app::start() {

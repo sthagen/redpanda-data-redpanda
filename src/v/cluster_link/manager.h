@@ -76,6 +76,10 @@ public:
      */
     ss::future<result<model::metadata>> update_cluster_link(
       model::name_t name, model::update_cluster_link_configuration_cmd cmd);
+    /**
+     * @brief Delete the cluster link object by name
+     */
+    ss::future<result<void>> delete_cluster_link(model::name_t name);
 
     /// Used to notify that a cluster link has been updated
     void on_link_change(model::id_t id);

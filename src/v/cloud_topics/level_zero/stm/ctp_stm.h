@@ -13,11 +13,8 @@
 #include "cloud_topics/level_zero/stm/ctp_stm_state.h"
 #include "cloud_topics/level_zero/stm/types.h"
 #include "raft/persisted_stm.h"
-#include "raft/replicate.h"
 
 #include <seastar/core/rwlock.hh>
-
-#include <expected>
 
 namespace cloud_topics {
 
@@ -78,7 +75,9 @@ public:
     ss::future<bool> sync_in_term(ss::abort_source& as);
 
 private:
-    ss::future<> do_apply(const model::record_batch& batch) override;
+    ss::future<> do_apply(const model::record_batch&) override;
+    void apply_placeholder(const model::record_batch&);
+    void apply_advance_reconciled_offset(model::record);
 
     ss::future<raft::local_snapshot_applied>
     apply_local_snapshot(raft::stm_snapshot_header, iobuf&&) override;
@@ -96,6 +95,10 @@ private:
     ss::rwlock _lock;
     /// Current in-memory state of the STM
     ctp_stm_state _state;
+
+    // The last observed epoch to be applied to the state machine. This value is
+    // used to check for violations of monotonicity in epoch order.
+    cluster_epoch _last_seen_epoch{};
 };
 
 } // namespace cloud_topics

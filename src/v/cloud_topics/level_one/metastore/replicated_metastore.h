@@ -59,6 +59,9 @@ public:
     get_compaction_offsets(
       const model::topic_id_partition&, model::timestamp) override;
 
+    ss::future<std::expected<compaction_info_response, errc>>
+    get_compaction_info(const sample_spec&) override;
+
 private:
     frontend& fe_;
 };

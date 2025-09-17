@@ -618,6 +618,15 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
             ntp_cfg.cfg.skip_read = true;
         }
 
+        // In Kafka first non-empty partition in a request or session
+        // is considered the `obligatory` batch read.
+        const bool obligatory_batch_read = total_read_size == 0;
+
+        // If it's the obligatory batch read then we need to allow for the
+        // configured max bytes to exceeded if the next batch in the partition
+        // is larger. This is needed to conform with KIP-74.
+        ntp_cfg.cfg.strict_max_bytes = !obligatory_batch_read;
+
         auto&& res = co_await do_read_from_ntp(
           cluster_pm,
           md_cache,
@@ -625,10 +634,7 @@ static ss::future<chunked_vector<read_result>> fetch_ntps(
           ntp_cfg,
           foreign_read,
           deadline,
-          // In Kafka first non-empty partition in a request or session
-          // is considered the `obligatory` batch read. The logic below
-          // is designed to approximate this behavior.
-          total_read_size == 0,
+          obligatory_batch_read,
           memory_sem,
           memory_fetch_sem);
 
@@ -1506,7 +1512,7 @@ class simple_fetch_planner final : public fetch_planner::impl {
                       .timeout = octx.deadline.value_or(model::no_timeout),
                       .current_leader_epoch = fp.current_leader_epoch,
                       .isolation_level = octx.request.data.isolation_level,
-                      .strict_max_bytes = octx.response_size > 0,
+                      .strict_max_bytes = true,
                       .skip_read = bytes_left_in_plan == 0 && max_bytes == 0,
                       .read_from_follower = octx.request.has_rack_id(),
                       .consumer_rack_id = octx.request.has_rack_id()
