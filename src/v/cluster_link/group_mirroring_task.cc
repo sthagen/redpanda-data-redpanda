@@ -27,8 +27,8 @@ void group_mirroring_task::update_config(const model::metadata& link_metadata) {
 
 namespace {
 
-chunked_hash_set<::model::partition_id> coordinators_on_current_shard(
-  link& link, ss::shard_id current_shard, ::model::node_id self_id) {
+chunked_hash_set<::model::partition_id>
+coordinators_on_current_shard(link& link, ss::shard_id, ::model::node_id) {
     auto topic_cfg = link.topic_metadata_cache().find_topic_cfg(
       ::model::kafka_consumer_offsets_nt);
     chunked_hash_set<::model::partition_id> ret;
@@ -39,12 +39,9 @@ chunked_hash_set<::model::partition_id> coordinators_on_current_shard(
          p_id < ::model::partition_id(topic_cfg->partition_count);
          ++p_id) {
         ::model::ktp ktp(::model::kafka_consumer_offsets_topic, p_id);
-        const auto is_leader = link.partition_leader_cache().get_leader_node(
-                                 ktp.as_tn_view(), ktp.get_partition())
-                               == self_id;
-        const auto on_current_shard = link.partition_manager().shard_owner(ktp)
-                                      == current_shard;
-        if (is_leader && on_current_shard) {
+        const auto is_leader = link.partition_manager().is_current_shard_leader(
+          ktp);
+        if (is_leader) {
             ret.insert(p_id);
         }
     }

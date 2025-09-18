@@ -21,6 +21,7 @@
 #include "kafka/utils/txn_reader.h"
 #include "model/namespace.h"
 #include "random/generators.h"
+#include "ssx/future-util.h"
 
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/log.hh>
@@ -173,7 +174,13 @@ ss::future<> reconciler::reconcile() {
       _l1_io->create_tmp_file());
     if (staging_file_fut.failed()) {
         auto ex = staging_file_fut.get_exception();
-        vlog(lg.error, "Exception creating staging file: {}", ex);
+        vlogl(
+          lg,
+          ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                         : ss::log_level::error,
+          "Exception creating staging file: {}",
+          ex);
+        co_return;
     }
     auto staging_file_result = staging_file_fut.get();
     if (!staging_file_result.has_value()) {
@@ -195,7 +202,12 @@ ss::future<> reconciler::reconcile() {
     co_await builder->close(); // Always.
     if (object_fut.failed()) {
         auto ex = object_fut.get_exception();
-        vlog(lg.error, "Exception building object: {}", ex);
+        vlogl(
+          lg,
+          ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                         : ss::log_level::error,
+          "Exception building object: {}",
+          ex);
         co_await staging_file->remove();
         co_return;
     }
@@ -219,7 +231,13 @@ ss::future<> reconciler::reconcile() {
     co_await staging_file->remove(); // Always.
     if (upload_fut.failed()) {
         auto ex = upload_fut.get_exception();
-        vlog(lg.error, "Exception uploading L1 object {}: {}", object_id, ex);
+        vlogl(
+          lg,
+          ssx::is_shutdown_exception(ex) ? ss::log_level::debug
+                                         : ss::log_level::error,
+          "Exception uploading L1 object {}: {}",
+          object_id,
+          ex);
         co_return;
     }
     auto upload_result = upload_fut.get();

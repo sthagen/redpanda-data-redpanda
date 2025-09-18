@@ -250,6 +250,10 @@ public:
         _impl->remove_shard_owner(ntp);
     }
 
+    bool is_current_shard_leader(const ::model::ntp& ntp) const final {
+        return _impl->shard_owner(ntp) == ss::this_shard_id();
+    }
+
     ss::future<::result<::model::offset, cluster::errc>> invoke_on_shard(
       ss::shard_id shard_id,
       const ::model::ktp& ktp,

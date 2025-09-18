@@ -49,6 +49,7 @@ redpanda_cc_library(
         "//src/v/kafka/utils:txn_reader",
         "//src/v/model",
         "//src/v/random:generators",
+        "//src/v/ssx:future_util",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:node_hash_map",
         "@seastar",

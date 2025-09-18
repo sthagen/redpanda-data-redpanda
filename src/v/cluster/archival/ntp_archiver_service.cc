@@ -2682,7 +2682,7 @@ ss::future<> ntp_archiver::apply_archive_retention() {
     }
 
     const auto& ntp_conf = _parent.get_ntp_config();
-    if (!ntp_conf.is_collectable()) {
+    if (!ntp_conf.is_remotely_collectable()) {
         vlog(_rtclog.trace, "NTP is not collectable");
         co_return;
     }

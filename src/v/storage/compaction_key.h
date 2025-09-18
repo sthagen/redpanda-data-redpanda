@@ -10,16 +10,15 @@
 #pragma once
 
 #include "bytes/bytes.h"
+#include "compaction/key.h"
 #include "model/record_batch_types.h"
 
-namespace compaction {
+namespace storage {
 
-/**
- * Type representing a record key prefixed with batch_type
- */
-struct compaction_key : bytes {
-    explicit compaction_key(bytes b)
-      : bytes(std::move(b)) {}
-};
+// Adds additional context (batch type & whether the owning batch is a control
+// batch) to a key represented by `bytes_view`, and returns the result as a
+// `compaction_key`.
+compaction::compaction_key enhance_key(
+  model::record_batch_type type, bool is_control_batch, bytes_view key);
 
-} // namespace compaction
+} // namespace storage

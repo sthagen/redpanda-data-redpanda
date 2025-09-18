@@ -113,7 +113,7 @@ ss::future<std::error_code> partition::prefix_truncate(
   model::offset rp_start_offset,
   kafka::offset kafka_start_offset,
   ss::lowres_clock::time_point deadline) {
-    if (!_log_eviction_stm || !_raft->log_config().is_collectable()) {
+    if (!_log_eviction_stm || !_raft->log_config().is_locally_collectable()) {
         vlog(
           clusterlog.info,
           "Cannot prefix-truncate topic/partition {} retention settings not "

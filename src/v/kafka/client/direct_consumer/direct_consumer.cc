@@ -153,7 +153,7 @@ ss::future<> direct_consumer::start() {
         co_return;
     }
     _metadata_callback_id = _cluster->register_metadata_cb(
-      [this](const metadata_response_data& d) { on_metadata_update(d); });
+      [this](const metadata_update& d) { on_metadata_update(d); });
     _started = true;
 
     auto lock_holder = co_await _subscriptions_lock.get_units();
@@ -242,7 +242,7 @@ ss::future<> direct_consumer::handle_metadata_update() {
     co_await update_fetchers(std::move(lock_holder));
 }
 
-void direct_consumer::on_metadata_update(const metadata_response_data&) {
+void direct_consumer::on_metadata_update(const metadata_update&) {
     ssx::spawn_with_gate(_gate, [this] { return handle_metadata_update(); });
 }
 

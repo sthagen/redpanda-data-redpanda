@@ -129,7 +129,7 @@ private:
         std::optional<kafka::offset> fetch_offset;
     };
     friend class fetcher;
-    void on_metadata_update(const metadata_response_data&);
+    void on_metadata_update(const metadata_update&);
 
     ss::future<> handle_metadata_update();
     ss::future<> update_fetchers(

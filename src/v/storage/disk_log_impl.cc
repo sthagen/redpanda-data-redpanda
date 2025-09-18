@@ -1756,7 +1756,7 @@ ss::future<std::optional<model::offset>> disk_log_impl::do_gc(gc_config cfg) {
         co_return request_eviction_until_offset(offset);
     }
 
-    if (!config().is_collectable()) {
+    if (!config().is_locally_collectable()) {
         co_return std::nullopt;
     }
 
@@ -2987,7 +2987,7 @@ disk_log_impl::max_eligible_for_compacted_reupload_offset(
             // perfectly compacted data that truncation leaves us with
             // uncompacted data in cloud storage. so in this case, a single
             // round of windowed compaction is 'enough'.
-            if (config().is_collectable()) {
+            if (config().is_locally_collectable()) {
                 return seg->finished_windowed_compaction();
             }
 
@@ -3711,7 +3711,7 @@ ss::shared_ptr<log> make_disk_backed_log(
 ss::future<std::pair<usage, reclaim_size_limits>>
 disk_log_impl::disk_usage_and_reclaimable_space(gc_config input_cfg) {
     std::optional<model::offset> max_offset;
-    if (config().is_collectable()) {
+    if (config().is_locally_collectable()) {
         auto cfg = apply_overrides(input_cfg);
         max_offset = retention_offset(cfg);
     }
@@ -3889,7 +3889,9 @@ disk_log_impl::disk_usage_target(gc_config cfg, usage usage) {
          * report space wanted as `factor * current capacity` to reflect that we
          * want space for continued growth.
          */
-        if (!config().is_collectable() || deletion_exempt(config().ntp())) {
+        if (
+          !config().is_locally_collectable()
+          || deletion_exempt(config().ntp())) {
             target.min_capacity_wanted = usage.total() * 2;
             co_return target;
         }
