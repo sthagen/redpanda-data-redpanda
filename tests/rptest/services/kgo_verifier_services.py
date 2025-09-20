@@ -279,13 +279,9 @@ class KgoVerifierService(Service):
         Wrapper to catch timeouts on wait, and send a `/print_stack` to the remote
         process in case it is experiencing a hang bug.
         """
-
-        if self._stopped:
-            raise RuntimeError(
-                f"Can't wait {self.who_am_i()}. It was already stopped."
-                f" You can either stop() a service or wait() and then stop() it"
-                f" but not the other way around."
-            )
+        assert not self._stopped, (
+            f"Can't wait {self.who_am_i()}. It was already stopped. You can either stop() a service or wait() and then stop() it but not the other way around."
+        )
 
         try:
             return self._do_wait_node(node, timeout_sec)
@@ -675,6 +671,10 @@ class KgoVerifierProducer(KgoVerifierService):
         return self._status
 
     def wait_node(self, node, timeout_sec: int | None):
+        assert not self._stopped, (
+            f"Can't wait {self.who_am_i()}. It was already stopped. You can either stop() a service or wait() and then stop() it but not the other way around."
+        )
+
         if not self._status_thread:
             return True
 
@@ -771,7 +771,7 @@ class KgoVerifierProducer(KgoVerifierService):
             cmd = cmd + f" --password {self._password}"
 
         if self._enable_tls:
-            cmd = cmd + f" --enable-tls"
+            cmd = cmd + " --enable-tls"
 
         if self._batch_max_bytes is not None:
             cmd = cmd + f" --batch_max_bytes {self._batch_max_bytes}"
@@ -783,7 +783,7 @@ class KgoVerifierProducer(KgoVerifierService):
             cmd = cmd + f" --fake-timestamp-step-ms {self._fake_timestamp_step_ms}"
 
         if self._use_transactions:
-            cmd = cmd + f" --use-transactions"
+            cmd = cmd + " --use-transactions"
 
             if self._msgs_per_transaction is not None:
                 cmd = cmd + f" --msgs-per-transaction {self._msgs_per_transaction}"
@@ -898,7 +898,7 @@ class KgoVerifierSeqConsumer(AbstractConsumer):
         if self._password is not None:
             cmd = cmd + f" --password {self._password}"
         if self._enable_tls:
-            cmd = cmd + f" --enable-tls"
+            cmd = cmd + " --enable-tls"
         if self._max_msgs is not None:
             cmd += f" --seq_read_msgs {self._max_msgs}"
         if self._max_throughput_mb is not None:
@@ -920,6 +920,10 @@ class KgoVerifierSeqConsumer(AbstractConsumer):
         self._status_thread.start()
 
     def wait_node(self, node, timeout_sec=None):
+        assert not self._stopped, (
+            f"Can't wait {self.who_am_i()}. It was already stopped. You can either stop() a service or wait() and then stop() it but not the other way around."
+        )
+
         if self._producer:
             producer: KgoVerifierProducer = self._producer
 
@@ -993,7 +997,7 @@ class KgoVerifierRandomConsumer(AbstractConsumer):
         if self._password is not None:
             cmd = cmd + f" --password {self._password}"
         if self._enable_tls:
-            cmd = cmd + f" --enable-tls"
+            cmd = cmd + " --enable-tls"
         if self._use_transactions:
             cmd += " --use-transactions"
 
@@ -1069,7 +1073,7 @@ class KgoVerifierConsumerGroupConsumer(AbstractConsumer):
         if self._password is not None:
             cmd = cmd + f" --password {self._password}"
         if self._enable_tls:
-            cmd = cmd + f" --enable-tls"
+            cmd = cmd + " --enable-tls"
         if self._loop:
             cmd += " --loop"
         if self._max_msgs is not None:

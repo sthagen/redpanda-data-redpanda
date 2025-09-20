@@ -178,6 +178,7 @@ TEST(SimpleMetastoreTest, TestGetMissingPartition) {
     ASSERT_EQ(get_res->oid, oid1);
     ASSERT_EQ(get_res->footer_pos, 200);
     ASSERT_EQ(get_res->object_size, 1200);
+    ASSERT_EQ(get_res->first_offset, 0_o);
     ASSERT_EQ(get_res->last_offset, 10_o);
 }
 
@@ -318,6 +319,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 0_o);
         ASSERT_EQ(get_res->last_offset, 10_o);
     }
     for (const auto& o : std::views::iota(11, 21)) {
@@ -326,6 +328,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 11_o);
         ASSERT_EQ(get_res->last_offset, 20_o);
     }
     for (const auto& o : std::views::iota(21, 31)) {
@@ -334,6 +337,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBasic) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 21_o);
         ASSERT_EQ(get_res->last_offset, 30_o);
     }
 }
@@ -357,6 +361,7 @@ TEST(SimpleMetastoreTest, TestAddGetOffsetBelowStart) {
     ASSERT_EQ(get_res->oid, oid1);
     ASSERT_EQ(get_res->footer_pos, 100);
     ASSERT_EQ(get_res->object_size, 1100);
+    ASSERT_EQ(get_res->first_offset, 0_o);
     ASSERT_EQ(get_res->last_offset, 10_o);
 }
 
@@ -402,6 +407,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 0_o);
         ASSERT_EQ(get_res->last_offset, 10_o);
     }
     for (const auto& t : {2000_t, 2999_t}) {
@@ -410,6 +416,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 11_o);
         ASSERT_EQ(get_res->last_offset, 20_o);
     }
     for (const auto& t : {3000_t, 3999_t}) {
@@ -418,6 +425,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 21_o);
         ASSERT_EQ(get_res->last_offset, 30_o);
     }
 }
@@ -514,6 +522,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 0_o);
         ASSERT_EQ(get_res->last_offset, 20_o);
     }
     // Others should be served from oid1 or oid2.
@@ -524,6 +533,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 0_o);
         ASSERT_EQ(get_res->last_offset, 10_o);
     }
     for (const auto& o : std::views::iota(11, 21)) {
@@ -532,6 +542,7 @@ TEST(StateUpdateTest, TestReplaceMultipleOnePartition) {
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 11_o);
         ASSERT_EQ(get_res->last_offset, 20_o);
     }
     // Sanity check that replacement leaves us with expected offsets.
@@ -581,6 +592,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 0_o);
         ASSERT_EQ(get_res->last_offset, 20_o);
     }
     tpr = model::topic_id_partition::from(tid_b);
@@ -590,6 +602,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 11_o);
         ASSERT_EQ(get_res->last_offset, 20_o);
     }
     // Others should be served from oid1 or oid2.
@@ -599,6 +612,7 @@ TEST(StateUpdateTest, TestReplaceMultipleMultiplePartitions) {
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
         ASSERT_EQ(get_res->object_size, 1100);
+        ASSERT_EQ(get_res->first_offset, 0_o);
         ASSERT_EQ(get_res->last_offset, 10_o);
     }
     // Sanity check that replacement leaves us with expected offsets.
@@ -1521,4 +1535,40 @@ TEST(SimpleMetastoreTest, TestDirtyRatio) {
     compaction_info = m.get_compaction_info(to_sample).get();
     ASSERT_TRUE(compaction_info.has_value());
     ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 0.0);
+}
+
+TEST(SimpleMetastoreTest, TestAddGetOffsetAfterBytes) {
+    simple_metastore m;
+    om_list_t os;
+    constexpr size_t data_size = 99;
+    os.emplace_back(om_builder(oid1, 100, 1100)
+                      .add(tid_a, 0_o, 10_o, 2000_t, 0, data_size)
+                      .build());
+    os.emplace_back(om_builder(oid2, 100, 1100)
+                      .add(tid_a, 11_o, 20_o, 2000_t, 0, data_size)
+                      .build());
+    os.emplace_back(om_builder(oid3, 100, 1100)
+                      .add(tid_a, 21_o, 30_o, 2000_t, 0, data_size)
+                      .build());
+    auto add_res
+      = m.add_objects(os, terms_builder().add(tid_a, 0_tm, 0_o).build()).get();
+    ASSERT_TRUE(add_res.has_value());
+    ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
+
+    auto tpr = model::topic_id_partition::from(tid_a);
+    auto get_res = m.get_first_offset_for_bytes(tpr, 0).get();
+    ASSERT_TRUE(get_res.has_value()) << "for size: 0";
+    ASSERT_EQ(get_res.value(), 31_o) << "for size: 0";
+    size_t query_size = 1;
+    for (auto offset : {21_o, 11_o, 0_o}) {
+        for (size_t i = 0; i < data_size; ++i, ++query_size) {
+            auto get_res = m.get_first_offset_for_bytes(tpr, query_size).get();
+            ASSERT_TRUE(get_res.has_value()) << "for size: " << query_size;
+            ASSERT_EQ(get_res.value(), offset) << "for size: " << query_size;
+        }
+    }
+    get_res = m.get_first_offset_for_bytes(tpr, ++query_size).get();
+    ASSERT_FALSE(get_res.has_value()) << "for size: " << query_size;
+    ASSERT_EQ(get_res.error(), metastore::errc::out_of_range)
+      << "for size: " << query_size;
 }

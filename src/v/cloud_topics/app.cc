@@ -62,15 +62,6 @@ ss::future<> app::construct(
       bucket,
       ss::sharded_parameter([&cloud_cache] { return &cloud_cache->local(); }));
 
-    co_await construct_service(
-      reconciler,
-      ss::sharded_parameter(
-        [&partition_mgr] { return &partition_mgr->local(); }),
-      data_plane.get(),
-      ss::sharded_parameter([this] { return &l1_io.local(); }),
-      ss::sharded_parameter(
-        [&metadata_cache] { return &metadata_cache->local(); }));
-
     co_await construct_service(domain_supervisor, controller);
     co_await construct_service(
       l1_metastore_fe,
@@ -80,6 +71,21 @@ ss::future<> app::construct(
       shard_table,
       connection_cache,
       &domain_supervisor);
+
+    co_await construct_service(
+      replicated_metastore, ss::sharded_parameter([this] {
+          return std::ref(l1_metastore_fe.local());
+      }));
+
+    co_await construct_service(
+      reconciler,
+      ss::sharded_parameter(
+        [&partition_mgr] { return &partition_mgr->local(); }),
+      data_plane.get(),
+      ss::sharded_parameter([this] { return &l1_io.local(); }),
+      ss::sharded_parameter(
+        [&metadata_cache] { return &metadata_cache->local(); }),
+      ss::sharded_parameter([this] { return &replicated_metastore.local(); }));
 
     co_await construct_service(
       manager,

@@ -43,6 +43,9 @@ public:
     ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, model::timestamp) override;
 
+    ss::future<std::expected<kafka::offset, errc>> get_first_offset_for_bytes(
+      const model::topic_id_partition&, uint64_t size) override;
+
     ss::future<std::expected<kafka::offset, errc>> get_end_offset_for_term(
       const model::topic_id_partition&, model::term_id) override;
 

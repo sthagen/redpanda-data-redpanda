@@ -249,6 +249,7 @@ simple_metastore::get_first_ge(
           .oid = it->oid,
           .footer_pos = footer_pos,
           .object_size = object_size,
+          .first_offset = it->base_offset,
           .last_offset = it->last_offset,
         };
     }
@@ -284,8 +285,38 @@ simple_metastore::get_first_ge(
               .oid = obj.oid,
               .footer_pos = footer_pos,
               .object_size = object_size,
+              .first_offset = obj.base_offset,
               .last_offset = obj.last_offset,
             };
+        }
+    }
+    return std::unexpected(metastore::errc::out_of_range);
+}
+
+ss::future<std::expected<kafka::offset, metastore::errc>>
+simple_metastore::get_first_offset_for_bytes(
+  const model::topic_id_partition& tpr, uint64_t size) {
+    co_return get_first_offset_for_bytes(state_, tpr, size);
+}
+
+std::expected<kafka::offset, metastore::errc>
+simple_metastore::get_first_offset_for_bytes(
+  const state& state, const model::topic_id_partition& tpr, uint64_t size) {
+    auto prt_ref = state.partition_state(tpr);
+    if (!prt_ref.has_value()) {
+        vlog(cd_log.debug, "Partition {} not tracked", tpr);
+        return std::unexpected(metastore::errc::missing_ntp);
+    }
+    auto& prt = prt_ref->get();
+    kafka::offset offset = prt.next_offset;
+    if (size == 0) {
+        return offset;
+    }
+    for (const auto& obj : std::views::reverse(prt.extents)) {
+        offset = obj.base_offset;
+        size -= std::min(size, obj.len);
+        if (size == 0) {
+            return offset;
         }
     }
     return std::unexpected(metastore::errc::out_of_range);

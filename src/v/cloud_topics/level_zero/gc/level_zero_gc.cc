@@ -41,7 +41,7 @@ public:
         auto res = co_await remote_->list_objects(
           bucket_, rtc, object_path_factory::level_zero_data_dir());
         if (res.has_value()) {
-            co_return res.assume_value();
+            co_return std::move(res).assume_value();
         }
         co_return std::unexpected(res.assume_error());
     }

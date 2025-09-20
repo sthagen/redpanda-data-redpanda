@@ -49,7 +49,16 @@ namespace cloud_topics::l1 {
 // implementation to ensure such requests are rejected and don't have harmful
 // side effects. As such, callers can think of this interface as thread safe.
 class metastore {
+protected:
+    metastore() = default;
+
 public:
+    virtual ~metastore() = default;
+    metastore(const metastore&) = delete;
+    metastore& operator=(const metastore&) = delete;
+    metastore(const metastore&&) = delete;
+    metastore& operator=(const metastore&&) = delete;
+
     enum class errc {
         missing_ntp,
         invalid_request,
@@ -79,6 +88,8 @@ public:
         object_id oid;
         size_t footer_pos;
         size_t object_size;
+        // The first offset available in the object (inclusive).
+        kafka::offset first_offset;
         // The last offset available in the object (inclusive).
         // This can be used to skip to the next offset.
         kafka::offset last_offset;
@@ -183,6 +194,16 @@ public:
     // `out_of_range`.
     virtual ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, model::timestamp) = 0;
+
+    // Finds the kafka offset such that if data was truncated before this offset
+    // there the total amount of data left would be ~size (within the
+    // granularity of a single object's size). This is intended to be used for
+    // bytes based retention of the metastore.
+    //
+    // If no such offset exists, returns `out_of_range`.
+    virtual ss::future<std::expected<kafka::offset, errc>>
+    get_first_offset_for_bytes(const model::topic_id_partition&, uint64_t size)
+      = 0;
 
     // Returns the end (i.e. one past the last) offset at which data was added
     // for the given partition term.

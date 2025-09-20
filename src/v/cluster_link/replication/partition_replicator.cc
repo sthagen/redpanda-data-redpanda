@@ -42,7 +42,7 @@ ss::future<> partition_replicator::start() {
               auto log_level = ssx::is_shutdown_exception(e)
                                  ? ss::log_level::trace
                                  : ss::log_level::warn;
-              _log.log(log_level, "Error in partition replicator: {}", e);
+              vlogl(_log, log_level, "Error in fetch_and_replicate: {}", e);
           });
     });
 }
@@ -89,8 +89,13 @@ ss::future<bool> partition_replicator::handle_replication_result(
         _backoff_policy.reset();
         co_return true;
     } catch (...) {
-        vlog(
-          _log.error,
+        auto eptr = std::current_exception();
+        auto log_level = ssx::is_shutdown_exception(eptr)
+                           ? ss::log_level::debug
+                           : ss::log_level::error;
+        vlogl(
+          _log,
+          log_level,
           "Exception during replication: {}",
           std::current_exception());
     }
@@ -101,7 +106,34 @@ ss::future<> partition_replicator::replicate_and_wait(
   replicate_ctx ctx, ss::gate& gate, ss::abort_source& as) {
     auto stages = _sink->replicate(
       std::move(ctx.batches), model::max_duration, as);
-    co_await std::move(stages.request_enqueued);
+    auto enqueue_f = co_await ss::coroutine::as_future(
+      std::move(stages.request_enqueued));
+    std::exception_ptr eptr = nullptr;
+    if (enqueue_f.failed()) {
+        eptr = enqueue_f.get_exception();
+        auto log_level = ssx::is_shutdown_exception(eptr)
+                           ? ss::log_level::debug
+                           : ss::log_level::error;
+        vlogl(
+          _log,
+          log_level,
+          "Exception during replicate request enqueue: {}",
+          eptr);
+    }
+    if (eptr != nullptr || gate.is_closed()) [[unlikely]] {
+        // always ensure `replicate_finished` is waited on.
+        // This branch is always called in error scenarios, so waiting in the
+        // foreground is acceptable and avoids dangling future.
+        vlog(
+          _log.trace,
+          "Waiting for replication to finish in the "
+          "foreground");
+        co_await std::move(stages.replicate_finished).discard_result();
+        if (eptr != nullptr) {
+            std::rethrow_exception(eptr);
+        }
+        co_return;
+    }
     ssx::spawn_with_gate(
       gate,
       [this,
@@ -151,8 +183,7 @@ ss::future<> partition_replicator::fetch_and_replicate() {
         auto log_level = ssx::is_shutdown_exception(eptr)
                            ? ss::log_level::debug
                            : ss::log_level::error;
-        _log.log(log_level, "Error in fetch_and_replicate: {}", eptr);
-
+        vlogl(_log, log_level, "Error in fetch_and_replicate: {}", eptr);
         as.request_abort();
     }
     co_await gate.close();
