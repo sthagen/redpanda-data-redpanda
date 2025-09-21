@@ -642,8 +642,44 @@ frontend::validate_fetch_offset(
   bool reading_from_follower,
   model::timeout_clock::time_point deadline) {
     if (reading_from_follower && !_partition->is_leader()) {
-        // TODO: implement follower fetching for cloud topics
-        co_return std::unexpected(frontend_errc::not_leader_for_partition);
+        std::optional<frontend_errc> ec = std::nullopt;
+        auto log_end_offset = get_log_end_offset(*_partition);
+
+        model::offset leader_hwm;
+        kafka::offset available_to_read;
+
+        if (!ec.has_value()) {
+            leader_hwm
+              = _partition->get_offset_translator_state()->from_log_offset(
+                _partition->leader_high_watermark());
+            available_to_read = std::min(
+              model::offset_cast(leader_hwm), log_end_offset);
+
+            if (fetch_offset < start_offset()) {
+                ec = frontend_errc::offset_out_of_range;
+            } else if (fetch_offset > available_to_read) {
+                // Offset know to be committed but not yet available on the
+                // follower.
+                ec = frontend_errc::offset_not_available;
+            }
+        }
+
+        if (ec.has_value()) {
+            vlog(
+              cd_log.warn,
+              "ntp {}: fetch offset out of range on follower, requested: {}, "
+              "partition start offset: {}, high watermark: {}, leader high "
+              "watermark: {}, log end offset: {}, ec: {}",
+              ntp(),
+              fetch_offset,
+              start_offset(),
+              high_watermark(),
+              leader_hwm,
+              log_end_offset,
+              ec);
+            co_return std::unexpected(*ec);
+        }
+        co_return std::monostate{};
     }
 
     auto timeout = deadline - model::timeout_clock::now();
