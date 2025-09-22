@@ -196,7 +196,7 @@ public:
     get_first_ge(const model::topic_id_partition&, model::timestamp) = 0;
 
     // Finds the kafka offset such that if data was truncated before this offset
-    // there the total amount of data left would be ~size (within the
+    // where the total amount of data left would be ~size (within the
     // granularity of a single object's size). This is intended to be used for
     // bytes based retention of the metastore.
     //

@@ -1369,11 +1369,15 @@ delete_topics_handler::handle(request_context ctx, ss::smp_service_group) {
                 resp.data.responses.push_back(
                   {.name = name,
                    .topic_id = id,
-                   .error_code = error_code::topic_authorization_failed});
+                   .error_code = error_code::topic_authorization_failed,
+                   .error_message = "Authorized to describe but not allowed to "
+                                    "delete this topic ID."});
             } else {
                 resp.data.responses.push_back(
                   {.topic_id = id,
-                   .error_code = error_code::topic_authorization_failed});
+                   .error_code = error_code::topic_authorization_failed,
+                   .error_message
+                   = "Not authorized to describe or delete this topic ID."});
             }
             id_to_name.erase(it);
         }
@@ -1388,7 +1392,8 @@ delete_topics_handler::handle(request_context ctx, ss::smp_service_group) {
         if (!ctx.authorized(security::acl_operation::describe, name)) {
             resp.data.responses.push_back(
               {.name = name,
-               .error_code = error_code::topic_authorization_failed});
+               .error_code = error_code::topic_authorization_failed,
+               .error_message = "Not authorized to describe this topic."});
         } else if (!id) {
             resp.data.responses.push_back(
               {.name = name,
@@ -1411,7 +1416,9 @@ delete_topics_handler::handle(request_context ctx, ss::smp_service_group) {
         } else {
             resp.data.responses.push_back(
               {.name = name,
-               .error_code = error_code::topic_authorization_failed});
+               .error_code = error_code::topic_authorization_failed,
+               .error_message = "Authorized to describe but not allowed to "
+                                "delete this topic."});
         }
     }
     provided_names.clear();
@@ -1502,7 +1509,16 @@ delete_topics_handler::handle(request_context ctx, ss::smp_service_group) {
         resp.data.responses.push_back(
           {.name = std::move(topic),
            .error_code = ec,
-           .error_message = "Too many partition mutations requested"});
+           .error_message = "Too many partition mutations requested."});
+    }
+
+    for (auto& topic : nodelete_topics) {
+        resp.data.responses.push_back(
+          deletable_topic_result{
+            .name = std::move(topic),
+            .error_code = error_code::topic_authorization_failed,
+            .error_message = "Topic is protected by 'kafka_nodelete_topics'.",
+          });
     }
 
     std::vector<cluster::topic_result> do_delete_res;
