@@ -1049,6 +1049,44 @@ TEST(SimpleMetastoreTest, TestObjectBuilderBadObjects) {
     ASSERT_EQ(0, release_res->size());
 }
 
+TEST(SimpleMetastoreTest, TestObjectBuilderRemovedObjects) {
+    simple_metastore m;
+    auto ob = m.object_builder();
+    const auto topic_id = model::create_topic_id();
+
+    auto gen_object_id = [&] {
+        return ob->get_or_create_object_for(
+          model::topic_id_partition(
+            topic_id, model::partition_id(static_cast<int32_t>(0))));
+    };
+
+    // pending object can be removed, but not twice
+    auto oid = gen_object_id();
+    ASSERT_TRUE(ob->remove_pending_object(oid).has_value());
+    ASSERT_FALSE(ob->remove_pending_object(oid).has_value());
+
+    // after removal, object id shouldn't be reused in this builder
+    auto oid2 = gen_object_id();
+    ASSERT_NE(oid, oid2);
+    oid = oid2;
+
+    // unfinished object with data can be removed
+    ASSERT_TRUE(ob->add(oid, {}).has_value());
+    ASSERT_TRUE(ob->remove_pending_object(oid).has_value());
+    ASSERT_FALSE(ob->remove_pending_object(oid).has_value());
+    ASSERT_FALSE(ob->add(oid, {}).has_value());
+
+    oid2 = gen_object_id();
+    ASSERT_NE(oid, oid2);
+    oid = oid2;
+
+    // finished object cannot be removed
+    oid = gen_object_id();
+    ASSERT_TRUE(ob->finish(oid, 0, 0).has_value());
+    ASSERT_FALSE(ob->remove_pending_object(oid).has_value());
+    ASSERT_FALSE(ob->finish(oid, 0, 0).has_value());
+}
+
 TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
     simple_metastore m;
     auto tp_a = model::topic_id_partition::from(tid_a);

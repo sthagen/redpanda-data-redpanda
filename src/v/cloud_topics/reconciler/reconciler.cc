@@ -268,6 +268,7 @@ ss::future<> reconciler::reconcile() {
     // Process partitions by their object. This should be easier to
     // improve than processing partition-by-partition.
     chunked_vector<built_object_metadata> successful_objects;
+    chunked_vector<l1::object_id> failed_objects;
     for (const auto& [oid, partitions] : oid_to_partitions) {
         auto object_fut = co_await ss::coroutine::as_future(
           reconcile_partitions(oid, partitions));
@@ -284,11 +285,13 @@ ss::future<> reconciler::reconcile() {
             if (is_shutdown) {
                 co_return;
             }
+            failed_objects.push_back(oid);
             continue; // Skip this object and move to the next
         }
 
         auto result = object_fut.get();
         if (!result.has_value()) {
+            failed_objects.push_back(oid);
             // Error was already logged in reconcile_partitions.
             continue; // Skip this object and move to the next
         }
@@ -297,12 +300,19 @@ ss::future<> reconciler::reconcile() {
         auto add_result = co_await add_object_metadata(
           oid, obj_metadata, metadata_builder.get());
         if (!add_result.has_value()) {
+            failed_objects.push_back(oid);
             // Error was already logged in add_object_metadata.
             continue; // Skip this object and move to the next
         }
 
         // Success - collect the metadata for final processing.
         successful_objects.push_back(std::move(obj_metadata));
+    }
+
+    for (const auto& oid : failed_objects) {
+        auto rm_ret = metadata_builder->remove_pending_object(oid);
+        vassert(
+          rm_ret.has_value(), "Removing object {} in non-pending state", oid);
     }
 
     // Check if we have any successful objects to commit.
@@ -364,7 +374,7 @@ reconciler::reconcile_partitions(
         vlogl(
           lg,
           ssx::is_shutdown_exception(ex) ? ss::log_level::debug
-                                         : ss::log_level::error,
+                                         : ss::log_level::warn,
           "Exception building and putting object {}: {}",
           oid,
           ex);
@@ -443,11 +453,6 @@ reconciler::build_object(
     chunked_vector<partition_commit_info> metas;
     metas.reserve(partitions.size());
     for (const auto& partition : partitions) {
-        vlog(
-          lg.debug,
-          "Processing partition {} with LRO {}",
-          partition->tidp,
-          partition->lro);
         auto meta = co_await add_partition_to_object(ctx, partition);
         if (meta.has_value()) {
             metas.emplace_back(partition, std::move(meta).value());
@@ -470,7 +475,7 @@ reconciler::put_object(const l1::object_id& oid, builder_context& ctx) {
     auto put_result = co_await _l1_io->put_object(oid, ctx.staging.get(), &_as);
     if (!put_result.has_value()) {
         vlog(
-          lg.error,
+          lg.warn,
           "Failed to put L1 object {}: {}",
           oid,
           static_cast<int>(put_result.error()));

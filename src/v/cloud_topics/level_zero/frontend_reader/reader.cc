@@ -361,14 +361,10 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
                   model::record_batch batch = std::move(*batches_it);
                   ++batches_it;
                   auto size = batch.header().size_bytes;
-                  auto crc = batch.header().crc;
                   batch.header() = local_batch_header;
                   batch.header().type = model::record_batch_type::raft_data;
                   batch.header().size_bytes = size;
-                  batch.header().crc = crc;
-                  // Recalculate the header crc
-                  batch.header().header_crc = model::internal_header_only_crc(
-                    batch.header());
+                  batch.header().reset_size_checksum_metadata(batch.data());
                   // Propagate materialized batches to the record batch cache
                   if (cache_enabled()) {
                       vlog(

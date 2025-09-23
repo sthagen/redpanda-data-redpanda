@@ -278,7 +278,6 @@
         "rptest/clients/admin/proto/redpanda/core/admin/v2/broker_pb2_connect.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/internal/debug_pb2_connect.py",
         "rptest/clients/admin/proto/redpanda/core/admin/v2/shadow_link_pb2_connect.py",
-        "rptest/clients/installpack.py",
         "rptest/clients/offline_log_viewer.py",
         "rptest/clients/ping_pong.py",
         "rptest/clients/rpk.py",

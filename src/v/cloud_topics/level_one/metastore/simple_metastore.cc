@@ -47,6 +47,17 @@ object_id simple_object_builder::get_or_create_object_for(
     return pending_objects_.begin()->first;
 }
 
+std::expected<void, simple_object_builder::error>
+simple_object_builder::remove_pending_object(object_id oid) {
+    auto it = pending_objects_.find(oid);
+    if (it == pending_objects_.end()) {
+        return std::unexpected(
+          error{fmt::format("Object {} is not a pending object", oid)});
+    }
+    pending_objects_.erase(it);
+    return {};
+}
+
 std::expected<void, metastore::object_metadata_builder::error>
 simple_object_builder::add(
   object_id oid, metastore::object_metadata::ntp_metadata ntp_meta) {

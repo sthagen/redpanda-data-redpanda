@@ -100,7 +100,7 @@ static model::record_batch make_placeholder_batch(
     ph.header().first_timestamp = hdr.first_timestamp;
     ph.header().max_timestamp = hdr.max_timestamp;
     ph.header().base_sequence = hdr.base_sequence;
-    ph.header().header_crc = model::internal_header_only_crc(ph.header());
+    ph.header().reset_size_checksum_metadata(ph.data());
     return ph;
 }
 
@@ -141,7 +141,7 @@ static void update_batch_base_offset(
   model::record_batch& src, model::offset offset, model::term_id term) {
     src.set_term(term);
     src.header().base_offset = offset;
-    src.header().header_crc = model::internal_header_only_crc(src.header());
+    src.header().reset_size_checksum_metadata(src.data());
 }
 
 static chunked_vector<model::record_batch>

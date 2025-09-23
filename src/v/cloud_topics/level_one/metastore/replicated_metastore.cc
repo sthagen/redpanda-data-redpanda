@@ -14,6 +14,8 @@
 #include "cloud_topics/level_one/metastore/state_update.h"
 #include "cloud_topics/logger.h"
 
+#include <algorithm>
+
 namespace cloud_topics::l1 {
 
 namespace {
@@ -92,6 +94,7 @@ public:
 
     object_id
     get_or_create_object_for(const model::topic_id_partition&) override;
+    std::expected<void, error> remove_pending_object(object_id) override;
     std::expected<void, error>
       add(object_id, metastore::object_metadata::ntp_metadata) override;
     std::expected<void, error>
@@ -128,6 +131,25 @@ object_id replicated_object_builder::get_or_create_object_for(
         return oid;
     }
     return partition_objects.pending_objects_.begin()->first;
+}
+
+std::expected<void, replicated_object_builder::error>
+replicated_object_builder::remove_pending_object(object_id oid) {
+    auto p_it = std::ranges::find_if(partitions_, [oid](auto& p) {
+        return p.second.pending_objects_.contains(oid);
+    });
+    if (p_it == partitions_.end()) {
+        return std::unexpected(
+          error{fmt::format("Object {} is not a pending object", oid)});
+    }
+    auto& [_, objects] = *p_it;
+    auto it = objects.pending_objects_.find(oid);
+    dassert(
+      it != objects.pending_objects_.end(),
+      "Pending objects expected to contain {}",
+      oid);
+    objects.pending_objects_.erase(it);
+    return {};
 }
 
 std::expected<void, replicated_object_builder::error>

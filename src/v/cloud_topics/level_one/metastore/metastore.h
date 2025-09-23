@@ -111,6 +111,12 @@ public:
         get_or_create_object_for(const model::topic_id_partition&)
           = 0;
 
+        // Removes a pending object from the builder. The object must be in the
+        // pending state. Further calls to get_or_create_object_for() will not
+        // return the object id. Any other call that references the object id
+        // will return an error.
+        virtual std::expected<void, error> remove_pending_object(object_id) = 0;
+
         // Adds the given partition metadata for the given object. Expected
         // that finish() has not yet been called on the object.
         virtual std::expected<void, error>
