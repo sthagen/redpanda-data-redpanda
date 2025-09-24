@@ -35,6 +35,8 @@ class api;
 namespace cloud_topics {
 class data_plane_api;
 class cloud_topics_manager;
+class level_zero_gc;
+class housekeeper_manager;
 
 class app : public ssx::sharded_service_container {
 public:
@@ -49,7 +51,6 @@ public:
     ss::future<> construct(
       model::node_id,
       cluster::controller*,
-      ss::sharded<cluster::partition_manager>*,
       ss::sharded<cluster::partition_leaders_table>*,
       ss::sharded<cluster::shard_table>*,
       ss::sharded<cloud_io::remote>*,
@@ -71,6 +72,8 @@ public:
     // TODO: add 'get_control_plane_api' etc
 
 private:
+    ss::future<> wire_up_notifications();
+
     ss::sstring _logger_name;
     std::unique_ptr<data_plane_api> data_plane;
     ss::sharded<state_accessors> state;
@@ -80,6 +83,8 @@ private:
     ss::sharded<l1::domain_supervisor> domain_supervisor;
     ss::sharded<l1::frontend> l1_metastore_fe;
     ss::sharded<cloud_topics_manager> manager;
+    ss::sharded<level_zero_gc> l0_gc;
+    ss::sharded<housekeeper_manager> housekeeper_manager;
 };
 
 } // namespace cloud_topics

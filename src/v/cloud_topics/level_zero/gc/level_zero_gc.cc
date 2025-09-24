@@ -115,14 +115,14 @@ void level_zero_gc::start() {
     worker_cv_.signal();
 }
 
-void level_zero_gc::stop() {
-    vlog(cd_log.info, "Stopping cloud topics L0 GC worker");
+void level_zero_gc::pause() {
+    vlog(cd_log.info, "Pausing cloud topics L0 GC worker");
     should_run_ = false;
     asrc_.request_abort();
 }
 
-seastar::future<> level_zero_gc::shutdown() {
-    vlog(cd_log.info, "Shutting down cloud topics L0 GC worker");
+seastar::future<> level_zero_gc::stop() {
+    vlog(cd_log.info, "Stopping cloud topics L0 GC worker");
     should_shutdown_ = true;
     asrc_.request_abort();
     worker_cv_.signal();

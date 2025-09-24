@@ -14,7 +14,26 @@ redpanda_cc_library(
         "//src/v/model",
         "//src/v/random:time_jitter",
         "//src/v/ssx:future_util",
-        "@abseil-cpp//absl/container:btree",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "manager",
+    srcs = ["manager.cc"],
+    hdrs = ["manager.h"],
+    deps = [
+        ":housekeeper",
+        "//src/v/base",
+        "//src/v/cloud_topics:logger",
+        "//src/v/cloud_topics/level_one/metastore",
+        "//src/v/cloud_topics/level_zero/stm:ctp_stm_api",
+        "//src/v/cluster",
+        "//src/v/config",
+        "//src/v/container:chunked_hash_map",
+        "//src/v/model",
+        "//src/v/ssx:work_queue",
+        "//src/v/utils:retry_chain_node",
         "@seastar",
     ],
 )

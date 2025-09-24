@@ -16,9 +16,7 @@
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
-#include "cluster/notification.h"
 #include "cluster/partition.h"
-#include "cluster/partition_manager.h"
 #include "container/chunked_hash_map.h"
 #include "container/chunked_vector.h"
 #include "model/fundamental.h"
@@ -56,12 +54,7 @@ enum class reconcile_error { build_or_put_failure, metadata_failure };
  */
 class reconciler {
 public:
-    reconciler(
-      cluster::partition_manager*,
-      data_plane_api*,
-      l1::io*,
-      cluster::metadata_cache*,
-      l1::metastore*);
+    reconciler(data_plane_api*, l1::io*, l1::metastore*);
 
     reconciler(const reconciler&) = delete;
     reconciler& operator=(const reconciler&) = delete;
@@ -71,6 +64,12 @@ public:
 
     ss::future<> start();
     ss::future<> stop();
+
+    void attach_partition(
+      const model::ntp&,
+      model::topic_id_partition,
+      ss::lw_shared_ptr<cluster::partition>);
+    void detach_partition(const model::ntp&);
 
 private:
     /*
@@ -104,12 +103,6 @@ private:
     // NB: Partition attachment is the only part using ntps instead of
     //     topic id partitions.
     chunked_hash_map<model::ntp, attached_partition> _partitions;
-
-    void attach_partition(ss::lw_shared_ptr<cluster::partition>);
-    void detach_partition(const model::ntp&);
-
-    cluster::notification_id_type _manage_notify_handle;
-    cluster::notification_id_type _unmanage_notify_handle;
 
 private:
     static constexpr size_t max_object_size = 64_MiB;
@@ -269,10 +262,8 @@ private:
     ntp_to_topic_id_partition(const model::ntp& ntp) const;
 
 private:
-    cluster::partition_manager* _partition_manager;
     data_plane_api* _data_plane;
     l1::io* _l1_io;
-    cluster::metadata_cache* _metadata_cache;
     l1::metastore* _metastore;
     ss::gate _gate;
     ss::abort_source _as;

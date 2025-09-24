@@ -25,6 +25,8 @@
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/server/group_router.h"
 
+#include <seastar/coroutine/switch_to.hh>
+
 namespace cluster_link {
 
 using ::cluster::cluster_link::frontend;
@@ -243,7 +245,8 @@ service::service(
   cluster::controller* controller,
   ss::sharded<kafka::group_router>* group_router,
   ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
-  ss::smp_service_group smp_group)
+  ss::smp_service_group smp_group,
+  ss::scheduling_group scheduling_group)
   : _self(self)
   , _plf(plf)
   , _notifications(std::move(notifications))
@@ -254,12 +257,14 @@ service::service(
   , _controller(controller)
   , _group_router(group_router)
   , _hm_frontend(hm_frontend)
-  , _smp_group(smp_group) {}
+  , _smp_group(smp_group)
+  , _scheduling_group(scheduling_group) {}
 
 service::~service() = default;
 
 ss::future<> service::start() {
     vlog(cllog.info, "Starting cluster link service");
+    co_await ss::coroutine::switch_to(_scheduling_group);
     _manager = std::make_unique<manager>(
       _self,
       partition_leader_cache::make_default(_partition_leaders_table),
@@ -274,7 +279,8 @@ ss::future<> service::start() {
       std::make_unique<health_monitor_based_partition_metadata_provider>(
         _hm_frontend),
       30s, // Temporary until we have a proper configuration for this
-      config::shard_local_cfg().default_topic_replication.bind());
+      config::shard_local_cfg().default_topic_replication.bind(),
+      _scheduling_group);
 
     co_await _manager->register_task_factory<source_topic_syncer_factory>();
     co_await _manager->register_task_factory<group_mirroring_task_factory>();

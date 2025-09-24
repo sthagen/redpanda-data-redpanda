@@ -281,8 +281,8 @@ TEST_F(l1_reader_test, missing_object) {
 
     // Register object in metastore but don't upload.
     // This is corruption and readers should throw.
-    auto builder = _metastore.object_builder();
-    auto oid = builder->get_or_create_object_for(tidp);
+    auto builder = _metastore.object_builder().get().value();
+    auto oid = builder->get_or_create_object_for(tidp).value();
     builder
       ->add(
         oid,
@@ -327,9 +327,9 @@ TEST_F(l1_reader_test, empty_offset_range) {
     // Mimic an object from which all partition data has been compacted.
     // The object has no data for the partition, but is registered
     // to cover a non-empty offset range in the metastore.
-    auto meta_builder = _metastore.object_builder();
+    auto meta_builder = _metastore.object_builder().get().value();
 
-    auto oid = meta_builder->get_or_create_object_for(tidp);
+    auto oid = meta_builder->get_or_create_object_for(tidp).value();
 
     auto buf = iobuf{};
     auto builder = l1::object_builder::create(

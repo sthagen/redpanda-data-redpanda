@@ -121,6 +121,23 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "batch_builder",
+    srcs = [
+        "batch_builder.cc",
+    ],
+    hdrs = [
+        "batch_builder.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":batch_compression",
+        ":model",
+        "//src/v/base",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "batch_compression",
     srcs = [
         "batch_compression.cc",

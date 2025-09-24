@@ -18,7 +18,6 @@
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
-#include "cluster/metadata_cache.h"
 #include "cluster/partition.h"
 #include "kafka/utils/txn_reader.h"
 #include "model/fundamental.h"
@@ -62,51 +61,17 @@ private:
 namespace cloud_topics::reconciler {
 
 reconciler::reconciler(
-  cluster::partition_manager* pm,
-  data_plane_api* data_plane,
-  l1::io* l1_io,
-  cluster::metadata_cache* metadata_cache,
-  l1::metastore* metastore)
-  : _partition_manager(pm)
-  , _data_plane(data_plane)
+  data_plane_api* data_plane, l1::io* l1_io, l1::metastore* metastore)
+  : _data_plane(data_plane)
   , _l1_io(l1_io)
-  , _metadata_cache(metadata_cache)
   , _metastore(metastore) {}
 
-std::optional<model::topic_id_partition>
-reconciler::ntp_to_topic_id_partition(const model::ntp& ntp) const {
-    model::topic_namespace_view topic_ns_view(ntp);
-    auto topic_cfg = _metadata_cache->get_topic_cfg(topic_ns_view);
-    if (!topic_cfg.has_value() || !topic_cfg->tp_id.has_value()) {
-        return std::nullopt;
-    }
-    return model::topic_id_partition{*topic_cfg->tp_id, ntp.tp.partition};
-}
-
 ss::future<> reconciler::start() {
-    _manage_notify_handle = _partition_manager->register_manage_notification(
-      model::kafka_namespace, [this](ss::lw_shared_ptr<cluster::partition> p) {
-          attach_partition(std::move(p));
-      });
-
-    _unmanage_notify_handle
-      = _partition_manager->register_unmanage_notification(
-        model::kafka_namespace, [this](model::topic_partition_view tp_p) {
-            detach_partition(
-              model::ntp(model::kafka_namespace, tp_p.topic, tp_p.partition));
-        });
-
     ssx::spawn_with_gate(_gate, [this] { return reconciliation_loop(); });
-
     co_return;
 }
 
 ss::future<> reconciler::stop() {
-    _partition_manager->unregister_manage_notification(_manage_notify_handle);
-
-    _partition_manager->unregister_unmanage_notification(
-      _unmanage_notify_handle);
-
     _as.request_abort();
     _control_sem.broken();
 
@@ -114,22 +79,15 @@ ss::future<> reconciler::stop() {
 }
 
 void reconciler::attach_partition(
+  const model::ntp& ntp,
+  model::topic_id_partition tidp,
   ss::lw_shared_ptr<cluster::partition> partition) {
     if (!is_cloud_partition(partition)) {
         return;
     }
-    const auto& ntp = partition->ntp();
-    auto tidp = ntp_to_topic_id_partition(ntp);
-    if (!tidp.has_value()) {
-        vlog(
-          lg.error,
-          "Cloud topic partition {} does not have a topic id: skipping",
-          ntp);
-        return;
-    }
-    vlog(lg.debug, "Attaching partition {} (tidp: {})", ntp, tidp.value());
+    vlog(lg.debug, "Attaching partition {} (tidp: {})", ntp, tidp);
     auto attached = ss::make_lw_shared<attached_partition_info>(
-      tidp.value(), partition);
+      tidp, partition);
     auto res = _partitions.try_emplace(ntp, std::move(attached));
     vassert(res.second, "Double registration of ntp {}", ntp);
 }
@@ -160,8 +118,9 @@ ss::future<> reconciler::reconciliation_loop() {
         try {
             co_await _control_sem.wait(
               poll_frequency, std::max(_control_sem.current(), size_t(1)));
-        } catch (const ss::semaphore_timed_out&) {
+        } catch (const ss::semaphore_timed_out& ex) {
             // Time to do some work.
+            std::ignore = ex;
         }
 
         vlog(
@@ -257,12 +216,24 @@ ss::future<> reconciler::reconcile() {
     }
 
     // Begin by creating the set of objects to be built.
-    auto metadata_builder = _metastore->object_builder();
+    auto metadata_builder_res = co_await _metastore->object_builder();
+    if (!metadata_builder_res.has_value()) {
+        vlog(
+          lg.warn,
+          "Could not create object metadata builder: {}",
+          metadata_builder_res.error());
+        co_return;
+    }
+    auto& metadata_builder = metadata_builder_res.value();
     chunked_hash_map<l1::object_id, chunked_vector<attached_partition>>
       oid_to_partitions;
     for (const auto& p : partitions) {
         auto oid = metadata_builder->get_or_create_object_for(p->tidp);
-        oid_to_partitions[oid].push_back(p);
+        if (!oid.has_value()) {
+            vlog(lg.warn, "Could not get object: {}", oid.error());
+            co_return;
+        }
+        oid_to_partitions[oid.value()].push_back(p);
     }
 
     // Process partitions by their object. This should be easier to

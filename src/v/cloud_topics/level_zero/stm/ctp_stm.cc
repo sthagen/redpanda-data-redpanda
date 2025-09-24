@@ -23,8 +23,6 @@
 
 namespace cloud_topics {
 
-constexpr static auto ctp_stm_sync_timeout = std::chrono::seconds(10);
-
 namespace {
 cluster_epoch extract_epoch(model::record_batch&& batch) {
     vassert(
@@ -61,8 +59,9 @@ ctp_stm::ctp_stm(ss::logger& logger, raft::consensus* raft)
 
 const model::ntp& ctp_stm::ntp() const noexcept { return _raft->ntp(); }
 
-ss::future<bool> ctp_stm::sync_in_term(ss::abort_source& as) {
-    auto sync_result = co_await sync(ctp_stm_sync_timeout);
+ss::future<bool>
+ctp_stm::sync_in_term(model::timeout_clock::time_point deadline) {
+    auto sync_result = co_await sync(deadline - model::timeout_clock::now());
     if (!sync_result) {
         // The replica is not a leader
         vlog(_log.debug, "Not a leader");
@@ -74,8 +73,7 @@ ss::future<bool> ctp_stm::sync_in_term(ss::abort_source& as) {
     auto committed_offset = _raft->committed_offset();
     if (committed_offset > last_applied()) {
         // The STM is catching up.
-        auto wait_res = co_await wait_no_throw(
-          committed_offset, ss::lowres_clock::now() + ctp_stm_sync_timeout, as);
+        auto wait_res = co_await wait_no_throw(committed_offset, deadline);
         if (!wait_res) {
             vlog(
               _log.warn,
@@ -177,16 +175,14 @@ ss::future<> ctp_stm::do_apply(const model::record_batch& batch) {
             switch (cmd_key) {
             case ctp_stm_key::advance_reconciled_offset:
                 apply_advance_reconciled_offset(std::move(r));
-                break;
+                return ss::stop_iteration::no;
 
-            default:
-                throw std::runtime_error(fmt_with_ctx(
-                  fmt::format,
-                  "Unknown ctp_stm_key({})",
-                  static_cast<int>(key)));
+            case ctp_stm_key::set_start_offset:
+                apply_set_start_offset(std::move(r));
+                return ss::stop_iteration::no;
             }
-
-            return ss::stop_iteration::no;
+            throw std::runtime_error(fmt_with_ctx(
+              fmt::format, "Unknown ctp_stm_key({})", static_cast<int>(key)));
         });
         break;
 
@@ -203,6 +199,12 @@ void ctp_stm::apply_advance_reconciled_offset(model::record record) {
     // LRO is expected to be within the translation range
     auto lro_log = _raft->log()->to_log_offset(kafka::offset_cast(lro));
     _state.advance_last_reconciled_offset(lro, lro_log);
+}
+
+void ctp_stm::apply_set_start_offset(model::record record) {
+    auto cmd = serde::from_iobuf<set_start_offset_cmd>(record.release_value());
+    vlog(_log.debug, "Setting start offset {}", cmd.new_start_offset);
+    _state.set_start_offset(cmd.new_start_offset);
 }
 
 void ctp_stm::apply_placeholder(const model::record_batch& batch) {

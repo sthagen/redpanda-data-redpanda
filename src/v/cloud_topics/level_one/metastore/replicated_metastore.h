@@ -22,7 +22,8 @@ class replicated_metastore : public metastore {
 public:
     explicit replicated_metastore(frontend& fe);
 
-    std::unique_ptr<object_metadata_builder> object_builder() override;
+    ss::future<std::expected<std::unique_ptr<object_metadata_builder>, errc>>
+    object_builder() override;
 
     ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) override;
@@ -63,7 +64,7 @@ public:
       const model::topic_id_partition&, model::timestamp) override;
 
     ss::future<std::expected<compaction_info_response, errc>>
-    get_compaction_info(const sample_spec&) override;
+    get_compaction_info(const compaction_sample_spec&) override;
 
 private:
     frontend& fe_;

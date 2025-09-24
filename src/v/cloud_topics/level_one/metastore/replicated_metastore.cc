@@ -92,7 +92,7 @@ public:
       = delete;
     replicated_object_builder& operator=(replicated_object_builder&&) = delete;
 
-    object_id
+    std::expected<object_id, error>
     get_or_create_object_for(const model::topic_id_partition&) override;
     std::expected<void, error> remove_pending_object(object_id) override;
     std::expected<void, error>
@@ -120,9 +120,15 @@ private:
     chunked_hash_map<model::partition_id, partitioned_objects> partitions_;
 };
 
-object_id replicated_object_builder::get_or_create_object_for(
+std::expected<object_id, replicated_object_builder::error>
+replicated_object_builder::get_or_create_object_for(
   const model::topic_id_partition& tidp) {
     auto metastore_pid = fe_.metastore_partition(tidp);
+    if (!metastore_pid) {
+        return std::unexpected(
+          error{"could not determine metastore partition for "
+                "get_or_create_object_for()"});
+    }
     auto& partition_objects = partitions_[*metastore_pid];
 
     if (partition_objects.pending_objects_.empty()) {
@@ -156,6 +162,10 @@ std::expected<void, replicated_object_builder::error>
 replicated_object_builder::add(
   object_id oid, metastore::object_metadata::ntp_metadata ntp_meta) {
     auto metastore_pid = fe_.metastore_partition(ntp_meta.tidp);
+    if (!metastore_pid) {
+        return std::unexpected(
+          error{"could not determine metastore partition for add()"});
+    }
     auto& partition_objects = partitions_[*metastore_pid];
     auto it = partition_objects.pending_objects_.find(oid);
     if (it == partition_objects.pending_objects_.end()) {
@@ -228,9 +238,23 @@ replicated_object_builder::release() {
 replicated_metastore::replicated_metastore(frontend& fe)
   : fe_(fe) {}
 
-std::unique_ptr<metastore::object_metadata_builder>
+ss::future<std::expected<
+  std::unique_ptr<metastore::object_metadata_builder>,
+  metastore::errc>>
 replicated_metastore::object_builder() {
-    return std::make_unique<replicated_object_builder>(fe_);
+    auto ensure_fut = co_await ss::coroutine::as_future(
+      fe_.ensure_topic_exists());
+    if (ensure_fut.failed()) {
+        auto ex = ensure_fut.get_exception();
+        vlog(cd_log.warn, "Error while ensuring metastore topic: {}", ex);
+        co_return std::unexpected(errc::transport_error);
+    }
+    auto success = ensure_fut.get();
+    if (!success) {
+        vlog(cd_log.warn, "Ensuring metastore topic did not succeed");
+        co_return std::unexpected(errc::transport_error);
+    }
+    co_return std::make_unique<replicated_object_builder>(fe_);
 }
 
 ss::future<std::expected<metastore::offsets_response, metastore::errc>>
@@ -606,7 +630,7 @@ replicated_metastore::get_compaction_offsets(
 
 ss::future<std::expected<metastore::compaction_info_response, metastore::errc>>
 replicated_metastore::get_compaction_info(
-  [[maybe_unused]] const sample_spec& log) {
+  [[maybe_unused]] const compaction_sample_spec& log) {
     co_return compaction_info_response{};
 }
 

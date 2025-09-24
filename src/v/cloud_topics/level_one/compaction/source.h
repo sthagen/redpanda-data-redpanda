@@ -41,20 +41,37 @@ private:
     bool preempted() const;
 
 private:
-    model::ntp _ntp;
-    model::topic_id_partition _tp;
-    offset_interval_set _dirty_ranges;
-    offset_interval_set _removable_tombstone_ranges;
+    const model::ntp _ntp;
+    const model::topic_id_partition _tp;
+
+    // Offset ranges for the contained `topic_id_partition` obtained from the
+    // metastore.
+    const offset_interval_set _dirty_ranges;
+    const offset_interval_set _removable_tombstone_ranges;
+
+    // The key-offset map for this run of compaction. Built up from existing
+    // data during `map_building_iteration()` by iterating over `_dirty_ranges`
+    // and used for removal of old keys in `deduplication_iteration`.
     compaction::key_offset_map* _map;
+
     metastore* _metastore;
     io* _io;
+
     ss::abort_source& _as;
     compaction_job_state& _state;
 
+    // Container representation of above `_dirty_ranges`.
     using interval_vec = chunked_vector<offset_interval_set::interval>;
-    interval_vec _dirty_range_intervals;
+    const interval_vec _dirty_range_intervals;
+
+    // Iterator used during `map_building_iteration()` which points into the
+    // above vector `_dirty_range_intervals`.
     interval_vec::const_iterator _map_building_it;
 
+    // The offset intervals that were indexed during
+    // `map_building_iteration()`s.
+    // TODO: could potentially be represented using only one offset for the
+    // highest indexed record.
     offset_interval_set _indexed_intervals;
 };
 

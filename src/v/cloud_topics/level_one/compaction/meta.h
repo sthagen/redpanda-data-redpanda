@@ -26,11 +26,11 @@
 namespace cloud_topics::l1 {
 
 struct log_compaction_meta {
-    log_compaction_meta(model::topic_id_partition tid_p, model::ntp ntp)
-      : tid_p(std::move(tid_p))
+    log_compaction_meta(model::topic_id_partition tidp, model::ntp ntp)
+      : tidp(std::move(tidp))
       , ntp(std::move(ntp)) {}
 
-    model::topic_id_partition tid_p;
+    model::topic_id_partition tidp;
     model::ntp ntp;
     ss::gate gate;
     intrusive_list_hook link;

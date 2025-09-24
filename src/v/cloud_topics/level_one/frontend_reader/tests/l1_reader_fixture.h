@@ -56,12 +56,13 @@ protected:
     }
 
     void make_l1_objects(std::vector<tidp_batches_t>& batches_by_tidp) {
-        auto meta_builder = _metastore.object_builder();
+        auto meta_builder = _metastore.object_builder().get().value();
 
         // First record the object ID for each tidp,
         std::map<model::topic_id_partition, l1::object_id> oid_by_tidp;
         for (auto& [tidp, unused] : batches_by_tidp) {
-            oid_by_tidp[tidp] = meta_builder->get_or_create_object_for(tidp);
+            oid_by_tidp[tidp]
+              = meta_builder->get_or_create_object_for(tidp).value();
         }
 
         // Then create output streams and builders for each object.

@@ -108,6 +108,7 @@ class RandomNodeOperationsTest(PreallocNodesTest):
                     "cloud_storage": "debug",
                     "cloud_io": "debug",
                     "kafka": "debug",
+                    "reconciler": "debug",
                 },
             ),
             *args,

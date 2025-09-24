@@ -62,8 +62,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
     ):
         kwargs.setdefault("extra_rp_conf", {}).update(
             {
-                "enable_developmental_unrecoverable_data_corrupting_features": True,
-                "development_enable_cluster_link": True,
+                "enable_shadow_linking": True,
             }
         )
 

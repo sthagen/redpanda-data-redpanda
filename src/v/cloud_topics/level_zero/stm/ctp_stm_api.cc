@@ -16,6 +16,7 @@
 #include "cloud_topics/logger.h"
 #include "cloud_topics/types.h"
 #include "model/fundamental.h"
+#include "model/timeout_clock.h"
 #include "raft/consensus.h"
 #include "serde/rw/uuid.h"
 #include "ssx/future-util.h"
@@ -47,7 +48,8 @@ ctp_stm_api::ctp_stm_api(retry_chain_node& rtc, ss::shared_ptr<ctp_stm> stm)
   , _stm(std::move(stm)) {}
 
 ss::future<std::expected<model::offset, ctp_stm_api_errc>>
-ctp_stm_api::replicated_apply(model::record_batch&& batch) {
+ctp_stm_api::replicated_apply(
+  model::record_batch&& batch, model::timeout_clock::time_point deadline) {
     model::term_id term = _stm->_raft->term();
 
     vlog(
@@ -64,14 +66,19 @@ ctp_stm_api::replicated_apply(model::record_batch&& batch) {
         co_return std::unexpected(ctp_stm_api_errc::timeout);
     }
 
-    co_await _stm->wait(
-      res.value().last_offset, model::timeout_clock::now() + 30s);
+    try {
+        co_await _stm->wait(res.value().last_offset, deadline);
+    } catch (...) {
+        co_return std::unexpected(ctp_stm_api_errc::timeout);
+    }
 
     co_return res.value().last_offset;
 }
 
 ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
-ctp_stm_api::advance_reconciled_offset(kafka::offset last_reconciled_offset) {
+ctp_stm_api::advance_reconciled_offset(
+  kafka::offset last_reconciled_offset,
+  model::timeout_clock::time_point deadline) {
     vlog(_rtclog.debug, "Replicating ctp_stm_cmd::advance_reconciled_offset");
 
     storage::record_batch_builder builder(
@@ -82,7 +89,32 @@ ctp_stm_api::advance_reconciled_offset(kafka::offset last_reconciled_offset) {
       serde::to_iobuf(advance_reconciled_offset_cmd(last_reconciled_offset)));
 
     auto batch = std::move(builder).build();
-    auto apply_result = co_await replicated_apply(std::move(batch));
+    auto apply_result = co_await replicated_apply(std::move(batch), deadline);
+
+    if (!apply_result.has_value()) {
+        co_return std::unexpected(apply_result.error());
+    }
+
+    co_return std::monostate{};
+}
+
+ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
+ctp_stm_api::set_start_offset(
+  kafka::offset start_offset, model::timeout_clock::time_point deadline) {
+    vlog(
+      _rtclog.debug,
+      "Replicating ctp_stm_cmd::set_new_start_offset{{{}}}",
+      start_offset);
+
+    storage::record_batch_builder builder(
+      model::record_batch_type::ctp_stm_command, model::offset(0));
+
+    builder.add_raw_kv(
+      serde::to_iobuf(set_start_offset_cmd::key),
+      serde::to_iobuf(set_start_offset_cmd(start_offset)));
+
+    auto batch = std::move(builder).build();
+    auto apply_result = co_await replicated_apply(std::move(batch), deadline);
 
     if (!apply_result.has_value()) {
         co_return std::unexpected(apply_result.error());
@@ -93,6 +125,10 @@ ctp_stm_api::advance_reconciled_offset(kafka::offset last_reconciled_offset) {
 
 kafka::offset ctp_stm_api::get_last_reconciled_offset() const {
     return _stm->state().get_last_reconciled_offset().value_or(kafka::offset());
+}
+
+kafka::offset ctp_stm_api::get_start_offset() const {
+    return _stm->state().start_offset();
 }
 
 ss::future<std::expected<std::optional<cluster_epoch>, ctp_stm_api_errc>>
@@ -114,9 +150,10 @@ ctp_stm_api::estimate_inactive_epoch() const noexcept {
     return _stm->estimate_inactive_epoch();
 }
 
-ss::future<bool> ctp_stm_api::sync_in_term(ss::abort_source& as) {
+ss::future<bool>
+ctp_stm_api::sync_in_term(model::timeout_clock::time_point deadline) {
     vlog(_rtclog.debug, "Syncing ctp_stm in term {}", _stm->_raft->term());
-    co_return co_await _stm->sync_in_term(as);
+    co_return co_await _stm->sync_in_term(deadline);
 }
 
 ss::future<cluster_epoch_fence> ctp_stm_api::fence_epoch(cluster_epoch e) {

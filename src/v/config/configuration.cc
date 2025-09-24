@@ -4440,16 +4440,17 @@ configuration::configuration()
       "may affect performance. The change is applied only after the restart.",
       {.needs_restart = needs_restart::yes, .visibility = visibility::tunable},
       false)
+  , enable_shadow_linking(
+      *this,
+      "enable_shadow_linking",
+      "Enable creating Shadow Links from this cluster to a remote source "
+      "cluster for data replication.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      false)
   , development_enable_cloud_topics(
       *this,
       "development_enable_cloud_topics",
       "Enable cloud topics.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::user},
-      false)
-  , development_enable_cluster_link(
-      *this,
-      "development_enable_cluster_link",
-      "Enable cluster linking.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
   , development_feature_property_testing_only(
@@ -4501,9 +4502,7 @@ configuration::error_map_t configuration::load(const YAML::Node& root_node) {
         throw std::invalid_argument("'redpanda' root is required");
     }
 
-    auto ignore = node().property_names_and_aliases();
-
-    return config_store::read_yaml(root_node["redpanda"], std::move(ignore));
+    return config_store::read_yaml(root_node["redpanda"]);
 }
 
 std::unique_ptr<configuration> make_config() {

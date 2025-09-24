@@ -36,7 +36,7 @@ struct segment_desc {
     model::term_id term;
     std::optional<size_t> num_records;
     std::optional<size_t> records_per_batch;
-    std::optional<model::timestamp> timestamp;
+    std::optional<model::timestamp> timestamp = model::timestamp::min();
 };
 
 struct offset_range {

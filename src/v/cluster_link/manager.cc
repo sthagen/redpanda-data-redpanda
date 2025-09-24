@@ -16,6 +16,7 @@
 #include "model/namespace.h"
 
 #include <seastar/coroutine/as_future.hh>
+#include <seastar/coroutine/switch_to.hh>
 
 #include <utility>
 
@@ -83,7 +84,8 @@ manager::manager(
   std::unique_ptr<consumer_groups_router> group_router,
   std::unique_ptr<partition_metadata_provider> partition_metadata_provider,
   ss::lowres_clock::duration task_reconciler_interval,
-  config::binding<int16_t> default_topic_replication)
+  config::binding<int16_t> default_topic_replication,
+  ss::scheduling_group scheduling_group)
   : _self(self)
   , _partition_leader_cache(std::move(partition_leader_cache))
   , _partition_manager(std::move(partition_manager))
@@ -95,14 +97,17 @@ manager::manager(
   , _group_router(std::move(group_router))
   , _partition_metadata_provider(std::move(partition_metadata_provider))
   , _queue(
+      scheduling_group,
       [](const std::exception_ptr& ex) {
           vlog(cllog.warn, "unexpected cluster link manager error: {}", ex);
       },
       ssx::work_queue::is_paused_t::yes)
   , _task_reconciler_interval(task_reconciler_interval)
-  , _default_topic_replication(std::move(default_topic_replication)) {}
+  , _default_topic_replication(std::move(default_topic_replication))
+  , _scheduling_group(scheduling_group) {}
 
 ss::future<> manager::start() {
+    co_await ss::coroutine::switch_to(_scheduling_group);
     vlog(cllog.info, "Starting cluster link manager");
     auto ids = _registry->get_all_link_ids();
     for (auto id : ids) {
@@ -110,7 +115,10 @@ ss::future<> manager::start() {
     }
 
     _link_task_reconciler_timer.set_callback([this] {
-        ssx::spawn_with_gate(_g, [this] { return link_task_reconciler(); });
+        ssx::spawn_with_gate(_g, [this] {
+            return ss::with_scheduling_group(
+              _scheduling_group, [this] { return link_task_reconciler(); });
+        });
     });
     _link_task_reconciler_timer.arm_periodic(_task_reconciler_interval);
     _queue.resume();

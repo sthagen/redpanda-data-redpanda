@@ -72,6 +72,11 @@ public:
       l1::metastore*,
       retention_configuration*,
       config::binding<std::chrono::milliseconds> loop_interval);
+    housekeeper(const housekeeper&) = delete;
+    housekeeper(housekeeper&&) = delete;
+    housekeeper& operator=(const housekeeper&) = delete;
+    housekeeper& operator=(housekeeper&&) = delete;
+    ~housekeeper() = default;
 
     // Start the housekeeping loop.
     ss::future<> start();

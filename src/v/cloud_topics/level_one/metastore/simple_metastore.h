@@ -29,7 +29,7 @@ public:
     simple_object_builder& operator=(const simple_object_builder&) = delete;
     simple_object_builder& operator=(simple_object_builder&&) = delete;
 
-    object_id
+    std::expected<object_id, error>
     get_or_create_object_for(const model::topic_id_partition&) override;
     std::expected<void, error> remove_pending_object(object_id) override;
     std::expected<void, error>
@@ -51,7 +51,8 @@ private:
 class domain_manager;
 class simple_metastore : public metastore {
 public:
-    std::unique_ptr<object_metadata_builder> object_builder() override;
+    ss::future<std::expected<std::unique_ptr<object_metadata_builder>, errc>>
+    object_builder() override;
 
     ss::future<std::expected<offsets_response, errc>>
     get_offsets(const model::topic_id_partition&) override;
@@ -96,7 +97,7 @@ public:
       const model::topic_id_partition&, model::timestamp) override;
 
     ss::future<std::expected<compaction_info_response, errc>>
-    get_compaction_info(const sample_spec&) override;
+    get_compaction_info(const compaction_sample_spec&) override;
 
 private:
     friend class domain_manager;

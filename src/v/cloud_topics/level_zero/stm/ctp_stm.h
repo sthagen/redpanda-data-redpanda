@@ -72,12 +72,13 @@ public:
     /// \brief The method is syncing the STM  to minimize races.
     /// \return 'true' if the replica is a leader and the in-memory state of
     /// the STM is up-to-date. Otherwise, return 'false'.
-    ss::future<bool> sync_in_term(ss::abort_source& as);
+    ss::future<bool> sync_in_term(model::timeout_clock::time_point deadline);
 
 private:
     ss::future<> do_apply(const model::record_batch&) override;
     void apply_placeholder(const model::record_batch&);
     void apply_advance_reconciled_offset(model::record);
+    void apply_set_start_offset(model::record);
 
     ss::future<raft::local_snapshot_applied>
     apply_local_snapshot(raft::stm_snapshot_header, iobuf&&) override;

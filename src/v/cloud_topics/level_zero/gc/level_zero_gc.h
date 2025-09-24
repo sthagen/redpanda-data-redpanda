@@ -216,17 +216,17 @@ public:
       level_zero_gc_config = {});
 
     /*
-     * Request that GC be started or stopped. These can be called multiple times
+     * Request that GC be started or paused. These can be called multiple times
      * and in any order. The last invocation will eventually take effect.
      */
     void start();
-    void stop();
+    void pause();
 
     /*
      * Request and wait for GC to be completely stopped. After calling shutdown,
-     * calling start() or stop() will have no effect.
+     * calling start() or pause() will have no effect.
      */
-    seastar::future<> shutdown();
+    seastar::future<> stop();
 
 private:
     level_zero_gc_config config_;

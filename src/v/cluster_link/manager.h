@@ -49,7 +49,8 @@ public:
       std::unique_ptr<consumer_groups_router> group_router,
       std::unique_ptr<partition_metadata_provider> partition_metadata_provider,
       ss::lowres_clock::duration task_reconciler_interval,
-      config::binding<int16_t> default_topic_replication);
+      config::binding<int16_t> default_topic_replication,
+      ss::scheduling_group scheduling_group);
     manager(const manager&) = delete;
     manager(manager&&) = delete;
     manager& operator=(const manager&) = delete;
@@ -149,6 +150,10 @@ public:
 
     partition_metadata_provider& get_partition_metadata_provider() noexcept;
 
+    ss::scheduling_group scheduling_group() const noexcept {
+        return _scheduling_group;
+    }
+
 private:
     /// Called periodically to reconcile registered tasks on created links
     ss::future<> link_task_reconciler();
@@ -179,6 +184,7 @@ private:
       "cluster_link::manager::link_task_reconciler"};
     ss::timer<ss::lowres_clock> _link_task_reconciler_timer;
     config::binding<int16_t> _default_topic_replication;
+    ss::scheduling_group _scheduling_group;
     ss::condition_variable _link_created_cv;
     ss::abort_source _as;
     ss::gate _g;

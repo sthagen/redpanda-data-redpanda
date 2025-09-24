@@ -101,7 +101,7 @@ public:
           std::make_unique<object_storage_test_impl>(&listed, &deleted),
           std::make_unique<epoch_source_test_impl>(&max_epoch)) {}
 
-    void TearDown() override { gc.shutdown().get(); }
+    void TearDown() override { gc.stop().get(); }
 
     /*
      * Insert an entry into the `listed` container which is the source of

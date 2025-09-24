@@ -87,7 +87,7 @@ TEST(ReducerTest, InMemoryReducer) {
 class ReducerTestFixture : public l1::l1_reader_fixture {
 public:
     l1::compaction_committer::updates_t
-    steal_updates_from_committer(l1::compaction_committer& committer) {
+    take_updates_from_committer(l1::compaction_committer& committer) {
         auto updates = std::exchange(committer._updates, {});
         return updates;
     }
@@ -125,8 +125,8 @@ TEST_F(ReducerTestFixture, Reducer) {
 
     auto state = l1::compaction_job_state::running;
     auto map = compaction::simple_key_offset_map();
-    auto sample_spec = l1::metastore::sample_spec{
-      .tid_p = tidp,
+    auto sample_spec = l1::metastore::compaction_sample_spec{
+      .tidp = tidp,
       .tombstone_removal_upper_bound_ts = model::timestamp::max()};
     auto compaction_info = _metastore.get_compaction_info(sample_spec).get();
 
@@ -153,7 +153,7 @@ TEST_F(ReducerTestFixture, Reducer) {
 
     std::move(reducer).run().get();
 
-    auto updates = steal_updates_from_committer(committer);
+    auto updates = take_updates_from_committer(committer);
     ASSERT_EQ(updates.size(), 1);
 
     auto& update = updates.front();

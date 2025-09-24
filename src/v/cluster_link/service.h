@@ -42,7 +42,8 @@ public:
       cluster::controller* controller,
       ss::sharded<kafka::group_router>* group_router,
       ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
-      ss::smp_service_group smp_group);
+      ss::smp_service_group smp_group,
+      ss::scheduling_group scheduling_group);
 
     service(const service&) = delete;
     service(service&&) = delete;
@@ -108,6 +109,7 @@ private:
     ss::sharded<kafka::group_router>* _group_router;
     ss::sharded<cluster::health_monitor_frontend>* _hm_frontend;
     ss::smp_service_group _smp_group;
+    ss::scheduling_group _scheduling_group;
     std::unique_ptr<manager> _manager;
     std::vector<ss::deferred_action<ss::noncopyable_function<void()>>>
       _notification_cleanups;

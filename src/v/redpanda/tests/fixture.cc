@@ -464,7 +464,7 @@ void redpanda_thread_fixture::configure(
             config.get("development_enable_cloud_topics").set_value(true);
         }
 
-        config.get("development_enable_cluster_link")
+        config.get("enable_shadow_linking")
           .set_value(development_cluster_linking_enabled);
     }).get();
 }

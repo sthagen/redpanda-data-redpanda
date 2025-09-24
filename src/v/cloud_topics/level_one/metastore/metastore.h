@@ -107,9 +107,8 @@ public:
         // appropriate for the given partition. Potentially shares the object
         // with another partition, if the object is allowed by the metastore to
         // be shared by the other partition.
-        virtual object_id
-        get_or_create_object_for(const model::topic_id_partition&)
-          = 0;
+        virtual std::expected<object_id, error>
+        get_or_create_object_for(const model::topic_id_partition&) = 0;
 
         // Removes a pending object from the builder. The object must be in the
         // pending state. Further calls to get_or_create_object_for() will not
@@ -132,7 +131,9 @@ public:
         kafka::offset start_offset;
         kafka::offset next_offset;
     };
-    virtual std::unique_ptr<object_metadata_builder> object_builder() = 0;
+    virtual ss::future<
+      std::expected<std::unique_ptr<object_metadata_builder>, errc>>
+    object_builder() = 0;
 
     struct term_offset {
         model::term_id term;
@@ -326,8 +327,8 @@ public:
     // All the information required to query a `compaction_info_response` from
     // the metastore. Parameters are used for call to
     // `get_compaction_offsets()`.
-    struct sample_spec {
-        model::topic_id_partition tid_p;
+    struct compaction_sample_spec {
+        model::topic_id_partition tidp;
         model::timestamp tombstone_removal_upper_bound_ts;
     };
 
@@ -348,18 +349,18 @@ public:
     // timestamp, as well as compaction offsets (see `get_compaction_offsets()`
     // above).
     virtual ss::future<std::expected<compaction_info_response, errc>>
-    get_compaction_info(const sample_spec&) = 0;
+    get_compaction_info(const compaction_sample_spec&) = 0;
+
+    using compaction_info_map = chunked_hash_map<
+      model::topic_id_partition,
+      std::expected<compaction_info_response, errc>>;
 
     // Vectorized RPC for obtaining compaction state for a number of partitions.
-    // Ensures `compaction_info_response`s for partitions are returned in the
-    // same order as requested in `to_sample`.
-    virtual ss::future<
-      chunked_vector<std::expected<compaction_info_response, errc>>>
-    get_compaction_infos(const chunked_vector<sample_spec>& to_sample) {
-        chunked_vector<std::expected<compaction_info_response, errc>> ret;
-        ret.reserve(to_sample.size());
+    virtual ss::future<compaction_info_map> get_compaction_infos(
+      const chunked_vector<compaction_sample_spec>& to_sample) {
+        compaction_info_map ret;
         for (const auto& log : to_sample) {
-            ret.push_back(co_await get_compaction_info(log));
+            ret.emplace(log.tidp, co_await get_compaction_info(log));
         }
         co_return ret;
     }

@@ -995,20 +995,20 @@ TEST(SimpleMetastoreTest, TestCompactionOffsetsNoTombstones) {
 
 TEST(SimpleMetastoreTest, TestObjectBuilder) {
     simple_metastore m;
-    auto ob = m.object_builder();
+    auto ob = m.object_builder().get().value();
     auto tp_a = model::topic_id_partition::from(tid_a);
 
     // Creating objects for the same partition will result in the same object.
-    auto o_a = ob->get_or_create_object_for(tp_a);
-    auto o_a_2 = ob->get_or_create_object_for(tp_a);
+    auto o_a = ob->get_or_create_object_for(tp_a).value();
+    auto o_a_2 = ob->get_or_create_object_for(tp_a).value();
     ASSERT_EQ(o_a, o_a_2);
 
     // Creating objects for different partitions will result in the same
     // object.
     auto tp_b = model::topic_id_partition::from(tid_b);
-    auto o_b = ob->get_or_create_object_for(tp_b);
+    auto o_b = ob->get_or_create_object_for(tp_b).value();
     ASSERT_EQ(o_a, o_b);
-    auto o_b_2 = ob->get_or_create_object_for(tp_b);
+    auto o_b_2 = ob->get_or_create_object_for(tp_b).value();
     ASSERT_EQ(o_b, o_b_2);
 
     // Add a partition's metadata to the object.
@@ -1017,7 +1017,7 @@ TEST(SimpleMetastoreTest, TestObjectBuilder) {
     // Finish the current object. The next object will be different.
     ASSERT_TRUE(ob->finish(o_a, 0, 1000).has_value());
 
-    auto o_a_3 = ob->get_or_create_object_for(tp_a);
+    auto o_a_3 = ob->get_or_create_object_for(tp_a).value();
     ASSERT_NE(o_a_2, o_a_3);
 
     // We can't release the result until we finish all objects.
@@ -1035,7 +1035,7 @@ TEST(SimpleMetastoreTest, TestObjectBuilder) {
 TEST(SimpleMetastoreTest, TestObjectBuilderBadObjects) {
     // Test calls for objects that don't exist in the builder.
     simple_metastore m;
-    auto ob = m.object_builder();
+    auto ob = m.object_builder().get().value();
     auto add_res = ob->add(create_object_id(), {});
     ASSERT_FALSE(add_res.has_value());
 
@@ -1051,13 +1051,15 @@ TEST(SimpleMetastoreTest, TestObjectBuilderBadObjects) {
 
 TEST(SimpleMetastoreTest, TestObjectBuilderRemovedObjects) {
     simple_metastore m;
-    auto ob = m.object_builder();
+    auto ob = m.object_builder().get().value();
     const auto topic_id = model::create_topic_id();
 
     auto gen_object_id = [&] {
-        return ob->get_or_create_object_for(
-          model::topic_id_partition(
-            topic_id, model::partition_id(static_cast<int32_t>(0))));
+        return ob
+          ->get_or_create_object_for(
+            model::topic_id_partition(
+              topic_id, model::partition_id(static_cast<int32_t>(0))))
+          .value();
     };
 
     // pending object can be removed, but not twice
@@ -1091,8 +1093,8 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
     simple_metastore m;
     auto tp_a = model::topic_id_partition::from(tid_a);
     {
-        auto ob = m.object_builder();
-        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto ob = m.object_builder().get().value();
+        auto o_a = ob->get_or_create_object_for(tp_a).value();
         auto add_res = ob->add(
           o_a,
           metastore::object_metadata::ntp_metadata{
@@ -1118,8 +1120,8 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
         ASSERT_EQ(10_o, offsets_res->next_offset);
     }
     {
-        auto ob = m.object_builder();
-        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto ob = m.object_builder().get().value();
+        auto o_a = ob->get_or_create_object_for(tp_a).value();
         auto add_res = ob->add(
           o_a,
           metastore::object_metadata::ntp_metadata{
@@ -1145,8 +1147,8 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
         ASSERT_EQ(20_o, offsets_res->next_offset);
     }
     {
-        auto ob = m.object_builder();
-        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto ob = m.object_builder().get().value();
+        auto o_a = ob->get_or_create_object_for(tp_a).value();
         auto add_res = ob->add(
           o_a,
           metastore::object_metadata::ntp_metadata{
@@ -1169,8 +1171,8 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
         ASSERT_EQ(20_o, offsets_res->next_offset);
     }
     {
-        auto ob = m.object_builder();
-        auto o_a = ob->get_or_create_object_for(tp_a);
+        auto ob = m.object_builder().get().value();
+        auto o_a = ob->get_or_create_object_for(tp_a).value();
         auto add_res = ob->add(
           o_a,
           metastore::object_metadata::ntp_metadata{
@@ -1534,8 +1536,8 @@ TEST(SimpleMetastoreTest, TestDirtyRatio) {
         ASSERT_TRUE(compact_res.has_value());
     }
 
-    auto to_sample = metastore::sample_spec{
-      .tid_p = tp, .tombstone_removal_upper_bound_ts = 3000_t};
+    auto to_sample = metastore::compaction_sample_spec{
+      .tidp = tp, .tombstone_removal_upper_bound_ts = 3000_t};
     auto compaction_info = m.get_compaction_info(to_sample).get();
     ASSERT_TRUE(compaction_info.has_value());
     ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 1.0);

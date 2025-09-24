@@ -46,7 +46,6 @@ redpanda_cc_library(
         "//src/v/cloud_topics/level_one/metastore:replicated_metastore",
         "//src/v/cloud_topics/level_zero/stm:ctp_stm_api",
         "//src/v/cluster",
-        "//src/v/cluster:notification",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
         "//src/v/kafka/utils:txn_reader",

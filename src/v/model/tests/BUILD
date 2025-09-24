@@ -208,3 +208,17 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "batch_builder_test",
+    timeout = "short",
+    srcs = ["batch_builder_test.cc"],
+    cpu = 1,
+    deps = [
+        "//src/v/model",
+        "//src/v/model:batch_builder",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:random",
+        "@googletest//:gtest",
+    ],
+)

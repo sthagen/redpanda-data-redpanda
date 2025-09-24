@@ -187,7 +187,8 @@ public:
           std::make_unique<test_consumer_group_router>(),
           std::make_unique<test_partition_metadata_provider>(),
           task_reconciler_interval,
-          _default_topic_replication.bind());
+          _default_topic_replication.bind(),
+          ss::default_scheduling_group());
     }
 
     virtual ss::future<> TearDownAsync() override {
@@ -423,7 +424,8 @@ public:
           std::make_unique<test_consumer_group_router>(),
           std::make_unique<test_partition_metadata_provider>(),
           task_reconciler_interval,
-          _default_topic_replication.bind());
+          _default_topic_replication.bind(),
+          ss::default_scheduling_group());
         co_await _manager->start();
     }
 

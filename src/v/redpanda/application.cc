@@ -1536,7 +1536,8 @@ void application::wire_up_runtime_services(
       controller.get(),
       &group_router,
       &controller->get_health_monitor(),
-      smp_service_groups.cluster_link_smp_sg())
+      smp_service_groups.cluster_link_smp_sg(),
+      sched_groups.cluster_linking_sg())
       .get();
 
     syschecks::systemd_message("Creating kafka usage manager frontend").get();
@@ -2187,7 +2188,6 @@ void application::wire_up_redpanda_services(
           ->construct(
             node_id,
             controller.get(),
-            &controller->get_partition_manager(),
             &controller->get_partition_leaders(),
             &controller->get_shard_table(),
             &cloud_io,
