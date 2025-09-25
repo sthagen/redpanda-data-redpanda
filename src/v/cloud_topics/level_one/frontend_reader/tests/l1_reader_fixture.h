@@ -126,7 +126,7 @@ protected:
               .value();
         }
 
-        _metastore.add_objects(std::move(meta_builder), term_map).get().value();
+        _metastore.add_objects(*meta_builder, term_map).get().value();
     }
 
     model::record_batch_reader make_reader(

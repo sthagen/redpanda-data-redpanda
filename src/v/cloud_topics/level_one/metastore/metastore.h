@@ -171,9 +171,8 @@ public:
     // it does not imply that all extents were accepted by the metastore. The
     // response should be examined to determine if subsequent add_objects()
     // requests need to be re-aligned to a different offset.
-    virtual ss::future<std::expected<add_response, errc>> add_objects(
-      std::unique_ptr<object_metadata_builder>, const term_offset_map_t&)
-      = 0;
+    virtual ss::future<std::expected<add_response, errc>>
+    add_objects(const object_metadata_builder&, const term_offset_map_t&) = 0;
 
     // Adds the given objects to the metastore, expecting that the new extents
     // replace an extent or set of extents covering the same range.
@@ -184,7 +183,7 @@ public:
     // correctness, these simplify accounting and makes it easier to validate
     // that we haven't lost data.
     virtual ss::future<std::expected<void, errc>>
-      replace_objects(std::unique_ptr<object_metadata_builder>) = 0;
+    replace_objects(const object_metadata_builder&) = 0;
 
     // Moves the start offset of the given partition's log to the given offset.
     virtual ss::future<std::expected<void, errc>>
@@ -278,8 +277,8 @@ public:
     // Similar to replace_objects(), but with additional constraints based on
     // compaction metadata. See get_compaction_offsets() for more details on
     // expected usage.
-    virtual ss::future<std::expected<void, errc>> compact_objects(
-      std::unique_ptr<object_metadata_builder>, const compaction_map_t&)
+    virtual ss::future<std::expected<void, errc>>
+    compact_objects(const object_metadata_builder&, const compaction_map_t&)
       = 0;
 
     // Returns metadata required to determine what to compact for the given

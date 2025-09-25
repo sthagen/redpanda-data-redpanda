@@ -553,7 +553,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
 
         return leadership_transfer_thread(redpanda, topic)
 
-    @cluster(num_nodes=7)
+    @cluster(num_nodes=8)
     @matrix(
         shuffle_leadership=[True, False],
         source_cluster_spec=[
@@ -582,7 +582,7 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             self.verify()
 
     @cluster(
-        num_nodes=7,
+        num_nodes=8,
         log_allow_list=[
             re.compile(".*Failed to sync write_at_offset_stm for partition"),
         ],

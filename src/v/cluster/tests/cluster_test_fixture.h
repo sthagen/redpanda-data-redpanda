@@ -21,6 +21,7 @@
 #include "redpanda/tests/fixture.h"
 #include "resource_mgmt/cpu_scheduling.h"
 #include "test_utils/async.h"
+#include "test_utils/test_macros.h"
 
 #include <seastar/core/metrics_api.hh>
 #include <seastar/core/sharded.hh>
@@ -323,9 +324,9 @@ public:
                          .create_topics(
                            cluster::without_custom_assignments(std::move(cfgs)),
                            model::no_timeout);
-        BOOST_REQUIRE_EQUAL(results.size(), 1);
+        RPTEST_REQUIRE_EQ_CORO(results.size(), 1);
         auto& result = results.at(0);
-        BOOST_REQUIRE_EQUAL(result.ec, cluster::errc::success);
+        RPTEST_REQUIRE_EQ_CORO(result.ec, cluster::errc::success);
         auto& leaders = app_0.controller->get_partition_leaders().local();
         co_await tests::cooperative_spin_wait_with_timeout(10s, [&]() {
             auto md = app_0.metadata_cache.local().get_topic_metadata(
@@ -358,20 +359,20 @@ public:
     }
 
     ss::future<> shuffle_leadership(model::ntp ntp) {
-        BOOST_REQUIRE(!_instances.empty());
+        RPTEST_REQUIRE_CORO(!_instances.empty());
         auto& app = _instances.begin()->second.get()->app;
         auto& leaders = app.controller->get_partition_leaders().local();
         auto current_leader = leaders.get_leader(ntp);
         if (!current_leader) {
-            return ss::now();
+            co_return;
         }
         auto& leader_app = _instances.at(*current_leader).get()->app;
         auto partition = leader_app.partition_manager.local().get(ntp);
-        BOOST_REQUIRE(partition);
+        RPTEST_REQUIRE_CORO(partition);
         auto current_leader_id = current_leader.value()();
         auto new_leader_id = model::node_id{
           ++current_leader_id % static_cast<int>(_instances.size())};
-        return partition
+        co_return co_await partition
           ->transfer_leadership(
             raft::transfer_leadership_request{
               .group = partition->group(), .target = new_leader_id})

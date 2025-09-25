@@ -28,6 +28,11 @@
 
 #include <vector>
 
+#if defined(IS_GTEST)
+#error                                                                         \
+  "archival service fixture uses boost assertions so can't be used with gtest"
+#endif
+
 namespace archival {
 
 struct segment_desc {

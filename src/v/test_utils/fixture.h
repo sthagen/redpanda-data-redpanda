@@ -11,6 +11,8 @@
 
 #pragma once
 
+#if defined(IS_BTEST)
+
 #include <seastar/core/future.hh>
 #include <seastar/core/thread.hh>
 #include <seastar/testing/thread_test_case.hh>
@@ -45,3 +47,5 @@
         BOOST_TEST_CHECKPOINT("~" << #klass << "::" << #method << "()");       \
     }                                                                          \
     void ::__FIXTURE_JOIN(klass, method)::fixture_test()
+
+#endif

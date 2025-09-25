@@ -55,7 +55,8 @@ ctp_stm_api::replicated_apply(
     vlog(
       _rtclog.debug, "Replicating batch {} in term {}", batch.header(), term);
 
-    auto opts = raft::replicate_options(raft::consistency_level::quorum_ack);
+    auto opts = raft::replicate_options(
+      raft::consistency_level::quorum_ack, _rtc.root_abort_source());
     opts.set_force_flush();
     auto res = co_await _stm->_raft->replicate(term, std::move(batch), opts);
 
@@ -67,7 +68,8 @@ ctp_stm_api::replicated_apply(
     }
 
     try {
-        co_await _stm->wait(res.value().last_offset, deadline);
+        co_await _stm->wait(
+          res.value().last_offset, deadline, _rtc.root_abort_source());
     } catch (...) {
         co_return std::unexpected(ctp_stm_api_errc::timeout);
     }
@@ -101,6 +103,10 @@ ctp_stm_api::advance_reconciled_offset(
 ss::future<std::expected<std::monostate, ctp_stm_api_errc>>
 ctp_stm_api::set_start_offset(
   kafka::offset start_offset, model::timeout_clock::time_point deadline) {
+    if (start_offset <= get_start_offset()) {
+        co_return std::monostate{};
+    }
+
     vlog(
       _rtclog.debug,
       "Replicating ctp_stm_cmd::set_new_start_offset{{{}}}",

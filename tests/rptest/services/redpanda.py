@@ -1212,12 +1212,12 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
 
     def __init__(self, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        # Now ensure that this base is part of the right type of object.
-        # For these checks to work, this __init__ method should appear in
-        # the MRO after all the __init__ methods that would set these properties
-        self._check_attr("context", TestContext)
-        self._check_attr("logger", Logger)
         self._usage_stats = UsageStats()
+
+    @property
+    @abstractmethod
+    def logger(self) -> Logger:
+        pass
 
     @property
     def usage_stats(self) -> UsageStats:
@@ -1247,6 +1247,9 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
         """Return a KafkaClientSecurity object suitable for connecting to the Kafka API
         on this broker."""
         pass
+
+    def export_cluster_config(self) -> None:
+        self.logger.debug("export_cluster_config not implemented for this service")
 
     def wait_until(
         self,
@@ -1329,16 +1332,6 @@ class RedpandaServiceABC(ABC, RedpandaServiceConstants):
             backoff_sec,
             err_msg=err_msg,
             logger=logger,
-        )
-
-    def _check_attr(self, name: str, t: Type) -> None:
-        v = getattr(self, name, None)
-        mro = self.__class__.__mro__
-        assert v is not None, (
-            f"RedpandaServiceABC was missing attribute {name} after __init__: {mro}\n"
-        )
-        assert isinstance(v, t), (
-            f"{name} had wrong type, expected {t} but was {type(v)}"
         )
 
     def _extract_samples(
@@ -1582,7 +1575,6 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
         # we save the test context under both names since RedpandaService and Service
         # save them under these two names, respetively
         self.context = self._context = context
-        self.logger = context.logger
 
         super().__init__()
 
@@ -1666,6 +1658,10 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
         assert self._min_brokers <= node_count, (
             f"Not enough brokers: test needs {self._min_brokers} but cluster has {node_count}"
         )
+
+    @property
+    def logger(self) -> Logger:
+        return self._context.logger
 
     @property
     def kubectl(self) -> KubectlTool:
@@ -2379,7 +2375,7 @@ class RedpandaServiceCloud(KubeServiceMixin, RedpandaServiceABC):
         return {}
 
 
-class RedpandaService(RedpandaServiceABC, Service):
+class RedpandaService(Service, RedpandaServiceABC):
     PERSISTENT_ROOT = "/var/lib/redpanda"
     TRIM_LOGS_KEY = "trim_logs"
     DATA_DIR = os.path.join(PERSISTENT_ROOT, "data")
@@ -4449,11 +4445,11 @@ class RedpandaService(RedpandaServiceABC, Service):
             return self.get_version(node)
         return None
 
-    def stop(self, **kwargs: Any) -> None:
+    def export_cluster_config(self) -> None:
         """
-        Override default stop() to execude stop_node in parallel
+        Export the cluster configuration of all nodes to the ducktape log
+        directory for later inspection.
         """
-        self._stop_time = time.time()  # The last time stop is invoked
         self.logger.info("%s: exporting cluster config" % self.who_am_i())
 
         service_dir = os.path.join(
@@ -4476,6 +4472,12 @@ class RedpandaService(RedpandaServiceABC, Service):
             # Configuration is optional: if redpanda has e.g. crashed, you
             # will not be able to get it from the admin API
             self.logger.info(f"{self.who_am_i()}: error getting config: {e}")
+
+    def stop(self, **kwargs: Any) -> None:
+        """
+        Override default stop() to execude stop_node in parallel
+        """
+        self._stop_time = time.time()  # The last time stop is invoked
 
         self.logger.info("%s: stopping service" % self.who_am_i())
 

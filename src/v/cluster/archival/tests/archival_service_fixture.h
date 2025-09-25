@@ -35,10 +35,15 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timed_out_error.hh>
 
-#include <boost/test/tools/old/interface.hpp>
+#include <boost/test/unit_test.hpp>
 
 #include <algorithm>
 #include <type_traits>
+
+#if defined(IS_GTEST)
+#error                                                                         \
+  "archival_service_fixture.h is not compatible with gtest due to use of boost assertions"
+#endif
 
 namespace {
 constexpr int16_t fixture_port_number = 7676;

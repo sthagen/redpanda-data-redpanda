@@ -66,6 +66,9 @@ class RpkRemoteTool:
     def tune(self, tuner: str) -> str:
         return self._execute([self._rpk_binary(), "redpanda", "tune", tuner, "-v"])
 
+    def check(self) -> str:
+        return self._execute([self._rpk_binary(), "redpanda", "check", "-v"])
+
     def mode_set(self, mode):
         return self._execute([self._rpk_binary(), "redpanda", "mode", mode])
 

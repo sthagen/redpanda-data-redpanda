@@ -1108,10 +1108,9 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
         ASSERT_TRUE(add_res.has_value());
         auto fin_res = ob->finish(o_a, 0, 1000);
         ASSERT_TRUE(fin_res.has_value());
-        auto add_obj_res = m.add_objects(
-                              std::move(ob),
-                              terms_builder().add(tid_a, 0_tm, 0_o).build())
-                             .get();
+        auto add_obj_res
+          = m.add_objects(*ob, terms_builder().add(tid_a, 0_tm, 0_o).build())
+              .get();
         ASSERT_TRUE(add_obj_res.has_value());
 
         auto offsets_res = m.get_offsets(tp_a).get();
@@ -1135,10 +1134,9 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
         ASSERT_TRUE(add_res.has_value());
         auto fin_res = ob->finish(o_a, 0, 1000);
         ASSERT_TRUE(fin_res.has_value());
-        auto add_obj_res = m.add_objects(
-                              std::move(ob),
-                              terms_builder().add(tid_a, 0_tm, 10_o).build())
-                             .get();
+        auto add_obj_res
+          = m.add_objects(*ob, terms_builder().add(tid_a, 0_tm, 10_o).build())
+              .get();
         ASSERT_TRUE(add_obj_res.has_value());
 
         auto offsets_res = m.get_offsets(tp_a).get();
@@ -1162,7 +1160,7 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
         ASSERT_TRUE(add_res.has_value());
         auto fin_res = ob->finish(o_a, 0, 1000);
         ASSERT_TRUE(fin_res.has_value());
-        auto replace_obj_res = m.replace_objects(std::move(ob)).get();
+        auto replace_obj_res = m.replace_objects(*ob).get();
         ASSERT_TRUE(replace_obj_res.has_value());
 
         auto offsets_res = m.get_offsets(tp_a).get();
@@ -1189,8 +1187,7 @@ TEST(SimpleMetastoreTest, TestUpdateWithObjectBuilder) {
 
         cm_builder cmb;
         cmb.clean(tid_a, 10_o, 19_o);
-        auto compact_obj_res
-          = m.compact_objects(std::move(ob), cmb.build()).get();
+        auto compact_obj_res = m.compact_objects(*ob, cmb.build()).get();
         ASSERT_TRUE(compact_obj_res.has_value());
 
         auto offsets_res = m.get_offsets(tp_a).get();

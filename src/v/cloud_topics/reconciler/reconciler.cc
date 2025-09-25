@@ -24,17 +24,17 @@
 #include "model/namespace.h"
 #include "random/generators.h"
 #include "ssx/future-util.h"
+#include "utils/retry_chain_node.h"
 
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/util/log.hh>
 
+#include <chrono>
+
+using namespace std::chrono_literals;
+
 namespace {
 ss::logger lg("reconciler");
-
-bool is_cloud_partition(
-  const ss::lw_shared_ptr<cluster::partition>& partition) {
-    return partition->get_ntp_config().cloud_topic_enabled();
-}
 
 class aborted_transaction_tracker_impl
   : public kafka::aborted_transaction_tracker {
@@ -82,14 +82,13 @@ void reconciler::attach_partition(
   const model::ntp& ntp,
   model::topic_id_partition tidp,
   ss::lw_shared_ptr<cluster::partition> partition) {
-    if (!is_cloud_partition(partition)) {
+    if (_partitions.contains(ntp)) {
         return;
     }
     vlog(lg.debug, "Attaching partition {} (tidp: {})", ntp, tidp);
     auto attached = ss::make_lw_shared<attached_partition_info>(
       tidp, partition);
-    auto res = _partitions.try_emplace(ntp, std::move(attached));
-    vassert(res.second, "Double registration of ntp {}", ntp);
+    _partitions.emplace(ntp, std::move(attached));
 }
 
 void reconciler::detach_partition(const model::ntp& ntp) {
@@ -431,7 +430,8 @@ reconciler::build_object(
     }
     metas.shrink_to_fit();
 
-    auto obj_info = co_await ctx.builder->finish();
+    auto obj_info = co_await ctx.builder->finish().finally(
+      [&ctx] { return ctx.close_builder(); });
     vlog(
       lg.debug,
       "Built L1 object from {} partitions ({} partitions didn't fit)",
@@ -540,6 +540,37 @@ reconciler::add_object_metadata(
     co_return std::expected<void, reconcile_error>{};
 }
 
+ss::future<std::expected<l1::metastore::add_response, l1::metastore::errc>>
+reconciler::add_objects_with_retry(
+  std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder,
+  l1::metastore::term_offset_map_t terms) {
+    static constexpr auto timeout = 5s;
+    static constexpr auto backoff = 100ms;
+
+    retry_chain_node rtc(_as, ss::lowres_clock::now() + timeout, backoff);
+    retry_chain_logger ctxlog(lg, rtc, "add_objects");
+    for (auto permit = rtc.retry(); permit.is_allowed; permit = rtc.retry()) {
+        auto add_result = co_await _metastore->add_objects(
+          *meta_builder, terms);
+
+        if (add_result.has_value()) {
+            co_return std::move(add_result).value();
+        }
+
+        if (add_result.error() != l1::metastore::errc::transport_error) {
+            vlog(
+              lg.error,
+              "Non-retryable error adding objects to the L1 metastore: {}",
+              add_result.error());
+            co_return std::unexpected(add_result.error());
+        }
+
+        co_await ss::sleep_abortable(permit.delay, rtc.root_abort_source());
+    }
+
+    co_return std::unexpected(l1::metastore::errc::transport_error);
+}
+
 ss::future<std::expected<void, reconcile_error>> reconciler::commit_objects(
   const chunked_vector<built_object_metadata>& objects,
   std::unique_ptr<l1::metastore::object_metadata_builder> meta_builder) {
@@ -557,11 +588,11 @@ ss::future<std::expected<void, reconcile_error>> reconciler::commit_objects(
         }
     }
 
-    auto add_objects_result = co_await _metastore->add_objects(
-      std::move(meta_builder), terms);
+    auto add_objects_result = co_await add_objects_with_retry(
+      std::move(meta_builder), std::move(terms));
     if (!add_objects_result.has_value()) {
         vlog(
-          lg.error,
+          lg.warn,
           "Failed to add objects to the L1 metastore: {}",
           add_objects_result.error());
         // TODO: The objects have been uploaded. The reconciler could

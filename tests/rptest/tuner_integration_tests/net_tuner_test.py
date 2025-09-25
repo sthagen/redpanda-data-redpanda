@@ -80,7 +80,7 @@ class NetTunerTest(RedpandaTest):
                 .decode("utf-8")
                 .strip()
             )
-            assert rps_cpu == "f", (
+            assert rps_cpu == "0", (
                 f"rps_cpus for queue {i} is not set correctly, got {rps_cpu}"
             )
 
@@ -97,13 +97,20 @@ class NetTunerTest(RedpandaTest):
         )
 
         for i in range(4):
-            rps_sock_flow_entries = int(
+            per_queue_rps_flow_count = int(
                 node.account.ssh_output(
                     f"cat /sys/class/net/ens5/queues/rx-{i}/rps_flow_cnt"
                 )
                 .decode("utf-8")
                 .strip()
             )
-            assert rps_sock_flow_entries / 4, (
-                f"rps_flow_cnt for queue {i} is not set correctly, got {rps_sock_flow_entries}"
+            assert per_queue_rps_flow_count == 0, (
+                f"rps_flow_cnt for queue {i} is not set correctly, got {per_queue_rps_flow_count}"
             )
+
+        # confirm that we also check cleanly
+        check_output = rpk.check().split()
+
+        for line in check_output:
+            if line.startswith("NIC ens5"):
+                assert line.endswith("true"), f"NIC check failed: {line}"

@@ -98,7 +98,8 @@ simple_object_builder::release() {
     if (!pending_objects_.empty()) {
         return std::unexpected(
           error{fmt::format(
-            "Builder still has {} pending object", pending_objects_.size())});
+            "Builder still has {} pending object(s)",
+            pending_objects_.size())});
     }
     return std::exchange(finished_objects_, {});
 }
@@ -151,15 +152,17 @@ simple_metastore::get_offsets(
 
 ss::future<std::expected<metastore::add_response, metastore::errc>>
 simple_metastore::add_objects(
-  std::unique_ptr<metastore::object_metadata_builder> builder,
+  const metastore::object_metadata_builder& builder,
   const term_offset_map_t& terms) {
-    auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
-    auto objects_res = simple_builder->release();
-    if (!objects_res.has_value()) {
-        vlog(cd_log.error, "Failed to add: {}", objects_res.error());
+    auto& simple_builder = dynamic_cast<const simple_object_builder&>(builder);
+    if (!simple_builder.pending_objects_.empty()) {
+        vlog(
+          cd_log.error,
+          "Failed to add: builder still has {} pending object(s)",
+          simple_builder.pending_objects_.size());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
-    co_return co_await add_objects(objects_res.value(), terms);
+    co_return co_await add_objects(simple_builder.finished_objects_, terms);
 }
 
 ss::future<std::expected<metastore::add_response, metastore::errc>>
@@ -191,14 +194,16 @@ simple_metastore::add_objects(
 
 ss::future<std::expected<void, metastore::errc>>
 simple_metastore::replace_objects(
-  std::unique_ptr<metastore::object_metadata_builder> builder) {
-    auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
-    auto objects_res = simple_builder->release();
-    if (!objects_res.has_value()) {
-        vlog(cd_log.error, "Failed to replace: {}", objects_res.error());
+  const metastore::object_metadata_builder& builder) {
+    auto& simple_builder = dynamic_cast<const simple_object_builder&>(builder);
+    if (!simple_builder.pending_objects_.empty()) {
+        vlog(
+          cd_log.error,
+          "Failed to replace: builder still has {} pending object(s)",
+          simple_builder.pending_objects_.size());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
-    co_return co_await replace_objects(objects_res.value());
+    co_return co_await replace_objects(simple_builder.finished_objects_);
 }
 
 ss::future<std::expected<void, metastore::errc>>
@@ -458,15 +463,18 @@ simple_metastore::compact_objects(
 
 ss::future<std::expected<void, metastore::errc>>
 simple_metastore::compact_objects(
-  std::unique_ptr<metastore::object_metadata_builder> builder,
+  const metastore::object_metadata_builder& builder,
   const compaction_map_t& compaction_metas) {
-    auto* simple_builder = dynamic_cast<simple_object_builder*>(builder.get());
-    auto objects_res = simple_builder->release();
-    if (!objects_res.has_value()) {
-        vlog(cd_log.error, "Failed to compact: {}", objects_res.error());
+    auto& simple_builder = dynamic_cast<const simple_object_builder&>(builder);
+    if (!simple_builder.pending_objects_.empty()) {
+        vlog(
+          cd_log.error,
+          "Failed to compact: builder still has {} pending object(s)",
+          simple_builder.pending_objects_.size());
         co_return std::unexpected(metastore::errc::invalid_request);
     }
-    co_return co_await compact_objects(objects_res.value(), compaction_metas);
+    co_return co_await compact_objects(
+      simple_builder.finished_objects_, compaction_metas);
 }
 
 ss::future<

@@ -116,7 +116,7 @@ write_pipeline<Clock>::get_write_requests(
     this->remove_timed_out_requests();
 
     vlog(
-      cd_log.debug, "get_write_requests called with max_bytes = {}", max_bytes);
+      cd_log.trace, "get_write_requests called with max_bytes = {}", max_bytes);
 
     auto& pending = this->get_pending();
 
@@ -141,7 +141,7 @@ write_pipeline<Clock>::get_write_requests(
     result.requests.splice(result.requests.end(), pending, pending.begin(), it);
     result.complete = pending.empty();
     vlog(
-      cd_log.debug,
+      cd_log.trace,
       "get_write_requests returned {} elements, containing {} ({}B)",
       result.requests.size(),
       human::bytes(acc_size),

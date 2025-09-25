@@ -35,8 +35,8 @@ redpanda_test_cc_library(
         "//src/v/security",
         "//src/v/ssx:thread_worker",
         "//src/v/storage",
+        "//src/v/test_utils:async",
         "//src/v/utils:unresolved_address",
-        "@boost//:test",
         "@fmt",
     ],
     visibility = ["//visibility:public"],
@@ -44,8 +44,6 @@ redpanda_test_cc_library(
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/redpanda:application",
         "//src/v/storage/tests:disk_log_builder",
-        "//src/v/test_utils:fixture",
-        "//src/v/test_utils:logs",
         "@seastar",
     ],
 )

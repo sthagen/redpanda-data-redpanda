@@ -80,6 +80,32 @@ redpanda_test_cc_library(
 )
 
 redpanda_test_cc_library(
+    name = "test_macros",
+    hdrs = [
+        "test_macros.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+    ],
+)
+
+redpanda_test_cc_library(
+    name = "async",
+    hdrs = [
+        "async.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":test_macros",
+        "//src/v/base",
+        "//src/v/model:timeout_clock",
+        "//src/v/ssx:sformat",
+        "@seastar",
+    ],
+)
+
+redpanda_test_cc_library(
     name = "random",
     hdrs = [
         "randoms.h",
@@ -185,12 +211,12 @@ redpanda_test_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":test_macros",
         "//src/v/bytes:iostream",
         "//src/v/cloud_storage",
         "//src/v/cluster",
         "//src/v/model/tests:random",
         "//src/v/storage/tests:disk_log_builder",
-        "@boost//:test",
     ],
 )
 

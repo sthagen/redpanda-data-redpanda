@@ -726,7 +726,6 @@ redpanda_cc_gtest(
         "//src/v/reflection:adl",
         "//src/v/storage",
         "//src/v/storage:logger",
-        "//src/v/test_utils:fixture",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:random",
         "//src/v/test_utils:random_bytes",
@@ -735,7 +734,6 @@ redpanda_cc_gtest(
         "@fmt",
         "@googletest//:gtest",
         "@seastar",
-        "@seastar//:testing",
     ],
 )
 

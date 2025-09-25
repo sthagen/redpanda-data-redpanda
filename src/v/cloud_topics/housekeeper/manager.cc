@@ -25,7 +25,7 @@ namespace cloud_topics {
 
 namespace {
 
-static constexpr auto stm_timeout = std::chrono::seconds(30);
+static constexpr auto stm_timeout = std::chrono::seconds(10);
 
 class l0_metastore_impl : public housekeeper::l0_metadata_storage {
 public:
@@ -45,6 +45,8 @@ public:
         co_await api.set_start_offset(
           offset, model::timeout_clock::now() + stm_timeout);
     }
+
+    void abort() { _as.request_abort(); }
 
 private:
     ss::abort_source _as;
@@ -103,6 +105,7 @@ void housekeeper_manager::start_housekeeper(
           _retention_configuration.get(),
           config::shard_local_cfg()
             .cloud_storage_housekeeping_interval_ms.bind());
+        vlog(cd_log.debug, "starting housekeeper for: {}", tidp);
         auto [it, _] = _state.emplace(
           tidp,
           state{
@@ -119,6 +122,7 @@ void housekeeper_manager::stop_housekeeper(model::topic_id_partition tidp) {
         if (it == _state.end()) {
             return ss::now();
         }
+        vlog(cd_log.debug, "stopping housekeeper for: {}", tidp);
         return it->second.housekeeper->stop().then(
           [this, it] { _state.erase(it); });
     });
@@ -127,10 +131,16 @@ void housekeeper_manager::stop_housekeeper(model::topic_id_partition tidp) {
 ss::future<> housekeeper_manager::start() { co_return; }
 
 ss::future<> housekeeper_manager::stop() {
+    vlog(cd_log.info, "stopping cloud_topics::housekeeper_manager");
+    // NOLINTNEXTLINE(*static-cast-downcast*)
+    static_cast<l0_metastore_impl*>(_l0_metastore.get())->abort();
     co_await _queue.shutdown();
-    for (auto& [_, state] : _state) {
+    vlog(cd_log.info, "cloud_topics::housekeeper_manager queue stopped");
+    for (auto& [tidp, state] : _state) {
+        vlog(cd_log.info, "stopping cloud_topics::housekeeper {}", tidp);
         co_await state.housekeeper->stop();
     }
+    vlog(cd_log.info, "successfully stopped cloud_topics::housekeeper");
     _state.clear();
 }
 
