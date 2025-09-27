@@ -72,16 +72,7 @@
 #include <stdexcept>
 #include <vector>
 
-ss::sstring test_directory() {
-    char* tmpdir = std::getenv("TEST_TMPDIR");
-    if (!tmpdir) {
-        return ss::format(
-          "test.dir_{}", random_generators::gen_alphanum_string(6));
-    }
-    return {
-      std::filesystem::path(tmpdir)
-      / fmt::format("test.dir_{}", random_generators::gen_alphanum_string(6))};
-}
+ss::sstring test_directory() { return test_env::random_dir_path(); }
 
 redpanda_thread_fixture::redpanda_thread_fixture(
   model::node_id node_id,

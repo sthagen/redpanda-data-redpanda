@@ -275,6 +275,10 @@ partition_leader_cache& link::partition_leader_cache() noexcept {
     return _manager->partition_leader_cache();
 }
 
+security_service& link::get_security_service() noexcept {
+    return _manager->get_security_service();
+}
+
 const partition_leader_cache& link::partition_leader_cache() const noexcept {
     return _manager->partition_leader_cache();
 }

@@ -188,6 +188,7 @@ DEFAULT_LOG_ALLOW_LIST: list[CompiledLogAllowElem] = [
     # the catalog that have "Assert" in them. These are typically benign and
     # just indicate a race in committing to Iceberg.
     re.compile(r"UpdateRequirement.*Assert"),
+    re.compile("assert-ref-snapshot-id"),
     # Temporary: https://redpandadata.atlassian.net/browse/CORE-9897
     # there is an ongoing investigation into s3_client receiving 400 Bad Request. For now, stop the CI bleed
     re.compile(
@@ -2727,7 +2728,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         )
         return (fibers, min_ms, max_ms)
 
-    def add_extra_rp_conf(self, conf):
+    def add_extra_rp_conf(self, conf: dict[str, Any]):
         self._extra_rp_conf = {**self._extra_rp_conf, **conf}
 
     def metric_sum(
@@ -2936,7 +2937,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         # Pass environment variables via FOO=BAR shell expressions
         return " ".join([f"{k}={v}" for (k, v) in self._environment.items()])
 
-    def set_seed_servers(self, node_list):
+    def set_seed_servers(self, node_list: list[ClusterNode]):
         assert len(node_list) > 0
         self._seed_servers = node_list
 
@@ -3565,11 +3566,11 @@ class RedpandaService(Service, RedpandaServiceABC):
 
     def start_node(
         self,
-        node,
-        override_cfg_params=None,
-        timeout=None,
-        write_config=True,
-        first_start=False,
+        node: ClusterNode,
+        override_cfg_params: dict[str, Any] | None = None,
+        timeout: int | None = None,
+        write_config: bool = True,
+        first_start: bool = False,
         expect_fail: bool = False,
         auto_assign_node_id: bool = False,
         omit_seeds_on_idx_one: bool = True,
@@ -3577,7 +3578,7 @@ class RedpandaService(Service, RedpandaServiceABC):
         node_id_override: int | None = None,
         extra_cli: list[str] = [],
         **kwargs: Any,
-    ):
+    ) -> None:
         """
         Start a single instance of redpanda. This function will not return until
         redpanda appears to have started successfully. If redpanda does not
@@ -4542,7 +4543,13 @@ class RedpandaService(Service, RedpandaServiceABC):
         except Exception as e:
             self.logger.warning(f"Cannot check metrics - {e}")
 
-    def stop_node(self, node, timeout=None, forced=False, **kwargs: Any):
+    def stop_node(
+        self,
+        node: ClusterNode,
+        timeout: float | None = None,
+        forced: bool = False,
+        **kwargs: Any,
+    ):
         assert not kwargs, f"Unknown args {kwargs}"
         # collect usage stats before the node is stopped, the usage stats
         # accumulate metrics from all the nodes before they are stopped.
@@ -4556,18 +4563,18 @@ class RedpandaService(Service, RedpandaServiceABC):
         self.remove_from_started_nodes(node)
 
         pid = self.redpanda_pid(node)
-        if pid is not None:
-            node.account.signal(
-                pid, signal.SIGKILL if forced else signal.SIGTERM, allow_fail=False
-            )
 
-        if timeout is None:
-            timeout = 30
+        if pid is None:
+            return
+
+        node.account.signal(
+            pid, signal.SIGKILL if forced else signal.SIGTERM, allow_fail=False
+        )
 
         try:
             wait_until(
-                lambda: self.redpanda_pid(node) == None,
-                timeout_sec=timeout,
+                lambda: self.redpanda_pid(node) is None,
+                timeout_sec=timeout or 30,
                 err_msg=f"Redpanda node {node.account.hostname} failed to stop in {timeout} seconds",
             )
         except TimeoutError:
@@ -4586,7 +4593,7 @@ class RedpandaService(Service, RedpandaServiceABC):
             node.account.signal(pid, signal.SIGKILL, allow_fail=True)
             raise
 
-    def remove_from_started_nodes(self, node):
+    def remove_from_started_nodes(self, node: ClusterNode):
         if node in self._started:
             self._started.remove(node)
 

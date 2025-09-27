@@ -202,7 +202,7 @@ reconciler::collect_leader_partitions() const {
 
     if (!leaders.empty()) {
         std::shuffle(
-          leaders.begin(), leaders.end(), random_generators::internal::gen);
+          leaders.begin(), leaders.end(), random_generators::global().engine());
     }
     return leaders;
 }

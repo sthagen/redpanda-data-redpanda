@@ -43,6 +43,7 @@ public:
       std::unique_ptr<kafka::data::rpc::topic_metadata_cache>
         topic_metadata_cache,
       std::unique_ptr<kafka::data::rpc::topic_creator> topic_creator,
+      std::unique_ptr<security_service> security_service,
       std::unique_ptr<link_registry> registry,
       std::unique_ptr<link_factory> link_factory,
       std::unique_ptr<cluster_factory> cluster_factory,
@@ -136,6 +137,8 @@ public:
 
     kafka::data::rpc::partition_leader_cache& partition_leader_cache() noexcept;
 
+    security_service& get_security_service() noexcept;
+
     const kafka::data::rpc::partition_leader_cache&
     partition_leader_cache() const noexcept;
 
@@ -168,6 +171,7 @@ private:
     std::unique_ptr<kafka::data::rpc::topic_metadata_cache>
       _topic_metadata_cache;
     std::unique_ptr<kafka::data::rpc::topic_creator> _topic_creator;
+    std::unique_ptr<security_service> _security_service;
     std::unique_ptr<link_registry> _registry;
     std::unique_ptr<link_factory> _link_factory;
     std::unique_ptr<cluster_factory> _cluster_factory;

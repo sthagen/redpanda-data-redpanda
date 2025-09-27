@@ -34,13 +34,8 @@
 #include "security/sasl_authentication.h"
 #include "security/scram_algorithm.h"
 #include "security/scram_authenticator.h"
-#include "storage/tests/utils/disk_log_builder.h" // IWYU pragma: keep; public member devex
-#include "test_utils/async.h"                     // IWYU pragma: export
+#include "test_utils/async.h" // IWYU pragma: export
 #include "utils/unresolved_address.h"
-
-#if defined(IS_BTEST)
-#include "test_utils/fixture.h" // IWYU pragma: export
-#endif
 
 #include <seastar/core/future.hh>
 #include <seastar/core/loop.hh>

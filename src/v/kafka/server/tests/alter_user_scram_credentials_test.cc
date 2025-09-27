@@ -19,7 +19,7 @@
 #include "security/scram_authenticator.h"
 #include "security/scram_credential.h"
 #include "security/types.h"
-#include "test_utils/fixture.h"
+#include "test_utils/boost_fixture.h"
 
 #include <algorithm>
 

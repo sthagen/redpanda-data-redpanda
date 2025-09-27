@@ -1536,6 +1536,7 @@ void application::wire_up_runtime_services(
       controller.get(),
       &group_router,
       &controller->get_health_monitor(),
+      &controller->get_security_frontend(),
       smp_service_groups.cluster_link_smp_sg(),
       sched_groups.cluster_linking_sg())
       .get();

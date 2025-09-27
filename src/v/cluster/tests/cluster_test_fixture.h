@@ -95,7 +95,9 @@ public:
     cluster_test_fixture()
       : _sgroups(create_scheduling_groups())
       , _group_deleter([this] { _sgroups.destroy_groups().get(); })
-      , _base_dir("cluster_test." + random_generators::gen_alphanum_string(6)) {
+      , _base_dir(
+          "cluster_test."
+          + random_generators::with_random_seed().gen_alphanum_string(6)) {
         // Disable all metrics to guard against double_registration errors
         // thrown by seastar. These are simulated nodes which use the same
         // internal metrics implementation, so the usual metrics registration

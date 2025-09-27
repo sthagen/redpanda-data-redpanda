@@ -12,13 +12,13 @@ import google.protobuf.duration_pb2
 import google.protobuf.field_mask_pb2
 import random
 import re
-from contextlib import nullcontext
-
 
 from connectrpc.errors import ConnectError, ConnectErrorCode
+from contextlib import nullcontext
 from ducktape.mark import matrix
 from ducktape.mark import ignore
 
+from rptest.clients.admin.proto.redpanda.core.common import acl_pb2
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
 )
@@ -33,9 +33,11 @@ from rptest.services.kgo_verifier_services import (
 from rptest.services.multi_cluster_services import (
     Cluster,
     MultiClusterServices,
+    SecondaryClusterArgs,
     SecondaryClusterSpec,
     ServiceType,
 )
+from rptest.services.redpanda import SchemaRegistryConfig
 from rptest.tests.cluster_linking_test_base import (
     ShadowLinkPreAllocTestBase,
     ShadowLinkTestBase,
@@ -48,6 +50,9 @@ from rptest.util import (
     wait_until,
     wait_until_result,
 )
+from typing import Any
+
+import google.protobuf.duration_pb2
 
 
 class MultiClusterTestBase(RedpandaTest):
@@ -782,3 +787,95 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
                     err_msg="Group states not consistent between source and target clusters",
                     retry_on_exc=True,
                 )
+
+
+class ShadowLinkSecurityTests(ShadowLinkTestBase):
+    """
+    Tests that verify security settings syncing
+    """
+
+    def __init__(self, test_context, *args, **kwargs):
+        super().__init__(
+            test_context=test_context,
+            secondary_cluster_args=SecondaryClusterArgs(
+                schema_registry_config=SchemaRegistryConfig()
+            ),
+            schema_registry_config=SchemaRegistryConfig(),
+            *args,
+            **kwargs,
+        )
+
+    @cluster(num_nodes=6)
+    @matrix(check_sr=[False, True])
+    def test_acl_sync(self, check_sr: bool):
+        """
+        This test verifies that Kafka ACLs are synced from source to target cluster
+        when a shadow link is created and configured
+        """
+        req = self.create_default_link_request("test-link")
+
+        resource_type = (
+            acl_pb2.ACL_RESOURCE_SR_ANY if check_sr else acl_pb2.ACL_RESOURCE_ANY
+        )
+
+        resource_filter = shadow_link_pb2.ACLResourceFilter(
+            resource_type=resource_type, pattern_type=acl_pb2.ACL_PATTERN_ANY
+        )
+        access_filter = shadow_link_pb2.ACLAccessFilter(
+            permission_type=acl_pb2.ACL_PERMISSION_TYPE_ANY,
+            operation=acl_pb2.ACL_OPERATION_ANY,
+        )
+        acl_filter = shadow_link_pb2.ACLFilter(
+            resource_filter=resource_filter, access_filter=access_filter
+        )
+        acl_filters: list[shadow_link_pb2.ACLFilter] = [acl_filter]
+
+        security_sync_options = shadow_link_pb2.SecuritySettingsSyncOptions(
+            interval=google.protobuf.duration_pb2.Duration(seconds=1),
+            acl_filters=acl_filters,
+        )
+        req.shadow_link.configurations.security_sync_options.CopyFrom(
+            security_sync_options
+        )
+
+        _ = self.create_link_with_request(req=req)
+        self.logger.info("Successfully created link")
+
+        target_acls: Any = self.target_cluster_rpk.acl_list(format="json")
+        assert len(target_acls["matches"]) == 0, (
+            f"Expected no ACLs on target cluster, got {target_acls}"
+        )
+
+        sr_kafka_acl = RPKACLInput(
+            allow_principal=["test-user"],
+            topic=["foo"],
+            registry_subject=["foo-value"],
+            operation=["read"],
+            resource_pattern_type="literal",
+        )
+        self.source_cluster_rpk.acl_create(sr_kafka_acl)
+
+        def check_if_acls_synced():
+            target_acls: Any = self.target_cluster_rpk.acl_list(format="json")
+            if len(target_acls["matches"]) == 1:
+                acl = target_acls["matches"][0]
+                self.logger.info(f"Found ACL on target cluster: {acl}")
+                expected_resource_type = "SUBJECT" if check_sr else "TOPIC"
+                expected_resource_name = "foo-value" if check_sr else "foo"
+                return (
+                    acl["principal"] == "User:test-user"
+                    and acl["host"] == "*"
+                    and acl["operation"] == "READ"
+                    and acl["resource_type"] == expected_resource_type
+                    and acl["resource_name"] == expected_resource_name
+                    and acl["resource_pattern_type"] == "LITERAL"
+                    and acl["permission"] == "ALLOW"
+                )
+            return False
+
+        wait_until(
+            check_if_acls_synced,
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg="Failed to sync acls",
+        )

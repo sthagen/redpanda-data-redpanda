@@ -21,7 +21,7 @@
 #include "random/fast_prng.h"
 #include "random/generators.h"
 #include "resource_mgmt/memory_groups.h"
-#include "test_utils/fixture.h"
+#include "test_utils/boost_fixture.h"
 
 #include <seastar/core/sharded.hh>
 

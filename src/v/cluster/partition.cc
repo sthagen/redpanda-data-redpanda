@@ -572,6 +572,7 @@ ss::future<> partition::stop() {
               "Stopping archiver on partition: {}",
               partition_ntp);
             co_await _archiver->stop();
+            _archiver.reset(nullptr);
         }
     }
 

@@ -30,7 +30,6 @@
 #include "model/metadata.h"
 #include "storage/directories.h"
 #include "test_utils/async.h"
-#include "test_utils/fixture.h"
 #include "test_utils/tmp_dir.h"
 #include "utils/lazy_abort_source.h"
 #include "utils/retry_chain_node.h"

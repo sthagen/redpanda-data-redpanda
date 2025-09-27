@@ -241,47 +241,46 @@ void read_result::memory_units_t::adopt(memory_units_t&& o) {
  * available resources: if none, there is no memory for the operation;
  * if less than \p max_bytes, the fetch should be capped to that size.
  *
- * \param max_bytes The limit of how much data is going to be fetched
- * \param obligatory_batch_read Set to true for the first ntp in the fetch
- *   fetch request, at least one batch must be fetched for that ntp. Also it
- *   is assumed that a batch size has already been consumed from kafka
- *   memory semaphore for it.
+ * \param max_units The maximum number of units the function will attempt to
+ * allocate.
+ * \param min_units The minimum number of units the function will attempt to
+ * allocate. If it can't allocate at least this many units no units will be
+ * allocated.
+ * \param require_min_units If true then at least \ref min_units will be
+ * allocated regardless of the units available in \ref memory_sem and \ref
+ * memory_fetch_sem.
  */
 static read_result::memory_units_t reserve_memory_units(
   ssx::semaphore& memory_sem,
   ssx::semaphore& memory_fetch_sem,
-  const size_t max_bytes,
-  const bool obligatory_batch_read) {
-    read_result::memory_units_t memory_units;
-    const size_t memory_kafka_now = memory_sem.current();
-    const size_t memory_fetch = memory_fetch_sem.current();
-    const size_t batch_size_estimate
-      = config::shard_local_cfg().kafka_memory_batch_size_estimate_for_fetch();
+  size_t max_units,
+  const size_t min_units,
+  const bool require_min_units) {
+    const size_t available_units = std::min(
+      memory_sem.current(), memory_fetch_sem.current());
+    // Note that it's not currently enforced that max_units >= min_units. Hence
+    // we set max_units to the larger of the two here to ensure that is the
+    // case.
+    max_units = std::max(max_units, min_units);
 
-    if (obligatory_batch_read) {
-        // cap what we want at what we have, but no further down than a single
-        // batch size - with \ref obligatory_batch_read, it must be fetched
-        // regardless
-        const size_t fetch_size = std::max(
-          batch_size_estimate,
-          std::min({max_bytes, memory_kafka_now, memory_fetch}));
-        memory_units.fetch = ss::consume_units(memory_fetch_sem, fetch_size);
-        memory_units.kafka = ss::consume_units(memory_sem, fetch_size);
-    } else {
-        // max_bytes is how much we prepare to read from this ntp, but no less
-        // than one full batch
-        const size_t requested_fetch_size = std::max(
-          max_bytes, batch_size_estimate);
-        // cap what we want at what we have
-        const size_t fetch_size = std::min(
-          {requested_fetch_size, memory_kafka_now, memory_fetch});
-        // only reserve memory if we have space for at least one batch,
-        // otherwise this ntp will be skipped
-        if (fetch_size >= batch_size_estimate) {
-            memory_units.fetch = ss::consume_units(
-              memory_fetch_sem, fetch_size);
-            memory_units.kafka = ss::consume_units(memory_sem, fetch_size);
-        }
+    size_t units_to_alloc = 0;
+    if (require_min_units) {
+        // if \ref require_min_units is true then we must read at least \ref
+        // min_units. So allocate at least that many even if it causes the
+        // semaphores to become negative.
+        units_to_alloc = std::max(
+          min_units, std::min(max_units, available_units));
+    } else if (available_units >= min_units) {
+        // only reserve memory if we have space for at least \ref min_units,
+        // otherwise allocate none.
+        units_to_alloc = std::min(available_units, max_units);
+    }
+
+    read_result::memory_units_t memory_units;
+    if (units_to_alloc > 0) {
+        memory_units.fetch = ss::consume_units(
+          memory_fetch_sem, units_to_alloc);
+        memory_units.kafka = ss::consume_units(memory_sem, units_to_alloc);
     }
 
     return memory_units;
@@ -336,6 +335,7 @@ static ss::future<read_result> do_read_from_ntp(
           memory_sem,
           memory_fetch_sem,
           ntp_config.cfg.max_bytes,
+          ntp_config.cfg.max_batch_size,
           obligatory_batch_read);
         if (!memory_units.fetch) {
             ntp_config.cfg.skip_read = true;
@@ -462,9 +462,14 @@ read_result::memory_units_t reserve_memory_units(
   ssx::semaphore& memory_sem,
   ssx::semaphore& memory_fetch_sem,
   const size_t max_bytes,
+  const size_t max_batch_size,
   const bool obligatory_batch_read) {
     return kafka::reserve_memory_units(
-      memory_sem, memory_fetch_sem, max_bytes, obligatory_batch_read);
+      memory_sem,
+      memory_fetch_sem,
+      max_bytes,
+      max_batch_size,
+      obligatory_batch_read);
 }
 
 } // namespace testing
@@ -1447,6 +1452,27 @@ class simple_fetch_planner final : public fetch_planner::impl {
                     error_code::invalid_topic_exception);
               }
 
+              const auto& topic_md = metadata_cache.get_topic_metadata_ref(
+                model::topic_namespace_view{model::kafka_namespace, topic});
+
+              if (!topic_md) {
+                  return fail_all_partitions(
+                    error_code::unknown_topic_or_partition);
+              }
+
+              const auto& topic_cfg = topic_md->get().get_configuration();
+              // Max batch size or `message.max.bytes` is a user configurable
+              // topic property that defines the max size of a batch that can be
+              // produced to any partition in the topic.
+              //
+              // It is used later in the fetch path to establish the minimum
+              // number of memory semaphore units that need to be allocated
+              // before reading a single batch from any of the topic's
+              // partitions.
+              const auto max_batch_size
+                = topic_cfg.properties.batch_max_bytes.value_or(
+                  metadata_cache.get_default_batch_max_bytes());
+
               for (const kafka::fetch_session_partition& fp : partitions) {
                   // if this is not an initial fetch we are allowed to skip
                   // partitions that already have an error or we have enough
@@ -1509,6 +1535,7 @@ class simple_fetch_planner final : public fetch_planner::impl {
                       .start_offset = fp.fetch_offset,
                       .max_offset = model::model_limits<model::offset>::max(),
                       .max_bytes = max_bytes,
+                      .max_batch_size = max_batch_size,
                       .timeout = octx.deadline.value_or(model::no_timeout),
                       .current_leader_epoch = fp.current_leader_epoch,
                       .isolation_level = octx.request.data.isolation_level,

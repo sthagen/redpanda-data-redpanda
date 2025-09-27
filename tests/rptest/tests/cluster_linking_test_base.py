@@ -20,6 +20,7 @@ from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
     shadow_link_pb2_connect,
 )
+from rptest.clients.admin.proto.redpanda.core.common import acl_pb2
 from rptest.clients.admin.v2 import Admin as AdminV2
 from rptest.clients.default import DefaultClient
 from rptest.clients.rpk import RpkTool
@@ -37,7 +38,9 @@ from rptest.services.multi_cluster_services import (
     ServiceType,
     SecondaryClusterSpec,
 )
-from rptest.services.redpanda import LoggingConfig
+from rptest.services.redpanda import (
+    LoggingConfig,
+)
 from rptest.tests.prealloc_nodes import PreallocNodesTest
 from rptest.utils.node_operations import FailureInjectorBackgroundThread
 
@@ -239,6 +242,7 @@ class ClusterLinkingProgressVerifier:
                         f"Group {g.group} partition {key} offset commit not found in target"
                     )
                     errors.append((key, "missing in target"))
+                    continue
 
                 if p.current_offset != target_partitions[key].current_offset:
                     self.logger.error(
@@ -371,6 +375,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
         link_name: str,
         mirror_all_topics: bool = True,
         mirror_all_groups: bool = True,
+        mirror_all_acls: bool = True,
     ) -> shadow_link_pb2.CreateShadowLinkRequest:
         topic_sync_options: shadow_link_pb2.TopicMetadataSyncOptions = (
             shadow_link_pb2.TopicMetadataSyncOptions(
@@ -379,6 +384,11 @@ class ShadowLinkTestBase(PreallocNodesTest):
         )
         group_sync_options: shadow_link_pb2.ConsumerOffsetSyncOptions = (
             shadow_link_pb2.ConsumerOffsetSyncOptions(
+                interval=google.protobuf.duration_pb2.Duration(seconds=1)
+            )
+        )
+        security_sync_options: shadow_link_pb2.SecuritySettingsSyncOptions = (
+            shadow_link_pb2.SecuritySettingsSyncOptions(
                 interval=google.protobuf.duration_pb2.Duration(seconds=1)
             )
         )
@@ -407,6 +417,34 @@ class ShadowLinkTestBase(PreallocNodesTest):
                     )
                 ],
             )
+
+        if mirror_all_acls:
+            security_sync_options = shadow_link_pb2.SecuritySettingsSyncOptions(
+                interval=google.protobuf.duration_pb2.Duration(seconds=1),
+                acl_filters=[
+                    shadow_link_pb2.ACLFilter(
+                        resource_filter=shadow_link_pb2.ACLResourceFilter(
+                            resource_type=acl_pb2.ACL_RESOURCE_ANY,
+                            pattern_type=acl_pb2.ACL_PATTERN_ANY,
+                        ),
+                        access_filter=shadow_link_pb2.ACLAccessFilter(
+                            permission_type=acl_pb2.ACL_PERMISSION_TYPE_ANY,
+                            operation=acl_pb2.ACL_OPERATION_ANY,
+                        ),
+                    ),
+                    shadow_link_pb2.ACLFilter(
+                        resource_filter=shadow_link_pb2.ACLResourceFilter(
+                            resource_type=acl_pb2.ACL_RESOURCE_SR_ANY,
+                            pattern_type=acl_pb2.ACL_PATTERN_ANY,
+                        ),
+                        access_filter=shadow_link_pb2.ACLAccessFilter(
+                            permission_type=acl_pb2.ACL_PERMISSION_TYPE_ANY,
+                            operation=acl_pb2.ACL_OPERATION_ANY,
+                        ),
+                    ),
+                ],
+            )
+
         client_options = shadow_link_pb2.ShadowLinkClientOptions(
             bootstrap_servers=self.source_cluster.service.brokers_list()
         )
@@ -415,6 +453,7 @@ class ShadowLinkTestBase(PreallocNodesTest):
             client_options=client_options,
             topic_metadata_sync_options=topic_sync_options,
             consumer_offset_sync_options=group_sync_options,
+            security_sync_options=security_sync_options,
         )
 
         link_resource = shadow_link_pb2.ShadowLink(configurations=link_cfg)

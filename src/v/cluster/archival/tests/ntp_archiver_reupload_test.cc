@@ -17,7 +17,7 @@
 #include "config/configuration.h"
 #include "storage/disk_log_impl.h"
 #include "storage/ntp_config.h"
-#include "test_utils/fixture.h"
+#include "test_utils/boost_fixture.h"
 #include "test_utils/scoped_config.h"
 
 #include <seastar/core/sharded.hh>

@@ -29,6 +29,7 @@
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/timeout_clock.h"
+#include "security/acl.h"
 #include "utils/to_string.h"
 
 #include <seastar/core/coroutine.hh>
@@ -268,8 +269,15 @@ static metadata_response::topic make_topic_response(
     if (rq.data.include_topic_authorized_operations) {
         res.topic_authorized_operations = kafka::topic_authorized_operations{
           details::to_bit_field(
-            details::authorized_operations(
-              ctx, md.get_configuration().tp_ns.tp))};
+            details::authorized_operations<model::topic>(
+              [&ctx](
+                security::acl_operation op,
+                const model::topic& resource,
+                authz_quiet q,
+                audit_authz_check c) {
+                  return ctx.authorized(op, resource, q, c);
+              },
+              md.get_configuration().tp_ns.tp))};
     }
 
     return res;
@@ -645,8 +653,15 @@ ss::future<typename T::api::response_type> handle_metadata(
         security::acl_operation::describe, security::default_cluster_name)) {
         reply.data.cluster_authorized_operations
           = kafka::cluster_authorized_operations{details::to_bit_field(
-            details::authorized_operations(
-              ctx, security::default_cluster_name))};
+            details::authorized_operations<security::acl_cluster_name>(
+              [&ctx](
+                security::acl_operation op,
+                const security::acl_cluster_name& resource,
+                authz_quiet q,
+                audit_authz_check c) {
+                  return ctx.authorized(op, resource, q, c);
+              },
+              security::default_cluster_name))};
     }
 
     co_return reply;

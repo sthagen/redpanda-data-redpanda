@@ -27,10 +27,6 @@
 #include "model/metadata.h"
 #include "random/generators.h"
 
-#if defined(IS_BTEST)
-#include "test_utils/fixture.h" // IWYU pragma: export
-#endif
-
 #include <seastar/core/sharded.hh>
 
 #include <boost/test/unit_test.hpp>

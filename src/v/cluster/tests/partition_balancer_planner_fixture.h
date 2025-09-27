@@ -30,7 +30,6 @@
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "random/generators.h"
-#include "test_utils/fixture.h"
 
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>

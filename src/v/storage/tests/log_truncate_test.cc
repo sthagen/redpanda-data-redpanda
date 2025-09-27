@@ -18,7 +18,6 @@
 #include "storage/tests/storage_test_fixture.h"
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
-#include "test_utils/fixture.h"
 
 #include <seastar/core/file.hh>
 #include <seastar/util/defer.hh>

@@ -11,7 +11,9 @@
 
 #pragma once
 
-#if defined(IS_BTEST)
+#if !defined(IS_BTEST)
+#error "boost fixture can be included only from boost test files"
+#endif
 
 #include <seastar/core/future.hh>
 #include <seastar/core/thread.hh>
@@ -47,5 +49,3 @@
         BOOST_TEST_CHECKPOINT("~" << #klass << "::" << #method << "()");       \
     }                                                                          \
     void ::__FIXTURE_JOIN(klass, method)::fixture_test()
-
-#endif

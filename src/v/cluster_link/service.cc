@@ -21,6 +21,7 @@
 #include "cluster_link/model/types.h"
 #include "cluster_link/replication/deps_impl.h"
 #include "cluster_link/replication/mux_remote_consumer.h"
+#include "cluster_link/security_migrator.h"
 #include "cluster_link/source_topic_syncer.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/server/group_router.h"
@@ -245,6 +246,7 @@ service::service(
   cluster::controller* controller,
   ss::sharded<kafka::group_router>* group_router,
   ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
+  ss::sharded<cluster::security_frontend>* security_fe,
   ss::smp_service_group smp_group,
   ss::scheduling_group scheduling_group)
   : _self(self)
@@ -257,6 +259,7 @@ service::service(
   , _controller(controller)
   , _group_router(group_router)
   , _hm_frontend(hm_frontend)
+  , _security_fe(security_fe)
   , _smp_group(smp_group)
   , _scheduling_group(scheduling_group) {}
 
@@ -272,6 +275,7 @@ ss::future<> service::start() {
         _shard_table, _partition_manager, _smp_group),
       topic_metadata_cache::make_default(_metadata_cache),
       topic_creator::make_default(_controller),
+      security_service::make_default(_security_fe),
       std::make_unique<link_registry_adapter>(&_plf->local()),
       std::make_unique<default_link_factory>(_partition_manager),
       std::make_unique<cluster_factory>(),
@@ -284,10 +288,11 @@ ss::future<> service::start() {
 
     co_await _manager->register_task_factory<source_topic_syncer_factory>();
     co_await _manager->register_task_factory<group_mirroring_task_factory>();
+    co_await _manager->register_task_factory<security_migrator_factory>();
 
-    // Register notifications before the manager starts.  The manager will have
-    // a constructed the underlying workqueue to start in a paused state and
-    // will pick up the notifications once it has started
+    // Register notifications before the manager starts.  The manager will
+    // have a constructed the underlying workqueue to start in a paused
+    // state and will pick up the notifications once it has started
     register_notifications();
     co_await _manager->start();
 }

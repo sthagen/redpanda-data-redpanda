@@ -145,11 +145,13 @@ TEST_F(cluster_mock_fixture, TestTopicMetadata) {
       model::node_id(1), net::unresolved_address{"localhost", 9092});
     cluster.start().get();
     auto deferred_stop = ss::defer([&cluster] { cluster.stop().get(); });
+    auto topic_id = model::topic_id{uuid_t::create()};
     cluster_mock.add_topic(
       model::topic{"test-topic"},
       3,
       1,
-      kafka::topic_authorized_operations{0x508});
+      kafka::topic_authorized_operations{0x508},
+      topic_id);
     EXPECT_NO_THROW(cluster.request_metadata_update().get())
       << "request_metadata_update threw";
     RPTEST_REQUIRE_EVENTUALLY(30s, [&] {
@@ -164,4 +166,5 @@ TEST_F(cluster_mock_fixture, TestTopicMetadata) {
     EXPECT_EQ(auth_ops.value(), 0x508);
     EXPECT_EQ(
       cluster.get_cluster_authorized_operations(), cluster_authorized_ops);
+    EXPECT_EQ(topics.topic_id_for_name(model::topic{"test-topic"}), topic_id);
 }

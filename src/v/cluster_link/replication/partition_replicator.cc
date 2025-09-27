@@ -13,6 +13,8 @@
 #include "cluster_link/logger.h"
 #include "ssx/future-util.h"
 
+#include <seastar/coroutine/switch_to.hh>
+
 namespace cluster_link::replication {
 
 static constexpr std::chrono::seconds base_backoff{1};
@@ -22,16 +24,19 @@ partition_replicator::partition_replicator(
   const model::ntp& ntp,
   model::term_id term,
   std::unique_ptr<data_source> source,
-  std::unique_ptr<data_sink> sink)
+  std::unique_ptr<data_sink> sink,
+  ss::scheduling_group scheduling_group)
   : _term(term)
   , _log(cllog, fmt::format("[{}-term-{}] replicator", ntp, term))
   , _source(std::move(source))
   , _sink(std::move(sink))
+  , _scheduling_group(scheduling_group)
   , _backoff_policy(
       make_exponential_backoff_policy<ss::lowres_clock>(
         base_backoff, max_backoff)) {}
 
 ss::future<> partition_replicator::start() {
+    co_await ss::coroutine::switch_to(_scheduling_group);
     vlog(_log.trace, "Starting replicator");
     co_await _sink->start();
     co_await _source->start(
@@ -48,6 +53,7 @@ ss::future<> partition_replicator::start() {
 }
 
 ss::future<> partition_replicator::stop() {
+    co_await ss::coroutine::switch_to(_scheduling_group);
     vlog(_log.trace, "Stopping replicator");
     _as.request_abort();
     // closing the gate first ensures all the units are returned to the

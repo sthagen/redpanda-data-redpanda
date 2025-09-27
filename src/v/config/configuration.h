@@ -702,7 +702,7 @@ struct configuration final : public config_store {
     bounded_property<size_t> max_in_flight_pandaproxy_requests_per_shard;
 
     bounded_property<double, numeric_bounds> kafka_memory_share_for_fetch;
-    property<size_t> kafka_memory_batch_size_estimate_for_fetch;
+    deprecated_property kafka_memory_batch_size_estimate_for_fetch;
     // debug controls
     property<bool> cpu_profiler_enabled;
     bounded_property<std::chrono::milliseconds> cpu_profiler_sample_period_ms;
@@ -805,6 +805,9 @@ struct configuration final : public config_store {
 
 public:
     development_feature_property<bool> development_enable_cloud_topics;
+    property<size_t> cloud_topics_produce_batching_size_threshold;
+    property<std::chrono::milliseconds> cloud_topics_produce_upload_interval;
+    property<size_t> cloud_topics_produce_cardinality_threshold;
 
     development_feature_property<int> development_feature_property_testing_only;
 

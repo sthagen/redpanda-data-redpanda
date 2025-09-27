@@ -179,4 +179,12 @@ For further details, consult:
 
 ---
 
+## Commit message instructions
+
+When writing or critiquing commit messages, follow these guidelines:
+
+ - First line of the commit message should be a short summary (max 50 chars)
+ - Remain lines should be wrapped at 72 chars
+
+
 _Results from code search may be incomplete. For more C++ details, see the [repository code search](https://github.com/redpanda-data/redpanda/search?q=c%2B%2B)._

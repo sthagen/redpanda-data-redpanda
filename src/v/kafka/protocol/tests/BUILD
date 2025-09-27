@@ -18,6 +18,7 @@ redpanda_cc_btest(
         "//src/v/kafka/protocol/schemata:sasl_authenticate_request",
         "//src/v/kafka/protocol/schemata:sasl_authenticate_response",
         "//src/v/kafka/server",
+        "//src/v/kafka/server:security",
         "//src/v/security",
         "@boost//:algorithm",
         "@boost//:test",

@@ -12,7 +12,6 @@
 #include "model/tests/random_batch.h"
 #include "storage/ntp_config.h"
 #include "storage/tests/disk_log_builder_fixture.h"
-#include "test_utils/fixture.h"
 #include "test_utils/test_macros.h"
 #include "test_utils/tmp_dir.h"
 

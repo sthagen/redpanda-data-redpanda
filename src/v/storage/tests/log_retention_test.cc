@@ -9,8 +9,6 @@
 
 #include "model/fundamental.h"
 #include "storage/tests/utils/disk_log_builder.h"
-// fixture
-#include "test_utils/fixture.h"
 
 #include <seastar/util/defer.hh>
 

@@ -36,7 +36,7 @@
 #include "storage/tests/utils/disk_log_builder.h"
 #include "storage/types.h"
 #include "test_utils/archival.h"
-#include "test_utils/fixture.h"
+#include "test_utils/boost_fixture.h"
 #include "test_utils/scoped_config.h"
 #include "utils/retry_chain_node.h"
 #include "utils/unresolved_address.h"

@@ -3796,14 +3796,7 @@ configuration::configuration()
       0.5,
       {.min = 0.0, .max = 1.0})
   , kafka_memory_batch_size_estimate_for_fetch(
-      *this,
-      "kafka_memory_batch_size_estimate_for_fetch",
-      "The size of the batch used to estimate memory consumption for fetch "
-      "requests, in bytes. Smaller sizes allow more concurrent fetch requests "
-      "per shard. Larger sizes prevent running out of memory because of too "
-      "many concurrent fetch requests.",
-      {.needs_restart = needs_restart::no, .visibility = visibility::user},
-      1_MiB)
+      *this, "kafka_memory_batch_size_estimate_for_fetch")
   , cpu_profiler_enabled(
       *this,
       "cpu_profiler_enabled",
@@ -4453,6 +4446,27 @@ configuration::configuration()
       "Enable cloud topics.",
       {.needs_restart = needs_restart::no, .visibility = visibility::user},
       false)
+  , cloud_topics_produce_batching_size_threshold(
+      *this,
+      "cloud_topics_produce_batching_size_threshold",
+      "The size limit for the object size in cloud topics. When the "
+      "amount of data on a shard reaches this limit, an upload is triggered.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      4_MiB)
+  , cloud_topics_produce_upload_interval(
+      *this,
+      "cloud_topics_produce_upload_interval",
+      "Time interval after which the upload is triggered.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      250ms)
+  , cloud_topics_produce_cardinality_threshold(
+      *this,
+      "cloud_topics_produce_cardinality_threshold",
+      "Threshold for the object cardinality in cloud topics. When the "
+      "number of partitions in waiting for the upload reach this limit, an "
+      "upload is triggered.",
+      {.needs_restart = needs_restart::no, .visibility = visibility::user},
+      1000)
   , development_feature_property_testing_only(
       *this,
       "development_feature_property_testing_only",

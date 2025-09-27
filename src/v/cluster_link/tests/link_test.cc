@@ -181,6 +181,7 @@ public:
                 return cluster::errc::success;
             },
             _default_topic_replication.bind()),
+          std::make_unique<fake_security_service>(),
           std::make_unique<test_link_registry>(&_table.local()),
           std::make_unique<link_test_factory>(this, 1s),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),
@@ -418,6 +419,7 @@ public:
                 return cluster::errc::success;
             },
             _default_topic_replication.bind()),
+          std::make_unique<fake_security_service>(),
           std::make_unique<test_link_registry>(&_table.local()),
           std::move(elf),
           std::make_unique<cluster_mock_factory>(&_cluster_mock),

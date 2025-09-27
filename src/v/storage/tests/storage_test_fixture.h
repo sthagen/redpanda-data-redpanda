@@ -21,6 +21,7 @@
 #include "storage/log_manager.h"
 #include "storage/tests/batch_generators.h"
 #include "storage/types.h"
+#include "test_utils/test_env.h"
 #include "test_utils/test_macros.h"
 
 #include <seastar/core/file.hh>
@@ -47,7 +48,7 @@ public:
     std::optional<model::timestamp> ts_cursor;
 
     storage_test_fixture()
-      : test_dir("test.data." + random_generators::gen_alphanum_string(10))
+      : test_dir(test_env::random_dir_path("test.data.", 10))
       , kvstore(
           storage::kvstore_config(
             1_MiB,
