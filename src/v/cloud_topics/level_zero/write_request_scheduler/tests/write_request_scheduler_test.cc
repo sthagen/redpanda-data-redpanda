@@ -1,4 +1,4 @@
-// Copyright 2024 Redpanda Data, Inc.
+// Copyright 2025 Redpanda Data, Inc.
 //
 // Use of this software is governed by the Business Source License
 // included in the file licenses/BSL.md
@@ -224,6 +224,24 @@ static ss::future<size_t> write_until_threshold(
     co_return num_requests_sent;
 }
 
+/// Same as model::test_make_random_batches but allows to specify number of
+/// batches and size of every batch (same size for all)
+static auto make_random_batches(size_t num_batches, size_t batch_size) {
+    chunked_vector<model::record_batch> batches;
+    for (size_t i = 0; i < num_batches; i++) {
+        auto batch = model::test::make_random_batch(
+          model::test::record_batch_spec{
+            .offset = model::offset(i),
+            .allow_compression = false,
+            .count = 1,
+            .records = 1,
+            .record_sizes = std::vector<size_t>{batch_size},
+          });
+        batches.push_back(std::move(batch));
+    }
+    return batches;
+}
+
 TEST_F_CORO(write_request_balancer_fixture, time_based_fallback_test) {
     // This test produces some batches and expects time based threshold
     // mechanism to trigger the upload.
@@ -262,29 +280,22 @@ TEST_F_CORO(write_request_balancer_fixture, test_core_affinity) {
     co_await start(
       /*disable_data_threshold=*/true, /*disable_time_based_fallback=*/false);
 
+    static constexpr size_t batch_size = 0x1000;
+    static constexpr size_t num_batches_hi = 99;
+    static constexpr size_t num_batches_lo = 10;
+
     std::atomic<size_t> shard1_data_size = 0;
     auto fut = ss::smp::submit_to(ss::shard_id(1), [this, &shard1_data_size] {
-        return model::test::make_random_batches().then(
-          [this, &shard1_data_size](auto buf) {
-              for (const model::record_batch& b : buf) {
-                  shard1_data_size += b.size_bytes();
-              }
-              chunked_vector<model::record_batch> batches;
-              std::move(buf.begin(), buf.end(), std::back_inserter(batches));
-              vlog(test_log.info, "Calling write_and_debounce on shard 1");
-              return pipeline.local().write_and_debounce(
-                test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s);
-          });
+        auto batches = make_random_batches(num_batches_hi, batch_size);
+        for (const model::record_batch& b : batches) {
+            shard1_data_size += b.size_bytes();
+        }
+        vlog(test_log.info, "Calling write_and_debounce on shard 1");
+        return pipeline.local().write_and_debounce(
+          test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s);
     });
 
-    size_t shard0_data_size = 0;
-    auto buf = co_await model::test::make_random_batches();
-    chunked_vector<model::record_batch> batches;
-    for (auto& b : buf) {
-        shard0_data_size += b.size_bytes();
-        batches.push_back(std::move(b));
-    }
-
+    auto batches = make_random_batches(num_batches_lo, batch_size);
     vlog(test_log.info, "Calling write_and_debounce on shard 0");
     auto s0_placeholders = co_await pipeline.local().write_and_debounce(
       test_ntp0, std::move(batches), ss::lowres_clock::now() + 10s);
@@ -293,9 +304,8 @@ TEST_F_CORO(write_request_balancer_fixture, test_core_affinity) {
 
     // Check that number of upload requests matches expectation.
     // The shard that has the most data should handle the request.
-    auto expected_shard = shard0_data_size > shard1_data_size ? 0 : 1;
     auto num_requests = co_await request_sink.invoke_on(
-      expected_shard, [](auto& s) { return s.write_requests_acked; });
+      ss::shard_id(1), [](auto& s) { return s.write_requests_acked; });
     ASSERT_EQ_CORO(num_requests, 2);
 
     co_await stop();

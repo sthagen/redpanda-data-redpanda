@@ -721,7 +721,9 @@ constexpr uint32_t packed_record_batch_header_size
     + sizeof(model::record_batch_header::base_sequence)     // 4
     + sizeof(model::record_batch_header::record_count);     // 4
 static_assert(packed_record_batch_header_size == 61);
-
+namespace test {
+class raw_record_batch_factory;
+}
 class record_batch
   : public serde::envelope<
       model::record_batch,
@@ -966,6 +968,7 @@ private:
     explicit operator bool() const noexcept { return !empty(); }
     friend class ss::optimized_optional<record_batch>;
     friend class record_batch_iterator;
+    friend class test::raw_record_batch_factory;
 
     template<typename Func>
     friend ss::future<>

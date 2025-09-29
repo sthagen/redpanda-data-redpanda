@@ -29,6 +29,24 @@ redpanda_test_cc_library(
     ],
 )
 
+redpanda_test_cc_library(
+    name = "raw_record_batch_factory",
+    srcs = [
+    ],
+    hdrs = [
+        "raw_record_batch_factory.h",
+    ],
+    visibility = [
+        "//visibility:public",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iobuf",
+        "//src/v/model",
+        "@seastar",
+    ],
+)
+
 redpanda_cc_btest(
     name = "ktp_test",
     timeout = "short",

@@ -966,3 +966,28 @@ redpanda_cc_btest(
         "@seastar//:testing",
     ],
 )
+
+redpanda_cc_btest(
+    name = "produce_invalid_batch_test",
+    timeout = "short",
+    srcs = [
+        "produce_invalid_batch_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/config",
+        "//src/v/container:chunked_vector",
+        "//src/v/kafka/client:transport",
+        "//src/v/kafka/protocol",
+        "//src/v/kafka/protocol:metadata",
+        "//src/v/kafka/protocol:produce",
+        "//src/v/model",
+        "//src/v/model/tests:raw_record_batch_factory",
+        "//src/v/redpanda/tests:fixture",
+        "//src/v/storage:record_batch_builder",
+        "//src/v/test_utils:scoped_config",
+        "//src/v/test_utils:seastar_boost",
+        "@seastar",
+        "@seastar//:testing",
+    ],
+)

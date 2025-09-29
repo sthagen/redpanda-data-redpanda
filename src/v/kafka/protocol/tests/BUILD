@@ -78,6 +78,7 @@ redpanda_cc_btest(
         "//src/v/kafka/protocol",
         "//src/v/model",
         "//src/v/model/tests:random",
+        "//src/v/model/tests:raw_record_batch_factory",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",
         "@seastar",

@@ -352,7 +352,9 @@ ss::future<> fetcher::do_fetch() {
             auto ec = fetch_result.error();
 
             // no need for backoff, reset fetch session and rerequest
-            if (ec == kafka::error_code::fetch_session_id_not_found) {
+            if (
+              ec == kafka::error_code::fetch_session_id_not_found
+              || ec == kafka::error_code::invalid_fetch_session_epoch) {
                 vlog(logger().trace, "fetch session invalidated");
                 _session_state.reset();
                 co_return;
@@ -396,6 +398,7 @@ ss::future<> fetcher::do_fetch() {
         needs_backoff = true;
     }
     if (needs_backoff) {
+        _session_state.reset();
         co_await _parent->_cluster->request_metadata_update();
         co_await ss::sleep_abortable(error_backoff, _as);
     }
