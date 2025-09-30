@@ -15,6 +15,8 @@
 
 #include <seastar/coroutine/switch_to.hh>
 
+using namespace std::chrono_literals;
+
 namespace cluster_link::replication {
 
 static constexpr std::chrono::seconds base_backoff{1};
@@ -110,8 +112,9 @@ ss::future<bool> partition_replicator::handle_replication_result(
 
 ss::future<> partition_replicator::replicate_and_wait(
   replicate_ctx ctx, ss::gate& gate, ss::abort_source& as) {
-    auto stages = _sink->replicate(
-      std::move(ctx.batches), model::max_duration, as);
+    static constexpr auto large_timeout
+      = std::chrono::duration_cast<model::timeout_clock::duration>(5min);
+    auto stages = _sink->replicate(std::move(ctx.batches), large_timeout, as);
     auto enqueue_f = co_await ss::coroutine::as_future(
       std::move(stages.request_enqueued));
     std::exception_ptr eptr = nullptr;

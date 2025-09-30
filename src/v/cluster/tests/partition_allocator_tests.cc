@@ -18,7 +18,6 @@
 #include "config/configuration.h"
 #include "model/metadata.h"
 #include "raft/fundamental.h"
-#include "random/fast_prng.h"
 #include "random/generators.h"
 #include "resource_mgmt/memory_groups.h"
 #include "test_utils/boost_fixture.h"
@@ -457,7 +456,7 @@ FIXTURE_TEST(recovery_test, partition_allocator_fixture) {
                 std::vector<model::broker_shard> replicas;
                 for (int r = 0; r < 3; r++) {
                     ret.push_back(
-                      model::broker_shard{model::node_id(r), prng() % 3});
+                      model::broker_shard{model::node_id(r), prng.get_int(2u)});
                 }
             }
         }

@@ -12,11 +12,14 @@
 #include "cloud_storage/types.h"
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/errc.h"
+#include "cloud_topics/level_one/frontend_reader/reader.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/frontend_reader/reader.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
 #include "cloud_topics/level_zero/stm/placeholder.h"
 #include "cloud_topics/logger.h"
+#include "cloud_topics/state_accessors.h"
+#include "cluster/metadata_cache.h"
 #include "cluster/partition.h"
 #include "cluster/rm_stm_types.h"
 #include "cluster/types.h"
@@ -280,12 +283,29 @@ ss::future<storage::translating_reader> frontend::make_reader(
     vassert(_data_plane != nullptr, "cloud topics api not initialized");
 
     auto ot_state = _partition->get_offset_translator_state();
+    auto lro = _ctp_stm_api->get_last_reconciled_offset();
+    if (lro > kafka::offset::min() && cfg.start_offset <= lro) {
+        // Read from L1 if some reconciliation has happened (lro > min) and the
+        // range overlaps L1.
+        vlog(
+          cd_log.debug,
+          "Start offset {} <= LRO {}: using L1 reader",
+          cfg.start_offset,
+          lro);
 
-    // TODO: depending on the 'cfg' construct level zero or level one
-    // reader impl.
+        auto impl = make_l1_reader(cfg);
+        co_return storage::translating_reader{
+          model::record_batch_reader(std::move(impl)), std::move(ot_state)};
+    }
+
+    vlog(
+      cd_log.debug,
+      "Start offset {} > LRO {}: using L0 reader",
+      cfg.start_offset,
+      lro);
+
     auto impl = std::make_unique<level_zero_log_reader_impl>(
       cfg, _partition, _data_plane);
-
     co_return storage::translating_reader{
       model::record_batch_reader(std::move(impl)), std::move(ot_state)};
 }
@@ -313,6 +333,32 @@ bool frontend::cache_enabled() const {
         return false;
     }
     return true;
+}
+
+std::optional<model::topic_id_partition>
+frontend::ntp_to_topic_id_partition(const model::ntp& ntp) const {
+    auto ct_state = _partition->get_cloud_topics_state();
+    auto metadata_cache = ct_state->local().get_metadata_cache();
+    auto topic_cfg = metadata_cache->get_topic_cfg(
+      model::topic_namespace_view(ntp));
+    if (!topic_cfg || !topic_cfg->tp_id) {
+        return std::nullopt;
+    }
+    return model::topic_id_partition{*topic_cfg->tp_id, ntp.tp.partition};
+}
+
+std::unique_ptr<model::record_batch_reader::impl>
+frontend::make_l1_reader(cloud_topic_log_reader_config& cfg) const {
+    auto ct_state = _partition->get_cloud_topics_state();
+    auto l1_metastore = ct_state->local().get_l1_metastore();
+    auto l1_io = ct_state->local().get_l1_io();
+
+    auto tidp = ntp_to_topic_id_partition(_partition->ntp());
+    vassert(
+      tidp.has_value(), "No topic id for cloud topic {}", _partition->ntp());
+
+    return std::make_unique<level_one_log_reader_impl>(
+      cfg, _partition->ntp(), *tidp, l1_metastore, l1_io);
 }
 
 ss::future<std::optional<storage::timequery_result>>

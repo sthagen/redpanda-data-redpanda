@@ -117,7 +117,6 @@ ss::future<std::optional<cluster_epoch>> ctp_stm::get_inactive_epoch() {
     storage::local_log_reader_config cfg(
       model::next_offset(lro),
       co,
-      0,
       4_MiB,
       std::make_optional(model::record_batch_type::dl_placeholder),
       std::nullopt,

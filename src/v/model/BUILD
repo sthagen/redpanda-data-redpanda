@@ -71,6 +71,7 @@ redpanda_cc_library(
         "//src/v/serde:vector",
         "//src/v/ssx:sformat",
         "//src/v/strings:string_switch",
+        "//src/v/utils:base64",
         "//src/v/utils:move_canary",
         "//src/v/utils:named_type",
         "//src/v/utils:to_string",

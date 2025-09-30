@@ -156,6 +156,12 @@ private:
 
     bool cache_enabled() const;
 
+    std::optional<model::topic_id_partition>
+    ntp_to_topic_id_partition(const model::ntp& ntp) const;
+
+    std::unique_ptr<model::record_batch_reader::impl>
+    make_l1_reader(cloud_topic_log_reader_config& cfg) const;
+
     ss::abort_source _as;
     retry_chain_node _rtc;
     ss::lw_shared_ptr<cluster::partition> _partition;

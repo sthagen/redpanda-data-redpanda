@@ -2,17 +2,6 @@ load("//bazel:build.bzl", "redpanda_cc_library")
 load("//bazel:test.bzl", "redpanda_test_cc_library")
 
 redpanda_cc_library(
-    name = "fast_prng",
-    hdrs = [
-        "fast_prng.h",
-    ],
-    visibility = ["//visibility:public"],
-    deps = [
-        "@abseil-cpp//absl/random",
-    ],
-)
-
-redpanda_cc_library(
     name = "generators",
     srcs = [
         "generators.cc",
@@ -23,6 +12,7 @@ redpanda_cc_library(
     visibility = ["//visibility:public"],
     deps = [
         "//src/v/base",
+        "@abseil-cpp//absl/random",
         "@seastar",
     ],
 )
@@ -69,6 +59,6 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
-        ":fast_prng",
+        ":generators",
     ],
 )

@@ -378,7 +378,6 @@ redpanda_cc_btest(
         "//src/v/model",
         "//src/v/raft",
         "//src/v/raft:fundamental",
-        "//src/v/random:fast_prng",
         "//src/v/random:generators",
         "//src/v/resource_mgmt:memory_groups",
         "//src/v/test_utils:seastar_boost",

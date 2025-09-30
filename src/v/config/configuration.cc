@@ -736,9 +736,10 @@ configuration::configuration()
   , fetch_read_strategy(
       *this,
       "fetch_read_strategy",
-      "The strategy used to fulfill fetch requests. * `polling`: Repeatedly "
-      "polls every partition in the request for new data. The polling interval "
-      "is set by `fetch_reads_debounce_timeout` (deprecated). * `non_polling`: "
+      "The strategy used to fulfill fetch requests. * `polling`: If "
+      "`fetch_reads_debounce_timeout` is set to its default value, then this "
+      "acts exactly like `non_polling`; otherwise, it acts like "
+      "`non_polling_with_debounce` (deprecated). * `non_polling`: "
       "The backend is signaled when a partition has new data, so Redpanda does "
       "not need to repeatedly read from every partition in the fetch. Redpanda "
       "Data recommends using this value for most workloads, because it can "

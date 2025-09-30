@@ -187,6 +187,8 @@ class EndToEndCloudTopicsTxTest(EndToEndCloudTopicsBase):
             loop=False,
             nodes=[traffic_node],
             use_transactions=True,
+            debug_logs=True,
+            trace_logs=True,
         )
         self.kgo_consumer.start(clean=False)
         self.kgo_consumer.wait()

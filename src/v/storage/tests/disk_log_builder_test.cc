@@ -200,7 +200,6 @@ TEST_F(log_builder_fixture, iterator_invalidation) {
     auto data_batches = b.consume(local_log_reader_config(
                                     model::offset(0),
                                     model::model_limits<model::offset>::max(),
-                                    0,
                                     std::numeric_limits<size_t>::max(),
                                     data,
                                     std::nullopt,
@@ -209,7 +208,6 @@ TEST_F(log_builder_fixture, iterator_invalidation) {
     auto config_batches = b.consume(local_log_reader_config(
                                       model::offset(0),
                                       model::model_limits<model::offset>::max(),
-                                      0,
                                       std::numeric_limits<size_t>::max(),
                                       configuration,
                                       std::nullopt,

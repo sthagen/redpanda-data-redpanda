@@ -8,7 +8,6 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/random:fast_prng",
         "//src/v/random:generators",
         "//src/v/test_utils:seastar_boost",
         "@abseil-cpp//absl/container:flat_hash_set",
@@ -27,7 +26,6 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/base",
-        "//src/v/random:fast_prng",
         "//src/v/random:generators",
         "//src/v/random:test_seeding",
         "//src/v/test_utils:seastar_boost",
@@ -81,6 +79,7 @@ redpanda_cc_bench(
     srcs = ["random_bench.cc"],
     deps = [
         "//src/v/random:generators",
+        "@abseil-cpp//absl/random",
         "@seastar",
         "@seastar//:benchmark",
     ],

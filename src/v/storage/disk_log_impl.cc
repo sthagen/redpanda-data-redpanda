@@ -3104,7 +3104,6 @@ disk_log_impl::make_reader(timequery_config config) {
           local_log_reader_config config(
             start_offset,
             cfg.max_offset,
-            0,
             2048, // We just need one record batch
             cfg.type_filter,
             cfg.time,

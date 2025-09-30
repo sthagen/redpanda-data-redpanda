@@ -2108,7 +2108,6 @@ TEST_F(storage_test_fixture, reader_reusability_test_parser_header) {
     storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::model_limits<model::offset>::max(),
-      0,
       4096,
       std::nullopt,
       std::nullopt,
@@ -2324,7 +2323,6 @@ TEST_F(storage_test_fixture, disposing_in_use_reader) {
     storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::offset::max(),
-      0,
       4096,
       std::nullopt,
       std::nullopt,
@@ -2603,7 +2601,6 @@ TEST_F(storage_test_fixture, reader_prevents_log_shutdown) {
     storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::model_limits<model::offset>::max(),
-      0,
       std::numeric_limits<int64_t>::max(),
       std::nullopt,
       std::nullopt,
@@ -3347,7 +3344,6 @@ static storage::log_gap_analysis analyze(storage::log& log) {
     storage::local_log_reader_config reader_cfg(
       model::offset(0),
       model::model_limits<model::offset>::max(),
-      0,
       10_MiB,
       std::nullopt,
       std::nullopt,
@@ -4155,7 +4151,6 @@ TEST_F(storage_test_fixture, reader_reusability_max_bytes) {
             storage::local_log_reader_config reader_cfg(
               model::offset(0),
               model::model_limits<model::offset>::max(),
-              0,
               reader_max_bytes,
               std::nullopt,
               std::nullopt,

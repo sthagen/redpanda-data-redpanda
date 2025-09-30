@@ -11,11 +11,12 @@
 
 #include "random/generators.h"
 
+#include "absl/random/random.h"
 #include "base/vassert.h"
 
+#include <algorithm>
 #include <atomic>
 #include <random>
-#include <type_traits>
 
 namespace random_generators {
 
@@ -27,9 +28,6 @@ using seed_type = rng::seed_type;
 
 namespace {
 constexpr seed_type fixed_seed = 1234567891u;
-
-// if these aren't the same we need to think a bit more about the seeded API
-static_assert(std::is_same_v<rng::seed_type, std::random_device::result_type>);
 
 std::atomic<int64_t> seed_generation = 0;
 
@@ -56,24 +54,36 @@ const seeding_mode global_seeding_mode = [] {
 }();
 
 seed_type random_seed() {
-    std::random_device rd;
-    auto seed = rd();
-    return seed;
+    // use a thread-local random device as random_device creation is
+    // expensive (involves opening `/dev/urandom` and closing it again)
+    static thread_local absl::BitGen bitgen;
+    // generate a random seed with the full range of seed_type
+    return absl::Uniform<seed_type>(bitgen);
+}
+
+// Given a seed, turn it into a seed-sequence, which is needed to properly
+// seed a 128-bit state from 64-bits of input entropy
+std::seed_seq seed_to_seq(seed_type seed) {
+    static_assert(sizeof(seed) == 8, "this is written for 64-bit seeds");
+
+    // create the seed_seq from high and low halves, as seed_seq
+    // is always a sequence of 32-bit values
+    return {seed, seed >> 32u};
 }
 
 // state to implement the global() rng object and its reseeding semantics
 thread_local rng global_instance;
 thread_local int64_t last_seed_gen = -1;
-} // namespace
-
-namespace internal {
-seeding_mode default_seeding_policy() { return global_seeding_mode; }
-} // namespace internal
 
 std::random_device::result_type get_initial_seed() {
     return global_seeding_mode == seeding_mode::fixed_seed ? fixed_seed
                                                            : random_seed();
 }
+} // namespace
+
+namespace internal {
+seeding_mode default_seeding_policy() { return global_seeding_mode; }
+} // namespace internal
 
 rng::rng()
   : rng(get_initial_seed()) {}
@@ -82,7 +92,7 @@ rng::rng(random_seed_tag)
   : rng(random_seed()) {}
 
 rng::rng(seed_type seed)
-  : gen_(seed)
+  : gen_(seed_to_seq(seed))
   , initial_seed_(seed) {}
 
 rng with_random_seed() { return rng{random_seed_tag{}}; }

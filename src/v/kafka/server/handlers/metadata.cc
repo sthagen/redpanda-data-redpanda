@@ -29,6 +29,7 @@
 #include "model/metadata.h"
 #include "model/namespace.h"
 #include "model/timeout_clock.h"
+#include "random/generators.h"
 #include "security/acl.h"
 #include "utils/to_string.h"
 
@@ -101,7 +102,7 @@ std::optional<cluster::leader_term> get_leader_term(
         leader_term->leader = previous;
 
         if (previous == *config::node().node_id()) {
-            auto idx = fast_prng_source() % replicas.size();
+            auto idx = random_generators::global().get_int(replicas.size() - 1);
             leader_term->leader = replicas[idx];
         }
     }

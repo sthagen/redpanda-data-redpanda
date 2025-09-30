@@ -362,7 +362,6 @@ redpanda_cc_library(
         "//src/v/model:batch_compression",
         "//src/v/model:batch_utils",
         "//src/v/raft:fundamental",
-        "//src/v/random:fast_prng",
         "//src/v/random:generators",
         "//src/v/random:time_jitter",
         "//src/v/reflection:adl",

@@ -1,5 +1,5 @@
 ---
-name: check formatting
+name: cloud-installpack-bk-trigger
 on:
   release:
     types: [published]
