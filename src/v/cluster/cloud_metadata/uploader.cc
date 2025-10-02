@@ -89,12 +89,18 @@ uploader::download_highest_manifest_or_create(retry_chain_node& retry_node) {
         // Happy path, just return.
         co_return manifest_res;
     }
+
     if (manifest_res.error() == error_outcome::no_matching_metadata) {
         cluster_metadata_manifest manifest{};
         manifest.cluster_uuid = _cluster_uuid;
+
+        // When no manifest is found we want to start from a metadata ID which
+        // is highest across all possible generations of clusters. That's why we
+        // ignore the cluster name filter here and just look for the highest
+        // manifest in the bucket.
         auto highest_manifest_res
           = co_await download_highest_manifest_in_bucket(
-            _remote, _bucket, retry_node);
+            _remote, _bucket, retry_node, cluster_name_ignore_filter);
         if (highest_manifest_res.has_value()) {
             auto& highest_manifest = highest_manifest_res.value();
             vlog(
@@ -197,6 +203,11 @@ ss::future<error_outcome> uploader::upload_next_metadata(
     if (co_await term_has_changed(synced_term)) {
         co_return error_outcome::term_has_changed;
     }
+    auto ref_upload_result = co_await maybe_upload_cluster_name_reference(
+      retry_node);
+    if (ref_upload_result != error_outcome::success) {
+        co_return ref_upload_result;
+    }
     manifest.upload_time_since_epoch
       = std::chrono::duration_cast<std::chrono::milliseconds>(
         ss::lowres_system_clock::now().time_since_epoch());
@@ -244,6 +255,11 @@ ss::future<error_outcome> uploader::maybe_upload_controller_snapshot(
   retry_chain_node& retry_node) {
     auto controller_snap_file = co_await _raft0->open_snapshot_file();
     if (!controller_snap_file.has_value()) {
+        vlog(
+          clusterlog.trace,
+          "Skipping controller snapshot upload as it does not exist at {}",
+          _raft0->get_snapshot_path());
+
         // Nothing to upload; continue.
         co_return error_outcome::success;
     }
@@ -323,6 +339,55 @@ ss::future<error_outcome> uploader::maybe_upload_controller_snapshot(
         }
         co_return error_outcome::upload_failed;
     }
+    co_return error_outcome::success;
+}
+
+ss::future<error_outcome>
+uploader::maybe_upload_cluster_name_reference(retry_chain_node& retry_node) {
+    auto cluster_name = config::shard_local_cfg().cloud_storage_cluster_name();
+    if (cluster_name.has_value()) {
+        cloud_io::transfer_details ref_td{
+          .bucket = _bucket,
+          .key = cluster_name_ref_for_uuid_key(
+            cluster_name.value(), _cluster_uuid),
+          .parent_rtc = retry_node,
+        };
+        auto ref_upload_result = co_await _remote.upload_object({
+          .transfer_details = std::move(ref_td),
+          .type = cloud_storage::upload_type::object,
+          // Empty payload. All the information is encoded in the key.
+          .payload = iobuf{},
+        });
+        if (ref_upload_result != cloud_storage::upload_result::success) {
+            vlog(
+              clusterlog.warn,
+              "Failed to upload cluster name reference: {}",
+              ref_upload_result);
+            co_return error_outcome::upload_failed;
+        }
+    } else {
+        // If check failed we don't want to block uploading. Warning is
+        // enough.
+        auto bucket_uses_cluster_names_res
+          = co_await check_bucket_contains_cluster_names(
+            _remote, _bucket, retry_node);
+        if (!bucket_uses_cluster_names_res.has_value()) {
+            vlog(
+              clusterlog.warn,
+              "Error checking for cluster names in bucket {}: {}",
+              _bucket(),
+              bucket_uses_cluster_names_res.error());
+        } else if (bucket_uses_cluster_names_res.value()) {
+            vlog(
+              clusterlog.warn,
+              "Bucket {} contains cluster_name/* keys, but "
+              "`cloud_storage_cluster_name` config property is not set. Please "
+              "set `cloud_storage_cluster_name` to ensure Whole Cluster "
+              "Restore functions correctly.",
+              _bucket());
+        }
+    }
+
     co_return error_outcome::success;
 }
 

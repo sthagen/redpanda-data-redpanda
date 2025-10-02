@@ -33,7 +33,7 @@ struct dataplane_query_result {
 };
 
 /// The query for the data-plane.
-/// The meta field contains a bunch of dl_placeholder batches.
+/// The meta field contains a bunch of ctp_placeholder batches.
 struct dataplane_query {
     size_t output_size_estimate{0};
     chunked_vector<extent_meta> meta;

@@ -92,7 +92,7 @@ public:
   // Convert a field path into a path of field numbers.
   std::optional<std::vector<int32_t>> convert_field_path_to_numbers(std::span<std::string_view> field_path) const override;
   // Look up a field based on the field numbers.
-  std::optional<serde::pb::field> lookup_field(std::span<int32_t> field_numbers) override;
+  std::optional<serde::pb::field> lookup_field(std::span<const int32_t> field_numbers) override;
 
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);
@@ -142,7 +142,7 @@ public:
   // Convert a field path into a path of field numbers.
   std::optional<std::vector<int32_t>> convert_field_path_to_numbers(std::span<std::string_view> field_path) const override;
   // Look up a field based on the field numbers.
-  std::optional<serde::pb::field> lookup_field(std::span<int32_t> field_numbers) override;
+  std::optional<serde::pb::field> lookup_field(std::span<const int32_t> field_numbers) override;
 
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);
@@ -193,7 +193,7 @@ public:
   // Convert a field path into a path of field numbers.
   std::optional<std::vector<int32_t>> convert_field_path_to_numbers(std::span<std::string_view> field_path) const override;
   // Look up a field based on the field numbers.
-  std::optional<serde::pb::field> lookup_field(std::span<int32_t> field_numbers) override;
+  std::optional<serde::pb::field> lookup_field(std::span<const int32_t> field_numbers) override;
 
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);
@@ -537,7 +537,7 @@ public:
   // Convert a field path into a path of field numbers.
   std::optional<std::vector<int32_t>> convert_field_path_to_numbers(std::span<std::string_view> field_path) const override;
   // Look up a field based on the field numbers.
-  std::optional<serde::pb::field> lookup_field(std::span<int32_t> field_numbers) override;
+  std::optional<serde::pb::field> lookup_field(std::span<const int32_t> field_numbers) override;
 
   // NOTE: This is intended to be used by field_mask only. Do not use directly.
   static bool is_valid_field_path(std::span<const ss::sstring> path);

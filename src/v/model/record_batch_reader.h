@@ -19,9 +19,11 @@
 #include "model/timeout_clock.h"
 
 #include <seastar/core/chunked_fifo.hh>
+#include <seastar/core/coroutine.hh>
 #include <seastar/core/do_with.hh>
 #include <seastar/core/future.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/coroutine/generator.hh>
 #include <seastar/util/noncopyable_function.hh>
 #include <seastar/util/optimized_optional.hh>
 #include <seastar/util/variant_utils.hh>
@@ -109,6 +111,38 @@ public:
             return ss::do_with(std::move(c), [this, tm](ReferenceConsumer& c) {
                 return do_peek_each_ref(c, tm);
             });
+        }
+
+        static seastar::coroutine::experimental::generator<model::record_batch>
+        generator(
+          std::unique_ptr<impl> impl, timeout_clock::time_point timeout) {
+            std::exception_ptr eptr;
+            try {
+                while (true) {
+                    if (!impl->is_slice_empty()) {
+                        co_yield impl->pop_batch();
+                        continue;
+                    }
+                    if (impl->is_end_of_stream()) {
+                        break;
+                    }
+                    co_await impl->load_slice(timeout);
+                }
+            } catch (...) {
+                eptr = std::current_exception();
+            }
+            try {
+                co_await impl->finally();
+            } catch (...) {
+                if (eptr) {
+                    throw seastar::nested_exception(
+                      eptr, std::current_exception());
+                }
+                throw;
+            }
+            if (eptr) {
+                std::rethrow_exception(eptr);
+            }
         }
 
     private:
@@ -294,6 +328,21 @@ public:
     auto peek_each_ref(
       ReferenceConsumer consumer, timeout_clock::time_point timeout) & {
         return _impl->peek_each_ref(std::move(consumer), timeout);
+    }
+
+    /*
+     * Create a coroutine generator from the reader.
+     *
+     *    auto gen = std::move(reader).generator();
+     *    while (std::optional<model::record_batch> batch = co_await gen()) {
+     *        ...
+     *    }
+     *
+     * When end of stream is reached std::nullopt will be returned.
+     */
+    seastar::coroutine::experimental::generator<model::record_batch>
+    generator(timeout_clock::time_point timeout) && {
+        return impl::generator(std::move(_impl), timeout);
     }
 
     std::unique_ptr<impl> release() && { return std::move(_impl); }

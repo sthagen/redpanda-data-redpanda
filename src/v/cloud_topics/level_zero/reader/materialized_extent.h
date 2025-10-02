@@ -28,7 +28,7 @@ namespace cloud_topics::l0 {
 
 // Materialized placeholder extent
 //
-// Extent represents dl_placeholder with the data
+// Extent represents ctp_placeholder with the data
 // that it represents stored in cloud storage cache or
 // main memory.
 // The extent can be hydrated (the data is moved from the cloud
@@ -40,7 +40,7 @@ struct materialized_extent {
 };
 
 /// Fetch data referenced by the placeholder batch and the content of the
-/// dl_placeholder.
+/// ctp_placeholder.
 /// Return 'true' if the object was downloaded from the cloud storage.
 /// Otherwise, if the object was populated from the cache, return 'false'.
 ss::future<result<bool>> materialize(
@@ -50,7 +50,7 @@ ss::future<result<bool>> materialize(
   cloud_io::basic_cache_service_api<>* cache,
   basic_retry_chain_node<>* rtc);
 
-// Get dl_placeholder and the payload of the object and generate a record
+// Get ctp_placeholder and the payload of the object and generate a record
 // batch
 model::record_batch make_raft_data_batch(materialized_extent extent);
 

@@ -146,6 +146,9 @@ src/v/base/format_to.h.
   latency. See our
   [docs](https://redpandadata.atlassian.net/wiki/x/AQBZTw#Managing-Concurrency-in-the-system)
   for more background.
+- Do not call the `get_exception` method on a future within a logging or
+  assertion statement (e.g. `vlog(..., fut.get_exception(), ...)`). Instead,
+  assign the return value of `get_exception` in a variable and pass the variable.
 
 
 ### C++ coding style

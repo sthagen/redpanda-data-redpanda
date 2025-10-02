@@ -56,7 +56,7 @@ enum class record_batch_type : int8_t {
     partition_properties_update
     = 34, // special batch type used to update partition properties
     datalake_coordinator = 35, // datalake::coordinator::*
-    dl_placeholder = 36,       // placeholder batch type used by cloud topics
+    ctp_placeholder = 36,      // placeholder batch type used by cloud topics
     ctp_stm_command = 37,      // ctp_stm command batch
     datalake_translation_state = 38, // maintains state for translation progress
     cluster_link = 39,               // cluster link update batches

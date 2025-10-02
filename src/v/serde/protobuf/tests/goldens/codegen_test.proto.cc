@@ -160,7 +160,7 @@ bool a::convert_field_path_to_numbers(std::span<std::string_view> field_path, st
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> a::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> a::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -354,7 +354,7 @@ bool b::convert_field_path_to_numbers(std::span<std::string_view> field_path, st
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> b::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> b::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -461,7 +461,7 @@ bool c::convert_field_path_to_numbers(std::span<std::string_view> field_path, st
   std::ignore = out;
   return field_path.empty();
 }
-std::optional<serde::pb::field> c::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> c::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -605,7 +605,7 @@ bool super_duper_secret::convert_field_path_to_numbers(std::span<std::string_vie
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> super_duper_secret::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> super_duper_secret::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -760,7 +760,7 @@ bool mask_wrapper::convert_field_path_to_numbers(std::span<std::string_view> fie
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> mask_wrapper::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> mask_wrapper::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -1385,7 +1385,7 @@ bool well_known_protos::convert_field_path_to_numbers(std::span<std::string_view
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> well_known_protos::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> well_known_protos::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -1595,7 +1595,7 @@ bool say_greeting_request::convert_field_path_to_numbers(std::span<std::string_v
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> say_greeting_request::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> say_greeting_request::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -1743,7 +1743,7 @@ bool say_greeting_response::convert_field_path_to_numbers(std::span<std::string_
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> say_greeting_response::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> say_greeting_response::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};

@@ -9,9 +9,10 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "base/seastarx.h"
 #include "base/type_traits.h"
-#include "random/generators.h"
 
+#include <seastar/core/sstring.hh>
 #include <seastar/testing/perf_tests.hh>
 
 #include <string>
@@ -30,29 +31,23 @@ struct large_struct {
 };
 
 template<typename ValueT>
-static auto make_value() {
+[[gnu::noinline]]
+static ValueT make_value() {
     if constexpr (std::is_same_v<ValueT, int64_t>) {
-        return static_cast<int64_t>(random_generators::get_int<int64_t>());
-
+        return 42;
     } else if constexpr (std::is_same_v<ValueT, ss::sstring>) {
-        constexpr size_t max_str_len = 64;
-        return random_generators::gen_alphanum_string(
-          random_generators::get_int<size_t>(0, max_str_len));
+        return ss::sstring(42, 'x'); // large than SSO size (15)
     } else if constexpr (std::is_same_v<ValueT, large_struct>) {
         constexpr size_t max_str_len = 64;
         constexpr size_t max_num_cardinality = 16;
         return large_struct{
-          .foo = random_generators::get_int<size_t>(0, max_num_cardinality),
-          .bar = random_generators::get_int<size_t>(0, max_num_cardinality),
-          .qux = random_generators::gen_alphanum_string(
-            random_generators::get_int<size_t>(0, max_str_len)),
-          .baz = random_generators::gen_alphanum_string(
-            random_generators::get_int<size_t>(0, max_str_len)),
-          .more = random_generators::gen_alphanum_string(
-            random_generators::get_int<size_t>(0, max_str_len)),
-          .data = random_generators::gen_alphanum_string(
-            random_generators::get_int<size_t>(0, max_str_len)),
-          .okdone = random_generators::get_int<size_t>(),
+          .foo = max_num_cardinality / 3,
+          .bar = max_num_cardinality - 2,
+          .qux = std::string(max_str_len / 8, 'x'),
+          .baz = std::string(max_str_len / 4, 'x'),
+          .more = std::string(max_str_len / 2, 'x'),
+          .data = std::string(max_str_len / 1, 'x'),
+          .okdone = 4242,
         };
     } else {
         static_assert(base::unsupported_type<ValueT>::value, "unsupported");

@@ -144,7 +144,13 @@ iobuf kafka_batch_adapter::adapt(iobuf&& kbatch) {
         + sizeof(model::record_batch_header::size_bytes);
 
     if (unlikely(kbatch.size_bytes() < kafka_length_diff)) {
-        vlog(klog.error, "kbatch is unexpectedly small");
+        vlog(
+          klog.warn,
+          "unable to parse kafka batch, size of the buffer is smaller than the "
+          "size of a header preamble (base offset and size_bytes), (current "
+          "buffer size: {})",
+          kbatch.size_bytes());
+        short_read = true;
         return iobuf{};
     }
     auto batch_length =

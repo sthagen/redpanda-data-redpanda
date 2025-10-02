@@ -1559,7 +1559,13 @@ class Admin:
             "get", "cloud_storage/topic_recovery?extended=true", **request_args
         )
 
-    def initialize_cluster_recovery(self, node=None, **kwargs):
+    def initialize_cluster_recovery(
+        self, node=None, cluster_uuid_override=None, **kwargs
+    ):
+        if cluster_uuid_override is not None:
+            assert "json" not in kwargs, "cannot pass cluster_uuid_override and json"
+            kwargs["json"] = {"cluster_uuid_override": cluster_uuid_override}
+
         request_args = {"node": node, **kwargs}
 
         return self._request("post", "cloud_storage/automated_recovery", **request_args)

@@ -30,6 +30,7 @@
 #include <seastar/util/log.hh>
 
 #include <chrono>
+#include <exception>
 #include <expected>
 
 using namespace std::chrono_literals;
@@ -411,7 +412,15 @@ reconciler::build_object(
             co_return std::unexpected(
               reconcile_error("abort requested while building object"));
         }
-        auto meta = co_await add_source_to_object(ctx, src);
+        auto read_result = co_await add_source_to_object(ctx, src);
+        if (!read_result.has_value()) {
+            // Log an error, we don't want a single stuck partition to
+            // prevent all partitions from being reconciled.
+            log_error(read_result.error().with_context(
+              "unable to reconcile partition {}", src->ntp()));
+            continue;
+        }
+        auto meta = read_result.value();
         if (meta.has_value()) {
             metas.emplace_back(src, std::move(meta).value());
         }
@@ -422,7 +431,7 @@ reconciler::build_object(
       [&ctx] { return ctx.close_builder(); });
     vlog(
       lg.debug,
-      "Built L1 object from {} partitions ({} partitions didn't fit)",
+      "Built L1 object from {} partitions ({} partitions were skipped)",
       metas.size(),
       sources.size() - metas.size());
     co_return built_object_metadata{
@@ -442,7 +451,8 @@ reconciler::put_object(const l1::object_id& oid, builder_context& ctx) {
     co_return std::expected<void, reconcile_error>{};
 }
 
-ss::future<std::optional<consumer_metadata>> reconciler::add_source_to_object(
+ss::future<std::expected<std::optional<consumer_metadata>, reconcile_error>>
+reconciler::add_source_to_object(
   builder_context& ctx, ss::shared_ptr<source> src) {
     vlog(
       lg.debug,
@@ -450,21 +460,21 @@ ss::future<std::optional<consumer_metadata>> reconciler::add_source_to_object(
       src->ntp(),
       src->last_reconciled_offset());
 
-    // Since the LRO is the last thing inclusive of what we uploaded to L1, we
-    // want to start reading from the next offset.
-    auto start_offset = kafka::next_offset(src->last_reconciled_offset());
-    auto reader = co_await src->make_reader(cloud_topic_log_reader_config(
-      /*start_offset=*/start_offset,
-      /*max_offset=*/kafka::offset::max(),
-      /*min_bytes=*/1,
-      /*max_bytes=*/ctx.size_budget,
-      /*type_filter=*/std::nullopt,
-      /*time=*/std::nullopt,
-      /*as=*/_as));
     reconciliation_consumer consumer(
       ctx.builder.get(), src->topic_id_partition());
-    auto metadata = co_await std::move(reader).consume(
-      std::move(consumer), model::no_timeout);
+    std::optional<consumer_metadata> metadata;
+    try {
+        auto reader = co_await src->make_reader(
+          source::reader_config{
+            .max_bytes = ctx.size_budget,
+            .as = &_as,
+          });
+        metadata = co_await std::move(reader).consume(
+          std::move(consumer), model::no_timeout);
+    } catch (...) {
+        co_return std::unexpected(reconcile_error(
+          "unable to consume from L0 partition: {}", std::current_exception()));
+    }
 
     if (!metadata.has_value()) {
         vlog(

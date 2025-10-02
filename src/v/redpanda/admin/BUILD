@@ -144,8 +144,30 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "aip_filter",
+    srcs = [
+        "aip_filter.cc",
+    ],
+    hdrs = [
+        "aip_filter.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/serde/protobuf:base",
+        "//src/v/serde/protobuf:field_mask",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+        "@fmt",
+        "@lexy",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "admin",
     srcs = [
+        "cluster_recovery.cc",
         "debug.cc",
         "debug_bundle.cc",
         "kafka.cc",
@@ -186,6 +208,7 @@ redpanda_cc_library(
     ],
     implementation_deps = [
         "//src/v/features:enterprise_feature_messages",
+        "//src/v/utils:uuid",
     ],
     visibility = ["//visibility:public"],
     deps = [

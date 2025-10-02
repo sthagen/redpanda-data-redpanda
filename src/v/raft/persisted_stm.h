@@ -248,7 +248,10 @@ protected:
      * called within its term it waits until the state machine is caught
      * up with all the events written by the previous leaders
      */
-    ss::future<bool> sync(model::timeout_clock::duration);
+    ss::future<bool> sync(
+      model::timeout_clock::duration,
+      std::optional<std::reference_wrapper<ss::abort_source>> as
+      = std::nullopt);
 
     bool _is_catching_up{false};
     model::term_id _insync_term;
@@ -258,9 +261,15 @@ protected:
 
 private:
     ss::future<> wait_offset_committed(
-      model::timeout_clock::duration, model::offset, model::term_id);
-    ss::future<bool>
-      do_sync(model::timeout_clock::duration, model::offset, model::term_id);
+      model::timeout_clock::duration,
+      model::offset,
+      model::term_id,
+      std::optional<std::reference_wrapper<ss::abort_source>> as);
+    ss::future<bool> do_sync(
+      model::timeout_clock::duration,
+      model::offset,
+      model::term_id,
+      std::optional<std::reference_wrapper<ss::abort_source>> as);
     ss::future<std::optional<stm_snapshot>> load_local_snapshot();
     ss::future<> wait_for_snapshot_hydrated();
 

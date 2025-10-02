@@ -243,6 +243,11 @@ ss::future<> controller::start(
   std::chrono::milliseconds application_start_time,
   ss::sharded<std::unique_ptr<cluster::data_migrations::group_proxy>>&
     data_migrations_group_proxy) {
+    // Abort all background activity if start() is asked to abort mid-way.
+    auto shard0_as_sub = shard0_as.subscribe([this](const auto&) noexcept {
+        return _as.invoke_on_all(&ss::abort_source::request_abort);
+    });
+
     /**
      * Switch to cluster scheduling group to ensure that all the controller
      * services are started within that scheduling group.
@@ -782,8 +787,6 @@ ss::future<> controller::start(
         .partition_autobalancing_node_availability_timeout_sec.bind(),
       config::shard_local_cfg()
         .partition_autobalancing_max_disk_usage_percent.bind(),
-      config::shard_local_cfg()
-        .storage_space_alert_free_threshold_percent.bind(),
       config::shard_local_cfg().partition_autobalancing_tick_interval_ms.bind(),
       config::shard_local_cfg().partition_autobalancing_concurrent_moves.bind(),
       config::shard_local_cfg()
@@ -1010,7 +1013,10 @@ ss::future<> controller::create_cluster(bootstrap_cluster_cmd_data cmd_data) {
             retry_chain_node retry_node(_as.local(), 300s, 5s);
             auto res
               = co_await cloud_metadata::download_highest_manifest_in_bucket(
-                _cloud_storage_api.local(), bucket_opt.value(), retry_node);
+                _cloud_storage_api.local(),
+                bucket_opt.value(),
+                retry_node,
+                config::shard_local_cfg().cloud_storage_cluster_name());
             if (res.has_value()) {
                 vlog(
                   clusterlog.info,

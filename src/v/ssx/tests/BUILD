@@ -286,3 +286,18 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "condition_variable_test",
+    timeout = "short",
+    srcs = [
+        "condition_variable_test.cc",
+    ],
+    deps = [
+        "//src/v/base",
+        "//src/v/ssx:condition_variable",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

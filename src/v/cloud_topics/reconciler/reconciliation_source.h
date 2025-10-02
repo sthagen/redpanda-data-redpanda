@@ -9,7 +9,6 @@
  */
 
 #include "cloud_topics/data_plane_api.h"
-#include "cloud_topics/log_reader_config.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"
 
@@ -62,12 +61,20 @@ public:
     virtual ss::future<std::expected<void, errc>>
     set_last_reconciled_offset(kafka::offset, ss::abort_source&) = 0;
 
+    struct reader_config {
+        // The soft limit for number of bytes to read.
+        size_t max_bytes;
+        // The abort source for when to stop the reader. The abort source must
+        // live as long as the returned reader from `make_reader`.
+        ss::abort_source* as;
+    };
+
     // Create a reader for the reconciliation source, data should only be read
     // above `last_reconciled_offset`.
     //
     // It *is* valid for this reader to outlive `source`.
     virtual ss::future<model::record_batch_reader>
-      make_reader(cloud_topic_log_reader_config) = 0;
+      make_reader(reader_config) = 0;
 
 private:
     model::ntp _ntp;

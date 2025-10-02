@@ -15,15 +15,13 @@
 #include "cluster/cloud_metadata/tests/cluster_metadata_utils.h"
 #include "cluster/cloud_metadata/tests/manual_mixin.h"
 #include "cluster/cloud_metadata/uploader.h"
-#include "cluster/cluster_recovery_reconciler.h"
+#include "cluster/cluster_recovery_manager.h"
 #include "cluster/config_frontend.h"
-#include "cluster/controller_snapshot.h"
 #include "cluster/feature_manager.h"
 #include "cluster/id_allocator_frontend.h"
 #include "cluster/partition.h"
 #include "cluster/partition_manager.h"
 #include "cluster/security_frontend.h"
-#include "cluster/tests/topic_properties_generator.h"
 #include "cluster/tests/tx_compaction_utils.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
@@ -32,6 +30,7 @@
 #include "model/namespace.h"
 #include "redpanda/application.h"
 #include "redpanda/tests/fixture.h"
+#include "security/credential_store.h"
 #include "security/scram_credential.h"
 #include "security/tests/license_utils.h"
 #include "security/types.h"
@@ -45,6 +44,7 @@
 #include <seastar/util/defer.hh>
 
 using namespace cluster::cloud_metadata;
+
 namespace {
 ss::logger logger("backend_test");
 static ss::abort_source never_abort;
@@ -231,10 +231,9 @@ TEST_P(ClusterRecoveryBackendLeadershipParamTest, TestRecoveryControllerState) {
     // Perform recovery.
     auto recover_err = app.controller->get_cluster_recovery_manager()
                          .local()
-                         .initialize_recovery(bucket)
+                         .initialize_recovery(bucket, std::nullopt)
                          .get();
     ASSERT_TRUE(recover_err.has_value());
-    ASSERT_EQ(recover_err.value(), cluster::errc::success);
 
     // If configured, start leadership transfers.
     ss::gate gate;
@@ -411,10 +410,9 @@ TEST_F(ClusterRecoveryBackendTest, TestRecoverMissingTopicManifest) {
         // Attempt a recovery.
         auto recover_err = app.controller->get_cluster_recovery_manager()
                              .local()
-                             .initialize_recovery(bucket)
+                             .initialize_recovery(bucket, std::nullopt)
                              .get();
         ASSERT_TRUE(recover_err.has_value());
-        ASSERT_EQ(recover_err.value(), cluster::errc::success);
         RPTEST_REQUIRE_EVENTUALLY(10s, [&] {
             return !app.controller->get_cluster_recovery_table()
                       .local()
@@ -510,10 +508,9 @@ TEST_F(ClusterRecoveryBackendTest, TestRecoverFailedDownload) {
     // Attempt a recovery.
     auto recover_err = app.controller->get_cluster_recovery_manager()
                          .local()
-                         .initialize_recovery(bucket)
+                         .initialize_recovery(bucket, std::nullopt)
                          .get();
     ASSERT_TRUE(recover_err.has_value());
-    ASSERT_EQ(recover_err.value(), cluster::errc::success);
     RPTEST_REQUIRE_EVENTUALLY(10s, [&] {
         return !app.controller->get_cluster_recovery_table()
                   .local()

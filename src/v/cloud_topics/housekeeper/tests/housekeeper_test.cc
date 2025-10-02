@@ -33,7 +33,9 @@ public:
       , _start_offset(start_offset) {}
 
     ss::future<> set_start_offset(
-      const model::topic_id_partition& tidp, kafka::offset offset) override {
+      const model::topic_id_partition& tidp,
+      kafka::offset offset,
+      ss::abort_source*) override {
         if (tidp == _tidp) {
             _start_offset = std::max(_start_offset, offset);
         }

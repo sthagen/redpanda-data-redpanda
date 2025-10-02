@@ -26,8 +26,8 @@ namespace cloud_topics {
 namespace {
 cluster_epoch extract_epoch(model::record_batch&& batch) {
     vassert(
-      batch.header().type == model::record_batch_type::dl_placeholder,
-      "Expected batch type to be dl_placeholder, got {}",
+      batch.header().type == model::record_batch_type::ctp_placeholder,
+      "Expected batch type to be ctp_placeholder, got {}",
       batch.header().type);
     iobuf value;
     batch.for_each_record([&value](model::record&& r) {
@@ -35,7 +35,7 @@ cluster_epoch extract_epoch(model::record_batch&& batch) {
         return ss::stop_iteration::yes;
     });
 
-    auto placeholder = serde::from_iobuf<dl_placeholder>(std::move(value));
+    auto placeholder = serde::from_iobuf<ctp_placeholder>(std::move(value));
     return placeholder.id.epoch;
 }
 
@@ -59,9 +59,10 @@ ctp_stm::ctp_stm(ss::logger& logger, raft::consensus* raft)
 
 const model::ntp& ctp_stm::ntp() const noexcept { return _raft->ntp(); }
 
-ss::future<bool>
-ctp_stm::sync_in_term(model::timeout_clock::time_point deadline) {
-    auto sync_result = co_await sync(deadline - model::timeout_clock::now());
+ss::future<bool> ctp_stm::sync_in_term(
+  model::timeout_clock::time_point deadline, ss::abort_source& as) {
+    auto sync_result = co_await sync(
+      deadline - model::timeout_clock::now(), as);
     if (!sync_result) {
         // The replica is not a leader
         vlog(_log.debug, "Not a leader");
@@ -73,7 +74,7 @@ ctp_stm::sync_in_term(model::timeout_clock::time_point deadline) {
     auto committed_offset = _raft->committed_offset();
     if (committed_offset > last_applied()) {
         // The STM is catching up.
-        auto wait_res = co_await wait_no_throw(committed_offset, deadline);
+        auto wait_res = co_await wait_no_throw(committed_offset, deadline, as);
         if (!wait_res) {
             vlog(
               _log.warn,
@@ -118,7 +119,7 @@ ss::future<std::optional<cluster_epoch>> ctp_stm::get_inactive_epoch() {
       model::next_offset(lro),
       co,
       4_MiB,
-      std::make_optional(model::record_batch_type::dl_placeholder),
+      std::make_optional(model::record_batch_type::ctp_placeholder),
       std::nullopt,
       std::nullopt);
 
@@ -154,14 +155,14 @@ ss::future<std::optional<cluster_epoch>> ctp_stm::get_inactive_epoch() {
 
 ss::future<> ctp_stm::do_apply(const model::record_batch& batch) {
     if (
-      batch.header().type != model::record_batch_type::dl_placeholder
+      batch.header().type != model::record_batch_type::ctp_placeholder
       && batch.header().type != model::record_batch_type::ctp_stm_command) {
         co_return;
     }
     vlog(_log.debug, "Applying record batch: {}", batch.header());
 
     switch (batch.header().type) {
-    case model::record_batch_type::dl_placeholder:
+    case model::record_batch_type::ctp_placeholder:
         apply_placeholder(batch);
         break;
 
@@ -214,7 +215,7 @@ void ctp_stm::apply_placeholder(const model::record_batch& batch) {
         value = std::move(r).release_value();
         return ss::stop_iteration::yes;
     });
-    auto placeholder = serde::from_iobuf<dl_placeholder>(std::move(value));
+    auto placeholder = serde::from_iobuf<ctp_placeholder>(std::move(value));
     auto id = placeholder.id;
     // this assertion is made here rather than inside the state object itself
     // because the assertion is about the physical content of the log rather

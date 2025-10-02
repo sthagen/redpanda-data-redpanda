@@ -18,6 +18,10 @@ namespace cluster {
 class partition;
 }
 
+namespace storage {
+struct local_log_reader_config;
+}
+
 namespace cloud_topics {
 class data_plane_api;
 
@@ -86,7 +90,10 @@ private:
 
     bool cache_enabled() const;
 
-    // Fetch L0 meta batches from the underlying partition
+    // Prepare a local log reader configuration for reading placeholder and
+    // other metadata batches from the CTP.
+    storage::local_log_reader_config ctp_read_config();
+
     ss::future<> fetch_metadata(model::timeout_clock::time_point deadline);
     ss::future<> materialize_batches(model::timeout_clock::time_point deadline);
     void consume_materialized_batches(

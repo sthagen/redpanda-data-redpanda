@@ -75,4 +75,7 @@ validate_iceberg_rest_catalog_config(const configuration& config);
 std::optional<ss::sstring>
 validate_consumer_group_metrics(const std::vector<ss::sstring>& metrics);
 
+std::optional<ss::sstring>
+validate_cloud_storage_cluster_name(const std::optional<ss::sstring>&);
+
 }; // namespace config

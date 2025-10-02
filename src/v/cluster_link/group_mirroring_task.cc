@@ -751,21 +751,37 @@ group_mirroring_task::do_find_coordinator(
     req.data.key_type = kafka::coordinator_type::group;
     req.data.key = group_id;
     // limit version to 3 as the next one use batched api
-    auto resp = co_await get_cluster_connection().dispatch_to_any(
-      std::move(req),
-      std::min(max_version, std::min(max_version, kafka::api_version{3})));
+    try {
+        auto resp = co_await get_cluster_connection().dispatch_to_any(
+          std::move(req),
+          std::min(max_version, std::min(max_version, kafka::api_version{3})));
 
-    if (resp.data.error_code != kafka::error_code::none) {
-        vlog(
-          logger().warn,
-          "Error finding coordinator for {} - {}",
+        if (resp.data.error_code != kafka::error_code::none) {
+            vlog(
+              logger().warn,
+              "Error finding coordinator for {} - {}",
+              group_id,
+              resp.data.error_code);
+            co_return std::unexpected(error(
+              ssx::sformat("Error finding coordinator for {}", group_id),
+              resp.data.error_code));
+        }
+        co_return resp.data.node_id;
+    } catch (...) {
+        auto lvl = ssx::is_shutdown_exception(std::current_exception())
+                     ? ss::log_level::trace
+                     : ss::log_level::warn;
+        vlogl(
+          logger(),
+          lvl,
+          "Exception thrown while finding coordinator for group {} - {}",
           group_id,
-          resp.data.error_code);
-        co_return std::unexpected(error(
-          ssx::sformat("Error finding coordinator for {}", group_id),
-          resp.data.error_code));
+          std::current_exception());
+        co_return std::unexpected<error>(ssx::sformat(
+          "Exception thrown while finding coordinator for group {} - {}",
+          group_id,
+          std::current_exception()));
     }
-    co_return resp.data.node_id;
 }
 
 ss::future<std::expected<
@@ -779,22 +795,38 @@ group_mirroring_task::do_find_coordinator_batched(
       group_ids.size());
     kafka::find_coordinator_request req;
     req.data.key_type = kafka::coordinator_type::group;
+    const auto group_cnt = group_ids.size();
     req.data.coordinator_keys = std::move(group_ids);
+    try {
+        auto resp = co_await get_cluster_connection().dispatch_to_any(
+          std::move(req), std::min(max_version, max_version));
 
-    auto resp = co_await get_cluster_connection().dispatch_to_any(
-      std::move(req), std::min(max_version, max_version));
+        if (resp.data.error_code != kafka::error_code::none) {
+            vlog(
+              logger().warn,
+              "Error finding coordinator for groups - {}",
+              resp.data.error_code);
+            co_return std::unexpected(error(
+              ssx::sformat("Error finding coordinator for groups"),
+              resp.data.error_code));
+        }
 
-    if (resp.data.error_code != kafka::error_code::none) {
-        vlog(
-          logger().warn,
-          "Error finding coordinator for groups - {}",
-          resp.data.error_code);
-        co_return std::unexpected(error(
-          ssx::sformat("Error finding coordinator for groups"),
-          resp.data.error_code));
+        co_return std::move(resp.data.coordinators);
+    } catch (...) {
+        auto lvl = ssx::is_shutdown_exception(std::current_exception())
+                     ? ss::log_level::trace
+                     : ss::log_level::warn;
+        vlogl(
+          logger(),
+          lvl,
+          "Exception thrown while finding coordinators for {} groups - {}",
+          group_cnt,
+          std::current_exception());
+        co_return std::unexpected<error>(ssx::sformat(
+          "Exception thrown while finding coordinators for {} groups - {}",
+          group_cnt,
+          std::current_exception()));
     }
-
-    co_return std::move(resp.data.coordinators);
 }
 
 std::string_view

@@ -6,9 +6,13 @@ from ducktape.utils.util import wait_until
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
 from rptest.services.cluster import cluster
+from rptest.services.kgo_verifier_services import KgoVerifierConsumerGroupConsumer
 from rptest.services.redpanda import RESTART_LOG_ALLOW_LIST, MetricsEndpoint
-from rptest.tests.end_to_end import EndToEndTest
+
+from rptest.tests.nodes_decommissioning_test import KgoVerifierProducer
 from rptest.tests.partition_movement import PartitionMovementMixin
+from rptest.tests.prealloc_nodes import PreallocNodesTest
+
 from rptest.util import wait_for_recovery_throttle_rate
 from rptest.utils.mode_checks import cleanup_on_early_exit, skip_debug_mode
 
@@ -20,35 +24,71 @@ def is_in_replica_set(replicas, id):
     return next((r for r in replicas if r["node_id"] == id), None) is not None
 
 
-class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
+class PartitionMoveInterruption(PartitionMovementMixin, PreallocNodesTest):
     """
     Basic test verifying partition movement cancellation
     """
 
-    def __init__(self, ctx, *args, **kwargs):
+    def __init__(self, test_context, *args, **kwargs):
         super(PartitionMoveInterruption, self).__init__(
-            ctx,
+            test_context,
             *args,
+            num_brokers=4,
             extra_rp_conf={
                 # Disable leader balancer, as this test is doing its own
                 # partition movement and the balancer would interfere
                 "enable_leader_balancer": False,
                 "partition_autobalancing_mode": "off",
+                "default_topic_replications": 3,
+                "compacted_log_segment_size": 1 * (2**20),
+                "controller_snapshot_max_age_sec": 3,
             },
+            node_prealloc_count=1,
             **kwargs,
         )
-
-        self._ctx = ctx
-        self.moves = 10
+        self.test_topic: str = ""
+        self.moves = 5
         self.partition_count = 20
         self.consumer_timeout_seconds = 90
-
+        self.msg_size = 64
         if self.debug_mode:
-            self.throughput = 500
             self.min_records = 5000
         else:
-            self.throughput = 10000
             self.min_records = 100000
+
+    def start_producer(self):
+        self.producer = KgoVerifierProducer(
+            self.test_context,
+            self.redpanda,
+            self.test_topic,
+            self.msg_size,
+            self.min_records,
+            custom_node=self.preallocated_nodes,
+            key_set_cardinality=500,
+        )
+
+        self.producer.start(clean=False)
+
+        wait_until(
+            lambda: self.producer.produce_status.acked > 10,
+            timeout_sec=120,
+            backoff_sec=1,
+        )
+
+    def start_consumer(self, compacted, tolerate_data_loss):
+        self.consumer = KgoVerifierConsumerGroupConsumer(
+            self.test_context,
+            self.redpanda,
+            self.test_topic,
+            self.msg_size,
+            readers=5,
+            nodes=self.preallocated_nodes,
+            compacted=compacted,
+            group_name="pmi-consumer",
+            tolerate_data_loss=tolerate_data_loss,
+        )
+
+        self.consumer.start(clean=False)
 
     def get_moving_to_node_metrics(self, node):
         metrics = self.redpanda.metrics_sample(
@@ -146,34 +186,19 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
         self.redpanda.set_cluster_config({"raft_learner_recovery_rate": str(new_rate)})
         wait_for_recovery_throttle_rate(redpanda=self.redpanda, new_rate=new_rate)
 
-    @cluster(num_nodes=7, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
     @matrix(
         replication_factor=[1, 3],
         unclean_abort=[True, False],
         force_back=[True, False],
-        recovery=[NO_RECOVERY, RESTART_RECOVERY],
         compacted=[False, True],
     )
     def test_cancelling_partition_move(
-        self, replication_factor, unclean_abort, force_back, recovery, compacted
+        self, replication_factor, unclean_abort, force_back, compacted
     ):
         """
         Cancel partition moving with active consumer / producer
         """
-
-        self.start_redpanda(
-            num_nodes=5,
-            extra_rp_conf={
-                "default_topic_replications": 3,
-                "compacted_log_segment_size": 1 * (2**20),
-                "controller_snapshot_max_age_sec": 3,
-            },
-        )
-        # skip compacted topics tests in debug mode
-        if compacted and self.debug_mode:
-            cleanup_on_early_exit(self)
-            return
-
         spec = TopicSpec(
             partition_count=self.partition_count,
             replication_factor=replication_factor,
@@ -183,86 +208,49 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
         )
 
         self.client().create_topic(spec)
-        self.topic = spec.name
+        self.test_topic = spec.name
 
-        self.start_producer(
-            1, throughput=self.throughput, repeating_keys=100 if compacted else None
-        )
+        self.start_producer()
         if not compacted:
-            self.start_consumer(1)
+            self.start_consumer(compacted=compacted, tolerate_data_loss=unclean_abort)
         # throttle recovery to prevent partition move from finishing
         self._throttle_recovery(10)
 
-        for _ in range(self.moves):
+        for i in range(self.moves):
             self._random_move_and_cancel(
                 unclean_abort=unclean_abort, force_back=force_back
             )
-            if recovery == RESTART_RECOVERY:
+            if i % 2 == 0:
                 # restart one of the nodes after each move
                 self.redpanda.restart_nodes([random.choice(self.redpanda.nodes)])
         # start consumer late in the process for the compaction to trigger
         if compacted:
-            self.start_consumer(1, verify_offsets=False)
-        if unclean_abort or force_back:
-            # do not run offsets validation as we may experience data loss since partition movement is forcibly cancelling
-            wait_until(lambda: self.producer.num_acked > 20000, timeout_sec=60)
+            self.start_consumer(compacted=compacted, tolerate_data_loss=unclean_abort)
 
-            self.producer.stop()
-            self.consumer.stop()
-        else:
-            self.run_validation(
-                enable_idempotence=False,
-                consumer_timeout_sec=self.consumer_timeout_seconds,
-                min_records=self.min_records,
-                enable_compaction=compacted,
-            )
+        self.producer.wait()
+        self.consumer.wait()
 
-    @cluster(num_nodes=7, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
     @matrix(
         replication_factor=[1, 3],
         unclean_abort=[True, False],
-        recovery=[NO_RECOVERY, RESTART_RECOVERY],
-        compacted=[False, True],
     )
-    def test_cancelling_partition_move_x_core(
-        self, replication_factor, unclean_abort, recovery, compacted
-    ):
+    def test_cancelling_partition_move_x_core(self, replication_factor, unclean_abort):
         """
         Cancel partition moving with active consumer / producer
         """
 
-        self.start_redpanda(
-            num_nodes=5,
-            extra_rp_conf={
-                "default_topic_replications": 3,
-                # make segments small to ensure that they are compacted during
-                # the test (only sealed i.e. not being written segments are compacted)
-                "compacted_log_segment_size": 1 * (2**20),
-            },
-        )
-
-        # skip compacted topics tests in debug mode
-        if compacted and self.debug_mode:
-            cleanup_on_early_exit(self)
-            return
-
         spec = TopicSpec(
             partition_count=self.partition_count,
             replication_factor=replication_factor,
-            cleanup_policy=TopicSpec.CLEANUP_COMPACT
-            if compacted
-            else TopicSpec.CLEANUP_DELETE,
+            cleanup_policy=TopicSpec.CLEANUP_COMPACT,
         )
 
         self.client().create_topic(spec)
-        self.topic = spec.name
+        self.test_topic = spec.name
 
-        self.start_producer(
-            1, throughput=self.throughput, repeating_keys=100 if compacted else None
-        )
-
-        self.start_consumer(1, verify_offsets=(not compacted))
-        self.await_startup()
+        self.start_producer()
+        self.start_consumer(compacted=True, tolerate_data_loss=unclean_abort)
         # throttle recovery to prevent partition move from finishing
         self._throttle_recovery(10)
 
@@ -272,11 +260,11 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
             x_core = i < self.moves / 2
 
             prev_assignment, new_assignment = self._dispatch_random_partition_move(
-                topic=self.topic, partition=partition, x_core_only=x_core
+                topic=self.test_topic, partition=partition, x_core_only=x_core
             )
             if x_core:
                 self._wait_post_move(
-                    topic=self.topic,
+                    topic=self.test_topic,
                     partition=partition,
                     assignments=new_assignment,
                     timeout_sec=60,
@@ -284,27 +272,16 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
             else:
                 self._request_move_cancel(
                     unclean_abort=unclean_abort,
-                    topic=self.topic,
+                    topic=self.test_topic,
                     partition=partition,
                     previous_assignment=prev_assignment,
                 )
-            if recovery == RESTART_RECOVERY:
+            if i % 2 == 0:
                 # restart one of the nodes after each move
                 self.redpanda.restart_nodes([random.choice(self.redpanda.nodes)])
 
-        if unclean_abort:
-            # do not run offsets validation as we may experience data loss since partition movement is forcibly cancelling
-            wait_until(lambda: self.producer.num_acked > 20000, timeout_sec=60)
-
-            self.producer.stop()
-            self.consumer.stop()
-        else:
-            self.run_validation(
-                enable_idempotence=False,
-                consumer_timeout_sec=self.consumer_timeout_seconds,
-                min_records=self.min_records,
-                enable_compaction=compacted,
-            )
+        self.producer.wait()
+        self.consumer.wait()
 
     def increase_replication_factor(
         self, topic, partition, requested_replication_factor
@@ -326,39 +303,36 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
                 continue
             assignments.append({"node_id": b["node_id"]})
 
-        self._set_partition_assignments(self.topic, partition, assignments, admin)
-        self._wait_post_move(self.topic, partition, assignments, 60)
+        self._set_partition_assignments(self.test_topic, partition, assignments, admin)
+        self._wait_post_move(self.test_topic, partition, assignments, 60)
 
     @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_forced_cancellation(self):
         partitions = 4
-        self.start_redpanda(
-            num_nodes=3,
-            extra_rp_conf={"default_topic_replications": 3},
-        )
 
         spec = TopicSpec(
             name="panda-test-topic", partition_count=partitions, replication_factor=3
         )
 
         self.client().create_topic(spec)
-        self.topic = spec.name
+        self.test_topic = spec.name
 
-        self.start_producer(1, throughput=self.throughput)
-        self.start_consumer(1)
-        self.await_startup()
+        self.start_producer()
+        self.start_consumer(compacted=False, tolerate_data_loss=True)
 
         admin = Admin(self.redpanda)
         partition = random.randint(0, partitions - 1)
 
         # get current assignments
-        assignment = self._get_node_assignments(admin, self.topic, partition=partition)
+        assignment = self._get_node_assignments(
+            admin, self.test_topic, partition=partition
+        )
 
         # drop one of the replicas, new quorum requires both of them to be up
         new_assignment = assignment[0:2]
 
         self.logger.info(
-            f"new assignment for {self.topic}/{partition}: {new_assignment}"
+            f"new assignment for {self.test_topic}/{partition}: {new_assignment}"
         )
         # throttle recovery to prevent partition move from finishing
         # self._throttle_recovery(10)
@@ -375,20 +349,22 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
         wait_until(new_controller, 10, 1)
 
         # update replica set
-        self._set_partition_assignments(self.topic, partition, new_assignment, admin)
+        self._set_partition_assignments(
+            self.test_topic, partition, new_assignment, admin
+        )
 
-        self._wait_for_move_in_progress(self.topic, partition)
+        self._wait_for_move_in_progress(self.test_topic, partition)
 
         # abort moving partition
-        admin.cancel_partition_move(self.topic, partition=partition)
-        admin.force_abort_partition_move(self.topic, partition=partition)
+        admin.cancel_partition_move(self.test_topic, partition=partition)
+        admin.force_abort_partition_move(self.test_topic, partition=partition)
 
         # # restart the node
         # self.redpanda.start_node(self.redpanda.get_node(to_stop))
 
         # wait for previous assignment to be set
         def cancelled():
-            info = admin.get_partitions(self.topic, partition)
+            info = admin.get_partitions(self.test_topic, partition)
 
             converged = self._equal_assignments(info["replicas"], assignment)
             return converged and info["status"] == "done"
@@ -396,32 +372,22 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
         # wait until redpanda reports complete
         wait_until(cancelled, timeout_sec=30, backoff_sec=2)
 
-        # do not run offsets validation as we may experience data loss since cancellation is forced
-        wait_until(lambda: self.producer.num_acked > 20000, timeout_sec=60)
+        self.producer.wait()
+        self.consumer.wait()
 
-        self.producer.stop()
-        self.consumer.stop()
-
-    @cluster(num_nodes=7)
+    @cluster(num_nodes=5)
     def test_cancelling_all_moves_in_cluster(self):
         """
         Cancel all partition moves in the cluster
         """
-        self.start_redpanda(
-            num_nodes=5,
-            extra_rp_conf={
-                "default_topic_replications": 3,
-            },
-        )
 
         spec = TopicSpec(partition_count=self.partition_count, replication_factor=3)
 
         self.client().create_topic(spec)
-        self.topic = spec.name
+        self.test_topic = spec.name
 
-        self.start_producer(1, throughput=self.throughput)
-        self.start_consumer(1)
-        self.await_startup()
+        self.start_producer()
+        self.start_consumer(compacted=False, tolerate_data_loss=False)
         # throttle recovery to prevent partition move from finishing
         self._throttle_recovery(10)
         current_movements = {}
@@ -430,7 +396,7 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
             partition = random.choice(partitions)
             partitions.remove(partition)
             current_movements[partition] = self._dispatch_random_partition_move(
-                self.topic, partition
+                self.test_topic, partition
             )
 
         self.logger.info(f"moving {current_movements}")
@@ -442,12 +408,8 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
         admin.cancel_all_reconfigurations()
 
         wait_until(lambda: len(admin.list_reconfigurations()) == 0, 60, 1)
-
-        self.run_validation(
-            enable_idempotence=False,
-            consumer_timeout_sec=self.consumer_timeout_seconds,
-            min_records=self.min_records,
-        )
+        self.producer.wait()
+        self.consumer.wait()
 
     def is_moving_to_node(previous_replicas, current_replicas, id):
         return is_in_replica_set(current_replicas, id) and not is_in_replica_set(
@@ -459,26 +421,20 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
             current_replicas, id
         )
 
-    @cluster(num_nodes=7)
+    @cluster(num_nodes=5)
     def test_cancelling_all_moves_from_node(self):
         """
         Cancel all partition moves directed to/from given node
         """
-        self.start_redpanda(
-            num_nodes=5,
-            extra_rp_conf={
-                "default_topic_replications": 3,
-            },
-        )
 
         spec = TopicSpec(partition_count=self.partition_count, replication_factor=3)
 
         self.client().create_topic(spec)
-        self.topic = spec.name
+        self.test_topic = spec.name
 
-        self.start_producer(1, throughput=self.throughput)
-        self.start_consumer(1)
-        self.await_startup()
+        self.start_producer()
+        self.start_consumer(compacted=False, tolerate_data_loss=False)
+
         # throttle recovery to prevent partition move from finishing
         self._throttle_recovery(10)
         current_movements = {}
@@ -487,7 +443,7 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
             partition = random.choice(partitions)
             partitions.remove(partition)
             current_movements[partition] = self._dispatch_random_partition_move(
-                self.topic, partition
+                self.test_topic, partition
             )
 
         self.logger.info(f"moving {current_movements}")
@@ -525,11 +481,8 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
 
         wait_until(has_no_node_reconfigurations, 60, 1)
 
-        self.run_validation(
-            enable_idempotence=False,
-            consumer_timeout_sec=self.consumer_timeout_seconds,
-            min_records=self.min_records,
-        )
+        self.producer.wait()
+        self.consumer.wait()
 
     def get_node_by_id(self, id):
         for n in self.redpanda.nodes:
@@ -537,28 +490,18 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
                 return n
         return None
 
-    @cluster(num_nodes=7, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
     def test_cancelling_partition_move_node_down(self):
         """
         Cancel partition moving with active consumer / producer
         """
 
-        self.start_redpanda(
-            num_nodes=5,
-            extra_rp_conf={
-                "default_topic_replications": 3,
-            },
-        )
-
         spec = TopicSpec(partition_count=self.partition_count, replication_factor=3)
 
         self.client().create_topic(spec)
-        self.topic = spec.name
-        self.start_producer(1, throughput=self.throughput)
-        self.start_consumer(1)
-        self.await_startup(
-            min_records=self.throughput, timeout_sec=self.consumer_timeout_seconds
-        )
+        self.test_topic = spec.name
+        self.start_producer()
+        self.start_consumer(compacted=False, tolerate_data_loss=False)
 
         metadata = self.client().describe_topics()
         topic, partition = self._random_partition(metadata)
@@ -601,11 +544,6 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
         self._wait_for_move_in_progress(topic, partition)
 
         admin.cancel_partition_move(topic, partition)
-        self.run_validation(
-            enable_idempotence=False,
-            consumer_timeout_sec=self.consumer_timeout_seconds,
-            min_records=self.min_records,
-        )
 
         def move_finished():
             for n in self.redpanda.started_nodes():
@@ -623,18 +561,14 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
 
         wait_until(move_finished, 30, backoff_sec=1)
 
+        self.producer.wait()
+        self.consumer.wait()
+
     # TODO: investigate slow startups in debug mode
     @skip_debug_mode
-    @cluster(num_nodes=7, log_allow_list=RESTART_LOG_ALLOW_LIST)
+    @cluster(num_nodes=5, log_allow_list=RESTART_LOG_ALLOW_LIST)
     @matrix(replication_factor=[1, 3])
     def test_cancellations_interrupted_with_restarts(self, replication_factor):
-        self.start_redpanda(
-            num_nodes=5,
-            extra_rp_conf={
-                "default_topic_replications": 3,
-            },
-        )
-
         spec = TopicSpec(
             name="test-move-topic",
             partition_count=self.partition_count,
@@ -642,13 +576,10 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
         )
 
         self.client().create_topic(spec)
-        self.topic = spec.name
+        self.test_topic = spec.name
 
-        self.start_producer(1, throughput=self.throughput)
-        self.start_consumer(1)
-        self.await_startup(
-            min_records=self.throughput, timeout_sec=self.consumer_timeout_seconds
-        )
+        self.start_producer()
+        self.start_consumer(compacted=False, tolerate_data_loss=False)
 
         topic = spec.name
         partition = 0
@@ -714,8 +645,5 @@ class PartitionMoveInterruption(PartitionMovementMixin, EndToEndTest):
 
             wait_until(move_finished, 80, backoff_sec=1)
 
-        self.run_validation(
-            enable_idempotence=False,
-            consumer_timeout_sec=self.consumer_timeout_seconds,
-            min_records=self.min_records,
-        )
+        self.producer.wait()
+        self.consumer.wait()

@@ -85,7 +85,6 @@ redpanda_test_cc_library(
     visibility = ["//visibility:private"],
     deps = [
         "//src/v/base",
-        "//src/v/random:generators",
         "@seastar//:benchmark",
     ],
 )

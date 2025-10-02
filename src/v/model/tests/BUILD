@@ -240,3 +240,16 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "record_batch_reader_gtest",
+    timeout = "short",
+    srcs = ["record_batch_reader_gtest.cc"],
+    cpu = 1,
+    deps = [
+        ":random",
+        "//src/v/model",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+    ],
+)

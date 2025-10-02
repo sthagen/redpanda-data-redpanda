@@ -47,8 +47,9 @@ public:
 
         // Update the start offset to the partition, this must be an
         // idempotent operation.
-        virtual ss::future<>
-        set_start_offset(const model::topic_id_partition&, kafka::offset) = 0;
+        virtual ss::future<> set_start_offset(
+          const model::topic_id_partition&, kafka::offset, ss::abort_source*)
+          = 0;
     };
 
     // A wrapper around a source of configuration for a give topic id +

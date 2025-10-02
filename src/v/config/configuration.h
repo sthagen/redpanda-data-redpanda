@@ -464,6 +464,7 @@ struct configuration final : public config_store {
     property<bool> cloud_storage_disable_read_replica_loop_for_tests;
     property<bool> disable_cluster_recovery_loop_for_tests;
     property<bool> enable_cluster_metadata_upload_loop;
+    property<std::optional<ss::sstring>> cloud_storage_cluster_name;
     property<size_t> cloud_storage_max_segments_pending_deletion_per_partition;
     property<bool> cloud_storage_enable_compacted_topic_reupload;
     property<size_t> cloud_storage_recovery_temporary_retention_bytes_default;

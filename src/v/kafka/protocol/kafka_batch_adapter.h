@@ -62,9 +62,11 @@ inline constexpr size_t kafka_header_size = sizeof(int64_t) + // base offset
 class kafka_batch_adapter {
 public:
     iobuf adapt(iobuf&&);
-
-    bool v2_format;
-    bool valid_crc;
+    /**
+     * Default to false, the values are set after calling adapt().
+     */
+    bool v2_format{false};
+    bool valid_crc{false};
     bool legacy_error{false};
     bool short_read{false};
 

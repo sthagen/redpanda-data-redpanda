@@ -149,6 +149,7 @@ redpanda_cc_library(
         "//src/v/serde:optional",
         "//src/v/serde:vector",
         "//src/v/ssx:async_algorithm",
+        "//src/v/ssx:condition_variable",
         "//src/v/ssx:future_util",
         "//src/v/ssx:semaphore",
         "//src/v/ssx:sformat",

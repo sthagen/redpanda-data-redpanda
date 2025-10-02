@@ -117,10 +117,16 @@ public:
     auto manifest() const { return _term_manifest; }
 
 private:
+    // Uploads cluster name reference object if configured to do so.
+    // Relevant for buckets containing metadata from multiple clusters.
+    ss::future<error_outcome>
+    maybe_upload_cluster_name_reference(retry_chain_node& retry_node);
+
     // Returns true if we're no longer the leader or the term has changed since
     // the input term.
     ss::future<bool> term_has_changed(model::term_id);
 
+private:
     raft::group_manager& _group_manager;
     storage::api& _storage;
     model::cluster_uuid _cluster_uuid;

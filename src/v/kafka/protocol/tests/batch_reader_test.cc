@@ -271,6 +271,57 @@ SEASTAR_THREAD_TEST_CASE(batch_reader_truncated_last_batch) {
       truncated_batches.back().base_offset());
 }
 
+SEASTAR_THREAD_TEST_CASE(
+  batch_reader_truncated_last_batch_varying_truncation_point) {
+    auto ctx = make_context(base_offset, many_batches);
+    // truncate the last batch
+
+    const auto all_batches
+      = model::consume_reader_to_memory(
+          model::make_record_batch_reader<kafka::batch_reader>(
+            ctx.record_set.copy()),
+          model::no_timeout)
+          .get();
+    for (size_t i = 1; i < model::packed_record_batch_header_size + 10; ++i) {
+        const auto last_batch_sz = all_batches.back().header().size_bytes;
+        auto truncated_buffer = ctx.record_set.copy().share(
+          0, ctx.record_set.size_bytes() - last_batch_sz + i);
+        auto non_tolerating_reader
+          = model::make_record_batch_reader<kafka::batch_reader>(
+            truncated_buffer.copy());
+        // reader is expected to fail on truncated batch, as the flag was not
+        // set to tolerate the truncation
+        BOOST_REQUIRE_EXCEPTION(
+          model::consume_reader_to_memory(
+            // NOLINTNEXTLINE(bugprone-use-after-move)
+            std::move(non_tolerating_reader),
+            model::no_timeout)
+            .get(),
+          kafka::exception,
+          [](const kafka::exception& e) {
+              return e.error == kafka::error_code::corrupt_message;
+          });
+
+        auto tolerating_reader
+          = model::make_record_batch_reader<kafka::batch_reader>(
+            truncated_buffer.copy(),
+            kafka::batch_reader::tolerate_partial_last_batch::yes);
+
+        auto truncated_batches = model::consume_reader_to_memory(
+                                   std::move(tolerating_reader),
+                                   model::no_timeout)
+                                   .get();
+
+        /**
+         * Validate that indeed the last batch was truncated.
+         */
+        BOOST_REQUIRE_EQUAL(truncated_batches.size(), all_batches.size() - 1);
+        BOOST_REQUIRE_EQUAL(
+          std::next(all_batches.rbegin())->base_offset(),
+          truncated_batches.back().base_offset());
+    }
+}
+
 SEASTAR_THREAD_TEST_CASE(batch_reader_truncated_batch_in_the_middle) {
     /** make some batches */
     auto input = model::test::make_random_batches(base_offset, 10).get();

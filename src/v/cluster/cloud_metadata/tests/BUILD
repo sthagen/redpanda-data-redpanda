@@ -59,7 +59,6 @@ redpanda_cc_gtest(
         "//src/v/cloud_storage",
         "//src/v/cloud_storage:types",
         "//src/v/cluster",
-        "//src/v/cluster/tests:topic_properties_generator",
         "//src/v/cluster/tests:tx_compaction_utils_gtest",
         "//src/v/config",
         "//src/v/model",
@@ -203,6 +202,21 @@ redpanda_cc_gtest(
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:scoped_config",
         "//src/v/utils:retry_chain_node",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "key_utils_test",
+    timeout = "short",
+    srcs = [
+        "key_utils_test.cc",
+    ],
+    cpu = 1,
+    deps = [
+        "//src/v/cluster",
+        "//src/v/test_utils:gtest",
         "@googletest//:gtest",
         "@seastar",
     ],

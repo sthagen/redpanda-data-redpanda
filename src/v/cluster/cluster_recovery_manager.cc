@@ -10,18 +10,14 @@
 #include "cluster/cluster_recovery_manager.h"
 
 #include "base/seastarx.h"
-#include "cloud_storage/cache_service.h"
 #include "cloud_storage/remote.h"
-#include "cloud_storage/remote_file.h"
 #include "cluster/cloud_metadata/cluster_manifest.h"
+#include "cluster/cloud_metadata/error_outcome.h"
 #include "cluster/cloud_metadata/manifest_downloads.h"
 #include "cluster/cluster_recovery_table.h"
 #include "cluster/cluster_utils.h"
 #include "cluster/commands.h"
-#include "cluster/config_frontend.h"
 #include "cluster/errc.h"
-#include "cluster/logger.h"
-#include "cluster/security_frontend.h"
 #include "config/configuration.h"
 
 #include <seastar/core/abort_source.hh>
@@ -79,48 +75,184 @@ cluster_recovery_manager::sync_leader(ss::abort_source& as) {
     co_return synced_term;
 }
 
-ss::future<result<cluster::errc, cloud_metadata::error_outcome>>
+namespace {
+
+ss::future<checked<void, cluster_recovery_manager::errc>> check_can_use_uuid(
+  cloud_storage::remote& _remote,
+  cloud_storage_clients::bucket_name bucket,
+  std::optional<ss::sstring> cluster_name,
+  model::cluster_uuid cluster_uuid_override,
+  retry_chain_node& fib) {
+    // Validate that the provided cluster UUID is owned by the configured
+    // cluster name or that the bucket does not contain any cluster
+    // name references.
+    if (cluster_name.has_value()) {
+        auto uses_cluster_id_res
+          = co_await cluster::cloud_metadata::check_cluster_name_owns_uuid(
+            _remote, bucket, *cluster_name, cluster_uuid_override, fib);
+        if (!uses_cluster_id_res.has_value()) {
+            vlog(
+              clusterlog.warn,
+              "Error checking cluster name ownership: {}",
+              uses_cluster_id_res.error());
+            co_return cluster_recovery_manager::errc::unknown;
+        }
+        if (!uses_cluster_id_res.value()) {
+            vlog(
+              clusterlog.warn,
+              "Cluster name {} does not own cluster UUID {}. Cannot proceed.",
+              *cluster_name,
+              cluster_uuid_override);
+            co_return cluster_recovery_manager::errc::misconfigured;
+        }
+    } else {
+        // If cluster name is not configured we need to error out if the
+        // bucket contains any cluster name references to avoid customer
+        // shooting themselves in the foot.
+        auto uses_cluster_id_res = co_await cluster::cloud_metadata::
+          check_bucket_contains_cluster_names(_remote, bucket, fib);
+        if (!uses_cluster_id_res.has_value()) {
+            vlog(
+              clusterlog.warn,
+              "Error checking if bucket contains cluster names: {}",
+              uses_cluster_id_res.error());
+            co_return cluster_recovery_manager::errc::unknown;
+        }
+        if (uses_cluster_id_res.value()) {
+            vlog(
+              clusterlog.warn,
+              "Cluster name references exist in bucket {}, but no cluster "
+              "name is configured. Cannot proceed. Please check "
+              "`cloud_storage_cluster_name` config property.",
+              bucket());
+            co_return cluster_recovery_manager::errc::misconfigured;
+        }
+    }
+
+    co_return outcome::success();
+}
+
+ss::future<checked<
+  cloud_metadata::cluster_metadata_manifest,
+  cluster_recovery_manager::errc>>
+download_manifest_for_recovery(
+  cloud_storage::remote& _remote,
+  cloud_storage_clients::bucket_name bucket,
+  std::optional<model::cluster_uuid> cluster_uuid_override,
+  std::optional<ss::sstring> cluster_name,
+  model::cluster_uuid ignored_uuid,
+  retry_chain_node& fib) {
+    if (!cluster_uuid_override.has_value()) {
+        vlog(
+          clusterlog.info,
+          "No cluster UUID override provided. Will search for latest manifest "
+          "(cluster name: {})",
+          cluster_name);
+        auto cluster_manifest_res = co_await cluster::cloud_metadata::
+          download_highest_manifest_in_bucket(
+            _remote, bucket, fib, cluster_name, ignored_uuid);
+        if (cluster_manifest_res.has_error()) {
+            vlog(
+              clusterlog.warn,
+              "Error finding cluster manifests: {}",
+              cluster_manifest_res.error());
+            if (
+              cluster_manifest_res.error()
+              == cloud_metadata::error_outcome::no_matching_metadata) {
+                co_return cluster_recovery_manager::errc::no_matching_metadata;
+            }
+            co_return cluster_recovery_manager::errc::unknown;
+        }
+        co_return std::move(cluster_manifest_res.value());
+    }
+
+    vlog(
+      clusterlog.info,
+      "Using user-provided cluster UUID override for recovery (cluster uuid "
+      "override: {}, cluster name: {})",
+      cluster_uuid_override,
+      cluster_name);
+
+    auto can_use_res = co_await check_can_use_uuid(
+      _remote, bucket, cluster_name, *cluster_uuid_override, fib);
+    if (can_use_res.has_error()) {
+        co_return can_use_res.error();
+    }
+
+    auto cluster_manifest_res
+      = co_await cluster::cloud_metadata::download_highest_manifest_for_cluster(
+        _remote, cluster_uuid_override.value(), bucket, fib);
+    if (cluster_manifest_res.has_error()) {
+        vlog(
+          clusterlog.warn,
+          "Error finding cluster manifests for cluster UUID "
+          "{}: {}",
+          cluster_uuid_override.value(),
+          cluster_manifest_res.error());
+        if (
+          cluster_manifest_res.error()
+          == cloud_metadata::error_outcome::no_matching_metadata) {
+            co_return cluster_recovery_manager::errc::no_matching_metadata;
+        }
+        co_return cluster_recovery_manager::errc::unknown;
+    }
+    co_return std::move(cluster_manifest_res.value());
+}
+
+} // namespace
+
+ss::future<checked<void, cluster_recovery_manager::errc>>
 cluster_recovery_manager::initialize_recovery(
-  cloud_storage_clients::bucket_name bucket) {
+  cloud_storage_clients::bucket_name bucket,
+  std::optional<model::cluster_uuid> cluster_uuid_override) {
     if (!_remote.local_is_initialized()) {
-        co_return cluster::errc::invalid_request;
+        vlog(clusterlog.warn, "Cloud storage is not configured/initialized");
+        co_return errc::misconfigured;
     }
     if (config::node().recovery_mode_enabled()) {
-        co_return cluster::errc::feature_disabled;
+        vlog(
+          clusterlog.warn, "Node is in recovery mode, cannot start recovery");
+        co_return errc::misconfigured;
     }
     auto synced_term = co_await sync_leader(_sharded_as.local());
     if (!synced_term.has_value()) {
-        co_return cluster::errc::not_leader_controller;
+        vlog(clusterlog.warn, "Not leader, cannot start recovery");
+        co_return errc::not_a_leader;
     }
     if (_recovery_table.local().is_recovery_active()) {
-        co_return cluster::errc::cluster_already_exists;
+        co_return errc::already_in_progress;
     }
     if (
       !_raft0->is_leader()
       || !_storage.local().get_cluster_uuid().has_value()) {
-        co_return cluster::errc::not_leader_controller;
-    }
-    const auto& ignored_uuid = _storage.local().get_cluster_uuid().value();
-    // TODO: protect with semaphore with a term check.
-    auto fib = retry_chain_node{_sharded_as.local(), 30s, 1s};
-    auto cluster_manifest_res
-      = co_await cluster::cloud_metadata::download_highest_manifest_in_bucket(
-        _remote.local(), bucket, fib, ignored_uuid);
-    if (cluster_manifest_res.has_error()) {
         vlog(
           clusterlog.warn,
-          "Error finding cluster manifests in bucket {}: {}",
-          bucket,
-          cluster_manifest_res.error());
-        co_return cluster_manifest_res.error();
+          "Lost leadership or storage uuid disappeared, cannot start recovery");
+        co_return errc::not_a_leader;
     }
-    auto& manifest = cluster_manifest_res.value();
-    vlog(clusterlog.info, "Found cluster manifest for recovery: {}", manifest);
+    auto cluster_name = config::shard_local_cfg().cloud_storage_cluster_name();
+    const auto& this_cluster_uuid = _storage.local().get_cluster_uuid().value();
+    // TODO: protect with semaphore with a term check.
+    auto fib = retry_chain_node{_sharded_as.local(), 30s, 1s};
+    auto manifest_res = co_await download_manifest_for_recovery(
+      _remote.local(),
+      bucket,
+      cluster_uuid_override,
+      cluster_name,
+      this_cluster_uuid,
+      fib);
+    if (manifest_res.has_error()) {
+        co_return manifest_res.error();
+    }
+    vlog(
+      clusterlog.info,
+      "Found cluster manifest for recovery: {}",
+      manifest_res.value());
 
     // Replicate an update to start recovery. Once applied, this will update
     // the recovery table.
     cluster_recovery_init_cmd_data data;
-    data.state.manifest = std::move(manifest);
+    data.state.manifest = std::move(manifest_res.value());
     data.state.bucket = std::move(bucket);
     auto errc = co_await replicate_and_wait(
       _controller_stm,
@@ -128,14 +260,14 @@ cluster_recovery_manager::initialize_recovery(
       cluster_recovery_init_cmd(0, std::move(data)),
       model::timeout_clock::now() + 30s,
       synced_term);
-    if (errc != errc::success) {
+    if (errc != cluster::errc::success) {
         vlog(
           clusterlog.warn,
           "Error replicating recovery initialization command: {}",
           errc.message());
-        co_return cluster::errc::replication_error;
+        co_return errc::unknown;
     }
-    co_return cluster::errc::success;
+    co_return outcome::success();
 }
 
 ss::future<cluster::errc> cluster_recovery_manager::replicate_update(
@@ -159,7 +291,7 @@ ss::future<cluster::errc> cluster_recovery_manager::replicate_update(
       cluster_recovery_update_cmd(0, std::move(data)),
       model::timeout_clock::now() + 30s,
       std::make_optional(term));
-    if (errc != errc::success) {
+    if (errc != cluster::errc::success) {
         vlog(
           clusterlog.warn,
           "Error replicating recovery update command: {}",

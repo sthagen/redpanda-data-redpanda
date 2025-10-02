@@ -1706,7 +1706,7 @@ ss::future<> rm_stm::do_apply(const model::record_batch& b) {
           b.header().producer_id);
     } else if (
       hdr.type == model::record_batch_type::raft_data
-      || hdr.type == model::record_batch_type::dl_placeholder) {
+      || hdr.type == model::record_batch_type::ctp_placeholder) {
         if (hdr.attrs.is_control()) {
             apply_control(bid.pid, parse_control_batch(b));
         } else {

@@ -68,24 +68,19 @@ void materialized_extent_fixture::produce_placeholders(
         size_t offset,
         size_t size,
         const model::record_batch& source) -> model::record_batch {
-        cloud_topics::dl_placeholder p{
+        cloud_topics::ctp_placeholder p{
           .id = id,
           .offset = cloud_topics::first_byte_offset_t(offset),
           .size_bytes = cloud_topics::byte_range_size_t(size),
         };
 
         storage::record_batch_builder builder(
-          model::record_batch_type::dl_placeholder, source.base_offset());
+          model::record_batch_type::ctp_placeholder, source.base_offset());
 
-        builder.add_raw_kv(
-          serde::to_iobuf(cloud_topics::dl_placeholder_record_key::payload),
-          serde::to_iobuf(p));
+        builder.add_raw_kv(std::nullopt, serde::to_iobuf(p));
         // Match number of records in the batch with the 'source'
         for (auto i = 1; i < source.record_count(); i++) {
-            iobuf empty;
-            builder.add_raw_kv(
-              serde::to_iobuf(cloud_topics::dl_placeholder_record_key::empty),
-              std::move(empty));
+            builder.add_raw_kv(std::nullopt, std::nullopt);
         }
         return std::move(builder).build();
     };

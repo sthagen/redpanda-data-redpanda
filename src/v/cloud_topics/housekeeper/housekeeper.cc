@@ -56,7 +56,7 @@ ss::future<> housekeeper::do_housekeeping() {
         new_start_offset = std::max(new_start_offset, offset);
     }
     if (new_start_offset != kafka::offset::min()) {
-        co_await _l0_metastore->set_start_offset(_tidp, new_start_offset);
+        co_await _l0_metastore->set_start_offset(_tidp, new_start_offset, &_as);
     }
 }
 

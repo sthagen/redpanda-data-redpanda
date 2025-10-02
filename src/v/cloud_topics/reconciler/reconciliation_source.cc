@@ -13,6 +13,7 @@
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/frontend.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
+#include "cloud_topics/log_reader_config.h"
 #include "cloud_topics/logger.h"
 #include "cluster/partition.h"
 #include "kafka/utils/txn_reader.h"
@@ -59,18 +60,15 @@ public:
       , _partition(std::move(partition)) {}
 
     kafka::offset last_reconciled_offset() override {
-        ss::abort_source as;
-        retry_chain_node rtc{as};
-        ctp_stm_api api(rtc, _partition->raft()->stm_manager()->get<ctp_stm>());
+        ctp_stm_api api(_partition->raft()->stm_manager()->get<ctp_stm>());
         return api.get_last_reconciled_offset();
     }
 
     ss::future<std::expected<void, errc>> set_last_reconciled_offset(
       kafka::offset offset, ss::abort_source& as) override {
-        retry_chain_node rtc{as};
-        ctp_stm_api api(rtc, _partition->raft()->stm_manager()->get<ctp_stm>());
+        ctp_stm_api api(_partition->raft()->stm_manager()->get<ctp_stm>());
         auto res = co_await api.advance_reconciled_offset(
-          offset, model::no_timeout);
+          offset, model::no_timeout, as);
         if (!res.has_value()) {
             switch (res.error()) {
             case ctp_stm_api_errc::timeout:
@@ -87,8 +85,9 @@ public:
     }
 
     ss::future<model::record_batch_reader>
-    make_reader(cloud_topic_log_reader_config cfg) override {
-        auto effective_start = co_await _fe->sync_effective_start(5s);
+    make_reader(reader_config input_cfg) override {
+        auto effective_start = co_await _fe->sync_effective_start(
+          model::no_timeout, *input_cfg.as);
         if (!effective_start.has_value()) {
             vlog(
               cd_log.warn,
@@ -97,8 +96,6 @@ public:
               effective_start.error());
             co_return model::make_empty_record_batch_reader();
         }
-
-        cfg.start_offset = std::max(effective_start.value(), cfg.start_offset);
 
         auto maybe_lso = _fe->last_stable_offset();
         if (!maybe_lso.has_value()) {
@@ -110,17 +107,24 @@ public:
             co_return model::make_empty_record_batch_reader();
         }
 
-        // It's possible for LSO to be 0, which in this case the previous offset
-        // is model::offset::min(), this is the same as the kafka fetch path.
-        cfg.max_offset = std::min(
-          kafka::prev_offset(maybe_lso.value()), cfg.max_offset);
-
+        // It's possible for LSO to be 0, which in this case the previous
+        // is model::offset::min(), this is the same as the kafka fetch
+        cloud_topic_log_reader_config cfg(
+          /*start_offset=*/std::min(
+            effective_start.value(), last_reconciled_offset()),
+          /*max_offset=*/kafka::prev_offset(maybe_lso.value()),
+          /*min_bytes=*/1,
+          /*max_bytes=*/input_cfg.max_bytes,
+          /*type_filter=*/std::nullopt,
+          /*time=*/std::nullopt,
+          /*as=*/*input_cfg.as);
         if (cfg.max_offset < cfg.start_offset) {
             co_return model::make_empty_record_batch_reader();
         }
         auto reader = co_await _fe->make_reader(
           cfg,
-          /*debounce_deadline=*/std::nullopt);
+          /*debounce_deadline=*/
+          std::nullopt);
 
         // It's important the `aborted_transaction_tracker_impl` takes a shared
         // so we don't have to worry about the lifetimes of the reader and

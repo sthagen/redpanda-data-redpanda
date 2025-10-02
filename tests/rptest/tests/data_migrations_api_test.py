@@ -87,6 +87,8 @@ class TmtpdiParams(TypedDict):
 
     cancellation: CancellationStage | None
     use_alias: bool
+    transfer_leadership: bool
+    include_groups: bool
 
 
 def TypedDictMemberOptions(cls, member):
@@ -100,11 +102,22 @@ def generate_tmptpdi_params() -> List[TmtpdiParams]:
         for stage in TypedDictMemberOptions(CancellationStage, "stage")
     ]
     return [
-        TmtpdiParams(cancellation=cancellation, use_alias=use_alias)
+        # cancel on various stages, other params True to test most complex case
+        TmtpdiParams(
+            cancellation=cancellation,
+            use_alias=True,
+            transfer_leadership=True,
+            include_groups=True,
+        )
         for cancellation in [None] + cancellation_stages
-        for use_alias in (True, False)
-        # alias only affects inbound, pointless to vary if cancel earlier
-        if not use_alias or cancellation is None or cancellation["dir"] == "in"
+    ] + [
+        # cancel on the latest stage, disable other params one by one
+        TmtpdiParams(
+            cancellation=CancellationStage(dir="in", stage="executing"),
+            use_alias=False,
+            transfer_leadership=False,
+            include_groups=False,
+        )
     ]
 
 
@@ -1029,13 +1042,9 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
         ],
     )
     @matrix(
-        transfer_leadership=[True, False],
-        include_groups=[True, False],
         params=generate_tmptpdi_params(),
     )
-    def test_migrated_topic_data_integrity(
-        self, include_groups: bool, transfer_leadership: bool, params: TmtpdiParams
-    ):
+    def test_migrated_topic_data_integrity(self, params: TmtpdiParams):
         cancellation = params["cancellation"]
         use_alias = params["use_alias"]
         rpk = RpkTool(self.redpanda)
@@ -1048,14 +1057,16 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
         self.client().create_topic(workload_topic)
 
         with self.start_producer(workload_topic.name) as producer:
-            group = "consumer-group-id" if include_groups else None
+            group = "consumer-group-id" if params["include_groups"] else None
             groups = [group] if group else []
             entities = {
                 "topic": workload_topic.name,
                 "group": group,
             }
 
-            tl_topic_name = workload_topic.name if transfer_leadership else None
+            tl_topic_name = (
+                workload_topic.name if params["transfer_leadership"] else None
+            )
             with self.tl_thread(tl_topic_name):
                 workload_ns_topic = make_namespaced_topic(workload_topic.name)
                 out_migration = OutboundDataMigration(
@@ -1173,7 +1184,9 @@ class DataMigrationsApiTest(RedpandaTest, DataMigrationTestMixin):
                 "group": group,
             }
 
-            tl_topic_name = inbound_topic_name if transfer_leadership else None
+            tl_topic_name = (
+                inbound_topic_name if params["transfer_leadership"] else None
+            )
             with self.tl_thread(tl_topic_name):
                 remounted = False
                 # two cycles max: to cancel halfway and to complete + check e2e

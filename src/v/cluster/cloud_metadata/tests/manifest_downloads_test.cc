@@ -103,8 +103,9 @@ TEST_F(cluster_metadata_fixture, test_download_manifest) {
 TEST_F(cluster_metadata_fixture, test_download_highest_manifest_in_bucket) {
     retry_chain_node retry_node(
       never_abort, ss::lowres_clock::time_point::max(), 10ms);
-    auto m_res
-      = download_highest_manifest_in_bucket(remote, bucket, retry_node).get();
+    auto m_res = download_highest_manifest_in_bucket(
+                   remote, bucket, retry_node, std::nullopt)
+                   .get();
     ASSERT_TRUE(m_res.has_error());
     ASSERT_EQ(m_res.error(), error_outcome::no_matching_metadata);
 
@@ -119,8 +120,9 @@ TEST_F(cluster_metadata_fixture, test_download_highest_manifest_in_bucket) {
         retry_node)
       .get();
 
-    m_res
-      = download_highest_manifest_in_bucket(remote, bucket, retry_node).get();
+    m_res = download_highest_manifest_in_bucket(
+              remote, bucket, retry_node, std::nullopt)
+              .get();
     ASSERT_TRUE(m_res.has_value());
     EXPECT_EQ(cluster_uuid, m_res.value().cluster_uuid);
     EXPECT_EQ(10, m_res.value().metadata_id());
@@ -137,8 +139,9 @@ TEST_F(cluster_metadata_fixture, test_download_highest_manifest_in_bucket) {
         manifest.get_manifest_path(),
         retry_node)
       .get();
-    m_res
-      = download_highest_manifest_in_bucket(remote, bucket, retry_node).get();
+    m_res = download_highest_manifest_in_bucket(
+              remote, bucket, retry_node, std::nullopt)
+              .get();
     ASSERT_TRUE(m_res.has_value());
     ASSERT_EQ(15, m_res.value().metadata_id());
     ASSERT_EQ(new_uuid, m_res.value().cluster_uuid);
@@ -158,4 +161,63 @@ TEST_F(cluster_metadata_fixture, test_download_highest_manifest_in_bucket) {
     ASSERT_TRUE(m_res.has_value());
     ASSERT_EQ(15, m_res.value().metadata_id());
     ASSERT_EQ(new_uuid, m_res.value().cluster_uuid);
+
+    {
+        SCOPED_TRACE(
+          "Should not match any metadata if non-existing cluster name is "
+          "given");
+        auto m_res = download_highest_manifest_in_bucket(
+                       remote, bucket, retry_node, "foo-cluster")
+                       .get();
+        ASSERT_TRUE(m_res.has_error());
+        ASSERT_EQ(error_outcome::no_matching_metadata, m_res.error());
+    }
+
+    {
+        SCOPED_TRACE(
+          "Should fail download when cluster name is not given but they are "
+          "used in the bucket");
+        cloud_io::transfer_details ref_td{
+          .bucket = bucket,
+          .key = cluster_name_ref_for_uuid_key("foo-cluster", cluster_uuid),
+          .parent_rtc = retry_node,
+        };
+        auto ref_upload_result
+          = remote
+              .upload_object({
+                .transfer_details = std::move(ref_td),
+                .type = cloud_storage::upload_type::object,
+                // Empty payload. All the information is encoded in the key.
+                .payload = iobuf{},
+              })
+              .get();
+        ASSERT_EQ(cloud_storage::upload_result::success, ref_upload_result);
+
+        auto m_res = download_highest_manifest_in_bucket(
+                       remote, bucket, retry_node, std::nullopt)
+                       .get();
+        ASSERT_TRUE(m_res.has_error());
+        ASSERT_EQ(error_outcome::misconfiguration, m_res.error());
+    }
+
+    {
+        SCOPED_TRACE("Should match metadata if existing cluster name is given");
+        auto m_res = download_highest_manifest_in_bucket(
+                       remote, bucket, retry_node, "foo-cluster")
+                       .get();
+        ASSERT_TRUE(m_res.has_value());
+        ASSERT_EQ(10, m_res.value().metadata_id());
+        ASSERT_EQ(cluster_uuid, m_res.value().cluster_uuid);
+    }
+
+    {
+        SCOPED_TRACE(
+          "Should not match any metadata if non-existing cluster name is "
+          "given");
+        auto m_res = download_highest_manifest_in_bucket(
+                       remote, bucket, retry_node, "bar-cluster")
+                       .get();
+        ASSERT_TRUE(m_res.has_error());
+        ASSERT_EQ(error_outcome::no_matching_metadata, m_res.error());
+    }
 }

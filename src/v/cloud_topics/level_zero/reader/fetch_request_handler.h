@@ -23,7 +23,7 @@
 namespace cloud_topics::l0 {
 
 /// Read request handler.
-/// This component can process dl_placeholder batches.
+/// This component can process ctp_placeholder batches.
 /// This component should be split up into separate components in the
 /// future (one for materialization step, one for reading from cache,
 // etc). Currently everything is done in one place for simplicity.

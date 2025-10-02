@@ -39,6 +39,7 @@
 #include "raft/transfer_leadership.h"
 #include "raft/types.h"
 #include "raft/voter_priority_tracker.h"
+#include "ssx/condition_variable.h"
 #include "ssx/semaphore.h"
 #include "storage/log.h"
 #include "storage/snapshot.h"
@@ -394,7 +395,7 @@ public:
 
     model::offset dirty_offset() const { return _log->offsets().dirty_offset; }
 
-    ss::condition_variable& commit_index_updated() {
+    ssx::condition_variable& commit_index_updated() {
         return _commit_index_updated;
     }
 
@@ -910,7 +911,7 @@ private:
     event_manager _event_manager;
     std::unique_ptr<probe> _probe;
     mutable ctx_log _ctxlog;
-    ss::condition_variable _commit_index_updated;
+    ssx::condition_variable _commit_index_updated;
 
     std::chrono::milliseconds _replicate_append_timeout;
     std::chrono::milliseconds _recovery_append_timeout;

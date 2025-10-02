@@ -393,4 +393,34 @@ validate_consumer_group_metrics(const std::vector<ss::sstring>& metrics) {
     return std::nullopt;
 }
 
+std::optional<ss::sstring>
+validate_cloud_storage_cluster_name(const std::optional<ss::sstring>& input) {
+    // Long enough to be useful, short enough not to hit object storage name
+    // length limits in most cases.
+    constexpr size_t max_cluster_name_length = 64;
+
+    if (!input.has_value()) {
+        return std::nullopt;
+    }
+
+    if (auto non_empty_string_opt = validate_non_empty_string_opt(input);
+        non_empty_string_opt.has_value()) {
+        return non_empty_string_opt;
+    }
+
+    if (input->length() > max_cluster_name_length) {
+        return fmt::format(
+          "Length must be at most {} characters", max_cluster_name_length);
+    }
+
+    for (char c : *input) {
+        if (!std::isalnum(c) && !(c == '-' || c == '_')) {
+            return "Only alphanumeric characters, hyphens, and underscores are "
+                   "allowed";
+        }
+    }
+
+    return std::nullopt;
+}
+
 }; // namespace config

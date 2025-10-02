@@ -14,7 +14,7 @@
 #include "cluster/cloud_metadata/types.h"
 #include "model/fundamental.h"
 
-#include <string>
+#include <expected>
 
 namespace cluster::cloud_metadata {
 
@@ -42,5 +42,21 @@ cloud_storage_clients::object_key offsets_snapshot_key(
   const cluster_metadata_id&,
   const model::partition_id&,
   size_t snapshot_idx);
+
+// E.g. cluster_name/<name>/uuid/<uuid>
+cloud_storage_clients::object_key
+cluster_name_ref_for_uuid_key(const ss::sstring&, const model::cluster_uuid&);
+
+// E.g. cluster_name/<name>/uuid/
+cloud_storage_clients::object_key
+cluster_name_ref_for_uuid_prefix_key(const ss::sstring& name);
+
+std::expected<std::tuple<ss::sstring, model::cluster_uuid>, std::string>
+parse_cluster_name_ref_for_uuid_key(const std::string& key);
+
+// E.g. cluster_name/
+constexpr cloud_storage_clients::object_key cluster_name_prefix_key() {
+    return cloud_storage_clients::object_key{"cluster_name/"};
+}
 
 } // namespace cluster::cloud_metadata

@@ -393,26 +393,33 @@ template<typename BaseT, supported_stm_snapshot T>
 ss::future<> persisted_stm_base<BaseT, T>::wait_offset_committed(
   model::timeout_clock::duration timeout,
   model::offset offset,
-  model::term_id term) {
+  model::term_id term,
+  std::optional<std::reference_wrapper<ss::abort_source>> as) {
     auto stop_cond = [this, offset, term] {
         return _raft->committed_offset() >= offset || _raft->term() > term;
     };
-
-    return _raft->commit_index_updated().wait(timeout, stop_cond);
+    auto deadline = model::timeout_clock::now() + timeout;
+    if (as) {
+        co_await _raft->commit_index_updated().wait(
+          deadline, as->get(), stop_cond);
+    } else {
+        co_await _raft->commit_index_updated().wait(deadline, stop_cond);
+    }
 }
 
 template<typename BaseT, supported_stm_snapshot T>
 ss::future<bool> persisted_stm_base<BaseT, T>::do_sync(
   model::timeout_clock::duration timeout,
   model::offset offset,
-  model::term_id term) {
+  model::term_id term,
+  std::optional<std::reference_wrapper<ss::abort_source>> as) {
     const auto committed = _raft->committed_offset();
     const auto ntp = _raft->ntp();
     _raft->events().notify_commit_index();
 
     if (offset > committed) {
         try {
-            co_await wait_offset_committed(timeout, offset, term);
+            co_await wait_offset_committed(timeout, offset, term, as);
         } catch (const ss::broken_condition_variable&) {
             co_return false;
         } catch (const ss::gate_closed_exception&) {
@@ -437,7 +444,8 @@ ss::future<bool> persisted_stm_base<BaseT, T>::do_sync(
 
     if (_raft->term() == term) {
         try {
-            co_await BaseT::wait(offset, model::timeout_clock::now() + timeout);
+            co_await BaseT::wait(
+              offset, model::timeout_clock::now() + timeout, as);
         } catch (const ss::broken_condition_variable&) {
             co_return false;
         } catch (const ss::gate_closed_exception&) {
@@ -475,8 +483,9 @@ ss::future<bool> persisted_stm_base<BaseT, T>::do_sync(
 }
 
 template<typename BaseT, supported_stm_snapshot T>
-ss::future<bool>
-persisted_stm_base<BaseT, T>::sync(model::timeout_clock::duration timeout) {
+ss::future<bool> persisted_stm_base<BaseT, T>::sync(
+  model::timeout_clock::duration timeout,
+  std::optional<std::reference_wrapper<ss::abort_source>> as) {
     auto term = _raft->term();
     if (!_raft->is_leader()) {
         return ss::make_ready_future<bool>(false);
@@ -489,7 +498,7 @@ persisted_stm_base<BaseT, T>::sync(model::timeout_clock::duration timeout) {
         auto sync_waiter = ss::make_lw_shared<expiring_promise<bool>>();
         _sync_waiters.push_back(sync_waiter);
         return sync_waiter->get_future_with_timeout(
-          deadline, [] { return false; });
+          deadline, [] { return false; }, as);
     }
     _is_catching_up = true;
 
@@ -515,7 +524,7 @@ persisted_stm_base<BaseT, T>::sync(model::timeout_clock::duration timeout) {
         sync_offset = log_offsets.dirty_offset;
     }
 
-    return do_sync(timeout, sync_offset, term).then([this](bool is_synced) {
+    return do_sync(timeout, sync_offset, term, as).then([this](bool is_synced) {
         _is_catching_up = false;
         for (auto& sync_waiter : _sync_waiters) {
             sync_waiter->set_value(is_synced);

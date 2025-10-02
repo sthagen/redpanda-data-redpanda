@@ -98,7 +98,8 @@ model::offset cloud_topic_partition::start_offset() const {
 
 ss::future<result<model::offset, error_code>>
 cloud_topic_partition::sync_effective_start(model::timeout_clock::duration d) {
-    auto res = co_await _fe->sync_effective_start(d);
+    ss::abort_source as;
+    auto res = co_await _fe->sync_effective_start(d, as);
     if (!res.has_value()) {
         co_return map_errc(res.error());
     }

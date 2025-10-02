@@ -6,6 +6,9 @@ package(default_visibility = [
 
 redpanda_cc_library(
     name = "placeholder",
+    srcs = [
+        "placeholder.cc",
+    ],
     hdrs = [
         "placeholder.h",
     ],
@@ -19,9 +22,12 @@ redpanda_cc_library(
     ],
     deps = [
         "//src/v/cloud_topics:types",
+        "//src/v/cloud_topics/level_zero/common:extent_meta",
+        "//src/v/model",
         "//src/v/serde",
         "//src/v/serde:named_type",
         "//src/v/serde:uuid",
+        "//src/v/storage:record_batch_builder",
         "//src/v/utils:named_type",
         "//src/v/utils:uuid",
     ],

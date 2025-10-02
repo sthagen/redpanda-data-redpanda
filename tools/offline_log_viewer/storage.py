@@ -178,7 +178,7 @@ class BatchType(Enum):
     group_fence_tx = 33
     partition_properties_update = 34
     datalake_coordinator = 35
-    dl_placeholder = 36
+    ctp_placeholder = 36
     ctp_stm_command = 37
     datalake_translation_state = 38
     unknown = -1

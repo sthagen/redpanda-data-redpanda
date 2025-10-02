@@ -227,7 +227,11 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         self.logger.info(f"RandomNodeOperationsBase object after setup: {self}")
 
     def _start_redpanda(
-        self, mixed_versions: bool, with_iceberg: bool, compaction_mode: CompactionMode
+        self,
+        mixed_versions: bool,
+        with_iceberg: bool,
+        compaction_mode: CompactionMode,
+        with_cloud_topics: bool,
     ):
         # since this test is deleting topics we must tolerate missing manifests
         self._si_settings.set_expected_damage(
@@ -278,6 +282,19 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         self.redpanda.await_feature(
             "membership_change_controller_cmds", "active", timeout_sec=30
         )
+
+        if with_cloud_topics:
+            self.redpanda.enable_development_feature_support()
+            self.redpanda.set_cluster_config(
+                values={
+                    "development_enable_cloud_topics": True,
+                }
+            )
+            self.redpanda.restart_nodes(
+                nodes=self.redpanda.nodes,
+                auto_assign_node_id=True,
+                omit_seeds_on_idx_one=False,
+            )
 
     def _alter_local_topic_retention_bytes(self, topic: str, retention_bytes: int):
         rpk = RpkTool(self.redpanda)
@@ -444,6 +461,11 @@ class RandomNodeOperationsBase(PreallocNodesTest):
                     "Skipping test with iceberg and unsupported cloud storage type"
                 )
 
+        with_cloud_topics = True
+        if mixed_versions:
+            with_cloud_topics = False
+            self.logger.info("Disabling cloud topics in mixed version test")
+
         def enable_write_caching_testing():
             if not mixed_versions:
                 return True
@@ -467,7 +489,10 @@ class RandomNodeOperationsBase(PreallocNodesTest):
 
         # start redpanda process
         self._start_redpanda(
-            mixed_versions, with_iceberg=with_iceberg, compaction_mode=compaction_mode
+            mixed_versions,
+            with_iceberg=with_iceberg,
+            compaction_mode=compaction_mode,
+            with_cloud_topics=with_cloud_topics,
         )
 
         self.redpanda.set_cluster_config({"controller_snapshot_max_age_sec": 1})
@@ -577,6 +602,34 @@ class RandomNodeOperationsBase(PreallocNodesTest):
         )
         fast_producer_consumer.start()
 
+        cloud_topics_consumer = RandomNodeOperationsTest.producer_consumer(
+            test_context=self.test_context,
+            logger=self.logger,
+            topic_name="tp-workload-ct",
+            redpanda=self.redpanda,
+            nodes=[self.preallocated_nodes[2]],
+            msg_size=self.msg_size,
+            rate_limit_bps=self.rate_limit,
+            msg_count=self.msg_count,
+            consumers_count=self.consumers_count,
+            compaction_enabled=False,
+        )
+        if with_cloud_topics:
+            rpk = RpkTool(self.redpanda)
+            rpk.create_topic(
+                topic=cloud_topics_consumer.topic,
+                partitions=self.max_partitions,
+                replicas=3,
+                config={
+                    "segment.bytes": default_segment_size,
+                    "cleanup.policy": "delete",
+                    "redpanda.remote.read": "false",
+                    "redpanda.remote.write": "false",
+                    "redpanda.cloud_topic.enabled": "true",
+                },
+            )
+            cloud_topics_consumer.start()
+
         write_caching_enabled = enable_write_caching_testing()
         write_caching_producer_consumer = None
         if write_caching_enabled:
@@ -670,6 +723,9 @@ class RandomNodeOperationsBase(PreallocNodesTest):
             write_caching_producer_consumer.verify()
 
         fast_producer_consumer.verify()
+
+        if with_cloud_topics:
+            cloud_topics_consumer.verify()
 
         if mixed_versions:
             self.logger.info("Upgrading cluster with current Redpanda version")

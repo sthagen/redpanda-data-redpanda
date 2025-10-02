@@ -198,7 +198,7 @@ bool test_all_types_edition2023_nested_message::convert_field_path_to_numbers(st
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> test_all_types_edition2023_nested_message::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> test_all_types_edition2023_nested_message::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -373,7 +373,7 @@ bool test_all_types_edition2023_group_like_type::convert_field_path_to_numbers(s
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> test_all_types_edition2023_group_like_type::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> test_all_types_edition2023_group_like_type::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -5201,7 +5201,7 @@ bool test_all_types_edition2023::convert_field_path_to_numbers(std::span<std::st
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> test_all_types_edition2023::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> test_all_types_edition2023::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};
@@ -6125,7 +6125,7 @@ bool foreign_message_edition2023::convert_field_path_to_numbers(std::span<std::s
   }
   return fields.front().second(field_path.subspan(1), out);
 }
-std::optional<serde::pb::field> foreign_message_edition2023::lookup_field(std::span<int32_t> field_numbers) {
+std::optional<serde::pb::field> foreign_message_edition2023::lookup_field(std::span<const int32_t> field_numbers) {
 
   if (field_numbers.empty()) {
     return serde::pb::field{.value = static_cast<serde::pb::base_message*>(this)};

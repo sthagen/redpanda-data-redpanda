@@ -223,7 +223,14 @@ private:
 
     static model::ntp parse_ntp_from_request(ss::httpd::parameters& param);
 
+    /// Parses the JSON body of the request. Throws if the body is not valid
+    /// JSON.
     static ss::future<json::Document> parse_json_body(ss::http::request* req);
+
+    /// Returns nullopt if the body is empty. Throws if the body is not empty
+    /// and not valid JSON.
+    static ss::future<std::optional<json::Document>>
+    parse_optional_json_body(ss::http::request* req);
 
     static model::node_id parse_broker_id(const ss::http::request& req);
 

@@ -200,6 +200,93 @@ TEST_F(cluster_metadata_uploader_fixture, test_download_highest_manifest) {
     ASSERT_EQ(down_res.value(), m);
 }
 
+TEST_F(cluster_metadata_uploader_fixture, test_upload_with_cluster_name) {
+    test_local_cfg.get("cloud_storage_cluster_name")
+      .set_value(std::make_optional<ss::sstring>("foo-cluster"));
+    auto& uploader = app.controller->metadata_uploader().value().get();
+    retry_chain_node retry_node(
+      never_abort, ss::lowres_clock::time_point::max(), 10ms);
+
+    RPTEST_REQUIRE_EVENTUALLY(5s, [this] { return raft0->is_leader(); });
+    auto down_res
+      = uploader.download_highest_manifest_or_create(retry_node).get();
+    ASSERT_TRUE(down_res.has_value());
+    auto& manifest = down_res.value();
+    ASSERT_EQ(manifest.metadata_id, cluster_metadata_id{});
+
+    for (int i = 0; i < 2; i++) {
+        auto err = uploader
+                     .upload_next_metadata(
+                       raft0->confirmed_term(), manifest, retry_node)
+                     .get();
+        ASSERT_EQ(err, error_outcome::success);
+    }
+
+    {
+        SCOPED_TRACE(
+          "Downloading highest manifest this time should return just uploaded "
+          "manifest");
+
+        auto down_res
+          = uploader.download_highest_manifest_or_create(retry_node).get();
+        ASSERT_TRUE(down_res.has_value());
+        ASSERT_EQ(down_res.value().metadata_id, cluster_metadata_id{1});
+    }
+
+    {
+        test_local_cfg.get("cloud_storage_cluster_name")
+          .set_value(std::make_optional<ss::sstring>("bar-cluster"));
+        SCOPED_TRACE(
+          "Should return the same manifest even after changing cluster name");
+        // We download manifests based on cluster UUID, so changing the
+        // cluster name should not affect what we download.
+        //
+        // We use the cluster name only if there are no manifests for this
+        // cluster UUID, in which case we look for the highest manifest in the
+        // bucket and start from there.
+        //
+        // Different cluster names during the lifetime of a cluster are
+        // considered synonyms.
+        auto down_res
+          = uploader.download_highest_manifest_or_create(retry_node).get();
+        ASSERT_TRUE(down_res.has_value());
+        ASSERT_EQ(down_res.value().metadata_id, cluster_metadata_id{1});
+
+        auto err = uploader
+                     .upload_next_metadata(
+                       raft0->confirmed_term(), manifest, retry_node)
+                     .get();
+        ASSERT_EQ(err, error_outcome::success);
+    }
+
+    {
+        SCOPED_TRACE("foo-cluster/ references should exist");
+        auto mres = download_highest_manifest_in_bucket(
+                      remote, bucket, retry_node, "foo-cluster")
+                      .get();
+        ASSERT_TRUE(mres.has_value());
+        ASSERT_EQ(mres.value().metadata_id, cluster_metadata_id{2});
+    }
+
+    {
+        SCOPED_TRACE("bar-cluster/ references should exist");
+        auto mres = download_highest_manifest_in_bucket(
+                      remote, bucket, retry_node, "bar-cluster")
+                      .get();
+        ASSERT_TRUE(mres.has_value());
+        ASSERT_EQ(mres.value().metadata_id, cluster_metadata_id{2});
+    }
+
+    {
+        SCOPED_TRACE("baz-cluster/ references should not exist");
+        auto mres = download_highest_manifest_in_bucket(
+                      remote, bucket, retry_node, "baz-cluster")
+                      .get();
+        ASSERT_TRUE(mres.has_error());
+        ASSERT_EQ(mres.error(), error_outcome::no_matching_metadata);
+    }
+}
+
 TEST_F(
   cluster_metadata_uploader_fixture, test_download_highest_manifest_errors) {
     auto& uploader = app.controller->metadata_uploader().value().get();

@@ -163,6 +163,7 @@ TEST(cluster_recovery_reconciler_test, test_config_ignore_list) {
       "cloud_storage_azure_shared_key",
       "cloud_storage_azure_adls_endpoint",
       "cloud_storage_azure_adls_port",
+      "cloud_storage_cluster_name",
     };
     auto ignore_list = controller_snapshot_reconciler::properties_ignore_list();
     ASSERT_EQ(ignore_list, expected_ignore_list);

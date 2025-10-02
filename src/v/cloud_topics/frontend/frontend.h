@@ -70,13 +70,13 @@ struct partition_info {
 /// - Data plane returns a placeholder for the record batch, containing
 ///   metadata to locate data in cloud storage.
 /// - 'cloud_topic_partition' pushes the placeholder to the metadata layer by
-///   replicating 'dl_placeholder' batch.
+///   replicating 'ctp_placeholder' batch.
 ///
 /// Read Request Path:
-/// - 'dl_placeholder' batches are queried from the metadata layer, fetched
+/// - 'ctp_placeholder' batches are queried from the metadata layer, fetched
 ///   from 'cluster::partition'.
 /// - Includes information about aborted transactions.
-/// - 'dl_placeholder' batches are 'materialized' using the data plane.
+/// - 'ctp_placeholder' batches are 'materialized' using the data plane.
 ///
 /// Currently, the data plane is explicitly a sharded service. The control
 /// plane includes 'cluster::partition' and 'ctp_stm', with no explicit API
@@ -92,7 +92,11 @@ public:
     const model::ntp& ntp() const;
 
     ss::future<std::expected<kafka::offset, frontend_errc>>
-    sync_effective_start(model::timeout_clock::duration timeout);
+    sync_effective_start(
+      model::timeout_clock::duration timeout, ss::abort_source& as);
+    ss::future<std::expected<kafka::offset, frontend_errc>>
+    sync_effective_start(
+      model::timeout_clock::time_point deadline, ss::abort_source& as);
 
     /// This method defines starting offset for translation in data-lake
     /// subsystem
@@ -162,8 +166,6 @@ private:
     std::unique_ptr<model::record_batch_reader::impl>
     make_l1_reader(cloud_topic_log_reader_config& cfg) const;
 
-    ss::abort_source _as;
-    retry_chain_node _rtc;
     ss::lw_shared_ptr<cluster::partition> _partition;
     data_plane_api* _data_plane;
     ss::lw_shared_ptr<cloud_topics::ctp_stm_api> _ctp_stm_api;

@@ -11,6 +11,8 @@
 
 #include <seastar/testing/thread_test_case.hh>
 
+#include <array>
+
 SEASTAR_THREAD_TEST_CASE(test_empty_string_vec) {
     using config::validate_non_empty_string_vec;
     BOOST_TEST(!(validate_non_empty_string_vec({"apple", "pear"}).has_value()));
@@ -42,4 +44,51 @@ SEASTAR_THREAD_TEST_CASE(test_audit_event_types) {
     std::vector<ss::sstring> one_bad_apple{
       "management", "consume", "hello world", "heartbeat"};
     BOOST_TEST(validate_audit_event_types(one_bad_apple).has_value());
+}
+
+SEASTAR_THREAD_TEST_CASE(test_cloud_storage_cluster_name_validation) {
+    using config::validate_cloud_storage_cluster_name;
+
+    // Test nullopt case separately
+    BOOST_TEST(!validate_cloud_storage_cluster_name(std::nullopt).has_value());
+
+    // Valid test cases
+    constexpr std::array valid_names{
+      "valid-name",
+      "valid_name",
+      "ValidName123",
+      "a",
+      "123",
+      "cluster-name_123"};
+
+    for (const auto& name : valid_names) {
+        BOOST_TEST(!validate_cloud_storage_cluster_name(name).has_value());
+    }
+
+    // Test maximum length (64 characters)
+    std::string max_length_name(64, 'a');
+    BOOST_TEST(
+      !validate_cloud_storage_cluster_name(max_length_name).has_value());
+
+    // Invalid test cases
+    constexpr std::array invalid_names{
+      "",              // Empty string
+      "invalid.name",  // Dot
+      "invalid name",  // Space
+      "invalid@name",  // At symbol
+      "invalid#name",  // Hash
+      "invalid$name",  // Dollar
+      "invalid%name",  // Percent
+      "invalid/name",  // Forward slash
+      "invalid\\name", // Backslash
+      "invalid:name"   // Colon
+    };
+
+    for (const auto& name : invalid_names) {
+        BOOST_TEST(validate_cloud_storage_cluster_name(name).has_value());
+    }
+
+    // Too long (65 characters)
+    std::string too_long_name(65, 'a');
+    BOOST_TEST(validate_cloud_storage_cluster_name(too_long_name).has_value());
 }

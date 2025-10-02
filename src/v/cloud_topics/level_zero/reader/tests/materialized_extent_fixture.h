@@ -114,7 +114,7 @@ public:
         iobuf_parser parser(std::move(payload));
         auto record = model::parse_one_record_from_buffer(parser);
         iobuf value = std::move(record).release_value();
-        auto placeholder = serde::from_iobuf<cloud_topics::dl_placeholder>(
+        auto placeholder = serde::from_iobuf<cloud_topics::ctp_placeholder>(
           std::move(value));
         e.id = placeholder.id;
         e.first_byte_offset = placeholder.offset;

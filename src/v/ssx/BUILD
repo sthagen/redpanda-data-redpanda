@@ -1,6 +1,18 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
 
 redpanda_cc_library(
+    name = "condition_variable",
+    srcs = ["condition_variable.cc"],
+    hdrs = ["condition_variable.h"],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/container:intrusive",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "thread_worker",
     hdrs = [
         "thread_worker.h",

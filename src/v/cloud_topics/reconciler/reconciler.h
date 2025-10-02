@@ -214,7 +214,7 @@ private:
      * Add source data to an L1 object builder. Returns the source
      * metadata if any batches were consumed, nullopt otherwise.
      */
-    ss::future<std::optional<consumer_metadata>>
+    ss::future<std::expected<std::optional<consumer_metadata>, reconcile_error>>
     add_source_to_object(builder_context& ctx, ss::shared_ptr<source> src);
 
     /*

@@ -35,7 +35,7 @@ namespace cloud_topics::l0 {
 
 namespace {
 // Copy extents and share the payload to use on another shard
-static inline serialized_chunk shallow_copy(serialized_chunk& chunk) {
+serialized_chunk shallow_copy(serialized_chunk& chunk) {
     serialized_chunk copy;
     copy.extents = chunk.extents.copy();
     copy.payload = chunk.payload.share(0, chunk.payload.size_bytes());
@@ -258,10 +258,8 @@ write_request_scheduler::proxy_write_request(write_request<>* req) noexcept {
     _stage.push_next_stage(proxy);
     auto extents_fut = co_await ss::coroutine::as_future(std::move(fut));
     if (extents_fut.failed()) {
-        vlog(
-          cd_log.error,
-          "Proxy write request failed: {}",
-          extents_fut.get_exception());
+        auto ex = extents_fut.get_exception();
+        vlog(cd_log.error, "Proxy write request failed: {}", ex);
         co_return std::unexpected(errc::upload_failure);
     }
     auto extents = extents_fut.get();

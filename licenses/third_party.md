@@ -21,6 +21,7 @@ please keep this up to date with every new library use.
 | hwloc           | BSD                                |
 | jsoncons        | Boost Software License Version 1.0 |
 | krb5            | MIT                                |
+| lexy            | Boost Software License Version 1.0 |
 | libcxx          | Apache License 2                   |
 | libcxxabi       | Apache License 2                   |
 | libnumactl      | LGPL v2.1                          |

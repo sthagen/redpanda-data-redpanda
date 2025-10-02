@@ -49,7 +49,7 @@ namespace {
 /// concatenating multiple chunks the offset has to be corrected.
 /// This is done using the `base_byte_offset` parameter.
 template<class Clock>
-void make_dl_placeholders(
+void make_ctp_placeholders(
   prepared_extents<Clock>& ctx,
   l0::write_request<Clock>& req,
   const l0::serialized_chunk& chunk) {
@@ -83,7 +83,7 @@ aggregator<Clock>::get_extents() {
               !req.data_chunk.payload.empty(),
               "Empty write request for ntp: {}",
               key);
-            make_dl_placeholders(ctx, req, req.data_chunk);
+            make_ctp_placeholders(ctx, req, req.data_chunk);
         }
     }
     return std::move(ctx.placeholders);

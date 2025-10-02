@@ -24,9 +24,6 @@
 
 namespace cloud_topics {
 
-// TODO: add config
-static constexpr size_t L0_max_bytes_per_metadata_fetch = 4_KiB;
-
 level_zero_log_reader_impl::level_zero_log_reader_impl(
   cloud_topic_log_reader_config& cfg,
   ss::lw_shared_ptr<cluster::partition> ctp,
@@ -146,6 +143,55 @@ level_zero_log_reader_impl::maybe_load_slices_from_cache() {
     return std::nullopt;
 }
 
+storage::local_log_reader_config level_zero_log_reader_impl::ctp_read_config() {
+    /*
+     * The requested offset range in the cloud topic reader configuration are
+     * specified as offsets in the kafka address space and need to first be
+     * converted into physical log offsets for log reader configuration.
+     */
+    auto ot_state = _ctp->get_offset_translator_state();
+    auto start_offset = ot_state->to_log_offset(
+      kafka::offset_cast(_config.start_offset));
+    auto max_offset = ot_state->to_log_offset(
+      kafka::offset_cast(_config.max_offset));
+
+    /*
+     * Used to set max_bytes on the log reader for the L0 CTP. Placeholder
+     * batches in the CTP lack a payload, so a few small batches may materialize
+     * into a large read. For example, a placeholder batch is roughly 110 bytes.
+     * If the maximum read size is set to 4K, then ~40 batches will be returned
+     * per read. If each materialized batch is 1 MB then the reader will be able
+     * to stream 40 MB without performing another read from the CTP. The default
+     * Kafka fetch size is 64 MB, so it is useful to read more than 4K.
+     *
+     * Default to the size of the segment reader buffer (32 KiB at the time of
+     * writing). This is a small size used across all existing workloads, and
+     * for cloud topics it provides plenty of metadata to drive large scans when
+     * materialized batches are big.
+     */
+    const auto ctp_reader_max_bytes
+      = storage::local_log_reader_config::segment_reader_max_buffer_size;
+
+    storage::local_log_reader_config cfg(
+      start_offset,
+      max_offset,
+      ctp_reader_max_bytes,
+      // We need to fetch both raft data batches for transaction control
+      // markers as well as placeholder batches to hydrate from object
+      // storage, so we don't include a typefilter and instead postfilter
+      // here.
+      /*type_filter=*/std::nullopt,
+      _config.first_timestamp,
+      _config.abort_source,
+      _config.client_address);
+
+    // The cloud topics reader (user of this log reader) operates in kafka
+    // offset space so this automatic translation saves a few steps.
+    cfg.translate_offsets = model::translate_offsets::yes;
+
+    return cfg;
+}
+
 ss::future<> level_zero_log_reader_impl::fetch_metadata(
   model::timeout_clock::time_point deadline) {
     vassert(
@@ -158,41 +204,13 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
         co_return;
     }
     try {
-        // Fetch metadata from the _ctp
-        auto ot_state = _ctp->get_offset_translator_state();
-        auto start_offset = ot_state->to_log_offset(
-          kafka::offset_cast(_config.start_offset));
-        auto max_offset = ot_state->to_log_offset(
-          kafka::offset_cast(_config.max_offset));
-        storage::local_log_reader_config cfg(
-          start_offset,
-          max_offset,
-          _config.max_bytes,
-          // We need to fetch both raft data batches for transaction control
-          // markers as well as placeholder batches to hydrate from object
-          // storage, so we don't include a typefilter and instead postfilter
-          // here.
-          /*type_filter=*/std::nullopt,
-          _config.first_timestamp,
-          _config.abort_source,
-          _config.client_address);
-        cfg.translate_offsets = model::translate_offsets::yes;
-        // This parameter defines how many bytes we want to fetch
-        // from the underlying partition in one go.
-        // The L0 meta batches are small, so we can fetch a lot of them in a
-        // single request and then gradually materialize them.
-        // The 'cfg.max_bytes' doesn't limit the size of the materialized
-        // batches, because it is fetching L0 meta batches, which have different
-        // size. In order to know the size of the materialized batches we need
-        // to fetch L0 meta batches first and then parse them.
-        cfg.max_bytes = L0_max_bytes_per_metadata_fetch;
-
+        auto cfg = ctp_read_config();
         auto reader = co_await _ctp->make_local_reader(cfg);
-        auto placeholders = co_await model::consume_reader_to_chunked_vector(
-          std::move(reader), deadline);
+        auto batches = std::move(reader).generator(deadline);
 
         // Convert L0 meta batches to extent_meta structures.
-        for (auto&& batch : placeholders) {
+        while (auto maybe_batch = co_await batches()) {
+            auto batch = std::move(maybe_batch).value();
             auto& header = batch.header();
             if (header.type == model::record_batch_type::raft_data) {
                 local_log_batch local_batch{.header = header};
@@ -200,19 +218,14 @@ ss::future<> level_zero_log_reader_impl::fetch_metadata(
                 _unhydrated.push_back(std::move(local_batch));
                 continue;
             }
-            if (header.type != model::record_batch_type::dl_placeholder) {
+            if (header.type != model::record_batch_type::ctp_placeholder) {
                 continue;
             }
             cloud_topics::extent_meta e{
               .base_offset = model::offset_cast(batch.base_offset()),
               .last_offset = model::offset_cast(batch.last_offset()),
             };
-            iobuf payload = std::move(batch).release_data();
-            iobuf_parser parser(std::move(payload));
-            auto record = model::parse_one_record_from_buffer(parser);
-            iobuf value = std::move(record).release_value();
-            auto placeholder = serde::from_iobuf<cloud_topics::dl_placeholder>(
-              std::move(value));
+            auto placeholder = parse_placeholder_batch(std::move(batch));
             e.id = placeholder.id;
             e.first_byte_offset = placeholder.offset;
             e.byte_range_size = placeholder.size_bytes;

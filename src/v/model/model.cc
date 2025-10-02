@@ -409,8 +409,8 @@ std::ostream& operator<<(std::ostream& o, record_batch_type bt) {
         return o << "batch_type::partition_properties_update";
     case record_batch_type::datalake_coordinator:
         return o << "batch_type::datalake_coordinator";
-    case record_batch_type::dl_placeholder:
-        return o << "batch_type::dl_placeholder";
+    case record_batch_type::ctp_placeholder:
+        return o << "batch_type::ctp_placeholder";
     case record_batch_type::ctp_stm_command:
         return o << "batch_type::ctp_stm_command";
     case record_batch_type::datalake_translation_state:
