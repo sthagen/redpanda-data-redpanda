@@ -19,10 +19,10 @@ using ::cluster_link::model::add_mirror_topic_cmd;
 using ::cluster_link::model::id_t;
 using ::cluster_link::model::metadata;
 using ::cluster_link::model::mirror_topic_metadata;
-using ::cluster_link::model::mirror_topic_state;
+using ::cluster_link::model::mirror_topic_status;
 using ::cluster_link::model::name_t;
 using ::cluster_link::model::update_cluster_link_configuration_cmd;
-using ::cluster_link::model::update_mirror_topic_state_cmd;
+using ::cluster_link::model::update_mirror_topic_status_cmd;
 
 model::record_batch create_upsert_command(model::offset offset, metadata link) {
     cluster::cluster_link_upsert_cmd cmd(0, std::move(link));
@@ -42,9 +42,9 @@ create_add_mirror_topic_command(id_t id, add_mirror_topic_cmd cmd) {
     return cluster::serde_serialize_cmd(std::move(add_cmd));
 }
 
-model::record_batch create_update_mirror_topic_state_command(
-  id_t id, update_mirror_topic_state_cmd cmd) {
-    cluster::cluster_link_update_mirror_topic_state_cmd update_cmd(
+model::record_batch create_update_mirror_topic_status_command(
+  id_t id, update_mirror_topic_status_cmd cmd) {
+    cluster::cluster_link_update_mirror_topic_status_cmd update_cmd(
       id, std::move(cmd));
     return cluster::serde_serialize_cmd(std::move(update_cmd));
 }
@@ -64,7 +64,7 @@ model::record_batch create_update_cluster_link_configuration_command(
 }
 
 mirror_topic_metadata create_mirror_topic_metadata(
-  mirror_topic_state state,
+  mirror_topic_status status,
   ::model::topic source_topic_name,
   std::optional<::model::topic_id> source_topic_id,
   std::optional<::model::topic_id> destination_topic_id,
@@ -72,7 +72,7 @@ mirror_topic_metadata create_mirror_topic_metadata(
   int32_t partition_count,
   std::optional<int16_t> replication_factor) {
     return {
-      .state = state,
+      .status = status,
       .source_topic_id = source_topic_id,
       .source_topic_name = std::move(source_topic_name),
       .destination_topic_id = destination_topic_id.value_or(

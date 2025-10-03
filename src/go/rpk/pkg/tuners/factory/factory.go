@@ -236,6 +236,7 @@ func (factory *tunersFactory) newNetworkTuner(
 	}
 	return tuners.NewNetTuner(
 		irq.ModeFromString(params.Mode),
+		factory.t,
 		params.CPUMask,
 		params.Nics,
 		factory.fs,

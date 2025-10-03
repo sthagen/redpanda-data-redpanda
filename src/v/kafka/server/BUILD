@@ -257,6 +257,7 @@ redpanda_cc_library(
         ":qdc_monitor_config",
         ":security",
         ":topic_config_utils",
+        "//proto/redpanda/core/admin/v2:broker_redpanda_proto",
         "//src/v/base",
         "//src/v/bytes",
         "//src/v/bytes:iobuf",

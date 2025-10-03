@@ -20,6 +20,7 @@
 #include "cluster_link/model/types.h"
 #include "kafka/server/fwd.h"
 #include "model/fundamental.h"
+#include "rpc/fwd.h"
 
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
@@ -29,7 +30,7 @@ namespace cluster_link {
 /**
  * @brief API access for cluster link service
  */
-class service {
+class service : public ss::peering_sharded_service<service> {
 public:
     service(
       ::model::node_id self,
@@ -39,6 +40,7 @@ public:
       ss::sharded<cluster::partition_leaders_table>* partition_leaders_table,
       ss::sharded<cluster::shard_table>* shard_table,
       ss::sharded<cluster::metadata_cache>* metadata_cache,
+      ss::sharded<::rpc::connection_cache>* connections,
       cluster::controller* controller,
       ss::sharded<kafka::group_router>* group_router,
       ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
@@ -61,20 +63,21 @@ public:
      * cluster link
      * @return Result containing either the created/updated link or an error
      */
-    ss::future<result<model::metadata>> upsert_cluster_link(model::metadata md);
+    ss::future<cl_result<model::metadata>>
+    upsert_cluster_link(model::metadata md);
     /**
      * @brief Get the cluster link object
      *
      * @param name The name of the link
      * @return Either the existing link or an error
      */
-    result<model::metadata> get_cluster_link(const model::name_t& name);
+    cl_result<model::metadata> get_cluster_link(const model::name_t& name);
     /**
      * @brief Returns a list of existing cluster links
      *
      * @return List of cluster links
      */
-    result<chunked_vector<model::metadata>> list_cluster_links();
+    cl_result<chunked_vector<model::metadata>> list_cluster_links();
     /**
      * @brief Updates the configuration of a cluster link
      *
@@ -82,21 +85,67 @@ public:
      * @param cmd The command containing the new configuration
      * @return Result containing the updated link
      */
-    ss::future<result<model::metadata>> update_cluster_link(
+    ss::future<cl_result<model::metadata>> update_cluster_link(
       model::name_t name, model::update_cluster_link_configuration_cmd cmd);
+
+    /**
+     * @brief Update the status of a mirror topic
+     *
+     * @return Result containing metadata of updated mirror topic or an error.
+     */
+    ss::future<cl_result<model::metadata>> update_mirror_topic_status(
+      model::name_t link_name,
+      const ::model::topic&,
+      model::mirror_topic_status);
+
+    /**
+     * @brief Failover the topics of a cluster link
+     *
+     * @return Result containing metadata of failed over topics or an error.
+     */
+    ss::future<cl_result<model::metadata>>
+    failover_link_topics(model::name_t link_name);
+
     /**
      * @brief Delete the cluster link object
      *
      * @param name The name of the link
      * @return nothing on success or an error
      */
-    ss::future<result<void>> delete_cluster_link(const model::name_t& name);
+    ss::future<cl_result<void>> delete_cluster_link(const model::name_t& name);
+
+    /**
+     * @brief Reports the status of a shard-local topic in the given link
+     */
+    ss::future<rpc::shadow_topic_report_response>
+    shard_local_topic_report(const model::id_t&, const ::model::topic&);
+
+    /**
+     * @brief Reports the status of a node-local topic in the given link
+     * This is the aggregate of reports from all shards.
+     */
+    ss::future<rpc::shadow_topic_report_response>
+      node_local_shadow_topic_report(rpc::shadow_topic_report_request);
+
+    /**
+     * @brief Shadow topic report aggregated from all the brokers hosting
+     * partition replicas of the topic.
+     */
+    ss::future<model::report_result_t>
+    shadow_topic_report(model::id_t, const ::model::topic&);
 
 private:
     void register_notifications();
     void unregister_notifications();
 
 private:
+    /**
+     * @brief Reports the status of a shadow topic in the given link
+     * on the input node_id.
+     */
+    ss::future<rpc::shadow_topic_report_response>
+      shadow_topic_report(::model::node_id, rpc::shadow_topic_report_request);
+
     ss::gate _gate;
     // Need explicit namespace due to having a `cluster_link::model` namespace
     ::model::node_id _self;
@@ -106,6 +155,7 @@ private:
     ss::sharded<cluster::partition_leaders_table>* _partition_leaders_table;
     ss::sharded<cluster::shard_table>* _shard_table;
     ss::sharded<cluster::metadata_cache>* _metadata_cache;
+    ss::sharded<::rpc::connection_cache>* _connections;
     cluster::controller* _controller;
     ss::sharded<kafka::group_router>* _group_router;
     ss::sharded<cluster::health_monitor_frontend>* _hm_frontend;

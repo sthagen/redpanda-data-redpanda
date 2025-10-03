@@ -51,6 +51,10 @@ func (hwLocCmd *hwLocCmd) Calc(mask string, location string) (string, error) {
 	return hwLocCmd.runCalc(mask, location)
 }
 
+func (hwLocCmd *hwLocCmd) RunCalcRaw(args ...string) (string, error) {
+	return hwLocCmd.runCalc(args...)
+}
+
 func (hwLocCmd *hwLocCmd) Distribute(numberOfElements uint) ([]string, error) {
 	return hwLocCmd.runDistrib(strconv.Itoa(int(numberOfElements)))
 }
@@ -145,4 +149,8 @@ func (hwLocCmd *hwLocCmd) runDistrib(args ...string) ([]string, error) {
 		}
 	}
 	return result, nil
+}
+
+func (hwLocCmd *hwLocCmd) MaskToListFormat(mask string) (string, error) {
+	return hwLocCmd.runCalc("--cpuset-output-format", "list", mask)
 }

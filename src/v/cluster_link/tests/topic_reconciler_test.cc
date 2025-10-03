@@ -266,8 +266,8 @@ TEST_F_CORO(topic_reconciler_test, test_topic_failure) {
           auto link = link_registry()->find_link_by_name(default_link_name);
           const auto& mirror_topics = link->get().state.mirror_topics;
           return mirror_topics.contains(topic.tp)
-                 && mirror_topics.at(topic.tp).state
-                      == model::mirror_topic_state::failed;
+                 && mirror_topics.at(topic.tp).status
+                      == model::mirror_topic_status::failed;
       });
 
     // Now update mirror topic properties again, but there should be no change

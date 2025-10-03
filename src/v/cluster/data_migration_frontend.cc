@@ -355,9 +355,9 @@ ss::future<std::error_code> frontend::insert_barrier() {
     if (!barrier_result) {
         co_return barrier_result.error();
     }
+    auto [barrier_offset, _] = barrier_result.value();
     try {
-        co_await _controller.local().wait(
-          barrier_result.value(), barrier_deadline);
+        co_await _controller.local().wait(barrier_offset, barrier_deadline);
     } catch (...) {
         co_return errc::timeout;
     }

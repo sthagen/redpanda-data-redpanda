@@ -34,6 +34,7 @@ redpanda_cc_library(
     name = "cloud_storage",
     srcs = [
         "anomalies_detector.cc",
+        "async_manifest_materializer.cc",
         "async_manifest_view.cc",
         "base_manifest.cc",
         "configuration.cc",
@@ -76,6 +77,7 @@ redpanda_cc_library(
     ],
     hdrs = [
         "anomalies_detector.h",
+        "async_manifest_materializer.h",
         "async_manifest_view.h",
         "base_manifest.h",
         "configuration.h",

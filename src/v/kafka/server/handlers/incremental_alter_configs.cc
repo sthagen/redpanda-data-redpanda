@@ -131,6 +131,15 @@ create_topic_properties_update(
       model::kafka_namespace, model::topic(resource.resource_name));
     cluster::topic_properties_update update(tp_ns);
 
+    if (!ctx.is_topic_mutable(tp_ns.tp)) {
+        return make_error_alter_config_resource_response<resp_resource_t>(
+          resource,
+          error_code::policy_violation,
+          fmt::format(
+            "Topic cannot be altered because it belongs to an active "
+            "shadow link."));
+    }
+
     schema_id_validation_config_parser schema_id_validation_config_parser{
       update.properties};
 

@@ -1,0 +1,14 @@
+{
+    "namespace": "cluster_link::rpc",
+    "service_name": "shadow_linking_rpc",
+    "includes": [
+        "cluster_link/model/types.h"
+    ],
+    "methods": [
+        {
+            "name": "shadow_topic_report",
+            "input_type": "shadow_topic_report_request",
+            "output_type": "shadow_topic_report_response"
+        }
+    ]
+}

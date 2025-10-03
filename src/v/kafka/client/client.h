@@ -262,6 +262,7 @@ private:
     ss::gate _gate;
 
     bool _is_started{false};
+    bool _is_stopped{false};
     // we must keep track of the retry count to avoid infinite retries to adhere
     // to previous behavior where the client would gave up after a certain
     // number of retries.

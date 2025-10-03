@@ -8,6 +8,7 @@ from ducktape.cluster.cluster import ClusterNode
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     broker_pb2,
     broker_pb2_connect,
+    kafka_connections_pb2,
     shadow_link_pb2,
     shadow_link_pb2_connect,
 )
@@ -25,6 +26,7 @@ class RedpandaServiceProto(Protocol):
 broker_pb = broker_pb2
 shadow_link_pb = shadow_link_pb2
 debug_pb = debug_pb2
+kafka_connections_pb = kafka_connections_pb2
 
 
 # A hacky workaround for https://github.com/connectrpc/connect-python/issues/37

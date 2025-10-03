@@ -20,6 +20,7 @@
 #include "kafka/server/logger.h"
 #include "net/connection.h"
 #include "net/server_probe.h"
+#include "proto/redpanda/core/admin/v2/kafka_connections.proto.h"
 #include "security/acl.h"
 #include "security/authorizer.h"
 #include "security/mtls.h"
@@ -198,6 +199,8 @@ public:
     }
 
     bool tls_enabled() const { return conn->tls_enabled(); }
+
+    proto::admin::kafka_connection to_proto() const;
 
 private:
     template<typename T>

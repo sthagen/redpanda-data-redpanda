@@ -1592,7 +1592,13 @@ ss::future<std::error_code> topics_frontend::revert_cancel_partition_move(
 ss::future<result<model::offset>> topics_frontend::stm_linearizable_barrier(
   model::timeout_clock::time_point timeout) {
     return _stm.invoke_on(controller_stm_shard, [timeout](controller_stm& stm) {
-        return stm.insert_linearizable_barrier(timeout);
+        return stm.insert_linearizable_barrier(timeout).then([](auto r) {
+            if (r.has_error()) {
+                return ss::make_ready_future<result<model::offset>>(r.error());
+            }
+            return ss::make_ready_future<result<model::offset>>(
+              r.value().first);
+        });
     });
 }
 

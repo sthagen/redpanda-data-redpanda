@@ -234,6 +234,15 @@ bool server::is_cluster_link_active() const {
     return clfe.cluster_linking_enabled() && clfe.cluster_link_active();
 }
 
+chunked_vector<ss::lw_shared_ptr<const connection_context>>
+server::list_connections() const {
+    using ret_t = chunked_vector<ss::lw_shared_ptr<const connection_context>>;
+    return _connections | std::views::transform([](const auto& conn) {
+               return conn.shared_from_this();
+           })
+           | std::ranges::to<ret_t>();
+}
+
 void server::setup_metrics() {
     namespace sm = ss::metrics;
     if (config::shard_local_cfg().disable_metrics()) {

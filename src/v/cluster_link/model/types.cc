@@ -19,9 +19,46 @@
 
 #include <ostream>
 
+namespace {
+template<typename T, typename... Args>
+bool is_any_of(T status, Args&&... args) {
+    return ((args == status) || ...);
+}
+} // namespace
+
 namespace cluster_link::model {
 
-std::ostream& operator<<(std::ostream& os, mirror_topic_state s) {
+bool is_valid_status_transition(
+  mirror_topic_status current, mirror_topic_status target) noexcept {
+    switch (target) {
+    case mirror_topic_status::active:
+        // Currently a mirror topic is created with active status
+        // and we do not allow transition back to active from a different
+        // status. This needs to change when we allow failed_over/promoted
+        // topics to be re-activated.
+        return false;
+    case mirror_topic_status::failed:
+        return is_any_of(
+          current,
+          mirror_topic_status::active,
+          mirror_topic_status::failing_over,
+          mirror_topic_status::promoting);
+    case mirror_topic_status::paused:
+    case mirror_topic_status::failing_over:
+    case mirror_topic_status::promoting:
+        return is_any_of(current, mirror_topic_status::active);
+    case mirror_topic_status::failed_over:
+        return is_any_of(current, mirror_topic_status::failing_over);
+    case mirror_topic_status::promoted:
+        return is_any_of(current, mirror_topic_status::promoting);
+    }
+}
+
+std::ostream& operator<<(std::ostream& os, const link_status& s) {
+    return os << fmt::format("{}", s);
+}
+
+std::ostream& operator<<(std::ostream& os, mirror_topic_status s) {
     return os << fmt::format("{}", s);
 }
 
@@ -90,7 +127,7 @@ std::ostream& operator<<(std::ostream& os, const metadata& md) {
 
 mirror_topic_metadata mirror_topic_metadata::copy() const {
     mirror_topic_metadata copy;
-    copy.state = state;
+    copy.status = status;
     copy.source_topic_id = source_topic_id;
     copy.source_topic_name = source_topic_name;
     copy.destination_topic_id = destination_topic_id;
@@ -161,7 +198,7 @@ void link_state::set_mirror_topics(mirror_topics_t&& topics) {
 
 link_state link_state::copy() const {
     link_state copy;
-    copy.paused = paused;
+    copy.status = status;
     copy.mirror_topics.reserve(mirror_topics.size());
     for (const auto& [topic, state] : mirror_topics) {
         copy.mirror_topics.emplace(topic, state.copy());
@@ -213,6 +250,28 @@ auto format_as(acl_pattern p) { return to_string_view(p); }
 auto format_as(acl_operation o) { return to_string_view(o); }
 auto format_as(acl_permission_type p) { return to_string_view(p); }
 } // namespace cluster_link::model
+
+namespace cluster_link::rpc {
+
+fmt::iterator shadow_topic_report_request::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{ link: {}, topic: {} }}", link_id, topic_name);
+}
+
+fmt::iterator
+shadow_topic_partition_leader_report::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{ partition: {} }}", partition);
+}
+
+fmt::iterator shadow_topic_report_response::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{ link_update_revision: {}, leaders: [{}], err_code: {} }}",
+      link_update_revision,
+      fmt::join(leaders.begin(), leaders.end(), ","),
+      err_code);
+}
+
+} // namespace cluster_link::rpc
 
 auto fmt::formatter<cluster_link::model::task_state>::format(
   cluster_link::model::task_state st, format_context& ctx) const
@@ -315,7 +374,7 @@ auto fmt::formatter<cluster_link::model::mirror_topic_metadata>::format(
       "{{state: {}, source_topic_id: {}, source_topic_name: {}, "
       "destination_topic_id: {}, partition_count: {}, replication_factor: {}, "
       "topic_configs: {}}}",
-      m.state,
+      m.status,
       m.source_topic_id,
       m.source_topic_name,
       m.destination_topic_id,
@@ -388,8 +447,8 @@ auto fmt::formatter<cluster_link::model::link_state>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{paused: {}, mirror_topics: {}}}",
-      s.paused,
+      "{{status: {}, mirror_topics: {}}}",
+      s.status,
       fmt::join(s.mirror_topics.begin(), s.mirror_topics.end(), ","));
 }
 
@@ -412,11 +471,12 @@ auto fmt::formatter<cluster_link::model::add_mirror_topic_cmd>::format(
       ctx.out(), "{{topic: {}, metadata: {}}}", m.topic, m.metadata);
 }
 
-auto fmt::formatter<cluster_link::model::update_mirror_topic_state_cmd>::format(
-  const cluster_link::model::update_mirror_topic_state_cmd& m,
-  format_context& ctx) -> decltype(ctx.out()) {
+auto fmt::formatter<cluster_link::model::update_mirror_topic_status_cmd>::
+  format(
+    const cluster_link::model::update_mirror_topic_status_cmd& m,
+    format_context& ctx) -> decltype(ctx.out()) {
     return fmt::format_to(
-      ctx.out(), "{{topic: {}, state: {}}}", m.topic, m.state);
+      ctx.out(), "{{topic: {}, state: {}}}", m.topic, m.status);
 }
 
 auto fmt::formatter<cluster_link::model::update_mirror_topic_properties_cmd>::

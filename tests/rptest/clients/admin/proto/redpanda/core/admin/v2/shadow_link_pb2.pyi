@@ -45,10 +45,6 @@ class _ShadowLinkStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrapper
     'Shadow link is active'
     SHADOW_LINK_STATE_PAUSED: _ShadowLinkState.ValueType
     'Shadow link was paused'
-    SHADOW_LINK_STATE_FAILING_OVER: _ShadowLinkState.ValueType
-    'Shadow link is in the process of failing over'
-    SHADOW_LINK_STATE_FAILED_OVER: _ShadowLinkState.ValueType
-    'Shadow link was failed over'
 
 class ShadowLinkState(_ShadowLinkState, metaclass=_ShadowLinkStateEnumTypeWrapper):
     """Enums
@@ -61,10 +57,6 @@ SHADOW_LINK_STATE_ACTIVE: ShadowLinkState.ValueType
 'Shadow link is active'
 SHADOW_LINK_STATE_PAUSED: ShadowLinkState.ValueType
 'Shadow link was paused'
-SHADOW_LINK_STATE_FAILING_OVER: ShadowLinkState.ValueType
-'Shadow link is in the process of failing over'
-SHADOW_LINK_STATE_FAILED_OVER: ShadowLinkState.ValueType
-'Shadow link was failed over'
 global___ShadowLinkState = ShadowLinkState
 
 class _ScramMechanism:
@@ -172,24 +164,36 @@ class _ShadowTopicStateEnumTypeWrapper(google.protobuf.internal.enum_type_wrappe
     SHADOW_TOPIC_STATE_UNSPECIFIED: _ShadowTopicState.ValueType
     SHADOW_TOPIC_STATE_ACTIVE: _ShadowTopicState.ValueType
     'Shadow topic is active'
-    SHADOW_TOPIC_STATE_PROMOTED: _ShadowTopicState.ValueType
-    'Shadow topic has been promoted'
     SHADOW_TOPIC_STATE_FAULTED: _ShadowTopicState.ValueType
     'Shadow topic has faulted'
     SHADOW_TOPIC_STATE_PAUSED: _ShadowTopicState.ValueType
     'Shadow topic has been paused'
+    SHADOW_TOPIC_STATE_FAILING_OVER: _ShadowTopicState.ValueType
+    'Shadow topic is in the process of failing over'
+    SHADOW_TOPIC_STATE_FAILED_OVER: _ShadowTopicState.ValueType
+    'Shadow topic has failed over successfully'
+    SHADOW_TOPIC_STATE_PROMOTING: _ShadowTopicState.ValueType
+    'Shadow topic is in the process of being promoted'
+    SHADOW_TOPIC_STATE_PROMOTED: _ShadowTopicState.ValueType
+    'Shadow topic is promoted successfully'
 
 class ShadowTopicState(_ShadowTopicState, metaclass=_ShadowTopicStateEnumTypeWrapper):
     """State of a shadow topic"""
 SHADOW_TOPIC_STATE_UNSPECIFIED: ShadowTopicState.ValueType
 SHADOW_TOPIC_STATE_ACTIVE: ShadowTopicState.ValueType
 'Shadow topic is active'
-SHADOW_TOPIC_STATE_PROMOTED: ShadowTopicState.ValueType
-'Shadow topic has been promoted'
 SHADOW_TOPIC_STATE_FAULTED: ShadowTopicState.ValueType
 'Shadow topic has faulted'
 SHADOW_TOPIC_STATE_PAUSED: ShadowTopicState.ValueType
 'Shadow topic has been paused'
+SHADOW_TOPIC_STATE_FAILING_OVER: ShadowTopicState.ValueType
+'Shadow topic is in the process of failing over'
+SHADOW_TOPIC_STATE_FAILED_OVER: ShadowTopicState.ValueType
+'Shadow topic has failed over successfully'
+SHADOW_TOPIC_STATE_PROMOTING: ShadowTopicState.ValueType
+'Shadow topic is in the process of being promoted'
+SHADOW_TOPIC_STATE_PROMOTED: ShadowTopicState.ValueType
+'Shadow topic is promoted successfully'
 global___ShadowTopicState = ShadowTopicState
 
 @typing.final

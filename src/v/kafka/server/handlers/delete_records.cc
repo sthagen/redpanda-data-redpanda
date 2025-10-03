@@ -50,7 +50,7 @@ make_partition_errors(const delete_records_topic& t, error_code ec) {
 /// partitions that all contain the identical error codes
 chunked_vector<delete_records_partition_result>
 validate_at_topic_level(request_context& ctx, const delete_records_topic& t) {
-    if (ctx.recovery_mode_enabled()) {
+    if (ctx.recovery_mode_enabled() || !ctx.is_topic_mutable(t.name)) {
         return make_partition_errors(t, error_code::policy_violation);
     }
 

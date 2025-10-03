@@ -38,6 +38,8 @@ enum class errc : int {
     link_limit_reached,
     link_creation_failed,
     link_has_active_shadow_topics,
+    topic_does_not_exist,
+    topic_metadata_stale,
 };
 
 std::error_code make_error_code(errc) noexcept;
@@ -57,7 +59,7 @@ private:
 };
 
 template<typename T>
-using result = result<T, err_info>;
+using cl_result = result<T, err_info>;
 } // namespace cluster_link
 
 namespace std {

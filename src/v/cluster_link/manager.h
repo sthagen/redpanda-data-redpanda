@@ -14,6 +14,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "cluster_link/deps.h"
 #include "cluster_link/link.h"
+#include "cluster_link/link_status_reconciler.h"
 #include "cluster_link/logger.h"
 #include "cluster_link/model/types.h"
 #include "cluster_link/task.h"
@@ -64,34 +65,54 @@ public:
     /**
      * @brief Creates or updates a cluster link
      */
-    ss::future<result<model::metadata>> upsert_cluster_link(model::metadata md);
+    ss::future<cl_result<model::metadata>>
+    upsert_cluster_link(model::metadata md);
     /**
      * @brief Get the cluster link object by name
      */
-    result<model::metadata> get_cluster_link(const model::name_t& name);
+    cl_result<model::metadata> get_cluster_link(const model::name_t& name);
     /**
      * @brief Returns list of cluster links
      */
-    result<chunked_vector<model::metadata>> list_cluster_links();
+    cl_result<chunked_vector<model::metadata>> list_cluster_links();
     /**
      * @brief Updates the configuration of a cluster link
      */
-    ss::future<result<model::metadata>> update_cluster_link(
+    ss::future<cl_result<model::metadata>> update_cluster_link(
       model::name_t name, model::update_cluster_link_configuration_cmd cmd);
+
+    /**
+     * @brief Update the status of a mirror topic
+     *
+     * @return Result containing metadata of updated mirror topic or an error.
+     */
+    ss::future<cl_result<model::metadata>> update_mirror_topic_status(
+      model::name_t link_name,
+      const ::model::topic&,
+      model::mirror_topic_status);
+
+    /**
+     * @brief Fails over the topics of a cluster link
+     *
+     * @return Result containing metadata of failed over topics or an error.
+     */
+    ss::future<cl_result<model::metadata>>
+    failover_link_topics(model::name_t link_name);
+
     /**
      * @brief Delete the cluster link object by name
      */
-    ss::future<result<void>> delete_cluster_link(model::name_t name);
+    ss::future<cl_result<void>> delete_cluster_link(model::name_t name);
 
     /// Used to notify that a cluster link has been updated
-    void on_link_change(model::id_t id);
+    void on_link_change(model::id_t id, ::model::revision_id);
     /// Used to notify manager in a change of NTP leadership
     void handle_partition_state_change(
       ::model::ntp ntp,
       ntp_leader is_ntp_leader,
       std::optional<::model::term_id>);
     /// Handles creation and start of a link
-    ss::future<> handle_on_link_change(model::id_t id);
+    ss::future<> handle_on_link_change(model::id_t id, ::model::revision_id);
     /// Handles leadership changes for a given NTP
     /// term will be set if partition still exists on the shard
     /// Will definitely be set if is_ntp_leader == true because assuming
@@ -102,7 +123,7 @@ public:
     ss::future<::cluster::cluster_link::errc>
     add_mirror_topic(model::id_t link_id, model::add_mirror_topic_cmd cmd);
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
-      model::id_t link_id, model::update_mirror_topic_state_cmd cmd);
+      model::id_t link_id, model::update_mirror_topic_status_cmd cmd);
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
       model::id_t link_id, model::update_mirror_topic_properties_cmd cmd);
 
@@ -157,11 +178,13 @@ public:
         return _scheduling_group;
     }
 
+    std::unique_ptr<link_registry>& registry() noexcept { return _registry; }
+
 private:
     /// Called periodically to reconcile registered tasks on created links
     ss::future<> link_task_reconciler();
-    ss::future<> start_topic_reconciler();
-    ss::future<> stop_topic_reconciler();
+    ss::future<> on_controller_leadership(::model::term_id);
+    ss::future<> on_controller_stepdown();
 
 private:
     ::model::node_id _self;
@@ -176,6 +199,7 @@ private:
     std::unique_ptr<link_factory> _link_factory;
     std::unique_ptr<cluster_factory> _cluster_factory;
     std::unique_ptr<topic_reconciler> _topic_reconciler;
+    std::unique_ptr<link_status_reconciler> _link_status_reconciler;
     std::unique_ptr<consumer_groups_router> _group_router;
     std::unique_ptr<partition_metadata_provider> _partition_metadata_provider;
     ssx::work_queue _queue;

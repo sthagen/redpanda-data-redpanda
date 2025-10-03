@@ -69,7 +69,7 @@ class RpkRemoteTool:
     def check(self) -> str:
         return self._execute([self._rpk_binary(), "redpanda", "check", "-v"])
 
-    def mode_set(self, mode):
+    def mode_set(self, mode: str) -> str:
         return self._execute([self._rpk_binary(), "redpanda", "mode", mode])
 
     def redpanda_start(self, log_file, additional_args="", env_vars=""):

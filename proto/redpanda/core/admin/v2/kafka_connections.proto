@@ -1,0 +1,220 @@
+// Copyright 2025 Redpanda Data, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package redpanda.core.admin.v2;
+
+import "google/api/field_info.proto";
+import "proto/redpanda/pbgen/options.proto";
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
+
+option (redpanda.pbgen.cpp_namespace) = "proto::admin";
+
+/* Resources */
+// Kafka connection details for a broker
+message KafkaConnection {
+    // Broker node ID
+    int32 node_id = 1;
+
+    // Broker shard that handles the connection
+    uint32 shard_id = 2;
+
+    // Kafka connection UUID
+    string uid = 3 [(google.api.field_info).format = UUID4];
+
+    // Lifecycle state of the connection (open/aborting/closed)
+    KafkaConnectionState state = 4;
+
+    // When the broker accepted the connection
+    google.protobuf.Timestamp open_time = 5;
+
+    // When the connection was closed. This field is set only when the
+    // connection state is "closed".
+    google.protobuf.Timestamp close_time = 6;
+
+    // Information about the authentication state of the connection
+    AuthenticationInfo authentication_info = 7;
+
+    // Name of the Kafka listener that accepted this connection.
+    // A listener is a named broker endpoint (for example, "internal",
+    // "external", or "sasl_tls"). Each listener defines its network address and
+    // enforces its protocol and authentication policy.
+    string listener_name = 8;
+
+    // Information about the TLS state of the connection (e.g., whether TLS
+    // encryption is used for this connection)
+    TLSInfo tls_info = 9;
+
+    // Remote client address of the TCP connection
+    Source source = 10;
+
+    // Client identifier included in every request sent by the Kafka client.
+    // This is typically a configurable property (client.id) set by the
+    // application when creating a producer or consumer, and is often used for
+    // metrics, quotas, and debugging.
+    string client_id = 11;
+
+    // Name of the client library, reported automatically in ApiVersions v3+
+    // requests. This is set by the client implementation and is not typically
+    // configurable by applications.
+    string client_software_name = 12;
+
+    // Version of the client library, reported automatically in ApiVersions v3+
+    // requests. Like client_software_name, this is set by the
+    // client and not usually configurable by applications.
+    string client_software_version = 13;
+
+    // Most recent transactional ID seen in requests sent over this connection
+    string transactional_id = 14;
+
+    // Most recent group ID seen in requests sent over this connection. This
+    // typically refers to a consumer group, but the Kafka group protocol is
+    // more general and may also be used by other types of clients that
+    // coordinate membership and assignments through the broker.
+    string group_id = 15;
+
+    // Most recent group instance ID seen in requests sent over this connection.
+    // This is used when static membership is enabled, allowing a specific
+    // client instance to retain its group membership across restarts.
+    string group_instance_id = 16;
+
+    // Most recent group member ID seen in requests sent over this connection.
+    // This is the unique identifier assigned by the broker to a particular
+    // member of the group.
+    string group_member_id = 17;
+
+    // This map records, for each Kafka API, the highest version number observed
+    // in requests on this connection. It can be useful for understanding which
+    // protocol versions a client supports or has negotiated with the broker.
+    // Only APIs that were actually used (i.e. at least one request was seen)
+    // are included.
+    //
+    // Example:
+    //   { 0: 11, 1: 13 }
+    // means that for API key 0 (Produce), version 11 was the highest seen,
+    // and for API key 1 (Fetch), version 13 was the highest seen.
+    //
+    // Reference:
+    // - https://kafka.apache.org/0101/protocol.html#protocol_api_keys
+    // - https://kafka.apache.org/0101/protocol.html#protocol_compatibility
+    map<int32, int32> api_versions = 18;
+
+    // How long the connection has been idle (no in-flight requests)
+    google.protobuf.Duration idle_duration = 19;
+
+    // Currently in-flight requests
+    InFlightRequests in_flight_requests = 20;
+
+    // Aggregated statistics for the entire connection's lifetime.
+    RequestStatistics total_request_statistics = 21;
+
+    // Statistics for previous last one minute window.
+    RequestStatistics recent_request_statistics = 22;
+}
+
+/* Other Messages */
+message AuthenticationInfo {
+    // Authentication state
+    AuthenticationState state = 1;
+
+    // Authentication mechanism
+    AuthenticationMechanism mechanism = 2;
+
+    // Authenticated user principal
+    string user_principal = 3;
+}
+
+message TLSInfo {
+    // Whether TLS is in use
+    bool enabled = 1;
+}
+
+message Source {
+    string ip_address = 1 [(google.api.field_info).format = IPV4_OR_IPV6];
+    uint32 port = 2;
+}
+
+message InFlightRequests {
+    message Request {
+        // API key for the request type (e.g., produce/fetch/metadata/etc)
+        // https://kafka.apache.org/0101/protocol.html#protocol_api_keys
+        int32 api_key = 1;
+
+        // How long the request has been in-flight since it was received
+        google.protobuf.Duration in_flight_duration = 2;
+    }
+
+    // A sample (e.g., the 5 latest) of the currently in-flight requests
+    repeated Request sampled_in_flight_requests = 1;
+
+    // Whether there are more in-flight requests than those in
+    // `sampled_in_flight_requests`.
+    bool has_more_requests = 2;
+}
+
+message RequestStatistics {
+    // Sum of bytes produced.
+    uint64 produce_bytes = 1;
+    // Sum of bytes fetched.
+    uint64 fetch_bytes = 2;
+    // Number of requests the client has made.
+    uint64 request_count = 3;
+    // Number of produced batches
+    // Average batch size = produce_bytes / produce_batch_count
+    uint64 produce_batch_count = 4;
+}
+
+/* Enums */
+enum KafkaConnectionState {
+    KAFKA_CONNECTION_STATE_UNSPECIFIED = 0;
+
+    // The connection is accepting requests.
+    KAFKA_CONNECTION_STATE_OPEN = 1;
+
+    // The connection is aborting ongoing requests and about to be closed.
+    // This is a transient state between open and closed that should rarely be
+    // observable under normal circumstances.
+    KAFKA_CONNECTION_STATE_ABORTING = 2;
+
+    // The connection has been closed.
+    KAFKA_CONNECTION_STATE_CLOSED = 3;
+}
+
+enum AuthenticationState {
+    AUTHENTICATION_STATE_UNSPECIFIED = 0;
+    AUTHENTICATION_STATE_UNAUTHENTICATED = 1;
+    AUTHENTICATION_STATE_SUCCESS = 2;
+    AUTHENTICATION_STATE_FAILURE = 3;
+}
+
+enum AuthenticationMechanism {
+    AUTHENTICATION_MECHANISM_UNSPECIFIED = 0;
+
+    // Mutual TLS using client certificates
+    AUTHENTICATION_MECHANISM_MTLS = 1;
+
+    // SASL SCRAM
+    AUTHENTICATION_MECHANISM_SASL_SCRAM = 2;
+
+    // SASL OAUTHBEARER (OAuth 2.0 / OpenID Connect)
+    AUTHENTICATION_MECHANISM_SASL_OAUTHBEARER = 3;
+
+    // SASL PLAIN (username/password in plaintext)
+    AUTHENTICATION_MECHANISM_SASL_PLAIN = 4;
+
+    // SASL GSSAPI (Kerberos)
+    AUTHENTICATION_MECHANISM_SASL_GSSAPI = 5;
+}

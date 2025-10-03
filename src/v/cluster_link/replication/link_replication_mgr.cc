@@ -124,4 +124,17 @@ void link_replication_manager::stop_replicator(
           });
     });
 }
+
+void link_replication_manager::stop_replicators(
+  std::optional<::model::topic> topic) {
+    if (_gate.is_closed()) {
+        return;
+    }
+    for (const auto& [ntp, _] : _replicators) {
+        if (!topic || ntp.tp.topic == *topic) {
+            stop_replicator(ntp, std::nullopt);
+        }
+    }
+}
+
 } // namespace cluster_link::replication

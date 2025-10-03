@@ -3,11 +3,18 @@ load("//bazel/pbgen:pbgen.bzl", "redpanda_proto_library")
 
 proto_library(
     name = "broker_proto",
-    srcs = ["broker.proto"],
+    srcs = [
+        "broker.proto",
+        "kafka_connections.proto",
+    ],
     visibility = ["//visibility:public"],
     deps = [
+        "//proto/redpanda/core/common:common_proto",
         "//proto/redpanda/pbgen:options_proto",
         "//proto/redpanda/pbgen:rpc_proto",
+        "@googleapis//google/api:field_info_proto",
+        "@protobuf//:duration_proto",
+        "@protobuf//:timestamp_proto",
     ],
 )
 
@@ -15,6 +22,9 @@ redpanda_proto_library(
     name = "broker_redpanda_proto",
     protos = [":broker_proto"],
     visibility = ["//visibility:public"],
+    deps = [
+        "@abseil-cpp//absl/time:time",
+    ],
 )
 
 proto_library(

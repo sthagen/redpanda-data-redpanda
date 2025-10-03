@@ -263,19 +263,15 @@ ss::future<response_ptr> create_partitions_handler::handle(
             });
       });
 
-    if (request.data.validate_only) {
-        std::transform(
-          request.data.topics.begin(),
-          valid_range_end,
-          std::back_inserter(resp.data.results),
-          [](const create_partitions_topic& tp) {
-              return create_partitions_topic_result{
-                .name = tp.name,
-                .error_code = error_code::none,
-              };
-          });
-        co_return co_await ctx.respond(std::move(resp));
-    }
+    valid_range_end = validate_range(
+      request.data.topics.begin(),
+      valid_range_end,
+      std::back_inserter(resp.data.results),
+      error_code::policy_violation,
+      "Topic belongs to an active cluster link",
+      [&ctx](const create_partitions_topic& tp) {
+          return ctx.is_topic_mutable(tp.name);
+      });
 
     const auto now = quota_manager::clock::now();
     valid_range_end = co_await validate_range_async(
@@ -302,6 +298,20 @@ ss::future<response_ptr> create_partitions_handler::handle(
                 return delay == 0ms;
             });
       });
+
+    if (request.data.validate_only) {
+        std::transform(
+          request.data.topics.begin(),
+          valid_range_end,
+          std::back_inserter(resp.data.results),
+          [](const create_partitions_topic& tp) {
+              return create_partitions_topic_result{
+                .name = tp.name,
+                .error_code = error_code::none,
+              };
+          });
+        co_return co_await ctx.respond(std::move(resp));
+    }
 
     auto results = co_await do_create_partitions(
       ctx,

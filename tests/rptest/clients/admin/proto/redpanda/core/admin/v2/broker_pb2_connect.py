@@ -64,6 +64,21 @@ class BrokerServiceClient:
             raise ConnectProtocolError('missing response message')
         return msg
 
+    def call_list_kafka_connections(self, req: proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsResponse]:
+        """Low-level method to call ListKafkaConnections, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.BrokerService/ListKafkaConnections'
+        return self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsResponse, extra_headers, timeout_seconds)
+
+    def list_kafka_connections(self, req: proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsResponse:
+        response = self.call_list_kafka_connections(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
 class AsyncBrokerServiceClient:
 
     def __init__(self, base_url: str, http_client: aiohttp.ClientSession, protocol: ConnectProtocol=ConnectProtocol.CONNECT_PROTOBUF):
@@ -100,6 +115,21 @@ class AsyncBrokerServiceClient:
             raise ConnectProtocolError('missing response message')
         return msg
 
+    async def call_list_kafka_connections(self, req: proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> UnaryOutput[proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsResponse]:
+        """Low-level method to call ListKafkaConnections, granting access to errors and metadata"""
+        url = self.base_url + '/redpanda.core.admin.v2.BrokerService/ListKafkaConnections'
+        return await self._connect_client.call_unary(url, req, proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsResponse, extra_headers, timeout_seconds)
+
+    async def list_kafka_connections(self, req: proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsRequest, extra_headers: HeaderInput | None=None, timeout_seconds: float | None=None) -> proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsResponse:
+        response = await self.call_list_kafka_connections(req, extra_headers, timeout_seconds)
+        err = response.error()
+        if err is not None:
+            raise err
+        msg = response.message()
+        if msg is None:
+            raise ConnectProtocolError('missing response message')
+        return msg
+
 @typing.runtime_checkable
 class BrokerServiceProtocol(typing.Protocol):
 
@@ -108,10 +138,14 @@ class BrokerServiceProtocol(typing.Protocol):
 
     def list_brokers(self, req: ClientRequest[proto.redpanda.core.admin.v2.broker_pb2.ListBrokersRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.broker_pb2.ListBrokersResponse]:
         ...
+
+    def list_kafka_connections(self, req: ClientRequest[proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsRequest]) -> ServerResponse[proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsResponse]:
+        ...
 BROKER_SERVICE_PATH_PREFIX = '/redpanda.core.admin.v2.BrokerService'
 
 def wsgi_broker_service(implementation: BrokerServiceProtocol) -> WSGIApplication:
     app = ConnectWSGI()
     app.register_unary_rpc('/redpanda.core.admin.v2.BrokerService/GetBroker', implementation.get_broker, proto.redpanda.core.admin.v2.broker_pb2.GetBrokerRequest)
     app.register_unary_rpc('/redpanda.core.admin.v2.BrokerService/ListBrokers', implementation.list_brokers, proto.redpanda.core.admin.v2.broker_pb2.ListBrokersRequest)
+    app.register_unary_rpc('/redpanda.core.admin.v2.BrokerService/ListKafkaConnections', implementation.list_kafka_connections, proto.redpanda.core.admin.v2.broker_pb2.ListKafkaConnectionsRequest)
     return app

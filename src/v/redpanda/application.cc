@@ -82,6 +82,7 @@
 #include "cluster/tx_topic_manager.h"
 #include "cluster/types.h"
 #include "cluster/utils/partition_change_notifier_impl.h"
+#include "cluster_link/rpc_service.h"
 #include "cluster_link/service.h"
 #include "compression/async_stream_zstd.h"
 #include "compression/lz4_decompression_buffers.h"
@@ -1533,6 +1534,7 @@ void application::wire_up_runtime_services(
       &controller->get_partition_leaders(),
       &controller->get_shard_table(),
       &metadata_cache,
+      &_connection_cache,
       controller.get(),
       &group_router,
       &controller->get_health_monitor(),
@@ -3422,6 +3424,12 @@ void application::start_runtime_services(
                   return _admin.local().handle_rpc_request(
                     std::move(ctx), std::move(buf));
               }));
+
+          runtime_services.push_back(
+            std::make_unique<cluster_link::rpc::service_impl>(
+              sched_groups.cluster_sg(),
+              smp_service_groups.cluster_smp_sg(),
+              _cluster_link_service));
 
           s.add_services(std::move(runtime_services));
 

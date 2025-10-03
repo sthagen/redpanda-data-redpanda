@@ -120,15 +120,36 @@ is_nested_shutdown_exception(const ss::nested_exception& ex) {
 bool segment_meta_matches_stats(
   const cloud_storage::segment_meta& meta,
   const cloud_storage::segment_record_stats& stats,
-  retry_chain_logger& ctxlog) {
+  retry_chain_logger& ctxlog,
+  bool gaps_allowed) {
     // Validate segment content. The 'stats' is computed when
     // the actual segment is scanned and represents the 'ground truth' about
     // its content. The 'meta' is the expected segment metadata. We
     // shouldn't replicate it if it doesn't match the 'stats'.
+    const auto offsets_valid = [&] {
+        if (gaps_allowed) {
+            /**
+             * Gap may be present either at the beginning or at the end of the
+             * segment. So we check that the stats range is fully contained
+             * within the segments range. Gaps should not influence the segment
+             * size and number of config records.
+             *
+             * base_o                                last_o
+             *   |           segment offsets           |
+             *    <- gap ->                   <- gap ->
+             *             |  stats offsets  |
+             *
+             *           base_o            last_o
+             */
+
+            return stats.base_rp_offset >= meta.base_offset
+                   && stats.last_rp_offset <= meta.committed_offset;
+        }
+        return meta.base_offset == stats.base_rp_offset
+               && meta.committed_offset == stats.last_rp_offset;
+    };
     if (
-      meta.size_bytes != stats.size_bytes
-      || meta.base_offset != stats.base_rp_offset
-      || meta.committed_offset != stats.last_rp_offset
+      meta.size_bytes != stats.size_bytes || !offsets_valid()
       || static_cast<size_t>(meta.delta_offset_end - meta.delta_offset)
            != stats.total_conf_records) {
         vlog(
@@ -2243,7 +2264,12 @@ ntp_archiver::wait_uploads_complete(
             if (
               upload.upload_kind == segment_upload_kind::non_compacted
               && upload.meta.has_value()) {
-                if (!segment_meta_matches_stats(*upload.meta, stats, _rtclog)) {
+                if (!segment_meta_matches_stats(
+                      *upload.meta,
+                      stats,
+                      _rtclog,
+                      _parent.get_ntp_config()
+                        .is_remote_allow_gaps_enabled())) {
                     break;
                 }
             }
@@ -3622,7 +3648,11 @@ ss::future<bool> ntp_archiver::do_upload_local(
         // the actual segment is scanned and represents the 'ground truth' about
         // its content. The 'meta' is the expected segment metadata. We
         // shouldn't replicate it if it doesn't match the 'stats'.
-        if (!segment_meta_matches_stats(meta, stats, _rtclog)) {
+        if (!segment_meta_matches_stats(
+              meta,
+              stats,
+              _rtclog,
+              _parent.get_ntp_config().is_remote_allow_gaps_enabled())) {
             co_return false;
         }
     }

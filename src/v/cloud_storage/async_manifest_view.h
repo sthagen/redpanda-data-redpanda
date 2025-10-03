@@ -11,14 +11,12 @@
 #pragma once
 
 #include "base/outcome.h"
+#include "cloud_storage/async_manifest_materializer.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_storage/materialized_manifest_cache.h"
 #include "cloud_storage/read_path_probes.h"
 #include "cloud_storage/remote_path_provider.h"
-#include "cloud_storage/remote_probe.h"
 #include "cloud_storage/types.h"
-#include "cloud_storage_clients/types.h"
-#include "model/metadata.h"
 #include "model/timestamp.h"
 #include "ssx/task_local_ptr.h"
 #include "utils/retry_chain_node.h"
@@ -31,11 +29,7 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timed_out_error.hh>
 
-#include <algorithm>
 #include <chrono>
-#include <exception>
-#include <map>
-#include <type_traits>
 #include <variant>
 
 namespace cloud_storage {
@@ -182,8 +176,6 @@ private:
     std::optional<size_t>
     get_spillover_upper_bound_by_term(model::term_id term) noexcept;
 
-    ss::future<> run_bg_loop();
-
     /// Return true if the offset belongs to the archive
     bool in_archive(async_view_search_query_t o);
 
@@ -192,27 +184,7 @@ private:
 
     /// Get manifest by offset/timestamp
     ss::future<result<data_manifest, error_outcome>>
-    get_materialized_manifest(async_view_search_query_t q) noexcept;
-
-    /// Load manifest from the cloud
-    ///
-    /// On success put serialized copy into the cache. The method should only be
-    /// called if the manifest is not available in the cache. The state of the
-    /// view is not changed.
-    ss::future<result<spillover_manifest, error_outcome>>
-    hydrate_manifest(remote_manifest_path path) const noexcept;
-
-    /// Load manifest from the cache
-    ///
-    /// The method reads manifest from the cache or downloads from the cloud.
-    /// Local state is not changed. The returned manifest has to be stored
-    /// in the view after the call.
-    /// \throws
-    ///     - not_found if the manifest doesn't exist
-    ///     - repeat if the manifest is being downloaded already
-    ///     - TODO
-    ss::future<result<spillover_manifest, error_outcome>>
-    materialize_manifest(remote_manifest_path path) const noexcept;
+    get_manifest(async_view_search_query_t q) noexcept;
 
     /// Find index of the spillover manifest
     ///
@@ -222,41 +194,17 @@ private:
     std::optional<segment_meta>
     search_spillover_manifests(async_view_search_query_t query) const;
 
-    /// Convert segment_meta to spillover manifest path
-    remote_manifest_path
-    get_spillover_manifest_path(const segment_meta& meta) const;
-
     mutable ss::gate _gate;
     ss::abort_source _as;
-    cloud_storage_clients::bucket_name _bucket;
     const remote_path_provider& _remote_path_provider;
-    ss::sharded<remote>& _remote;
-    ss::sharded<cache>& _cache;
-    ts_read_path_probe& _ts_probe;
 
     const partition_manifest& _stm_manifest;
     mutable retry_chain_node _rtcnode;
     retry_chain_logger _ctxlog;
-    config::binding<std::chrono::milliseconds> _timeout;
-    config::binding<std::chrono::milliseconds> _backoff;
-    config::binding<size_t> _read_buffer_size;
-    config::binding<int16_t> _readahead_size;
 
     config::binding<std::chrono::milliseconds> _manifest_meta_ttl;
 
-    materialized_manifest_cache& _manifest_cache;
-
-    using materialized_manifest_ptr = ss::shared_ptr<materialized_manifest>;
-
-    // BG loop state
-    /// Materialization request which is sent to background fiber
-    struct materialization_request_t {
-        segment_meta search_vec;
-        ss::promise<result<materialized_manifest_ptr, error_outcome>> promise;
-        std::unique_ptr<ts_read_path_probe::hist_t::measurement> _measurement;
-    };
-    std::deque<materialization_request_t> _requests;
-    ss::condition_variable _cvar;
+    async_manifest_materializer _materializer;
 };
 
 enum class async_manifest_view_cursor_status {

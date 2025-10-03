@@ -46,9 +46,14 @@ public:
     virtual ss::future<> start();
     virtual ss::future<> stop() noexcept;
 
-    ss::future<result<void>> register_task(task_factory*);
+    ss::future<cl_result<void>> register_task(task_factory*);
 
-    void update_config(model::metadata);
+    void update_config(model::metadata, ::model::revision_id);
+
+    // at the link scope
+    bool requires_active_replicators() const;
+    // per topic
+    bool requires_active_replicators(const ::model::topic&) const;
 
     ss::future<> handle_on_leadership_change(
       ::model::ntp ntp,
@@ -78,7 +83,7 @@ public:
     add_mirror_topic(model::add_mirror_topic_cmd cmd);
 
     ss::future<::cluster::cluster_link::errc>
-    update_mirror_topic_state(model::update_mirror_topic_state_cmd cmd);
+    update_mirror_topic_state(model::update_mirror_topic_status_cmd cmd);
 
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
       model::update_mirror_topic_properties_cmd cmd);
@@ -117,7 +122,7 @@ private:
     bool should_start_task(task* t) const;
     bool should_stop_task(task* t) const;
     ss::future<> run_task_reconciler();
-    ss::future<result<void>> do_register_task(std::unique_ptr<task>);
+    ss::future<cl_result<void>> do_register_task(std::unique_ptr<task>);
     void maybe_update_sasl_configuration(
       const std::optional<model::connection_config::authn_variant>&
         authn_config);

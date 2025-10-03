@@ -351,7 +351,7 @@ TEST_F_CORO(source_topic_syncer_test, topic_id_changes) {
         if (it == mirror_topics.end()) {
             return false;
         }
-        return it->second.state == model::mirror_topic_state::failed;
+        return it->second.status == model::mirror_topic_status::failed;
     });
 }
 

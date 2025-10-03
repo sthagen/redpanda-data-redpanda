@@ -37,6 +37,10 @@ public:
     // can no longer has a term that we can access.
     void stop_replicator(::model::ntp, std::optional<::model::term_id>);
 
+    // Stop all replicators for a given topic, or all replicators if no topic
+    // is specified.
+    void stop_replicators(std::optional<::model::topic> topic = std::nullopt);
+
 private:
     ss::future<> do_start_replicator(::model::ntp, ::model::term_id);
     ss::future<>

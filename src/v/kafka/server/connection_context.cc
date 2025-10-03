@@ -18,6 +18,7 @@
 #include "bytes/scattered_message.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "config/node_config.h"
 #include "kafka/protocol/sasl_authenticate.h"
 #include "kafka/server/datalake_throttle_manager.h"
 #include "kafka/server/handlers/fetch.h"
@@ -31,6 +32,7 @@
 #include "kafka/server/sasl_probe.h"
 #include "kafka/server/server.h"
 #include "kafka/server/snc_quota_manager.h"
+#include "model/fundamental.h"
 #include "net/exceptions.h"
 #include "security/authorizer.h"
 #include "security/exceptions.h"
@@ -808,6 +810,35 @@ connection_context::dispatch_method_once(request_header hdr, size_t size) {
 
     co_await it->second->process_request(
       shared_from_this(), std::move(rctx), sres);
+}
+
+proto::admin::kafka_connection connection_context::to_proto() const {
+    using proto::admin::kafka_connection_state;
+
+    auto res = proto::admin::kafka_connection{};
+    res.set_shard_id(ss::this_shard_id());
+    res.set_node_id(
+      config::node().node_id.value().value_or(model::unassigned_node_id));
+    res.set_listener_name(ss::sstring{listener()});
+    res.set_state(
+      _as.abort_requested() ? kafka_connection_state::aborting
+                            : kafka_connection_state::open);
+
+    auto src = proto::admin::source{};
+    src.set_ip_address(fmt::format("{}", client_host()));
+    src.set_port(client_port());
+    res.set_source(std::move(src));
+
+    auto tls_info = proto::admin::tls_info{};
+    tls_info.set_enabled(conn->tls_enabled());
+    res.set_tls_info(std::move(tls_info));
+
+    auto auth_info = proto::admin::authentication_info{};
+    auth_info.set_user_principal(ss::sstring{get_principal().name()});
+
+    // TODO: fill out the response with the remaining fields
+
+    return res;
 }
 
 ss::future<> connection_context::virtual_connection_state::process_request(

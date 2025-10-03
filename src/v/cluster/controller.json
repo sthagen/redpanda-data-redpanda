@@ -188,9 +188,9 @@
             "output_type": "add_mirror_topic_response"
         },
         {
-            "name": "update_mirror_topic_state",
-            "input_type": "update_mirror_topic_state_request",
-            "output_type": "update_mirror_topic_state_response"
+            "name": "update_mirror_topic_status",
+            "input_type": "update_mirror_topic_status_request",
+            "output_type": "update_mirror_topic_status_response"
         },
         {
             "name": "update_mirror_topic_properties",

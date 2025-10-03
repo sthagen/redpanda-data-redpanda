@@ -396,7 +396,7 @@ public:
 
     ss::future<> run_impl() override { return ss::now(); }
 
-    ss::future<result<void>> start() override {
+    ss::future<cl_result<void>> start() override {
         static unsigned num_calls = 0;
         if (num_calls < 2) {
             num_calls++;

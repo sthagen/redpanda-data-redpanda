@@ -2841,7 +2841,7 @@ class RedpandaService(Service, RedpandaServiceABC):
 
         self.for_nodes(self.nodes, prune)
 
-    def node_id(self, node, force_refresh=False, timeout_sec=30):
+    def node_id(self, node: ClusterNode, force_refresh=False, timeout_sec=30) -> int:
         """
         Returns the node ID of a given node. Uses a cached value unless
         'force_refresh' is set to True.
@@ -3640,7 +3640,9 @@ class RedpandaService(Service, RedpandaServiceABC):
         if not expect_fail:
             self._started.add(node)
 
-    def start_node_with_rpk(self, node, additional_args="", clean_node=True):
+    def start_node_with_rpk(
+        self, node: ClusterNode, additional_args="", clean_node=True
+    ):
         """
         Start a single instance of redpanda using rpk. similar to start_node,
         this function will not return until redpanda appears to have started
@@ -4621,7 +4623,11 @@ class RedpandaService(Service, RedpandaServiceABC):
                 raise e
 
     def clean_node(
-        self, node, preserve_logs=False, preserve_current_install=False, **kwargs: Any
+        self,
+        node: ClusterNode,
+        preserve_logs=False,
+        preserve_current_install=False,
+        **kwargs: Any,
     ):
         assert not kwargs, f"Unknown args {kwargs}"
         # These are allow_fail=True to allow for a race where kill_process finds

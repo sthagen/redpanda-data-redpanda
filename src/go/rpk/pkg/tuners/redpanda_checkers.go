@@ -231,7 +231,7 @@ func RedpandaCheckers(
 		return nil, err
 	}
 	netCheckersFactory := NewNetCheckersFactory(
-		fs, irqProcFile, irqDeviceInfo, ethtool, balanceService, cpuMasks)
+		fs, y.Rpk.Tuners, irqProcFile, irqDeviceInfo, ethtool, balanceService, cpuMasks)
 	checkers := map[CheckerID][]Checker{
 		ConfigFileChecker:             {NewConfigChecker(y)},
 		IoConfigFileChecker:           {NewIOConfigFileExistanceChecker(fs, ioConfigFile)},

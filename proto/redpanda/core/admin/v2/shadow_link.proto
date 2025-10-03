@@ -396,10 +396,6 @@ enum ShadowLinkState {
     SHADOW_LINK_STATE_ACTIVE = 1;
     // Shadow link was paused
     SHADOW_LINK_STATE_PAUSED = 2;
-    // Shadow link is in the process of failing over
-    SHADOW_LINK_STATE_FAILING_OVER = 3;
-    // Shadow link was failed over
-    SHADOW_LINK_STATE_FAILED_OVER = 4;
 }
 // Valid SCRAM mechanisms
 enum ScramMechanism {
@@ -445,10 +441,16 @@ enum ShadowTopicState {
     SHADOW_TOPIC_STATE_UNSPECIFIED = 0;
     // Shadow topic is active
     SHADOW_TOPIC_STATE_ACTIVE = 1;
-    // Shadow topic has been promoted
-    SHADOW_TOPIC_STATE_PROMOTED = 2;
     // Shadow topic has faulted
-    SHADOW_TOPIC_STATE_FAULTED = 3;
+    SHADOW_TOPIC_STATE_FAULTED = 2;
     // Shadow topic has been paused
-    SHADOW_TOPIC_STATE_PAUSED = 4;
+    SHADOW_TOPIC_STATE_PAUSED = 3;
+    // Shadow topic is in the process of failing over
+    SHADOW_TOPIC_STATE_FAILING_OVER = 4;
+    // Shadow topic has failed over successfully
+    SHADOW_TOPIC_STATE_FAILED_OVER = 5;
+    // Shadow topic is in the process of being promoted
+    SHADOW_TOPIC_STATE_PROMOTING = 6;
+    // Shadow topic is promoted successfully
+    SHADOW_TOPIC_STATE_PROMOTED = 7;
 }

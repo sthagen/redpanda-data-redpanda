@@ -14,6 +14,7 @@
 #include "cluster/cluster_link/fwd.h"
 #include "cluster/fwd.h"
 #include "config/configuration.h"
+#include "container/chunked_vector.h"
 #include "features/feature_table.h"
 #include "kafka/protocol/types.h"
 #include "kafka/server/connection_context.h"
@@ -252,6 +253,9 @@ public:
     }
 
     bool is_cluster_link_active() const;
+
+    chunked_vector<ss::lw_shared_ptr<const connection_context>>
+    list_connections() const;
 
 private:
     void setup_metrics();

@@ -107,8 +107,10 @@ public:
      * to returned offsets are linearizable. (i.e. majority of followers have
      * updated their commit indices to at least reaturned offset). For more
      * details see paragraph 6.4 of Raft protocol dissertation.
+     *
+     * Returns the barrier offset and its term if successful.
      */
-    ss::future<result<model::offset>>
+    ss::future<result<std::pair<model::offset, model::term_id>>>
       insert_linearizable_barrier(model::timeout_clock::time_point);
 
 protected:

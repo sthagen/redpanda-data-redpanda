@@ -12,6 +12,7 @@
 package tuners
 
 import (
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/disk"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
@@ -196,7 +197,8 @@ func GetExpectedIRQsDistribution(
 
 	nonNvmeDisksInfo := diskInfoByType[disk.NonNvme]
 	nvmeDisksInfo := diskInfoByType[disk.Nvme]
-	irqCPUMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, finalCPUMask)
+	// dedicated mode is never used for disks
+	irqCPUMask, err := cpuMasks.CPUMaskForIRQs(effectiveMode, finalCPUMask, config.RpkNodeTuners{})
 	if err != nil {
 		return nil, err
 	}

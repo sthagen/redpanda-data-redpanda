@@ -18,11 +18,12 @@
 #include "kafka/data/rpc/deps.h"
 #include "model/fundamental.h"
 
+#include <expected>
+
 namespace cluster_link {
 
 /**
  * @brief Abstract class that provides accessors to cluster link table
- *
  */
 class link_registry {
 public:
@@ -50,6 +51,9 @@ public:
 
     virtual chunked_vector<model::id_t> get_all_link_ids() const = 0;
 
+    virtual std::optional<::model::revision_id>
+    get_last_update_revision(const model::id_t&) const = 0;
+
     virtual ss::future<::cluster::cluster_link::errc> add_mirror_topic(
       model::id_t,
       model::add_mirror_topic_cmd,
@@ -58,7 +62,7 @@ public:
 
     virtual ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
       model::id_t,
-      model::update_mirror_topic_state_cmd,
+      model::update_mirror_topic_status_cmd,
       ::model::timeout_clock::time_point)
       = 0;
 
@@ -80,6 +84,14 @@ public:
         model::update_cluster_link_configuration_cmd,
         ::model::timeout_clock::time_point)
       = 0;
+
+    virtual ss::future<std::expected<
+      ::cluster_link::model::aggregated_shadow_topic_report,
+      errc>>
+    shadow_topic_report(const model::id_t&, const ::model::topic&) = 0;
+
+    virtual ss::future<::cluster::cluster_link::errc>
+      failover_link_topics(model::id_t, ::model::timeout_clock::time_point) = 0;
 };
 
 /**

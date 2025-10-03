@@ -21,7 +21,7 @@ ss::logger sllog("shadow_link_service");
 namespace {
 
 template<typename T>
-T handle_error(cluster_link::result<T> result) {
+T handle_error(cluster_link::cl_result<T> result) {
     if (result.has_value()) {
         return std::move(result).assume_value();
     }
@@ -37,6 +37,8 @@ T handle_error(cluster_link::result<T> result) {
     case cluster_link::errc::task_creation_failed:
     case cluster_link::errc::rpc_error:
     case cluster_link::errc::link_creation_failed:
+    case cluster_link::errc::topic_does_not_exist:
+    case cluster_link::errc::topic_metadata_stale:
         throw serde::pb::rpc::internal_exception(info.message());
     case cluster_link::errc::failed_to_connect_to_remote_cluster:
     case cluster_link::errc::remote_cluster_does_not_support_required_api:
@@ -198,8 +200,42 @@ shadow_link_service_impl::update_shadow_link(
 
 ss::future<proto::admin::fail_over_response>
 shadow_link_service_impl::fail_over(
-  serde::pb::rpc::context, proto::admin::fail_over_request) {
-    throw serde::pb::rpc::unimplemented_exception();
+  serde::pb::rpc::context ctx, proto::admin::fail_over_request req) {
+    vlog(sllog.trace, "fail_over_request: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .fail_over(ctx, std::move(req));
+    }
+    auto link_name = cluster_link::model::name_t{req.get_name()};
+    auto current_link = handle_error(
+      _service->local().get_cluster_link(link_name));
+    const auto& failover_topic = req.get_shadow_topic_name();
+    proto::admin::fail_over_response resp;
+    if (failover_topic.empty()) {
+        // failover the entire link
+        auto result = handle_error(
+          co_await _service->local().failover_link_topics(
+            std::move(link_name)));
+        resp.set_shadow_link(metadata_to_shadow_link(std::move(result)));
+    } else {
+        // failover the specific shadow topic
+        auto topic = model::topic{failover_topic};
+        auto result = handle_error(
+          co_await _service->local().update_mirror_topic_status(
+            std::move(link_name),
+            topic,
+            cluster_link::model::mirror_topic_status::failing_over));
+        resp.set_shadow_link(metadata_to_shadow_link(std::move(result)));
+    }
+    co_return resp;
 }
 
 std::optional<model::node_id>

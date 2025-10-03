@@ -105,7 +105,7 @@ public:
         co_await _table.local().apply_update(
           ::cluster::cluster_link::testing::create_upsert_command(
             ::model::offset{id()}, std::move(metadata)));
-        _manager->on_link_change(id);
+        _manager->on_link_change(id, {});
     }
 
     ss::future<> remove_link(const model::name_t& name) {
@@ -113,7 +113,7 @@ public:
         co_await _table.local().apply_update(
           ::cluster::cluster_link::testing::create_remove_command(name));
         if (id.has_value()) {
-            _manager->on_link_change(id.value());
+            _manager->on_link_change(id.value(), {});
         }
     }
 
@@ -349,7 +349,7 @@ TEST_F_CORO(link_test_manager_started, test_remove_link) {
 }
 
 TEST_F_CORO(link_test_manager_started, test_remove_non_existant_link) {
-    _manager->on_link_change(model::id_t(1));
+    _manager->on_link_change(model::id_t(1), {});
     return ss::now();
 }
 

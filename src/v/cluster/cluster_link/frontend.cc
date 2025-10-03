@@ -29,7 +29,7 @@ using ::cluster_link::model::metadata;
 using ::cluster_link::model::name_t;
 using ::cluster_link::model::update_cluster_link_configuration_cmd;
 using ::cluster_link::model::update_mirror_topic_properties_cmd;
-using ::cluster_link::model::update_mirror_topic_state_cmd;
+using ::cluster_link::model::update_mirror_topic_status_cmd;
 
 namespace {
 errc map_errc(std::error_code ec) {
@@ -119,15 +119,15 @@ ss::future<errc> frontend::add_mirror_topic(
     co_return co_await do_mutation(std::move(c), timeout);
 }
 
-ss::future<errc> frontend::update_mirror_topic_state(
+ss::future<errc> frontend::update_mirror_topic_status(
   id_t id,
-  update_mirror_topic_state_cmd cmd,
+  update_mirror_topic_status_cmd cmd,
   model::timeout_clock::time_point timeout) {
     if (!cluster_linking_enabled()) {
         co_return errc::feature_disabled;
     }
     cluster_link_cmd c{
-      cluster::cluster_link_update_mirror_topic_state_cmd(id, std::move(cmd))};
+      cluster::cluster_link_update_mirror_topic_status_cmd(id, std::move(cmd))};
     co_return co_await do_mutation(std::move(c), timeout);
 }
 
@@ -192,6 +192,25 @@ chunked_vector<id_t> frontend::get_all_link_ids() const {
     return _table->get_all_link_ids();
 }
 
+bool frontend::is_topic_mutable_for_kafka_api(const model::topic& topic) const {
+    auto status = _table->find_mirror_topic_status(topic);
+    if (!status) {
+        // topic does not belong to any cluster link
+        return true;
+    }
+    switch (*status) {
+    case ::cluster_link::model::mirror_topic_status::active:
+    case ::cluster_link::model::mirror_topic_status::failed:
+    case ::cluster_link::model::mirror_topic_status::paused:
+    case ::cluster_link::model::mirror_topic_status::failing_over:
+    case ::cluster_link::model::mirror_topic_status::promoting:
+        return false;
+    case ::cluster_link::model::mirror_topic_status::failed_over:
+    case ::cluster_link::model::mirror_topic_status::promoted:
+        return true;
+    }
+}
+
 std::optional<chunked_hash_map<
   ::model::topic,
   ::cluster_link::model::mirror_topic_metadata>>
@@ -209,6 +228,11 @@ frontend::get_mirror_topics_for_link(id_t id) const {
         mirror_topics.emplace(topic, metadata.copy());
     }
     return mirror_topics;
+}
+
+std::optional<::model::revision_id> frontend::get_last_update_revision(
+  const ::cluster_link::model::id_t& id) const {
+    return _table->get_link_last_update_revision(id);
 }
 
 ss::future<errc> frontend::do_mutation(
@@ -294,25 +318,25 @@ ss::future<errc> frontend::dispatch_mutation_to_remote(
                     });
               },
               [client, timeout](
-                cluster::cluster_link_update_mirror_topic_state_cmd
+                cluster::cluster_link_update_mirror_topic_status_cmd
                   cmd) mutable {
                   return client
-                    .update_mirror_topic_state(
-                      cluster::update_mirror_topic_state_request{
+                    .update_mirror_topic_status(
+                      cluster::update_mirror_topic_status_request{
                         .link_id = cmd.key,
                         .cmd = std::move(cmd.value),
                         .timeout = timeout},
                       rpc::client_opts(timeout))
                     .then(&rpc::get_ctx_data<
-                          cluster::update_mirror_topic_state_response>)
-                    .then(
-                      [](
-                        result<cluster::update_mirror_topic_state_response> r) {
-                          if (r.has_error()) {
-                              return result<void>(r.error());
-                          }
-                          return result<void>(r.value().ec);
-                      });
+                          cluster::update_mirror_topic_status_response>)
+                    .then([](
+                            result<cluster::update_mirror_topic_status_response>
+                              r) {
+                        if (r.has_error()) {
+                            return result<void>(r.error());
+                        }
+                        return result<void>(r.value().ec);
+                    });
               },
               [client, timeout](
                 cluster::cluster_link_update_mirror_topic_properties_cmd
@@ -375,6 +399,7 @@ ss::future<errc> frontend::do_local_mutation(
     if (!result) {
         co_return errc::not_leader_controller;
     }
+    auto [_, term] = result.value();
     auto ec = validate_mutation(cmd);
     if (ec != errc::success) {
         co_return ec;
@@ -393,7 +418,7 @@ ss::future<errc> frontend::do_local_mutation(
       [](auto cmd) { return serde_serialize_cmd(std::move(cmd)); },
       std::move(cmd));
     auto err_code = co_await _controller->replicate_and_wait(
-      std::move(b), timeout, *_as);
+      std::move(b), timeout, *_as, term);
     co_return map_errc(err_code);
 }
 
@@ -403,7 +428,9 @@ errc frontend::validate_mutation(const cluster_link_cmd& cmd) const {
     validator v{
       _table,
       max_links,
-      {"redpanda.remote.readreplica", "redpanda.remote.recovery"}};
+      {"redpanda.remote.readreplica",
+       "redpanda.remote.recovery",
+       "redpanda.remote.allowgaps"}};
     return v.validate_mutation(cmd);
 }
 
@@ -450,6 +477,16 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
                 "Attempting to create a cluster link without a name");
               return errc::link_name_invalid;
           }
+          if (
+            cmd.value.state.status
+            != ::cluster_link::model::link_status::active) {
+              vlog(
+                cluster::clusterlog.warn,
+                "Attempting to create a cluster link with invalid initial "
+                "state: {}",
+                cmd.value.state.status);
+              return errc::invalid_create;
+          }
           constexpr static size_t max_name_size = 128;
           if (cmd.value.name().size() > max_name_size) {
               vlog(
@@ -492,7 +529,34 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
           if (!meta.has_value()) {
               return errc::does_not_exist;
           }
-          return errc::success;
+          const auto& md = meta->get();
+          const auto is_removable =
+            [](const ::cluster_link::model::mirror_topic_status s) {
+                switch (s) {
+                case ::cluster_link::model::mirror_topic_status::active:
+                case ::cluster_link::model::mirror_topic_status::paused:
+                case ::cluster_link::model::mirror_topic_status::failing_over:
+                case ::cluster_link::model::mirror_topic_status::promoting:
+                    return false;
+                case ::cluster_link::model::mirror_topic_status::promoted:
+                case ::cluster_link::model::mirror_topic_status::failed_over:
+                case ::cluster_link::model::mirror_topic_status::failed:
+                    return true;
+                }
+            };
+          const auto mirror_topic_states
+            = md.state.mirror_topics | std::views::values
+              | std::views::transform(
+                &::cluster_link::model::mirror_topic_metadata::status);
+          if (std::ranges::all_of(mirror_topic_states, is_removable)) {
+              return errc::success;
+          }
+          vlog(
+            cluster::clusterlog.info,
+            "Attempting to remove cluster link {} which still has active "
+            "mirror topics",
+            cmd.key);
+          return errc::link_has_active_shadow_topics;
       },
       [this](const cluster::cluster_link_add_mirror_topic_cmd& cmd) {
           auto ec = model::validate_kafka_topic_name(cmd.value.topic);
@@ -500,10 +564,34 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
               vlog(cluster::clusterlog.warn, "Invalid topic name: {}", ec);
               return errc::mirror_topic_name_invalid;
           }
+          if (
+            cmd.value.metadata.status
+            != ::cluster_link::model::mirror_topic_status::active) {
+              vlog(
+                cluster::clusterlog.warn,
+                "Attempting to add mirror topic {} with invalid initial state "
+                "{}",
+                cmd.value.topic,
+                cmd.value.metadata.status);
+              return errc::invalid_create;
+          }
           auto meta = _table->find_link_by_id(cmd.key);
           if (!meta.has_value()) {
               return errc::does_not_exist;
           }
+          const auto status = meta->get().state.status;
+          if (status != ::cluster_link::model::link_status::active) {
+              // fence any new topic additions if the link is not active
+              vlog(
+                cluster::clusterlog.warn,
+                "Attempting to add mirror topic {} to link {} which is not in "
+                "the active state (current state: {})",
+                cmd.value.topic,
+                meta->get().name,
+                status);
+              return errc::invalid_update;
+          }
+
           auto id = _table->find_id_by_topic(cmd.value.topic);
           if (id.has_value()) {
               if (id.value() != cmd.key) {
@@ -543,7 +631,7 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
           }
           return errc::success;
       },
-      [this](const cluster::cluster_link_update_mirror_topic_state_cmd& cmd) {
+      [this](const cluster::cluster_link_update_mirror_topic_status_cmd& cmd) {
           auto ec = model::validate_kafka_topic_name(cmd.value.topic);
           if (ec) {
               vlog(cluster::clusterlog.warn, "Invalid topic name: {}", ec);
@@ -566,6 +654,25 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
                 "Topic '{}' is being mirrored by another link",
                 cmd.value.topic);
               return errc::topic_being_mirrored_by_other_link;
+          }
+          auto status = _table->find_mirror_topic_status(cmd.value.topic);
+          if (!status) {
+              vlog(
+                cluster::clusterlog.warn,
+                "Topic '{}' is not being mirrored",
+                cmd.value.topic);
+              return errc::topic_not_being_mirrored;
+          }
+          if (!::cluster_link::model::is_valid_status_transition(
+                *status, cmd.value.status)) {
+              vlog(
+                cluster::clusterlog.warn,
+                "Attempting to change state of mirror topic {} from {} to "
+                "invalid state {}",
+                cmd.value.topic,
+                *status,
+                cmd.value.status);
+              return errc::invalid_update;
           }
           return errc::success;
       },
@@ -602,6 +709,19 @@ errc frontend::validator::validate_mutation(const cluster_link_cmd& cmd) const {
             it != mirror_state.mirror_topics.end(),
             "State inconsistency detected, should have been able to find {}",
             cmd.value.topic);
+
+          if (
+            mirror_state.status != ::cluster_link::model::link_status::active) {
+              // fence any topic property updates if the link is not active
+              vlog(
+                cluster::clusterlog.warn,
+                "Attempting to update mirror topic {} on link {} which is not "
+                "in the active state (current state: {})",
+                cmd.value.topic,
+                meta->get().name,
+                mirror_state.status);
+              return errc::invalid_update;
+          }
 
           if (cmd.value.partition_count < it->second.partition_count) {
               vlog(
@@ -792,5 +912,72 @@ errc frontend::validator::validate_metadata_mirroring_config(
     }
 
     return errc::success;
+}
+
+ss::future<errc> frontend::failover_link_topics(
+  ::cluster_link::model::id_t id, model::timeout_clock::time_point timeout) {
+    auto meta = _table->find_link_by_id(id);
+    if (!meta.has_value()) {
+        co_return errc::does_not_exist;
+    }
+    const auto& md = meta->get();
+    if (md.state.status != ::cluster_link::model::link_status::active) {
+        vlog(
+          cluster::clusterlog.warn,
+          "Attempting to failover topics of link {} which is not in the active "
+          "state (current state: {})",
+          md.name,
+          md.state.status);
+        co_return errc::invalid_update;
+    }
+
+    const auto& topics = md.state.mirror_topics;
+    chunked_vector<model::topic> topics_to_failover;
+    auto should_failover = [](::cluster_link::model::mirror_topic_status s) {
+        switch (s) {
+        case ::cluster_link::model::mirror_topic_status::active:
+            return true;
+        case ::cluster_link::model::mirror_topic_status::paused:
+        case ::cluster_link::model::mirror_topic_status::failed:
+        case ::cluster_link::model::mirror_topic_status::promoted:
+        case ::cluster_link::model::mirror_topic_status::failed_over:
+        case ::cluster_link::model::mirror_topic_status::failing_over:
+        case ::cluster_link::model::mirror_topic_status::promoting:
+            return false;
+        }
+    };
+    for (const auto& [t, info] : topics) {
+        if (should_failover(info.status)) {
+            topics_to_failover.push_back(t);
+        }
+    }
+    chunked_vector<errc> errors;
+    errors.reserve(topics_to_failover.size());
+    co_await ss::max_concurrent_for_each(
+      topics_to_failover,
+      32,
+      [this, &errors, id, timeout](const model::topic& t) {
+          return update_mirror_topic_status(
+                   id,
+                   {.topic = t,
+                    .status
+                    = ::cluster_link::model::mirror_topic_status::failing_over},
+                   timeout)
+            .then([&errors](errc err_code) {
+                if (err_code != errc::success) {
+                    errors.push_back(err_code);
+                }
+            });
+      });
+
+    if (!errors.empty()) {
+        vlog(
+          cluster::clusterlog.warn,
+          "Encountered {} errors while failing over topics of link id {}",
+          errors.size(),
+          id);
+        co_return map_errc(errors.front());
+    }
+    co_return errc::success;
 }
 } // namespace cluster::cluster_link

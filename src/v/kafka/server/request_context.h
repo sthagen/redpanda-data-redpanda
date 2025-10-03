@@ -13,6 +13,7 @@
 #include "base/seastarx.h"
 #include "base/vlog.h"
 #include "bytes/iobuf.h"
+#include "cluster/cluster_link/frontend.h"
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/fwd.h"
 #include "kafka/protocol/types.h"
@@ -199,6 +200,12 @@ public:
 
     fetch_metadata_cache& get_fetch_metadata_cache() {
         return _conn->server().get_fetch_metadata_cache();
+    }
+
+    bool is_topic_mutable(const model::topic& topic) const {
+        return _conn->server()
+          .cluster_link_frontend()
+          .is_topic_mutable_for_kafka_api(topic);
     }
 
     template<typename ResponseType>

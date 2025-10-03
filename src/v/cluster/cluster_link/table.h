@@ -27,6 +27,9 @@ public:
     using map_t = chunked_hash_map<
       ::cluster_link::model::id_t,
       ::cluster_link::model::metadata>;
+    using link_revision_index_t
+      = chunked_hash_map<::cluster_link::model::id_t, model::revision_id>;
+
     table() = default;
     table(const table&) = delete;
     table(table&&) = delete;
@@ -36,8 +39,8 @@ public:
 
     using notification_id
       = named_type<size_t, struct cluster_link_notification_tag>;
-    using notification_callback
-      = ss::noncopyable_function<void(::cluster_link::model::id_t)>;
+    using notification_callback = ss::noncopyable_function<void(
+      ::cluster_link::model::id_t, model::revision_id)>;
 
     /// Number of links in the table
     size_t size() const;
@@ -56,8 +59,11 @@ public:
     find_id_by_topic(model::topic_view tp) const;
     /// Find the state of a mirror topic by its name, otherwise returns
     /// std::nullopt
-    std::optional<::cluster_link::model::mirror_topic_state>
-    find_mirror_topic_state(model::topic_view tp) const;
+    std::optional<::cluster_link::model::mirror_topic_status>
+    find_mirror_topic_status(model::topic_view tp) const;
+
+    std::optional<::model::revision_id>
+    get_link_last_update_revision(const ::cluster_link::model::id_t&) const;
 
     /// Returns a list of all link IDs in the table
     chunked_vector<::cluster_link::model::id_t> get_all_link_ids() const;
@@ -79,45 +85,56 @@ public:
 private:
     /// Snapshot copy of all the cluster links
     map_t all_links() const;
+    table::link_revision_index_t all_link_revisions() const;
     /// Restores a cluster link table from a snapshot
-    void reset_links(map_t);
+    void reset_links(map_t, link_revision_index_t, model::revision_id);
 
     /// Upserts a link, if the ID classes, throws a std::logic_error
-    cluster::cluster_link::errc
-      upsert_link(::cluster_link::model::id_t, ::cluster_link::model::metadata);
+    cluster::cluster_link::errc upsert_link(
+      ::cluster_link::model::id_t,
+      ::cluster_link::model::metadata,
+      model::revision_id);
     /// Removes a link by ID
     cluster::cluster_link::errc
-    remove_link(const ::cluster_link::model::name_t&);
+    remove_link(const ::cluster_link::model::name_t&, model::revision_id);
 
     cluster::cluster_link::errc add_mirror_topic(
       ::cluster_link::model::id_t,
-      const ::cluster_link::model::add_mirror_topic_cmd& cmd);
+      const ::cluster_link::model::add_mirror_topic_cmd& cmd,
+      model::revision_id);
 
     cluster::cluster_link::errc update_mirror_topic_state(
       ::cluster_link::model::id_t,
-      const ::cluster_link::model::update_mirror_topic_state_cmd& cmd);
+      const ::cluster_link::model::update_mirror_topic_status_cmd& cmd,
+      model::revision_id);
 
     cluster::cluster_link::errc update_mirror_topic_properties(
       ::cluster_link::model::id_t,
-      const ::cluster_link::model::update_mirror_topic_properties_cmd&);
+      const ::cluster_link::model::update_mirror_topic_properties_cmd&,
+      model::revision_id);
 
     cluster::cluster_link::errc update_cluster_link_configuration(
       ::cluster_link::model::id_t,
-      const ::cluster_link::model::update_cluster_link_configuration_cmd&);
+      const ::cluster_link::model::update_cluster_link_configuration_cmd&,
+      model::revision_id);
 
-    void run_callbacks(::cluster_link::model::id_t);
+    void run_callbacks(::cluster_link::model::id_t, model::revision_id);
 
 private:
     using name_index_t = chunked_hash_map<
       ::cluster_link::model::name_t,
       ::cluster_link::model::id_t>;
-
     using topic_name_index_t
       = chunked_hash_map<model::topic, ::cluster_link::model::id_t>;
 
     map_t _link_metadata;
     name_index_t _name_index;
     topic_name_index_t _topic_name_index;
+    // tracks each link to its last updated command revision.
+    // The revision is only monotonically increasing since it is derived
+    // from the command batch offsets from the controller log.
+    // Only tracked for active links.
+    link_revision_index_t _link_revision_index;
 
     chunked_hash_map<notification_id, notification_callback> _callbacks;
     notification_id _latest_id{0};

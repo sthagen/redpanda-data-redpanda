@@ -60,6 +60,10 @@ struct error_category final : public std::error_category {
             return "link creation failed";
         case errc::link_has_active_shadow_topics:
             return "link has active shadow topics";
+        case errc::topic_does_not_exist:
+            return "topic does not exist";
+        case errc::topic_metadata_stale:
+            return "topic metadata is stale";
         }
 
         return "(unknown error code)";

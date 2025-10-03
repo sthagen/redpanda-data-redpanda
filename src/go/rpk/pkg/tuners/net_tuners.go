@@ -14,6 +14,7 @@ package tuners
 import (
 	"fmt"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
@@ -25,6 +26,7 @@ import (
 
 func NewNetTuner(
 	mode irq.Mode,
+	t config.RpkNodeTuners,
 	cpuMask string,
 	interfaces []string,
 	fs afero.Fs,
@@ -36,7 +38,7 @@ func NewNetTuner(
 	executor executors.Executor,
 ) Tunable {
 	factory := NewNetTunersFactory(
-		fs, irqProcFile, irqDeviceInfo, ethtool, irqBalanceService, cpuMasks, executor)
+		fs, t, irqProcFile, irqDeviceInfo, ethtool, irqBalanceService, cpuMasks, executor)
 	return NewAggregatedTunable(
 		[]Tunable{
 			factory.NewNICsBalanceServiceTuner(interfaces),
@@ -65,6 +67,7 @@ type NetTunersFactory interface {
 
 type netTunersFactory struct {
 	fs              afero.Fs
+	t               config.RpkNodeTuners
 	irqProcFile     irq.ProcFile
 	irqDeviceInfo   irq.DeviceInfo
 	ethtool         ethtool.EthtoolWrapper
@@ -76,6 +79,7 @@ type netTunersFactory struct {
 
 func NewNetTunersFactory(
 	fs afero.Fs,
+	t config.RpkNodeTuners,
 	irqProcFile irq.ProcFile,
 	irqDeviceInfo irq.DeviceInfo,
 	ethtool ethtool.EthtoolWrapper,
@@ -85,6 +89,7 @@ func NewNetTunersFactory(
 ) NetTunersFactory {
 	return &netTunersFactory{
 		fs:             fs,
+		t:              t,
 		irqProcFile:    irqProcFile,
 		irqDeviceInfo:  irqDeviceInfo,
 		ethtool:        ethtool,
@@ -92,7 +97,7 @@ func NewNetTunersFactory(
 		cpuMasks:       cpuMasks,
 		executor:       executor,
 		checkersFactory: NewNetCheckersFactory(
-			fs, irqProcFile, irqDeviceInfo, ethtool, balanceService, cpuMasks),
+			fs, t, irqProcFile, irqDeviceInfo, ethtool, balanceService, cpuMasks),
 	}
 }
 
@@ -135,7 +140,7 @@ func (f *netTunersFactory) NewNICsIRQsAffinityTuner(
 		},
 		func(nic network.Nic) TuneResult {
 			zap.L().Sugar().Debugf("Tuning '%s' IRQs affinity", nic.Name())
-			dist, err := network.GetHwInterfaceIRQsDistribution(nic, mode, cpuMask, f.cpuMasks)
+			dist, err := network.GetHwInterfaceIRQsDistribution(nic, mode, cpuMask, f.cpuMasks, f.t)
 			if err != nil {
 				return NewTuneError(err)
 			}
@@ -165,7 +170,7 @@ func (f *netTunersFactory) NewNICsRpsTuner(
 			if err != nil {
 				return NewTuneError(err)
 			}
-			rpsMask, err := network.GetRpsCPUMask(nic, mode, cpuMask, f.cpuMasks)
+			rpsMask, err := network.GetRpsCPUMask(nic, mode, cpuMask, f.cpuMasks, f.t)
 			if err != nil {
 				return NewTuneError(err)
 			}
@@ -198,7 +203,7 @@ func (f *netTunersFactory) NewNICsRfsTuner(interfaces []string, mode irq.Mode, c
 			if err != nil {
 				return NewTuneError(err)
 			}
-			queueLimit, err := network.OneRPSQueueLimit(limits, nic, mode, cpuMask, f.cpuMasks)
+			queueLimit, err := network.OneRPSQueueLimit(limits, nic, mode, cpuMask, f.cpuMasks, f.t)
 			if err != nil {
 				return NewTuneError(err)
 			}

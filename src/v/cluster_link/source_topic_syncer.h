@@ -54,7 +54,7 @@ private:
     using reconciler_commands = std::variant<
       model::add_mirror_topic_cmd,
       model::update_mirror_topic_properties_cmd,
-      model::update_mirror_topic_state_cmd>;
+      model::update_mirror_topic_status_cmd>;
     using reconciler_commands_vector = chunked_vector<reconciler_commands>;
     // Map of topics who are candidates for mirror topic creation
     using candidate_create_map

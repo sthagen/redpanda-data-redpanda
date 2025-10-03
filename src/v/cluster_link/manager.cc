@@ -64,6 +64,8 @@ errc map_cluster_errc(::cluster::cluster_link::errc ec) {
         return errc::topic_mirrored_by_other_link;
     case cluster::cluster_link::errc::topic_not_being_mirrored:
         return errc::topic_not_being_mirrored;
+    case cluster::cluster_link::errc::link_has_active_shadow_topics:
+        return errc::link_has_active_shadow_topics;
     }
     __builtin_unreachable();
 }
@@ -112,8 +114,14 @@ ss::future<> manager::start() {
     co_await ss::coroutine::switch_to(_scheduling_group);
     vlog(cllog.info, "Starting cluster link manager");
     auto ids = _registry->get_all_link_ids();
-    for (auto id : ids) {
-        co_await handle_on_link_change(id);
+    chunked_hash_map<model::id_t, ::model::revision_id> id_to_revision;
+    for (const auto& id : ids) {
+        auto rev = _registry->get_last_update_revision(id);
+        vassert(rev.has_value(), "Link {} does not have a update revision", id);
+        id_to_revision.emplace(id, *rev);
+    }
+    for (const auto& id : ids) {
+        co_await handle_on_link_change(id, id_to_revision.at(id));
     }
 
     _link_task_reconciler_timer.set_callback([this] {
@@ -129,7 +137,7 @@ ss::future<> manager::start() {
 ss::future<> manager::stop() {
     vlog(cllog.info, "Stopping cluster link manager");
 
-    co_await stop_topic_reconciler();
+    co_await on_controller_stepdown();
 
     co_await _queue.shutdown();
     _link_task_reconciler_timer.cancel();
@@ -143,7 +151,7 @@ ss::future<> manager::stop() {
     vlog(cllog.info, "Cluster link manager stopped");
 }
 
-ss::future<result<model::metadata>>
+ss::future<cl_result<model::metadata>>
 manager::upsert_cluster_link(model::metadata md) {
     static constexpr auto wait_for_link_creation_timeout = 30s;
     auto hold = _g.hold();
@@ -190,7 +198,8 @@ manager::upsert_cluster_link(model::metadata md) {
     co_return metadata_resp->get().copy();
 }
 
-result<model::metadata> manager::get_cluster_link(const model::name_t& name) {
+cl_result<model::metadata>
+manager::get_cluster_link(const model::name_t& name) {
     auto metadata_resp = _registry->find_link_by_name(name);
     if (!metadata_resp) {
         return err_info(
@@ -200,7 +209,7 @@ result<model::metadata> manager::get_cluster_link(const model::name_t& name) {
     return metadata_resp->get().copy();
 }
 
-result<chunked_vector<model::metadata>> manager::list_cluster_links() {
+cl_result<chunked_vector<model::metadata>> manager::list_cluster_links() {
     auto link_ids = _registry->get_all_link_ids();
     chunked_vector<model::metadata> resp;
     resp.reserve(link_ids.size());
@@ -218,7 +227,7 @@ result<chunked_vector<model::metadata>> manager::list_cluster_links() {
     return resp;
 }
 
-ss::future<result<model::metadata>> manager::update_cluster_link(
+ss::future<cl_result<model::metadata>> manager::update_cluster_link(
   model::name_t name, model::update_cluster_link_configuration_cmd cmd) {
     static constexpr auto model_timeout = 30s;
     auto hold = _g.hold();
@@ -256,20 +265,100 @@ ss::future<result<model::metadata>> manager::update_cluster_link(
     co_return metadata_resp->get().copy();
 }
 
-ss::future<result<void>> manager::delete_cluster_link(model::name_t name) {
+ss::future<cl_result<model::metadata>> manager::update_mirror_topic_status(
+  model::name_t link_name,
+  const ::model::topic& topic,
+  model::mirror_topic_status status) {
+    static constexpr auto model_timeout = 30s;
+    auto hold = _g.hold();
+    vlog(
+      cllog.info,
+      "Attempting to update mirror topic '{}' status on link '{}' to status: "
+      "{}",
+      topic,
+      link_name,
+      status);
+    const auto link_id = _registry->find_link_id_by_name(link_name);
+    if (!link_id.has_value()) {
+        co_return err_info{
+          errc::link_id_not_found,
+          ssx::sformat("Unable to find link by name '{}'", link_name)};
+    }
+    model::update_mirror_topic_status_cmd cmd;
+    cmd.topic = topic;
+    cmd.status = status;
+    auto ec = co_await _registry->update_mirror_topic_state(
+      *link_id, std::move(cmd), ::model::timeout_clock::now() + model_timeout);
+    auto err = map_cluster_errc(ec);
+    if (err != errc::success) {
+        co_return err_info(
+          err,
+          fmt::format(
+            "Failed to update mirror topic '{}' status on link '{}': {}",
+            topic,
+            *link_id,
+            ec));
+    }
+    auto metadata_resp = _registry->find_link_by_id(*link_id);
+    if (!metadata_resp) {
+        co_return err_info(
+          errc::link_id_not_found,
+          fmt::format("Failed to find cluster link with id '{}'", *link_id));
+    }
+    co_return metadata_resp->get().copy();
+}
+
+ss::future<cl_result<model::metadata>>
+manager::failover_link_topics(model::name_t link_name) {
+    static constexpr auto model_timeout = 30s;
+    auto hold = _g.hold();
+    vlog(
+      cllog.info,
+      "Attempting to failover all mirror topics on link '{}'",
+      link_name);
+    const auto link_id = _registry->find_link_id_by_name(link_name);
+    if (!link_id.has_value()) {
+        co_return err_info{
+          errc::link_id_not_found,
+          ssx::sformat("Unable to find link by name '{}'", link_name)};
+    }
+    auto ec = co_await _registry->failover_link_topics(
+      *link_id, ::model::timeout_clock::now() + model_timeout);
+    auto err = map_cluster_errc(ec);
+    if (err != errc::success) {
+        co_return err_info(
+          err,
+          fmt::format(
+            "Failed to failover all mirror topics on link '{}': {}",
+            *link_id,
+            ec));
+    }
+    auto metadata_resp = _registry->find_link_by_id(*link_id);
+    if (!metadata_resp) {
+        co_return err_info(
+          errc::link_id_not_found,
+          fmt::format("Failed to find cluster link with id '{}'", *link_id));
+    }
+    co_return metadata_resp->get().copy();
+}
+
+ss::future<cl_result<void>> manager::delete_cluster_link(model::name_t name) {
     vlog(cllog.info, "Attempting to delete cluster link named '{}'", name);
     auto cl_resp = get_cluster_link(name);
     if (cl_resp.has_error()) {
         co_return cl_resp.assume_error();
     }
 
-    const auto is_active = [](const model::mirror_topic_state s) {
+    const auto is_active = [](const model::mirror_topic_status s) {
         switch (s) {
-        case model::mirror_topic_state::active:
-        case model::mirror_topic_state::paused:
+        case model::mirror_topic_status::active:
+        case model::mirror_topic_status::paused:
+        case model::mirror_topic_status::failing_over:
+        case model::mirror_topic_status::promoting:
             return true;
-        case model::mirror_topic_state::failed:
-        case model::mirror_topic_state::promoted:
+        case model::mirror_topic_status::failed:
+        case model::mirror_topic_status::promoted:
+        case model::mirror_topic_status::failed_over:
             return false;
         }
     };
@@ -277,14 +366,14 @@ ss::future<result<void>> manager::delete_cluster_link(model::name_t name) {
     const auto mirror_topic_states = cl_resp.assume_value().state.mirror_topics
                                      | std::views::values
                                      | std::views::transform(
-                                       &model::mirror_topic_metadata::state);
+                                       &model::mirror_topic_metadata::status);
 
     if (std::ranges::any_of(mirror_topic_states, is_active)) {
         co_return err_info(
           errc::link_has_active_shadow_topics,
           fmt::format(
-            "Failed to delete cluster link with name '{}'. There are active "
-            "shadow topics.",
+            "Failed to delete cluster link with name '{}'. There are "
+            "active/promoting shadow topics.",
             name));
     }
 
@@ -299,12 +388,13 @@ ss::future<result<void>> manager::delete_cluster_link(model::name_t name) {
     co_return outcome::success();
 }
 
-void manager::on_link_change(model::id_t id) {
+void manager::on_link_change(model::id_t id, ::model::revision_id revision) {
     vlog(cllog.trace, "Cluster link with id={} has changed", id);
     if (_topic_reconciler && _is_controller_leader) {
         _topic_reconciler->trigger(id);
     }
-    _queue.submit([this, id] { return handle_on_link_change(id); });
+    _queue.submit(
+      [this, id, revision] { return handle_on_link_change(id, revision); });
 }
 
 void manager::handle_partition_state_change(
@@ -317,10 +407,20 @@ void manager::handle_partition_state_change(
     });
 }
 
-ss::future<> manager::handle_on_link_change(model::id_t id) {
+ss::future<>
+manager::handle_on_link_change(model::id_t id, ::model::revision_id revision) {
     static constexpr auto retry_delay = 10s;
 
-    vlog(cllog.trace, "Handling cluster link change for id={}", id);
+    vlog(
+      cllog.trace,
+      "Handling cluster link change for id={}, revision={}",
+      id,
+      revision);
+    auto notify_reconciler = ss::defer([this] {
+        if (_link_status_reconciler) {
+            _link_status_reconciler->reconcile();
+        }
+    });
     auto link_opt = _registry->find_link_by_id(id);
     if (!link_opt) {
         vlog(cllog.debug, "Detected cluster link id={} has been removed", id);
@@ -356,7 +456,7 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
           "Updating cluster link id={} with new config: {}",
           id,
           link_metadata);
-        it->second->update_config(link_metadata.copy());
+        it->second->update_config(link_metadata.copy(), revision);
     } else {
         // Create a new link
         vlog(
@@ -434,8 +534,9 @@ ss::future<> manager::handle_on_link_change(model::id_t id) {
               id,
               e,
               retry_delay.count());
-            _queue.submit_delayed(
-              retry_delay, [this, id] { return handle_on_link_change(id); });
+            _queue.submit_delayed(retry_delay, [this, id, revision] {
+                return handle_on_link_change(id, revision);
+            });
         }
     }
 }
@@ -516,15 +617,13 @@ ss::future<> manager::handle_on_leadership_change(
 
     if (ntp == ::model::controller_ntp) {
         if (is_ntp_leader == ntp_leader::yes && !_is_controller_leader) {
+            vassert(term.has_value(), "term must be set when becoming leader");
             _is_controller_leader = ntp_leader::yes;
-            vlog(cllog.debug, "Starting topic reconciler on controller leader");
-            co_await start_topic_reconciler();
+            co_await on_controller_leadership(term.value());
         }
         if (is_ntp_leader == ntp_leader::no && _is_controller_leader) {
             _is_controller_leader = ntp_leader::no;
-            vlog(
-              cllog.debug, "Stopping topic reconciler on controller follower");
-            co_await stop_topic_reconciler();
+            co_await on_controller_stepdown();
         }
     }
 
@@ -545,7 +644,7 @@ ss::future<::cluster::cluster_link::errc> manager::add_mirror_topic(
 }
 
 ss::future<::cluster::cluster_link::errc> manager::update_mirror_topic_state(
-  model::id_t link_id, model::update_mirror_topic_state_cmd cmd) {
+  model::id_t link_id, model::update_mirror_topic_status_cmd cmd) {
     static constexpr auto mirror_topic_timeout = 5s;
     return _registry->update_mirror_topic_state(
       link_id,
@@ -580,7 +679,7 @@ model::cluster_link_task_status_report manager::get_task_status_report() const {
     return report;
 }
 
-ss::future<> manager::start_topic_reconciler() {
+ss::future<> manager::on_controller_leadership(::model::term_id term) {
     if (!_is_controller_leader) {
         co_return;
     }
@@ -600,11 +699,24 @@ ss::future<> manager::start_topic_reconciler() {
     } catch (const std::exception& e) {
         vlog(cllog.error, "Failed to start topic reconciler: {}", e);
         // If it fails to start, enqueue a retry to start the reconciler
-        _queue.submit_delayed(10s, [this] { return start_topic_reconciler(); });
+        _queue.submit_delayed(
+          10s, [this, term] { return on_controller_leadership(term); });
+    }
+    if (!_link_status_reconciler) {
+        _link_status_reconciler = std::make_unique<link_status_reconciler>(
+          _registry.get(), term);
+        try {
+            co_await _link_status_reconciler->start();
+        } catch (const std::exception& e) {
+            vlog(cllog.error, "Failed to start link status reconciler: {}", e);
+            // If it fails to start, enqueue a retry to start the reconciler
+            _queue.submit_delayed(
+              10s, [this, term] { return on_controller_leadership(term); });
+        }
     }
 }
 
-ss::future<> manager::stop_topic_reconciler() {
+ss::future<> manager::on_controller_stepdown() {
     if (_topic_reconciler) {
         vlog(cllog.trace, "Stopping topic reconciler");
         try {
@@ -615,7 +727,20 @@ ss::future<> manager::stop_topic_reconciler() {
             vlog(cllog.error, "Failed to stop topic reconciler: {}", e);
             // If it fails to start, enqueue a retry to start the reconciler
             _queue.submit_delayed(
-              10s, [this] { return stop_topic_reconciler(); });
+              10s, [this] { return on_controller_stepdown(); });
+        }
+    }
+    if (_link_status_reconciler) {
+        vlog(cllog.trace, "Stopping link status reconciler");
+        try {
+            co_await _link_status_reconciler->stop();
+            _link_status_reconciler.reset();
+            vlog(cllog.debug, "Link status reconciler has stopped");
+        } catch (const std::exception& e) {
+            vlog(cllog.error, "Failed to stop link status reconciler: {}", e);
+            // If it fails to start, enqueue a retry to start the reconciler
+            _queue.submit_delayed(
+              10s, [this] { return on_controller_stepdown(); });
         }
     }
 }

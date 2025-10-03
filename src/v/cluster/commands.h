@@ -473,9 +473,9 @@ using cluster_link_add_mirror_topic_cmd = controller_command<
   model::record_batch_type::cluster_link,
   serde_opts::serde_only>;
 
-using cluster_link_update_mirror_topic_state_cmd = controller_command<
+using cluster_link_update_mirror_topic_status_cmd = controller_command<
   ::cluster_link::model::id_t,
-  ::cluster_link::model::update_mirror_topic_state_cmd,
+  ::cluster_link::model::update_mirror_topic_status_cmd,
   cluster_link_update_mirror_topic_state_cmd_type,
   model::record_batch_type::cluster_link,
   serde_opts::serde_only>;

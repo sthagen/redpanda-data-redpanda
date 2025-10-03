@@ -9,3 +9,5 @@ inputs:
 plugins:
   - remote: buf.build/community/sudorandom-connect-openapi:v0.21.2
     out: vbuild/openapi
+    opt:
+      - short-service-tags

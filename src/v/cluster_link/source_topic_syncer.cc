@@ -29,6 +29,14 @@ const absl::flat_hash_set<ss::sstring> required_topic_properties{
   ss::sstring{kafka::topic_property_timestamp_type},
 };
 
+/*
+ * This map contains topic properties that will be overridden when creating
+ * mirror topics.
+ */
+const absl::flat_hash_map<ss::sstring, ss::sstring>
+  topic_configuration_overrides{
+    {{ss::sstring(kafka::topic_property_remote_allow_gaps), "true"}}};
+
 const absl::flat_hash_set<::model::topic> topic_denylist{
   ::model::kafka_consumer_offsets_topic,
 };
@@ -79,6 +87,28 @@ validate_and_get_configs_from_response(
             configs.emplace(c.name, *c.value);
         }
     }
+
+    // apply overrides
+    for (const auto& [k, v] : topic_configuration_overrides) {
+        auto it = configs.find(k);
+        if (it != configs.end()) {
+            vlog(
+              logger.debug,
+              "Overriding topic property {} value from {} to {}",
+              k,
+              it->second,
+              v);
+            it->second = v;
+        } else {
+            vlog(
+              logger.trace,
+              "Adding topic property override {} with value {}",
+              k,
+              v);
+            configs.emplace(k, v);
+        }
+    }
+
     return configs;
 }
 
@@ -319,6 +349,7 @@ void source_topic_syncer::enqueue_create_mirror_topic_commands(
           model::add_mirror_topic_cmd{
             .topic = it->first,
             .metadata = model::mirror_topic_metadata{
+              .status = model::mirror_topic_status::active,
               .source_topic_id = it->second.topic_id,
               .source_topic_name = it->first,
               .partition_count = it->second.partition_count,
@@ -355,12 +386,12 @@ void source_topic_syncer::enqueue_update_mirror_topic_commands(
         const auto& metadata_cache = it->second.first;
         const auto& mirror_topic_cache = it->second.second;
 
-        if (mirror_topic_cache.state != model::mirror_topic_state::active) {
+        if (mirror_topic_cache.status != model::mirror_topic_status::active) {
             vlog(
               logger().debug,
               "Skipping update to topic {} which is in a non-active state: {}",
               topic,
-              mirror_topic_cache.state);
+              mirror_topic_cache.status);
             continue;
         }
 
@@ -377,9 +408,9 @@ void source_topic_syncer::enqueue_update_mirror_topic_commands(
               "Topic {} has fewer partitions than expected, marking as failed",
               topic);
             commands.emplace_back(
-              model::update_mirror_topic_state_cmd{
+              model::update_mirror_topic_status_cmd{
                 .topic = topic,
-                .state = model::mirror_topic_state::failed,
+                .status = model::mirror_topic_status::failed,
               });
             continue;
         }
@@ -396,8 +427,8 @@ void source_topic_syncer::enqueue_update_mirror_topic_commands(
               mirror_topic_cache.source_topic_id,
               metadata_cache.topic_id);
             commands.emplace_back(
-              model::update_mirror_topic_state_cmd{
-                .topic = topic, .state = model::mirror_topic_state::failed});
+              model::update_mirror_topic_status_cmd{
+                .topic = topic, .status = model::mirror_topic_status::failed});
             continue;
         }
 
@@ -441,7 +472,9 @@ void source_topic_syncer::enqueue_update_mirror_topic_commands(
                       "Topic {} property {} changed: {} -> {}",
                       topic,
                       key,
-                      cached_config_it->second,
+                      cached_config_it == mirror_topic_cache.topic_configs.end()
+                        ? "<not-set>"
+                        : cached_config_it->second,
                       val);
                     enqueue_command = true;
                 }
@@ -486,7 +519,7 @@ source_topic_syncer::submit_commands(reconciler_commands_vector commands) {
           [this](model::update_mirror_topic_properties_cmd c) {
               return get_link()->update_mirror_topic_properties(std::move(c));
           },
-          [this](model::update_mirror_topic_state_cmd c) {
+          [this](model::update_mirror_topic_status_cmd c) {
               return get_link()->update_mirror_topic_state(std::move(c));
           });
         if (res != ::cluster::cluster_link::errc::success) {

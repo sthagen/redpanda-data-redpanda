@@ -411,30 +411,32 @@ func (rpkc *RpkNodeConfig) UnmarshalYAML(n *yaml.Node) error {
 		// Deprecated 2021-07-1
 		SASL *SASL `yaml:"sasl"`
 
-		KafkaAPI                 RpkKafkaAPI          `yaml:"kafka_api"`
-		AdminAPI                 RpkAdminAPI          `yaml:"admin_api"`
-		SR                       RpkSchemaRegistryAPI `yaml:"schema_registry"`
-		AdditionalStartFlags     weakStringArray      `yaml:"additional_start_flags"`
-		TuneNetwork              weakBool             `yaml:"tune_network"`
-		TuneDiskScheduler        weakBool             `yaml:"tune_disk_scheduler"`
-		TuneNomerges             weakBool             `yaml:"tune_disk_nomerges"`
-		TuneDiskWriteCache       weakBool             `yaml:"tune_disk_write_cache"`
-		TuneDiskIrq              weakBool             `yaml:"tune_disk_irq"`
-		TuneFstrim               weakBool             `yaml:"tune_fstrim"`
-		TuneCPU                  weakBool             `yaml:"tune_cpu"`
-		TuneAioEvents            weakBool             `yaml:"tune_aio_events"`
-		TuneClocksource          weakBool             `yaml:"tune_clocksource"`
-		TuneSwappiness           weakBool             `yaml:"tune_swappiness"`
-		TuneTransparentHugePages weakBool             `yaml:"tune_transparent_hugepages"`
-		EnableMemoryLocking      weakBool             `yaml:"enable_memory_locking"`
-		TuneCoredump             weakBool             `yaml:"tune_coredump"`
-		CoredumpDir              weakString           `yaml:"coredump_dir"`
-		TuneBallastFile          weakBool             `yaml:"tune_ballast_file"`
-		BallastFilePath          weakString           `yaml:"ballast_file_path"`
-		BallastFileSize          weakString           `yaml:"ballast_file_size"`
-		WellKnownIo              weakString           `yaml:"well_known_io"`
-		Overprovisioned          weakBool             `yaml:"overprovisioned"`
-		SMP                      *weakInt             `yaml:"smp"`
+		KafkaAPI                       RpkKafkaAPI          `yaml:"kafka_api"`
+		AdminAPI                       RpkAdminAPI          `yaml:"admin_api"`
+		SR                             RpkSchemaRegistryAPI `yaml:"schema_registry"`
+		AdditionalStartFlags           weakStringArray      `yaml:"additional_start_flags"`
+		TuneNetwork                    weakBool             `yaml:"tune_network"`
+		TuneDiskScheduler              weakBool             `yaml:"tune_disk_scheduler"`
+		TuneNomerges                   weakBool             `yaml:"tune_disk_nomerges"`
+		TuneDiskWriteCache             weakBool             `yaml:"tune_disk_write_cache"`
+		TuneDiskIrq                    weakBool             `yaml:"tune_disk_irq"`
+		TuneFstrim                     weakBool             `yaml:"tune_fstrim"`
+		TuneCPU                        weakBool             `yaml:"tune_cpu"`
+		TuneAioEvents                  weakBool             `yaml:"tune_aio_events"`
+		TuneClocksource                weakBool             `yaml:"tune_clocksource"`
+		TuneSwappiness                 weakBool             `yaml:"tune_swappiness"`
+		TuneTransparentHugePages       weakBool             `yaml:"tune_transparent_hugepages"`
+		EnableMemoryLocking            weakBool             `yaml:"enable_memory_locking"`
+		TuneCoredump                   weakBool             `yaml:"tune_coredump"`
+		CoredumpDir                    weakString           `yaml:"coredump_dir"`
+		TuneBallastFile                weakBool             `yaml:"tune_ballast_file"`
+		BallastFilePath                weakString           `yaml:"ballast_file_path"`
+		BallastFileSize                weakString           `yaml:"ballast_file_size"`
+		WellKnownIo                    weakString           `yaml:"well_known_io"`
+		Overprovisioned                weakBool             `yaml:"overprovisioned"`
+		SMP                            *weakInt             `yaml:"smp"`
+		CoresPerDedicatedInterruptCore *weakInt             `yaml:"cores_per_dedicated_interrupt_core"`
+		AllowDedicatedInterruptMode    *weakBool            `yaml:"allow_dedicated_interrupt_mode"`
 	}
 	if err := n.Decode(&internal); err != nil {
 		return err
@@ -477,6 +479,11 @@ func (rpkc *RpkNodeConfig) UnmarshalYAML(n *yaml.Node) error {
 	rpkc.Tuners.BallastFilePath = string(internal.BallastFilePath)
 	rpkc.Tuners.BallastFileSize = string(internal.BallastFileSize)
 	rpkc.Tuners.WellKnownIo = string(internal.WellKnownIo)
+	if internal.CoresPerDedicatedInterruptCore != nil && *internal.CoresPerDedicatedInterruptCore <= 1 {
+		return errors.New("cores_per_dedicated_interrupt_core must be greater than 1")
+	}
+	rpkc.Tuners.CoresPerDedicatedInterruptCore = (*int)(internal.CoresPerDedicatedInterruptCore)
+	rpkc.Tuners.AllowDedicatedInterruptMode = (*bool)(internal.AllowDedicatedInterruptMode)
 	return nil
 }
 

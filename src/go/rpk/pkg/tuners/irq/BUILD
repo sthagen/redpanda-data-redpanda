@@ -14,6 +14,7 @@ go_library(
     visibility = ["//visibility:public"],
     deps = select({
         "@rules_go//go/platform:android": [
+            "//src/go/rpk/pkg/config",
             "//src/go/rpk/pkg/os",
             "//src/go/rpk/pkg/tuners/executors",
             "//src/go/rpk/pkg/tuners/executors/commands",
@@ -23,6 +24,7 @@ go_library(
             "@org_uber_go_zap//:zap",
         ],
         "@rules_go//go/platform:linux": [
+            "//src/go/rpk/pkg/config",
             "//src/go/rpk/pkg/os",
             "//src/go/rpk/pkg/tuners/executors",
             "//src/go/rpk/pkg/tuners/executors/commands",

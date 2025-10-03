@@ -20,6 +20,7 @@ import collections.abc
 import google.protobuf.descriptor
 import google.protobuf.internal.containers
 import google.protobuf.message
+from ...... import proto
 import typing
 DESCRIPTOR: google.protobuf.descriptor.FileDescriptor
 
@@ -29,7 +30,7 @@ class GetBrokerRequest(google.protobuf.message.Message):
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NODE_ID_FIELD_NUMBER: builtins.int
     node_id: builtins.int
-    "The node ID for the broker. If set to -1 then the broker handling the RPC\n    request will response with it's own information.\n    "
+    'The node ID for the broker. If set to -1, the broker handling the RPC\n    request returns information about itself.\n    '
 
     def __init__(self, *, node_id: builtins.int=...) -> None:
         ...
@@ -83,6 +84,53 @@ class ListBrokersResponse(google.protobuf.message.Message):
     def ClearField(self, field_name: typing.Literal['brokers', b'brokers']) -> None:
         ...
 global___ListBrokersResponse = ListBrokersResponse
+
+@typing.final
+class ListKafkaConnectionsRequest(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    NODE_ID_FIELD_NUMBER: builtins.int
+    PAGE_SIZE_FIELD_NUMBER: builtins.int
+    FILTER_FIELD_NUMBER: builtins.int
+    ORDER_BY_FIELD_NUMBER: builtins.int
+    node_id: builtins.int
+    'The node ID for the broker. If set to -1, the broker handling the RPC\n    request returns information about itself.\n    '
+    page_size: builtins.int
+    'The maximum number of connections to return. If unspecified or 0, a\n    default value may be applied. Note that paging is currently not fully\n    supported, and this field only acts as a limit for the first page of data\n    returned. Subsequent pages of data cannot be requested.\n    '
+    filter: builtins.str
+    'Filter expression to apply to the connection list.\n    Uses a subset of AIP-160 filter syntax supporting:\n    - Field comparisons (`=`, `!=`, `<`, `>`, `<=`, `>=`)\n    - Logical AND chaining: condition1 AND condition2\n    - Nested field access: parent.child = value\n    - Escape sequences: field = "string with \\"quotes\\""\n    - Enum types\n    - RFC3339 timestamps and ISO-like duration\n\n    Limitations (not supported):\n    - Logical OR chaining\n    - Parentheses `(` `)` for grouping\n    - Map and repeated types\n    - HAS (:) operator\n    - Negation (-, NOT)\n    - Bare literal matching\n\n    Example filters:\n    - `state = KAFKA_CONNECTION_STATE_OPEN`\n    - `idle_duration > 30s AND request_count_total > 100`\n    - `authentication_info.user_principal = "my-producer"`\n    - `recent_request_statistics.produce_bytes > 1000 AND\n    client_software_name = "kgo"`\n    - `open_time >= 2025-09-01T10:22:54Z`\n\n    Reference: https://google.aip.dev/160\n    '
+    order_by: builtins.str
+    'Field-based ordering specification following AIP-132 syntax.\n    Supports multiple fields with `asc`/`desc` direction indicators.\n    Examples:\n    - `idle_duration desc` - longest idle connections first\n    - `open_time desc, total_request_statistics.request_count desc` - newest\n    connections first, then most active\n    - `recent_request_statistics.produce_bytes desc` - connections with\n    highest current produce throughput first\n\n    Reference: https://google.aip.dev/132#ordering\n    '
+
+    def __init__(self, *, node_id: builtins.int=..., page_size: builtins.int=..., filter: builtins.str=..., order_by: builtins.str=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['filter', b'filter', 'node_id', b'node_id', 'order_by', b'order_by', 'page_size', b'page_size']) -> None:
+        ...
+global___ListKafkaConnectionsRequest = ListKafkaConnectionsRequest
+
+@typing.final
+class ListKafkaConnectionsResponse(google.protobuf.message.Message):
+    DESCRIPTOR: google.protobuf.descriptor.Descriptor
+    CONNECTIONS_FIELD_NUMBER: builtins.int
+    TOTAL_SIZE_FIELD_NUMBER: builtins.int
+    total_size: builtins.int
+    'Total number of connections matching the request.\n    This may be greater than `len(connections)` if some connections were\n    omitted from the response due to the specified (or default) `page_size`.\n    Example:\n      request.page_size = 10\n      response.connections = [<10 items>]\n      response.total_size = 13\n    '
+
+    @property
+    def connections(self) -> google.protobuf.internal.containers.RepeatedCompositeFieldContainer[proto.redpanda.core.admin.v2.kafka_connections_pb2.KafkaConnection]:
+        """The list of connections matching the request.
+        Note that in addition to open connections, some recently-closed
+        connections may also be included here. If you don't want to include
+        closed connections, set the filter in the request to `state =
+        KAFKA_CONNECTION_STATE_OPEN`.
+        """
+
+    def __init__(self, *, connections: collections.abc.Iterable[proto.redpanda.core.admin.v2.kafka_connections_pb2.KafkaConnection] | None=..., total_size: builtins.int=...) -> None:
+        ...
+
+    def ClearField(self, field_name: typing.Literal['connections', b'connections', 'total_size', b'total_size']) -> None:
+        ...
+global___ListKafkaConnectionsResponse = ListKafkaConnectionsResponse
 
 @typing.final
 class Broker(google.protobuf.message.Message):

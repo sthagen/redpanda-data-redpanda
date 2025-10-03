@@ -13,9 +13,11 @@ package irq
 
 import (
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/executors/commands"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/hwloc"
@@ -25,8 +27,8 @@ import (
 
 type CPUMasks interface {
 	BaseCPUMask(cpuMask string) (string, error)
-	CPUMaskForComputations(mode Mode, cpuMask string) (string, error)
-	CPUMaskForIRQs(mode Mode, cpuMask string) (string, error)
+	CPUMaskForComputations(mode Mode, cpuMask string, t config.RpkNodeTuners) (string, error)
+	CPUMaskForIRQs(mode Mode, cpuMask string, t config.RpkNodeTuners) (string, error)
 	SetMask(path string, mask string) error
 	ReadMask(path string) (string, error)
 	ReadIRQMask(IRQ int) (string, error)
@@ -69,7 +71,7 @@ func (masks *cpuMasks) IsSupported() bool {
 }
 
 func (masks *cpuMasks) CPUMaskForComputations(
-	mode Mode, cpuMask string,
+	mode Mode, cpuMask string, t config.RpkNodeTuners,
 ) (string, error) {
 	zap.L().Sugar().Debugf("Computing CPU mask for '%s' mode and input CPU mask '%s'", mode, cpuMask)
 	computationsMask := ""
@@ -83,6 +85,21 @@ func (masks *cpuMasks) CPUMaskForComputations(
 	} else if mode == Mq {
 		// all available cores
 		computationsMask = cpuMask
+	} else if mode == Dedicated {
+		numOfPUs, err := masks.GetNumberOfPUs(cpuMask)
+		if err != nil {
+			return "", err
+		}
+		rpPUs := numOfPUs - uint(math.Ceil(float64(numOfPUs)/float64(t.GetCoresPerDedicatedInterruptCore())))
+		separateMasks, err := masks.hwloc.DistributeRestrict(rpPUs, cpuMask)
+		if err != nil {
+			return "", err
+		}
+		// merge the separate masks into one
+		computationsMask, err = masks.hwloc.RunCalcRaw(separateMasks...)
+		if err != nil {
+			return "", err
+		}
 	} else {
 		err = fmt.Errorf("unsupported mode: '%s'", mode)
 	}
@@ -96,14 +113,14 @@ func (masks *cpuMasks) CPUMaskForComputations(
 }
 
 func (masks *cpuMasks) CPUMaskForIRQs(
-	mode Mode, cpuMask string,
+	mode Mode, cpuMask string, t config.RpkNodeTuners,
 ) (string, error) {
 	zap.L().Sugar().Debugf("Computing IRQ CPU mask for '%s' mode and input CPU mask '%s'",
 		mode, cpuMask)
 	var err error
 	var maskForIRQs string
 	if mode != Mq {
-		maskForComputations, err := masks.CPUMaskForComputations(mode, cpuMask)
+		maskForComputations, err := masks.CPUMaskForComputations(mode, cpuMask, t)
 		if err != nil {
 			return "", err
 		}

@@ -109,6 +109,11 @@ public:
         return _table->get_all_link_ids();
     }
 
+    std::optional<::model::revision_id>
+    get_last_update_revision(const model::id_t& id) const override {
+        return _table->get_link_last_update_revision(id);
+    }
+
     ss::future<::cluster::cluster_link::errc> add_mirror_topic(
       model::id_t id,
       model::add_mirror_topic_cmd cmd,
@@ -127,14 +132,14 @@ public:
 
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
       model::id_t id,
-      model::update_mirror_topic_state_cmd cmd,
+      model::update_mirror_topic_status_cmd cmd,
       ::model::timeout_clock::time_point) override {
         auto link = _table->find_link_by_id(id);
         if (!link) {
             co_return ::cluster::cluster_link::errc::does_not_exist;
         }
         auto batch = ::cluster::cluster_link::testing::
-          create_update_mirror_topic_state_command(id, std::move(cmd));
+          create_update_mirror_topic_status_command(id, std::move(cmd));
 
         auto ec = co_await _table->apply_update(std::move(batch));
         co_return ec.value();
@@ -185,6 +190,39 @@ public:
           create_update_cluster_link_configuration_command(id, std::move(cmd));
         auto ec = co_await _table->apply_update(std::move(batch));
         co_return ec.value();
+    }
+
+    ss::future<std::expected<
+      ::cluster_link::model::aggregated_shadow_topic_report,
+      errc>>
+    shadow_topic_report(const model::id_t&, const ::model::topic&) override {
+        // unused in unit tests.
+        co_return std::unexpected(errc::link_id_not_found);
+    }
+
+    ss::future<::cluster::cluster_link::errc> failover_link_topics(
+      model::id_t id, ::model::timeout_clock::time_point timeout) override {
+        auto link = _table->find_link_by_id(id);
+        if (!link) {
+            co_return ::cluster::cluster_link::errc::does_not_exist;
+        }
+        chunked_vector<::model::topic> topics_to_failover;
+        for (const auto& [t, info] : link->get().state.mirror_topics) {
+            if (info.status == model::mirror_topic_status::active) {
+                // only active topics can be failed over.
+                topics_to_failover.push_back(t);
+            }
+        }
+        for (const auto& t : topics_to_failover) {
+            auto err = co_await update_mirror_topic_state(
+              id,
+              {.topic = t, .status = model::mirror_topic_status::failing_over},
+              timeout);
+            if (err != ::cluster::cluster_link::errc::success) {
+                co_return err;
+            }
+        }
+        co_return ::cluster::cluster_link::errc::success;
     }
 
 private:

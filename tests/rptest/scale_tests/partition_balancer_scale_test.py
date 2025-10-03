@@ -275,6 +275,7 @@ class PartitionBalancerScaleTest(PreallocNodesTest, PartitionMovementMixin):
             return list(filter(lambda n: n["address"] != node.account.hostname, seeds))
 
         self.redpanda.stop_node(to_restart)
+        assert to_restart is not None, "couldn't find node to restart"
         self.redpanda.clean_node(to_restart)
         self.redpanda.start_node(
             to_restart,

@@ -16,6 +16,7 @@ import (
 	"strconv"
 
 	"github.com/lorenzosaino/go-sysctl"
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/network"
@@ -39,10 +40,14 @@ type NetCheckersFactory interface {
 	NewRfsTableSizeChecker() Checker
 	NewListenBacklogChecker() Checker
 	NewSynBacklogChecker() Checker
+	// Check if all the interfaces run in dedicated mode and return the mask for
+	// computations if so. Empty string otherwise.
+	DedicatedMaskForComputations(interfaces []string) string
 }
 
 type netCheckersFactory struct {
 	fs             afero.Fs
+	t              config.RpkNodeTuners
 	irqProcFile    irq.ProcFile
 	irqDeviceInfo  irq.DeviceInfo
 	ethtool        ethtool.EthtoolWrapper
@@ -52,6 +57,7 @@ type netCheckersFactory struct {
 
 func NewNetCheckersFactory(
 	fs afero.Fs,
+	t config.RpkNodeTuners,
 	irqProcFile irq.ProcFile,
 	irqDeviceInfo irq.DeviceInfo,
 	ethtool ethtool.EthtoolWrapper,
@@ -60,12 +66,32 @@ func NewNetCheckersFactory(
 ) NetCheckersFactory {
 	return &netCheckersFactory{
 		fs:             fs,
+		t:              t,
 		irqProcFile:    irqProcFile,
 		irqDeviceInfo:  irqDeviceInfo,
 		ethtool:        ethtool,
 		balanceService: balanceService,
 		cpuMasks:       cpuMasks,
 	}
+}
+
+func (f *netCheckersFactory) DedicatedMaskForComputations(interfaces []string) string {
+	for _, ifaceName := range interfaces {
+		nic := network.NewNic(f.fs, f.irqProcFile, f.irqDeviceInfo, f.ethtool, ifaceName)
+		mode, err := network.GetDefaultMode(nic, "all", f.cpuMasks, f.t)
+		if err != nil {
+			return ""
+		}
+		if mode != irq.Dedicated {
+			return ""
+		}
+	}
+
+	mask, err := f.cpuMasks.CPUMaskForComputations(irq.Dedicated, "all", f.t)
+	if err != nil {
+		return ""
+	}
+	return mask
 }
 
 func (f *netCheckersFactory) NewNicIRQAffinityStaticChecker(
@@ -102,7 +128,7 @@ func (f *netCheckersFactory) NewNicIRQAffinityChecker(
 		func() (interface{}, error) {
 			return isSet(nic, func(currentNic network.Nic) (bool, error) {
 				dist, err := network.GetHwInterfaceIRQsDistribution(
-					currentNic, mode, cpuMask, f.cpuMasks)
+					currentNic, mode, cpuMask, f.cpuMasks, f.t)
 				if err != nil {
 					return false, err
 				}
@@ -157,7 +183,7 @@ func (f *netCheckersFactory) NewNicRpsSetChecker(
 				if err != nil {
 					return false, err
 				}
-				rfsMask, err := network.GetRpsCPUMask(nic, mode, cpuMask, f.cpuMasks)
+				rfsMask, err := network.GetRpsCPUMask(nic, mode, cpuMask, f.cpuMasks, f.t)
 				if err != nil {
 					return false, err
 				}
@@ -199,7 +225,7 @@ func (f *netCheckersFactory) NewNicRfsChecker(nic network.Nic, mode irq.Mode, cp
 				if err != nil {
 					return false, err
 				}
-				queueLimit, err := network.OneRPSQueueLimit(limits, nic, mode, cpuMask, f.cpuMasks)
+				queueLimit, err := network.OneRPSQueueLimit(limits, nic, mode, cpuMask, f.cpuMasks, f.t)
 				if err != nil {
 					return false, err
 				}

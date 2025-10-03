@@ -128,7 +128,7 @@ task::task(
 
 task::~task() = default;
 
-ss::future<result<void>> task::start() {
+ss::future<cl_result<void>> task::start() {
     vlog(logger().trace, "start called");
     if (_task_runner) {
         vlog(logger().debug, "task already started");
@@ -143,7 +143,7 @@ ss::future<result<void>> task::start() {
     co_return outcome::success();
 }
 
-ss::future<result<void>> task::stop() noexcept {
+ss::future<cl_result<void>> task::stop() noexcept {
     vlog(logger().trace, "stop called");
     auto res = change_state(
       model::task_state::stopped, ssx::sformat("{} has stopped", name()));
@@ -155,7 +155,7 @@ ss::future<result<void>> task::stop() noexcept {
     co_return outcome::success();
 }
 
-ss::future<result<void>> task::pause() {
+ss::future<cl_result<void>> task::pause() {
     vlog(logger().trace, "pause called");
     BOOST_OUTCOME_CO_TRYX(change_state(
       model::task_state::paused, ssx::sformat("{} has paused", name())));
@@ -227,7 +227,7 @@ model::task_status_report task::get_status_report() const {
     return report;
 }
 
-result<model::task_state>
+cl_result<model::task_state>
 task::change_state(model::task_state new_state, ss::sstring reason) {
     vlog(
       logger().trace,

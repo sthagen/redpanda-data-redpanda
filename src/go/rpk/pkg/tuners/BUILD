@@ -116,6 +116,7 @@ go_test(
     deps = select({
         "@rules_go//go/platform:android": [
             "//src/go/rpk/pkg/cloud/provider",
+            "//src/go/rpk/pkg/config",
             "//src/go/rpk/pkg/os",
             "//src/go/rpk/pkg/system/systemd",
             "//src/go/rpk/pkg/tuners/disk",
@@ -131,6 +132,7 @@ go_test(
         ],
         "@rules_go//go/platform:linux": [
             "//src/go/rpk/pkg/cloud/provider",
+            "//src/go/rpk/pkg/config",
             "//src/go/rpk/pkg/os",
             "//src/go/rpk/pkg/system/systemd",
             "//src/go/rpk/pkg/tuners/disk",

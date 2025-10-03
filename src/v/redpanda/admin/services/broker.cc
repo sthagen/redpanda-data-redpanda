@@ -11,6 +11,10 @@
 
 #include "redpanda/admin/services/broker.h"
 
+#include "kafka/server/connection_context.h"
+#include "kafka/server/server.h"
+#include "proto/redpanda/core/admin/v2/kafka_connections.proto.h"
+#include "ssx/async_algorithm.h"
 #include "version/version.h"
 
 #include <seastar/core/coroutine.hh>
@@ -21,11 +25,19 @@ using namespace proto::admin;
 
 namespace admin {
 
+namespace {
+// NOLINTNEXTLINE(*-non-const-global-variables,cert-err58-*)
+ss::logger brlog{"admin_api_server/broker_service"};
+
+} // namespace
+
 broker_service_impl::broker_service_impl(
   admin::proxy::client client,
-  std::vector<std::unique_ptr<serde::pb::rpc::base_service>>* services)
+  std::vector<std::unique_ptr<serde::pb::rpc::base_service>>* services,
+  ss::sharded<kafka::server>& kafka_server)
   : _proxy_client(std::move(client))
-  , _services(services) {}
+  , _services(services)
+  , _kafka_server(kafka_server) {}
 
 ss::future<proto::admin::get_broker_response> broker_service_impl::get_broker(
   serde::pb::rpc::context ctx, proto::admin::get_broker_request req) {
@@ -72,6 +84,98 @@ proto::admin::broker broker_service_impl::self_broker() const {
         }
     }
     return b;
+}
+
+namespace {
+
+struct connection_gather_result {
+    chunked_vector<proto::kafka_connection> connections;
+    size_t total_matching_count;
+};
+
+ss::future<connection_gather_result>
+gather_connections(const kafka::server& server, size_t limit) {
+    auto result = connection_gather_result{};
+
+    auto conn_ptrs = server.list_connections();
+    co_await ss::maybe_yield();
+
+    co_await ssx::async_for_each(
+      conn_ptrs, [&result, limit](const auto& conn_ptr) {
+          auto conn_proto = conn_ptr->to_proto();
+
+          // TODO: Apply filtering here when implemented
+          bool matches_filter = true;
+
+          if (matches_filter) {
+              result.total_matching_count++;
+
+              if (result.connections.size() < limit) {
+                  result.connections.emplace_back(std::move(conn_proto));
+              }
+          }
+      });
+
+    co_return result;
+}
+
+} // namespace
+
+ss::future<proto::admin::list_kafka_connections_response>
+broker_service_impl::list_kafka_connections(
+  serde::pb::rpc::context ctx,
+  proto::admin::list_kafka_connections_request req) {
+    vlog(brlog.trace, "list_kafka_connections: {}", req);
+
+    // Proxy to the target node id specified in the request
+    auto target = model::node_id{req.get_node_id()};
+    if (target != -1 && target != _proxy_client.self_node_id()) {
+        vlog(brlog.debug, "Redirecting to target node id {}", target);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::broker_service_client>(target)
+          .list_kafka_connections(ctx, std::move(req));
+    }
+
+    auto resp = proto::admin::list_kafka_connections_response{};
+
+    constexpr size_t default_limit = 1000;
+    auto limit = (req.get_page_size() == 0) ? default_limit
+                                            : req.get_page_size();
+
+    // Iterate across shards sequentially to bound memory usage while
+    // calculating total size
+    auto result_connections = chunked_vector<proto::kafka_connection>{};
+    auto total_matching_connections = size_t{0};
+
+    for (ss::shard_id shard = 0; shard < ss::smp::count; ++shard) {
+        // Get connections from this shard with the remaining limit
+        auto remaining_limit = limit - result_connections.size();
+        auto shard_result = co_await _kafka_server.invoke_on(
+          shard,
+          [remaining_limit](
+            kafka::server& server) -> ss::future<connection_gather_result> {
+              return gather_connections(server, remaining_limit);
+          });
+
+        total_matching_connections += shard_result.total_matching_count;
+        std::ranges::move(
+          shard_result.connections, std::back_inserter(result_connections));
+
+        co_await ss::maybe_yield();
+    }
+
+    resp.set_total_size(total_matching_connections);
+    resp.set_connections(std::move(result_connections));
+
+    vlog(
+      brlog.trace,
+      "list_kafka_connections: response connections: {} ({}b), total matching: "
+      "{}",
+      resp.get_connections().size(),
+      resp.get_connections().memory_size(),
+      resp.get_total_size());
+
+    co_return resp;
 }
 
 } // namespace admin

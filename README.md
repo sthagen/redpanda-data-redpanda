@@ -11,6 +11,7 @@
 Redpanda is the most complete, Apache Kafka®-compatible streaming data platform, designed from the ground up to be lighter, faster, and simpler to operate. Free from ZooKeeper™ and JVMs, it prioritizes an end-to-end developer experience with a huge ecosystem of connectors, configurable tiered storage, and more.
 
 # Table of Contents
+
 - [Get started](#get-started)
   - [Prebuilt packages](#prebuilt-packages)
     - [Debian/Ubuntu](#debianubuntu)
@@ -66,18 +67,16 @@ To install from a `.tar.gz` archive, download the file and extract it into `/opt
 For amd64:
 
 ```
-curl -LO \
-  https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/raw/names/redpanda-amd64/versions/25.1.1/redpanda-25.1.1-amd64.tar.gz
+curl -LO https://vectorized-public.s3.us-west-2.amazonaws.com/releases/redpanda/25.2.7/redpanda-25.2.7-amd64.tar.gz
 ```
 
 For arm64:
 
 ```
-curl -LO \
-  https://dl.redpanda.com/nzc4ZYQK3WRGd9sy/redpanda/raw/names/redpanda-arm64/versions/25.1.1/redpanda-25.1.1-arm64.tar.gz
+curl -LO https://vectorized-public.s3.us-west-2.amazonaws.com/releases/redpanda/25.2.7/redpanda-25.2.7-arm64.tar.gz
 ```
 
-Replace `25.1.1` with the version you want to download. See [Release Notes](https://github.com/redpanda-data/redpanda/releases).
+Replace `25.2.7` with the version you want to download. See [Release Notes](https://github.com/redpanda-data/redpanda/releases) for available releases.
 
 ## Build Manually
 
@@ -150,4 +149,3 @@ docker pull docker.redpanda.com/redpandadata/redpanda-unstable:v25.1.1-rc1
 - [Upcoming Redpanda Events](https://www.redpanda.com/events)
 - [Redpanda Support](https://support.redpanda.com/)
 - [Redpanda University](https://university.redpanda.com/)
-

@@ -765,6 +765,20 @@ produce_handler::handle(request_context ctx, ss::smp_service_group ssg) {
       resp,
       error_code::invalid_topic_exception);
     request.data.topics.erase_to_end(migrated_it);
+
+    auto linked_topics_it = std::partition(
+      request.data.topics.begin(),
+      request.data.topics.end(),
+      [&ctx](const topic_produce_data& t) {
+          return ctx.is_topic_mutable(t.name);
+      });
+    fill_response_with_errors(
+      linked_topics_it,
+      request.data.topics.cend(),
+      resp,
+      error_code::policy_violation);
+    request.data.topics.erase_to_end(linked_topics_it);
+
     ss::promise<> dispatched_promise;
     auto dispatched_f = dispatched_promise.get_future();
 

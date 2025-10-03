@@ -21,17 +21,17 @@ namespace cluster::cluster_link {
 using ::cluster_link::model::add_mirror_topic_cmd;
 using ::cluster_link::model::id_t;
 using ::cluster_link::model::metadata;
-using ::cluster_link::model::mirror_topic_state;
+using ::cluster_link::model::mirror_topic_status;
 using ::cluster_link::model::name_t;
 using ::cluster_link::model::update_cluster_link_configuration_cmd;
-using ::cluster_link::model::update_mirror_topic_state_cmd;
+using ::cluster_link::model::update_mirror_topic_status_cmd;
 
 namespace {
 static constexpr auto accepted_commands = cluster::make_commands_list<
   cluster::cluster_link_upsert_cmd,
   cluster::cluster_link_remove_cmd,
   cluster::cluster_link_add_mirror_topic_cmd,
-  cluster::cluster_link_update_mirror_topic_state_cmd,
+  cluster::cluster_link_update_mirror_topic_status_cmd,
   cluster::cluster_link_update_mirror_topic_properties_cmd,
   cluster::cluster_link_update_cluster_link_configuration_cmd>();
 
@@ -43,13 +43,30 @@ table::map_t copy_links(const table::map_t& links) {
     }
     return copy;
 }
+
+table::link_revision_index_t
+copy_revisions(const table::link_revision_index_t& revisions) {
+    table::link_revision_index_t copy;
+    copy.reserve(revisions.size());
+    for (const auto& [id, rev] : revisions) {
+        copy.emplace(id, rev);
+    }
+    return copy;
+}
+
 } // namespace
 
 table::map_t table::all_links() const { return copy_links(_link_metadata); }
+table::link_revision_index_t table::all_link_revisions() const {
+    return copy_revisions(_link_revision_index);
+}
 
 size_t table::size() const { return _link_metadata.size(); }
 
-void table::reset_links(map_t links) {
+void table::reset_links(
+  map_t links,
+  link_revision_index_t link_to_revision,
+  model::revision_id snapshot_revision) {
     name_index_t snap_name_index;
     topic_name_index_t snap_topic_name_index;
 
@@ -69,6 +86,15 @@ void table::reset_links(map_t links) {
     for (const auto& [id, metadata] : links) {
         if (!_link_metadata.contains(id)) {
             all_inserts.push_back(id);
+        }
+        if (!link_to_revision.contains(id)) {
+            // this is unexpected but we move on by using the snapshot revision.
+            vlog(
+              cluster::clusterlog.error,
+              "Link id {} from snapshot is missing a revision, setting to {}",
+              id,
+              snapshot_revision);
+            link_to_revision.emplace(id, snapshot_revision);
         }
         auto it = snap_name_index.emplace(metadata.name, id);
         if (!it.second) {
@@ -96,17 +122,32 @@ void table::reset_links(map_t links) {
     }
 
     _link_metadata = std::move(links);
+    _link_revision_index = std::move(link_to_revision);
+    vassert(
+      _link_metadata.size() == _link_revision_index.size(),
+      "Inconsistent cluster link and revision index sizes, have {} links and "
+      "{} revisions",
+      _link_metadata.size(),
+      _link_revision_index.size());
     _name_index = std::move(snap_name_index);
     _topic_name_index = std::move(snap_topic_name_index);
 
+    auto get_revision = [this, &snapshot_revision](id_t id) {
+        auto it = _link_revision_index.find(id);
+        if (it != _link_revision_index.end()) {
+            return it->second;
+        }
+        return snapshot_revision;
+    };
+
     for (const auto& deleted : all_deletes) {
-        run_callbacks(deleted);
+        run_callbacks(deleted, get_revision(deleted));
     }
     for (const auto& inserted : all_inserts) {
-        run_callbacks(inserted);
+        run_callbacks(inserted, get_revision(inserted));
     }
     for (const auto& changed : all_changes) {
-        run_callbacks(changed);
+        run_callbacks(changed, get_revision(changed));
     }
 }
 std::optional<std::reference_wrapper<const metadata>>
@@ -150,8 +191,8 @@ std::optional<id_t> table::find_id_by_topic(model::topic_view tp) const {
     return it->second;
 }
 
-std::optional<mirror_topic_state>
-table::find_mirror_topic_state(model::topic_view tp) const {
+std::optional<mirror_topic_status>
+table::find_mirror_topic_status(model::topic_view tp) const {
     auto id = find_id_by_topic(tp);
     if (!id) {
         return std::nullopt;
@@ -169,7 +210,16 @@ table::find_mirror_topic_state(model::topic_view tp) const {
       "Inconsistent topic index for {} expected to exist in metadata id {}",
       tp,
       id.value());
-    return it->second.state;
+    return it->second.status;
+}
+
+std::optional<::model::revision_id> table::get_link_last_update_revision(
+  const ::cluster_link::model::id_t& id) const {
+    auto it = _link_revision_index.find(id);
+    if (it == _link_revision_index.end()) {
+        return std::nullopt;
+    }
+    return it->second;
 }
 
 chunked_vector<id_t> table::get_all_link_ids() const {
@@ -186,37 +236,44 @@ bool table::is_batch_applicable(const model::record_batch& b) const {
 
 ss::future<std::error_code> table::apply_update(model::record_batch b) {
     auto offset = b.base_offset();
+    auto revision = model::revision_id(b.last_offset());
     auto cmd = co_await deserialize(std::move(b), accepted_commands);
     auto results = co_await container().map([cmd = std::move(cmd),
-                                             offset](table& table) mutable {
+                                             offset,
+                                             revision](table& table) mutable {
         return ss::visit(
           std::move(cmd),
-          [&table, offset](const cluster::cluster_link_upsert_cmd& upsert) {
+          [&table, offset, revision](
+            const cluster::cluster_link_upsert_cmd& upsert) {
               auto existing_id = table.find_id_by_name(upsert.value.name);
               return table.upsert_link(
-                existing_id.value_or(id_t{offset}), upsert.value.copy());
+                existing_id.value_or(id_t{offset}),
+                upsert.value.copy(),
+                revision);
           },
-          [&table](const cluster::cluster_link_remove_cmd& remove) {
-              return table.remove_link(remove.key);
+          [&table, revision](const cluster::cluster_link_remove_cmd& remove) {
+              return table.remove_link(remove.key, revision);
           },
-          [&table](const cluster::cluster_link_add_mirror_topic_cmd& add) {
-              return table.add_mirror_topic(add.key, add.value);
+          [&table,
+           revision](const cluster::cluster_link_add_mirror_topic_cmd& add) {
+              return table.add_mirror_topic(add.key, add.value, revision);
           },
-          [&table](
-            const cluster::cluster_link_update_mirror_topic_state_cmd& state) {
-              return table.update_mirror_topic_state(state.key, state.value);
+          [&table, revision](
+            const cluster::cluster_link_update_mirror_topic_status_cmd& state) {
+              return table.update_mirror_topic_state(
+                state.key, state.value, revision);
           },
-          [&table](
+          [&table, revision](
             const cluster::cluster_link_update_mirror_topic_properties_cmd&
               state) {
               return table.update_mirror_topic_properties(
-                state.key, state.value);
+                state.key, state.value, revision);
           },
-          [&table](
+          [&table, revision](
             const cluster::cluster_link_update_cluster_link_configuration_cmd&
               cmd) {
               return table.update_cluster_link_configuration(
-                cmd.key, cmd.value);
+                cmd.key, cmd.value, revision);
           });
     });
     auto first_res = results.front();
@@ -237,14 +294,19 @@ ss::future<std::error_code> table::apply_update(model::record_batch b) {
 
 ss::future<> table::fill_snapshot(cluster::controller_snapshot& snap) const {
     snap.cluster_links.links = all_links();
+    snap.cluster_links.link_revisions = all_link_revisions();
     return ss::now();
 }
 
-ss::future<>
-table::apply_snapshot(model::offset, const cluster::controller_snapshot& snap) {
-    return container().invoke_on_all([&snap](table& table) {
-        table.reset_links(copy_links(snap.cluster_links.links));
-    });
+ss::future<> table::apply_snapshot(
+  model::offset offset, const cluster::controller_snapshot& snap) {
+    return container().invoke_on_all(
+      [&snap, snap_revision = model::revision_id(offset)](table& table) {
+          table.reset_links(
+            copy_links(snap.cluster_links.links),
+            copy_revisions(snap.cluster_links.link_revisions),
+            snap_revision);
+      });
 }
 
 table::notification_id table::register_for_updates(notification_callback cb) {
@@ -260,13 +322,14 @@ bool table::cluster_link_active() const {
     return !_link_metadata.empty();
 }
 
-void table::run_callbacks(id_t id) {
+void table::run_callbacks(id_t id, model::revision_id revision) {
     for (const auto& [_, cb] : _callbacks) {
-        cb(id);
+        cb(id, revision);
     }
 }
 
-cluster::cluster_link::errc table::upsert_link(id_t id, metadata meta) {
+cluster::cluster_link::errc
+table::upsert_link(id_t id, metadata meta, model::revision_id revision) {
     for (const auto& t : meta.state.mirror_topics) {
         auto link_id = find_id_by_topic(t.first);
         if (link_id && link_id.value() != id) {
@@ -304,11 +367,13 @@ cluster::cluster_link::errc table::upsert_link(id_t id, metadata meta) {
     });
 
     _link_metadata.insert_or_assign(id, std::move(meta));
-    run_callbacks(id);
+    _link_revision_index[id] = revision;
+    run_callbacks(id, revision);
     return cluster::cluster_link::errc::success;
 }
 
-cluster::cluster_link::errc table::remove_link(const name_t& name) {
+cluster::cluster_link::errc
+table::remove_link(const name_t& name, model::revision_id revision) {
     auto name_it = _name_index.find(name);
     if (name_it == _name_index.end()) {
         return cluster::cluster_link::errc::success;
@@ -326,14 +391,15 @@ cluster::cluster_link::errc table::remove_link(const name_t& name) {
       name,
       id);
     _name_index.erase(name_it);
+    _link_revision_index.erase(id);
     _link_metadata.erase(it);
 
-    run_callbacks(id);
+    run_callbacks(id, revision);
     return cluster::cluster_link::errc::success;
 }
 
-cluster::cluster_link::errc
-table::add_mirror_topic(id_t id, const add_mirror_topic_cmd& cmd) {
+cluster::cluster_link::errc table::add_mirror_topic(
+  id_t id, const add_mirror_topic_cmd& cmd, model::revision_id revision) {
     auto link_id = find_id_by_topic(cmd.topic);
     if (link_id) {
         if (link_id.value() != id) {
@@ -362,12 +428,15 @@ table::add_mirror_topic(id_t id, const add_mirror_topic_cmd& cmd) {
     _link_metadata[id].state.mirror_topics.insert(
       {cmd.topic, cmd.metadata.copy()});
     _topic_name_index.emplace(cmd.topic, id);
-    run_callbacks(id);
+    _link_revision_index[id] = revision;
+    run_callbacks(id, revision);
     return errc::success;
 }
 
 cluster::cluster_link::errc table::update_mirror_topic_state(
-  id_t id, const update_mirror_topic_state_cmd& cmd) {
+  id_t id,
+  const update_mirror_topic_status_cmd& cmd,
+  model::revision_id revision) {
     auto link_id = find_id_by_topic(cmd.topic);
     if (!link_id) {
         vlog(
@@ -393,14 +462,16 @@ cluster::cluster_link::errc table::update_mirror_topic_state(
       cmd.topic,
       id);
 
-    it->second.state = cmd.state;
-    run_callbacks(id);
+    it->second.status = cmd.status;
+    _link_revision_index[id] = revision;
+    run_callbacks(id, revision);
     return errc::success;
 }
 
 cluster::cluster_link::errc table::update_mirror_topic_properties(
   ::cluster_link::model::id_t id,
-  const ::cluster_link::model::update_mirror_topic_properties_cmd& cmd) {
+  const ::cluster_link::model::update_mirror_topic_properties_cmd& cmd,
+  model::revision_id revision) {
     auto link_id = find_id_by_topic(cmd.topic);
     if (!link_id) {
         vlog(
@@ -435,20 +506,24 @@ cluster::cluster_link::errc table::update_mirror_topic_properties(
     for (const auto& [key, value] : cmd.topic_configs) {
         md.topic_configs.emplace(key, value);
     }
-    run_callbacks(id);
+    _link_revision_index[id] = revision;
+    run_callbacks(id, revision);
     return errc::success;
 }
 
 cluster::cluster_link::errc table::update_cluster_link_configuration(
-  id_t id, const update_cluster_link_configuration_cmd& cmd) {
+  id_t id,
+  const update_cluster_link_configuration_cmd& cmd,
+  model::revision_id revision) {
     if (!_link_metadata.contains(id)) {
         vlog(cluster::clusterlog.warn, "Link id {} not found", id);
         return errc::does_not_exist;
     }
     _link_metadata[id].connection = cmd.connection;
     _link_metadata[id].configuration = cmd.link_config.copy();
+    _link_revision_index[id] = revision;
 
-    run_callbacks(id);
+    run_callbacks(id, revision);
     return errc::success;
 }
 } // namespace cluster::cluster_link

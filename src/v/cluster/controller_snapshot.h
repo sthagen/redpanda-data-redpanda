@@ -303,11 +303,13 @@ struct cluster_link_t
       ::cluster_link::model::id_t,
       ::cluster_link::model::metadata>
       links;
+    chunked_hash_map<::cluster_link::model::id_t, model::revision_id>
+      link_revisions;
 
     friend bool operator==(const cluster_link_t&, const cluster_link_t&)
       = default;
 
-    auto serde_fields() { return std::tie(links); }
+    auto serde_fields() { return std::tie(links, link_revisions); }
 };
 
 } // namespace controller_snapshot_parts

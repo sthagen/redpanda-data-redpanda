@@ -23,14 +23,14 @@ using ::cluster_link::model::connection_config;
 using ::cluster_link::model::id_t;
 using ::cluster_link::model::link_configuration;
 using ::cluster_link::model::metadata;
-using ::cluster_link::model::mirror_topic_state;
+using ::cluster_link::model::mirror_topic_status;
 using ::cluster_link::model::name_t;
 using ::cluster_link::model::scram_credentials;
 using ::cluster_link::model::tls_file_path;
 using ::cluster_link::model::tls_value;
 using ::cluster_link::model::update_cluster_link_configuration_cmd;
 using ::cluster_link::model::update_mirror_topic_properties_cmd;
-using ::cluster_link::model::update_mirror_topic_state_cmd;
+using ::cluster_link::model::update_mirror_topic_status_cmd;
 using ::cluster_link::model::uuid_t;
 
 constexpr size_t max_links = 1;
@@ -104,13 +104,13 @@ public:
     }
 
     ss::future<cluster::cluster_link::errc>
-    update_mirror_topic_state(id_t id, update_mirror_topic_state_cmd cmd) {
-        cluster::cluster_link_update_mirror_topic_state_cmd update_cmd{
+    update_mirror_topic_status(id_t id, update_mirror_topic_status_cmd cmd) {
+        cluster::cluster_link_update_mirror_topic_status_cmd update_cmd{
           id, std::move(cmd)};
         auto ec = _validator->validate_mutation(update_cmd);
         if (ec == errc::success) {
             auto err = co_await _table.local().apply_update(
-              testing::create_update_mirror_topic_state_command(
+              testing::create_update_mirror_topic_status_command(
                 update_cmd.key, std::move(update_cmd.value)));
             vassert(
               !err, "Failed to update mirror topic state: {}", err.message());
@@ -149,6 +149,22 @@ public:
         }
 
         co_return ec;
+    }
+
+    ss::future<cluster::cluster_link::errc>
+    failover_link_topic(id_t id, const model::topic& topic) {
+        // first transition to failing over and then to failed over
+        auto ec = co_await update_mirror_topic_status(
+          id,
+          update_mirror_topic_status_cmd{
+            .topic = topic, .status = mirror_topic_status::failing_over});
+        if (ec != errc::success) {
+            co_return ec;
+        }
+        co_return co_await update_mirror_topic_status(
+          id,
+          update_mirror_topic_status_cmd{
+            .topic = topic, .status = mirror_topic_status::failed_over});
     }
 
     id_t _latest_id{0};
@@ -211,6 +227,66 @@ TEST_F_CORO(frontend_validation_test, remove_existing) {
     EXPECT_EQ(
       co_await delete_cluster_link(name_t("link1")),
       cluster::cluster_link::errc::does_not_exist);
+}
+
+TEST_F_CORO(frontend_validation_test, remove_empty_link) {
+    EXPECT_EQ(
+      co_await upsert_cluster_link(create_base_metadata()),
+      cluster::cluster_link::errc::success);
+    EXPECT_EQ(
+      co_await delete_cluster_link(name_t("link1")),
+      cluster::cluster_link::errc::success);
+}
+
+TEST_F_CORO(frontend_validation_test, remove_link_with_topics) {
+    // create a link
+    EXPECT_EQ(
+      co_await upsert_cluster_link(create_base_metadata()),
+      cluster::cluster_link::errc::success);
+    // Add a topic to the link
+    auto maybe_link_id = _table.local().find_id_by_name(name_t("link1"));
+    EXPECT_TRUE(maybe_link_id.has_value())
+      << "Unable to find link ID for link1";
+    auto link_id = maybe_link_id.value();
+    add_mirror_topic_cmd cmd0{
+      .topic = model::topic("mirror-topic-0"),
+      .metadata = testing::create_mirror_topic_metadata(
+        mirror_topic_status::active, model::topic("mirror-topic-0"))};
+    EXPECT_EQ(
+      co_await add_mirror_topic(link_id, std::move(cmd0)),
+      cluster::cluster_link::errc::success);
+    // Try to delete the link, should fail
+    EXPECT_EQ(
+      co_await delete_cluster_link(name_t("link1")),
+      cluster::cluster_link::errc::link_has_active_shadow_topics);
+    // Add another topic and transition the first one to failed_over
+    add_mirror_topic_cmd cmd1{
+      .topic = model::topic("mirror-topic-1"),
+      .metadata = testing::create_mirror_topic_metadata(
+        mirror_topic_status::active, model::topic("mirror-topic-1"))};
+    EXPECT_EQ(
+      co_await add_mirror_topic(link_id, std::move(cmd1)),
+      cluster::cluster_link::errc::success);
+    // Try delete again, should still fail
+    EXPECT_EQ(
+      co_await delete_cluster_link(name_t("link1")),
+      cluster::cluster_link::errc::link_has_active_shadow_topics);
+    // Transition first topic to failed_over
+    EXPECT_EQ(
+      co_await failover_link_topic(link_id, model::topic("mirror-topic-0")),
+      cluster::cluster_link::errc::success);
+    // Try delete again, should still fail
+    EXPECT_EQ(
+      co_await delete_cluster_link(name_t("link1")),
+      cluster::cluster_link::errc::link_has_active_shadow_topics);
+    // Transition second topic to failed_over
+    EXPECT_EQ(
+      co_await failover_link_topic(link_id, model::topic("mirror-topic-1")),
+      cluster::cluster_link::errc::success);
+    // Now the delete should succeed
+    EXPECT_EQ(
+      co_await delete_cluster_link(name_t("link1")),
+      cluster::cluster_link::errc::success);
 }
 
 TEST_F_CORO(frontend_validation_test, update_existing_bad_uuid) {
@@ -355,7 +431,7 @@ TEST_F_CORO(frontend_validation_test, add_mirror_topic_success) {
     add_mirror_topic_cmd cmd{
       .topic = model::topic("mirror-topic"),
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, model::topic("mirror-topic"))};
+        mirror_topic_status::active, model::topic("mirror-topic"))};
     EXPECT_EQ(
       co_await add_mirror_topic(id.value(), std::move(cmd)), errc::success);
 }
@@ -369,7 +445,7 @@ TEST_F_CORO(frontend_validation_test, add_mirror_topic_invalid_name) {
     add_mirror_topic_cmd cmd{
       .topic = model::topic("\xFF\xFF\xFF"), // Invalid UTF-8
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, model::topic("\xFF\xFF\xFF"))};
+        mirror_topic_status::active, model::topic("\xFF\xFF\xFF"))};
     EXPECT_EQ(
       co_await add_mirror_topic(id.value(), std::move(cmd)),
       errc::mirror_topic_name_invalid);
@@ -379,14 +455,14 @@ TEST_F_CORO(frontend_validation_test, add_mirror_topic_no_link) {
     add_mirror_topic_cmd cmd{
       .topic = model::topic("mirror-topic"),
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, model::topic("mirror-topic"))};
+        mirror_topic_status::active, model::topic("mirror-topic"))};
     EXPECT_EQ(
       co_await add_mirror_topic(id_t{5}, std::move(cmd)), errc::does_not_exist);
 }
 
 TEST_F_CORO(frontend_validation_test, add_mirror_topic_already_mirrored) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
     auto m = create_base_metadata();
     testing::set_link_mirror_topics(m, test_topic, mirror_state, test_topic);
     ASSERT_EQ_CORO(co_await upsert_cluster_link(std::move(m)), errc::success);
@@ -396,7 +472,7 @@ TEST_F_CORO(frontend_validation_test, add_mirror_topic_already_mirrored) {
     add_mirror_topic_cmd cmd{
       .topic = test_topic,
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, test_topic)};
+        mirror_topic_status::active, test_topic)};
 
     EXPECT_EQ(
       co_await add_mirror_topic(id.value(), std::move(cmd)),
@@ -405,7 +481,7 @@ TEST_F_CORO(frontend_validation_test, add_mirror_topic_already_mirrored) {
 
 TEST_F_CORO(frontend_validation_test, add_mirror_topic_mirrored_by_other_link) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
     auto m1 = create_base_metadata();
     testing::set_link_mirror_topics(m1, test_topic, mirror_state, test_topic);
 
@@ -424,16 +500,16 @@ TEST_F_CORO(frontend_validation_test, add_mirror_topic_mirrored_by_other_link) {
     add_mirror_topic_cmd cmd{
       .topic = test_topic,
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, test_topic)};
+        mirror_topic_status::active, test_topic)};
 
     EXPECT_EQ(
       co_await add_mirror_topic(id_t{2}, std::move(cmd)),
       errc::topic_being_mirrored_by_other_link);
 }
 
-TEST_F_CORO(frontend_validation_test, update_mirror_topic_state_success) {
+TEST_F_CORO(frontend_validation_test, update_mirror_topic_status_success) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     auto m = create_base_metadata();
     testing::set_link_mirror_topics(m, test_topic, mirror_state, test_topic);
@@ -441,16 +517,16 @@ TEST_F_CORO(frontend_validation_test, update_mirror_topic_state_success) {
     auto id = _table.local().find_id_by_name(name_t("link1"));
     ASSERT_TRUE_CORO(id.has_value());
 
-    update_mirror_topic_state_cmd update_cmd{
-      .topic = test_topic, .state = mirror_topic_state::paused};
+    update_mirror_topic_status_cmd update_cmd{
+      .topic = test_topic, .status = mirror_topic_status::paused};
     EXPECT_EQ(
-      co_await update_mirror_topic_state(id.value(), std::move(update_cmd)),
+      co_await update_mirror_topic_status(id.value(), std::move(update_cmd)),
       errc::success);
 }
 
-TEST_F_CORO(frontend_validation_test, update_mirror_topic_state_invalid_name) {
+TEST_F_CORO(frontend_validation_test, update_mirror_topic_status_invalid_name) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     auto m = create_base_metadata();
     testing::set_link_mirror_topics(m, test_topic, mirror_state, test_topic);
@@ -459,19 +535,20 @@ TEST_F_CORO(frontend_validation_test, update_mirror_topic_state_invalid_name) {
     auto id = _table.local().find_id_by_name(name_t("link1"));
     ASSERT_TRUE_CORO(id.has_value());
 
-    update_mirror_topic_state_cmd update_cmd{
+    update_mirror_topic_status_cmd update_cmd{
       .topic = model::topic("\xFF\xFF\xFF"), // Invalid UTF-8
-      .state = mirror_topic_state::paused};
+      .status = mirror_topic_status::paused};
     EXPECT_EQ(
-      co_await update_mirror_topic_state(id.value(), std::move(update_cmd)),
+      co_await update_mirror_topic_status(id.value(), std::move(update_cmd)),
       errc::mirror_topic_name_invalid);
 }
 
 TEST_F_CORO(frontend_validation_test, update_mirror_topic_non_existant_link) {
-    update_mirror_topic_state_cmd update_cmd{
-      .topic = model::topic("test-topic"), .state = mirror_topic_state::paused};
+    update_mirror_topic_status_cmd update_cmd{
+      .topic = model::topic("test-topic"),
+      .status = mirror_topic_status::paused};
     EXPECT_EQ(
-      co_await update_mirror_topic_state(id_t{5}, std::move(update_cmd)),
+      co_await update_mirror_topic_status(id_t{5}, std::move(update_cmd)),
       errc::does_not_exist);
 }
 
@@ -482,16 +559,17 @@ TEST_F_CORO(
     auto id = _table.local().find_id_by_name(name_t("link1"));
     ASSERT_TRUE_CORO(id.has_value());
 
-    update_mirror_topic_state_cmd update_cmd{
-      .topic = model::topic("test-topic"), .state = mirror_topic_state::paused};
+    update_mirror_topic_status_cmd update_cmd{
+      .topic = model::topic("test-topic"),
+      .status = mirror_topic_status::paused};
     EXPECT_EQ(
-      co_await update_mirror_topic_state(id.value(), std::move(update_cmd)),
+      co_await update_mirror_topic_status(id.value(), std::move(update_cmd)),
       errc::topic_not_being_mirrored);
 }
 
 TEST_F_CORO(frontend_validation_test, update_mirror_topic_mirrored_by_other) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     auto m1 = create_base_metadata();
     testing::set_link_mirror_topics(m1, test_topic, mirror_state, test_topic);
@@ -508,11 +586,11 @@ TEST_F_CORO(frontend_validation_test, update_mirror_topic_mirrored_by_other) {
         testing::create_upsert_command(model::offset{2}, std::move(m2))),
       errc::success);
 
-    update_mirror_topic_state_cmd update_cmd{
-      .topic = test_topic, .state = mirror_topic_state::paused};
+    update_mirror_topic_status_cmd update_cmd{
+      .topic = test_topic, .status = mirror_topic_status::paused};
 
     EXPECT_EQ(
-      co_await update_mirror_topic_state(id_t{2}, std::move(update_cmd)),
+      co_await update_mirror_topic_status(id_t{2}, std::move(update_cmd)),
       errc::topic_being_mirrored_by_other_link);
 }
 
@@ -649,7 +727,7 @@ TEST_F_CORO(frontend_validation_test, update_mirror_topic_properties_success) {
     add_mirror_topic_cmd cmd{
       .topic = model::topic("mirror-topic"),
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, model::topic("mirror-topic"))};
+        mirror_topic_status::active, model::topic("mirror-topic"))};
     EXPECT_EQ(
       co_await add_mirror_topic(id.value(), std::move(cmd)), errc::success);
 
@@ -675,7 +753,7 @@ TEST_F_CORO(
     add_mirror_topic_cmd cmd{
       .topic = model::topic("mirror-topic"),
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, model::topic("mirror-topic"))};
+        mirror_topic_status::active, model::topic("mirror-topic"))};
     EXPECT_EQ(
       co_await add_mirror_topic(id.value(), std::move(cmd)), errc::success);
 
@@ -706,7 +784,7 @@ TEST_F_CORO(frontend_validation_test, update_mirror_topic_properties_no_link) {
 TEST_F_CORO(
   frontend_validation_test, update_mirror_topic_properties_mirrored_by_other) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     auto m1 = create_base_metadata();
     testing::set_link_mirror_topics(m1, test_topic, mirror_state, test_topic);
@@ -764,7 +842,7 @@ TEST_F_CORO(
     add_mirror_topic_cmd cmd{
       .topic = model::topic("mirror-topic"),
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, model::topic("mirror-topic"))};
+        mirror_topic_status::active, model::topic("mirror-topic"))};
     EXPECT_EQ(
       co_await add_mirror_topic(id.value(), std::move(cmd)), errc::success);
 
@@ -791,7 +869,7 @@ TEST_F_CORO(
     add_mirror_topic_cmd cmd{
       .topic = model::topic("mirror-topic"),
       .metadata = testing::create_mirror_topic_metadata(
-        mirror_topic_state::active, model::topic("mirror-topic"))};
+        mirror_topic_status::active, model::topic("mirror-topic"))};
     EXPECT_EQ(
       co_await add_mirror_topic(id.value(), std::move(cmd)), errc::success);
 

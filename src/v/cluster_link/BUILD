@@ -1,4 +1,11 @@
 load("//bazel:build.bzl", "redpanda_cc_library")
+load("//src/v/rpc:compiler.bzl", "redpanda_cc_rpc_library")
+
+redpanda_cc_rpc_library(
+    name = "shadow_link_rpc_gen",
+    src = "shadow_linking_rpc.json",
+    visibility = ["//visibility:public"],
+)
 
 redpanda_cc_library(
     name = "logger",
@@ -49,6 +56,7 @@ redpanda_cc_library(
     srcs = [
         "deps.cc",
         "link.cc",
+        "link_status_reconciler.cc",
         "manager.cc",
         "task.cc",
         "topic_reconciler.cc",
@@ -56,6 +64,7 @@ redpanda_cc_library(
     hdrs = [
         "deps.h",
         "link.h",
+        "link_status_reconciler.h",
         "manager.h",
         "task.h",
         "topic_reconciler.h",
@@ -190,6 +199,7 @@ redpanda_cc_library(
     deps = [
         ":errc",
         ":fwd",
+        ":shadow_link_rpc_gen",
         "//src/v/base",
         "//src/v/cluster",
         "//src/v/cluster/utils:partition_change_notifier_api",
@@ -199,6 +209,24 @@ redpanda_cc_library(
         "//src/v/kafka/server",
         "//src/v/model",
         "//src/v/raft",
+        "//src/v/rpc",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "rpc_service",
+    srcs = [
+        "rpc_service.cc",
+    ],
+    hdrs = [
+        "rpc_service.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":cluster_link",
+        ":shadow_link_rpc_gen",
+        "//src/v/cluster",
         "@seastar",
     ],
 )

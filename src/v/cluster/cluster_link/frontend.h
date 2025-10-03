@@ -15,7 +15,6 @@
 #include "cluster/commands.h"
 #include "cluster/controller_stm.h"
 #include "cluster/fwd.h"
-#include "cluster_link/model/types.h"
 #include "features/feature_table.h"
 #include "features/fwd.h"
 #include "model/timeout_clock.h"
@@ -30,7 +29,7 @@ class frontend : public ss::peering_sharded_service<frontend> {
       cluster::cluster_link_upsert_cmd,
       cluster::cluster_link_remove_cmd,
       cluster::cluster_link_add_mirror_topic_cmd,
-      cluster::cluster_link_update_mirror_topic_state_cmd,
+      cluster::cluster_link_update_mirror_topic_status_cmd,
       cluster::cluster_link_update_mirror_topic_properties_cmd,
       cluster::cluster_link_update_cluster_link_configuration_cmd>;
 
@@ -55,9 +54,9 @@ public:
       ::cluster_link::model::id_t,
       ::cluster_link::model::add_mirror_topic_cmd,
       model::timeout_clock::time_point);
-    ss::future<errc> update_mirror_topic_state(
+    ss::future<errc> update_mirror_topic_status(
       ::cluster_link::model::id_t,
-      ::cluster_link::model::update_mirror_topic_state_cmd,
+      ::cluster_link::model::update_mirror_topic_status_cmd,
       model::timeout_clock::time_point);
     ss::future<errc> update_mirror_topic_properties(
       ::cluster_link::model::id_t,
@@ -67,6 +66,9 @@ public:
       ::cluster_link::model::id_t,
       ::cluster_link::model::update_cluster_link_configuration_cmd,
       model::timeout_clock::time_point);
+
+    ss::future<errc> failover_link_topics(
+      ::cluster_link::model::id_t, model::timeout_clock::time_point);
 
     bool cluster_link_active() const;
 
@@ -90,6 +92,15 @@ public:
       ::model::topic,
       ::cluster_link::model::mirror_topic_metadata>>
     get_mirror_topics_for_link(::cluster_link::model::id_t id) const;
+
+    std::optional<::model::revision_id>
+    get_last_update_revision(const ::cluster_link::model::id_t& id) const;
+
+    /**
+     * Topics that are part of an active shadow link cannot be modified
+     * through the Kafka API unless the topics are in a failed over state.
+     */
+    bool is_topic_mutable_for_kafka_api(const model::topic&) const;
 
 private:
     ss::future<errc>

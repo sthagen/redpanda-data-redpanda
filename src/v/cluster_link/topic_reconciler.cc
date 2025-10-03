@@ -119,13 +119,14 @@ ss::future<> topic_reconciler::do_reconcile_topic(model::id_t link_id) {
         // Do not attempt to reconcile mirror topics that have failed or are
         // being promoted
         if (
-          mirror_topic_config.state == model::mirror_topic_state::failed
-          || mirror_topic_config.state == model::mirror_topic_state::promoted) {
+          mirror_topic_config.status == model::mirror_topic_status::failed
+          || mirror_topic_config.status
+               == model::mirror_topic_status::promoted) {
             vlog(
               cllog.trace,
               "Skipping topic {} with state {}",
               topic_name,
-              mirror_topic_config.state);
+              mirror_topic_config.status);
             continue;
         }
 
@@ -163,9 +164,9 @@ ss::future<> topic_reconciler::maybe_update_existing_topic(
           err_msg.value());
         auto res = co_await _link_registry->update_mirror_topic_state(
           link_id,
-          model::update_mirror_topic_state_cmd{
+          model::update_mirror_topic_status_cmd{
             .topic = topic,
-            .state = model::mirror_topic_state::failed,
+            .status = model::mirror_topic_status::failed,
           },
           ::model::timeout_clock::now() + update_timeout);
         if (res != ::cluster::cluster_link::errc::success) {

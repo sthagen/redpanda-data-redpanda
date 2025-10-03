@@ -22,11 +22,57 @@
 #include "cluster_link/replication/deps_impl.h"
 #include "cluster_link/replication/mux_remote_consumer.h"
 #include "cluster_link/security_migrator.h"
+#include "cluster_link/shadow_linking_rpc_service.h"
 #include "cluster_link/source_topic_syncer.h"
 #include "kafka/client/direct_consumer/direct_consumer.h"
 #include "kafka/server/group_router.h"
 
 #include <seastar/coroutine/switch_to.hh>
+
+namespace {
+/**
+ * @brief Reduces the results of shard reports into a single response
+ */
+struct shard_report_reducer {
+    using result_t = ::cluster_link::rpc::shadow_topic_report_response;
+    void operator()(result_t shard_result) {
+        if (!result) {
+            result = std::move(shard_result);
+            return;
+        }
+        if (result->err_code != ::cluster_link::errc::success) {
+            // once we have an error, we just keep it
+            return;
+        }
+        if (shard_result.err_code != ::cluster_link::errc::success) {
+            result->err_code = shard_result.err_code;
+            // no need to populate further results
+            return;
+        }
+        // capture the minimum revision seen across the shards. Usually all
+        // shards should have the same revision, so this is a conservative
+        // check.
+        result->link_update_revision = std::min(
+          result->link_update_revision, shard_result.link_update_revision);
+        for (auto& leader : shard_result.leaders) {
+            result->leaders.push_back(std::move(leader));
+        }
+        return;
+    }
+
+    std::optional<result_t> get() && {
+        if (!result) {
+            return std::nullopt;
+        }
+        if (result->err_code != ::cluster_link::errc::success) {
+            result->leaders.clear();
+            result->link_update_revision = {};
+        }
+        return std::move(result);
+    }
+    std::optional<result_t> result;
+};
+} // namespace
 
 namespace cluster_link {
 
@@ -40,8 +86,9 @@ using data_sink_factory = replication::local_partition_data_sink_factory;
 
 class link_registry_adapter : public link_registry {
 public:
-    explicit link_registry_adapter(frontend* plf)
-      : _plf(plf) {}
+    explicit link_registry_adapter(frontend* plf, service* svc)
+      : _plf(plf)
+      , _svc(svc) {}
 
     ss::future<::cluster::cluster_link::errc> upsert_link(
       model::metadata md, ::model::timeout_clock::time_point timeout) override {
@@ -72,6 +119,11 @@ public:
         return _plf->get_all_link_ids();
     }
 
+    std::optional<::model::revision_id>
+    get_last_update_revision(const model::id_t& id) const override {
+        return _plf->get_last_update_revision(id);
+    }
+
     ss::future<::cluster::cluster_link::errc> add_mirror_topic(
       model::id_t id,
       model::add_mirror_topic_cmd cmd,
@@ -81,9 +133,9 @@ public:
 
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_state(
       model::id_t id,
-      model::update_mirror_topic_state_cmd cmd,
+      model::update_mirror_topic_status_cmd cmd,
       ::model::timeout_clock::time_point timeout) override {
-        return _plf->update_mirror_topic_state(id, std::move(cmd), timeout);
+        return _plf->update_mirror_topic_status(id, std::move(cmd), timeout);
     }
 
     ss::future<::cluster::cluster_link::errc> update_mirror_topic_properties(
@@ -109,8 +161,19 @@ public:
           id, std::move(cmd), timeout);
     }
 
+    ss::future<model::report_result_t> shadow_topic_report(
+      const model::id_t& id, const ::model::topic& topic) override {
+        return _svc->shadow_topic_report(id, topic);
+    }
+
+    ss::future<::cluster::cluster_link::errc> failover_link_topics(
+      model::id_t id, ::model::timeout_clock::time_point timeout) override {
+        return _plf->failover_link_topics(id, timeout);
+    }
+
 private:
     frontend* _plf;
+    service* _svc;
 };
 
 class default_link_factory : public link_factory {
@@ -243,6 +306,7 @@ service::service(
   ss::sharded<cluster::partition_leaders_table>* partition_leaders_table,
   ss::sharded<cluster::shard_table>* shard_table,
   ss::sharded<cluster::metadata_cache>* metadata_cache,
+  ss::sharded<::rpc::connection_cache>* connections,
   cluster::controller* controller,
   ss::sharded<kafka::group_router>* group_router,
   ss::sharded<cluster::health_monitor_frontend>* hm_frontend,
@@ -256,6 +320,7 @@ service::service(
   , _partition_leaders_table(partition_leaders_table)
   , _shard_table(shard_table)
   , _metadata_cache(metadata_cache)
+  , _connections(connections)
   , _controller(controller)
   , _group_router(group_router)
   , _hm_frontend(hm_frontend)
@@ -276,7 +341,7 @@ ss::future<> service::start() {
       topic_metadata_cache::make_default(_metadata_cache),
       topic_creator::make_default(_controller),
       security_service::make_default(_security_fe),
-      std::make_unique<link_registry_adapter>(&_plf->local()),
+      std::make_unique<link_registry_adapter>(&_plf->local(), this),
       std::make_unique<default_link_factory>(_partition_manager),
       std::make_unique<cluster_factory>(),
       std::make_unique<kafka_consumer_groups_router>(_group_router),
@@ -305,32 +370,48 @@ ss::future<> service::stop() {
     }
 }
 
-ss::future<result<model::metadata>>
+ss::future<cl_result<model::metadata>>
 service::upsert_cluster_link(model::metadata md) {
     return _manager->upsert_cluster_link(std::move(md));
 }
 
-result<model::metadata> service::get_cluster_link(const model::name_t& name) {
+cl_result<model::metadata>
+service::get_cluster_link(const model::name_t& name) {
     return _manager->get_cluster_link(name);
 }
 
-result<chunked_vector<model::metadata>> service::list_cluster_links() {
+cl_result<chunked_vector<model::metadata>> service::list_cluster_links() {
     return _manager->list_cluster_links();
 }
 
-ss::future<result<model::metadata>> service::update_cluster_link(
+ss::future<cl_result<model::metadata>> service::update_cluster_link(
   model::name_t name, model::update_cluster_link_configuration_cmd cmd) {
     return _manager->update_cluster_link(std::move(name), std::move(cmd));
 }
 
-ss::future<result<void>>
+ss::future<cl_result<model::metadata>> service::update_mirror_topic_status(
+  model::name_t link_name,
+  const ::model::topic& topic,
+  model::mirror_topic_status status) {
+    return _manager->update_mirror_topic_status(
+      std::move(link_name), topic, status);
+}
+
+ss::future<cl_result<model::metadata>>
+service::failover_link_topics(model::name_t link_name) {
+    return _manager->failover_link_topics(std::move(link_name));
+}
+
+ss::future<cl_result<void>>
 service::delete_cluster_link(const model::name_t& name) {
     return _manager->delete_cluster_link(name);
 }
 
 void service::register_notifications() {
     auto pl_notif_id = _plf->local().register_for_updates(
-      [this](model::id_t id) { _manager->on_link_change(id); });
+      [this](model::id_t id, ::model::revision_id revision) {
+          _manager->on_link_change(id, revision);
+      });
     _notification_cleanups.emplace_back([this, pl_notif_id] {
         _plf->local().unregister_for_updates(pl_notif_id);
     });
@@ -364,4 +445,182 @@ void service::register_notifications() {
           partition_notifications_id);
     });
 }
+
+ss::future<rpc::shadow_topic_report_response> service::shard_local_topic_report(
+  const model::id_t& link_id, const ::model::topic& topic) {
+    auto& registry = _manager->registry();
+    const auto& md = registry->find_link_by_id(link_id);
+    if (!md.has_value()) {
+        co_return ::cluster_link::rpc::shadow_topic_report_response{
+          .err_code = errc::link_id_not_found};
+    }
+    const auto& topics = md->get().state.mirror_topics;
+    if (topics.find(topic) == topics.end()) {
+        co_return ::cluster_link::rpc::shadow_topic_report_response{
+          .err_code = errc::topic_not_being_mirrored};
+    }
+    auto maybe_rev = registry->get_last_update_revision(link_id);
+    if (!maybe_rev.has_value()) {
+        vlog(
+          cllog.warn,
+          "Inconsistent state detected, topic {} is mapped to link id {}, but "
+          "the link revision does not exist",
+          topic,
+          link_id);
+        co_return ::cluster_link::rpc::shadow_topic_report_response{
+          .err_code = ::cluster_link::errc::link_id_not_found};
+    }
+    rpc::shadow_topic_report_response result;
+    result.err_code = ::cluster_link::errc::success;
+    result.link_update_revision = maybe_rev.value();
+    auto local_partitions
+      = _partition_manager->local().get_topic_partition_table(
+        {::model::kafka_namespace, topic});
+    for (const auto& [ntp, partition] : local_partitions) {
+        if (!partition->is_leader()) {
+            continue;
+        }
+        result.leaders.push_back(
+          ::cluster_link::rpc::shadow_topic_partition_leader_report{
+            .partition = ntp.tp.partition});
+    }
+    co_return result;
+}
+
+ss::future<rpc::shadow_topic_report_response>
+service::node_local_shadow_topic_report(
+  rpc::shadow_topic_report_request request) {
+    shard_report_reducer reducer{};
+    const auto& link_id = request.link_id;
+    const auto& topic = request.topic_name;
+    co_await container().map_reduce(
+      reducer,
+      [](
+        service& s,
+        const ::cluster_link::model::id_t& link_id,
+        const ::model::topic& topic) {
+          return s.shard_local_topic_report(link_id, topic);
+      },
+      link_id,
+      topic);
+    auto result = std::move(reducer).get();
+    if (result) {
+        result->node_id = _self;
+        co_return std::move(*result);
+    }
+    vlog(
+      cllog.error,
+      "No result from shard report reducer for topic: {}, this should never "
+      "happen, returning {}",
+      topic,
+      errc::link_id_not_found);
+    // This is effectively unreachable because the reducer always produces a
+    // result aggregated from all shards. Here we return a blanket
+    // link_id_not_found
+    co_return ::cluster_link::rpc::shadow_topic_report_response{
+      .err_code = errc::link_id_not_found};
+}
+
+ss::future<::cluster_link::rpc::shadow_topic_report_response>
+service::shadow_topic_report(
+  ::model::node_id node_id, rpc::shadow_topic_report_request request) {
+    using resp_t = ::cluster_link::rpc::shadow_topic_report_response;
+    if (node_id == _self) {
+        co_return co_await node_local_shadow_topic_report(std::move(request));
+    }
+    static constexpr auto rpc_timeout = 5s;
+    co_return co_await _connections->local()
+      .with_node_client<rpc::shadow_linking_rpc_client_protocol>(
+        _self,
+        ss::this_shard_id(),
+        node_id,
+        ::model::timeout_clock::now() + rpc_timeout,
+        [request = std::move(request)](
+          rpc::shadow_linking_rpc_client_protocol client) mutable {
+            return client
+              .shadow_topic_report(
+                std::move(request), ::rpc::client_opts(rpc_timeout))
+              .then(&::rpc::get_ctx_data<resp_t>);
+        })
+      .then(
+        [](result<::cluster_link::rpc::shadow_topic_report_response> result) {
+            if (result.has_error()) {
+                vlog(
+                  cllog.warn,
+                  "Error getting shadow topic report from remote node: {}",
+                  result.error());
+                return ss::make_ready_future<resp_t>(
+                  resp_t{.err_code = ::cluster_link::errc::rpc_error});
+            }
+            return ss::make_ready_future<resp_t>(std::move(result.value()));
+        });
+}
+
+ss::future<model::report_result_t>
+service::shadow_topic_report(model::id_t link_id, const ::model::topic& topic) {
+    // farms out requests to all nodes with replicas of the topic
+    // and then aggregates the results
+    // generate a list of brokers with replicas of the topic
+    absl::flat_hash_set<::model::node_id> topic_nodes;
+    const auto& md_cache = _metadata_cache->local();
+    const auto& maybe_tp_md = md_cache.get_topic_metadata_ref(
+      ::model::topic_namespace_view{::model::kafka_namespace, topic});
+    if (!maybe_tp_md) {
+        co_return std::unexpected<errc>(errc::topic_does_not_exist);
+    }
+    const auto& tp_md = maybe_tp_md.value().get();
+    // no scheduling points while looping through partitions
+    auto num_partitions = tp_md.get_configuration().partition_count;
+    const auto& assignments = tp_md.get_assignments();
+    for (const auto& [_, p_assignment] : assignments) {
+        for (const auto& r : p_assignment.replicas) {
+            topic_nodes.insert(r.node_id);
+        }
+    }
+    if (topic_nodes.empty()) {
+        co_return std::unexpected<errc>(errc::topic_metadata_stale);
+    }
+    ::cluster_link::model::aggregated_shadow_topic_report result;
+    result.total_partitions = num_partitions;
+    result.brokers.reserve(topic_nodes.size());
+    try {
+        co_await ss::max_concurrent_for_each(
+          topic_nodes,
+          32,
+          [this, link_id, &topic, &result](::model::node_id node_id) {
+              ::cluster_link::rpc::shadow_topic_report_request request;
+              request.link_id = link_id;
+              request.topic_name = topic;
+              return shadow_topic_report(node_id, std::move(request))
+                .then([node_id, &result](
+                        ::cluster_link::rpc::shadow_topic_report_response r) {
+                    if (r.err_code != ::cluster_link::errc::success) {
+                        vlog(
+                          cllog.warn,
+                          "Error getting shadow topic report from node {}: {}",
+                          node_id,
+                          r.err_code);
+                    }
+                    ::cluster_link::model::aggregated_shadow_topic_report::
+                      broker_report broker_report;
+                    broker_report.broker = node_id;
+                    broker_report.link_update_revision = r.link_update_revision;
+                    for (auto& leader : r.leaders) {
+                        broker_report.leaders.push_back(
+                          {.partition = leader.partition});
+                    }
+                    result.brokers.push_back(std::move(broker_report));
+                    return ss::now();
+                });
+          });
+    } catch (...) {
+        vlog(
+          cllog.warn,
+          "Exception during shadow topic reporting {}",
+          std::current_exception());
+        co_return std::unexpected<errc>(errc::rpc_error);
+    }
+    co_return result;
+}
+
 } // namespace cluster_link

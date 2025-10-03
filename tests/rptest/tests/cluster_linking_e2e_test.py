@@ -13,6 +13,7 @@ import google.protobuf.field_mask_pb2
 import random
 import re
 
+from ducktape.cluster.cluster_spec import ClusterSpec
 from connectrpc.errors import ConnectError, ConnectErrorCode
 from contextlib import nullcontext
 from ducktape.mark import matrix
@@ -51,7 +52,7 @@ from rptest.util import (
     wait_until_result,
 )
 from typing import Any
-
+from time import sleep
 import google.protobuf.duration_pb2
 
 
@@ -532,7 +533,7 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         with expect_exception(
             ConnectError,
             lambda e: str(e)
-            == f"[failed_precondition] Failed to delete cluster link with name '{test_link}'. There are active shadow topics.",
+            == f"[failed_precondition] Failed to delete cluster link with name '{test_link}'. There are active/promoting shadow topics.",
         ):
             self.delete_link(test_link)
 
@@ -677,13 +678,6 @@ class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):
         assert target_cluster_group.state == "Empty", (
             "Group test_group state expected to be empty on target cluster"
         )
-
-    @contextmanager
-    def _nop_context_manager(self):
-        try:
-            yield
-        finally:
-            pass
 
     @cluster(num_nodes=7)
     @ignore(
@@ -878,4 +872,200 @@ class ShadowLinkSecurityTests(ShadowLinkTestBase):
             timeout_sec=30,
             backoff_sec=1,
             err_msg="Failed to sync acls",
+        )
+
+
+class ShadowLinkTopicFailoverTests(ShadowLinkPreAllocTestBase):
+    def _maybe_failure_injector(self, with_failures: bool):
+        if with_failures:
+            return self.create_source_failure_injector()
+        else:
+            return self._nop_context_manager()
+
+    def _produce_to_topics(
+        self,
+        topics: list[TopicSpec],
+        redpanda,
+        messages: int = 1000,
+        expect_failures: bool = False,
+    ):
+        for t in topics:
+            producer = KgoVerifierProducer(
+                self.test_context,
+                redpanda,
+                t.name,
+                128,
+                messages,
+                self.preallocated_nodes,
+            )
+            try:
+                producer.start()
+                producer.stop()
+            except ducktape.errors.TimeoutError as e:
+                if expect_failures:
+                    self.logger.debug(
+                        f"Expected failure producing to topic {t.name}: {e}"
+                    )
+                else:
+                    raise
+            finally:
+                producer.do_free()
+
+    @cluster(num_nodes=7)
+    @matrix(with_failures=[True, False])
+    def test_link_topic_failover(self, with_failures):
+        num_failover_topics = random.choice([1, 3, 5, 10])
+        num_non_failover_topics = random.choice([0, 3, 5, 10])
+
+        self.create_link("test-link")
+        failover_topics = [
+            TopicSpec(
+                name=f"failover-topic-{i}",
+                partition_count=5,
+                replication_factor=random.choice([1, 3]),
+            )
+            for i in range(num_failover_topics)
+        ]
+        non_failover_topics = [
+            TopicSpec(
+                name=f"non-failover-topic-{i}",
+                partition_count=5,
+                replication_factor=random.choice([1, 3]),
+            )
+            for i in range(num_non_failover_topics)
+        ]
+
+        all_topics = failover_topics + non_failover_topics
+        for topic in all_topics:
+            self.source_default_client().create_topic(topic)
+
+        count = 1000
+
+        # Seed some data in the source cluster
+        self._produce_to_topics(
+            all_topics, self.source_cluster.service, expect_failures=False
+        )
+
+        # Wait for topics to be created in the target cluster
+        for t in all_topics:
+            self.target_cluster.service.wait_until(
+                lambda: self.topic_exists_in_target(t.name),
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg=f"Topic {t.name} not found in target cluster",
+            )
+
+        # Wait for data to be replicated
+        for t in all_topics:
+            consumer = KgoVerifierConsumerGroupConsumer(
+                self.test_context,
+                self.target_cluster.service,
+                topic=t.name,
+                group_name="test_group",
+                msg_size=40,
+                max_msgs=count,
+                readers=1,
+                nodes=self.preallocated_nodes,
+            )
+            try:
+                consumer.start()
+                consumer.wait()
+            finally:
+                consumer.stop()
+                consumer.free()
+        # Try producing to topics in shadow cluster, should fail
+        # Policy violation
+        self._produce_to_topics(
+            non_failover_topics, self.target_cluster.service, expect_failures=True
+        )
+
+        with self._maybe_failure_injector(with_failures=with_failures):
+            # Failover a subset of topics
+            for topic in failover_topics:
+                metadata = self.failover_link_topic(
+                    link_name="test-link", topic=topic.name
+                )
+                self.logger.debug(f"Failover response: {metadata}")
+
+                topic_status = [
+                    s.state
+                    for s in metadata.status.shadow_topic_statuses
+                    if s.name == topic.name
+                ]
+                assert next(iter(topic_status), None) in [
+                    shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILING_OVER,
+                    shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER,
+                ], (
+                    "Topic state should be FAILING_OVER or FAILED_OVER after failover request"
+                )
+
+                # Wait for topic to be marked as failed over
+                self.wait_for_topic_status(
+                    link="test-link",
+                    topic=topic.name,
+                    target_status=shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER,
+                )
+                sleep(0.5)
+
+        # Produce to failed over topics in target, should succeed
+        self._produce_to_topics(
+            failover_topics, self.target_cluster.service, expect_failures=False
+        )
+        # Produce to non-failed over topics in target, should still fail
+        self._produce_to_topics(
+            non_failover_topics, self.target_cluster.service, expect_failures=True
+        )
+        # Check non failover topics are still active
+        for t in non_failover_topics:
+            self.wait_for_topic_status(
+                link="test-link",
+                topic=t.name,
+                target_status=shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_ACTIVE,
+            )
+
+    @cluster(num_nodes=7)
+    @matrix(with_failures=[True, False])
+    def test_link_failover(self, with_failures):
+        self.create_link("test-link")
+        num_topics = random.choice([0, 1, 3, 5, 10])
+        if num_topics == 0:
+            # To avoid warning of under allocated nodes
+            # In this case no kgo nodes are needed
+            self.test_context.cluster.alloc(ClusterSpec.simple_linux(1))
+        topics = [
+            TopicSpec(
+                name=f"test-topic-{i}",
+                partition_count=5,
+                replication_factor=random.choice([1, 3]),
+            )
+            for i in range(num_topics)
+        ]
+        for t in topics:
+            self.source_default_client().create_topic(t)
+
+        self._produce_to_topics(
+            topics, self.source_cluster.service, expect_failures=False
+        )
+
+        for t in topics:
+            self.target_cluster.service.wait_until(
+                lambda: self.topic_exists_in_target(t.name),
+                timeout_sec=60,
+                backoff_sec=1,
+                err_msg=f"Topic {t.name} not found in target cluster",
+            )
+
+        self._produce_to_topics(
+            topics, self.target_cluster.service, expect_failures=True
+        )
+
+        with self._maybe_failure_injector(with_failures=with_failures):
+            # Let some failures kickin
+            if with_failures:
+                sleep(5)
+            self.failover_link(name="test-link")
+            self.wait_for_link_failover(link="test-link")
+
+        self._produce_to_topics(
+            topics, self.target_cluster.service, expect_failures=False
         )

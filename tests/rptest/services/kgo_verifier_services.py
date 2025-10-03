@@ -377,12 +377,15 @@ class KgoVerifierService(Service):
         else:
             return super(KgoVerifierService, self).allocate_nodes()
 
-    def free(self):
-        assert self._stopped, "Cannot free KgoVerifierService before stopping it"
+    def do_free(self):
         if self.use_custom_node:
             return
         else:
             return super(KgoVerifierService, self).free()
+
+    def free(self):
+        assert self._stopped, "Cannot free KgoVerifierService before stopping it"
+        self.do_free()
 
 
 class StatusThread(threading.Thread):

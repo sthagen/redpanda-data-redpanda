@@ -16,3 +16,4 @@ quick:
   excluded:
   - tests/rpk_tuner_test.py
   - tests/rpk_cloud_test.py
+  - tests/workload_upgrade_runner_test.py # Excluded until CORE-13748 is fixed. 

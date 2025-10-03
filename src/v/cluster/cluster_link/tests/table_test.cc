@@ -40,12 +40,12 @@ using ::cluster_link::model::link_configuration;
 using ::cluster_link::model::link_state;
 using ::cluster_link::model::metadata;
 using ::cluster_link::model::mirror_topic_metadata;
-using ::cluster_link::model::mirror_topic_state;
+using ::cluster_link::model::mirror_topic_status;
 using ::cluster_link::model::name_t;
 using ::cluster_link::model::topic_metadata_mirroring_config;
 using ::cluster_link::model::update_cluster_link_configuration_cmd;
 using ::cluster_link::model::update_mirror_topic_properties_cmd;
-using ::cluster_link::model::update_mirror_topic_state_cmd;
+using ::cluster_link::model::update_mirror_topic_status_cmd;
 using ::cluster_link::model::uuid_t;
 
 class cluster_link_table_test : public seastar_test {
@@ -221,7 +221,7 @@ TEST_F_CORO(cluster_link_table_test, callback_test) {
     bool was_called = false;
     id_t link_id{0};
     auto notification_id = _table.local().register_for_updates(
-      [&was_called, &link_id](id_t id) {
+      [&was_called, &link_id](id_t id, model::revision_id) {
           was_called = true;
           link_id = id;
       });
@@ -254,7 +254,7 @@ TEST_F_CORO(cluster_link_table_test, callback_removal) {
     co_await _table.local().apply_update(
       testing::create_upsert_command(model::offset{1}, link.copy()));
     auto notification_id = _table.local().register_for_updates(
-      [&was_called, &link_id](id_t id) {
+      [&was_called, &link_id](id_t id, model::revision_id) {
           was_called = true;
           link_id = id;
       });
@@ -303,7 +303,9 @@ TEST_F_CORO(cluster_link_table_test, callback_snapshot) {
           .bootstrap_servers{net::unresolved_address{"localhost", 9092}}}});
 
     auto notification_id = _table.local().register_for_updates(
-      [&detected_ids](id_t id) { detected_ids.insert(id); });
+      [&detected_ids](id_t id, model::revision_id) {
+          detected_ids.insert(id);
+      });
     auto auto_remove = ss::defer([this, notification_id] {
         _table.local().unregister_for_updates(notification_id);
     });
@@ -319,7 +321,7 @@ TEST_F_CORO(cluster_link_table_test, callback_snapshot) {
 
 TEST_F_CORO(cluster_link_table_test, with_mirror_topics) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
     metadata link{
       .name = name_t("link1"),
       .uuid = uuid_t(::uuid_t::create()),
@@ -332,10 +334,10 @@ TEST_F_CORO(cluster_link_table_test, with_mirror_topics) {
 
     ASSERT_EQ_CORO(_table.local().size(), 1);
 
-    auto mirror_topic_state = _table.local().find_mirror_topic_state(
+    auto mirror_topic_state = _table.local().find_mirror_topic_status(
       test_topic);
     ASSERT_TRUE_CORO(mirror_topic_state.has_value());
-    EXPECT_EQ(mirror_topic_state.value(), mirror_topic_state::active);
+    EXPECT_EQ(mirror_topic_state.value(), mirror_topic_status::active);
 
     auto link_id = _table.local().find_id_by_topic(test_topic);
     ASSERT_TRUE_CORO(link_id.has_value());
@@ -345,8 +347,8 @@ TEST_F_CORO(cluster_link_table_test, with_mirror_topics) {
 TEST_F_CORO(cluster_link_table_test, with_multiple_links) {
     model::topic test_topic1("mirror-link1");
     model::topic test_topic2("mirror-link2");
-    mirror_topic_state mirror_state1 = mirror_topic_state::active;
-    mirror_topic_state mirror_state2 = mirror_topic_state::paused;
+    mirror_topic_status mirror_state1 = mirror_topic_status::active;
+    mirror_topic_status mirror_state2 = mirror_topic_status::paused;
 
     metadata link1{
       .name = name_t("link1"),
@@ -373,7 +375,7 @@ TEST_F_CORO(cluster_link_table_test, with_multiple_links) {
 
     ASSERT_EQ_CORO(_table.local().size(), 2);
 
-    auto mirror_topic_state1 = _table.local().find_mirror_topic_state(
+    auto mirror_topic_state1 = _table.local().find_mirror_topic_status(
       test_topic1);
     ASSERT_TRUE_CORO(mirror_topic_state1.has_value());
     EXPECT_EQ(mirror_topic_state1.value(), mirror_state1);
@@ -382,7 +384,7 @@ TEST_F_CORO(cluster_link_table_test, with_multiple_links) {
     ASSERT_TRUE_CORO(link_id1.has_value());
     EXPECT_EQ(link_id1.value(), id_t(1));
 
-    auto mirror_topic_state2 = _table.local().find_mirror_topic_state(
+    auto mirror_topic_state2 = _table.local().find_mirror_topic_status(
       test_topic2);
     ASSERT_TRUE_CORO(mirror_topic_state2.has_value());
     EXPECT_EQ(mirror_topic_state2.value(), mirror_state2);
@@ -398,13 +400,13 @@ TEST_F_CORO(cluster_link_table_test, with_multiple_links) {
 
     link_id1 = _table.local().find_id_by_topic(test_topic1);
     EXPECT_FALSE(link_id1.has_value());
-    mirror_topic_state1 = _table.local().find_mirror_topic_state(test_topic1);
+    mirror_topic_state1 = _table.local().find_mirror_topic_status(test_topic1);
     EXPECT_FALSE(mirror_topic_state1.has_value());
 
     link_id2 = _table.local().find_id_by_topic(test_topic2);
     ASSERT_TRUE_CORO(link_id2.has_value());
     EXPECT_EQ(link_id2.value(), id_t(2));
-    mirror_topic_state2 = _table.local().find_mirror_topic_state(test_topic2);
+    mirror_topic_state2 = _table.local().find_mirror_topic_status(test_topic2);
     ASSERT_TRUE_CORO(mirror_topic_state2.has_value());
     EXPECT_EQ(mirror_topic_state2.value(), mirror_state2);
 }
@@ -412,8 +414,8 @@ TEST_F_CORO(cluster_link_table_test, with_multiple_links) {
 TEST_F_CORO(cluster_link_table_test, remove_mirror_topic) {
     model::topic test_topic1("mirror-link1");
     model::topic test_topic2("mirror-link2");
-    mirror_topic_state mirror_state1 = mirror_topic_state::active;
-    mirror_topic_state mirror_state2 = mirror_topic_state::paused;
+    mirror_topic_status mirror_state1 = mirror_topic_status::active;
+    mirror_topic_status mirror_state2 = mirror_topic_status::paused;
 
     metadata link{
       .name = name_t("link1"),
@@ -440,12 +442,12 @@ TEST_F_CORO(cluster_link_table_test, remove_mirror_topic) {
       << "Failed to upsert link: " << res.message();
     auto link_id = _table.local().find_id_by_topic(test_topic1);
     EXPECT_FALSE(link_id.has_value());
-    auto topic_state = _table.local().find_mirror_topic_state(test_topic1);
+    auto topic_state = _table.local().find_mirror_topic_status(test_topic1);
     EXPECT_FALSE(topic_state.has_value());
     link_id = _table.local().find_id_by_topic(test_topic2);
     ASSERT_TRUE_CORO(link_id.has_value());
     EXPECT_EQ(link_id.value(), id_t(1));
-    topic_state = _table.local().find_mirror_topic_state(test_topic2);
+    topic_state = _table.local().find_mirror_topic_status(test_topic2);
     ASSERT_TRUE_CORO(topic_state.has_value());
     EXPECT_EQ(topic_state.value(), mirror_state2);
 
@@ -455,13 +457,13 @@ TEST_F_CORO(cluster_link_table_test, remove_mirror_topic) {
       << "Failed to remove link: " << res.message();
     link_id = _table.local().find_id_by_topic(test_topic2);
     EXPECT_FALSE(link_id.has_value());
-    topic_state = _table.local().find_mirror_topic_state(test_topic2);
+    topic_state = _table.local().find_mirror_topic_status(test_topic2);
     EXPECT_FALSE(topic_state.has_value());
 }
 
 TEST_F_CORO(cluster_link_table_test, duplicate_topic) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -490,7 +492,7 @@ TEST_F_CORO(cluster_link_table_test, duplicate_topic) {
 
 TEST_F_CORO(cluster_link_table_test, reset_links_duplicate_topic) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
     table::map_t links;
     auto iter = links.emplace(
       id_t(1),
@@ -522,7 +524,7 @@ TEST_F_CORO(cluster_link_table_test, reset_links_duplicate_topic) {
 
 TEST_F_CORO(cluster_link_table_test, test_add_and_update_mirror_topic) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -545,7 +547,7 @@ TEST_F_CORO(cluster_link_table_test, test_add_and_update_mirror_topic) {
     ASSERT_EQ_CORO(res.value(), int(errc::success))
       << "Failed to add mirror topic: " << res.message();
 
-    auto mirror_topic_state = _table.local().find_mirror_topic_state(
+    auto mirror_topic_state = _table.local().find_mirror_topic_status(
       test_topic);
     ASSERT_TRUE_CORO(mirror_topic_state.has_value());
     EXPECT_EQ(mirror_topic_state.value(), mirror_state);
@@ -554,22 +556,22 @@ TEST_F_CORO(cluster_link_table_test, test_add_and_update_mirror_topic) {
     ASSERT_TRUE_CORO(link_id.has_value());
     EXPECT_EQ(link_id.value(), id_t(1));
 
-    mirror_state = mirror_topic_state::paused;
+    mirror_state = mirror_topic_status::paused;
     res = co_await _table.local().apply_update(
-      testing::create_update_mirror_topic_state_command(
+      testing::create_update_mirror_topic_status_command(
         id_t{1},
-        update_mirror_topic_state_cmd{
-          .topic = test_topic, .state = mirror_state}));
+        update_mirror_topic_status_cmd{
+          .topic = test_topic, .status = mirror_state}));
     ASSERT_EQ_CORO(res.value(), int(errc::success))
       << "Failed to update mirror topic state: " << res.message();
-    mirror_topic_state = _table.local().find_mirror_topic_state(test_topic);
+    mirror_topic_state = _table.local().find_mirror_topic_status(test_topic);
     ASSERT_TRUE_CORO(mirror_topic_state.has_value());
     EXPECT_EQ(mirror_topic_state.value(), mirror_state);
 }
 
 TEST_F_CORO(cluster_link_table_test, test_update_mirror_topic_state_not_found) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -582,17 +584,17 @@ TEST_F_CORO(cluster_link_table_test, test_update_mirror_topic_state_not_found) {
       << "Failed to upsert link1: " << res.message();
 
     res = co_await _table.local().apply_update(
-      testing::create_update_mirror_topic_state_command(
+      testing::create_update_mirror_topic_status_command(
         id_t{1},
-        update_mirror_topic_state_cmd{
-          .topic = test_topic, .state = mirror_state}));
+        update_mirror_topic_status_cmd{
+          .topic = test_topic, .status = mirror_state}));
     EXPECT_EQ(res.value(), int(errc::topic_not_being_mirrored))
       << "Expected error for non-existent topic, got: " << res.message();
 }
 
 TEST_F_CORO(cluster_link_table_test, test_add_mirror_topic_no_link) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -618,7 +620,7 @@ TEST_F_CORO(cluster_link_table_test, test_add_mirror_topic_no_link) {
 TEST_F_CORO(
   cluster_link_table_test, test_add_mirror_topic_duplicate_same_link) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -654,7 +656,7 @@ TEST_F_CORO(
 TEST_F_CORO(
   cluster_link_table_test, test_add_mirror_topic_duplicate_different_link) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -692,7 +694,7 @@ TEST_F_CORO(
 
 TEST_F_CORO(cluster_link_table_test, update_state_non_existant_mirror_topic) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -705,17 +707,17 @@ TEST_F_CORO(cluster_link_table_test, update_state_non_existant_mirror_topic) {
       << "Failed to upsert link1: " << res.message();
 
     res = co_await _table.local().apply_update(
-      testing::create_update_mirror_topic_state_command(
+      testing::create_update_mirror_topic_status_command(
         id_t{1},
-        update_mirror_topic_state_cmd{
-          .topic = test_topic, .state = mirror_state}));
+        update_mirror_topic_status_cmd{
+          .topic = test_topic, .status = mirror_state}));
     EXPECT_EQ(res.value(), int(errc::topic_not_being_mirrored))
       << "Expected error for non-existent topic, got: " << res.message();
 }
 
 TEST_F_CORO(cluster_link_table_test, update_state_mirror_topic_other_link) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -748,10 +750,10 @@ TEST_F_CORO(cluster_link_table_test, update_state_mirror_topic_other_link) {
       << "Failed to add mirror topic: " << res.message();
 
     res = co_await _table.local().apply_update(
-      testing::create_update_mirror_topic_state_command(
+      testing::create_update_mirror_topic_status_command(
         id_t{2},
-        update_mirror_topic_state_cmd{
-          .topic = test_topic, .state = mirror_state}));
+        update_mirror_topic_status_cmd{
+          .topic = test_topic, .status = mirror_state}));
     EXPECT_EQ(res.value(), int(errc::topic_being_mirrored_by_other_link))
       << "Expected error for topic being mirrored by other link, got: "
       << res.message();
@@ -760,7 +762,7 @@ TEST_F_CORO(cluster_link_table_test, update_state_mirror_topic_other_link) {
 TEST_F_CORO(
   cluster_link_table_test, test_add_and_update_mirror_topic_properties) {
     model::topic test_topic("mirror-link1");
-    mirror_topic_state mirror_state = mirror_topic_state::active;
+    mirror_topic_status mirror_state = mirror_topic_status::active;
 
     metadata link1{
       .name = name_t("link1"),
@@ -849,7 +851,7 @@ TEST_F_CORO(
     link1.state.mirror_topics.insert(
       {test_topic,
        testing::create_mirror_topic_metadata(
-         mirror_topic_state::active, test_topic)});
+         mirror_topic_status::active, test_topic)});
 
     auto res = co_await _table.local().apply_update(
       testing::create_upsert_command(model::offset{1}, link1.copy()));

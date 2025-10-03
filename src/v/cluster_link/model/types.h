@@ -12,11 +12,15 @@
 #pragma once
 
 #include "absl/container/flat_hash_set.h"
+#include "cluster_link/errc.h"
 #include "container/chunked_hash_map.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
-#include "serde/envelope.h"
+#include "serde/rw/enum.h"
+#include "serde/rw/envelope.h"
+#include "serde/rw/named_type.h"
 #include "serde/rw/variant.h"
+#include "serde/rw/vector.h"
 #include "utils/absl_sstring_hash.h"
 #include "utils/named_type.h"
 #include "utils/unresolved_address.h"
@@ -24,6 +28,7 @@
 
 #include <seastar/util/bool_class.hh>
 
+#include <expected>
 #include <ostream>
 #include <string_view>
 
@@ -37,32 +42,82 @@ using name_t = named_type<ss::sstring, struct name_tag>;
 /// Type to indicate if the task is enabled or not
 using enabled_t = ss::bool_class<struct enabled_tag>;
 
-enum class mirror_topic_state : uint8_t {
+/**
+ *
+ *                     ┌─────────────┐
+ *                     │   PAUSED    │
+ *                     └─────────────┘
+ *                           ▲ │
+ *                           │ ▼
+ *                     ┌─────────────┐
+ *        ┌────────────┤   ACTIVE    ├────────────┐
+ *        │            └─────────────┘            │
+ *        │                  │                    │
+ *        ▼                  ▼                    ▼
+ *  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+ *  │FAILING_OVER │───▶│   FAILED    │◀───│ PROMOTING   │
+ *  └─────────────┘    └─────────────┘    └─────────────┘
+ *        │                                       │
+ *        ▼                                       ▼
+ *  ┌─────────────┐                      ┌─────────────┐
+ *  │ FAILED_OVER │                      │  PROMOTED   │
+ *  └─────────────┘                      └─────────────┘
+ *        │                                       │
+ *      <---     todo: add transitional states --->
+ *        └───────────────┐    ┌──────────────────┘
+ *                        ▼    ▼
+ *                  ┌─────────────┐
+ *                  │   ACTIVE    │
+ *                  └─────────────┘
+ *
+ **/
+enum class mirror_topic_status : uint8_t {
     /// Mirroring is active on the topic
     active,
-    /// Mirroring has failed for the topic
+    /// Mirroring has failed for the topic. This is a terminal state
+    /// and non recoverable today.
     failed,
     /// Mirroring has been paused
     paused,
-    /// Mirror topic has been promoted
+    /// Mirroring topic failover has been requested and in progress
+    /// A failover is the processing switching the mirroring topic to active
+    /// state and accept Kafka API writes. Disables replication from the source
+    /// cluster
+    // makes the topic read-write for consumers and producers.
+    failing_over,
+    /// Mirroring topic has successfully failed over and current active for
+    /// Kafka API read/writes.
+    failed_over,
+    /// Same as failing_over but additionally waits for the topic to catch up to
+    /// the source topic before completing the promote operation.
+    promoting,
+    /// Mirrorring topic has been successfully promoted
     promoted
 };
 
-static constexpr std::string_view to_string_view(mirror_topic_state s) {
+static constexpr std::string_view to_string_view(mirror_topic_status s) {
     switch (s) {
-    case mirror_topic_state::active:
+    case mirror_topic_status::active:
         return "active";
-    case mirror_topic_state::failed:
+    case mirror_topic_status::failed:
         return "failed";
-    case mirror_topic_state::paused:
+    case mirror_topic_status::paused:
         return "paused";
-    case mirror_topic_state::promoted:
+    case mirror_topic_status::promoted:
         return "promoted";
+    case mirror_topic_status::failing_over:
+        return "failing_over";
+    case mirror_topic_status::failed_over:
+        return "failed_over";
+    case mirror_topic_status::promoting:
+        return "promoting";
     }
-    return "unknown";
 }
 
-std::ostream& operator<<(std::ostream& os, mirror_topic_state s);
+bool is_valid_status_transition(
+  mirror_topic_status current, mirror_topic_status target) noexcept;
+
+std::ostream& operator<<(std::ostream& os, mirror_topic_status s);
 
 enum class task_state : uint8_t {
     /// The task is currently active and processing
@@ -93,7 +148,6 @@ static constexpr std::string_view to_string_view(task_state st) {
     case task_state::faulted:
         return "faulted";
     }
-    return "unknown";
 }
 
 std::ostream& operator<<(std::ostream& os, task_state s);
@@ -233,7 +287,7 @@ struct mirror_topic_metadata
       serde::version<0>,
       serde::compat_version<0>> {
     /// Current mirroring state
-    mirror_topic_state state{mirror_topic_state::active};
+    mirror_topic_status status{mirror_topic_status::active};
     /// The topic ID of the source topic
     /// Made optional to allow for cases where we will migrate from clusters
     /// that don't yet support topic ids
@@ -256,7 +310,7 @@ struct mirror_topic_metadata
 
     auto serde_fields() {
         return std::tie(
-          state,
+          status,
           source_topic_id,
           source_topic_name,
           destination_topic_id,
@@ -615,6 +669,27 @@ struct link_configuration
     friend std::ostream&
     operator<<(std::ostream& os, const link_configuration& lc);
 };
+
+enum class link_status : uint8_t {
+    // Initial state when the link is created
+    active,
+    // The link has been paused by the user,
+    // pauses all link related tasks including replication and syncing
+    // of metadata
+    // Note: pausing state has not been implemented yet.
+    paused,
+};
+
+static constexpr std::string_view to_string_view(link_status s) {
+    switch (s) {
+    case link_status::active:
+        return "active";
+    case link_status::paused:
+        return "paused";
+    }
+}
+std::ostream& operator<<(std::ostream& os, const link_status& s);
+
 /**
  * Link state. The state is modified by the cluster link tasks and is
  * persisted to the cluster link table.
@@ -628,13 +703,10 @@ struct link_state
     link_state& operator=(const link_state&) = delete;
     ~link_state() noexcept = default;
 
-    /// Type to indicate if the cluster link is paused
-    using paused_t = ss::bool_class<struct paused_tag>;
-    /// Flag indicating if the cluster link has been paused
-    paused_t paused{paused_t::no};
+    link_status status{link_status::active};
+    /// Map of topics that this link is mirroring and their state
     using mirror_topics_t
       = chunked_hash_map<::model::topic, mirror_topic_metadata>;
-    /// Map of topics that this link is mirroring and their state
     chunked_hash_map<::model::topic, mirror_topic_metadata> mirror_topics;
 
     void set_mirror_topics(const mirror_topics_t& topics);
@@ -642,7 +714,7 @@ struct link_state
 
     friend bool operator==(const link_state&, const link_state&) = default;
 
-    auto serde_fields() { return std::tie(paused, mirror_topics); }
+    auto serde_fields() { return std::tie(status, mirror_topics); }
 
     link_state copy() const;
 
@@ -699,22 +771,22 @@ struct add_mirror_topic_cmd
 ///
 /// Will be used by the cluster linking mirroring task to change the state
 /// of mirroring for the topic
-struct update_mirror_topic_state_cmd
+struct update_mirror_topic_status_cmd
   : serde::envelope<
-      update_mirror_topic_state_cmd,
+      update_mirror_topic_status_cmd,
       serde::version<0>,
       serde::compat_version<0>> {
     /// Name of the topic
     ::model::topic topic;
     /// New state of the topic
-    mirror_topic_state state{mirror_topic_state::active};
+    mirror_topic_status status{mirror_topic_status::active};
 
     friend bool operator==(
-      const update_mirror_topic_state_cmd&,
-      const update_mirror_topic_state_cmd&)
+      const update_mirror_topic_status_cmd&,
+      const update_mirror_topic_status_cmd&)
       = default;
 
-    auto serde_fields() { return std::tie(topic, state); }
+    auto serde_fields() { return std::tie(topic, status); }
 };
 
 /// \brief Command used to update the properties of a mirror topic
@@ -813,12 +885,99 @@ struct cluster_link_task_status_report
 
     auto serde_fields() { return std::tie(link_reports); }
 };
+
+struct aggregated_shadow_topic_report {
+    struct partition_report {
+        ::model::partition_id partition;
+    };
+    struct broker_report {
+        ::model::node_id broker;
+        ::model::revision_id link_update_revision;
+        chunked_vector<partition_report> leaders;
+    };
+
+    chunked_vector<broker_report> brokers;
+    int32_t total_partitions{0};
+
+    friend bool operator==(
+      const aggregated_shadow_topic_report&,
+      const aggregated_shadow_topic_report&)
+      = default;
+};
+using report_result_t = std::expected<aggregated_shadow_topic_report, errc>;
 } // namespace cluster_link::model
 
+namespace cluster_link::rpc {
+// report request to a single broker
+struct shadow_topic_report_request
+  : serde::envelope<
+      shadow_topic_report_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    cluster_link::model::id_t link_id;
+    ::model::topic topic_name;
+
+    friend bool operator==(
+      const shadow_topic_report_request&, const shadow_topic_report_request&)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator) const;
+
+    auto serde_fields() { return std::tie(link_id, topic_name); }
+};
+
+struct shadow_topic_partition_leader_report
+  : serde::envelope<
+      shadow_topic_partition_leader_report,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    ::model::partition_id partition;
+    // todo: add offset information for promotion
+    // todo: add hwm information for fail over state
+    // checkpointing
+
+    friend bool operator==(
+      const shadow_topic_partition_leader_report&,
+      const shadow_topic_partition_leader_report&)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator) const;
+
+    auto serde_fields() { return std::tie(partition); }
+};
+
+// aggregated report from a single broker about a shadow topic
+// the report is aggregated across all partition leaders and shards
+// on the broker.
+struct shadow_topic_report_response
+  : serde::envelope<
+      shadow_topic_report_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    ::model::node_id node_id;
+    // The smallest revision seen by the link across all shards.
+    ::model::revision_id link_update_revision;
+    // Report for each partition that is a leader on this broker.
+    chunked_vector<shadow_topic_partition_leader_report> leaders;
+    errc err_code;
+
+    friend bool operator==(
+      const shadow_topic_report_response&, const shadow_topic_report_response&)
+      = default;
+
+    fmt::iterator format_to(fmt::iterator) const;
+
+    auto serde_fields() {
+        return std::tie(node_id, link_update_revision, leaders, err_code);
+    }
+};
+
+} // namespace cluster_link::rpc
+
 template<>
-struct fmt::formatter<cluster_link::model::mirror_topic_state>
+struct fmt::formatter<cluster_link::model::mirror_topic_status>
   : fmt::formatter<string_view> {
-    auto format(cluster_link::model::mirror_topic_state s, format_context& ctx)
+    auto format(cluster_link::model::mirror_topic_status s, format_context& ctx)
       -> decltype(ctx.out());
 };
 
@@ -998,10 +1157,10 @@ struct fmt::formatter<cluster_link::model::add_mirror_topic_cmd>
 };
 
 template<>
-struct fmt::formatter<cluster_link::model::update_mirror_topic_state_cmd>
+struct fmt::formatter<cluster_link::model::update_mirror_topic_status_cmd>
   : fmt::formatter<string_view> {
     auto format(
-      const cluster_link::model::update_mirror_topic_state_cmd& m,
+      const cluster_link::model::update_mirror_topic_status_cmd& m,
       format_context& ctx) -> decltype(ctx.out());
 };
 

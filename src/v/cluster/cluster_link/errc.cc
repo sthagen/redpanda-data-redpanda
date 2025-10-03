@@ -64,6 +64,8 @@ std::string errc_category::message(int c) const {
         return "Topic property is excluded from mirroring";
     case errc::scram_configuration_invalid:
         return "SCRAM configuration invalid";
+    case errc::link_has_active_shadow_topics:
+        return "Link has active shadow topics";
     }
     return "cluster::cluster_link::unknown";
 }
@@ -156,5 +158,9 @@ auto fmt::formatter<cluster::cluster_link::errc>::format(
         return fmt::format_to(
           ctx.out(),
           "cluster::cluster_link::errc::scram_configuration_invalid");
+    case cluster::cluster_link::errc::link_has_active_shadow_topics:
+        return fmt::format_to(
+          ctx.out(),
+          "cluster::cluster_link::errc::link_has_active_shadow_topics");
     }
 }

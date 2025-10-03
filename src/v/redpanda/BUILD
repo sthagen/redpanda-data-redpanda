@@ -33,6 +33,7 @@ redpanda_cc_library(
         "//src/v/cluster:cloud_metadata_offsets_upload_router",
         "//src/v/cluster:offsets_lookup",
         "//src/v/cluster_link:fwd",
+        "//src/v/cluster_link:rpc_service",
         "//src/v/compression",
         "//src/v/config",
         "//src/v/crypto",

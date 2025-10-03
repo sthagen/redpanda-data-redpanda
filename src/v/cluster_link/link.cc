@@ -21,8 +21,8 @@
 
 namespace cluster_link {
 namespace {
-ss::future<result<void>> start_task(task* t) {
-    result<void> res = outcome::success();
+ss::future<cl_result<void>> start_task(task* t) {
+    cl_result<void> res = outcome::success();
     try {
         co_return co_await t->start();
     } catch (const std::exception& e) {
@@ -33,8 +33,8 @@ ss::future<result<void>> start_task(task* t) {
 
     co_return res;
 }
-ss::future<result<void>> stop_task(task* t) {
-    result<void> res = outcome::success();
+ss::future<cl_result<void>> stop_task(task* t) {
+    cl_result<void> res = outcome::success();
     try {
         co_return co_await t->stop();
     } catch (const std::exception& e) {
@@ -152,7 +152,7 @@ ss::future<> link::stop() noexcept {
     vlog(cllog.info, "Stopped link {} ({})", _config.name, _config.uuid);
 }
 
-ss::future<result<void>> link::register_task(task_factory* tf) {
+ss::future<cl_result<void>> link::register_task(task_factory* tf) {
     co_await ss::coroutine::switch_to(_manager->scheduling_group());
     vlog(
       cllog.debug,
@@ -174,13 +174,15 @@ ss::future<result<void>> link::register_task(task_factory* tf) {
     co_return co_await do_register_task(std::move(t));
 }
 
-void link::update_config(model::metadata config) {
+void link::update_config(
+  model::metadata config, ::model::revision_id revision) {
     vlog(
       cllog.debug,
-      "Updating cluster link {} ({}): {}",
+      "Updating cluster link {} ({}): {} using revision: {}",
       _config.name,
       _config.uuid,
-      config);
+      config,
+      revision);
     _config = std::move(config);
     maybe_update_sasl_configuration(_config.connection.authn_config);
 
@@ -188,6 +190,62 @@ void link::update_config(model::metadata config) {
         vlog(cllog.trace, "Updating config for task {}", t->name());
         t->update_config(_config);
     }
+
+    // reconcile the replicators. We do not need replicators running
+    // if the link is not active or a specific topic in the link is not
+    // active.
+    if (!requires_active_replicators()) {
+        vlog(
+          cllog.debug,
+          "Link {} is not active, stopping all replicators",
+          _config.name);
+        _replication_mgr.stop_replicators();
+    } else {
+        for (const auto& [topic, _] : _config.state.mirror_topics) {
+            if (requires_active_replicators(topic)) {
+                continue;
+            }
+            vlog(
+              cllog.debug,
+              "Topic {} on link {} is not active, stopping its replicators",
+              topic,
+              _config.name);
+            _replication_mgr.stop_replicators(topic);
+        }
+    }
+}
+
+bool link::requires_active_replicators() const {
+    switch (_config.state.status) {
+    case model::link_status::active:
+        // check below for topic status overrides
+        return true;
+    case model::link_status::paused:
+        return false;
+    }
+}
+
+bool link::requires_active_replicators(const ::model::topic& topic) const {
+    if (!requires_active_replicators()) {
+        return false;
+    }
+    const auto& mts = _config.state.mirror_topics;
+    auto it = mts.find(topic);
+    if (it == mts.end()) {
+        return false;
+    }
+    switch (it->second.status) {
+    case model::mirror_topic_status::active:
+        return true;
+    case model::mirror_topic_status::failed:
+    case model::mirror_topic_status::paused:
+    case model::mirror_topic_status::failing_over:
+    case model::mirror_topic_status::failed_over:
+    case model::mirror_topic_status::promoting:
+    case model::mirror_topic_status::promoted:
+        return false;
+    }
+    __builtin_unreachable();
 }
 
 ss::future<> link::handle_on_leadership_change(
@@ -211,7 +269,15 @@ ss::future<> link::handle_on_leadership_change(
           _link_id,
           ntp,
           is_ntp_leader);
-        if (is_ntp_leader) {
+        auto needs_replicators = requires_active_replicators(ntp.tp.topic);
+        if (!needs_replicators) {
+            vlog(
+              cllog.info,
+              "[{}] Topic {} is not active, will stop any active replicators",
+              _link_id,
+              ntp.tp.topic);
+        }
+        if (is_ntp_leader && needs_replicators) {
             vassert(
               term, "Term must be set when leadership is assumed: {}", ntp);
             _replication_mgr.start_replicator(ntp, *term);
@@ -256,7 +322,7 @@ link::add_mirror_topic(model::add_mirror_topic_cmd cmd) {
 }
 
 ss::future<::cluster::cluster_link::errc>
-link::update_mirror_topic_state(model::update_mirror_topic_state_cmd cmd) {
+link::update_mirror_topic_state(model::update_mirror_topic_status_cmd cmd) {
     return _manager->update_mirror_topic_state(_link_id, std::move(cmd));
 }
 
@@ -377,7 +443,7 @@ ss::future<> link::run_task_reconciler() {
     }
 }
 
-ss::future<result<void>> link::do_register_task(std::unique_ptr<task> t) {
+ss::future<cl_result<void>> link::do_register_task(std::unique_ptr<task> t) {
     vlog(
       cllog.debug,
       "Registering task {} for cluster link {} ({})",
@@ -394,7 +460,7 @@ ss::future<result<void>> link::do_register_task(std::unique_ptr<task> t) {
           errc::task_already_registered_on_link, std::move(msg));
     }
 
-    result<void> res = outcome::success();
+    cl_result<void> res = outcome::success();
     // Do not need to unregister the task callback as the task lifetime is
     // managed by the link
     t->register_for_updates([this](

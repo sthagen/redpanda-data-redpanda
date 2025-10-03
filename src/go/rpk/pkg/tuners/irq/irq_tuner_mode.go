@@ -33,18 +33,23 @@ mq - distribute NIC's IRQs among all CPUs instead of binding
 	them all to CPU0. In this mode RPS is always enabled to
 	spreads NAPIs' handling between all CPUs.
 
+dedicated:
+
+	Use one interrupt core per 16 vcpus. Bind all NIC IRQs to these
+	cores. Enable RPS/RFS to spread NAPI handling to all cores.
+
 If there isn't any mode given script will use a default mode:
-  - If number of physical CPU cores per Rx HW queue is greater than 4 - use the 'sq-split' mode.
-  - Otherwise, if number of hyperthreads per Rx HW queue is greater than 4 - use the 'sq' mode.
-  - Otherwise use the 'mq' mode.
+  - Use dedicated mode if it's allowed by config and safe to do so
+  - Otherwise use mq mode
 */
 type Mode string
 
 const (
-	SqSplit Mode = "sq-split"
-	Sq      Mode = "sq"
-	Mq      Mode = "mq"
-	Default Mode = "def"
+	SqSplit   Mode = "sq-split"
+	Sq        Mode = "sq"
+	Dedicated Mode = "dedicated"
+	Mq        Mode = "mq"
+	Default   Mode = "def"
 )
 
 func ModeFromString(modeString string) Mode {
@@ -54,6 +59,8 @@ func ModeFromString(modeString string) Mode {
 		return Sq
 	} else if modeString == "sq-split" {
 		return SqSplit
+	} else if modeString == "dedicated" {
+		return Dedicated
 	}
 
 	return Default

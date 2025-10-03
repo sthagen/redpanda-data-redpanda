@@ -287,6 +287,18 @@ ss::future<reassignable_topic_response> do_handle_topic(
   alter_op_context& octx) {
     reassignable_topic_response topic_response{.name = topic.name};
     topic_response.partitions.reserve(topic.partitions.size());
+    if (!octx.rctx.is_topic_mutable(topic.name)) {
+        for (auto& partition : topic.partitions) {
+            topic_response.partitions.push_back(
+              reassignable_partition_response{
+                .partition_index = partition.partition_index,
+                .error_code = error_code::policy_violation,
+                .error_message
+                = "Topic is not mutable due an active cluster link.",
+              });
+        }
+        return ssx::now(std::move(topic_response));
+    };
     auto tp_metadata_ref = octx.rctx.metadata_cache().get_topic_metadata_ref(
       model::topic_namespace_view{model::kafka_namespace, topic.name});
 

@@ -191,7 +191,8 @@ ss::future<> state_machine::write_last_applied(model::offset o) {
     return _raft->write_last_applied(o);
 }
 
-ss::future<result<model::offset>> state_machine::insert_linearizable_barrier(
+ss::future<result<std::pair<model::offset, model::term_id>>>
+state_machine::insert_linearizable_barrier(
   model::timeout_clock::time_point timeout) {
     /**
      * Inject leader barrier and wait until returned offset is applied
@@ -200,12 +201,14 @@ ss::future<result<model::offset>> state_machine::insert_linearizable_barrier(
     return _raft->linearizable_barrier(timeout).then(
       [this, timeout](result<model::offset> r) {
           if (!r) {
-              return ss::make_ready_future<result<model::offset>>(r.error());
+              return ss::make_ready_future<
+                result<std::pair<model::offset, model::term_id>>>(r.error());
           }
 
           // wait for the returned offset to be applied
-          return wait(r.value(), timeout).then([r] {
-              return result<model::offset>(r.value());
+          return wait(r.value(), timeout).then([this, r] {
+              return result<std::pair<model::offset, model::term_id>>(
+                std::make_pair(r.value(), _raft->get_term(r.value())));
           });
       });
 }

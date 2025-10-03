@@ -46,12 +46,12 @@ public:
 
     /// Starts/resumes the task
     /// Is virtual so these methods can be overriden by test classes
-    virtual ss::future<result<void>> start();
+    virtual ss::future<cl_result<void>> start();
     /// Stops the task from running
     /// Is virtual so these methods can be overriden by test classes
-    virtual ss::future<result<void>> stop() noexcept;
+    virtual ss::future<cl_result<void>> stop() noexcept;
     /// Pauses the task, prevening it from running until resumed
-    ss::future<result<void>> pause();
+    ss::future<cl_result<void>> pause();
     /// Returns the name of the task
     const ss::sstring& name() const noexcept;
 
@@ -97,7 +97,8 @@ protected:
 
     /// Used by the implementation to change the state of the task
     /// \return The previous state
-    result<model::task_state> change_state(model::task_state, ss::sstring = "");
+    cl_result<model::task_state>
+      change_state(model::task_state, ss::sstring = "");
     /// Changes the run interval
     void set_run_interval(ss::lowres_clock::duration);
     /// Returns the logger

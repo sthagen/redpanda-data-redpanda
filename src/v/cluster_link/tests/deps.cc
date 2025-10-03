@@ -96,7 +96,9 @@ ss::future<> cluster_link_manager_test_fixture::wire_up_and_start(
       ss::default_scheduling_group());
 
     auto notif_id = _table.local().register_for_updates(
-      [this](model::id_t id) { _manager.local().on_link_change(id); });
+      [this](model::id_t id, ::model::revision_id revision) {
+          _manager.local().on_link_change(id, revision);
+      });
     _notification_cleanups.emplace_back(
       [this, notif_id] { _table.local().unregister_for_updates(notif_id); });
 

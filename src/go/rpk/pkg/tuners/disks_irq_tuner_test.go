@@ -14,6 +14,7 @@ package tuners
 import (
 	"testing"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/disk"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/irq"
 	"github.com/stretchr/testify/require"
@@ -39,7 +40,7 @@ func (m *cpuMasksMock) BaseCPUMask(cpuMask string) (string, error) {
 }
 
 func (m *cpuMasksMock) CPUMaskForIRQs(
-	mode irq.Mode, cpuMask string,
+	mode irq.Mode, cpuMask string, t config.RpkNodeTuners,
 ) (string, error) {
 	return m.cpuMaskForIRQs(mode, cpuMask)
 }

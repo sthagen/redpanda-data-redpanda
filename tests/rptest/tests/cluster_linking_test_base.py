@@ -486,6 +486,16 @@ class ShadowLinkTestBase(PreallocNodesTest):
         req = self.delete_link_request(link_name=link_name, *args, **kwargs)
         return self.delete_link_with_request(req=req)
 
+    def failover_link(self, name: str) -> shadow_link_pb2.ShadowLink:
+        req = shadow_link_pb2.FailOverRequest(name=name)
+        return self.service_client.fail_over(req=req).shadow_link
+
+    def failover_link_topic(
+        self, link_name: str, topic: str
+    ) -> shadow_link_pb2.ShadowLink:
+        req = shadow_link_pb2.FailOverRequest(name=link_name, shadow_topic_name=topic)
+        return self.service_client.fail_over(req=req).shadow_link
+
     def delete_link_with_request(
         self, req: shadow_link_pb2.DeleteShadowLinkRequest
     ) -> shadow_link_pb2.DeleteShadowLinkResponse:
@@ -526,6 +536,98 @@ class ShadowLinkTestBase(PreallocNodesTest):
     def topic_exists_in_target(self, topic: str) -> bool:
         topics = RpkTool(self.target_cluster.service).list_topics()
         return topic in topics
+
+    def wait_for_topic_status(
+        self,
+        link: str,
+        topic: str,
+        target_status: shadow_link_pb2.ShadowTopicState.ValueType,
+        timeout_sec: int = 60,
+    ):
+        def topic_reached_status():
+            try:
+                metadata = self.get_link(name=link)
+                topic_status = [
+                    s.state
+                    for s in metadata.status.shadow_topic_statuses
+                    if s.name == topic
+                ]
+                self.target_cluster_service.logger.debug(
+                    f"Topic {topic} status: {topic_status}"
+                )
+                return next(iter(topic_status), None) == target_status
+            except Exception as e:
+                self.target_cluster_service.logger.debug(
+                    f"Exception while fetching topic status: {e}"
+                )
+                return False
+
+        self.target_cluster.service.wait_until(
+            topic_reached_status,
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg=f"Topic {topic} has not reached {target_status} in {timeout_sec} seconds",
+        )
+
+    def wait_for_link_status(
+        self,
+        link: str,
+        target_status: shadow_link_pb2.ShadowLinkState.ValueType,
+        timeout_sec: int = 60,
+    ):
+        def link_reached_status():
+            try:
+                metadata = self.get_link(name=link)
+                self.target_cluster_service.logger.debug(
+                    f"Link {link} status: {metadata.status.state}"
+                )
+                return metadata.status.state == target_status
+            except Exception as e:
+                self.target_cluster_service.logger.debug(
+                    f"Exception while fetching link status: {e}"
+                )
+                return False
+
+        self.target_cluster.service.wait_until(
+            link_reached_status,
+            timeout_sec=60,
+            backoff_sec=1,
+            err_msg=f"Link {link} has not reached {target_status} in {timeout_sec} seconds",
+        )
+
+    def wait_for_link_failover(self, link: str, timeout_sec: int = 60):
+        def link_failed_over():
+            try:
+                metadata = self.get_link(name=link)
+                self.target_cluster_service.logger.debug(
+                    f"Link {link} status: {metadata.status.state}"
+                )
+                return all(
+                    [
+                        s.state
+                        == shadow_link_pb2.ShadowTopicState.SHADOW_TOPIC_STATE_FAILED_OVER
+                        for s in metadata.status.shadow_topic_statuses
+                    ]
+                )
+            except Exception as e:
+                self.target_cluster_service.logger.debug(
+                    f"Exception while fetching link status: {e}"
+                )
+                return False
+
+        self.target_cluster.service.wait_until(
+            link_failed_over,
+            timeout_sec=timeout_sec,
+            backoff_sec=1,
+            err_msg=f"Link {link} has not completed failover in {timeout_sec} seconds",
+        )
+
+    @contextmanager
+    def _nop_context_manager(self):
+        try:
+            yield
+        finally:
+            pass
 
     @contextmanager
     def create_source_failure_injector(self, **kwargs):

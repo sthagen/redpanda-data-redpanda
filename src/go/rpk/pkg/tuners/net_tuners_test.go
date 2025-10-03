@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/config"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/os"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners"
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
@@ -41,6 +42,7 @@ func mockNetTunersFactory(
 	}
 	return tuners.NewNetTunersFactory(
 		fs,
+		config.RpkNodeTuners{},
 		procFile,
 		irq.NewDeviceInfo(fs, procFile),
 		eth,

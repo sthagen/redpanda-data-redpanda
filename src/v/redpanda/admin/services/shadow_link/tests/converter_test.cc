@@ -709,16 +709,16 @@ TEST(converter_test, metadata_to_shadow_link_topic_status) {
     cluster_link::model::link_state::mirror_topics_t mirror_topic_states;
     mirror_topic_states[model::topic{"active"}]
       = cluster_link::model::mirror_topic_metadata{
-        .state = cluster_link::model::mirror_topic_state::active};
+        .status = cluster_link::model::mirror_topic_status::active};
     mirror_topic_states[model::topic{"failed"}]
       = cluster_link::model::mirror_topic_metadata{
-        .state = cluster_link::model::mirror_topic_state::failed};
+        .status = cluster_link::model::mirror_topic_status::failed};
     mirror_topic_states[model::topic{"paused"}]
       = cluster_link::model::mirror_topic_metadata{
-        .state = cluster_link::model::mirror_topic_state::paused};
+        .status = cluster_link::model::mirror_topic_status::paused};
     mirror_topic_states[model::topic{"promoted"}]
       = cluster_link::model::mirror_topic_metadata{
-        .state = cluster_link::model::mirror_topic_state::promoted};
+        .status = cluster_link::model::mirror_topic_status::promoted};
 
     md.state.set_mirror_topics(std::move(mirror_topic_states));
 

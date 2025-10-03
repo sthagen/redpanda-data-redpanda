@@ -39,6 +39,7 @@ enum class errc : int16_t {
     topic_filter_invalid,
     topic_property_excluded_from_mirroring,
     scram_configuration_invalid,
+    link_has_active_shadow_topics,
 };
 
 struct errc_category final : public std::error_category {
