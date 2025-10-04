@@ -217,8 +217,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_POST_roundtrip) {
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
 
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected
             = "\"" + std::string(httpd_server_reply)
               + "\""; // sestar will return json string containing the
@@ -282,8 +281,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_GET_streaming_roundtrip) {
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
 
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected
             = "\"" + std::string(httpd_server_reply)
               + "\""; // sestar will return json string containing the
@@ -311,8 +309,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_POST_streaming_roundtrip) {
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
 
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected
             = "\"" + std::string(httpd_server_reply)
               + "\""; // sestar will return json string containing the
@@ -334,8 +331,7 @@ SEASTAR_THREAD_TEST_CASE(test_error_500) {
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(
             header.result(), boost::beast::http::status::internal_server_error);
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           BOOST_REQUIRE(actual.find("/fail-status-500") != std::string::npos);
       });
 }
@@ -354,8 +350,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_GET_roundtrip) {
       std::nullopt,
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected = "\"" + std::string(httpd_server_reply) + "\"";
           BOOST_REQUIRE_EQUAL(expected, actual);
       });
@@ -378,8 +373,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_PUT_roundtrip) {
       ss::sstring(httpd_server_reply),
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected = "\"\"";
           BOOST_REQUIRE_EQUAL(expected, actual);
       });
@@ -403,8 +397,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_PUT_empty_roundtrip) {
       std::move(stream),
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected = "\"\"";
           BOOST_REQUIRE_EQUAL(expected, actual);
       });
@@ -466,8 +459,7 @@ private:
             auto tmpbuf = _fin.read().get();
             buffer.append(std::move(tmpbuf));
             if (buffer.size_bytes() > _expected_data.size()) {
-                iobuf_parser parser(buffer.copy());
-                ss::sstring body = parser.read_string(parser.bytes_left());
+                ss::sstring body = buffer.linearize_to_string();
                 if (body.find(_expected_data) != ss::sstring::npos) {
                     _fin.close().get();
                     return buffer;
@@ -602,8 +594,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_via_impostor) {
       false,
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected = ss::sstring(httpd_server_reply);
           BOOST_REQUIRE_EQUAL(expected, actual);
       });
@@ -684,8 +675,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_via_impostor_chunked_encoding) {
       false,
       [](const http::client::response_header& header, iobuf&& body) {
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected = ss::sstring(httpd_server_reply);
           BOOST_REQUIRE_EQUAL(expected, actual);
       });
@@ -764,8 +754,7 @@ void run_framing_test_using_impostor(
             iobuf_parser pbuf(encoder.encode(std::move(tmp)));
             chunks.push_back(pbuf.read_string(pbuf.bytes_left()));
         }
-        iobuf_parser ptail(encoder.encode_eof());
-        chunks.push_back(ptail.read_string(ptail.bytes_left()));
+        chunks.push_back(encoder.encode_eof().linearize_to_string());
 
         test_impostor_request(
           config,
@@ -776,8 +765,7 @@ void run_framing_test_using_impostor(
           [](const http::client::response_header& header, iobuf&& body) {
               BOOST_REQUIRE_EQUAL(
                 header.result(), boost::beast::http::status::ok);
-              iobuf_parser parser(std::move(body));
-              std::string actual = parser.read_string(parser.bytes_left());
+              std::string actual = body.linearize_to_string();
               std::string expected = ss::sstring(httpd_server_reply);
               BOOST_REQUIRE_EQUAL(expected, actual);
           });
@@ -834,8 +822,7 @@ SEASTAR_THREAD_TEST_CASE(test_http_via_impostor_no_content_length) {
           // Expect normal reply despite the absence of content-length
           // header
           BOOST_REQUIRE_EQUAL(header.result(), boost::beast::http::status::ok);
-          iobuf_parser parser(std::move(body));
-          std::string actual = parser.read_string(parser.bytes_left());
+          std::string actual = body.linearize_to_string();
           std::string expected = ss::sstring(httpd_server_reply);
           BOOST_REQUIRE_EQUAL(expected, actual);
       });
@@ -919,8 +906,7 @@ SEASTAR_THREAD_TEST_CASE(default_host_request_header) {
     BOOST_REQUIRE_EQUAL(
       response->get_headers().result(), boost::beast::http::status::ok);
 
-    iobuf_const_parser parser(body);
-    const auto body_str = parser.read_string(parser.bytes_left());
+    const auto body_str = body.linearize_to_string();
 
     rapidjson::Document doc;
     doc.Parse(body_str);
@@ -956,8 +942,7 @@ SEASTAR_THREAD_TEST_CASE(custom_host_request_header) {
     BOOST_REQUIRE_EQUAL(
       response->get_headers().result(), boost::beast::http::status::ok);
 
-    iobuf_const_parser parser(body);
-    const auto body_str = parser.read_string(parser.bytes_left());
+    const auto body_str = body.linearize_to_string();
 
     rapidjson::Document doc;
     doc.Parse(body_str);
@@ -989,8 +974,7 @@ SEASTAR_THREAD_TEST_CASE(post_method) {
     BOOST_REQUIRE_EQUAL(
       response->get_headers().result(), boost::beast::http::status::ok);
 
-    iobuf_parser parser(std::move(body));
-    std::string actual = parser.read_string(parser.bytes_left());
+    std::string actual = body.linearize_to_string();
     std::string expected
       = "\"" + std::string(httpd_server_reply)
         + "\""; // sestar will return json string containing the

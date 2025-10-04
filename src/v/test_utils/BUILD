@@ -295,3 +295,17 @@ redpanda_test_cc_library(
     deps = [
     ],
 )
+
+# The hook implementation for perf tests, installs the global test hooks.
+redpanda_test_cc_library(
+    name = "rpbench_hooks",
+    srcs = [
+        "rpbench_hooks.cc",
+    ],
+    implementation_deps = [
+        ":global_test_hooks",
+        "@seastar//:benchmark",
+    ],
+    visibility = ["//visibility:public"],
+    alwayslink = True,  # hooks are installed by a global constructor
+)

@@ -8,6 +8,7 @@ redpanda_cc_btest(
         "utils.h",
     ],
     deps = [
+        "//src/v/base",
         "//src/v/bytes",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iobuf_parser",

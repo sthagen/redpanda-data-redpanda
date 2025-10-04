@@ -110,21 +110,6 @@ void check_error(peekable_parser* parser) {
 namespace {
 constexpr static size_t max_numeric_string_size = 128;
 
-ss::sstring linearize_iobuf(iobuf b) {
-    constexpr static size_t max_allocation_size = 128_KiB;
-    if (b.size_bytes() > max_allocation_size) {
-        throw std::runtime_error(
-          fmt::format(
-            "string too big: {} > {}", b.size_bytes(), max_allocation_size));
-    }
-    ss::sstring result{ss::sstring::initialized_later{}, b.size_bytes()};
-    char* dest = result.data();
-    for (const auto& frag : b) {
-        dest = std::copy_n(frag.get(), frag.size(), dest);
-    }
-    return result;
-}
-
 template<typename T>
 T iobuf_to_number(iobuf b) {
     if (b.size_bytes() > max_numeric_string_size) {
@@ -134,7 +119,7 @@ T iobuf_to_number(iobuf b) {
             b.size_bytes(),
             max_numeric_string_size));
     }
-    auto str = linearize_iobuf(std::move(b));
+    auto str = b.linearize_to_string();
     T result{};
     if constexpr (std::is_floating_point_v<T>) {
         bool ok{};
@@ -219,7 +204,7 @@ double transform_map_key(iobuf key_string) {
 
 template<>
 ss::sstring transform_map_key(iobuf key_string) {
-    return linearize_iobuf(std::move(key_string));
+    return key_string.linearize_to_string();
 }
 
 bool read_bool(peekable_parser* parser) {
@@ -254,7 +239,7 @@ ss::sstring read_string(peekable_parser* parser) {
         throw std::runtime_error(
           fmt::format("expected string, got: {}", parser->token()));
     }
-    return linearize_iobuf(parser->value_string());
+    return parser->value_string().linearize_to_string();
 }
 iobuf read_string_as_bytes(peekable_parser* parser) {
     if (parser->token() != token::value_string) [[unlikely]] {

@@ -7,6 +7,7 @@
 // the Business Source License, use of this software will be governed
 // by the Apache License, Version 2.0
 
+#include "base/units.h"
 #include "bytes/bytes.h"
 #include "bytes/details/io_allocation_size.h"
 #include "bytes/iobuf.h"
@@ -30,6 +31,7 @@
 #include <cstdint>
 #include <iterator>
 #include <span>
+#include <stdexcept>
 
 SEASTAR_THREAD_TEST_CASE(test_copy_equal) {
     iobuf buf;
@@ -827,6 +829,7 @@ SEASTAR_THREAD_TEST_CASE(iobuf_hexdump) {
   00000000 | 41 65 6e 65 61 6e 20 73  65 64 20 6c 65 6f 20 70  | Aenean sed leo p
   00000010 | 6f 72 74 74 69 74 6f 72  2e                       | orttitor.)");
 }
+
 SEASTAR_THREAD_TEST_CASE(iobuf_tail) {
     iobuf buf = iobuf::from("hello");
     buf.append_fragments(iobuf::from("world"));
@@ -836,4 +839,13 @@ SEASTAR_THREAD_TEST_CASE(iobuf_tail) {
     BOOST_CHECK_EQUAL(buf.tail(10), "helloworld");
     BOOST_CHECK_EQUAL(buf.tail(0), "");
     BOOST_CHECK_THROW(buf.tail(11), std::out_of_range);
+}
+
+SEASTAR_THREAD_TEST_CASE(iobuf_linearize) {
+    iobuf buf = iobuf::from("hello");
+    BOOST_CHECK_EQUAL(buf.linearize_to_string(), "hello");
+    BOOST_CHECK_EQUAL(buf.tail(3).linearize_to_string(), "llo");
+    BOOST_CHECK_EQUAL(iobuf{}.linearize_to_string(), "");
+    iobuf large = iobuf::from(std::string(128_KiB + 1, 'a'));
+    BOOST_CHECK_THROW(large.linearize_to_string(), std::runtime_error);
 }

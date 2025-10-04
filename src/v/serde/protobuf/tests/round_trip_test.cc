@@ -24,18 +24,6 @@
 #include <google/protobuf/util/message_differencer.h>
 #include <protobuf_mutator/mutator.h>
 
-namespace {
-
-std::string iobuf_to_string(const iobuf& b) {
-    std::string output;
-    for (const auto& frag : b) {
-        output.append(frag.get(), frag.size());
-    }
-    return output;
-}
-
-} // namespace
-
 TEST(ProtobufCompat, RoundtripSerdeSimple) {
     proto::example::person_phone_number original;
     original.set_number("123-456-7890");
@@ -59,8 +47,9 @@ TEST(ProtobufCompat, RoundtripSerdeEmptyConformanceProto) {
                           std::move(serialized))
                           .get()));
     EXPECT_EQ(original, deserialized)
-      << "original: " << iobuf_to_string(original.to_json().get())
-      << "\ndeserialized: " << iobuf_to_string(deserialized.to_json().get());
+      << "original: " << original.to_json().get().linearize_to_string()
+      << "\ndeserialized: "
+      << deserialized.to_json().get().linearize_to_string();
     deserialized = {};
     EXPECT_NO_THROW(
       deserialized
@@ -68,8 +57,9 @@ TEST(ProtobufCompat, RoundtripSerdeEmptyConformanceProto) {
           original.to_json().get())
           .get());
     EXPECT_EQ(original, deserialized)
-      << "original: " << iobuf_to_string(original.to_json().get())
-      << "\ndeserialized: " << iobuf_to_string(deserialized.to_json().get());
+      << "original: " << original.to_json().get().linearize_to_string()
+      << "\ndeserialized: "
+      << deserialized.to_json().get().linearize_to_string();
 }
 
 TEST(ProtobufCompat, RoundtripSerde) {
@@ -132,7 +122,8 @@ TEST(ProtobufCompat, LibprotobufCompat) {
     // Protobuf
     std::string libpb_serialized;
     EXPECT_TRUE(libpb_version.SerializeToString(&libpb_serialized));
-    auto serde_serialized = iobuf_to_string(serde_version.to_proto().get());
+    auto serde_serialized
+      = serde_version.to_proto().get().linearize_to_string();
     proto::example::person serde_parsed;
     EXPECT_NO_THROW(
       serde_parsed = proto::example::person::from_proto(
@@ -166,7 +157,7 @@ TEST(ProtobufCompat, LibprotobufCompat) {
           << libpb_serialized;
         EXPECT_EQ(serde_version, serde_parsed);
     }
-    serde_serialized = iobuf_to_string(serde_version.to_json().get());
+    serde_serialized = serde_version.to_json().get().linearize_to_string();
     libpb_parsed = {};
     EXPECT_TRUE(
       google::protobuf::json::JsonStringToMessage(
@@ -193,7 +184,7 @@ TEST(ProtobufCompat, RandomizedConformanceTest) {
         if (!serde) {
             continue;
         }
-        auto serde_serialized = iobuf_to_string(serde->to_proto().get());
+        auto serde_serialized = serde->to_proto().get().linearize_to_string();
         protobuf_test_messages::editions::TestAllTypesEdition2023 libpb_parsed;
         if (!libpb_parsed.ParseFromString(serde_serialized)) {
             FAIL() << "Failed to parse libpb from serde serialized data";
@@ -238,7 +229,7 @@ TEST(ProtobufCompat, RandomizedConformanceJsonTest) {
                 from_json(&p, &serde)
                   .get())
               << libpb_serialized;
-            auto serde_serialized = iobuf_to_string(serde.to_json().get());
+            auto serde_serialized = serde.to_json().get().linearize_to_string();
             protobuf_test_messages::editions::TestAllTypesEdition2023
               libpb_parsed;
             ASSERT_TRUE(
@@ -296,11 +287,12 @@ TEST(ProtobufCompat, Wellknown) {
                         serialized.copy())
                         .get()));
     EXPECT_EQ(original, deserialized)
-      << "Proto: " << iobuf_to_string(original.to_json().get())
-      << "\nDeserialized: " << iobuf_to_string(deserialized.to_json().get());
+      << "Proto: " << original.to_json().get().linearize_to_string()
+      << "\nDeserialized: "
+      << deserialized.to_json().get().linearize_to_string();
     deserialized = {};
     example::WellKnownProtos libpb;
-    EXPECT_TRUE(libpb.ParseFromString(iobuf_to_string(serialized.copy())));
+    EXPECT_TRUE(libpb.ParseFromString(serialized.linearize_to_string()));
     EXPECT_NO_THROW(
       (deserialized = proto::example::well_known_protos::from_proto(
                         iobuf::from(libpb.SerializeAsString()))
@@ -312,16 +304,17 @@ TEST(ProtobufCompat, Wellknown) {
     EXPECT_NO_THROW(
       (deserialized
        = proto::example::well_known_protos::from_json(serialized.copy()).get()))
-      << "JSON: " << iobuf_to_string(serialized);
+      << "JSON: " << serialized.linearize_to_string();
     EXPECT_EQ(original, deserialized)
-      << "Proto: " << iobuf_to_string(original.to_json().get())
-      << "\nDeserialized: " << iobuf_to_string(deserialized.to_json().get());
+      << "Proto: " << original.to_json().get().linearize_to_string()
+      << "\nDeserialized: "
+      << deserialized.to_json().get().linearize_to_string();
 
     libpb = {};
     deserialized = {};
     ASSERT_TRUE(
       google::protobuf::json::JsonStringToMessage(
-        iobuf_to_string(serialized.copy()), &libpb, {})
+        serialized.linearize_to_string(), &libpb, {})
         .ok());
     std::string libpb_serialized;
     ASSERT_TRUE(

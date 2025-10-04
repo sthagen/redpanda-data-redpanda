@@ -269,6 +269,10 @@ public:
 
     std::string hexdump(size_t) const;
 
+    // Linearize this iobuf to a string. Note that if the iobuf is over 128KiB
+    // this method will throw as to not cause an oversized allocation.
+    ss::sstring linearize_to_string() const;
+
 private:
     void prepend(std::unique_ptr<fragment>);
 

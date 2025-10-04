@@ -58,8 +58,8 @@ using random_generators::rng;
 // and maintaining their own rng object.
 
 // the first and second values expected from `get_int` with the default seed
-constexpr int get_int_0 = 79693958;
-constexpr int get_int_1 = 1828472881;
+constexpr int get_int_0 = 1822407592;
+constexpr int get_int_1 = 1412255784;
 
 using namespace random_generators::internal;
 

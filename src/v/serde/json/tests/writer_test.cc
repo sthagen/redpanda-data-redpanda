@@ -28,12 +28,7 @@
 namespace {
 
 std::string to_string(serde::json::writer&& w) {
-    iobuf b = std::move(w).finish();
-    std::string output;
-    for (const auto& frag : b) {
-        output.append(frag.get(), frag.size());
-    }
-    return output;
+    return std::move(w).finish().linearize_to_string();
 }
 
 class JsonWriterTest : public ::testing::Test {

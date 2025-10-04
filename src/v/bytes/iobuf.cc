@@ -9,6 +9,7 @@
 
 #include "bytes/iobuf.h"
 
+#include "base/units.h"
 #include "base/vassert.h"
 #include "bytes/details/io_allocation_size.h"
 
@@ -277,4 +278,18 @@ iobuf::placeholder iobuf::reserve(size_t sz) {
     placeholder p(back, back.size(), sz);
     back.reserve(sz);
     return p;
+}
+
+ss::sstring iobuf::linearize_to_string() const {
+    constexpr static size_t max_size = 128_KiB;
+    if (size_bytes() > max_size) {
+        throw std::runtime_error(
+          fmt::format("string too big: {}", size_bytes()));
+    }
+    ss::sstring out{ss::sstring::initialized_later{}, size_bytes()};
+    auto it = out.begin();
+    for (const auto& frag : *this) {
+        it = std::copy_n(frag.get(), frag.size(), it);
+    }
+    return out;
 }

@@ -224,11 +224,6 @@ ss::input_stream<char> make_manifest_stream(std::string_view json) {
     return make_iobuf_input_stream(std::move(i));
 }
 
-ss::sstring iobuf_to_string(iobuf buf) {
-    iobuf_parser parser{std::move(buf)};
-    return parser.read_string_unsafe(parser.bytes_left());
-}
-
 } // namespace
 
 class bucket_view_fixture : public http_imposter_fixture {
@@ -483,7 +478,7 @@ private:
     void set_expectations_for_manifest(
       const cloud_storage::partition_manifest& manifest) {
         const auto path = manifest.get_manifest_path(path_provider)().string();
-        const auto reply_body = iobuf_to_string(manifest.to_iobuf());
+        const auto reply_body = manifest.to_iobuf().linearize_to_string();
 
         when()
           .request(fmt::format("/{}", path))

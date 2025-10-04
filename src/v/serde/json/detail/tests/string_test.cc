@@ -23,7 +23,6 @@
  * the License.
  */
 
-#include "bytes/iobuf_parser.h"
 #include "serde/json/detail/string.h"
 
 #include <gtest/gtest.h>
@@ -32,15 +31,6 @@
 #include <string_view>
 
 using namespace serde::json::detail;
-
-namespace {
-
-std::string iobuf_as_string(iobuf b) {
-    iobuf_parser p(std::move(b));
-    return p.read_string(p.bytes_left());
-}
-
-} // namespace
 
 struct test_case {
     std::string_view input;
@@ -311,7 +301,8 @@ TEST_P(string_parse_test, test_string) {
     EXPECT_EQ(pos, expected_pos);
     EXPECT_EQ(err, expected_err);
     if (expected_err == string_parser::result::done) {
-        EXPECT_EQ(iobuf_as_string(std::move(parser).value()), expected_output);
+        EXPECT_EQ(
+          std::move(parser).value().linearize_to_string(), expected_output);
     } else {
         EXPECT_THROW(std::move(parser).value(), std::runtime_error);
     }
@@ -352,7 +343,8 @@ TEST_P(string_parse_test, test_piecewise) {
         EXPECT_THROW(parser.advance(buf, err), std::runtime_error);
 
         // Check that the value is correct.
-        EXPECT_EQ(iobuf_as_string(std::move(parser).value()), expected_output)
+        EXPECT_EQ(
+          std::move(parser).value().linearize_to_string(), expected_output)
           << "When split as: " << input.substr(0, i) << " | "
           << input.substr(i);
     }
@@ -381,7 +373,7 @@ TEST(piecewise_string_test, test_string) {
 
         // Check that the value is correct.
         EXPECT_EQ(
-          iobuf_as_string(std::move(parser).value()),
+          std::move(parser).value().linearize_to_string(),
           "hello world\nhello universe")
           << "When split as: " << json_string.substr(0, i) << " | "
           << json_string.substr(i);

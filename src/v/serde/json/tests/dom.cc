@@ -21,9 +21,8 @@ namespace serde::json::test::dom {
 
 namespace {
 
-std::string iobuf_as_string(iobuf b) {
-    iobuf_parser p(std::move(b));
-    return absl::CHexEscape(p.read_string(p.bytes_left()));
+std::string iobuf_as_string(const iobuf& b) {
+    return absl::CHexEscape(b.linearize_to_string());
 }
 
 void debug_format_value(std::ostream& os, const value& v, int base_indent = 0) {
@@ -31,15 +30,13 @@ void debug_format_value(std::ostream& os, const value& v, int base_indent = 0) {
 
     ss::visit(
       v.data(),
-      [&os](const iobuf& v) {
-          os << "string(" << iobuf_as_string(v.copy()) << ")";
-      },
+      [&os](const iobuf& v) { os << "string(" << iobuf_as_string(v) << ")"; },
       [&os, base_indent](const json_object& v) {
           os << "object(";
           for (const auto& [k, v] : v) {
               os << "\n"
                  << std::string(base_indent + 2, ' ') << "key("
-                 << iobuf_as_string(k.copy()) << ") :\n";
+                 << iobuf_as_string(k) << ") :\n";
               debug_format_value(os, v, base_indent + 4);
           }
           if (v.size() == 0) {

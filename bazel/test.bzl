@@ -355,7 +355,8 @@ def redpanda_test_cc_library(
         local_defines = [],
         visibility = None,
         implementation_deps = [],
-        deps = []):
+        deps = [],
+        alwayslink = False):
     cc_library(
         name = name,
         srcs = srcs,
@@ -371,6 +372,7 @@ def redpanda_test_cc_library(
         features = [
             "layering_check",
         ],
+        alwayslink = alwayslink,
     )
 
 def redpanda_cc_bench(
@@ -435,6 +437,16 @@ def redpanda_cc_bench(
         # This is always defined in MiB for Bazel
         "resources:memory:{}".format(_parse_bytes(memory) / (1 << 20)),
     ]
+
+    # all benches must include the hooks
+    deps.append(
+        "//src/v/test_utils:rpbench_hooks",
+    )
+
+    env = {
+        # see https://redpandadata.atlassian.net/wiki/x/BwDSUw
+        "REDPANDA_RNG_SEEDING_MODE_DEFAULT": "fixed",
+    } | env
 
     tags = tags + ["bench"]
 

@@ -131,6 +131,7 @@ redpanda_cc_library(
         "//src/v/net:tls",
         "//src/v/ssx:future_util",
         "//src/v/ssx:sformat",
+        "//src/v/strings:utf8",
         "//src/v/utils:base64",
         "//src/v/utils:file_io",
         "//src/v/utils:named_type",

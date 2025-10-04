@@ -101,16 +101,14 @@ convert_primitive(serde::json::parser& p, const primitive_type& ft) {
                     max_bytes,
                     buf.size_bytes()));
             }
-
-            iobuf_const_parser iop(buf);
-            return iop.read_string(iop.bytes_left());
+            return buf.linearize_to_string();
         };
 
-        // 32 bytes should be enough for most date/time formats.
+        // 64 bytes should be enough for most date/time formats.
         // There can be unlimited trailing digits for fractional
-        // seconds but 32 should be more than enough.
+        // seconds but 64 should be more than enough.
         // Example: 2025-01-01T01:02:03.11111111111[snip]Z
-        constexpr size_t max_date_time_format_length = 32;
+        constexpr size_t max_date_time_format_length = 64;
 
         if (std::holds_alternative<timestamptz_type>(ft)) {
             auto parse_input = linearize(

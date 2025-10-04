@@ -9,10 +9,10 @@
  * by the Apache License, Version 2.0
  */
 
-#include "absl/container/flat_hash_set.h"
-#include "bytes/iobuf_parser.h"
 #include "json/document.h"
 #include "wasm/tests/wasm_fixture.h"
+
+#include <algorithm>
 
 TEST_F(WasmTestFixture, Wasi) {
     load_wasm("wasi.wasm");
@@ -20,8 +20,7 @@ TEST_F(WasmTestFixture, Wasi) {
     auto result = transform(batch);
     const auto& result_records = result.copy_records();
     ASSERT_EQ(result_records.size(), 1);
-    iobuf_const_parser parser(result_records.front().value());
-    const auto& value = parser.read_string(parser.bytes_left());
+    const auto& value = result_records.front().value().linearize_to_string();
     json::Document doc;
     doc.Parse(value);
     std::vector<std::string> program_args;
@@ -40,7 +39,7 @@ TEST_F(WasmTestFixture, Wasi) {
         environment_variables.emplace_back(v);
     }
     // The order here doesn't matter, so sort the values.
-    std::sort(environment_variables.begin(), environment_variables.end());
+    std::ranges::sort(environment_variables);
     std::vector<std::string> expected_env{
       ss::format("REDPANDA_INPUT_TOPIC={}", meta().input_topic.tp()),
       ss::format(

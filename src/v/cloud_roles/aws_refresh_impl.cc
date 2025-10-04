@@ -12,6 +12,7 @@
 
 #include "cloud_roles/logger.h"
 #include "request_response_helpers.h"
+#include "strings/utf8.h"
 
 namespace cloud_roles {
 
@@ -28,8 +29,9 @@ ss::sstring read_string_from_response(cloud_roles::api_response response) {
     vassert(
       std::holds_alternative<iobuf>(response),
       "response does not contain iobuf");
-    iobuf_const_parser parser(std::get<iobuf>(response));
-    return parser.read_string(parser.bytes_left());
+    auto str = std::get<iobuf>(response).linearize_to_string();
+    validate_utf8(str);
+    return str;
 }
 
 void add_metadata_token_to_request(

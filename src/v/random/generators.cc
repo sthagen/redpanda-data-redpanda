@@ -27,7 +27,7 @@ using internal::chars;
 using seed_type = rng::seed_type;
 
 namespace {
-constexpr seed_type fixed_seed = 1234567891u;
+constexpr seed_type fixed_seed = 0xDEADBEEF;
 
 std::atomic<int64_t> seed_generation = 0;
 
@@ -75,7 +75,7 @@ std::seed_seq seed_to_seq(seed_type seed) {
 thread_local rng global_instance;
 thread_local int64_t last_seed_gen = -1;
 
-std::random_device::result_type get_initial_seed() {
+seed_type get_initial_seed() {
     return global_seeding_mode == seeding_mode::fixed_seed ? fixed_seed
                                                            : random_seed();
 }

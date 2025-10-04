@@ -127,8 +127,7 @@ ss::future<http::downloaded_response> handle_token_request(
       "application/x-www-form-urlencoded");
 
     EXPECT_TRUE(payload.has_value());
-    iobuf_parser parser{std::move(payload.value())};
-    auto received = parser.read_string(parser.bytes_left());
+    auto received = payload.value().linearize_to_string();
 
     EXPECT_TRUE(query_params_equal(
       absl::flat_hash_map<ss::sstring, ss::sstring>{
@@ -422,8 +421,7 @@ ss::future<http::downloaded_response> handle_commit_table_txn(
   std::optional<iobuf> payload,
   [[maybe_unused]] ss::lowres_clock::duration timeout) {
     EXPECT_TRUE(payload.has_value());
-    iobuf_parser parser(std::move(*payload));
-    auto json_str = parser.read_string(parser.bytes_left());
+    auto json_str = payload->linearize_to_string();
     json::Document doc;
     doc.Parse(json_str);
     // validate that the request is a valid json
