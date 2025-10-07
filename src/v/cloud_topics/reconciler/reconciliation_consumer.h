@@ -29,6 +29,7 @@ struct consumer_metadata {
     kafka::offset last_offset;
     model::timestamp last_timestamp;
     absl::btree_map<model::term_id, kafka::offset> terms;
+    uint64_t batch_count{0};
 };
 
 /// Consumes record batches from a reader and writes them to an L1 object.

@@ -57,6 +57,7 @@ reconciler::reconciler(l1::io* l1_io, l1::metastore* metastore)
   , _metastore(metastore) {}
 
 ss::future<> reconciler::start() {
+    _probe.setup_metrics();
     ssx::spawn_with_gate(_gate, [this] { return reconciliation_loop(); });
     co_return;
 }
@@ -189,6 +190,8 @@ ss::future<> reconciler::reconciliation_loop() {
 }
 
 ss::future<> reconciler::reconcile() {
+    _probe.increment_rounds();
+
     chunked_vector<ss::shared_ptr<source>> sources;
     // Make a copy of the sources to not worry about concurrent modification.
     for (auto& [_, src] : _sources) {
@@ -352,11 +355,13 @@ reconciler::build_and_put_object(
     // Build the object.
     auto build_result = co_await build_object(ctx, sources);
     if (!build_result.has_value()) {
+        _probe.increment_object_build_failed();
         co_return std::unexpected(build_result.error());
     }
 
     auto obj_meta = std::move(build_result.value());
     if (obj_meta.commits.empty()) {
+        _probe.increment_empty_objects_skipped();
         co_return std::unexpected(
           reconcile_error("Skipping put for object {}: no data", oid));
     }
@@ -364,8 +369,11 @@ reconciler::build_and_put_object(
     // Upload the object.
     auto put_result = co_await put_object(oid, ctx);
     if (!put_result.has_value()) {
+        _probe.increment_object_upload_failed();
         co_return std::unexpected(put_result.error());
     }
+
+    _probe.increment_objects_uploaded();
 
     co_return obj_meta;
 }
@@ -422,6 +430,8 @@ reconciler::build_object(
         }
         auto meta = read_result.value();
         if (meta.has_value()) {
+            _probe.increment_partitions_reconciled();
+            _probe.add_batches_reconciled(meta->batch_count);
             metas.emplace_back(src, std::move(meta).value());
         }
     }
@@ -434,6 +444,9 @@ reconciler::build_object(
       "Built L1 object from {} partitions ({} partitions were skipped)",
       metas.size(),
       sources.size() - metas.size());
+    if (!metas.empty()) {
+        _probe.add_bytes_reconciled(obj_info.size_bytes);
+    }
     co_return built_object_metadata{
       .object_info = std::move(obj_info),
       .commits = std::move(metas),

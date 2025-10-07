@@ -11,10 +11,10 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cloud_io/access_time_tracker.h"
 #include "cloud_io/basic_cache_service_api.h"
-#include "cloud_storage/access_time_tracker.h"
-#include "cloud_storage/cache_probe.h"
-#include "cloud_storage/recursive_directory_walker.h"
+#include "cloud_io/cache_probe.h"
+#include "cloud_io/recursive_directory_walker.h"
 #include "config/configuration.h"
 #include "config/property.h"
 #include "ssx/semaphore.h"
@@ -35,7 +35,7 @@
 
 struct cloud_storage_fixture;
 
-namespace cloud_storage {
+namespace cloud_io {
 
 // These timeout/backoff settings are for S3 requests
 using namespace std::chrono_literals;
@@ -55,11 +55,10 @@ class cache;
 
 /// RAII guard for bytes reserved in the cache: constructed prior to a call
 /// to cache::put, and may be destroyed afterwards.
-using space_reservation_guard
-  = cloud_io::basic_space_reservation_guard<ss::lowres_clock>;
+using space_reservation_guard = basic_space_reservation_guard<ss::lowres_clock>;
 
 class cache
-  : public cloud_io::basic_cache_service_api<ss::lowres_clock>
+  : public basic_cache_service_api<ss::lowres_clock>
   , public ss::peering_sharded_service<cache> {
 public:
     /// C-tor.
@@ -307,7 +306,7 @@ private:
     // slack free space and thereby avoid continuously trimming.
     static constexpr double _cache_size_low_watermark{0.8};
 
-    cloud_storage::recursive_directory_walker _walker;
+    recursive_directory_walker _walker;
     uint64_t _total_cleaned;
     /// Current size of the cache directory (only used on shard 0)
     uint64_t _current_cache_size{0};
@@ -366,4 +365,4 @@ private:
       1, "cloud/cache/access_tracker_sync"};
 };
 
-} // namespace cloud_storage
+} // namespace cloud_io

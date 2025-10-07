@@ -409,33 +409,6 @@ public:
           new_offset, translation_timestamp, term, timeout, as);
     }
 
-    void update_commit_lag(
-      std::optional<kafka::offset> max_committed_kafka_offset) const final {
-        auto max_translatable_offset = max_offset_for_translation();
-        if (
-          !max_translatable_offset
-          || max_translatable_offset.value() < kafka::offset{0}) {
-            return;
-        }
-        auto offset_lag = max_translatable_offset.value()
-                          - max_committed_kafka_offset.value_or(
-                            kafka::offset{-1});
-        _partition->probe().update_iceberg_commit_offset_lag(offset_lag);
-    }
-
-    void
-    update_translation_lag(kafka::offset max_translated_offset) const final {
-        auto max_translatable_offset = max_offset_for_translation();
-        if (
-          !max_translatable_offset
-          || max_translatable_offset.value() < kafka::offset{0}) {
-            return;
-        }
-        auto offset_lag = max_translatable_offset.value()
-                          - std::max(max_translated_offset, kafka::offset{-1});
-        _partition->probe().update_iceberg_translation_offset_lag(offset_lag);
-    }
-
 private:
     bool has_more_data_to_translate(
       std::optional<kafka::offset> last_translated_offset) {
@@ -630,6 +603,14 @@ public:
     }
 
     size_t buffered_bytes() const final { return _mem_tracker.current_usage(); }
+
+    void report_translation_lag(int64_t new_lag) final {
+        _probe->update_translation_offset_lag(new_lag);
+    }
+
+    void report_commit_lag(int64_t new_lag) final {
+        _probe->update_commit_offset_lag(new_lag);
+    }
 
 private:
     scheduling::clock::duration compute_target_lag() const {

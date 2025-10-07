@@ -23,6 +23,7 @@ from rptest.clients.admin.proto.redpanda.core.common import acl_pb2
 from rptest.clients.admin.proto.redpanda.core.admin.v2 import (
     shadow_link_pb2,
 )
+from rptest.clients.kafka_cli_tools import KafkaCliToolsError
 from rptest.clients.rpk import RpkTool, RPKACLInput, RpkException
 from rptest.clients.types import TopicSpec
 from rptest.services.admin import Admin
@@ -537,6 +538,14 @@ class ShadowLinkBasicTests(ShadowLinkTestBase):
         ):
             self.delete_link(test_link)
 
+        # Now verify that we can delete the link when force=True
+        self.delete_link(test_link, force=True)
+
+        with expect_exception(
+            ConnectError, lambda e: e.code == ConnectErrorCode.NOT_FOUND
+        ):
+            self.get_link(test_link)
+
 
 class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
     def leadership_shuffler(self, redpanda, topic: str, enabled: bool):
@@ -612,6 +621,83 @@ class ShadowLinkingReplicationTests(ShadowLinkPreAllocTestBase):
             self.create_target_failure_injector(),
         ):
             self.verify()
+
+    @cluster(num_nodes=8)
+    @matrix(
+        source_cluster_spec=[
+            SecondaryClusterSpec(ServiceType.REDPANDA),
+            SecondaryClusterSpec(
+                ServiceType.KAFKA, kafka_version="3.8.0", kafka_quorum="COMBINED_KRAFT"
+            ),
+        ],
+    )
+    def test_topic_delete(self, source_cluster_spec):
+        topic = TopicSpec(name="source-topic", partition_count=5, replication_factor=3)
+
+        self.source_default_client().create_topic(topic)
+        shadow_link = self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+        self.start_producer_consumer(topic=topic.name, msg_size=128, msg_cnt=100000)
+        self.verify()
+
+        target_client = self.target_default_client()
+
+        # topic is not deletable as it is covered by the shadow topic autocreate filters
+        with expect_exception(
+            KafkaCliToolsError, lambda e: "PolicyViolationException" in str(e)
+        ):
+            target_client.delete_topic(topic.name)
+
+        shadow_link.configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters.extend(
+            [
+                shadow_link_pb2.NameFilter(
+                    pattern_type=shadow_link_pb2.PATTERN_TYPE_LITERAL,
+                    filter_type=shadow_link_pb2.FILTER_TYPE_EXCLUDE,
+                    name=topic.name,
+                ),
+            ]
+        )
+        update_mask: google.protobuf.field_mask_pb2.FieldMask = google.protobuf.field_mask_pb2.FieldMask(
+            paths=[
+                "configurations.topic_metadata_sync_options.auto_create_shadow_topic_filters"
+            ]
+        )
+        updated_link = self.update_link(
+            shadow_link=shadow_link, update_mask=update_mask
+        )
+
+        # Now the topic should be deletable, as it is not in the autocreate filters
+        target_client.delete_topic(topic.name)
+        link_state = self.get_link("test-link")
+        assert len(link_state.status.shadow_topic_statuses) == 0, (
+            "Expected empty shadow_topic_statuses. "
+            f"Instead got {link_state.status.shadow_topic_statuses}"
+        )
+
+    @cluster(num_nodes=8)
+    def test_replication_with_transactions(self):
+        topic = TopicSpec(name="source-topic", partition_count=1, replication_factor=3)
+
+        self.source_default_client().create_topic(topic)
+        self.create_link("test-link")
+
+        self.target_cluster.service.wait_until(
+            lambda: self.topic_exists_in_target(topic.name),
+            timeout_sec=30,
+            backoff_sec=1,
+            err_msg=f"Topic {topic.name} not found in target cluster",
+        )
+
+        self.start_producer_consumer(
+            topic=topic.name, msg_size=128, msg_cnt=10000, use_transactions=True
+        )
+        self.verify()
 
 
 class ShadowLinkConsumeGroupsMirroringTest(ShadowLinkTestBase):

@@ -310,3 +310,15 @@ redpanda_test_cc_library(
     visibility = ["//visibility:public"],
     alwayslink = True,  # hooks are installed by a global constructor
 )
+
+redpanda_test_cc_library(
+    name = "metrics",
+    hdrs = [
+        "metrics.h",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "@seastar",
+    ],
+)

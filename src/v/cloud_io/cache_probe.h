@@ -14,7 +14,7 @@
 
 #include <seastar/core/metrics_registration.hh>
 
-namespace cloud_storage {
+namespace cloud_io {
 
 class cache_probe {
 public:
@@ -71,4 +71,4 @@ private:
     metrics::public_metric_groups _public_metrics;
 };
 
-} // namespace cloud_storage
+} // namespace cloud_io

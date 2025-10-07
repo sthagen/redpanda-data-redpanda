@@ -262,7 +262,7 @@ static void
 test_remote_partition_cache_size_estimate_materialized_segments_args(
   cloud_storage_fixture& context,
   ss::sharded<remote>& api,
-  ss::sharded<cloud_storage::cache>& cache,
+  ss::sharded<cloud_io::cache>& cache,
   cloud_storage::segment_name_format sname_format) {
     auto segments = setup_s3_imposter(
       context, 3, 10, manifest_inconsistency::none, sname_format);

@@ -24,11 +24,8 @@ class cluster_epoch_service;
 
 namespace cloud_io {
 class remote;
-} // namespace cloud_io
-
-namespace cloud_storage {
 class cache;
-}
+} // namespace cloud_io
 
 namespace storage {
 class api;
@@ -42,7 +39,7 @@ class data_plane_api;
 ss::future<std::unique_ptr<data_plane_api>> make_data_plane(
   ss::sstring logger_name,
   seastar::sharded<cloud_io::remote>*,
-  seastar::sharded<cloud_storage::cache>*,
+  seastar::sharded<cloud_io::cache>*,
   cloud_storage_clients::bucket_name bucket,
   seastar::sharded<storage::api>* log_manager,
   seastar::sharded<cluster::cluster_epoch_service<ss::lowres_clock>>*

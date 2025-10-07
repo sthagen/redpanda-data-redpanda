@@ -198,6 +198,12 @@
             "output_type": "update_mirror_topic_properties_response"
         },
         {
+            "name": "delete_mirror_topic",
+            "input_type": "delete_mirror_topic_request",
+            "output_type": "delete_mirror_topic_response"
+        },
+
+        {
             "name": "get_current_cluster_epoch",
             "input_type": "get_current_cluster_epoch_request",
             "output_type": "get_current_cluster_epoch_response"

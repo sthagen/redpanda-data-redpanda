@@ -13,7 +13,7 @@
 #include "base/units.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "config/property.h"
 #include "storage/disk.h"
 #include "test_utils/scoped_config.h"
@@ -38,9 +38,9 @@ static inline std::filesystem::path get_cache_dir(std::filesystem::path p) {
     return p / "test_cache_dir";
 }
 
-// In cloud_storage namespace so we can befriend this fixture from
+// In cloud_io namespace so we can befriend this fixture from
 // the class under test.
-namespace cloud_storage {
+namespace cloud_io {
 
 class cache_test_fixture {
 public:
@@ -52,7 +52,7 @@ public:
 
     temporary_dir test_dir;
     const std::filesystem::path CACHE_DIR;
-    ss::sharded<cloud_storage::cache> sharded_cache;
+    ss::sharded<cloud_io::cache> sharded_cache;
 
     cache_test_fixture()
       : test_dir("test_cache_dir")
@@ -69,12 +69,12 @@ public:
             config::mock_binding<uint16_t>(3))
           .get();
         sharded_cache
-          .invoke_on_all([](cloud_storage::cache& c) { return c.start(); })
+          .invoke_on_all([](cloud_io::cache& c) { return c.start(); })
           .get();
         sharded_cache
           .invoke_on(
             ss::shard_id{0},
-            [](cloud_storage::cache& c) {
+            [](cloud_io::cache& c) {
                 c.notify_disk_status(
                   100ULL * 1024 * 1024 * 1024,
                   50ULL * 1024 * 1024 * 1024,
@@ -120,8 +120,7 @@ public:
         sharded_cache
           .invoke_on(
             ss::shard_id{0},
-            [&size_limit_override,
-             &object_limit_override](cloud_storage::cache& c) {
+            [&size_limit_override, &object_limit_override](cloud_io::cache& c) {
                 return c.trim(size_limit_override, object_limit_override);
             })
           .get();
@@ -143,7 +142,7 @@ public:
         sharded_cache
           .invoke_on(
             ss::shard_id{0},
-            [max_objects](cloud_storage::cache& c) {
+            [max_objects](cloud_io::cache& c) {
                 c._max_objects = config::mock_binding<uint32_t>(max_objects);
             })
           .get();
@@ -155,7 +154,7 @@ public:
         sharded_cache
           .invoke_on(
             ss::shard_id{0},
-            [](cloud_storage::cache& c) {
+            [](cloud_io::cache& c) {
                 auto units = ss::get_units(c._cleanup_sm, 1).get();
             })
           .get();
@@ -165,7 +164,7 @@ public:
         return sharded_cache
           .invoke_on(
             ss::shard_id{0},
-            [](cloud_storage::cache& c) { return c._current_cache_objects; })
+            [](cloud_io::cache& c) { return c._current_cache_objects; })
           .get();
     }
 
@@ -182,4 +181,4 @@ public:
     }
 };
 
-} // namespace cloud_storage
+} // namespace cloud_io

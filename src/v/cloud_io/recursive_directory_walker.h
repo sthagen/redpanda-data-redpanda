@@ -18,7 +18,7 @@
 
 #include <chrono>
 
-namespace cloud_storage {
+namespace cloud_io {
 
 inline constexpr auto cache_tmp_file_extension{".part"};
 
@@ -56,4 +56,4 @@ private:
     ss::gate _gate;
 };
 
-} // namespace cloud_storage
+} // namespace cloud_io

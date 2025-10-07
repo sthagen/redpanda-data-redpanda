@@ -8,7 +8,7 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_storage/access_time_tracker.h"
+#include "cloud_io/access_time_tracker.h"
 
 #include "absl/container/btree_map.h"
 #include "absl/container/btree_set.h"
@@ -50,7 +50,7 @@ void read_nested(
 
 } // namespace absl
 
-namespace cloud_storage {
+namespace cloud_io {
 
 // For async serialization/deserialization, the fixed-size content
 // is defined in a header struct, and then the main body of the encoding
@@ -309,4 +309,4 @@ std::chrono::system_clock::time_point file_metadata::time_point() const {
       std::chrono::seconds{atime_sec}};
 }
 
-} // namespace cloud_storage
+} // namespace cloud_io

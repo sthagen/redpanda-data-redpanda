@@ -10,7 +10,7 @@
 
 #include "cluster/archival/archiver_manager.h"
 
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cluster/archival/logger.h"
 #include "cluster/archival/ntp_archiver_service.h"
 #include "cluster/archival/upload_housekeeping_service.h"
@@ -514,7 +514,7 @@ public:
       ss::lw_shared_ptr<cluster::partition> part,
       ss::lw_shared_ptr<const archival::configuration> config,
       cloud_storage::remote& remote,
-      cloud_storage::cache& cache,
+      cloud_io::cache& cache,
       archival::upload_housekeeping_service& housekeeping)
       : _ntp(std::move(ntp))
       , _self_id(broker_id)
@@ -616,7 +616,7 @@ private:
     ss::lw_shared_ptr<cluster::partition> _part;
     ss::lw_shared_ptr<const archival::configuration> _config;
     cloud_storage::remote& _remote;
-    cloud_storage::cache& _cache;
+    cloud_io::cache& _cache;
     archival::upload_housekeeping_service& _upload_housekeeping;
     ss::abort_source _as;
     retry_chain_node _rtc;
@@ -638,7 +638,7 @@ struct managed_partition : public managed_partition_fsm::state_machine_t {
       ss::lw_shared_ptr<cluster::partition> part,
       ss::lw_shared_ptr<const archival::configuration> config,
       cloud_storage::remote& remote,
-      cloud_storage::cache& cache,
+      cloud_io::cache& cache,
       archival::upload_housekeeping_service& housekeeping)
       : managed_partition_fsm::state_machine_t(
           ntp,
@@ -716,7 +716,7 @@ public:
       ss::sharded<cluster::partition_manager>& pm,
       ss::sharded<raft::group_manager>& gm,
       ss::sharded<cloud_storage::remote>& api,
-      ss::sharded<cloud_storage::cache>& cache,
+      ss::sharded<cloud_io::cache>& cache,
       ss::sharded<archival::upload_housekeeping_service>& upload_housekeeping,
       ss::lw_shared_ptr<const configuration>& config)
       : _self_node_id(node_id)
@@ -949,7 +949,7 @@ public:
     ss::sharded<cluster::partition_manager>& _pm;
     ss::sharded<raft::group_manager>& _gm;
     ss::sharded<cloud_storage::remote>& _remote;
-    ss::sharded<cloud_storage::cache>& _cache;
+    ss::sharded<cloud_io::cache>& _cache;
     ss::sharded<archival::upload_housekeeping_service>& _upload_housekeeping;
     ss::lw_shared_ptr<const configuration> _config;
     std::map<model::ntp, ss::shared_ptr<managed_partition>> _managed;
@@ -968,7 +968,7 @@ archiver_manager::archiver_manager(
   ss::sharded<cluster::partition_manager>& pm,
   ss::sharded<raft::group_manager>& gm,
   ss::sharded<cloud_storage::remote>& api,
-  ss::sharded<cloud_storage::cache>& cache,
+  ss::sharded<cloud_io::cache>& cache,
   ss::sharded<archival::upload_housekeeping_service>& upload_housekeeping,
   ss::lw_shared_ptr<const configuration> config)
   : _impl(

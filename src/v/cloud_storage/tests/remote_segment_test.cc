@@ -11,7 +11,7 @@
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/download_exception.h"
 #include "cloud_storage/materialized_resources.h"
 #include "cloud_storage/partition_manifest.h"

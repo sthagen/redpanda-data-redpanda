@@ -12,8 +12,8 @@
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
 #include "cache_test_fixture.h"
-#include "cloud_storage/access_time_tracker.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/access_time_tracker.h"
+#include "cloud_io/cache_service.h"
 #include "random/generators.h"
 #include "test_utils/boost_fixture.h"
 #include "test_utils/iostream.h"
@@ -36,7 +36,7 @@
 #include <optional>
 #include <stdexcept>
 
-using namespace cloud_storage;
+using namespace cloud_io;
 
 static ss::logger test_log("cache_test_logger");
 
@@ -52,7 +52,7 @@ FIXTURE_TEST(get_after_put, cache_test_fixture) {
     auto data_string = create_data_string('a', 1_MiB + 1_KiB);
     put_into_cache(data_string, KEY);
 
-    std::optional<cloud_storage::cache_item> returned_item
+    std::optional<cloud_io::cache_item> returned_item
       = sharded_cache.local().get(KEY).get();
     BOOST_REQUIRE(returned_item);
     BOOST_CHECK_EQUAL(returned_item->size, data_string.length());
@@ -88,7 +88,7 @@ FIXTURE_TEST(put_rewrites_file, cache_test_fixture) {
     auto data_string2 = create_data_string('b', 1_MiB + 1_KiB);
     put_into_cache(data_string2, KEY);
 
-    std::optional<cloud_storage::cache_item> returned_item
+    std::optional<cloud_io::cache_item> returned_item
       = sharded_cache.local().get(KEY).get();
     BOOST_REQUIRE(returned_item);
     BOOST_CHECK_EQUAL(returned_item->size, data_string2.length());
@@ -103,7 +103,7 @@ FIXTURE_TEST(put_rewrites_file, cache_test_fixture) {
 }
 
 FIXTURE_TEST(get_missing_file, cache_test_fixture) {
-    std::optional<cloud_storage::cache_item> returned_item
+    std::optional<cloud_io::cache_item> returned_item
       = sharded_cache.local().get(WRONG_KEY).get();
 
     BOOST_CHECK(!returned_item);

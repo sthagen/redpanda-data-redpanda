@@ -65,14 +65,27 @@ public:
         }
     }
 
+    void update_translation_offset_lag(int64_t new_lag) {
+        _translation_offset_lag = new_lag;
+    }
+
+    void update_commit_offset_lag(int64_t new_lag) {
+        _commit_offset_lag = new_lag;
+    }
+
 private:
     void register_created_files_metrics();
     void register_invalid_record_metric();
     void register_throughput_metrics();
+    void register_lag_metrics();
 
 private:
     model::ntp _ntp;
     std::optional<metrics::public_metric_groups> _public_metrics;
+
+    // Lag metrics
+    int64_t _translation_offset_lag = 0;
+    int64_t _commit_offset_lag = 0;
 
     size_t _translations_finished = 0;
     size_t _files_created = 0;

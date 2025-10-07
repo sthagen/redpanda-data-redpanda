@@ -91,7 +91,7 @@ class async_manifest_view {
 public:
     async_manifest_view(
       ss::sharded<remote>& remote,
-      ss::sharded<cache>& cache,
+      ss::sharded<cloud_io::cache>& cache,
       const partition_manifest& stm_manifest,
       cloud_storage_clients::bucket_name bucket,
       const remote_path_provider& path_provider);

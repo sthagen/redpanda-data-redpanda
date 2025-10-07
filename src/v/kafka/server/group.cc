@@ -2501,31 +2501,30 @@ group::handle_offset_commit(offset_commit_request&& r) {
     }
 }
 
-ss::future<offset_fetch_response>
-group::handle_offset_fetch(offset_fetch_request&& r) {
+ss::future<offset_fetch_response_group>
+group::handle_offset_fetch(offset_fetch_request_group r, bool require_stable) {
     if (in_state(group_state::dead)) {
-        return ss::make_ready_future<offset_fetch_response>(
-          offset_fetch_response(r.data.topics));
+        co_return offset_fetch_response::make_group(std::move(r));
     }
 
-    offset_fetch_response resp;
-    resp.data.error_code = error_code::none;
+    offset_fetch_response_group resp{
+      .group_id = r.group_id, .error_code = error_code::none};
 
     // retrieve all topics available
-    if (!r.data.topics) {
-        absl::flat_hash_map<
+    if (!r.topics) {
+        chunked_hash_map<
           model::topic,
-          chunked_vector<offset_fetch_response_partition>>
+          chunked_vector<offset_fetch_response_partitions>>
           tmp;
         for (const auto& e : _offsets) {
-            offset_fetch_response_partition p = {
+            offset_fetch_response_partitions p = {
               .partition_index = e.first.partition,
               .committed_offset = model::offset(-1),
               .metadata = "",
               .error_code = error_code::none,
             };
 
-            if (r.data.require_stable && has_pending_transaction(e.first)) {
+            if (require_stable && has_pending_transaction(e.first)) {
                 p.error_code = error_code::unstable_offset_commit;
             } else {
                 p.committed_offset = e.second->metadata.offset;
@@ -2537,28 +2536,28 @@ group::handle_offset_fetch(offset_fetch_request&& r) {
         }
 
         for (auto& e : tmp) {
-            resp.data.topics.push_back(
+            resp.topics.push_back(
               {.name = e.first, .partitions = std::move(e.second)});
         }
 
-        return ss::make_ready_future<offset_fetch_response>(std::move(resp));
+        co_return resp;
     }
 
     // retrieve for the topics specified in the request
-    for (const auto& topic : *r.data.topics) {
-        offset_fetch_response_topic t;
+    for (const auto& topic : *r.topics) {
+        offset_fetch_response_topics t;
         t.name = topic.name;
         for (auto id : topic.partition_indexes) {
             model::topic_partition tp(topic.name, id);
 
-            offset_fetch_response_partition p = {
+            offset_fetch_response_partitions p = {
               .partition_index = id,
               .committed_offset = model::offset(-1),
               .metadata = "",
               .error_code = error_code::none,
             };
 
-            if (r.data.require_stable && has_pending_transaction(tp)) {
+            if (require_stable && has_pending_transaction(tp)) {
                 p.error_code = error_code::unstable_offset_commit;
             } else {
                 auto res = offset(tp);
@@ -2572,10 +2571,10 @@ group::handle_offset_fetch(offset_fetch_request&& r) {
             }
             t.partitions.push_back(std::move(p));
         }
-        resp.data.topics.push_back(std::move(t));
+        resp.topics.push_back(std::move(t));
     }
 
-    return ss::make_ready_future<offset_fetch_response>(std::move(resp));
+    co_return resp;
 }
 
 kafka::member_id group::generate_member_id(const join_group_request& r) {

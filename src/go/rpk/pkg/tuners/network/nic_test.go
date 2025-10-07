@@ -13,6 +13,7 @@ package network
 
 import (
 	"fmt"
+	"math"
 	"testing"
 
 	"github.com/redpanda-data/redpanda/src/go/rpk/pkg/tuners/ethtool"
@@ -46,6 +47,9 @@ type ethtoolMock struct {
 }
 
 func (m *ethtoolMock) DriverName(iface string) (string, error) {
+	if m.driverName == nil {
+		return "dummy", nil
+	}
 	return m.driverName(iface)
 }
 
@@ -97,6 +101,12 @@ func Test_nic_Slaves_ReturnEmptyForNotBondInterface(t *testing.T) {
 	require.Empty(t, slaves)
 }
 
+type IrqInfoRes struct {
+	Num        int
+	ProcLine   string
+	QueueIndex int
+}
+
 func Test_nic_GetIRQs(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -104,7 +114,7 @@ func Test_nic_GetIRQs(t *testing.T) {
 		irqDeviceInfo irq.DeviceInfo
 		ethtool       ethtool.EthtoolWrapper
 		nicName       string
-		want          []int
+		want          []IrqInfoRes
 	}{
 		{
 			name: "Shall return all device IRQs when there are not fast paths",
@@ -122,7 +132,23 @@ func Test_nic_GetIRQs(t *testing.T) {
 					return []int{54, 56, 58}, nil
 				},
 			},
-			want: []int{54, 56, 58},
+			want: []IrqInfoRes{
+				{
+					Num:        54,
+					ProcLine:   "54:       9076       8545       3081       1372       4662     190816       3865       6709  IR-PCI-MSI 333825-edge      iwlwifi: queue 1",
+					QueueIndex: math.MaxInt64,
+				},
+				{
+					Num:        56,
+					ProcLine:   "56:      24300       3370        681       2725       1511       6627      21983       7056  IR-PCI-MSI 333826-edge      iwlwifi: queue 2",
+					QueueIndex: math.MaxInt64,
+				},
+				{
+					Num:        58,
+					ProcLine:   "58:       8444      10072       3025       2732       5432       5919       7217       3559  IR-PCI-MSI 333827-edge      iwlwifi: queue 3",
+					QueueIndex: math.MaxInt64,
+				},
+			},
 		},
 		{
 			name: "Shall return fast path IRQs only sorted by queue number",
@@ -142,7 +168,28 @@ func Test_nic_GetIRQs(t *testing.T) {
 					return []int{91, 92, 93, 94, 95}, nil
 				},
 			},
-			want: []int{95, 94, 93, 92},
+			want: []IrqInfoRes{
+				{
+					Num:        95,
+					ProcLine:   "95:      40351          0          0          0   PCI-MSI 1572868-edge      eth0-TxRx-0",
+					QueueIndex: 0,
+				},
+				{
+					Num:        94,
+					ProcLine:   "94:      48929          0          0          0   PCI-MSI 1572867-edge      eth0-TxRx-1",
+					QueueIndex: 1,
+				},
+				{
+					Num:        93,
+					ProcLine:   "93:      60344          0          0          0   PCI-MSI 1572866-edge      eth0-TxRx-2",
+					QueueIndex: 2,
+				},
+				{
+					Num:        92,
+					ProcLine:   "92:      79079          0          0          0   PCI-MSI 1572865-edge      eth0-TxRx-3",
+					QueueIndex: 3,
+				},
+			},
 		},
 		{
 			name: "Fdir fast path IRQs should be moved to the end of list",
@@ -163,7 +210,33 @@ func Test_nic_GetIRQs(t *testing.T) {
 					return []int{91, 92, 93, 94, 95, 96}, nil
 				},
 			},
-			want: []int{95, 94, 93, 92, 96},
+			want: []IrqInfoRes{
+				{
+					Num:        95,
+					ProcLine:   "95:      40351          0          0          0   PCI-MSI 1572868-edge      eth0-TxRx-0",
+					QueueIndex: 0,
+				},
+				{
+					Num:        94,
+					ProcLine:   "94:      48929          0          0          0   PCI-MSI 1572867-edge      eth0-TxRx-1",
+					QueueIndex: 1,
+				},
+				{
+					Num:        93,
+					ProcLine:   "93:      60344          0          0          0   PCI-MSI 1572866-edge      eth0-TxRx-2",
+					QueueIndex: 2,
+				},
+				{
+					Num:        92,
+					ProcLine:   "92:      79079          0          0          0   PCI-MSI 1572865-edge      eth0-TxRx-3",
+					QueueIndex: 3,
+				},
+				{
+					Num:        96,
+					ProcLine:   "96:      40351          0          0          0   PCI-MSI 1572868-edge      eth0-fdir-TxRx-0",
+					QueueIndex: math.MaxInt64,
+				},
+			},
 		},
 	}
 	for _, tt := range tests {
@@ -177,7 +250,13 @@ func Test_nic_GetIRQs(t *testing.T) {
 			}
 			got, err := n.GetIRQs()
 			require.NoError(t, err)
-			require.Exactly(t, tt.want, got)
+			require.Exactly(t, len(tt.want), len(got))
+
+			for i := range got {
+				require.Equal(t, tt.want[i].Num, got[i].Num)
+				require.Equal(t, tt.want[i].ProcLine, got[i].ProcLine)
+				require.Equal(t, tt.want[i].QueueIndex, got[i].QueueIndex())
+			}
 		})
 	}
 }

@@ -10,6 +10,7 @@
  */
 #include "kafka/server/group_router.h"
 
+#include "kafka/protocol/offset_fetch.h"
 #include "kafka/server/logger.h"
 
 #include <seastar/core/coroutine.hh>
@@ -260,8 +261,46 @@ group_router::leave_group(leave_group_request&& request) {
 }
 
 ss::future<offset_fetch_response>
-group_router::offset_fetch(offset_fetch_request&& request) {
-    return route(std::move(request), &group_manager::offset_fetch);
+group_router::offset_fetch(offset_fetch_request request) {
+    chunked_hash_map<
+      std::optional<std::pair<model::ntp, ss::shard_id>>,
+      offset_fetch_request>
+      requests_by_shard;
+
+    offset_fetch_response response;
+    // Collect requests by shard
+    for (auto& group : request.data.groups) {
+        requests_by_shard
+          .try_emplace(shard_for(group.group_id), offset_fetch_request{})
+          .first->second.data.groups.push_back(std::move(group));
+    }
+    // Collect responses
+    for (auto& [key, request] : requests_by_shard) {
+        if (key.has_value()) {
+            auto& [ntp, shard] = key.value();
+            request.ntp = std::move(ntp);
+            auto shard_res = co_await with_scheduling_group(
+              _sg, [this, shard, r = std::move(request)]() mutable {
+                  return get_group_manager().invoke_on(
+                    shard, _ssg, &group_manager::offset_fetch, std::move(r));
+              });
+            std::ranges::move(
+              shard_res.data.groups, std::back_inserter(response.data.groups));
+        } else {
+            // Not coordinator for these groups
+            for (auto& group : request.data.groups) {
+                vlog(
+                  cg_klog.trace,
+                  "in route() not coordinator for {}",
+                  group.group_id);
+                response.data.groups.push_back(
+                  offset_fetch_response_group{
+                    .group_id = std::move(group.group_id),
+                    .error_code = error_code::not_coordinator});
+            }
+        }
+    }
+    co_return response;
 }
 
 ss::future<offset_delete_response>

@@ -25,7 +25,6 @@ redpanda_test_cc_library(
     name = "common",
     srcs = ["util.cc"],
     hdrs = [
-        "cache_test_fixture.h",
         "cloud_storage_fixture.h",
         "common_def.h",
         "manual_fixture.h",
@@ -38,9 +37,9 @@ redpanda_test_cc_library(
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
         "//src/v/bytes:streambuf",
+        "//src/v/cloud_io:cache",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
-        "//src/v/cloud_storage:cache",
         "//src/v/cloud_storage:types",
         "//src/v/cluster",
         "//src/v/cluster/cloud_metadata/tests:manual_mixin",
@@ -117,24 +116,6 @@ redpanda_cc_btest(
         "//src/v/utils:to_string",
         "//src/v/utils:tracking_allocator",
         "@boost//:test",
-        "@seastar//:testing",
-    ],
-)
-
-redpanda_cc_btest(
-    name = "directory_walker_test",
-    timeout = "short",
-    srcs = [
-        "directory_walker_test.cc",
-    ],
-    deps = [
-        "//src/v/base",
-        "//src/v/bytes:iobuf",
-        "//src/v/bytes:iostream",
-        "//src/v/cloud_storage:cache",
-        "//src/v/test_utils:seastar_boost",
-        "@boost//:test",
-        "@seastar",
         "@seastar//:testing",
     ],
 )
@@ -253,33 +234,6 @@ redpanda_cc_gtest(
 )
 
 redpanda_cc_btest(
-    name = "cache_test",
-    timeout = "short",
-    srcs = [
-        "cache_test.cc",
-        "cache_test_fixture.h",
-    ],
-    deps = [
-        "//src/v/base",
-        "//src/v/bytes:iobuf",
-        "//src/v/bytes:iostream",
-        "//src/v/cloud_storage:cache",
-        "//src/v/config",
-        "//src/v/random:generators",
-        "//src/v/storage:disk",
-        "//src/v/test_utils:iostream",
-        "//src/v/test_utils:scoped_config",
-        "//src/v/test_utils:seastar_boost",
-        "//src/v/utils:directory_walker",
-        "//src/v/utils:file_io",
-        "//src/v/utils:human",
-        "@boost//:filesystem",
-        "@boost//:test",
-        "@seastar",
-    ],
-)
-
-redpanda_cc_btest(
     name = "tx_range_manifest_test",
     timeout = "short",
     srcs = [
@@ -368,9 +322,10 @@ redpanda_cc_btest(
     cpu = 1,
     deps = [
         "//src/v/bytes:iostream",
+        "//src/v/cloud_io:cache",
+        "//src/v/cloud_io/tests:cloud_io_cache_fixture",
         "//src/v/cloud_io/tests:s3_imposter",
         "//src/v/cloud_storage",
-        "//src/v/cloud_storage:cache",
         "//src/v/cloud_storage/tests:common",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:lazy_abort_source",
@@ -391,8 +346,8 @@ redpanda_cc_btest(
         "//src/v/base",
         "//src/v/bytes:iobuf",
         "//src/v/bytes:iostream",
+        "//src/v/cloud_io:cache",
         "//src/v/cloud_storage",
-        "//src/v/cloud_storage:cache",
         "//src/v/cloud_storage:types",
         "//src/v/cloud_storage/tests:common",
         "//src/v/model",
@@ -609,12 +564,10 @@ redpanda_cc_btest(
 redpanda_cc_bench(
     name = "cloud_storage_rpbench",
     srcs = [
-        "cache_bench.cc",
         "segment_meta_cstore_bench.cc",
     ],
     deps = [
         "//src/v/base",
-        "//src/v/cloud_storage:cache",
         "//src/v/cloud_storage:segment_meta_cstore",
         "//src/v/config",
         "//src/v/model",

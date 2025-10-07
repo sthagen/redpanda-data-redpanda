@@ -58,7 +58,7 @@ public:
       ss::sharded<raft::group_manager>&,
       ss::sharded<features::feature_table>&,
       ss::sharded<cloud_storage::remote>&,
-      ss::sharded<cloud_storage::cache>&,
+      ss::sharded<cloud_io::cache>&,
       ss::sharded<node_status_table>&,
       ss::sharded<cluster::metadata_cache>&,
       ss::scheduling_group);
@@ -367,7 +367,7 @@ private:
     ss::gate _gate;
     consensus_ptr _raft0;
     ss::sharded<cloud_storage::remote>& _cloud_storage_api;
-    ss::sharded<cloud_storage::cache>& _cloud_cache;
+    ss::sharded<cloud_io::cache>& _cloud_cache;
     ss::sharded<node_status_table>& _node_status_table;
     ss::sharded<cluster::metadata_cache>& _metadata_cache;
     controller_probe _probe;

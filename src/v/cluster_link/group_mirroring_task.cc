@@ -313,7 +313,14 @@ build_offset_commit_request(group_mirroring_task::group_offsets g_offsets) {
 template<typename ApiT>
 kafka::api_version
 get_max_supported(kafka::client::api_version_range remote_supported) {
-    return std::min(remote_supported.max, ApiT::max_valid);
+    constexpr auto client_supported_max = [] {
+        if constexpr (std::same_as<ApiT, kafka::offset_fetch_api>) {
+            return kafka::api_version{7};
+        } else {
+            return ApiT::max_valid;
+        }
+    }();
+    return std::min(remote_supported.max, client_supported_max);
 }
 
 kafka::list_groups_request make_list_groups_request() {

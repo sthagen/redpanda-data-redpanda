@@ -22,7 +22,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/sharded.hh>
 
-namespace cloud_storage {
+namespace cloud_io {
 class cache;
 }
 
@@ -229,7 +229,7 @@ public:
       ss::sharded<cluster::node::local_monitor>* local_monitor,
       ss::sharded<storage::api>* storage,
       ss::sharded<storage::node>* storage_node,
-      ss::sharded<cloud_storage::cache>* cache,
+      ss::sharded<cloud_io::cache>* cache,
       ss::sharded<cluster::partition_manager>* pm);
 
     disk_space_manager(disk_space_manager&&) noexcept = delete;
@@ -367,7 +367,7 @@ private:
     ss::sharded<cluster::node::local_monitor>* _local_monitor;
     ss::sharded<storage::api>* _storage;
     ss::sharded<storage::node>* _storage_node;
-    ss::sharded<cloud_storage::cache>* _cache;
+    ss::sharded<cloud_io::cache>* _cache;
     ss::sharded<cluster::partition_manager>* _pm;
 
     node::notification_id _cache_disk_nid;

@@ -19,9 +19,9 @@
 
 namespace pandaproxy::json {
 
-inline std::vector<kafka::offset_fetch_request_topic>
+inline chunked_vector<kafka::offset_fetch_request_topic>
 partitions_request_to_offset_request(std::vector<model::topic_partition> tps) {
-    std::vector<kafka::offset_fetch_request_topic> res;
+    chunked_vector<kafka::offset_fetch_request_topic> res;
     if (tps.empty()) {
         return res;
     }

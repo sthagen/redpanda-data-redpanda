@@ -159,4 +159,7 @@ public:
     lookup_field(std::span<const int32_t> field_numbers) = 0;
 };
 
+template<typename T>
+concept Message = std::derived_from<T, serde::pb::base_message>;
+
 } // namespace serde::pb

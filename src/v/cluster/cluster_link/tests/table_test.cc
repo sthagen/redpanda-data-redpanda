@@ -140,7 +140,7 @@ TEST_F_CORO(cluster_link_table_test, upsert_success_test) {
 
     ASSERT_NO_THROW_CORO(
       co_await _table.local().apply_update(
-        testing::create_remove_command(name_t("link1"))));
+        testing::create_remove_command(name_t("link1"), false)));
     found_link = _table.local().find_link_by_name(name_t("link1"));
     EXPECT_FALSE(found_link.has_value());
     found_link = _table.local().find_link_by_id(id_t(1));
@@ -196,7 +196,7 @@ TEST_F_CORO(cluster_link_table_test, remove_non_existent_link) {
     EXPECT_EQ(_table.local().size(), 0);
     EXPECT_NO_THROW(
       co_await _table.local().apply_update(
-        testing::create_remove_command(name_t("nonexistent"))));
+        testing::create_remove_command(name_t("nonexistent"), false)));
     EXPECT_EQ(_table.local().size(), 0);
 }
 
@@ -207,7 +207,7 @@ TEST_F_CORO(cluster_link_table_test, validate_batch_applicable) {
         .name = name_t("link1"),
         .uuid = uuid_t(::uuid_t::create()),
         .connection = connection_config{}});
-    auto remove = testing::create_remove_command(name_t("link1"));
+    auto remove = testing::create_remove_command(name_t("link1"), false);
     EXPECT_TRUE(_table.local().is_batch_applicable(upsert));
     EXPECT_TRUE(_table.local().is_batch_applicable(remove));
     cluster::feature_update_license_update_cmd feature_update_cmd(
@@ -262,7 +262,7 @@ TEST_F_CORO(cluster_link_table_test, callback_removal) {
         _table.local().unregister_for_updates(notification_id);
     });
     co_await _table.local().apply_update(
-      testing::create_remove_command(name_t("link1")));
+      testing::create_remove_command(name_t("link1"), false));
     EXPECT_TRUE(was_called);
     EXPECT_EQ(link_id, id_t(1));
 }
@@ -394,7 +394,7 @@ TEST_F_CORO(cluster_link_table_test, with_multiple_links) {
     EXPECT_EQ(link_id2.value(), id_t(2));
 
     res = co_await _table.local().apply_update(
-      testing::create_remove_command(name_t("link1")));
+      testing::create_remove_command(name_t("link1"), false));
     ASSERT_EQ_CORO(res.value(), int(errc::success))
       << "Failed to remove link1: " << res.message();
 
@@ -452,7 +452,7 @@ TEST_F_CORO(cluster_link_table_test, remove_mirror_topic) {
     EXPECT_EQ(topic_state.value(), mirror_state2);
 
     res = co_await _table.local().apply_update(
-      testing::create_remove_command(name_t("link1")));
+      testing::create_remove_command(name_t("link1"), false));
     ASSERT_EQ_CORO(res.value(), int(errc::success))
       << "Failed to remove link: " << res.message();
     link_id = _table.local().find_id_by_topic(test_topic2);

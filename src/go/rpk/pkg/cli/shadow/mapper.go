@@ -74,6 +74,7 @@ func mapTLSSettings(tls TLSSettings) *adminv2.TLSSettings {
 
 	switch t := tls.(type) {
 	case *TLSFileSettings:
+		pbTLS.Enabled = t.Enabled
 		pbTLS.TlsSettings = &adminv2.TLSSettings_TlsFileSettings{
 			TlsFileSettings: &adminv2.TLSFileSettings{
 				CaPath:   t.CAPath,
@@ -82,6 +83,7 @@ func mapTLSSettings(tls TLSSettings) *adminv2.TLSSettings {
 			},
 		}
 	case *TLSPEMSettings:
+		pbTLS.Enabled = t.Enabled
 		pbTLS.TlsSettings = &adminv2.TLSSettings_TlsPemSettings{
 			TlsPemSettings: &adminv2.TLSPEMSettings{
 				Ca:   t.CA,

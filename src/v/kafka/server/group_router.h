@@ -67,7 +67,7 @@ public:
     ss::future<leave_group_response> leave_group(leave_group_request&& request);
 
     ss::future<offset_fetch_response>
-    offset_fetch(offset_fetch_request&& request);
+    offset_fetch(offset_fetch_request request);
 
     ss::future<offset_delete_response>
     offset_delete(offset_delete_request&& request);

@@ -451,9 +451,10 @@ private:
                                / (node_count * (node_count - 1));
 
         // Generous boundaries to allow for fluctuations. But they will catch
-        // pathological cases.
+        // pathological cases. Set empirically to avoid flakes (i.e., if the
+        // upper bound is * 3, we get ~1% flakes in the pair test).
         double expected_min = expected_freq - sqrt(expected_freq) * 3;
-        double expected_max = expected_freq + sqrt(expected_freq) * 3;
+        double expected_max = expected_freq + sqrt(expected_freq) * 4;
 
         logger.info(
           "validating replica pair frequencies, topic filter: {}, "
@@ -899,9 +900,6 @@ FIXTURE_TEST(test_many_topics, partition_balancer_sim_fixture) {
 }
 
 FIXTURE_TEST(test_replica_pair_frequency, partition_balancer_sim_fixture) {
-    // TODO: This is really flaky! Fix me!
-    return;
-
     for (model::node_id::type i = 0; i < 3; ++i) {
         add_node(model::node_id{i}, 300_GiB);
     }

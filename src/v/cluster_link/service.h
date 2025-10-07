@@ -112,7 +112,8 @@ public:
      * @param name The name of the link
      * @return nothing on success or an error
      */
-    ss::future<cl_result<void>> delete_cluster_link(const model::name_t& name);
+    ss::future<cl_result<void>>
+    delete_cluster_link(const model::name_t& name, bool force_delete_link);
 
     /**
      * @brief Reports the status of a shard-local topic in the given link

@@ -12,7 +12,6 @@
 
 namespace cloud_storage {
 
-class cache;
 class partition_recovery_manager;
 class remote;
 class remote_partition;
@@ -29,3 +28,7 @@ struct offset_range;
 struct topic_recovery_service;
 
 } // namespace cloud_storage
+
+namespace cloud_io {
+class cache;
+}

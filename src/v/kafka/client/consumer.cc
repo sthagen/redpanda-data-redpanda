@@ -369,11 +369,11 @@ ss::future<describe_groups_response> consumer::describe_group() {
 }
 
 ss::future<offset_fetch_response>
-consumer::offset_fetch(std::vector<offset_fetch_request_topic> topics) {
+consumer::offset_fetch(chunked_vector<offset_fetch_request_topic> topics) {
     refresh_inactivity_timer();
     auto req_builder = [topics{std::move(topics)}, group_id{_group_id}]() {
         return offset_fetch_request{
-          .data{.group_id = group_id, .topics = topics}};
+          .data{.group_id = group_id, .topics = topics.copy()}};
     };
     return req_res(std::move(req_builder))
       .then([this](offset_fetch_response res) {

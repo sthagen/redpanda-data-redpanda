@@ -10,7 +10,7 @@
 
 #pragma once
 
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/read_path_probes.h"
@@ -51,7 +51,7 @@ class remote_segment final {
 public:
     remote_segment(
       remote& r,
-      cache& cache,
+      cloud_io::cache& cache,
       cloud_storage_clients::bucket_name bucket,
       const remote_segment_path& path,
       const model::ntp& ntp,
@@ -212,15 +212,15 @@ private:
 
     /// Helper for do_hydrate_segment
     ss::future<uint64_t> put_segment_in_cache_and_create_index(
-      uint64_t, space_reservation_guard&, ss::input_stream<char>);
+      uint64_t, cloud_io::space_reservation_guard&, ss::input_stream<char>);
 
     ss::future<uint64_t> put_segment_in_cache(
-      uint64_t, space_reservation_guard&, ss::input_stream<char>);
+      uint64_t, cloud_io::space_reservation_guard&, ss::input_stream<char>);
 
     /// Stores a segment chunk in cache. The chunk is stored in a path derived
     /// from the segment path: <segment_path>_chunks/chunk_start_file_offset.
     ss::future<> put_chunk_in_cache(
-      space_reservation_guard&,
+      cloud_io::space_reservation_guard&,
       ss::input_stream<char>,
       chunk_start_offset_t chunk_start);
 
@@ -268,7 +268,7 @@ private:
 
     ss::gate _gate;
     remote& _api;
-    cache& _cache;
+    cloud_io::cache& _cache;
     cloud_storage_clients::bucket_name _bucket;
     const model::ntp& _ntp;
     remote_segment_path _path;
@@ -479,7 +479,7 @@ struct hydration_request {
     using materialize_action_t = ss::noncopyable_function<ss::future<bool>()>;
 
     std::filesystem::path path;
-    cache_element_status current_status;
+    cloud_io::cache_element_status current_status;
     bool was_cached{false};
 
     hydrate_action_t hydrate_action;
@@ -495,7 +495,7 @@ struct hydration_loop_state {
     using materialize_action_t = hydration_request::materialize_action_t;
 
     explicit hydration_loop_state(
-      cache& c, remote_segment_path root, retry_chain_logger& ctxlog);
+      cloud_io::cache& c, remote_segment_path root, retry_chain_logger& ctxlog);
 
     // Add request for hydration for a path. The actions supplied are used to
     // hydrate and materialize the path.
@@ -525,7 +525,7 @@ struct hydration_loop_state {
     std::exception_ptr current_error();
 
 private:
-    cache& _cache;
+    cloud_io::cache& _cache;
     remote_segment_path _root;
     retry_chain_logger& _ctxlog;
     std::vector<hydration_request> _states;

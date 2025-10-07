@@ -11,6 +11,7 @@
 
 #include "cluster_link/manager.h"
 
+#include "cluster_link/deps.h"
 #include "cluster_link/logger.h"
 #include "kafka/data/rpc/deps.h"
 #include "model/namespace.h"
@@ -342,8 +343,10 @@ manager::failover_link_topics(model::name_t link_name) {
     co_return metadata_resp->get().copy();
 }
 
-ss::future<cl_result<void>> manager::delete_cluster_link(model::name_t name) {
+ss::future<cl_result<void>>
+manager::delete_cluster_link(model::name_t name, bool force_delete_link) {
     vlog(cllog.info, "Attempting to delete cluster link named '{}'", name);
+    auto hold = _g.hold();
     auto cl_resp = get_cluster_link(name);
     if (cl_resp.has_error()) {
         co_return cl_resp.assume_error();
@@ -368,17 +371,26 @@ ss::future<cl_result<void>> manager::delete_cluster_link(model::name_t name) {
                                      | std::views::transform(
                                        &model::mirror_topic_metadata::status);
 
-    if (std::ranges::any_of(mirror_topic_states, is_active)) {
-        co_return err_info(
-          errc::link_has_active_shadow_topics,
-          fmt::format(
-            "Failed to delete cluster link with name '{}'. There are "
-            "active/promoting shadow topics.",
-            name));
+    auto active_shadow_topics = std::ranges::any_of(
+      mirror_topic_states, is_active);
+
+    if (active_shadow_topics) {
+        if (!force_delete_link) {
+            co_return err_info(
+              errc::link_has_active_shadow_topics,
+              fmt::format(
+                "Failed to delete cluster link with name '{}'. There are "
+                "active/promoting shadow topics.",
+                name));
+        }
+        vlog(
+          cllog.info,
+          "Force deleting link \"{}\" with active shadow topics",
+          name);
     }
 
     auto ec = co_await _registry->delete_link(
-      std::move(name), ::model::timeout_clock::now() + 30s);
+      std::move(name), force_delete_link, ::model::timeout_clock::now() + 30s);
     auto err = map_cluster_errc(ec);
     if (err != errc::success) {
         co_return err_info(

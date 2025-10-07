@@ -96,8 +96,10 @@ public:
     }
 
     ss::future<::cluster::cluster_link::errc> delete_link(
-      model::name_t name, ::model::timeout_clock::time_point timeout) override {
-        return _plf->remove_cluster_link(std::move(name), timeout);
+      model::name_t name,
+      bool force,
+      ::model::timeout_clock::time_point timeout) override {
+        return _plf->remove_cluster_link(std::move(name), force, timeout);
     }
 
     std::optional<std::reference_wrapper<const model::metadata>>
@@ -402,9 +404,9 @@ service::failover_link_topics(model::name_t link_name) {
     return _manager->failover_link_topics(std::move(link_name));
 }
 
-ss::future<cl_result<void>>
-service::delete_cluster_link(const model::name_t& name) {
-    return _manager->delete_cluster_link(name);
+ss::future<cl_result<void>> service::delete_cluster_link(
+  const model::name_t& name, bool force_delete_link) {
+    return _manager->delete_cluster_link(name, force_delete_link);
 }
 
 void service::register_notifications() {

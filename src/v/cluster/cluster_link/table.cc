@@ -19,6 +19,7 @@
 namespace cluster::cluster_link {
 
 using ::cluster_link::model::add_mirror_topic_cmd;
+using ::cluster_link::model::delete_mirror_topic_cmd;
 using ::cluster_link::model::id_t;
 using ::cluster_link::model::metadata;
 using ::cluster_link::model::mirror_topic_status;
@@ -31,6 +32,7 @@ static constexpr auto accepted_commands = cluster::make_commands_list<
   cluster::cluster_link_upsert_cmd,
   cluster::cluster_link_remove_cmd,
   cluster::cluster_link_add_mirror_topic_cmd,
+  cluster::cluster_link_delete_mirror_topic_cmd,
   cluster::cluster_link_update_mirror_topic_status_cmd,
   cluster::cluster_link_update_mirror_topic_properties_cmd,
   cluster::cluster_link_update_cluster_link_configuration_cmd>();
@@ -252,7 +254,7 @@ ss::future<std::error_code> table::apply_update(model::record_batch b) {
                 revision);
           },
           [&table, revision](const cluster::cluster_link_remove_cmd& remove) {
-              return table.remove_link(remove.key, revision);
+              return table.remove_link(remove.value.link_name, revision);
           },
           [&table,
            revision](const cluster::cluster_link_add_mirror_topic_cmd& add) {
@@ -268,6 +270,10 @@ ss::future<std::error_code> table::apply_update(model::record_batch b) {
               state) {
               return table.update_mirror_topic_properties(
                 state.key, state.value, revision);
+          },
+          [&table,
+           revision](const cluster::cluster_link_delete_mirror_topic_cmd& cmd) {
+              return table.delete_mirror_topic(cmd.key, cmd.value, revision);
           },
           [&table, revision](
             const cluster::cluster_link_update_cluster_link_configuration_cmd&
@@ -506,6 +512,40 @@ cluster::cluster_link::errc table::update_mirror_topic_properties(
     for (const auto& [key, value] : cmd.topic_configs) {
         md.topic_configs.emplace(key, value);
     }
+    _link_revision_index[id] = revision;
+    run_callbacks(id, revision);
+    return errc::success;
+}
+
+cluster::cluster_link::errc table::delete_mirror_topic(
+  id_t id, const delete_mirror_topic_cmd& cmd, model::revision_id revision) {
+    auto link_id = find_id_by_topic(cmd.topic);
+    if (!link_id.has_value()) {
+        vlog(
+          cluster::clusterlog.info,
+          "Unable to delete mirror topic {} from link {}. Topic not found",
+          cmd.topic,
+          id);
+        return errc::topic_not_being_mirrored;
+    }
+    if (link_id.value() != id) {
+        vlog(
+          cluster::clusterlog.info,
+          "Unable to delete mirror topic {} from link {}. It is registered to "
+          "link {}",
+          cmd.topic,
+          id,
+          link_id.value());
+        return errc::topic_being_mirrored_by_other_link;
+    }
+
+    if (!find_link_by_id(id).has_value()) {
+        vlog(cluster::clusterlog.info, "Link {} not found", id);
+        return errc::does_not_exist;
+    }
+
+    _link_metadata[id].state.mirror_topics.erase(cmd.topic);
+    _topic_name_index.erase(cmd.topic);
     _link_revision_index[id] = revision;
     run_callbacks(id, revision);
     return errc::success;

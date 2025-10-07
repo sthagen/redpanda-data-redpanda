@@ -1725,21 +1725,29 @@ group_manager::offset_commit(offset_commit_request&& r) {
 }
 
 ss::future<offset_fetch_response>
-group_manager::offset_fetch(offset_fetch_request&& r) {
-    auto error = validate_group_status(
-      r.ntp, r.data.group_id, offset_fetch_api::key, true);
-    if (error != error_code::none) {
-        return ss::make_ready_future<offset_fetch_response>(
-          offset_fetch_response(error));
-    }
+group_manager::offset_fetch(offset_fetch_request r) {
+    const auto require_stable = r.data.require_stable;
+    offset_fetch_response response;
 
-    auto group = get_group(r.data.group_id);
-    if (!group) {
-        return ss::make_ready_future<offset_fetch_response>(
-          offset_fetch_response(r.data.topics));
-    }
+    for (auto& g_req : r.data.groups) {
+        auto& g_res = response.data.groups.emplace_back();
+        auto error = validate_group_status(
+          r.ntp, g_req.group_id, offset_fetch_api::key, true);
+        if (error != error_code::none) {
+            g_res.group_id = std::move(g_req.group_id);
+            g_res.error_code = error;
+            continue;
+        }
 
-    return group->handle_offset_fetch(std::move(r)).finally([group] {});
+        auto group = get_group(g_req.group_id);
+        if (!group) {
+            g_res = offset_fetch_response::make_group(std::move(g_req));
+        } else {
+            g_res = co_await group->handle_offset_fetch(
+              std::move(g_req), require_stable);
+        }
+    }
+    co_return response;
 }
 
 ss::future<offset_delete_response>

@@ -11,7 +11,7 @@
 #include "cloud_topics/data_plane_impl.h"
 
 #include "base/outcome.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_topics/batch_cache/batch_cache.h"
 #include "cloud_topics/cluster_services.h"
 #include "cloud_topics/data_plane_api.h"
@@ -41,7 +41,7 @@ public:
 
     ss::future<> construct(
       seastar::sharded<cloud_io::remote>* io,
-      seastar::sharded<cloud_storage::cache>* cache,
+      seastar::sharded<cloud_io::cache>* cache,
       cloud_storage_clients::bucket_name bucket,
       seastar::sharded<storage::api>* storage_api,
       seastar::sharded<cluster::cluster_epoch_service<ss::lowres_clock>>*
@@ -152,7 +152,7 @@ private:
 ss::future<std::unique_ptr<data_plane_api>> make_data_plane(
   ss::sstring logger_name,
   ss::sharded<cloud_io::remote>* remote,
-  ss::sharded<cloud_storage::cache>* cache,
+  ss::sharded<cloud_io::cache>* cache,
   cloud_storage_clients::bucket_name bucket,
   ss::sharded<storage::api>* log_manager,
   seastar::sharded<cluster::cluster_epoch_service<>>* cluster_services) {

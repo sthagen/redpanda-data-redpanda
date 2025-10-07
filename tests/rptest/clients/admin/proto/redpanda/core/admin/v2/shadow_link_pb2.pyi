@@ -278,13 +278,16 @@ class DeleteShadowLinkRequest(google.protobuf.message.Message):
     """Request to delete a shadow link"""
     DESCRIPTOR: google.protobuf.descriptor.Descriptor
     NAME_FIELD_NUMBER: builtins.int
+    FORCE_FIELD_NUMBER: builtins.int
     name: builtins.str
     'The name of the link to delete'
+    force: builtins.bool
+    "By default, DeleteShadowLink will fail if there are any active Shadow\n    Topics.  Set this flag to 'true' if you wish to delete the link while\n    there are active shadow topics.\n    "
 
-    def __init__(self, *, name: builtins.str=...) -> None:
+    def __init__(self, *, name: builtins.str=..., force: builtins.bool=...) -> None:
         ...
 
-    def ClearField(self, field_name: typing.Literal['name', b'name']) -> None:
+    def ClearField(self, field_name: typing.Literal['force', b'force', 'name', b'name']) -> None:
         ...
 global___DeleteShadowLinkRequest = DeleteShadowLinkRequest
 

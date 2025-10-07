@@ -380,7 +380,7 @@ void async_manifest_view_cursor::on_timeout() {
 
 async_manifest_view::async_manifest_view(
   ss::sharded<remote>& remote,
-  ss::sharded<cache>& cache,
+  ss::sharded<cloud_io::cache>& cache,
   const partition_manifest& stm_manifest,
   cloud_storage_clients::bucket_name bucket,
   const remote_path_provider& path_provider)

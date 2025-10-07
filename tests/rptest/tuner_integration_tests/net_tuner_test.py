@@ -82,7 +82,7 @@ class NetTunerTest(RedpandaTest):
         )
 
         assert len(interrupt_ids) == len(expected_interrupt_setup.interrupts_masks), (
-            "Got more interrupts/queues than expected"
+            f"Got more interrupts/queues than expected, got {interrupt_ids} expected {expected_interrupt_setup.interrupts_masks}"
         )
 
         for interrupt_id, target_mask in zip(
@@ -182,10 +182,30 @@ class NetTunerTest(RedpandaTest):
         self.start_rp()
 
         expected_interrupt_setup = self.ExpectedInterruptSetup(
-            interrupts_masks=["8", "8", "8", "8"],
+            interrupts_masks=["8"],
             redpanda_cores={0, 1, 2},
             rps_cpu_mask="7",
-            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 4),
+            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 1),
+            rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
+        )
+
+        self._test_interrupt_config(self.node, self.rpk, expected_interrupt_setup)
+
+    @cluster(num_nodes=1)
+    def test_tune_net_dedicated_1_core_no_rps_rfs(self):
+        self.rpk.config_set("rpk.cores_per_dedicated_interrupt_core", "4")
+        self.rpk.config_set("rpk.allow_dedicated_interrupt_mode", "true")
+        self.rpk.config_set("rpk.allow_rps_rfs_tuner", "false")
+
+        self.rpk.tune("net")
+
+        self.start_rp()
+
+        expected_interrupt_setup = self.ExpectedInterruptSetup(
+            interrupts_masks=["8"],
+            redpanda_cores={0, 1, 2},
+            rps_cpu_mask="0",
+            rps_cpu_flow_count=0,
             rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
         )
 
@@ -201,10 +221,10 @@ class NetTunerTest(RedpandaTest):
         self.start_rp()
 
         expected_interrupt_setup = self.ExpectedInterruptSetup(
-            interrupts_masks=["4", "4", "8", "8"],
+            interrupts_masks=["4", "8"],
             redpanda_cores={0, 1},
             rps_cpu_mask="3",
-            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 4),
+            rps_cpu_flow_count=int(self.TARGET_RFS_TABLE_SIZE / 2),
             rfs_table_size=self.TARGET_RFS_TABLE_SIZE,
         )
 

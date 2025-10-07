@@ -17,6 +17,8 @@ type EthtoolWrapper interface {
 	DriverName(string) (string, error)
 	Features(string) (map[string]bool, error)
 	Change(string, map[string]bool) error
+	GetChannels(string) (ethtool.Channels, error)
+	SetChannels(string, ethtool.Channels) (ethtool.Channels, error)
 }
 
 func NewEthtoolWrapper() (EthtoolWrapper, error) {

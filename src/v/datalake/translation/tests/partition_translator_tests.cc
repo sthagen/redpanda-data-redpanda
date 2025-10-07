@@ -204,9 +204,6 @@ public:
         co_return std::make_error_code(std::errc());
     }
 
-    void update_commit_lag(std::optional<kafka::offset>) const final {}
-    void update_translation_lag(kafka::offset) const final {}
-
 private:
     fake_test_ctx& _test_ctx;
 };
@@ -338,6 +335,10 @@ public:
     }
 
     size_t buffered_bytes() const final { return _buffered_bytes; }
+
+    void report_translation_lag(int64_t) final {}
+
+    void report_commit_lag(int64_t) final {}
 
 private:
     size_t _translated_bytes{0};

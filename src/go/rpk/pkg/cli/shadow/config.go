@@ -75,12 +75,13 @@ func generateSampleConfig() *ShadowLinkConfig {
 	return &ShadowLinkConfig{
 		Name: "sample-shadow-link",
 		ClientOptions: &ShadowLinkClientOptions{
-			BootstrapServers: []string{"localhost:9092"},
-			SourceClusterID:  "source-cluster-id",
+			BootstrapServers: []string{"localhost:9092", "localhost:19092"},
+			SourceClusterID:  "optional-source-cluster-id",
 			TLSSettings: &TLSFileSettings{
+				Enabled:  true,
 				CAPath:   "/path/to/ca.crt",
-				KeyPath:  "/path/to/client.key",
-				CertPath: "/path/to/client.crt",
+				KeyPath:  "/path/to/optional/client.key",
+				CertPath: "/path/to/optional/client.crt",
 			},
 			AuthenticationConfiguration: &ScramConfig{
 				Username:       "username",
@@ -101,6 +102,11 @@ func generateSampleConfig() *ShadowLinkConfig {
 					PatternType: PatternTypeLiteral,
 					FilterType:  FilterTypeInclude,
 					Name:        "*",
+				},
+				{
+					PatternType: PatternTypePrefix,
+					FilterType:  FilterTypeExclude,
+					Name:        "foo-",
 				},
 			},
 			ShadowedTopicProperties: []string{"retention.ms", "segment.ms"},
@@ -124,6 +130,28 @@ func generateSampleConfig() *ShadowLinkConfig {
 					PatternType: PatternTypeLiteral,
 					FilterType:  FilterTypeInclude,
 					Name:        "*",
+				},
+			},
+			ScramCredFilters: []*NameFilter{
+				{
+					PatternType: PatternTypePrefix,
+					FilterType:  FilterTypeExclude,
+					Name:        "admin-",
+				},
+			},
+			ACLFilters: []*ACLFilter{
+				{
+					ResourceFilter: &ACLResourceFilter{
+						ResourceType: ACLResourceTopic,
+						PatternType:  ACLPatternPrefixed,
+						Name:         "test-",
+					},
+					AccessFilter: &ACLAccessFilter{
+						Principal:      "User:admin",
+						Operation:      ACLOperationAny,
+						PermissionType: ACLPermissionTypeAllow,
+						Host:           "*",
+					},
 				},
 			},
 		},

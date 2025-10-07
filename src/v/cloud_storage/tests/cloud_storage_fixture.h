@@ -11,8 +11,8 @@
 #pragma once
 
 #include "base/vlog.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_io/tests/s3_imposter.h"
-#include "cloud_storage/cache_service.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/tests/common_def.h"
 #include "cloud_storage/types.h"
@@ -53,15 +53,14 @@ struct cloud_storage_fixture : s3_imposter_fixture {
             config::mock_binding<uint16_t>(3))
           .get();
 
-        cache.invoke_on_all([](cloud_storage::cache& c) { return c.start(); })
-          .get();
+        cache.invoke_on_all([](cloud_io::cache& c) { return c.start(); }).get();
 
         // Supply some phony disk stats so that the cache doesn't panic and
         // think it has zero bytes of space
         cache
           .invoke_on(
             ss::shard_id{0},
-            [](cloud_storage::cache& c) {
+            [](cloud_io::cache& c) {
                 c.notify_disk_status(
                   100ULL * 1024 * 1024 * 1024,
                   50ULL * 1024 * 1024 * 1024,
@@ -112,7 +111,7 @@ struct cloud_storage_fixture : s3_imposter_fixture {
     }
 
     ss::tmp_dir tmp_directory;
-    ss::sharded<cloud_storage::cache> cache;
+    ss::sharded<cloud_io::cache> cache;
     ss::sharded<cloud_storage_clients::client_pool> pool;
     ss::sharded<cloud_io::remote> cloud_io;
     ss::sharded<remote> api;

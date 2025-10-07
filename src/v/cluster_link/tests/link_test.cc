@@ -111,7 +111,7 @@ public:
     ss::future<> remove_link(const model::name_t& name) {
         auto id = _table.local().find_id_by_name(name);
         co_await _table.local().apply_update(
-          ::cluster::cluster_link::testing::create_remove_command(name));
+          ::cluster::cluster_link::testing::create_remove_command(name, false));
         if (id.has_value()) {
             _manager->on_link_change(id.value(), {});
         }

@@ -9,7 +9,7 @@
  */
 #pragma once
 
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage_clients/types.h"
@@ -23,7 +23,7 @@ class remote_file {
 public:
     remote_file(
       remote& r,
-      cache& cache,
+      cloud_io::cache& cache,
       cloud_storage_clients::bucket_name bucket,
       remote_segment_path remote_path,
       retry_chain_node& retry_parent,
@@ -55,7 +55,7 @@ private:
     put_in_cache(uint64_t size_bytes, ss::input_stream<char> s);
 
     remote& _remote;
-    cache& _cache;
+    cloud_io::cache& _cache;
     cloud_storage_clients::bucket_name _bucket;
     remote_segment_path _remote_path;
     retry_chain_node _rtc;

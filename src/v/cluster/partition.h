@@ -52,7 +52,7 @@ public:
     partition(
       consensus_ptr r,
       ss::sharded<cloud_storage::remote>&,
-      ss::sharded<cloud_storage::cache>&,
+      ss::sharded<cloud_io::cache>&,
       ss::lw_shared_ptr<const archival::configuration>,
       ss::sharded<features::feature_table>&,
       ss::sharded<archival::upload_housekeeping_service>&,
@@ -439,7 +439,7 @@ private:
     ss::sharded<features::feature_table>& _feature_table;
     ss::lw_shared_ptr<const archival::configuration> _archival_conf;
     ss::sharded<cloud_storage::remote>& _cloud_storage_api;
-    ss::sharded<cloud_storage::cache>& _cloud_storage_cache;
+    ss::sharded<cloud_io::cache>& _cloud_storage_cache;
     ss::shared_ptr<cloud_storage::partition_probe> _cloud_storage_probe;
     ss::shared_ptr<cloud_storage::async_manifest_view>
       _cloud_storage_manifest_view;

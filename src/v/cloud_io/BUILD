@@ -145,3 +145,43 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
 )
+
+redpanda_cc_library(
+    name = "cache",
+    srcs = [
+        "access_time_tracker.cc",
+        "cache_probe.cc",
+        "cache_service.cc",
+        "recursive_directory_walker.cc",
+    ],
+    hdrs = [
+        "access_time_tracker.h",
+        "cache_probe.h",
+        "cache_service.h",
+        "recursive_directory_walker.h",
+    ],
+    implementation_deps = [
+        ":logger",
+        "//src/v/bytes:iobuf_parser",
+        "//src/v/container:chunked_vector",
+        "//src/v/serde",
+        "//src/v/serde:enum",
+        "//src/v/serde:sstring",
+        "//src/v/ssx:future_util",
+        "//src/v/ssx:watchdog",
+        "//src/v/utils:human",
+        "@abseil-cpp//absl/container:btree",
+        "@re2",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/bytes:iostream",
+        "//src/v/cloud_io:basic_cache_service_api",
+        "//src/v/config",
+        "//src/v/metrics",
+        "//src/v/ssx:semaphore",
+        "//src/v/storage:disk",
+        "@seastar",
+    ],
+)

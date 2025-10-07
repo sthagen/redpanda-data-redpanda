@@ -11,6 +11,7 @@
 
 #include "cluster_link/model/types.h"
 
+#include "base/format_to.h"
 #include "utils/to_string.h"
 
 #include <seastar/util/variant_utils.hh>
@@ -245,10 +246,18 @@ update_cluster_link_configuration_cmd::copy() const {
     return copy;
 }
 
+fmt::iterator delete_mirror_topic_cmd::format_to(fmt::iterator it) const {
+    return fmt::format_to(it, "{{topic: {}}}", topic);
+}
 auto format_as(acl_resource r) { return to_string_view(r); }
 auto format_as(acl_pattern p) { return to_string_view(p); }
 auto format_as(acl_operation o) { return to_string_view(o); }
 auto format_as(acl_permission_type p) { return to_string_view(p); }
+
+fmt::iterator delete_shadow_link_cmd::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it, "{{ link_name: {}, force: {} }}", link_name, force);
+}
 } // namespace cluster_link::model
 
 namespace cluster_link::rpc {

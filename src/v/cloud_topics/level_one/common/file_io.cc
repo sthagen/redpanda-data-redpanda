@@ -77,7 +77,7 @@ file_io::file_io(
   std::filesystem::path staging_dir,
   cloud_io::remote* remote,
   cloud_storage_clients::bucket_name bucket,
-  cloud_storage::cache* cache)
+  cloud_io::cache* cache)
   : _remote(remote)
   , _bucket(std::move(bucket))
   , _staging_dir(std::move(staging_dir))
@@ -140,7 +140,7 @@ file_io::put_object(object_id oid, staging_file* file, ss::abort_source* as) {
 
 ss::future<uint64_t> file_io::save_to_cache(
   ss::input_stream<char> stream,
-  cloud_storage::space_reservation_guard* reservation,
+  cloud_io::space_reservation_guard* reservation,
   std::filesystem::path cache_key,
   uint64_t content_length) {
     co_await _cache->put(std::move(cache_key), stream, *reservation);
@@ -184,7 +184,7 @@ file_io::read_object(object_extent extent, ss::abort_source* as) {
         }
         // TODO(cloud_topics): reserving space should also take an abort_source
         auto reservation_fut = co_await ss::coroutine::as_future<
-          cloud_storage::space_reservation_guard>(
+          cloud_io::space_reservation_guard>(
           _cache->reserve_space(extent.size, 1));
         if (reservation_fut.failed()) {
             vlog(

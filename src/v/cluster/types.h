@@ -3462,14 +3462,14 @@ struct remove_cluster_link_request
       remove_cluster_link_request,
       serde::version<0>,
       serde::compat_version<0>> {
-    ::cluster_link::model::name_t name;
+    ::cluster_link::model::delete_shadow_link_cmd cmd;
     model::timeout_clock::duration timeout{};
 
     friend bool operator==(
       const remove_cluster_link_request&, const remove_cluster_link_request&)
       = default;
 
-    auto serde_fields() { return std::tie(name, timeout); }
+    auto serde_fields() { return std::tie(cmd, timeout); }
 };
 
 struct remove_cluster_link_response
@@ -3607,6 +3607,36 @@ struct update_cluster_link_configuration_response
     friend bool operator==(
       const update_cluster_link_configuration_response&,
       const update_cluster_link_configuration_response&)
+      = default;
+
+    auto serde_fields() { return std::tie(ec); }
+};
+
+struct delete_mirror_topic_request
+  : serde::envelope<
+      delete_mirror_topic_request,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    ::cluster_link::model::id_t link_id;
+    ::cluster_link::model::delete_mirror_topic_cmd cmd;
+    model::timeout_clock::duration timeout{};
+
+    friend bool operator==(
+      const delete_mirror_topic_request&, const delete_mirror_topic_request&)
+      = default;
+
+    auto serde_fields() { return std::tie(link_id, cmd, timeout); }
+};
+
+struct delete_mirror_topic_response
+  : serde::envelope<
+      delete_mirror_topic_response,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    cluster_link::errc ec{cluster_link::errc::success};
+
+    friend bool operator==(
+      const delete_mirror_topic_response&, const delete_mirror_topic_response&)
       = default;
 
     auto serde_fields() { return std::tie(ec); }

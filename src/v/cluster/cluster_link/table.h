@@ -113,6 +113,11 @@ private:
       const ::cluster_link::model::update_mirror_topic_properties_cmd&,
       model::revision_id);
 
+    cluster::cluster_link::errc delete_mirror_topic(
+      ::cluster_link::model::id_t,
+      const ::cluster_link::model::delete_mirror_topic_cmd& cmd,
+      model::revision_id);
+
     cluster::cluster_link::errc update_cluster_link_configuration(
       ::cluster_link::model::id_t,
       const ::cluster_link::model::update_cluster_link_configuration_cmd&,

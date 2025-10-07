@@ -54,7 +54,7 @@ public:
       ss::sharded<cluster::partition_leaders_table>*,
       ss::sharded<cluster::shard_table>*,
       ss::sharded<cloud_io::remote>*,
-      ss::sharded<cloud_storage::cache>*,
+      ss::sharded<cloud_io::cache>*,
       ss::sharded<cluster::metadata_cache>*,
       ss::sharded<rpc::connection_cache>*,
       cloud_storage_clients::bucket_name,

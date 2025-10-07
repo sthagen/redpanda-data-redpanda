@@ -174,10 +174,14 @@ type (
 		BallastFilePath          string `yaml:"ballast_file_path,omitempty" json:"ballast_file_path"`
 		BallastFileSize          string `yaml:"ballast_file_size,omitempty" json:"ballast_file_size"`
 		WellKnownIo              string `yaml:"well_known_io,omitempty" json:"well_known_io"`
+		// Use GetAllowRpsRfsTuner to read
+		AllowRpsRfsTuner *bool `yaml:"allow_rps_rfs_tuner,omitempty" json:"allow_rps_rfs_tuner"`
 		// Use GetCoresPerDedicatedInterruptCore to read
 		CoresPerDedicatedInterruptCore *int `yaml:"cores_per_dedicated_interrupt_core,omitempty" json:"cores_per_dedicated_interrupt_core"`
 		// Use GetAllowDedicatedInterruptMode to read
 		AllowDedicatedInterruptMode *bool `yaml:"allow_dedicated_interrupt_mode,omitempty" json:"allow_dedicated_interrupt_mode"`
+		// Use GetAllowRxQueueTuner to read
+		AllowRxQueueTuner *bool `yaml:"allow_rx_queue_tuner,omitempty" json:"allow_rx_queue_tuner"`
 	}
 
 	RpkKafkaAPI struct {
@@ -215,6 +219,20 @@ func (t *RpkNodeTuners) GetAllowDedicatedInterruptMode() bool {
 		return *t.AllowDedicatedInterruptMode
 	}
 	return false
+}
+
+func (t *RpkNodeTuners) GetAllowRxQueueTuner() bool {
+	if t.AllowRxQueueTuner != nil {
+		return *t.AllowRxQueueTuner
+	}
+	return true
+}
+
+func (t *RpkNodeTuners) GetAllowRpsRfsTuner() bool {
+	if t.AllowRpsRfsTuner != nil {
+		return *t.AllowRpsRfsTuner
+	}
+	return true
 }
 
 func (t *TLS) Config(fs afero.Fs) (*tls.Config, error) {

@@ -15,6 +15,7 @@
 #include "cloud_topics/level_one/common/object.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "cloud_topics/level_one/metastore/metastore.h"
+#include "cloud_topics/reconciler/reconciler_probe.h"
 #include "cloud_topics/reconciler/reconciliation_consumer.h"
 #include "cluster/partition.h"
 #include "container/chunked_hash_map.h"
@@ -95,6 +96,8 @@ public:
 
     ss::future<> start();
     ss::future<> stop();
+
+    void setup_metrics_for_tests() { _probe.setup_metrics(); }
 
     void attach_partition(
       const model::ntp&,
@@ -256,6 +259,7 @@ private:
     l1::metastore* _metastore;
     ss::gate _gate;
     ss::abort_source _as;
+    reconciler_probe _probe;
 };
 
 } // namespace cloud_topics::reconciler

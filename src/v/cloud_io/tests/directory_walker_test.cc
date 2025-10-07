@@ -11,8 +11,8 @@
 #include "base/seastarx.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "cloud_storage/access_time_tracker.h"
-#include "cloud_storage/recursive_directory_walker.h"
+#include "cloud_io/access_time_tracker.h"
+#include "cloud_io/recursive_directory_walker.h"
 #include "test_utils/tmp_dir.h"
 
 #include <seastar/core/file.hh>
@@ -30,10 +30,10 @@
 #include <chrono>
 #include <set>
 
-using namespace cloud_storage;
+using namespace cloud_io;
 using namespace std::chrono_literals;
 
-std::set<std::string> result_paths(cloud_storage::walk_result& r) {
+std::set<std::string> result_paths(walk_result& r) {
     std::set<std::string> paths;
     for (const auto& f : r.regular_files) {
         paths.insert(f.path);
@@ -43,7 +43,7 @@ std::set<std::string> result_paths(cloud_storage::walk_result& r) {
 
 SEASTAR_THREAD_TEST_CASE(one_level) {
     temporary_dir tmpdir("directory-walker");
-    cloud_storage::recursive_directory_walker _walker;
+    recursive_directory_walker _walker;
     const std::filesystem::path target_dir = tmpdir.get_path();
     const std::filesystem::path file_path1 = target_dir / "file1.txt";
     const std::filesystem::path file_path2 = target_dir / "file2.txt";
@@ -72,7 +72,7 @@ SEASTAR_THREAD_TEST_CASE(one_level) {
 
 SEASTAR_THREAD_TEST_CASE(three_levels) {
     temporary_dir tmpdir("directory-walker");
-    cloud_storage::recursive_directory_walker _walker;
+    recursive_directory_walker _walker;
     const std::filesystem::path target_dir = tmpdir.get_path();
     const std::filesystem::path file_path1 = target_dir / "a" / "file1.txt";
     const std::filesystem::path file_path2 = target_dir / "file2.txt";
@@ -109,7 +109,7 @@ SEASTAR_THREAD_TEST_CASE(three_levels) {
 
 SEASTAR_THREAD_TEST_CASE(no_files) {
     temporary_dir tmpdir("directory-walker");
-    cloud_storage::recursive_directory_walker _walker;
+    recursive_directory_walker _walker;
     const std::filesystem::path target_dir = tmpdir.get_path();
     const std::filesystem::path dir1 = target_dir / "a" / "b";
     const std::filesystem::path dir2 = target_dir / "c";
@@ -126,7 +126,7 @@ SEASTAR_THREAD_TEST_CASE(no_files) {
 
 SEASTAR_THREAD_TEST_CASE(empty_dir) {
     temporary_dir tmpdir("directory-walker");
-    cloud_storage::recursive_directory_walker _walker;
+    recursive_directory_walker _walker;
     const std::filesystem::path target_dir = tmpdir.get_path();
 
     access_time_tracker tracker;
@@ -153,7 +153,7 @@ void write_to_file(auto& target_file, uint64_t size) {
 
 SEASTAR_THREAD_TEST_CASE(total_size_correct) {
     temporary_dir tmpdir("directory-walker");
-    cloud_storage::recursive_directory_walker _walker;
+    recursive_directory_walker _walker;
     const std::filesystem::path target_dir = tmpdir.get_path();
     const std::filesystem::path file_path1 = target_dir / "a" / "file1.txt";
     const std::filesystem::path file_path2 = target_dir / "file2.txt";

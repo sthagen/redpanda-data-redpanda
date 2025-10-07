@@ -10,8 +10,8 @@
 
 #pragma once
 
+#include "cloud_io/cache_service.h"
 #include "cloud_io/remote.h"
-#include "cloud_storage/cache_service.h"
 #include "cloud_topics/level_one/common/abstract_io.h"
 #include "cloud_topics/level_one/common/object_id.h"
 #include "model/fundamental.h"
@@ -31,7 +31,7 @@ public:
       std::filesystem::path staging_dir,
       cloud_io::remote* remote,
       cloud_storage_clients::bucket_name bucket,
-      cloud_storage::cache* cache);
+      cloud_io::cache* cache);
     ss::future<std::expected<std::unique_ptr<staging_file>, errc>>
     create_tmp_file() override;
 
@@ -47,14 +47,14 @@ public:
 private:
     ss::future<uint64_t> save_to_cache(
       ss::input_stream<char>,
-      cloud_storage::space_reservation_guard*,
+      cloud_io::space_reservation_guard*,
       std::filesystem::path,
       uint64_t content_length);
 
     cloud_io::remote* _remote;
     cloud_storage_clients::bucket_name _bucket;
     std::filesystem::path _staging_dir;
-    cloud_storage::cache* _cache;
+    cloud_io::cache* _cache;
 };
 
 } // namespace cloud_topics::l1

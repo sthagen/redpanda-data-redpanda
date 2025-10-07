@@ -191,7 +191,7 @@ SEASTAR_THREAD_TEST_CASE(bounded_property_example) {
 
     BOOST_CHECK_EQUAL(cfg.bounded_int.example(), "18432");
     BOOST_CHECK_EQUAL(cfg.bounded_int_opt.example(), "18432");
-    BOOST_CHECK(cfg.bounded_opt_ms.example()->empty());
+    BOOST_CHECK(!cfg.bounded_opt_ms.example().has_value());
     BOOST_CHECK_EQUAL(cfg.minmax_bounded_opt_ms.example(), "52");
 }
 

@@ -11,12 +11,10 @@
 
 #pragma once
 
+#include "redpanda/admin/aip_common_config.h"
 #include "serde/protobuf/base.h"
 
-#include <fmt/ranges.h>
-
 #include <memory>
-#include <vector>
 
 namespace admin {
 
@@ -37,46 +35,22 @@ private:
 
 struct aip_filter_config {
     // A getter for converting field numbers -> a value_t
-    ss::noncopyable_function<serde::pb::field::value_t(
-      std::span<const int32_t> field_numbers)>
-      field_type_getter;
+    field_type_getter_t field_type_getter;
 
     // A converter from field path in filter expression to field numbers.
     // If std::nullopt is returned the filter specified a path that does
     // not exist and filter creation will throw an exception.
-    ss::noncopyable_function<std::optional<std::vector<int32_t>>(
-      std::span<std::string_view> field_path)>
-      field_path_converter;
+    field_path_converter_t field_path_converter;
 
     // The user specified filter expression.
     ss::sstring filter_expression;
 };
 
-template<typename T>
-concept ProtobufMessage = std::derived_from<T, serde::pb::base_message>;
-
-template<ProtobufMessage MsgType>
+template<serde::pb::Message MsgType>
 aip_filter_config make_aip_filter_config(std::string_view filter_expression) {
     return aip_filter_config{
-      .field_type_getter =
-        [](std::span<const int32_t> field_nums) {
-            auto default_obj = MsgType{};
-            auto val = default_obj.lookup_field(field_nums);
-            if (!val) {
-                throw std::runtime_error(
-                  fmt::format(
-                    "Unknown field lookup for field numbers: {}", field_nums));
-            }
-            return std::move(val->value);
-        },
-      .field_path_converter = [](std::span<std::string_view> field_path)
-        -> std::optional<std::vector<int32_t>> {
-          auto res = std::vector<int32_t>{};
-          if (!MsgType::convert_field_path_to_numbers(field_path, &res)) {
-              return std::nullopt;
-          }
-          return res;
-      },
+      .field_type_getter = make_field_type_getter<MsgType>(),
+      .field_path_converter = make_field_path_converter<MsgType>(),
       .filter_expression = ss::sstring{filter_expression},
     };
 }

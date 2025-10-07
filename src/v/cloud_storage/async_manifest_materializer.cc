@@ -10,7 +10,7 @@
 
 #include "cloud_storage/async_manifest_materializer.h"
 
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/materialized_resources.h"
 #include "cloud_storage/remote.h"
 #include "ssx/future-util.h"
@@ -22,7 +22,7 @@ namespace cloud_storage {
 async_manifest_materializer::async_manifest_materializer(
   cloud_storage_clients::bucket_name bucket,
   ss::sharded<remote>* remote,
-  ss::sharded<cache>* cache,
+  ss::sharded<cloud_io::cache>* cache,
   const remote_path_provider* path_provider,
   const partition_manifest* stm_manifest)
   : _rtcnode(_as)
@@ -248,10 +248,10 @@ async_manifest_materializer::do_materialize_manifest(
         // hydrate manifest from the cloud.
         auto cache_status = co_await _cache->local().is_cached(path());
         switch (cache_status) {
-        case cache_element_status::in_progress:
+        case cloud_io::cache_element_status::in_progress:
             vlog(_ctxlog.warn, "Concurrent manifest hydration, path {}", path);
             co_return error_outcome::repeat;
-        case cache_element_status::not_available: {
+        case cloud_io::cache_element_status::not_available: {
             auto res = co_await hydrate_manifest(path);
             if (res.has_failure()) {
                 if (res.error() == error_outcome::shutting_down) {
@@ -267,7 +267,7 @@ async_manifest_materializer::do_materialize_manifest(
             }
             manifest = std::move(res.value());
         } break;
-        case cache_element_status::available: {
+        case cloud_io::cache_element_status::available: {
             auto res = co_await _cache->local().get(path());
             if (!res.has_value()) {
                 vlog(

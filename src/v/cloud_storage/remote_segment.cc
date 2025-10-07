@@ -13,7 +13,7 @@
 #include "base/vlog.h"
 #include "bytes/iobuf.h"
 #include "bytes/iostream.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/download_exception.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/materialized_resources.h"
@@ -97,7 +97,7 @@ generate_log_prefix(const segment_meta& meta, const model::ntp& ntp) {
 
 remote_segment::remote_segment(
   remote& r,
-  cache& c,
+  cloud_io::cache& c,
   cloud_storage_clients::bucket_name bucket,
   const remote_segment_path& path,
   const model::ntp& ntp,
@@ -123,7 +123,7 @@ remote_segment::remote_segment(
   , _rtc(&parent)
   , _ctxlog(cst_log, _rtc, generate_log_prefix(meta, ntp))
   , _wait_list(expiry_handler_impl)
-  , _cache_backoff_jitter(cache_thrash_backoff)
+  , _cache_backoff_jitter(cloud_io::cache_thrash_backoff)
   , _compacted(meta.is_compacted)
   , _sname_format(meta.sname_format)
   , _metadata_size_hint(meta.metadata_size_hint)
@@ -380,7 +380,7 @@ remote_segment::maybe_get_offsets(model::timestamp ts) {
  */
 ss::future<uint64_t> remote_segment::put_segment_in_cache_and_create_index(
   uint64_t size_bytes,
-  space_reservation_guard& reservation,
+  cloud_io::space_reservation_guard& reservation,
   ss::input_stream<char> s) {
     offset_index tmpidx(
       get_base_rp_offset(),
@@ -433,7 +433,7 @@ ss::future<uint64_t> remote_segment::put_segment_in_cache_and_create_index(
 
 ss::future<uint64_t> remote_segment::put_segment_in_cache(
   uint64_t size_bytes,
-  space_reservation_guard& reservation,
+  cloud_io::space_reservation_guard& reservation,
   ss::input_stream<char> s) {
     try {
         co_await _cache.put(_path, s, reservation).finally([&s] {
@@ -452,7 +452,7 @@ ss::future<uint64_t> remote_segment::put_segment_in_cache(
 }
 
 ss::future<> remote_segment::put_chunk_in_cache(
-  space_reservation_guard& reservation,
+  cloud_io::space_reservation_guard& reservation,
   ss::input_stream<char> stream,
   chunk_start_offset_t chunk_start) {
     try {
@@ -472,7 +472,7 @@ ss::future<> remote_segment::put_chunk_in_cache(
 ss::future<> remote_segment::do_hydrate_segment() {
     retry_chain_node local_rtc(
       config::shard_local_cfg().cloud_storage_segment_upload_timeout_ms(),
-      cache_hydration_backoff,
+      cloud_io::cache_hydration_backoff,
       &_rtc);
 
     // RAII reservation object represents the disk space this put will consume
@@ -506,7 +506,7 @@ ss::future<> remote_segment::do_hydrate_segment() {
 ss::future<> remote_segment::do_hydrate_index() {
     retry_chain_node local_rtc(
       config::shard_local_cfg().cloud_storage_segment_upload_timeout_ms(),
-      cache_hydration_backoff,
+      cloud_io::cache_hydration_backoff,
       &_rtc);
 
     offset_index ix(
@@ -540,7 +540,7 @@ ss::future<> remote_segment::do_hydrate_txrange() {
     ss::gate::holder guard(_gate);
     retry_chain_node local_rtc(
       config::shard_local_cfg().cloud_storage_segment_upload_timeout_ms(),
-      cache_hydration_backoff,
+      cloud_io::cache_hydration_backoff,
       &_rtc);
     if (_sname_format == segment_name_format::v3 && _metadata_size_hint == 0) {
         // The tx-manifest is empty, no need to download it, and
@@ -1087,7 +1087,7 @@ ss::future<> remote_segment::hydrate(model::opt_abort_source_t as) {
 ss::future<> remote_segment::hydrate_chunk(chunk_start_offset_t start_offset) {
     const auto path_to_start = get_path_to_chunk(start_offset);
     if (const auto status = co_await _cache.is_cached(path_to_start);
-        status == cache_element_status::available) {
+        status == cloud_io::cache_element_status::available) {
         vlog(
           _ctxlog.debug,
           "skipping chunk hydration for chunk path {}, it is already in "
@@ -1098,7 +1098,7 @@ ss::future<> remote_segment::hydrate_chunk(chunk_start_offset_t start_offset) {
 
     retry_chain_node rtc{
       config::shard_local_cfg().cloud_storage_segment_upload_timeout_ms(),
-      cache_hydration_backoff,
+      cloud_io::cache_hydration_backoff,
       &_rtc};
 
     auto byte_range = _chunks_api->get_byte_range_for_chunk(
@@ -1618,7 +1618,7 @@ std::ostream& operator<<(std::ostream& os, hydration_request::kind kind) {
 }
 
 hydration_loop_state::hydration_loop_state(
-  cache& c, remote_segment_path root, retry_chain_logger& ctxlog)
+  cloud_io::cache& c, remote_segment_path root, retry_chain_logger& ctxlog)
   : _cache{c}
   , _root{std::move(root)}
   , _ctxlog{ctxlog} {}
@@ -1659,7 +1659,7 @@ ss::future<> hydration_loop_state::update_current_path_states() {
 ss::future<bool> hydration_loop_state::is_cache_thrashing() {
     for (auto& path_state : _states) {
         bool available = path_state.current_status
-                         != cache_element_status::not_available;
+                         != cloud_io::cache_element_status::not_available;
         path_state.was_cached |= available;
         if (!available && path_state.was_cached) {
             vlog(
@@ -1682,9 +1682,9 @@ ss::future<> hydration_loop_state::hydrate(size_t wait_list_size) {
 
     for (const auto& state : _states) {
         switch (state.current_status) {
-        case cache_element_status::available:
+        case cloud_io::cache_element_status::available:
             break;
-        case cache_element_status::not_available:
+        case cloud_io::cache_element_status::not_available:
             vlog(
               _ctxlog.info,
               "Hydrating {} {}, {} waiters",
@@ -1693,7 +1693,7 @@ ss::future<> hydration_loop_state::hydrate(size_t wait_list_size) {
               wait_list_size);
             fs.push_back(state.hydrate_action());
             break;
-        case cache_element_status::in_progress:
+        case cloud_io::cache_element_status::in_progress:
             // Ths means that we have two remote_segment instances running
             // in parallel. This is possible in case of extreme contention
             // when the materialized segment gets evicted and then

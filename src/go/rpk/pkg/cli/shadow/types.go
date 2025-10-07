@@ -72,6 +72,8 @@ type TLSSettings interface {
 }
 
 type TLSFileSettings struct {
+	// Whether or not TLS is enabled
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// Path to the CA
 	CAPath string `json:"ca_path,omitempty" yaml:"ca_path,omitempty"`
 	// Key and Cert are optional but if one is provided, then both must be
@@ -86,6 +88,8 @@ func (*TLSFileSettings) tlsSettingType() string {
 }
 
 type TLSPEMSettings struct {
+	// Whether or not TLS is enabled
+	Enabled bool `json:"enabled" yaml:"enabled"`
 	// The CA
 	CA string `json:"ca,omitempty" yaml:"ca,omitempty"`
 	// Key and Cert are optional but if one is provided, then both must be
@@ -172,7 +176,7 @@ type NameFilter struct {
 	FilterType FilterType `json:"filter_type,omitempty" yaml:"filter_type,omitempty"`
 	// The resource name, or "*"
 	// Note if "*", must be the _only_ character
-	// and `pattern_type` must be `PATTERN_TYPE_LITERAL`
+	// and `pattern_type` must be `LITERAL`
 	Name string `json:"name,omitempty" yaml:"name,omitempty"`
 }
 

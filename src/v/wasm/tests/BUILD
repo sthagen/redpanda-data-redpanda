@@ -231,6 +231,7 @@ redpanda_cc_gtest(
         "//src/v/metrics",
         "//src/v/model",
         "//src/v/test_utils:gtest",
+        "//src/v/test_utils:metrics",
         "//src/v/wasm:engine_probe",
         "//src/v/wasm:logger",
         "@googletest//:gtest",

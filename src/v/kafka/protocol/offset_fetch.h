@@ -50,35 +50,55 @@ struct offset_fetch_response final {
 
     offset_fetch_response_data data;
 
-    offset_fetch_response() = default;
-
-    offset_fetch_response(error_code error) { data.error_code = error; }
-
-    offset_fetch_response(const offset_fetch_request&, error_code error)
-      : offset_fetch_response(error) {}
-
-    offset_fetch_response(
-      std::optional<std::vector<offset_fetch_request_topic>>& topics) {
-        data.error_code = error_code::none;
-        if (topics) {
+    template<typename Topics>
+    static auto get_topics(auto topics) {
+        Topics result;
+        if (topics.has_value()) {
+            result.reserve(topics->size());
             for (auto& topic : *topics) {
-                chunked_vector<offset_fetch_response_partition> partitions;
+                decltype(Topics::value_type::partitions) partitions;
+                partitions.reserve(topic.partition_indexes.size());
                 for (auto id : topic.partition_indexes) {
-                    offset_fetch_response_partition p = {
+                    partitions.push_back({
                       .partition_index = id,
                       .committed_offset = model::offset(-1),
+                      .committed_leader_epoch = kafka::leader_epoch{-1},
                       .metadata = "",
                       .error_code = error_code::none,
-                    };
-                    partitions.push_back(std::move(p));
+                    });
                 }
-                offset_fetch_response_topic t = {
-                  .name = topic.name,
+                result.push_back({
+                  .name = std::move(topic.name),
                   .partitions = std::move(partitions),
-                };
-                data.topics.push_back(std::move(t));
+                });
             }
         }
+        return result;
+    }
+
+    static offset_fetch_response_group
+    make_group(offset_fetch_request_group request) {
+        using topics = decltype(offset_fetch_response_group::topics);
+        return offset_fetch_response_group{
+          .group_id = std::move(request.group_id),
+          .topics = get_topics<topics>(std::move(request.topics)),
+          .error_code = error_code::none};
+    }
+
+    offset_fetch_response() = default;
+
+    explicit offset_fetch_response(error_code error) {
+        data.error_code = error;
+    }
+
+    explicit offset_fetch_response(
+      const offset_fetch_request&, error_code error)
+      : offset_fetch_response(error) {}
+
+    explicit offset_fetch_response(
+      std::optional<chunked_vector<offset_fetch_request_topic>> topics) {
+        data.error_code = error_code::none;
+        data.topics = get_topics<decltype(data.topics)>(std::move(topics));
     }
 
     void encode(protocol::encoder& writer, api_version version) {

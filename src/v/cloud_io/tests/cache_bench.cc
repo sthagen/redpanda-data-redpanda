@@ -9,7 +9,7 @@
  */
 
 #include "base/seastarx.h"
-#include "cloud_storage/access_time_tracker.h"
+#include "cloud_io/access_time_tracker.h"
 #include "ssx/sformat.h"
 
 #include <seastar/testing/perf_tests.hh>
@@ -20,7 +20,7 @@ static std::chrono::system_clock::time_point make_ts(int64_t val) {
 }
 
 static void run_test(int test_scale) {
-    cloud_storage::access_time_tracker tracker;
+    cloud_io::access_time_tracker tracker;
     std::vector<ss::sstring> names;
     for (int i = 0; i < test_scale; i++) {
         names.push_back(ssx::sformat("name-{}", i));

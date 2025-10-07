@@ -210,7 +210,10 @@ bool compaction_source::preempted() const {
         return true;
     }
 
-    if (_state == compaction_job_state::stopped) {
+    // TODO: This will eventually change to better respect a hard/soft stop.
+    if (
+      _state == compaction_job_state::hard_stop
+      || _state == compaction_job_state::soft_stop) {
         return true;
     }
 

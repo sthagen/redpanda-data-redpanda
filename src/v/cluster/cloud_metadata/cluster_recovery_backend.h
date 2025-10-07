@@ -38,7 +38,7 @@ public:
       cluster::cluster_recovery_manager&,
       raft::group_manager&,
       cloud_storage::remote&,
-      cloud_storage::cache&,
+      cloud_io::cache&,
       cluster::members_table&,
       features::feature_table&,
       security::credential_store&,
@@ -100,7 +100,7 @@ private:
 
     // Remote with which to download recovery materials.
     cloud_storage::remote& _remote;
-    cloud_storage::cache& _cache;
+    cloud_io::cache& _cache;
 
     // Controller state for the current cluster.
     cluster::members_table& _members_table;

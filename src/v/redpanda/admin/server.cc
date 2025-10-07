@@ -13,7 +13,7 @@
 
 #include "base/vlog.h"
 #include "bytes/iostream.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote_path_provider.h"
 #include "cloud_storage/spillover_manifest.h"
@@ -300,7 +300,7 @@ admin_server::admin_server(
     topic_recovery_status_frontend,
   ss::sharded<storage::node>& storage_node,
   ss::sharded<memory_sampling>& memory_sampling_service,
-  ss::sharded<cloud_storage::cache>& cloud_storage_cache,
+  ss::sharded<cloud_io::cache>& cloud_storage_cache,
   ss::sharded<resources::cpu_profiler>& cpu_profiler,
   ss::sharded<transform::service>* transform_service,
   ss::sharded<security::audit::audit_log_manager>& audit_mgr,
@@ -1992,7 +1992,7 @@ void config_multi_property_validation(
     }
 
     // cloud_storage_cache_size/size_percent validation
-    if (auto invalid_cache = cloud_storage::cache::validate_cache_config(
+    if (auto invalid_cache = cloud_io::cache::validate_cache_config(
           updated_config);
         invalid_cache.has_value()) {
         auto name = ss::sstring(updated_config.cloud_storage_cache_size.name());

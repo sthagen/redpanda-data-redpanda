@@ -122,7 +122,7 @@ public:
     ss::sharded<stress_fiber_manager> stress_fiber_manager;
 
     // Sorted list of services (public members)
-    ss::sharded<cloud_storage::cache> shadow_index_cache;
+    ss::sharded<cloud_io::cache> shadow_index_cache;
     ss::sharded<cloud_storage::partition_recovery_manager>
       partition_recovery_manager;
     ss::sharded<cloud_storage_clients::client_pool> cloud_storage_clients;

@@ -276,7 +276,7 @@ redpanda_cc_btest(
     cpu = 1,
     deps = [
         "//src/v/cluster",
-        "//src/v/kafka/client",
+        "//src/v/kafka/client:transport",
         "//src/v/kafka/protocol",
         "//src/v/kafka/protocol:describe_groups",
         "//src/v/kafka/protocol:find_coordinator",
@@ -287,6 +287,7 @@ redpanda_cc_btest(
         "//src/v/model",
         "//src/v/model:timeout_clock",
         "//src/v/redpanda/tests:fixture",
+        "//src/v/security",
         "//src/v/test_utils:scoped_config",
         "//src/v/test_utils:seastar_boost",
         "//src/v/utils:base64",
@@ -370,6 +371,7 @@ redpanda_cc_btest(
     ],
     deps = [
         "//src/v/kafka/protocol:offset_fetch",
+        "//src/v/kafka/server",
         "//src/v/redpanda/tests:fixture",
         "//src/v/test_utils:seastar_boost",
         "@boost//:test",

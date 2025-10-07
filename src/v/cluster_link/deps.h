@@ -38,7 +38,8 @@ public:
     upsert_link(model::metadata md, ::model::timeout_clock::time_point) = 0;
 
     virtual ss::future<::cluster::cluster_link::errc>
-      delete_link(model::name_t, ::model::timeout_clock::time_point) = 0;
+    delete_link(model::name_t, bool force, ::model::timeout_clock::time_point)
+      = 0;
 
     virtual std::optional<std::reference_wrapper<const model::metadata>>
       find_link_by_id(model::id_t) const = 0;

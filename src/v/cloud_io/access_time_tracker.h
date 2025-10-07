@@ -20,7 +20,7 @@
 #include <chrono>
 #include <string_view>
 
-namespace cloud_storage {
+namespace cloud_io {
 
 enum class tracker_version : uint8_t { v1, v2 };
 
@@ -92,4 +92,4 @@ private:
     bool _dirty{false};
 };
 
-} // namespace cloud_storage
+} // namespace cloud_io

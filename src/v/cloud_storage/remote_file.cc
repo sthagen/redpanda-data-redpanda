@@ -9,7 +9,7 @@
  */
 #include "cloud_storage/remote_file.h"
 
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/download_exception.h"
 #include "cloud_storage/logger.h"
 #include "cloud_storage/remote.h"
@@ -23,7 +23,7 @@ namespace cloud_storage {
 
 remote_file::remote_file(
   remote& r,
-  cache& cache,
+  cloud_io::cache& cache,
   cloud_storage_clients::bucket_name bucket,
   remote_segment_path remote_path,
   retry_chain_node& retry_parent,
@@ -36,7 +36,7 @@ remote_file::remote_file(
   , _rtc(&retry_parent)
   , _ctxlog(cst_log, _rtc, std::move(log_prefix))
   , _metrics(std::move(metrics))
-  , _cache_backoff_jitter(cache_thrash_backoff) {};
+  , _cache_backoff_jitter(cloud_io::cache_thrash_backoff) {};
 
 ss::future<ss::file> remote_file::hydrate_readable_file() {
     ss::gate::holder g(_gate);

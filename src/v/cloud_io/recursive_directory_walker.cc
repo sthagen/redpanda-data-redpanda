@@ -8,12 +8,12 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_storage/recursive_directory_walker.h"
+#include "cloud_io/recursive_directory_walker.h"
 
 #include "base/vassert.h"
 #include "base/vlog.h"
-#include "cloud_storage/access_time_tracker.h"
-#include "cloud_storage/logger.h"
+#include "cloud_io/access_time_tracker.h"
+#include "cloud_io/logger.h"
 #include "ssx/watchdog.h"
 
 #include <seastar/core/coroutine.hh>
@@ -29,7 +29,7 @@
 #include <string_view>
 #include <vector>
 
-namespace cloud_storage {
+namespace cloud_io {
 
 struct walk_accumulator {
     walk_accumulator(
@@ -56,10 +56,7 @@ struct walk_accumulator {
             }
 
             vlog(
-              cst_log.debug,
-              "Regular file found {} ({})",
-              entry_path,
-              file_size);
+              log.debug, "Regular file found {} ({})", entry_path, file_size);
 
             current_cache_size += static_cast<uint64_t>(file_size);
             if (entry_path.ends_with(cache_tmp_file_extension)) {
@@ -76,7 +73,7 @@ struct walk_accumulator {
             }
         } else if (
           entry.type && entry.type == ss::directory_entry_type::directory) {
-            vlog(cst_log.debug, "Dir found {}", entry_path);
+            vlog(log.debug, "Dir found {}", entry_path);
             dirlist.emplace_front(entry_path);
         }
     }
@@ -97,13 +94,13 @@ struct walk_accumulator {
     size_t filtered_out_files{0};
     size_t tmp_files_size{0};
 };
-} // namespace cloud_storage
+} // namespace cloud_io
 
 namespace {
 ss::future<> walker_process_directory(
   const ss::sstring& start_dir,
   ss::sstring target,
-  cloud_storage::walk_accumulator& state,
+  cloud_io::walk_accumulator& state,
   chunked_vector<ss::sstring>& empty_dirs) {
     try {
         ss::file target_dir = co_await open_directory(target);
@@ -130,7 +127,7 @@ ss::future<> walker_process_directory(
     }
 }
 } // namespace
-namespace cloud_storage {
+namespace cloud_io {
 
 ss::future<walk_result> recursive_directory_walker::walk(
   ss::sstring start_dir,
@@ -142,10 +139,10 @@ ss::future<walk_result> recursive_directory_walker::walk(
     auto guard = _gate.hold();
 
     ssx::watchdog wd1m(std::chrono::seconds(60), [] {
-        vlog(cst_log.info, "Directory walk is taking more than 1 min");
+        vlog(log.info, "Directory walk is taking more than 1 min");
     });
     ssx::watchdog wd10m(std::chrono::seconds(600), [] {
-        vlog(cst_log.warn, "Directory walk is taking more than 10 min");
+        vlog(log.warn, "Directory walk is taking more than 10 min");
     });
 
     // Object to accumulate data as we walk directories
@@ -207,8 +204,8 @@ ss::future<walk_result> recursive_directory_walker::walk(
 }
 
 ss::future<> recursive_directory_walker::stop() {
-    vlog(cst_log.debug, "Stopping recursive directory walker");
+    vlog(log.debug, "Stopping recursive directory walker");
     return _gate.close();
 }
 
-} // namespace cloud_storage
+} // namespace cloud_io

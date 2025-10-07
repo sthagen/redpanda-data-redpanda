@@ -9,7 +9,7 @@
  */
 
 #pragma once
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/fwd.h"
 #include "cloud_storage/partition_manifest.h"
 #include "cloud_storage/remote.h"
@@ -156,7 +156,7 @@ public:
       const storage::ntp_config& ntp,
       ss::lw_shared_ptr<const configuration> conf,
       cloud_storage::remote& remote,
-      cloud_storage::cache& c,
+      cloud_io::cache& c,
       cluster::partition& parent,
       ss::shared_ptr<cloud_storage::async_manifest_view> amv);
 
@@ -712,7 +712,7 @@ private:
     model::ntp _ntp;
     model::initial_revision_id _rev;
     cloud_storage::remote& _remote;
-    cloud_storage::cache& _cache;
+    cloud_io::cache& _cache;
     cluster::partition& _parent;
     model::term_id _start_term;
     archival_policy _policy;

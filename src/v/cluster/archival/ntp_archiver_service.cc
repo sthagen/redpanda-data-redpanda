@@ -349,7 +349,7 @@ ntp_archiver::ntp_archiver(
   const storage::ntp_config& ntp,
   ss::lw_shared_ptr<const configuration> conf,
   cloud_storage::remote& remote,
-  cloud_storage::cache& c,
+  cloud_io::cache& c,
   cluster::partition& parent,
   ss::shared_ptr<cloud_storage::async_manifest_view> amv)
   : _ntp(ntp.ntp())

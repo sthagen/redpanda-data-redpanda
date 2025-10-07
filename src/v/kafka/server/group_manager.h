@@ -169,7 +169,7 @@ public:
 
     /// \brief Handle a OffsetFetch request
     ss::future<offset_fetch_response>
-    offset_fetch(offset_fetch_request&& request);
+    offset_fetch(offset_fetch_request request);
 
     ss::future<offset_delete_response>
     offset_delete(offset_delete_request&& request);

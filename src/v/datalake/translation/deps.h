@@ -201,14 +201,6 @@ public:
       ss::abort_source&)
       = 0;
 
-    virtual void update_commit_lag(
-      std::optional<kafka::offset> max_committed_kafka_offset) const
-      = 0;
-
-    virtual void
-    update_translation_lag(kafka::offset max_translated_kafka_offset) const
-      = 0;
-
     static std::unique_ptr<data_source>
       make_default_data_source(ss::lw_shared_ptr<cluster::partition>);
 };
@@ -279,6 +271,12 @@ public:
      *  Returns the number of bytes buffered for the parquet file in memory
      */
     virtual size_t buffered_bytes() const = 0;
+
+    // Report and update the lag of data that has yet to be translated.
+    virtual void report_translation_lag(int64_t new_lag) = 0;
+
+    // Report and update the lag of data that has yet to be committed.
+    virtual void report_commit_lag(int64_t new_lag) = 0;
 
     static std::unique_ptr<translation_context>
     make_default_translation_context(

@@ -88,7 +88,7 @@ public:
       ss::sharded<cluster::topic_recovery_status_frontend>&,
       ss::sharded<storage::node>&,
       ss::sharded<memory_sampling>&,
-      ss::sharded<cloud_storage::cache>&,
+      ss::sharded<cloud_io::cache>&,
       ss::sharded<resources::cpu_profiler>&,
       ss::sharded<transform::service>*,
       ss::sharded<security::audit::audit_log_manager>&,
@@ -785,7 +785,7 @@ private:
       _topic_recovery_status_frontend;
     ss::sharded<storage::node>& _storage_node;
     ss::sharded<memory_sampling>& _memory_sampling_service;
-    ss::sharded<cloud_storage::cache>& _cloud_storage_cache;
+    ss::sharded<cloud_io::cache>& _cloud_storage_cache;
     ss::sharded<resources::cpu_profiler>& _cpu_profiler;
     ss::sharded<transform::service>* _transform_service;
     ss::sharded<security::audit::audit_log_manager>& _audit_mgr;

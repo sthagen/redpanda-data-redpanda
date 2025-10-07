@@ -523,10 +523,9 @@ class RedpandaOIDCTest(RedpandaOIDCTestMethods):
         super(RedpandaOIDCTest, self).__init__(test_context, **kwargs)
 
 
-# TODO(CORE-13761): Re-enable these tests
-# class RedpandaOIDCTlsTest(RedpandaOIDCTestMethods):
-#     def __init__(self, test_context, **kwargs):
-#         super(RedpandaOIDCTlsTest, self).__init__(test_context, use_ssl=True, **kwargs)
+class RedpandaOIDCTlsTest(RedpandaOIDCTestMethods):
+    def __init__(self, test_context, **kwargs):
+        super(RedpandaOIDCTlsTest, self).__init__(test_context, use_ssl=True, **kwargs)
 
 
 class JavaClientOIDCTest(RedpandaOIDCTestBase):

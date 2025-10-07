@@ -35,7 +35,7 @@ public:
       ss::sharded<cluster::partition_manager>& pm,
       ss::sharded<raft::group_manager>& gm,
       ss::sharded<cloud_storage::remote>& api,
-      ss::sharded<cloud_storage::cache>& cache,
+      ss::sharded<cloud_io::cache>& cache,
       ss::sharded<archival::upload_housekeeping_service>& upload_housekeeping,
       ss::lw_shared_ptr<const configuration> config);
     ~archiver_manager();

@@ -30,7 +30,7 @@ public:
     async_manifest_materializer(
       cloud_storage_clients::bucket_name,
       ss::sharded<remote>*,
-      ss::sharded<cache>*,
+      ss::sharded<cloud_io::cache>*,
       const remote_path_provider*,
       const partition_manifest*);
 
@@ -90,7 +90,7 @@ private:
 
     cloud_storage_clients::bucket_name _bucket;
     ss::sharded<remote>* _remote;
-    ss::sharded<cache>* _cache;
+    ss::sharded<cloud_io::cache>* _cache;
     const remote_path_provider* _remote_path_provider;
     const partition_manifest* _stm_manifest;
 

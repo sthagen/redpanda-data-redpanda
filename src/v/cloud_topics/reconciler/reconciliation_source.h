@@ -8,6 +8,8 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
+#pragma once
+
 #include "cloud_topics/data_plane_api.h"
 #include "model/fundamental.h"
 #include "model/record_batch_reader.h"

@@ -59,9 +59,9 @@
 
 namespace {
 
-std::vector<kafka::offset_fetch_request_topic>
+chunked_vector<kafka::offset_fetch_request_topic>
 offset_request_from_assignment(kc::assignment assignment) {
-    auto topics = std::vector<kafka::offset_fetch_request_topic>{};
+    auto topics = chunked_vector<kafka::offset_fetch_request_topic>{};
     topics.reserve(assignment.size());
     std::transform(
       std::make_move_iterator(assignment.begin()),

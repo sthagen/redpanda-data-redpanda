@@ -75,7 +75,7 @@ skip the confirmation prompt.
 	}
 
 	cmd.Flags().BoolVar(&noConfirm, "no-confirm", false, "Disable confirmation prompt")
-	cmd.Flags().StringVar(&cfgLocation, "config-file", "", "Path to configuration file to use for the shadow link; use --help for details")
+	cmd.Flags().StringVarP(&cfgLocation, "config-file", "c", "", "Path to configuration file to use for the shadow link; use --help for details")
 	cmd.MarkFlagRequired("config-file")
 	return cmd
 }

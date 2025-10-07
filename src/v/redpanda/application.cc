@@ -12,8 +12,8 @@
 #include "absl/log/globals.h"
 #include "base/vlog.h"
 #include "cli_parser.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_io/remote.h"
-#include "cloud_storage/cache_service.h"
 #include "cloud_storage/configuration.h"
 #include "cloud_storage/inventory/inv_ops.h"
 #include "cloud_storage/inventory/types.h"
@@ -1017,7 +1017,7 @@ void application::check_environment() {
     storage::directories::initialize(
       config::node().data_directory().as_sstring())
       .get();
-    cloud_storage::cache::initialize(config::node().cloud_storage_cache_path())
+    cloud_io::cache::initialize(config::node().cloud_storage_cache_path())
       .get();
 
     if (config::shard_local_cfg().storage_strict_data_init()) {
@@ -2080,8 +2080,7 @@ void application::wire_up_redpanda_services(
         });
 
         shadow_index_cache
-          .invoke_on_all(
-            [](cloud_storage::cache& cache) { return cache.start(); })
+          .invoke_on_all([](cloud_io::cache& cache) { return cache.start(); })
           .get();
 
         construct_service(

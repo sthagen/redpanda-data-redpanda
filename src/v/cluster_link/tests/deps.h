@@ -83,9 +83,11 @@ public:
     }
 
     ss::future<::cluster::cluster_link::errc> delete_link(
-      model::name_t name, ::model::timeout_clock::time_point) override {
+      model::name_t name,
+      bool force,
+      ::model::timeout_clock::time_point) override {
         auto batch = ::cluster::cluster_link::testing::create_remove_command(
-          std::move(name));
+          std::move(name), force);
         auto ec = co_await _table->apply_update(std::move(batch));
         co_return ec.value();
     }

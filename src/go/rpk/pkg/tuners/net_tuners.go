@@ -41,6 +41,8 @@ func NewNetTuner(
 		fs, t, irqProcFile, irqDeviceInfo, ethtool, irqBalanceService, cpuMasks, executor)
 	return NewAggregatedTunable(
 		[]Tunable{
+			// RX queue count tuner should always be first in order as others will re-read queue counts
+			factory.NewRxQueueCountTuner(interfaces, mode, cpuMask),
 			factory.NewNICsBalanceServiceTuner(interfaces),
 			factory.NewNICsIRQsAffinityTuner(interfaces, mode, cpuMask),
 			factory.NewNICsRpsTuner(interfaces, mode, cpuMask),
@@ -54,6 +56,7 @@ func NewNetTuner(
 }
 
 type NetTunersFactory interface {
+	NewRxQueueCountTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable
 	NewNICsBalanceServiceTuner(interfaces []string) Tunable
 	NewNICsIRQsAffinityTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable
 	NewNICsRpsTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable
@@ -99,6 +102,49 @@ func NewNetTunersFactory(
 		checkersFactory: NewNetCheckersFactory(
 			fs, t, irqProcFile, irqDeviceInfo, ethtool, balanceService, cpuMasks),
 	}
+}
+
+func (f *netTunersFactory) NewRxQueueCountTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable {
+	return f.tuneNonVirtualInterfaces(
+		interfaces,
+		func(nic network.Nic) Checker {
+			return f.checkersFactory.NewNicRxQueueCountChecker(nic, mode, cpuMask)
+		},
+		func(nic network.Nic) TuneResult {
+			if !f.t.GetAllowRxQueueTuner() {
+				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as it's disabled by configuration")
+				return NewTuneResult(false)
+			}
+
+			supportsIrqLowering, err := nic.SupportsRxQueueLowering()
+			if err != nil {
+				return NewTuneError(err)
+			}
+			if !supportsIrqLowering {
+				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as using an unknown driver")
+				return NewTuneResult(false)
+			}
+
+			zap.L().Sugar().Debugf("Tuning '%s' queue counts", nic.Name())
+			_, targetChannels, err := network.GetCurrentAndTargetChannels(nic, mode, cpuMask, f.cpuMasks, f.t, f.ethtool)
+			if err != nil {
+				return NewTuneError(err)
+			}
+
+			_, err = f.ethtool.SetChannels(nic.Name(), targetChannels)
+			if err != nil {
+				return NewTuneError(err)
+			}
+
+			return NewTuneResult(false)
+		},
+		func() (bool, string) {
+			if !f.cpuMasks.IsSupported() {
+				return false, "Tuner is not supported as 'hwloc' is not installed"
+			}
+			return true, ""
+		},
+	)
 }
 
 func (f *netTunersFactory) NewNICsBalanceServiceTuner(

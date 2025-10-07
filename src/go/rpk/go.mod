@@ -9,7 +9,7 @@ require (
 	buf.build/gen/go/redpandadata/cloud/connectrpc/go v1.18.1-20250806153840-184e270a51f5.1
 	buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.7-20250806153840-184e270a51f5.1
 	buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.7-20250718021421-04f2daa29ad9.1
-	buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20250930194408-070fbb41a3d0.1
+	buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251003220015-a1e818380921.1
 	buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.18.1-20250819145731-621dc775ffe4.1
 	buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.7-20250819145731-621dc775ffe4.1
 	buf.build/gen/go/redpandadata/gatekeeper/connectrpc/go v1.18.1-20250813192242-efcc93bcd794.1
@@ -85,7 +85,7 @@ require (
 require (
 	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.7-20250613105001-9f2d3c737feb.1 // indirect
 	buf.build/gen/go/grpc-ecosystem/grpc-gateway/protocolbuffers/go v1.36.7-20240617172850-a48fcebcf8f1.1 // indirect
-	buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.0-20250930194408-070fbb41a3d0.1 // indirect
+	buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.0-20251003220015-a1e818380921.1 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/BurntSushi/toml v1.1.0 // indirect
 	github.com/Microsoft/go-winio v0.4.14 // indirect

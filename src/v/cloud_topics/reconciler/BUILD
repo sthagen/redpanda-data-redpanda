@@ -20,6 +20,21 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "reconciler_probe",
+    srcs = [
+        "reconciler_probe.cc",
+    ],
+    hdrs = [
+        "reconciler_probe.h",
+    ],
+    deps = [
+        "//src/v/config",
+        "//src/v/metrics",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "reconciler",
     srcs = [
         "reconciler.cc",
@@ -38,6 +53,7 @@ redpanda_cc_library(
     ],
     visibility = ["//visibility:public"],
     deps = [
+        ":reconciler_probe",
         ":reconciliation_consumer",
         "//src/v/base",
         "//src/v/cloud_storage_clients",

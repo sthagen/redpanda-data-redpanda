@@ -38,7 +38,7 @@ ss::future<> app::construct(
   ss::sharded<cluster::partition_leaders_table>* leaders_table,
   ss::sharded<cluster::shard_table>* shard_table,
   ss::sharded<cloud_io::remote>* remote,
-  ss::sharded<cloud_storage::cache>* cloud_cache,
+  ss::sharded<cloud_io::cache>* cloud_cache,
   ss::sharded<cluster::metadata_cache>* metadata_cache,
   ss::sharded<rpc::connection_cache>* connection_cache,
   cloud_storage_clients::bucket_name bucket,

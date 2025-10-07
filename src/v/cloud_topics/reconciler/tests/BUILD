@@ -1,4 +1,19 @@
-load("//bazel:test.bzl", "redpanda_cc_gtest")
+load("//bazel:test.bzl", "redpanda_cc_gtest", "redpanda_test_cc_library")
+
+redpanda_test_cc_library(
+    name = "test_utils",
+    hdrs = [
+        "test_utils.h",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/common:fake_io",
+        "//src/v/cloud_topics/level_one/metastore:simple",
+        "//src/v/cloud_topics/reconciler",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "@seastar",
+    ],
+)
 
 redpanda_cc_gtest(
     name = "reconciliation_consumer_test",
@@ -26,6 +41,7 @@ redpanda_cc_gtest(
         "reconciler_test.cc",
     ],
     deps = [
+        ":test_utils",
         "//src/v/cloud_topics/level_one/common:fake_io",
         "//src/v/cloud_topics/level_one/common:object",
         "//src/v/cloud_topics/level_one/metastore:simple",
@@ -35,6 +51,27 @@ redpanda_cc_gtest(
         "//src/v/storage:record_batch_builder",
         "//src/v/test_utils:gtest",
         "//src/v/test_utils:random_bytes",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_gtest(
+    name = "reconciler_metrics_test",
+    timeout = "short",
+    srcs = [
+        "reconciler_metrics_test.cc",
+    ],
+    deps = [
+        ":test_utils",
+        "//src/v/cloud_topics/level_one/common:fake_io",
+        "//src/v/cloud_topics/level_one/common:object",
+        "//src/v/cloud_topics/level_one/metastore:simple",
+        "//src/v/cloud_topics/reconciler",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:metrics",
         "@googletest//:gtest",
         "@seastar",
     ],

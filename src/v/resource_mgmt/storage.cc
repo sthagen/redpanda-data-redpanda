@@ -12,7 +12,7 @@
 #include "storage.h"
 
 #include "base/vlog.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cluster/node/local_monitor.h"
 #include "cluster/partition_manager.h"
 #include "datalake/datalake_manager.h"
@@ -35,7 +35,7 @@ disk_space_manager::disk_space_manager(
   ss::sharded<cluster::node::local_monitor>* local_monitor,
   ss::sharded<storage::api>* storage,
   ss::sharded<storage::node>* storage_node,
-  ss::sharded<cloud_storage::cache>* cache,
+  ss::sharded<cloud_io::cache>* cache,
   ss::sharded<cluster::partition_manager>* pm)
   : _enabled(std::move(enabled))
   , _enabled_override(std::move(enabled_override))

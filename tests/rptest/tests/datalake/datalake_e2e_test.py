@@ -1392,8 +1392,8 @@ message_type {
 
 
 class DatalakeMetricsTest(RedpandaTest):
-    commit_lag = "vectorized_cluster_partition_iceberg_offsets_pending_commit"
-    translation_lag = "vectorized_cluster_partition_iceberg_offsets_pending_translation"
+    commit_lag = "redpanda_iceberg_pending_commit_lag"
+    translation_lag = "redpanda_iceberg_pending_translation_lag"
 
     def __init__(self, test_ctx, *args, **kwargs):
         super(DatalakeMetricsTest, self).__init__(
@@ -1453,11 +1453,11 @@ class DatalakeMetricsTest(RedpandaTest):
                 topic_leader,
                 [DatalakeMetricsTest.commit_lag, DatalakeMetricsTest.translation_lag],
                 labels={
-                    "namespace": "kafka",
-                    "topic": self.topic_name,
-                    "partition": "0",
+                    "redpanda_namespace": "kafka",
+                    "redpanda_topic": self.topic_name,
                 },
                 reduce=sum,
+                metrics_endpoint=MetricsEndpoint.PUBLIC_METRICS,
             )
 
             # Wait for lag build up

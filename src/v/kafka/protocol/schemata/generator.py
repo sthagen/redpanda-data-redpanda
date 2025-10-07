@@ -63,7 +63,12 @@ path_type_map = {
     "OffsetFetchRequestData": {
         "Topics": {
             "PartitionIndexes": ("model::partition_id", "int32"),
-        }
+        },
+        "Groups": {
+            "Topics": {
+                "PartitionIndexes": ("model::partition_id", "int32"),
+            }
+        },
     },
     "OffsetFetchResponseData": {
         "Topics": {
@@ -71,8 +76,17 @@ path_type_map = {
                 "PartitionIndex": ("model::partition_id", "int32"),
                 "CommittedOffset": ("model::offset", "int64"),
                 "CommittedLeaderEpoch": ("kafka::leader_epoch", "int32"),
-            },
-        }
+            }
+        },
+        "Groups": {
+            "Topics": {
+                "Partitions": {
+                    "PartitionIndex": ("model::partition_id", "int32"),
+                    "CommittedOffset": ("model::offset", "int64"),
+                    "CommittedLeaderEpoch": ("kafka::leader_epoch", "int32"),
+                }
+            }
+        },
     },
     "OffsetCommitRequestData": {
         "Topics": {
@@ -567,7 +581,6 @@ override_member_container = {
     "metadata_response_partition": "chunked_vector",
     "metadata_response_topic": "chunked_vector",
     "partition_data": "chunked_vector",
-    "offset_fetch_response_partition": "chunked_vector",
     "int32_t": "std::vector",
     "model::node_id": "std::vector",
     "model::partition_id": "std::vector",
@@ -577,7 +590,6 @@ override_member_container = {
     "createable_topic_config": "std::vector",
     "creatable_topic_configs": "std::vector",
     "creatable_replica_assignment": "std::vector",
-    "offset_fetch_request_topic": "std::vector",
     "partition_produce_response": "std::vector",
     "creatable_acl_result": "std::vector",
     "offset_delete_request_partition": "std::vector",
@@ -599,9 +611,14 @@ def make_context_field(path):
 # a listing of expected struct types
 STRUCT_TYPES = [
     "ApiVersion",
+    "OffsetFetchRequestGroup",
     "OffsetFetchRequestTopic",
+    "OffsetFetchRequestTopics",
+    "OffsetFetchResponseGroup",
     "OffsetFetchResponseTopic",
+    "OffsetFetchResponseTopics",
     "OffsetFetchResponsePartition",
+    "OffsetFetchResponsePartitions",
     "OffsetCommitRequestTopic",
     "OffsetCommitRequestPartition",
     "OffsetCommitResponseTopic",

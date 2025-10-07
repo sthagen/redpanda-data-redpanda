@@ -112,7 +112,7 @@ controller::controller(
   ss::sharded<raft::group_manager>& raft_manager,
   ss::sharded<features::feature_table>& feature_table,
   ss::sharded<cloud_storage::remote>& cloud_storage_api,
-  ss::sharded<cloud_storage::cache>& cloud_cache,
+  ss::sharded<cloud_io::cache>& cloud_cache,
   ss::sharded<node_status_table>& node_status_table,
   ss::sharded<cluster::metadata_cache>& metadata_cache,
   ss::scheduling_group scheduling_group)

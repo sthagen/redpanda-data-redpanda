@@ -23,7 +23,8 @@ reconciliation_consumer::reconciliation_consumer(
   , _metadata{
       .base_offset = kafka::offset::min(),
       .last_offset = kafka::offset::min(),
-      .last_timestamp = model::timestamp::min()} {}
+      .last_timestamp = model::timestamp::min(),
+      .batch_count = 0} {}
 
 ss::future<ss::stop_iteration>
 reconciliation_consumer::operator()(model::record_batch batch) {
@@ -43,6 +44,8 @@ reconciliation_consumer::operator()(model::record_batch batch) {
           std::make_pair(
             batch.term(), model::offset_cast(batch.base_offset())));
     }
+
+    ++_metadata.batch_count;
 
     co_await _builder->add_batch(std::move(batch));
 

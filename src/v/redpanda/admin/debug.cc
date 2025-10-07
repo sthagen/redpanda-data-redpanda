@@ -10,7 +10,7 @@
  */
 #include "base/vassert-register.h"
 #include "base/vassert.h"
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cluster/cloud_storage_size_reducer.h"
 #include "cluster/controller.h"
 #include "cluster/controller_stm.h"
@@ -887,7 +887,7 @@ admin_server::get_local_storage_usage_handler(
         auto [cache_bytes, cache_objects]
           = co_await _cloud_storage_cache.invoke_on(
             ss::shard_id{0},
-            [](cloud_storage::cache& cache) -> std::pair<uint64_t, size_t> {
+            [](cloud_io::cache& cache) -> std::pair<uint64_t, size_t> {
                 return {cache.get_usage_bytes(), cache.get_usage_objects()};
             });
 

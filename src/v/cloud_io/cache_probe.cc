@@ -8,14 +8,14 @@
  * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
  */
 
-#include "cloud_storage/cache_probe.h"
+#include "cloud_io/cache_probe.h"
 
 #include "config/configuration.h"
 #include "metrics/prometheus_sanitize.h"
 
 #include <seastar/core/metrics.hh>
 
-namespace cloud_storage {
+namespace cloud_io {
 
 cache_probe::cache_probe() {
     namespace sm = ss::metrics;
@@ -168,4 +168,4 @@ cache_probe::cache_probe() {
     }
 }
 
-} // namespace cloud_storage
+} // namespace cloud_io

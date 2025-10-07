@@ -9,6 +9,7 @@
  * by the Apache License, Version 2.0
  */
 #pragma once
+#include "cluster/cluster_link/errc.h"
 #include "cluster/errc.h"
 #include "cluster/tx_errc.h"
 #include "kafka/protocol/errors.h"
@@ -174,4 +175,40 @@ constexpr error_code map_tx_errc(cluster::tx::errc ec) {
     }
 }
 
+constexpr error_code map_cluster_link_errc(cluster::cluster_link::errc ec) {
+    switch (ec) {
+    case cluster::cluster_link::errc::success:
+        return error_code::none;
+    case cluster::cluster_link::errc::timeout:
+        return error_code::request_timed_out;
+    case cluster::cluster_link::errc::throttling_quota_exceeded:
+        return error_code::throttling_quota_exceeded;
+    case cluster::cluster_link::errc::not_leader_controller:
+        return error_code::not_controller;
+    case cluster::cluster_link::errc::mirror_topic_name_invalid:
+        return error_code::invalid_topic_exception;
+    case cluster::cluster_link::errc::topic_not_being_mirrored:
+        return error_code::unknown_topic_or_partition;
+
+    case cluster::cluster_link::errc::does_not_exist:
+    case cluster::cluster_link::errc::invalid_create:
+    case cluster::cluster_link::errc::invalid_update:
+    case cluster::cluster_link::errc::limit_exceeded:
+    case cluster::cluster_link::errc::service_error:
+    case cluster::cluster_link::errc::replication_error:
+    case cluster::cluster_link::errc::feature_disabled:
+    case cluster::cluster_link::errc::rpc_error:
+    case cluster::cluster_link::errc::topic_already_being_mirrored:
+    case cluster::cluster_link::errc::topic_being_mirrored_by_other_link:
+    case cluster::cluster_link::errc::uuid_conflict:
+    case cluster::cluster_link::errc::bootstrap_servers_empty:
+    case cluster::cluster_link::errc::tls_configuration_invalid:
+    case cluster::cluster_link::errc::link_name_invalid:
+    case cluster::cluster_link::errc::topic_filter_invalid:
+    case cluster::cluster_link::errc::topic_property_excluded_from_mirroring:
+    case cluster::cluster_link::errc::scram_configuration_invalid:
+    case cluster::cluster_link::errc::link_has_active_shadow_topics:
+        return error_code::unknown_server_error;
+    }
+}
 } // namespace kafka

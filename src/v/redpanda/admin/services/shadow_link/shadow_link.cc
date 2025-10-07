@@ -92,6 +92,18 @@ ss::future<proto::admin::create_shadow_link_response>
 shadow_link_service_impl::create_shadow_link(
   serde::pb::rpc::context, proto::admin::create_shadow_link_request req) {
     vlog(sllog.trace, "create_shadow_link: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .create_shadow_link(serde::pb::rpc::context{}, std::move(req));
+    }
 
     auto md = convert_create_to_metadata(std::move(req));
     auto get_resp = _service->local().get_cluster_link(md.name);
@@ -111,12 +123,24 @@ shadow_link_service_impl::create_shadow_link(
 
 ss::future<proto::admin::delete_shadow_link_response>
 shadow_link_service_impl::delete_shadow_link(
-  serde::pb::rpc::context, proto::admin::delete_shadow_link_request req) {
+  serde::pb::rpc::context ctx, proto::admin::delete_shadow_link_request req) {
     vlog(sllog.trace, "delete_shadow_link: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .delete_shadow_link(ctx, std::move(req));
+    }
 
     handle_error(
       co_await _service->local().delete_cluster_link(
-        cluster_link::model::name_t{req.get_name()}));
+        cluster_link::model::name_t{req.get_name()}, req.get_force()));
 
     proto::admin::delete_shadow_link_response dsl_resp;
     co_return dsl_resp;
@@ -124,8 +148,20 @@ shadow_link_service_impl::delete_shadow_link(
 
 ss::future<proto::admin::get_shadow_link_response>
 shadow_link_service_impl::get_shadow_link(
-  serde::pb::rpc::context, proto::admin::get_shadow_link_request req) {
+  serde::pb::rpc::context ctx, proto::admin::get_shadow_link_request req) {
     vlog(sllog.trace, "get_shadow_link: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .get_shadow_link(ctx, std::move(req));
+    }
 
     auto resp = handle_error(_service->local().get_cluster_link(
       cluster_link::model::name_t{req.get_name()}));
@@ -138,6 +174,18 @@ ss::future<proto::admin::list_shadow_links_response>
 shadow_link_service_impl::list_shadow_links(
   serde::pb::rpc::context, proto::admin::list_shadow_links_request req) {
     vlog(sllog.trace, "list_shadow_links: {}", req);
+    auto redirect_node = redirect_to(model::controller_ntp);
+    if (redirect_node) {
+        vlog(
+          sllog.debug,
+          "Redirecting to leader of {}: {}",
+          model::controller_ntp,
+          *redirect_node);
+        co_return co_await _proxy_client
+          .make_client_for_node<proto::admin::shadow_link_service_client>(
+            *redirect_node)
+          .list_shadow_links(serde::pb::rpc::context{}, std::move(req));
+    }
 
     auto resp = handle_error(_service->local().list_cluster_links());
 

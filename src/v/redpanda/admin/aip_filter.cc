@@ -15,6 +15,7 @@
 #include "absl/strings/str_split.h"
 #include "absl/time/time.h"
 #include "serde/protobuf/base.h"
+#include "serde/protobuf/rpc.h"
 
 #include <seastar/util/variant_utils.hh>
 
@@ -28,7 +29,6 @@
 
 #include <algorithm>
 #include <cstdint>
-#include <stdexcept>
 #include <type_traits>
 #include <variant>
 
@@ -186,7 +186,7 @@ std::vector<comparison> parse_expression(std::string_view input) {
         // the unexpected case defensively
         auto err = result.errors().empty() ? std::string_view{"[unknown error]"}
                                            : result.errors().front();
-        throw std::invalid_argument(
+        throw serde::pb::rpc::invalid_argument_exception(
           fmt::format("Failed to parse input: {}", err));
     }
 
@@ -202,7 +202,7 @@ auto get_field_value(
         // This should be impossible, since we could only get field numbers from
         // convert_field_path_to_numbers if the field exists, but handle it to
         // be defensive
-        throw std::runtime_error(
+        throw serde::pb::rpc::internal_exception(
           fmt::format(
             "Unexpected unknown field during filtering: {}", field_numbers));
     }
@@ -307,13 +307,13 @@ auto convert_literal(
 
     constexpr auto expects_quoted = std::is_same_v<SerdeType, ss::sstring>;
     if (expects_quoted && !is_quoted) {
-        throw std::invalid_argument(
+        throw serde::pb::rpc::invalid_argument_exception(
           fmt::format(
             "Expected quoted literal for field '{}', got unquoted '{}'",
             field_path,
             value));
     } else if (!expects_quoted && is_quoted) {
-        throw std::invalid_argument(
+        throw serde::pb::rpc::invalid_argument_exception(
           fmt::format(
             "Expected unquoted literal for field '{}', got quoted '{}'",
             field_path,
@@ -322,7 +322,7 @@ auto convert_literal(
 
     if constexpr (std::is_same_v<literal_type, bool>) {
         if (value != "true" && value != "false") {
-            throw std::invalid_argument(
+            throw serde::pb::rpc::invalid_argument_exception(
               fmt::format(
                 "Expected boolean literal for field '{}', got '{}'",
                 field_path,
@@ -332,7 +332,7 @@ auto convert_literal(
     } else if constexpr (std::is_integral_v<literal_type>) {
         if constexpr (std::is_unsigned_v<literal_type>) {
             if (!value.empty() && value[0] == '-') {
-                throw std::invalid_argument(
+                throw serde::pb::rpc::invalid_argument_exception(
                   fmt::format(
                     "Expected positive integer literal for field '{}', got "
                     "negative '{}'",
@@ -346,7 +346,7 @@ auto convert_literal(
             // Try parsing as a larger type to see if it's a range issue
             absl::int128 temp;
             if (absl::SimpleAtoi(value, &temp)) {
-                throw std::invalid_argument(
+                throw serde::pb::rpc::invalid_argument_exception(
                   fmt::format(
                     "Integer '{}' is out of range for field '{}' (valid "
                     "range: {} to {})",
@@ -356,7 +356,7 @@ auto convert_literal(
                     std::numeric_limits<literal_type>::max()));
             }
 
-            throw std::invalid_argument(
+            throw serde::pb::rpc::invalid_argument_exception(
               fmt::format(
                 "Invalid integer literal '{}' for field '{}'",
                 value,
@@ -367,7 +367,7 @@ auto convert_literal(
         if constexpr (std::is_same_v<literal_type, float>) {
             float result{};
             if (!absl::SimpleAtof(value, &result)) {
-                throw std::invalid_argument(
+                throw serde::pb::rpc::invalid_argument_exception(
                   fmt::format(
                     "Invalid float literal '{}' for field '{}'",
                     value,
@@ -377,7 +377,7 @@ auto convert_literal(
         } else {
             double result{};
             if (!absl::SimpleAtod(value, &result)) {
-                throw std::invalid_argument(
+                throw serde::pb::rpc::invalid_argument_exception(
                   fmt::format(
                     "Invalid floating point literal '{}' for field '{}'",
                     value,
@@ -390,7 +390,7 @@ auto convert_literal(
     } else if constexpr (std::is_same_v<literal_type, absl::Duration>) {
         absl::Duration result;
         if (!absl::ParseDuration(value, &result)) {
-            throw std::invalid_argument(
+            throw serde::pb::rpc::invalid_argument_exception(
               fmt::format(
                 "Invalid duration format '{}' for field '{}' (expected format: "
                 "e.g., '1.3s')",
@@ -402,7 +402,7 @@ auto convert_literal(
         absl::Time result;
         std::string error;
         if (!absl::ParseTime(absl::RFC3339_full, value, &result, &error)) {
-            throw std::invalid_argument(
+            throw serde::pb::rpc::invalid_argument_exception(
               fmt::format(
                 "Invalid timestamp format '{}' for field '{}': {} (expected "
                 "RFC3339 format)",
@@ -422,7 +422,8 @@ build_comparison(const aip_filter_config& config, const comparison& comp) {
       comp.field_path, '.');
     auto field_numbers = config.field_path_converter(path_components);
     if (!field_numbers) {
-        throw std::invalid_argument("Invalid field path: " + comp.field_path);
+        throw serde::pb::rpc::invalid_argument_exception(
+          "Invalid field path: " + comp.field_path);
     }
 
     serde::pb::field::value_t field_type = config.field_type_getter(
@@ -437,7 +438,7 @@ build_comparison(const aip_filter_config& config, const comparison& comp) {
           if constexpr (!info::supports_ordering_comparisons) {
               if (
                 comp.op != comparison_op::EQ && comp.op != comparison_op::NE) {
-                  throw std::invalid_argument(
+                  throw serde::pb::rpc::invalid_argument_exception(
                     fmt::format(
                       "{} field '{}' only supports = and != operators",
                       info::error_name,
@@ -450,7 +451,7 @@ build_comparison(const aip_filter_config& config, const comparison& comp) {
             *field_numbers, comp.op, std::move(value));
       },
       [&](const auto&) -> std::unique_ptr<ast_node> {
-          throw std::invalid_argument(
+          throw serde::pb::rpc::invalid_argument_exception(
             fmt::format(
               "Unsupported field type for field path: {}", comp.field_path));
       });
@@ -490,7 +491,7 @@ aip_filter_parser::create_aip_filter(aip_filter_config config) {
 
     if (config.filter_expression.size() > max_filter_length) {
         // Limit the size of the expression to avoid overly expensive parsing
-        throw std::invalid_argument(
+        throw serde::pb::rpc::invalid_argument_exception(
           fmt::format(
             "Filter expression exceeds maximum length of {} characters (got "
             "{}).",

@@ -25,6 +25,13 @@
 
 namespace cloud_topics::l1 {
 
+// Contains sampled information from the metastore and the time at which it was
+// sampled.
+struct compaction_info_and_timestamp {
+    metastore::compaction_info_response info;
+    model::timestamp sampled_at;
+};
+
 struct log_compaction_meta {
     log_compaction_meta(model::topic_id_partition tidp, model::ntp ntp)
       : tidp(std::move(tidp))
@@ -32,11 +39,18 @@ struct log_compaction_meta {
 
     model::topic_id_partition tidp;
     model::ntp ntp;
-    ss::gate gate;
+    // If set, this is cached compaction metadata obtained from the metastore at
+    // the `sampled_at` time.
+    std::optional<compaction_info_and_timestamp> info_and_ts{std::nullopt};
+    // If set, this is the shard on which the log is currently undergoing an
+    // inflight compaction.
+    std::optional<ss::shard_id> inflight{std::nullopt};
     intrusive_list_hook link;
 };
 
-using log_compaction_meta_ptr = std::unique_ptr<log_compaction_meta>;
+using log_compaction_meta_ptr = ss::lw_shared_ptr<log_compaction_meta>;
+using foreign_log_compaction_meta_ptr
+  = ss::foreign_ptr<log_compaction_meta_ptr>;
 
 struct log_compaction_meta_hash {
     using is_transparent = void;
@@ -81,11 +95,6 @@ using logs_type_t = chunked_hash_set<
 using log_list_t
   = intrusive_list<log_compaction_meta, &log_compaction_meta::link>;
 
-struct log_info_and_meta {
-    metastore::compaction_info_response info;
-    log_compaction_meta* meta;
-};
-
 // Represents the output from a compaction job over a cloud topic partition.
 // Highly subject to change in the future.
 struct object_output_t {
@@ -93,5 +102,12 @@ struct object_output_t {
     object_builder::object_info info;
     std::unique_ptr<staging_file> staging_file;
 };
+
+using cmp_t = std::function<bool(
+  const log_compaction_meta_ptr&, const log_compaction_meta_ptr&)>;
+using log_compaction_queue = std::priority_queue<
+  log_compaction_meta_ptr,
+  chunked_vector<log_compaction_meta_ptr>,
+  cmp_t>;
 
 } // namespace cloud_topics::l1

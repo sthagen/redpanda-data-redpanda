@@ -25,6 +25,7 @@
 #include "features/feature_table.h"
 #include "kafka/protocol/fwd.h"
 #include "kafka/protocol/offset_commit.h"
+#include "kafka/protocol/offset_fetch.h"
 #include "kafka/server/group_metadata.h"
 #include "kafka/server/group_probe.h"
 #include "kafka/server/member.h"
@@ -632,8 +633,8 @@ public:
     ss::future<cluster::commit_group_tx_reply>
     handle_commit_tx(cluster::commit_group_tx_request r);
 
-    ss::future<offset_fetch_response>
-    handle_offset_fetch(offset_fetch_request&& r);
+    ss::future<offset_fetch_response_group>
+    handle_offset_fetch(offset_fetch_request_group r, bool require_stable);
 
     void insert_offset(const model::topic_partition& tp, offset_metadata md) {
         if (auto o_it = _offsets.find(tp); o_it != _offsets.end()) {

@@ -54,3 +54,20 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "worker_manager_test",
+    timeout = "short",
+    srcs = [
+        "worker_manager_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/compaction:meta",
+        "//src/v/cloud_topics/level_one/compaction:worker",
+        "//src/v/model",
+        "//src/v/ssx:semaphore",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

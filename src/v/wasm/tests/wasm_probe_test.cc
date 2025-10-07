@@ -9,68 +9,41 @@
  * by the Apache License, Version 2.0
  */
 
-#include "base/type_traits.h"
 #include "base/units.h"
-#include "gmock/gmock.h"
 #include "metrics/metrics.h"
+#include "test_utils/metrics.h"
 #include "wasm/logger.h"
-
-#include <seastar/core/metrics.hh>
-#include <seastar/core/metrics_api.hh>
-#include <seastar/core/smp.hh>
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <wasm/engine_probe.h>
 
 #include <optional>
-#include <type_traits>
 
 namespace wasm {
 
 namespace {
 
-template<typename T>
-std::optional<T> find_metric_value(
-  std::string_view metric_name, const ss::sstring& function_name) {
-    auto metrics = ss::metrics::impl::get_value_map(
-      metrics::public_metrics_handle);
-    auto metrics_it = metrics.find(ss::sstring(metric_name));
-    if (metrics_it == metrics.end()) {
-        return std::nullopt;
-    }
-    seastar::metrics::impl::metric_family family = metrics_it->second;
-    auto family_it = family.find(
-      {{"function_name", function_name},
-       {ss::metrics::shard_label.name(), std::to_string(ss::this_shard_id())}});
-    if (family_it == family.end()) {
-        return std::nullopt;
-    }
-    ss::metrics::impl::metric_function metric_fn
-      = family_it->second->get_function();
-    seastar::metrics::impl::metric_value sample = metric_fn();
-    if constexpr (std::is_same_v<double, T>) {
-        return sample.d();
-    } else if constexpr (std::is_same_v<uint64_t, T>) {
-        return sample.ui();
-    } else {
-        static_assert(base::unsupported_type<T>::value, "unsupported type");
-    }
-}
-
 std::optional<uint64_t>
 reported_memory_usage(const ss::sstring& function_name) {
-    return find_metric_value<uint64_t>(
-      "wasm_engine_memory_usage", function_name);
+    return test_utils::find_metric_value<uint64_t>(
+      "wasm_engine_memory_usage",
+      metrics::public_metrics_handle,
+      {{"function_name", function_name}});
 }
 
 std::optional<uint64_t> reported_max_memory(const ss::sstring& function_name) {
-    return find_metric_value<uint64_t>("wasm_engine_max_memory", function_name);
+    return test_utils::find_metric_value<uint64_t>(
+      "wasm_engine_max_memory",
+      metrics::public_metrics_handle,
+      {{"function_name", function_name}});
 }
 
 std::optional<double> reported_cpu_time(const ss::sstring& function_name) {
-    return find_metric_value<double>(
-      "wasm_engine_cpu_seconds_total", function_name);
+    return test_utils::find_metric_value<double>(
+      "wasm_engine_cpu_seconds_total",
+      metrics::public_metrics_handle,
+      {{"function_name", function_name}});
 }
 
 } // namespace

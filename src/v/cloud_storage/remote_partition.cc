@@ -922,7 +922,7 @@ private:
 remote_partition::remote_partition(
   ss::shared_ptr<async_manifest_view> m,
   remote& api,
-  cache& c,
+  cloud_io::cache& c,
   cloud_storage_clients::bucket_name bucket,
   partition_probe& probe)
   : _ntp(m->get_ntp())

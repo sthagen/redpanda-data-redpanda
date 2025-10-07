@@ -326,7 +326,8 @@ public:
 
         auto it = source_cluster_group.find(of_req.data.group_id);
         if (it == source_cluster_group.end()) {
-            co_return kafka::offset_fetch_response(of_req.data.topics);
+            co_return kafka::offset_fetch_response(
+              std::move(of_req.data.topics));
         }
 
         if (it->second.coordinator_id != id) {

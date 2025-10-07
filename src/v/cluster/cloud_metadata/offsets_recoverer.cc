@@ -10,7 +10,7 @@
 
 #include "cluster/cloud_metadata/offsets_recoverer.h"
 
-#include "cloud_storage/cache_service.h"
+#include "cloud_io/cache_service.h"
 #include "cloud_storage/remote.h"
 #include "cloud_storage/remote_file.h"
 #include "cluster/cloud_metadata/offsets_lookup_batcher.h"
@@ -30,7 +30,7 @@ namespace cluster::cloud_metadata {
 offsets_recoverer::offsets_recoverer(
   model::node_id node_id,
   ss::sharded<cloud_storage::remote>& remote,
-  ss::sharded<cloud_storage::cache>& cache,
+  ss::sharded<cloud_io::cache>& cache,
   ss::sharded<offsets_lookup>& local_lookup,
   ss::sharded<cluster::partition_leaders_table>& leaders_table,
   ss::sharded<rpc::connection_cache>& connection_cache,

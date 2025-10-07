@@ -6,6 +6,7 @@
 #
 # https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
 
+from rptest.services.redpanda import MetricsEndpoint
 import threading
 import time
 
@@ -114,8 +115,12 @@ class DatalakeDiskUsageTest(RedpandaTest):
         return current_size
 
     def translation_lag(self):
-        metric_name = "vectorized_cluster_partition_iceberg_offsets_pending_translation"
-        return self.redpanda.metric_sum(metric_name, expect_metric=True)
+        metric_name = "redpanda_iceberg_pending_translation_lag"
+        return self.redpanda.metric_sum(
+            metric_name,
+            metrics_endpoint=MetricsEndpoint.PUBLIC_METRICS,
+            expect_metric=True,
+        )
 
     @cluster(num_nodes=2)
     @skip_debug_mode

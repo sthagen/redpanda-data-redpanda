@@ -158,7 +158,14 @@ partition_translator::fetch_translation_offsets(retry_chain_node& rcn) {
     // if we reach this point before the most recent batch of files has
     // been committed, the commit lag metric will be out of sync at
     // least until 'wait_for_data' returns and we re-enter the loop.
-    _data_source->update_commit_lag(last_committed_offset);
+    auto max_translatable_offset = _data_source->max_offset_for_translation();
+    if (
+      max_translatable_offset.value_or(kafka::offset::min())
+      >= kafka::offset{0}) {
+        int64_t lag = max_translatable_offset.value()
+                      - last_committed_offset.value_or(kafka::offset{-1});
+        _translation_ctx->report_commit_lag(lag);
+    }
 
     auto next_start_offset = result.last_added_offset
                                ? kafka::next_offset(*result.last_added_offset)
@@ -202,7 +209,13 @@ partition_translator::fetch_translation_offsets(retry_chain_node& rcn) {
     if (
       !current_translation_lto || checkpointed_lto > current_translation_lto) {
         _lag_tracking->notify_data_translated(checkpointed_lto);
-        _data_source->update_translation_lag(checkpointed_lto);
+        if (
+          max_translatable_offset.value_or(kafka::offset::min())
+          >= kafka::offset{0}) {
+            int64_t lag = max_translatable_offset.value()
+                          - std::max(checkpointed_lto, kafka::offset{-1});
+            _translation_ctx->report_translation_lag(lag);
+        }
         current_translation_lto = checkpointed_lto;
     }
 

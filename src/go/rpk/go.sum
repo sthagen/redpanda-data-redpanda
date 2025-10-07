@@ -8,10 +8,10 @@ buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.7-20250806153840-18
 buf.build/gen/go/redpandadata/cloud/protocolbuffers/go v1.36.7-20250806153840-184e270a51f5.1/go.mod h1:J6+tKG3WghdUGXXD5lYp/G15vFpzMRvAsbF6+L+YZBQ=
 buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.7-20250718021421-04f2daa29ad9.1 h1:mE9lPhqy3ghMKY6fAot31NySa8aI22sUjKbJuMlmDGA=
 buf.build/gen/go/redpandadata/common/protocolbuffers/go v1.36.7-20250718021421-04f2daa29ad9.1/go.mod h1:pUNfu5CqCYitRtXrJ69rHyB7SXdTkDuqqnNwQYI2H1Q=
-buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.0-20250930194408-070fbb41a3d0.1 h1:0OXvz9FG7sIqQPNIakEXBUARkhxCnS1zq6+7ttvAi7w=
-buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.0-20250930194408-070fbb41a3d0.1/go.mod h1:cW1LlfqRXkA2ia7jETbXwvJr2uR7Aj8xeqbv1R4nfEY=
-buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20250930194408-070fbb41a3d0.1 h1:w4hn0pk7uzb+l04sEsqGVjglvwi8snvgS+QQBwmpsVU=
-buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20250930194408-070fbb41a3d0.1/go.mod h1:QenSPzqxZpyo9hHIpRzTetvDchelVDzimnmaggHKenc=
+buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.0-20251003220015-a1e818380921.1 h1:+bBkTuaJtXW9irz6gDCCFHK17BNxjUPB0qIvNOiXSXE=
+buf.build/gen/go/redpandadata/core/connectrpc/go v1.19.0-20251003220015-a1e818380921.1/go.mod h1:vJABXSPxk+Oeds+LifrwLGPUkbl7ftBHqNpLAfPcTRA=
+buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251003220015-a1e818380921.1 h1:GoNb2M1NqJA97n6Joml7RitfzDJQbLEJKXingogSP/o=
+buf.build/gen/go/redpandadata/core/protocolbuffers/go v1.36.10-20251003220015-a1e818380921.1/go.mod h1:QenSPzqxZpyo9hHIpRzTetvDchelVDzimnmaggHKenc=
 buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.18.1-20250819145731-621dc775ffe4.1 h1:CiTv2Rme+0H/2IQpyZFK8SQYRWgRWEvFNxZIfDMYOQQ=
 buf.build/gen/go/redpandadata/dataplane/connectrpc/go v1.18.1-20250819145731-621dc775ffe4.1/go.mod h1:HJnvbiwx2qZN8HcD30Dijm5Aamjcrk/8/ffTOFrF5Go=
 buf.build/gen/go/redpandadata/dataplane/protocolbuffers/go v1.36.7-20250819145731-621dc775ffe4.1 h1:31r1Sv/BoVyGzzBfBHcUcyQJz/+4i/fr8wc7gQVihEM=

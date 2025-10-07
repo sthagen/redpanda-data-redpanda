@@ -41,6 +41,7 @@ client_options:
     - "broker2:9092"
   source_cluster_id: "source-123"
   tls_settings:
+    enabled: true
     ca_path: "/path/to/ca.crt"
     key_path: "/path/to/key.pem"
     cert_path: "/path/to/cert.pem"
@@ -75,6 +76,7 @@ security_sync_options:
 					BootstrapServers: []string{"broker1:9092", "broker2:9092"},
 					SourceClusterID:  "source-123",
 					TLSSettings: &TLSFileSettings{
+						Enabled:  true,
 						CAPath:   "/path/to/ca.crt",
 						KeyPath:  "/path/to/key.pem",
 						CertPath: "/path/to/cert.pem",
@@ -123,6 +125,7 @@ client_options:
   bootstrap_servers:
     - "broker1:9092"
   tls_settings:
+    enabled: true
     ca: |
       -----BEGIN CERTIFICATE-----
       test-ca-content
@@ -145,9 +148,10 @@ client_options:
 				ClientOptions: &ShadowLinkClientOptions{
 					BootstrapServers: []string{"broker1:9092"},
 					TLSSettings: &TLSPEMSettings{
-						CA:   "-----BEGIN CERTIFICATE-----\ntest-ca-content\n-----END CERTIFICATE-----\n",
-						Key:  "-----BEGIN PRIVATE KEY-----\ntest-key-content\n-----END PRIVATE KEY-----\n",
-						Cert: "-----BEGIN CERTIFICATE-----\ntest-cert-content\n-----END CERTIFICATE-----\n",
+						Enabled: true,
+						CA:      "-----BEGIN CERTIFICATE-----\ntest-ca-content\n-----END CERTIFICATE-----\n",
+						Key:     "-----BEGIN PRIVATE KEY-----\ntest-key-content\n-----END PRIVATE KEY-----\n",
+						Cert:    "-----BEGIN CERTIFICATE-----\ntest-cert-content\n-----END CERTIFICATE-----\n",
 					},
 					AuthenticationConfiguration: &ScramConfig{
 						Username:       "pemuser",
@@ -347,6 +351,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 					"bootstrap_servers": ["broker1:9092", "broker2:9092"],
 					"source_cluster_id": "source-123",
 					"tls_settings": {
+						"enabled": false,
 						"ca_path": "/path/to/ca.crt",
 						"key_path": "/path/to/key.pem",
 						"cert_path": "/path/to/cert.pem"
@@ -388,6 +393,7 @@ func TestShadowLinkConfigUnmarshalJSON(t *testing.T) {
 					BootstrapServers: []string{"broker1:9092", "broker2:9092"},
 					SourceClusterID:  "source-123",
 					TLSSettings: &TLSFileSettings{
+						Enabled:  false,
 						CAPath:   "/path/to/ca.crt",
 						KeyPath:  "/path/to/key.pem",
 						CertPath: "/path/to/cert.pem",
@@ -533,11 +539,13 @@ func TestTLSSettingsUnmarshalJSON(t *testing.T) {
 		{
 			name: "file-based TLS settings",
 			jsonData: `{
+				"enabled": true,
 				"ca_path": "/path/to/ca.crt",
 				"key_path": "/path/to/key.pem",
 				"cert_path": "/path/to/cert.pem"
 			}`,
 			want: &TLSFileSettings{
+				Enabled:  true,
 				CAPath:   "/path/to/ca.crt",
 				KeyPath:  "/path/to/key.pem",
 				CertPath: "/path/to/cert.pem",
@@ -546,14 +554,16 @@ func TestTLSSettingsUnmarshalJSON(t *testing.T) {
 		{
 			name: "PEM-based TLS settings",
 			jsonData: `{
+				"enabled": false,
 				"ca": "ca-content",
 				"key": "key-content",
 				"cert": "cert-content"
 			}`,
 			want: &TLSPEMSettings{
-				CA:   "ca-content",
-				Key:  "key-content",
-				Cert: "cert-content",
+				Enabled: false,
+				CA:      "ca-content",
+				Key:     "key-content",
+				Cert:    "cert-content",
 			},
 		},
 		{
@@ -656,6 +666,8 @@ func TestShadowLinkConfigChanges(t *testing.T) {
 		// Special-case exclusion for exactly this one field which is also an
 		// enum.
 		regexp.MustCompile(`^security_sync_options\.acl_filters\.access_filter\.operation$`),
+		// A one-of type in protobuf, represented as an interface{} in Go.
+		regexp.MustCompile(`client_options.tls_settings.enabled$`),
 	}
 
 	var walk func(v reflect.Type, parentName string, m map[string]string)

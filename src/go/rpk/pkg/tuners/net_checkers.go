@@ -26,6 +26,8 @@ import (
 )
 
 type NetCheckersFactory interface {
+	NewNicRxQueueCountCheckers(interfaces []string, mode irq.Mode, cpuMask string) []Checker
+	NewNicRxQueueCountChecker(nic network.Nic, mode irq.Mode, cpuMask string) Checker
 	NewNicIRQAffinityStaticChecker(interfaces []string) Checker
 	NewNicIRQAffinityCheckers(interfaces []string, mode irq.Mode, mask string) []Checker
 	NewNicIRQAffinityChecker(nic network.Nic, mode irq.Mode, mask string) Checker
@@ -92,6 +94,52 @@ func (f *netCheckersFactory) DedicatedMaskForComputations(interfaces []string) s
 		return ""
 	}
 	return mask
+}
+
+func (f *netCheckersFactory) NewNicRxQueueCountChecker(
+	nic network.Nic, mode irq.Mode, cpuMask string,
+) Checker {
+	return NewEqualityChecker(
+		NicRxQueueCountChecker,
+		fmt.Sprintf("NIC %s RX queue count set", nic.Name()),
+		Warning,
+		true,
+		func() (interface{}, error) {
+			if !f.t.GetAllowRxQueueTuner() {
+				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as it's disabled by configuration")
+				return true, nil
+			}
+
+			supportsIrqLowering, err := nic.SupportsRxQueueLowering()
+			if err != nil {
+				return false, err
+			}
+			if !supportsIrqLowering {
+				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as using an unknown driver")
+				return true, nil
+			}
+
+			currentChannels, targetChannels, err := network.GetCurrentAndTargetChannels(nic, mode, cpuMask, f.cpuMasks, f.t, f.ethtool)
+			if err != nil {
+				return false, err
+			}
+
+			rxCheck := currentChannels.RxCount == targetChannels.RxCount
+			combinedCheck := currentChannels.CombinedCount == targetChannels.CombinedCount
+
+			// We need both to be true because for the not in use one the check will always be true (0 == 0)
+			return rxCheck && combinedCheck, nil
+		},
+	)
+}
+
+func (f *netCheckersFactory) NewNicRxQueueCountCheckers(
+	interfaces []string, mode irq.Mode, cpuMask string,
+) []Checker {
+	return f.forNonVirtualInterfaces(interfaces,
+		func(nic network.Nic) Checker {
+			return f.NewNicRxQueueCountChecker(nic, mode, cpuMask)
+		})
 }
 
 func (f *netCheckersFactory) NewNicIRQAffinityStaticChecker(

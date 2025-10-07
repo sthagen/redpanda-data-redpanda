@@ -267,6 +267,7 @@ redpanda_cc_library(
         "//src/v/cloud_storage",
         "//src/v/cluster",
         "//src/v/cluster:state_machine_registry",
+        "//src/v/cluster_link/model",
         "//src/v/config",
         "//src/v/container:chunked_hash_map",
         "//src/v/container:chunked_vector",
