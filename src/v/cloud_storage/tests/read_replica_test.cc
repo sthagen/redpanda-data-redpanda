@@ -40,6 +40,7 @@ FIXTURE_TEST(test_read_replica_basic_sync, read_replica_e2e_fixture) {
     // Produce records to the source.
     auto partition = app.partition_manager.local().get(ntp).get();
     auto& archiver = partition->archiver()->get();
+    archiver.initialize_probe();
     BOOST_REQUIRE(archiver.sync_for_tests().get());
     archiver.upload_topic_manifest().get();
     tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
@@ -64,6 +65,7 @@ FIXTURE_TEST(test_read_replica_basic_sync, read_replica_e2e_fixture) {
     auto rr_archiver_ref = rr_partition->archiver();
     BOOST_REQUIRE(rr_archiver_ref.has_value());
     auto& rr_archiver = rr_partition->archiver()->get();
+    rr_archiver.initialize_probe();
     BOOST_REQUIRE(rr_archiver.sync_for_tests().get());
     rr_archiver.sync_manifest().get();
     BOOST_REQUIRE_EQUAL(3, rr_archiver.manifest().size());
@@ -97,6 +99,7 @@ FIXTURE_TEST(
 
     auto partition = app.partition_manager.local().get(ntp).get();
     auto& archiver = partition->archiver()->get();
+    archiver.initialize_probe();
     BOOST_REQUIRE(archiver.sync_for_tests().get());
     archiver.upload_topic_manifest().get();
 
@@ -139,6 +142,7 @@ FIXTURE_TEST(test_read_replica_delete_records, read_replica_e2e_fixture) {
     // Produce records to the source.
     auto partition = app.partition_manager.local().get(ntp).get();
     auto& archiver = partition->archiver()->get();
+    archiver.initialize_probe();
     BOOST_REQUIRE(archiver.sync_for_tests().get());
     archiver.upload_topic_manifest().get();
     tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
@@ -164,6 +168,7 @@ FIXTURE_TEST(test_read_replica_delete_records, read_replica_e2e_fixture) {
     rr_rp->wait_for_leader(ntp).get();
     auto rr_partition = rr_rp->app.partition_manager.local().get(ntp).get();
     auto& rr_archiver = rr_partition->archiver()->get();
+    rr_archiver.initialize_probe();
 
     // Do an initial sync to download the manifest.
     BOOST_REQUIRE(rr_archiver.sync_for_tests().get());
@@ -236,6 +241,7 @@ FIXTURE_TEST(
 
     auto partition = app.partition_manager.local().get(ntp).get();
     auto& archiver = partition->archiver()->get();
+    archiver.initialize_probe();
     BOOST_REQUIRE(archiver.sync_for_tests().get());
     archiver.upload_topic_manifest().get();
     tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
@@ -290,6 +296,7 @@ FIXTURE_TEST(
     rr_rp->wait_for_leader(ntp).get();
     auto rr_partition = rr_rp->app.partition_manager.local().get(ntp).get();
     auto& rr_archiver = rr_partition->archiver()->get();
+    rr_archiver.initialize_probe();
     rr_archiver.sync_manifest().get();
 
     tests::kafka_list_offsets_transport rr_lister(

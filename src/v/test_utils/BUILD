@@ -274,7 +274,9 @@ redpanda_test_cc_library(
         "global_test_hooks.h",
     ],
     implementation_deps = [
+        "//src/v/random:generators",
         "//src/v/random:test_seeding",
+        "//src/v/test_utils:test_env",
         "@fmt",
     ],
     visibility = ["//visibility:public"],

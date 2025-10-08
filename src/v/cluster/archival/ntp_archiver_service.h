@@ -448,6 +448,8 @@ public:
       const segment_collector_stream& strm,
       std::optional<model::term_id> archiver_term = std::nullopt);
 
+    void initialize_probe();
+
 private:
     // Labels for contexts in which manifest uploads occur. Used for logging.
     static constexpr const char* housekeeping_ctx_label = "housekeeping";

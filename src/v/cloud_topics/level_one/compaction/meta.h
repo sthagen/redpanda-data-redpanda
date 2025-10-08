@@ -25,11 +25,11 @@
 
 namespace cloud_topics::l1 {
 
-// Contains sampled information from the metastore and the time at which it was
-// sampled.
+// Contains compaction information collected from the metastore and the time at
+// which it was obtained.
 struct compaction_info_and_timestamp {
     metastore::compaction_info_response info;
-    model::timestamp sampled_at;
+    model::timestamp collected_at;
 };
 
 struct log_compaction_meta {
@@ -40,7 +40,7 @@ struct log_compaction_meta {
     model::topic_id_partition tidp;
     model::ntp ntp;
     // If set, this is cached compaction metadata obtained from the metastore at
-    // the `sampled_at` time.
+    // the `collected_at` time.
     std::optional<compaction_info_and_timestamp> info_and_ts{std::nullopt};
     // If set, this is the shard on which the log is currently undergoing an
     // inflight compaction.
@@ -57,11 +57,11 @@ struct log_compaction_meta_hash {
 
     size_t
     operator()(const cloud_topics::l1::log_compaction_meta_ptr& m) const {
-        return std::hash<model::ntp>{}(m->ntp);
+        return absl::Hash<model::topic_id_partition>{}(m->tidp);
     }
 
-    size_t operator()(const model::ntp& ntp) const {
-        return std::hash<model::ntp>{}(ntp);
+    size_t operator()(const model::topic_id_partition& tidp) const {
+        return absl::Hash<model::topic_id_partition>{}(tidp);
     }
 };
 
@@ -71,23 +71,23 @@ struct log_compaction_meta_eq {
     bool operator()(
       const cloud_topics::l1::log_compaction_meta_ptr& lhs,
       const cloud_topics::l1::log_compaction_meta_ptr& rhs) const {
-        return lhs->ntp == rhs->ntp;
+        return lhs->tidp == rhs->tidp;
     }
 
     bool operator()(
       const cloud_topics::l1::log_compaction_meta_ptr& lhs,
-      const model::ntp& rhs) const noexcept {
-        return lhs->ntp == rhs;
+      const model::topic_id_partition& rhs) const noexcept {
+        return lhs->tidp == rhs;
     }
 
     bool operator()(
-      const model::ntp& lhs,
+      const model::topic_id_partition& lhs,
       const cloud_topics::l1::log_compaction_meta_ptr& rhs) const {
-        return lhs == rhs->ntp;
+        return lhs == rhs->tidp;
     }
 };
 
-using logs_type_t = chunked_hash_set<
+using log_set_t = chunked_hash_set<
   log_compaction_meta_ptr,
   log_compaction_meta_hash,
   log_compaction_meta_eq>;

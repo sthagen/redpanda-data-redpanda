@@ -9,6 +9,7 @@
  */
 #pragma once
 
+#include "base/format_to.h"
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/level_zero/stm/ctp_stm_api.h"
 #include "cloud_topics/log_reader_config.h"
@@ -151,6 +152,31 @@ public:
     ss::future<std::error_code> linearizable_barrier();
 
 private:
+    // All timequeries work by first getting a coarse grained timequery result
+    // from metadata indexes, then getting an exact answer using the datapath.
+    struct coarse_grained_timequery_result {
+        model::timestamp time;
+        kafka::offset start_offset;
+        kafka::offset last_offset;
+
+        fmt::iterator format_to(fmt::iterator) const;
+    };
+
+    // Determine the offset using the course grained index in local
+    // storage to find out which L0 offset we should start reading from.
+    ss::future<std::optional<coarse_grained_timequery_result>>
+    l0_timequery(storage::timequery_config cfg);
+
+    // Determine the offset using the course gained index in the metastore to
+    // find out which L1 batch we should start reading from.
+    ss::future<std::optional<coarse_grained_timequery_result>>
+    l1_timequery(storage::timequery_config cfg);
+
+    // Create a reader to find the exact offset for a timequery.
+    ss::future<std::optional<storage::timequery_result>>
+      refine_timequery_result(
+        coarse_grained_timequery_result, model::opt_abort_source_t);
+
     raft::replicate_stages upload_and_replicate(
       model::batch_identity batch_id,
       model::record_batch,

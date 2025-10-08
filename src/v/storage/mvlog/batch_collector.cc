@@ -19,7 +19,7 @@ bool batch_collector::should_skip(
     if (batch_hdr.last_offset() < cfg_.start_offset) {
         return true;
     }
-    if (batch_hdr.max_timestamp < cfg_.first_timestamp) {
+    if (cfg_.timestamp > batch_hdr.max_timestamp) {
         return true;
     }
     if (

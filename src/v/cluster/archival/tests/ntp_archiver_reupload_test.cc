@@ -236,6 +236,7 @@ struct reupload_fixture : public archiver_fixture {
           app.shadow_index_cache.local(),
           *part,
           manifest_view);
+        archiver->initialize_probe();
     }
 
     ss::lw_shared_ptr<storage::segment> run_disk_log_housekeeping(

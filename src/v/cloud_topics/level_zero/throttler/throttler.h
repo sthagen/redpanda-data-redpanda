@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cloud_topics/level_zero/common/level_zero_probe.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "utils/token_bucket.h"
@@ -81,5 +82,6 @@ private:
     size_t _outstanding_throttled_requests{0};
     // Number of times the pipeline was throttled by tput
     size_t _throttle_by_tput{0};
+    throttler_probe _probe;
 };
 } // namespace cloud_topics::l0

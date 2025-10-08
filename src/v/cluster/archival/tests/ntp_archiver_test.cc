@@ -149,6 +149,7 @@ FIXTURE_TEST(test_upload_segments, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
         amv->stop().get();
@@ -280,6 +281,7 @@ FIXTURE_TEST(test_upload_after_failure, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -374,6 +376,7 @@ FIXTURE_TEST(
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -459,6 +462,7 @@ FIXTURE_TEST(test_retention, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
         amv->stop().get();
@@ -580,6 +584,7 @@ FIXTURE_TEST(test_archive_retention, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
     amv->start().get();
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -768,6 +773,7 @@ FIXTURE_TEST(test_segments_pending_deletion_limit, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
     auto action = ss::defer([&archiver] { archiver.stop().get(); });
 
     auto res = upload_next_with_retries(archiver).get();
@@ -890,6 +896,7 @@ FIXTURE_TEST(test_upload_segments_leadership_transfer, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver] { archiver.stop().get(); });
 
@@ -1118,6 +1125,7 @@ static void test_partial_upload_impl(
       test.app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     test.listen();
     auto res = test.upload_next_with_retries(archiver, lso).get();
@@ -1385,6 +1393,7 @@ static void test_manifest_spillover_impl(
       test.app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto stop_archiver = ss::defer([&archiver] { archiver.stop().get(); });
 
@@ -1550,6 +1559,7 @@ FIXTURE_TEST(test_upload_with_gap, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       manifest_view);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &manifest_view] {
         archiver.stop().get();
@@ -1722,6 +1732,7 @@ FIXTURE_TEST(test_flush_wait_out_of_bounds, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -1775,6 +1786,7 @@ FIXTURE_TEST(test_flush_wait_with_no_flush, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -1825,6 +1837,7 @@ FIXTURE_TEST(test_flush_wait_with_flush, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -1902,6 +1915,7 @@ FIXTURE_TEST(test_flush_wait_with_flush_multiple_waiters, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -1986,6 +2000,7 @@ FIXTURE_TEST(test_flush_with_leadership_change, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -2122,6 +2137,7 @@ FIXTURE_TEST(test_ntp_archiver_upload_loop_blocked, archiver_fixture) {
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();
@@ -2239,6 +2255,7 @@ FIXTURE_TEST(
       app.shadow_index_cache.local(),
       *part,
       amv);
+    archiver.initialize_probe();
 
     auto action = ss::defer([&archiver, &amv] {
         archiver.stop().get();

@@ -32,6 +32,14 @@ public:
       : _tidp(tidp)
       , _start_offset(start_offset) {}
 
+    kafka::offset
+    get_start_offset(const model::topic_id_partition& tidp) override {
+        if (tidp == _tidp) {
+            return _start_offset;
+        }
+        return kafka::offset{0};
+    }
+
     ss::future<> set_start_offset(
       const model::topic_id_partition& tidp,
       kafka::offset offset,
@@ -122,6 +130,19 @@ public:
     };
 
     kafka::offset start_offset() const { return _l0_metastore.start_offset(); }
+
+    void set_start_offset(kafka::offset offset) {
+        ss::abort_source as;
+        _l0_metastore.set_start_offset(_tidp, offset, &as).get();
+    }
+
+    kafka::offset l1_start_offset() {
+        auto result = _l1_metastore.get_offsets(_tidp).get();
+        if (!result.has_value()) {
+            return kafka::offset{0};
+        }
+        return result.value().start_offset;
+    }
 
     void add_object(object_params params) {
         auto result = handle_error(_l1_metastore.get_offsets(_tidp).get());
@@ -451,4 +472,30 @@ TEST_F(HousekeeperTest, MultipleObjectsBytesRetention) {
 
     housekeeper.do_housekeeping().get();
     EXPECT_EQ(start_offset(), kafka::offset{50});
+}
+
+TEST_F(HousekeeperTest, SyncsToL1) {
+    // This test simulates the scenario where Delete Records updates L0's
+    // start offset, and the housekeeper syncs it to L1.
+    simple_retention_config cfg;
+    auto housekeeper = make_housekeeper(cfg);
+
+    add_object({
+      .records = 100,
+      .size = 1_MiB,
+      .max_timestamp = model::timestamp_clock::now() - 1h,
+    });
+
+    EXPECT_EQ(start_offset(), kafka::offset{0});
+    EXPECT_EQ(l1_start_offset(), kafka::offset{0});
+
+    set_start_offset(kafka::offset{50});
+
+    EXPECT_EQ(start_offset(), kafka::offset{50});
+    EXPECT_EQ(l1_start_offset(), kafka::offset{0});
+
+    housekeeper.do_housekeeping().get();
+
+    EXPECT_EQ(start_offset(), kafka::offset{50});
+    EXPECT_EQ(l1_start_offset(), kafka::offset{50});
 }

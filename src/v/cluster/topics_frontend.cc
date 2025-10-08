@@ -1155,6 +1155,10 @@ ss::future<topic_result> topics_frontend::do_purged_topic(
         marker_exists = _topics.local().get_iceberg_tombstones().contains(
           topic.nt);
         break;
+    case topic_purge_domain::cloud_topic:
+        marker_exists = _topics.local().get_cloud_topic_tombstones().contains(
+          topic);
+        break;
     }
 
     if (!marker_exists) {

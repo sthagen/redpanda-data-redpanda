@@ -20,6 +20,11 @@ public:
     virtual void test_unit_start(const test_unit& test) override {
         test_hooks::before_test_case(test.full_name());
     }
+
+    virtual void test_unit_finish(
+      const test_unit& test, [[maybe_unused]] unsigned long elapsed) override {
+        test_hooks::after_test_case(test.full_name());
+    }
 };
 
 BOOST_TEST_GLOBAL_CONFIGURATION(boost_hooks);

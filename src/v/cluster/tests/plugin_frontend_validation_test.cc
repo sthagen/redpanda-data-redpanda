@@ -16,6 +16,7 @@
 #include "cluster/plugin_frontend.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
+#include "config/node_config.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
 #include "model/namespace.h"
@@ -73,6 +74,10 @@ class PluginValidationTest : public testing::Test {
 public:
     model::offset _latest_offset{0};
     model::transform_id _latest_id{0};
+
+    static void SetUpTestSuite() {
+        config::node().node_id.set_value(model::node_id{1});
+    }
 
     plugin_table _plugin_table;
     data_migrations::migrated_resources _migrated_resources;

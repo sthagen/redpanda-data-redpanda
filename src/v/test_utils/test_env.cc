@@ -38,4 +38,21 @@ std::string random_dir_path(std::string prefix, size_t suffix_len) {
     return std::filesystem::path(test_tmpdir()) / (prefix + suffix);
 }
 
+// Return the value of the given environment variable, or the given
+// default value if the variable is not set.
+std::string getenv(
+  std::string_view name, // NOLINT(bugprone-easily-swappable-parameters)
+  std::string_view default_value) noexcept {
+    const char* v = std::getenv(std::string{name}.c_str());
+    return v ? v : std::string{default_value};
+}
+
+std::string getenv_default(
+  std::string_view name_sv, // NOLINT(bugprone-easily-swappable-parameters)
+  std::string_view default_value) noexcept {
+    std::string name{name_sv};
+    const char* v = std::getenv(name.c_str());
+    return v ? v : test_env::getenv(name + "_DEFAULT", default_value);
+}
+
 } // namespace test_env

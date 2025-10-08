@@ -14,9 +14,12 @@
 #include "kafka/protocol/fetch.h"
 #include "kafka/protocol/schemata/produce_request.h"
 #include "model/compression.h"
+#include "model/fundamental.h"
+#include "model/namespace.h"
 #include "model/timestamp.h"
 
 #include <optional>
+#include <stdexcept>
 
 namespace tests {
 
@@ -101,6 +104,9 @@ public:
     ss::future<kafka::offset> produce_to_partition(
       model::topic topic_name, model::partition_id pid, model::record_batch);
 
+    ss::future<kafka::offset>
+    produce_to_partition(const model::ntp& ntp, model::record_batch batch);
+
 private:
     // Convert the given records-per-partition mapping to a set of per-partition
     // produce requests. Each request, once sent, will correspond to a
@@ -137,6 +143,9 @@ public:
       model::topic topic_name,
       model::partition_id pid,
       model::offset kafka_offset_inclusive);
+
+    ss::future<kafka::offset>
+    timequery(model::topic_partition tp, model::timestamp time);
 
 private:
     ss::future<kafka::fetch_response> raw_consume(

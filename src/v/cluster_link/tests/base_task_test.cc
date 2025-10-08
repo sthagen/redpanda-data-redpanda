@@ -10,6 +10,7 @@
  */
 
 #include "cluster_link/task.h"
+#include "test_utils/async.h"
 #include "test_utils/test.h"
 
 #include <seastar/core/sleep.hh>
@@ -54,14 +55,17 @@ public:
     }
 
     ss::future<> run_impl() override {
+        _last_run = ss::lowres_clock::now();
         _count++;
         return ss::now();
     }
 
     unsigned count() const noexcept { return _count; }
+    ss::lowres_clock::time_point last_run() const noexcept { return _last_run; }
 
 private:
     unsigned _count{0};
+    ss::lowres_clock::time_point _last_run{};
 };
 
 class test_task_factory : public task_factory {
@@ -153,42 +157,61 @@ private:
 
 TEST_F_CORO(test_task_started_fixture, test_pause_resume) {
     // make sure the task is running
-    co_await ss::sleep(initial_run_interval);
-    auto pre_count = get_task()->count();
-    EXPECT_GT(pre_count, 0);
+    RPTEST_REQUIRE_EVENTUALLY_CORO(
+      initial_run_interval * 3, [this] { return get_task()->count() > 0; });
 
     auto res = co_await get_task()->pause();
     ASSERT_TRUE_CORO(res.has_value())
       << "Failed to pause task: " << res.assume_error().message();
     ASSERT_EQ_CORO(get_task()->get_state(), model::task_state::paused);
-
-    co_await ss::sleep(initial_run_interval * 2);
+    // once the task is paused, get the current count and last run time
     auto cur_count = get_task()->count();
-    EXPECT_THAT(cur_count, IsInRange(pre_count, pre_count + 1));
+    auto last_run = get_task()->last_run();
+
+    // Sleep for the task duration * 2 and check that nothing has changed
+    co_await ss::sleep(initial_run_interval * 2);
+    EXPECT_EQ(get_task()->count(), cur_count);
+    EXPECT_EQ(get_task()->last_run(), last_run);
 
     res = co_await get_task()->start();
     ASSERT_TRUE_CORO(res.has_value())
       << "Failed to resume task: " << res.assume_error().message();
-
-    co_await ss::sleep(initial_run_interval * 2);
-    pre_count = cur_count;
-    cur_count = get_task()->count();
-    EXPECT_THAT(cur_count, IsInRange(pre_count + 2, pre_count + 3));
+    // Restart the task and ensure it starts running again
+    RPTEST_REQUIRE_EVENTUALLY_CORO(
+      initial_run_interval * 3, [this, cur_count, last_run] {
+          return get_task()->count() > cur_count
+                 && get_task()->last_run() != last_run;
+      });
 }
 
 TEST_F_CORO(test_task_started_fixture, test_change_run_interval) {
     test_metadata meta;
     meta.run_interval = initial_run_interval * 2;
     co_await ss::sleep(initial_run_interval);
-    auto pre_count = get_task()->count();
+    // Get the last time the task was executed
+    auto last_run = get_task()->last_run();
+    // Wait for the next run to complete
+    RPTEST_REQUIRE_EVENTUALLY_CORO(initial_run_interval * 3, [this, last_run] {
+        return get_task()->last_run() != last_run;
+    });
+    // Calculate the diff, it should be close to the initial run interval +/-
+    // 100ms
+    auto diff = get_task()->last_run() - last_run;
+    last_run = get_task()->last_run();
+    EXPECT_THAT(
+      diff,
+      IsInRange(initial_run_interval - 100ms, initial_run_interval + 100ms));
+    // Now update the interval to run twice as long
     get_task()->update_config(meta);
-    co_await ss::sleep(initial_run_interval);
-    auto cur_count = get_task()->count();
-    EXPECT_THAT(cur_count, IsInRange(pre_count, pre_count + 1));
-
-    co_await ss::sleep(initial_run_interval);
-    cur_count = get_task()->count();
-    EXPECT_THAT(cur_count, IsInRange(pre_count + 1, pre_count + 2));
+    RPTEST_REQUIRE_EVENTUALLY_CORO(initial_run_interval * 4, [this, last_run] {
+        return get_task()->last_run() != last_run;
+    });
+    diff = get_task()->last_run() - last_run;
+    // The diff should be close to double the initial run interval +/- 100ms
+    EXPECT_THAT(
+      diff,
+      IsInRange(
+        initial_run_interval * 2 - 100ms, initial_run_interval * 2 + 100ms));
 }
 
 TEST_F_CORO(test_task_started_fixture, test_callbacks) {

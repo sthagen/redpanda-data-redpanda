@@ -11,6 +11,7 @@
 #pragma once
 
 #include "base/seastarx.h"
+#include "cloud_topics/level_zero/common/level_zero_probe.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "config/property.h"
@@ -23,7 +24,6 @@
 
 #include <chrono>
 #include <expected>
-#include <future>
 
 namespace cloud_topics::l0 {
 
@@ -108,6 +108,8 @@ private:
     config::binding<size_t> _max_buffer_size;
     config::binding<size_t> _max_cardinality;
     config::binding<std::chrono::milliseconds> _scheduling_interval;
+
+    write_request_scheduler_probe _probe;
 };
 
 } // namespace cloud_topics::l0

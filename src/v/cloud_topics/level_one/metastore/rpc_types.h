@@ -139,9 +139,10 @@ struct get_first_timestamp_ge_request
       serde::version<0>,
       serde::compat_version<0>> {
     using resp_t = get_first_timestamp_ge_reply;
-    auto serde_fields() { return std::tie(tp, ts); }
+    auto serde_fields() { return std::tie(tp, o, ts); }
 
     model::topic_id_partition tp;
+    kafka::offset o;
     model::timestamp ts;
 };
 

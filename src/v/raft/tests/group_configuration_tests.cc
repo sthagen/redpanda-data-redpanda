@@ -44,7 +44,6 @@ TEST(test_raft_group_configuration, test_demoting_removed_voters) {
       raft::vnode(model::node_id{2}, model::revision_id(0)));
     test_grp.finish_configuration_transition();
 
-    test_grp.finish_configuration_transition();
     // remove single broker
     test_grp.remove(create_vnode(1), model::revision_id{0});
     // finish configuration transition

@@ -58,6 +58,9 @@ ss::future<> housekeeper::do_housekeeping() {
     if (new_start_offset != kafka::offset::min()) {
         co_await _l0_metastore->set_start_offset(_tidp, new_start_offset, &_as);
     }
+    // Sync the start offset back to the L1 metastore.
+    // DeleteRecords may advance the L0 start offset past the L1 start offset.
+    co_await sync_start_offset();
 }
 
 ss::future<> housekeeper::do_loop() {
@@ -117,7 +120,9 @@ housekeeper::do_time_retention(std::chrono::milliseconds duration) {
     }
     auto retention_point = model::timestamp_clock::now() - duration;
     auto result = co_await _l1_metastore->get_first_ge(
-      _tidp, model::to_timestamp(retention_point));
+      _tidp,
+      offsets_result->start_offset,
+      model::to_timestamp(retention_point));
     if (result.has_value()) {
         auto object = result.value();
         co_return object.first_offset;
@@ -128,6 +133,18 @@ housekeeper::do_time_retention(std::chrono::milliseconds duration) {
     }
     auto next_offset = offsets_result.value().next_offset;
     co_return next_offset;
+}
+
+ss::future<> housekeeper::sync_start_offset() {
+    auto start_offset = _l0_metastore->get_start_offset(_tidp);
+    auto result = co_await _l1_metastore->set_start_offset(_tidp, start_offset);
+    if (!result.has_value()) {
+        vlog(
+          cd_log.warn,
+          "Failed to sync start offset to L1 for {}: {}",
+          _tidp,
+          result.error());
+    }
 }
 
 } // namespace cloud_topics

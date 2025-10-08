@@ -17,6 +17,7 @@
 #include "bytes/iobuf.h"
 #include "cloud_topics/cluster_services.h"
 #include "cloud_topics/level_zero/cluster_services_impl/cluster_services.h"
+#include "cloud_topics/level_zero/common/level_zero_probe.h"
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/types.h"
@@ -116,5 +117,7 @@ private:
     basic_retry_chain_logger<Clock> _logger;
 
     write_pipeline<Clock>::stage _stage;
+
+    batcher_probe _probe;
 };
 } // namespace cloud_topics::l0

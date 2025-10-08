@@ -17,6 +17,7 @@
 #include "cluster/producer_state.h"
 #include "cluster/topic_table.h"
 #include "cluster/types.h"
+#include "config/node_config.h"
 #include "gmock/gmock.h"
 #include "model/fundamental.h"
 #include "model/metadata.h"
@@ -36,7 +37,13 @@
 
 namespace cluster {
 struct test_fixture : public seastar_test {
-    test_fixture() {}
+    test_fixture() = default;
+
+    static void SetUpTestSuite() {
+        ss::smp::invoke_on_all([] {
+            config::node().node_id.set_value(model::node_id{1});
+        }).get();
+    }
 
     ss::future<> SetUpAsync() {
         co_await as.start();

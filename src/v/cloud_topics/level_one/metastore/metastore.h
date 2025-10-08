@@ -196,10 +196,11 @@ public:
     get_first_ge(const model::topic_id_partition&, kafka::offset) = 0;
 
     // Finds the first object of a given partition with data greater than or
-    // equal to the given timestamp. If no such timestamp exists, returns
-    // `out_of_range`.
-    virtual ss::future<std::expected<object_response, errc>>
-    get_first_ge(const model::topic_id_partition&, model::timestamp) = 0;
+    // equal to the given timestamp, that starts after the provided offset. If
+    // no such timestamp exists, returns `out_of_range`.
+    virtual ss::future<std::expected<object_response, errc>> get_first_ge(
+      const model::topic_id_partition&, kafka::offset, model::timestamp)
+      = 0;
 
     // Finds the kafka offset such that if data was truncated before this offset
     // where the total amount of data left would be ~size (within the
@@ -326,7 +327,7 @@ public:
     // All the information required to query a `compaction_info_response` from
     // the metastore. Parameters are used for call to
     // `get_compaction_offsets()`.
-    struct compaction_sample_spec {
+    struct compaction_info_spec {
         model::topic_id_partition tidp;
         model::timestamp tombstone_removal_upper_bound_ts;
     };
@@ -342,13 +343,13 @@ public:
         compaction_offsets_response offsets_response;
     };
 
-    // Obtains compaction state for a provided `sample_spec` on the basis of a
-    // single partition. Provides information relevant to determining if a
-    // partition requires compaction - e.g dirty ratio and earliest dirty
+    // Obtains compaction state for a provided `compaction_info_spec` on the
+    // basis of a single partition. Provides information relevant to determining
+    // if a partition requires compaction - e.g dirty ratio and earliest dirty
     // timestamp, as well as compaction offsets (see `get_compaction_offsets()`
     // above).
     virtual ss::future<std::expected<compaction_info_response, errc>>
-    get_compaction_info(const compaction_sample_spec&) = 0;
+    get_compaction_info(const compaction_info_spec&) = 0;
 
     using compaction_info_map = chunked_hash_map<
       model::topic_id_partition,
@@ -356,9 +357,9 @@ public:
 
     // Vectorized RPC for obtaining compaction state for a number of partitions.
     virtual ss::future<compaction_info_map> get_compaction_infos(
-      const chunked_vector<compaction_sample_spec>& to_sample) {
+      const chunked_vector<compaction_info_spec>& to_collect) {
         compaction_info_map ret;
-        for (const auto& log : to_sample) {
+        for (const auto& log : to_collect) {
             ret.emplace(log.tidp, co_await get_compaction_info(log));
         }
         co_return ret;

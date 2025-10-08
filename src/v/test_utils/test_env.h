@@ -26,4 +26,19 @@ namespace test_env {
 std::string
 random_dir_path(std::string prefix = "test.dir_", size_t suffix_len = 6);
 
+// Return the value of the given environment variable, or the given
+// default value if the variable is not set.
+std::string
+getenv(std::string_view name, std::string_view default_value = "") noexcept;
+
+// Given the name of an environment variable, say X, return the value of the
+// environment variable X, if present, otherwise the value of the variable
+// X_DEFAULT if present, otherwise default_value.
+//
+// This falls back to X_DEFAULT to make it easier to set a default value in
+// bazel (which sets the _DEFAULT version), and then allow overrides via
+// the command line or environment by setting X.
+std::string getenv_default(
+  std::string_view name, std::string_view default_value = "") noexcept;
+
 } // namespace test_env

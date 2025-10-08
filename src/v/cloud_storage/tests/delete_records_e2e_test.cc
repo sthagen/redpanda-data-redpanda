@@ -117,6 +117,7 @@ public:
         auto archiver_ref = partition->archiver();
         BOOST_REQUIRE(archiver_ref.has_value());
         archiver = &archiver_ref.value().get();
+        archiver->initialize_probe();
     }
 
     // Truncates by space, expecting the override offset is removed.
@@ -125,6 +126,7 @@ public:
         props.retention_bytes = tristate<size_t>(bytes);
         partition->update_configuration(std::move(props)).get();
         auto& new_archiver = partition->archiver()->get();
+        new_archiver.initialize_probe();
         new_archiver.housekeeping().get();
         BOOST_REQUIRE_EQUAL(
           new_archiver.manifest().get_start_kafka_offset_override(),
@@ -300,6 +302,7 @@ FIXTURE_TEST(test_delete_from_stm_consume, delete_records_e2e_fixture) {
 FIXTURE_TEST(test_delete_from_archive_consume, delete_records_e2e_fixture) {
     auto partition = app.partition_manager.local().get(ntp);
     auto& archiver = partition->archiver()->get();
+    archiver.initialize_probe();
     archiver.sync_for_tests().get();
 
     const auto records_per_seg = 5;

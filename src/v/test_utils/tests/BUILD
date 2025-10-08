@@ -52,3 +52,16 @@ redpanda_cc_gtest(
         "@googletest//:gtest",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "test_env_test",
+    timeout = "short",
+    srcs = [
+        "test_env_test.cc",
+    ],
+    deps = [
+        "//src/v/test_utils:gtest",
+        "//src/v/test_utils:test_env",
+        "@googletest//:gtest",
+    ],
+)

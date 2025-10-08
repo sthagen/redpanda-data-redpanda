@@ -14,6 +14,7 @@ package(
         "//src/v/cloud_topics/level_zero/reader:__pkg__",
         "//src/v/cloud_topics/level_zero/reader/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/stm:__pkg__",
+        "//src/v/cloud_topics/level_zero/throttler:__pkg__",
         "//src/v/cloud_topics/level_zero/throttler/tests:__pkg__",
         "//src/v/cloud_topics/level_zero/write_request_scheduler:__pkg__",
         "//src/v/cloud_topics/level_zero/write_request_scheduler/tests:__pkg__",
@@ -29,5 +30,21 @@ redpanda_cc_library(
         "//src/v/cloud_topics:types",
         "//src/v/model",
         "@fmt",
+    ],
+)
+
+redpanda_cc_library(
+    name = "level_zero_probe",
+    srcs = [
+        "level_zero_probe.cc",
+    ],
+    hdrs = [
+        "level_zero_probe.h",
+    ],
+    deps = [
+        "//src/v/metrics",
+        "//src/v/utils:log_hist",
+        "@fmt",
+        "@seastar",
     ],
 )

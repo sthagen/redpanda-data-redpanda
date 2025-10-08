@@ -15,6 +15,7 @@
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/read_request.h"
 #include "cloud_topics/logger.h"
+#include "config/configuration.h"
 #include "resource_mgmt/memory_groups.h"
 #include "utils/human.h"
 
@@ -47,7 +48,11 @@ template<class Clock>
 read_pipeline<Clock>::read_pipeline()
   : _mem_quota(get_cloud_topics_l0_read_path_memory(), "read-pipeline")
   // TODO: use config parameter
-  , _breaker(10, std::chrono::seconds(1)) {}
+  , _breaker(10, std::chrono::seconds(1))
+  , _probe(
+      "read",
+      config::shard_local_cfg().disable_metrics(),
+      config::shard_local_cfg().disable_public_metrics()) {}
 
 template<class Clock>
 ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
@@ -55,6 +60,10 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
     auto h = this->hold_gate();
     auto& as = this->get_root_rtc().root_abort_source();
     auto size_estimate = query.output_size_estimate;
+    _probe.register_request();
+    _probe.set_memory_usage_gauge(_current_size + size_estimate);
+    auto lat_probe = _probe.register_request_processing_time();
+    auto err_fallback = ss::defer([this] { _probe.register_request_error(); });
     std::optional<
       ss::semaphore_units<ss::named_semaphore_exception_factory, Clock>>
       half_open_units;
@@ -64,14 +73,27 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
     case circuit_breaker_state::half_open:
         // If the circuit breaker is half open acquire units twice.
         // Possibly, we will have to use different mechanism here.
-        half_open_units = co_await ss::get_units(_mem_quota, size_estimate, as);
+        half_open_units = ss::try_get_units(_mem_quota, size_estimate);
+        if (!half_open_units) {
+            // Track the time we are waiting for memory as memory pressure event
+            auto measure = _probe.register_memory_pressure_blocked(
+              size_estimate);
+            half_open_units = co_await ss::get_units(
+              _mem_quota, size_estimate, as);
+        }
         break;
     case circuit_breaker_state::closed:
+        err_fallback.cancel();
+        _probe.register_request_timeout();
         co_return errc::timeout;
     }
 
     // TODO: add timeout
-    auto units = co_await ss::get_units(_mem_quota, size_estimate, as);
+    auto units = ss::try_get_units(_mem_quota, size_estimate);
+    if (!units) {
+        auto measure = _probe.register_memory_pressure_blocked(size_estimate);
+        units = co_await ss::get_units(_mem_quota, size_estimate, as);
+    }
     _current_size += size_estimate;
 
     // The read request is stored on the stack of the
@@ -99,14 +121,23 @@ ss::future<result<dataplane_query_result>> read_pipeline<Clock>::make_reader(
     this->signal(stage);
 
     if (this->stopped()) {
+        err_fallback.cancel();
         co_return errc::shutting_down;
     }
 
     auto res = co_await std::move(fut);
     if (res.has_error()) {
+        if (res.error() == errc::timeout) {
+            err_fallback.cancel();
+            _probe.register_request_timeout();
+        }
         co_return res.error();
     }
-
+    err_fallback.cancel();
+    _probe.register_request_completed();
+    for (auto& r : res.value().results) {
+        _probe.register_bytes_out(r.size_bytes());
+    }
     co_return std::move(res.value());
 }
 

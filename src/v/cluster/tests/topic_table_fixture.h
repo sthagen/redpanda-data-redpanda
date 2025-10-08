@@ -21,6 +21,7 @@
 #include "cluster/tests/utils.h"
 #include "cluster/topic_table.h"
 #include "config/configuration.h"
+#include "config/node_config.h"
 #include "config/property.h"
 #include "features/feature_table.h"
 #include "model/fundamental.h"
@@ -28,6 +29,7 @@
 #include "random/generators.h"
 
 #include <seastar/core/sharded.hh>
+#include <seastar/core/smp.hh>
 
 #include <boost/test/unit_test.hpp>
 
@@ -177,6 +179,15 @@ struct topic_table_fixture {
         return total;
     }
 
+    struct set_config_node_id {
+        set_config_node_id() {
+            ss::smp::invoke_on_all([] {
+                config::node().node_id.set_value(model::node_id{1});
+            }).get();
+        }
+    };
+
+    set_config_node_id setter;
     ss::sharded<cluster::members_table> members;
     ss::sharded<features::feature_table> features;
     ss::sharded<cluster::partition_allocator> allocator;

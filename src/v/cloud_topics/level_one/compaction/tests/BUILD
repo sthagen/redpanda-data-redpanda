@@ -71,3 +71,22 @@ redpanda_cc_gtest(
         "@seastar",
     ],
 )
+
+redpanda_cc_gtest(
+    name = "log_info_collector_test",
+    timeout = "short",
+    srcs = [
+        "log_info_collector_test.cc",
+    ],
+    deps = [
+        "//src/v/cloud_topics/level_one/compaction:log_info_collector",
+        "//src/v/cloud_topics/level_one/compaction:meta",
+        "//src/v/cloud_topics/level_one/frontend_reader/tests:l1_reader_fixture",
+        "//src/v/cluster",
+        "//src/v/model",
+        "//src/v/model/tests:random",
+        "//src/v/test_utils:gtest",
+        "@googletest//:gtest",
+        "@seastar",
+    ],
+)

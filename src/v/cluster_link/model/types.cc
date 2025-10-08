@@ -467,11 +467,12 @@ auto fmt::formatter<cluster_link::model::metadata>::format(
   -> decltype(ctx.out()) {
     return fmt::format_to(
       ctx.out(),
-      "{{name: {}, uuid: {}, connection: {}, state: {}}}",
+      "{{name: {}, uuid: {}, connection: {}, state: {}, configuration: {}}}",
       m.name,
       m.uuid,
       m.connection,
-      m.state);
+      m.state,
+      m.configuration);
 }
 
 auto fmt::formatter<cluster_link::model::add_mirror_topic_cmd>::format(

@@ -25,14 +25,14 @@ namespace cloud_topics {
 // managed by the cloud_topics_manager.
 //
 // L1 retention: L1 retention is computed by periodically querying the
-// metastore, the propagating the updated start offset to L0 metadata storage
+// metastore, then propagating the updated start offset to L0 metadata storage
 // (i.e. l0::ctp_stm). We propagate to L0 so that the fetch path doesn't need to
-// make a RPC in order to service list offset requests. Since we write the data
-// to L0, we rely on the reconciler to actually push the new start offset, since
-// there is an additional Delete Records Kafka RPC that can also advance the
-// start offset for the partition. By centralizing the start offset, we can
-// give read-your-own-write consistency for delete records, and also have a
-// single source of truth for pushing the new start offset to the L1 metastore.
+// make a RPC in order to service list offset requests. There is an additional
+// Delete Records Kafka RPC that can also advance the start offset for the
+// partition. For this reason, the start offset is also back-propagated to L1 at
+// the end of housekeeping. By centralizing the start offset, we can give
+// read-your-own-write consistency for delete records, and also have a single
+// source of truth for pushing the new start offset to the L1 metastore.
 //
 // L0 retention: This is managed entirely by l0::ctp_stm based on the process
 // the reconciler has made.
@@ -44,6 +44,10 @@ public:
     public:
         l0_metadata_storage() = default;
         virtual ~l0_metadata_storage() = default;
+
+        // Get the current start offset for the partition.
+        virtual kafka::offset get_start_offset(const model::topic_id_partition&)
+          = 0;
 
         // Update the start offset to the partition, this must be an
         // idempotent operation.
@@ -95,6 +99,10 @@ private:
     ss::future<> do_loop();
     ss::future<kafka::offset> do_bytes_retention(size_t size);
     ss::future<kafka::offset> do_time_retention(std::chrono::milliseconds);
+    // Syncs the start offset from L0 metadata storage to L1 metastore.
+    // This ensures that L1 has the most up-to-date start offset, including
+    // any updates from Delete Records requests.
+    ss::future<> sync_start_offset();
 
     model::topic_id_partition _tidp;
     l0_metadata_storage* _l0_metastore;

@@ -247,7 +247,8 @@ domain_manager::get_first_timestamp_ge(
         };
     }
     auto& stm_state = stm_->state();
-    auto get_res = simple_metastore::get_first_ge(stm_state, req.tp, req.ts);
+    auto get_res = simple_metastore::get_first_ge(
+      stm_state, req.tp, req.o, req.ts);
     if (!get_res.has_value()) {
         co_return rpc::get_first_timestamp_ge_reply{
           .ec = convert_metastore_errc(get_res.error()),

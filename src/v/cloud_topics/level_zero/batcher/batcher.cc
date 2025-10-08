@@ -51,7 +51,8 @@ batcher<Clock>::batcher(
         .bind()) // TODO: use different config
   , _rtc(_as)
   , _logger(cd_log, _rtc)
-  , _stage(std::move(stage)) {}
+  , _stage(std::move(stage))
+  , _probe(config::shard_local_cfg().disable_metrics()) {}
 
 template<class Clock>
 ss::future<> batcher<Clock>::start() {
@@ -176,6 +177,7 @@ ss::future<result<bool>> batcher<Clock>::run_once() noexcept {
                 wr.set_value(errc::failed_to_get_epoch);
                 list.requests.pop_back();
             }
+            _probe.register_epoch_error();
             co_return errc::failed_to_get_epoch;
         }
 
@@ -187,6 +189,7 @@ ss::future<result<bool>> batcher<Clock>::run_once() noexcept {
         }
         // TODO: skip waiting if list.completed is not true
         auto payload = aggregator.prepare();
+        auto size_bytes = payload.size_bytes();
         auto result = co_await upload_object(
           aggregator.get_object_id(), std::move(payload));
         if (result.has_error()) {
@@ -196,9 +199,11 @@ ss::future<result<bool>> batcher<Clock>::run_once() noexcept {
             // don't want to depend on kafka layer directly.
             // Timeout should work well at this point.
             aggregator.ack_error(errc::timeout);
+            _probe.register_error();
             co_return result.error();
         }
         aggregator.ack();
+        _probe.register_upload(size_bytes);
         co_return list.complete;
     } catch (...) {
         auto err = std::current_exception();

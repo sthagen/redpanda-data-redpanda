@@ -125,10 +125,10 @@ TEST_F(ReducerTestFixture, Reducer) {
 
     auto state = l1::compaction_job_state::running;
     auto map = compaction::simple_key_offset_map();
-    auto sample_spec = l1::metastore::compaction_sample_spec{
+    auto info_spec = l1::metastore::compaction_info_spec{
       .tidp = tidp,
       .tombstone_removal_upper_bound_ts = model::timestamp::max()};
-    auto compaction_info = _metastore.get_compaction_info(sample_spec).get();
+    auto compaction_info = _metastore.get_compaction_info(info_spec).get();
 
     ASSERT_TRUE(compaction_info.has_value());
     ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 1.0);

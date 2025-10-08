@@ -30,6 +30,8 @@ TEST(BatchBuilderTest, AddSimpleRecord) {
     builder.add_record({.key = std::move(key), .value = std::move(value)});
     auto batch = builder.build_sync();
 
+    EXPECT_EQ(batch.header().producer_id, -1);
+    EXPECT_EQ(batch.header().base_sequence, -1);
     EXPECT_EQ(batch.header().record_count, 1);
     auto records = batch.copy_records();
     EXPECT_EQ(records.size(), 1);

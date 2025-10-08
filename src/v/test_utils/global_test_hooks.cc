@@ -9,16 +9,51 @@
  * by the Apache License, Version 2.0
  */
 
-#include "random/test_seeding.h"
+#include "test_utils/global_test_hooks.h"
 
+#include "random/generators.h"
+#include "random/test_seeding.h"
+#include "test_utils/test_env.h"
+
+#include <fmt/core.h>
+
+#include <cstdlib>
 #include <string>
+#include <string_view>
+
+using namespace std::literals;
 
 namespace test_hooks {
 
-void before_test_case([[maybe_unused]] const std::string& test_name) {
-    // reset seeds for each test case to ensure reproducibility
-    random_generators::reset_seed_for_tests();
+namespace {
+
+constexpr std::string_view debug_hooks_str = "REDPANDA_DEBUG_TEST_HOOKS";
+
+const bool debug_hooks = test_env::getenv(std::string{debug_hooks_str}, "0")
+                         != "0";
+
+static void maybe_debug_log(std::string_view hook, std::string_view test_name) {
+    if (debug_hooks) {
+        fmt::print(
+          stderr,
+          "{} {} {}: {}\n",
+          debug_hooks_str,
+          hook,
+          test_name,
+          random_generators::global_state_string());
+    }
 }
 
-void after_test_case([[maybe_unused]] const std::string& test_name) {}
+} // namespace
+
+void before_test_case(const std::string& test_name) {
+    // reset seeds for each test case to improve reproducibility, see
+    // https://redpandadata.atlassian.net/wiki/spaces/CORE/pages/1406271495/Random+values+in+tests
+    random_generators::reset_seed_for_tests();
+    maybe_debug_log("before_test_case", test_name);
+}
+
+void after_test_case(const std::string& test_name) {
+    maybe_debug_log("after_test_case", test_name);
+}
 } // namespace test_hooks

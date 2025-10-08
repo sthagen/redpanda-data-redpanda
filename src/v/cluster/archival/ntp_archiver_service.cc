@@ -584,8 +584,7 @@ ss::future<> ntp_archiver::upload_until_abort() {
         co_return;
     }
     if (!_probe) {
-        _probe.emplace(
-          _conf->ntp_metrics_disabled, _ntp, _parent.archival_meta_stm());
+        initialize_probe();
     }
 
     while (!_as.abort_requested()) {
@@ -3814,6 +3813,11 @@ bool ntp_archiver::uploaded_and_clean_past_offset(model::offset o) const {
 bool ntp_archiver::uploaded_data_past_flush_offset() const {
     return flush_in_progress()
            && manifest().get_last_offset() >= _flush_uploads_offset.value();
+}
+
+void ntp_archiver::initialize_probe() {
+    _probe.emplace(
+      _conf->ntp_metrics_disabled, _ntp, _parent.archival_meta_stm());
 }
 
 } // namespace archival

@@ -191,5 +191,6 @@ test:lldb --strategy=TestRunner=local
 
 # always pass through the following variables if they are set in the environment
 test --test_env=REDPANDA_RNG_SEEDING_MODE
+test --test_env=REDPANDA_DEBUG_TEST_HOOKS
 
 try-import %workspace%/user.bazelrc

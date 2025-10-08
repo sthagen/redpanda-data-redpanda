@@ -924,6 +924,7 @@ using create_partitions_configuration_assignment
 enum class topic_purge_domain {
     cloud_storage = 0,
     iceberg = 1,
+    cloud_topic = 2,
 };
 
 std::ostream& operator<<(std::ostream&, const topic_purge_domain&);
@@ -985,6 +986,17 @@ struct nt_iceberg_tombstone
     model::revision_id last_deleted_revision;
 
     auto serde_fields() { return std::tie(last_deleted_revision); }
+};
+
+struct nt_cloud_topic_tombstone
+  : serde::envelope<
+      nt_cloud_topic_tombstone,
+      serde::version<0>,
+      serde::compat_version<0>> {
+    // The topic ID used by cloud topic whose data requires removal.
+    model::topic_id topic_id;
+
+    auto serde_fields() { return std::tie(topic_id); }
 };
 
 struct topic_lifecycle_transition

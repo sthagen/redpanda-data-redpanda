@@ -10,6 +10,7 @@
 
 #include "cluster/data_migrated_resources.h"
 #include "cluster/topic_table.h"
+#include "config/node_config.h"
 #include "datalake/catalog_schema_manager.h"
 #include "datalake/coordinator/coordinator.h"
 #include "datalake/coordinator/state_machine.h"
@@ -17,11 +18,18 @@
 #include "datalake/record_schema_resolver.h"
 #include "raft/tests/stm_test_fixture.h"
 
+#include <seastar/core/smp.hh>
+
 using coordinator = std::unique_ptr<datalake::coordinator::coordinator>;
 using stm = datalake::coordinator::coordinator_stm;
 using stm_ptr = ss::shared_ptr<stm>;
 
 struct coordinator_stm_fixture : stm_raft_fixture<stm> {
+    static void SetUpTestSuite() {
+        ss::smp::invoke_on_all([] {
+            config::node().node_id.set_value(model::node_id{0});
+        }).get();
+    }
     ss::future<> TearDownAsync() override {
         for (auto& [_, coordinator] : coordinators) {
             co_await coordinator->stop_and_wait();

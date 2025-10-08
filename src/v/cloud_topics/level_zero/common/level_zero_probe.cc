@@ -1,0 +1,287 @@
+/*
+ * Copyright 2025 Redpanda Data, Inc.
+ *
+ * Licensed as a Redpanda Enterprise file under the Redpanda Community
+ * License (the "License"); you may not use this file except in compliance with
+ * the License. You may obtain a copy of the License at
+ *
+ * https://github.com/redpanda-data/redpanda/blob/master/licenses/rcl.md
+ */
+#include "cloud_topics/level_zero/common/level_zero_probe.h"
+
+#include "metrics/metrics.h"
+#include "metrics/prometheus_sanitize.h"
+
+#include <seastar/core/metrics.hh>
+#include <seastar/core/metrics_types.hh>
+#include <seastar/core/shared_ptr.hh>
+
+namespace cloud_topics::l0 {
+
+pipeline_probe::pipeline_probe(
+  std::string_view name, bool disable, bool public_disable) {
+    setup_internal_metrics(disable, ss::sstring(name));
+    setup_public_metrics(public_disable, ss::sstring(name));
+}
+
+void pipeline_probe::setup_internal_metrics(bool disable, ss::sstring name) {
+    if (disable) {
+        return;
+    }
+    namespace sm = ss::metrics;
+    std::vector<sm::label_instance> labels;
+    labels.emplace_back(sm::label("name")(std::move(name)));
+    // Set up private metrics
+    _metrics.add_group(
+      prometheus_sanitize::metrics_name("cloud_topics_pipeline"),
+      {sm::make_counter(
+         "requests_in",
+         [this] { return _requests_in; },
+         sm::description("Number of requests that entered the pipeline."),
+         labels),
+       sm::make_counter(
+         "requests_completed",
+         [this] { return _requests_completed; },
+         sm::description("Number of requests that completed successfully."),
+         labels),
+       sm::make_counter(
+         "requests_error",
+         [this] { return _requests_error; },
+         sm::description("Number of requests that completed with error."),
+         labels),
+       sm::make_counter(
+         "requests_timeout",
+         [this] { return _requests_timeout; },
+         sm::description("Number of requests that timed out."),
+         labels),
+       sm::make_histogram(
+         "request_processing_time_ms",
+         [this] { return _request_processing_time.public_histogram_logform(); },
+         sm::description("Request processing time histogram in milliseconds."),
+         labels),
+       sm::make_gauge(
+         "current_memory_usage",
+         [this] { return _current_memory_usage; },
+         sm::description(
+           "Current memory usage of the pipeline. Includes all "
+           "requests in-flight."),
+         labels),
+       sm::make_counter(
+         "memory_pressure_waits",
+         [this] { return _memory_pressure_waits; },
+         sm::description("Number of times requests had to wait for memory."),
+         labels),
+       sm::make_gauge(
+         "memory_pressure_blocked",
+         [this] { return _memory_pressure_blocked; },
+         sm::description(
+           "Amount of memory (in bytes) blocked due to memory pressure."),
+         labels),
+       sm::make_counter(
+         "bytes_in",
+         [this] { return _total_bytes_in; },
+         sm::description(
+           "Total number of bytes processed by the pipeline. "
+           "For write pipeline it's bytes written, for read "
+           "pipeline it's bytes fetched."),
+         labels),
+       sm::make_counter(
+         "bytes_out",
+         [this] { return _total_bytes_out; },
+         sm::description(
+           "Total number of bytes processed by the pipeline. "
+           "For write pipeline it's bytes written, for read "
+           "pipeline it's bytes fetched."),
+         labels),
+       sm::make_histogram(
+         "request_size_bytes",
+         [this] {
+             return _request_memory_histogram.public_histogram_logform();
+         },
+         sm::description("Request size histogram."),
+         labels)});
+}
+
+void pipeline_probe::setup_public_metrics(bool disable, ss::sstring name) {
+    if (disable) {
+        return;
+    }
+    namespace sm = ss::metrics;
+    std::vector<sm::label_instance> labels;
+    labels.emplace_back(sm::label("name")(std::move(name)));
+    // Set up public metrics
+    _public_metrics.add_group(
+      prometheus_sanitize::metrics_name("cloud_topics_pipeline"),
+      {
+        sm::make_counter(
+          "requests_in",
+          [this] { return _requests_in; },
+          sm::description("Number of requests that entered the pipeline."),
+          labels),
+        sm::make_counter(
+          "requests_error",
+          [this] { return _requests_error + _requests_timeout; },
+          sm::description(
+            "Number of failed requests. This includes all failed "
+            "requests no matter the reason."),
+          labels),
+        sm::make_counter(
+          "bytes_processed",
+          [this] { return std::max(_total_bytes_in, _total_bytes_out); },
+          sm::description(
+            "Total number of bytes processed by the pipeline. "
+            "For write pipeline it's bytes written, for read "
+            "pipeline it's bytes fetched."),
+          labels),
+        sm::make_gauge(
+          "current_memory_usage",
+          [this] { return _current_memory_usage; },
+          sm::description(
+            "Current memory usage of the pipeline. Includes all "
+            "requests in-flight."),
+          labels),
+      });
+}
+
+throttler_probe::throttler_probe(bool disable) {
+    setup_internal_metrics(disable);
+}
+
+void throttler_probe::setup_internal_metrics(bool disable) {
+    if (disable) {
+        return;
+    }
+    namespace sm = ss::metrics;
+    std::vector<sm::label_instance> labels;
+
+    // Set up private metrics
+    _metrics.add_group(
+      prometheus_sanitize::metrics_name("cloud_topics_throttler"),
+      {sm::make_counter(
+         "throttle_events",
+         [this] { return _throttle_events_count; },
+         sm::description("Number of times throttling was applied."),
+         labels),
+       sm::make_gauge(
+         "bytes_throttled",
+         [this] { return _bytes_throttled_gauge; },
+         sm::description("Current number of bytes being throttled."),
+         labels),
+       sm::make_gauge(
+         "requests_throttled",
+         [this] { return _requests_throttled_gauge; },
+         sm::description("Current number of requests being throttled."),
+         labels)});
+}
+
+write_request_scheduler_probe::write_request_scheduler_probe(bool disable) {
+    setup_internal_metrics(disable);
+}
+
+void write_request_scheduler_probe::setup_internal_metrics(bool disable) {
+    if (disable) {
+        return;
+    }
+    namespace sm = ss::metrics;
+    std::vector<sm::label_instance> labels;
+
+    // Set up private metrics
+    _metrics.add_group(
+      prometheus_sanitize::metrics_name("cloud_topics_write_request_scheduler"),
+      {sm::make_counter(
+         "data_threshold_requests",
+         [this] { return _data_threshold_requests; },
+         sm::description(
+           "Number of write requests scheduled by data threshold policy."),
+         labels),
+
+       sm::make_counter(
+         "data_threshold_bytes",
+         [this] { return _data_threshold_bytes; },
+         sm::description(
+           "Total number of bytes scheduled by data threshold policy."),
+         labels),
+
+       sm::make_counter(
+         "time_fallback_requests",
+         [this] { return _time_fallback_requests; },
+         sm::description(
+           "Number of write requests scheduled by time based fallback policy."),
+         labels),
+
+       sm::make_counter(
+         "time_fallback_bytes",
+         [this] { return _time_fallback_bytes; },
+         sm::description(
+           "Total number of bytes scheduled by time based fallback policy."),
+         labels),
+
+       sm::make_counter(
+         "tx_requests_xshard",
+         [this] { return _tx_requests_xshard; },
+         sm::description("Number of write requests proxied to another shard."),
+         labels),
+
+       sm::make_counter(
+         "tx_bytes_xshard",
+         [this] { return _tx_bytes_xshard; },
+         sm::description("Total number of bytes proxied to another shard."),
+         labels),
+
+       sm::make_counter(
+         "rx_requests_xshard",
+         [this] { return _rx_requests_xshard; },
+         sm::description(
+           "Number of write requests received from another shard."),
+         labels),
+
+       sm::make_counter(
+         "rx_bytes_xshard",
+         [this] { return _rx_bytes_xshard; },
+         sm::description("Total number of bytes received from another shard."),
+         labels)});
+}
+batcher_probe::batcher_probe(bool disable) { setup_internal_metrics(disable); }
+
+void batcher_probe::setup_internal_metrics(bool disable) {
+    if (disable) {
+        return;
+    }
+    namespace sm = ss::metrics;
+    std::vector<sm::label_instance> labels;
+
+    // Set up private metrics
+    _metrics.add_group(
+      prometheus_sanitize::metrics_name("cloud_topics_batcher"),
+      {
+        sm::make_counter(
+          "objects_uploaded",
+          [this] { return _objects_uploaded; },
+          sm::description(
+            "Number of L0 objects successfully uploaded by the batcher."),
+          labels),
+
+        sm::make_counter(
+          "bytes_uploaded",
+          [this] { return _bytes_uploaded; },
+          sm::description(
+            "Total number of bytes successfully uploaded by the batcher."),
+          labels),
+
+        sm::make_counter(
+          "upload_errors",
+          [this] { return _upload_errors; },
+          sm::description(
+            "Number of upload errors encountered by the batcher."),
+          labels),
+
+        sm::make_counter(
+          "epoch_errors",
+          [this] { return _epoch_errors; },
+          sm::description("Number of epoch errors encountered by the batcher."),
+          labels),
+
+      });
+}
+
+} // namespace cloud_topics::l0

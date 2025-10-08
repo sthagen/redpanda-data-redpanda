@@ -161,3 +161,27 @@ INT_KEY_MAP_PERF_TEST(std_hash, uint64_t, int64_t, SIZE);
 INT_KEY_MAP_PERF_TEST(absl_btree_map, uint64_t, int64_t, SIZE);
 INT_KEY_MAP_PERF_TEST(absl_flat_map, uint64_t, int64_t, SIZE);
 INT_KEY_MAP_PERF_TEST(chunked_map, uint64_t, int64_t, SIZE);
+
+static inline auto absl_next_seed() {
+    return absl::container_internal::NextSeed();
+}
+
+PERF_TEST(absl_next_seed, next_seed_10000) {
+    constexpr size_t inner_iters = 10000;
+    for (size_t i = 0; i < inner_iters; ++i) {
+        perf_tests::do_not_optimize(absl_next_seed());
+    }
+
+    return inner_iters;
+}
+
+PERF_TEST(absl_next_seed, find_seed_again) {
+    auto first_seed = absl_next_seed();
+    while (absl_next_seed() != first_seed) {
+    }
+}
+
+PERF_TEST(absl_next_seed, find_seed_0) {
+    while (absl_next_seed() != 0) {
+    }
+}

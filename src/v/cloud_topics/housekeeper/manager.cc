@@ -34,21 +34,31 @@ public:
         state)
       : _state(state) {}
 
+    kafka::offset
+    get_start_offset(const model::topic_id_partition& tidp) override {
+        auto api = get_api(tidp);
+        return api.get_start_offset();
+    }
+
     ss::future<> set_start_offset(
       const model::topic_id_partition& tidp,
       kafka::offset offset,
       ss::abort_source* as) override {
-        auto& state = _state->at(tidp);
-        auto stm = state.partition->raft()->stm_manager()->get<ctp_stm>();
-        if (!stm) {
-            throw std::runtime_error(fmt::format("no ctp_stm for {}", tidp));
-        }
-        ctp_stm_api api(stm);
+        auto api = get_api(tidp);
         co_await api.set_start_offset(
           offset, model::timeout_clock::now() + stm_timeout, *as);
     }
 
 private:
+    ctp_stm_api get_api(const model::topic_id_partition& tidp) {
+        auto& state = _state->at(tidp);
+        auto stm = state.partition->raft()->stm_manager()->get<ctp_stm>();
+        if (!stm) {
+            throw std::runtime_error(fmt::format("no ctp_stm for {}", tidp));
+        }
+        return ctp_stm_api(stm);
+    }
+
     chunked_hash_map<model::topic_id_partition, housekeeper_manager::state>*
       _state;
 };

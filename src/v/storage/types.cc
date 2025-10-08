@@ -59,7 +59,7 @@ fmt::iterator local_log_reader_config::format_to(fmt::iterator it) const {
       max_bytes,
       strict_max_bytes,
       type_filter,
-      first_timestamp,
+      timestamp,
       bytes_consumed,
       over_budget,
       skip_batch_cache,

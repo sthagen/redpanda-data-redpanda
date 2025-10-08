@@ -145,6 +145,51 @@ redpanda_cc_library(
 )
 
 redpanda_cc_library(
+    name = "log_collector",
+    srcs = [
+        "log_collector.cc",
+    ],
+    hdrs = [
+        "log_collector.h",
+    ],
+    implementation_deps = [
+        "//src/v/ssx:future_util",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        "//src/v/base",
+        "//src/v/cluster",
+        "//src/v/model",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
+    name = "log_info_collector",
+    srcs = [
+        "log_info_collector.cc",
+    ],
+    hdrs = [
+        "log_info_collector.h",
+    ],
+    implementation_deps = [
+        "//src/v/ssx:future_util",
+    ],
+    visibility = ["//visibility:public"],
+    deps = [
+        ":logger",
+        ":meta",
+        "//src/v/cloud_topics/level_one/metastore",
+        "//src/v/cluster",
+        "//src/v/compaction:utils",
+        "//src/v/config",
+        "//src/v/container:chunked_vector",
+        "//src/v/model",
+        "@seastar",
+    ],
+)
+
+redpanda_cc_library(
     name = "committing_policy",
     srcs = [
         "committing_policy.cc",

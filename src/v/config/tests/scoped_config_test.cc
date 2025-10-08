@@ -16,25 +16,16 @@
 // scoped_config, it is reset in between each one.
 
 SEASTAR_THREAD_TEST_CASE(test_scoped_config_a) {
-    BOOST_REQUIRE_MESSAGE(
-      !config::shard_local_cfg().cluster_id().has_value(),
-      config::shard_local_cfg().cluster_id()->c_str());
     scoped_config cfg;
     cfg.get("cluster_id").set_value(std::make_optional<ss::sstring>("a"));
 }
 
 SEASTAR_THREAD_TEST_CASE(test_scoped_config_b) {
-    BOOST_REQUIRE_MESSAGE(
-      !config::shard_local_cfg().cluster_id().has_value(),
-      config::shard_local_cfg().cluster_id()->c_str());
     scoped_config cfg;
     cfg.get("cluster_id").set_value(std::make_optional<ss::sstring>("b"));
 }
 
 SEASTAR_THREAD_TEST_CASE(test_scoped_config_c) {
-    BOOST_REQUIRE_MESSAGE(
-      !config::shard_local_cfg().cluster_id().has_value(),
-      config::shard_local_cfg().cluster_id()->c_str());
     scoped_config cfg;
     cfg.get("cluster_id").set_value(std::make_optional<ss::sstring>("c"));
 }

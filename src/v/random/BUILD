@@ -13,6 +13,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/base",
         "@abseil-cpp//absl/random",
+        "@fmt",
         "@seastar",
     ],
 )

@@ -420,13 +420,16 @@ TEST_F(ReconcilerTest, OffsetAndTimestampTracking) {
     EXPECT_EQ(obj_beyond_offset.error(), l1::metastore::errc::out_of_range);
 
     // Timestamp queries.
-    auto obj_at_ts
-      = metastore().get_first_ge(src->topic_id_partition(), base_ts).get();
+    auto obj_at_ts = metastore()
+                       .get_first_ge(
+                         src->topic_id_partition(), kafka::offset{}, base_ts)
+                       .get();
     EXPECT_TRUE(obj_at_ts.has_value());
 
     auto obj_at_later_ts = metastore()
                              .get_first_ge(
                                src->topic_id_partition(),
+                               kafka::offset{},
                                model::timestamp{base_ts() + 1500})
                              .get();
     EXPECT_TRUE(obj_at_later_ts.has_value());
@@ -435,6 +438,7 @@ TEST_F(ReconcilerTest, OffsetAndTimestampTracking) {
     auto obj_beyond_ts = metastore()
                            .get_first_ge(
                              src->topic_id_partition(),
+                             kafka::offset{},
                              model::timestamp{base_ts() + 10000})
                            .get();
     EXPECT_FALSE(obj_beyond_ts.has_value());

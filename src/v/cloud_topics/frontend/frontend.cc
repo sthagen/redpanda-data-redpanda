@@ -13,6 +13,7 @@
 #include "cloud_topics/data_plane_api.h"
 #include "cloud_topics/frontend/errc.h"
 #include "cloud_topics/level_one/frontend_reader/reader.h"
+#include "cloud_topics/level_one/metastore/metastore.h"
 #include "cloud_topics/level_zero/common/extent_meta.h"
 #include "cloud_topics/level_zero/frontend_reader/reader.h"
 #include "cloud_topics/level_zero/stm/ctp_stm.h"
@@ -24,12 +25,14 @@
 #include "cluster/rm_stm_types.h"
 #include "cluster/types.h"
 #include "model/fundamental.h"
+#include "model/offset_interval.h"
 #include "model/record.h"
 #include "model/record_batch_reader.h"
 #include "model/record_batch_types.h"
 #include "model/timeout_clock.h"
 #include "raft/errc.h"
 #include "raft/replicate.h"
+#include "storage/log_reader.h"
 #include "storage/record_batch_builder.h"
 #include "storage/types.h"
 
@@ -43,6 +46,7 @@
 #include <chrono>
 #include <expected>
 #include <iterator>
+#include <limits>
 #include <optional>
 #include <stdexcept>
 
@@ -63,18 +67,10 @@ static constexpr auto L0_replicate_default_timeout = 1s;
 // array of placeholder batches.
 static placeholder_batches_with_size convert_to_placeholders(
   const chunked_vector<cloud_topics::extent_meta>& extents,
-  const chunked_vector<model::record_batch_header>& original_headers) {
-    // TODO: avoid copying this buffer
-    ss::circular_buffer<model::record_batch_header> headers;
-    std::copy(
-      original_headers.begin(),
-      original_headers.end(),
-      std::back_inserter(headers));
+  const chunked_vector<model::record_batch_header>& headers) {
     placeholder_batches_with_size result;
     result.batches.reserve(extents.size());
-    for (const auto& extent : extents) {
-        auto header = headers.front();
-        headers.pop_front();
+    for (const auto& [extent, header] : std::views::zip(extents, headers)) {
         vassert(
           extent.base_offset() <= extent.last_offset(),
           "Extent base offset {} is greater than committed offset {}",
@@ -319,10 +315,148 @@ frontend::make_l1_reader(cloud_topic_log_reader_config& cfg) const {
 
 ss::future<std::optional<storage::timequery_result>>
 frontend::timequery(storage::timequery_config cfg) {
-    // cluster::partition::timequery returns a result in Kafka offsets,
-    // no further offset translation is required here.
-    // TODO: take metadata layer state into account
-    return _partition->timequery(cfg);
+    // Data periodically moves from L0 -> L1, since we need to return the first
+    // offset for a given timestamp, we query L0 first, then we query L1. If L1
+    // has the data, then we can go ahead and use that value to answer the
+    // query, otherwise the L0 data. Why can't we look in L0 lazily? The issue
+    // lies with the reconciler moving data during these queries into L1. We may
+    // query L1 and then by the time we look at L0, we have an issue where the
+    // timestamp we were looking for moved to L1 in the meantime. To avoid this
+    // we need to first query L0, then we can query L1. In this case, the data
+    // intervals that we queried between L0 and L1 could overlap, but that's OK
+    // because we just favor using L1 to answer the time query in this case.
+    auto l0_result = co_await l0_timequery(cfg);
+    auto l1_result = co_await l1_timequery(cfg);
+    vlog(
+      cd_log.trace,
+      "metadata timequery for L1: {}, for L0: {}",
+      l1_result,
+      l0_result);
+    if (l1_result) {
+        co_return co_await refine_timequery_result(
+          *l1_result, cfg.abort_source);
+    }
+    if (l0_result) {
+        co_return co_await refine_timequery_result(
+          *l0_result, cfg.abort_source);
+    }
+    co_return std::nullopt;
+}
+
+ss::future<std::optional<frontend::coarse_grained_timequery_result>>
+frontend::l1_timequery(storage::timequery_config cfg) {
+    auto ct_state = _partition->get_cloud_topics_state();
+    auto l1_metastore = ct_state->local().get_l1_metastore();
+    auto maybe_tidp = ntp_to_topic_id_partition(_partition->ntp());
+    vassert(
+      maybe_tidp.has_value(),
+      "No topic id for cloud topic {}",
+      _partition->ntp());
+    const auto& tidp = *maybe_tidp;
+    // I don't love this, but we clamp min/max offsets by the kafka start offset
+    // and the LSO/HWM, but we can ignore the max offset for L1 because we never
+    // upload anything less than LSO to L1.
+    std::ignore = cfg.max_offset;
+    // Go query our start offset from the L1 metastore
+    auto result = co_await l1_metastore->get_first_ge(
+      tidp, model::offset_cast(cfg.min_offset), cfg.time);
+    if (!result.has_value()) {
+        if (
+          result.error() == l1::metastore::errc::out_of_range
+          || result.error() == l1::metastore::errc::missing_ntp) {
+            co_return std::nullopt;
+        }
+        throw std::runtime_error(fmt_with_ctx(
+          fmt::format,
+          "unable to read from l1 to service timequery @ {} for: {}",
+          cfg.time,
+          _partition->ntp()));
+    }
+    co_return coarse_grained_timequery_result{
+      .time = cfg.time,
+      .start_offset = result->first_offset,
+      .last_offset = result->last_offset,
+    };
+}
+
+ss::future<std::optional<frontend::coarse_grained_timequery_result>>
+frontend::l0_timequery(storage::timequery_config cfg) {
+    // Read L0 metadata to find the right batch. We can't use
+    // _partition->timequery because it will filter for only data batches, not
+    // placeholder batches.
+    auto reader = co_await _partition->make_local_reader({
+      /*start_offset=*/cfg.min_offset,
+      /*max_offset=*/cfg.max_offset,
+      /*max_bytes=*/std::numeric_limits<size_t>::max(),
+      /*type_filter=*/std::nullopt,
+      /*time=*/cfg.time,
+      /*as=*/cfg.abort_source,
+      /*client_addr=*/cfg.client_address,
+    });
+    auto type_filter = std::to_array({
+      model::record_batch_type::raft_data,
+      model::record_batch_type::ctp_placeholder,
+    });
+    auto gen = std::move(reader).generator(model::no_timeout);
+    while (auto batch = co_await gen()) {
+        if (!std::ranges::contains(type_filter, batch->header().type)) {
+            continue;
+        }
+        if (batch->header().max_timestamp < cfg.time) {
+            continue;
+        }
+        // NOTE: we can't just return this offset verbatim, since we don't
+        // record the same timestamp deltas inside batches for placeholder
+        // batches (this would require unpacking batches during produce).
+        auto ot_state = _partition->get_offset_translator_state();
+        co_return coarse_grained_timequery_result{
+          .time = cfg.time,
+          .start_offset = model::offset_cast(
+            ot_state->from_log_offset(batch->base_offset())),
+          .last_offset = model::offset_cast(
+            ot_state->from_log_offset(batch->last_offset())),
+        };
+    }
+    co_return std::nullopt;
+}
+ss::future<std::optional<storage::timequery_result>>
+frontend::refine_timequery_result(
+  coarse_grained_timequery_result input,
+  model::opt_abort_source_t abort_source) {
+    cloud_topic_log_reader_config reader_cfg(
+      /*start_offset=*/input.start_offset,
+      /*max_offset=*/input.last_offset,
+      /*as=*/abort_source);
+    // TODO(perf): In the case of L0, we should only need to materialize a
+    // single batch here, because the local log is correct to the granularity of
+    // a batch (but not within a batch due to placeholders). For L1, we could be
+    // giving the reader a timestamp so it uses the L1 object indexes to seek
+    // to the correct spot within the index, this would allow us to optimize IO
+    // against the cloud.
+    auto reader = co_await make_reader(reader_cfg, std::nullopt);
+    auto generator = std::move(reader.reader).generator(model::no_timeout);
+    auto query_interval = model::bounded_offset_interval::checked(
+      kafka::offset_cast(input.start_offset),
+      kafka::offset_cast(input.last_offset));
+    while (auto batch = co_await generator()) {
+        auto batch_interval = model::bounded_offset_interval::checked(
+          batch->base_offset(), batch->last_offset());
+        if (!query_interval.overlaps(batch_interval)) {
+            if (batch_interval.min() > query_interval.max()) {
+                break;
+            }
+            continue;
+        }
+        if (input.time > batch->header().max_timestamp) {
+            continue;
+        }
+        co_return co_await storage::batch_timequery(
+          std::move(*batch),
+          kafka::offset_cast(input.start_offset),
+          input.time,
+          kafka::offset_cast(input.last_offset));
+    }
+    co_return std::nullopt;
 }
 
 namespace {
@@ -762,19 +896,26 @@ frontend::get_partition_info() const {
 }
 
 size_t frontend::estimate_size_between(kafka::offset, kafka::offset) const {
-    // TODO: implement this function
-    // This function can't be implemented yet because the L1 read path is not
-    // completely implemented.
+    // TODO(iceberg): implement this function
     return 0;
 }
 
 ss::future<std::error_code> frontend::linearizable_barrier() {
-    // TODO: implement linearizable barrier for cloud topics
     auto r = co_await _partition->linearizable_barrier();
     if (r) {
         co_return raft::errc::success;
     }
     co_return r.error();
+}
+
+fmt::iterator
+frontend::coarse_grained_timequery_result::format_to(fmt::iterator it) const {
+    return fmt::format_to(
+      it,
+      "{{time:{},start_offset:{},last_offset:{}}}",
+      time,
+      start_offset,
+      last_offset);
 }
 
 } // namespace cloud_topics

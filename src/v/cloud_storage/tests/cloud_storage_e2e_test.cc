@@ -85,6 +85,7 @@ TEST_F(ManualFixture, TestSpilloverRetentionCompactedTopic) {
     const auto num_segs = 100;
     auto partition = app.partition_manager.local().get(ntp);
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
     tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
     auto deferred_g_close = ss::defer([&gen] { gen.stop().get(); });
     auto total_records = gen.num_segments(num_segs)
@@ -132,6 +133,7 @@ TEST_F(ManualFixture, TestSizeEstimationWithCloud) {
     const auto num_segs = 100;
     auto partition = app.partition_manager.local().get(ntp);
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
     tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
     auto deferred_g_close = ss::defer([&gen] { gen.stop().get(); });
 
@@ -233,6 +235,7 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloud) {
     auto partition = app.partition_manager.local().get(ntp);
     auto log = partition->log();
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
     ASSERT_TRUE(archiver.sync_for_tests().get());
 
     tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
@@ -312,6 +315,7 @@ TEST_P(EndToEndFixture, TestProduceConsumeFromCloudWithSpillover) {
     auto archiver_ref = partition->archiver();
     ASSERT_TRUE(archiver_ref.has_value());
     auto& archiver = archiver_ref.value().get();
+    archiver.initialize_probe();
 
     kafka_produce_transport producer(make_kafka_client().get());
     producer.start().get();
@@ -570,6 +574,7 @@ public:
         partition = app.partition_manager.local().get(ntp).get();
         log = partition->log();
         archiver = &partition->archiver()->get();
+        archiver->initialize_probe();
     }
 
     scoped_config test_local_cfg;
@@ -858,6 +863,7 @@ TEST_F(CloudStorageManualMultiNodeTestBase, ReclaimableReportedInHealthReport) {
 
         // drive the uploading
         auto& archiver = prt_l->archiver()->get();
+        archiver.initialize_probe();
         archiver.sync_for_tests().get();
         archiver
           .upload_next_candidates(
@@ -898,6 +904,7 @@ TEST_F(EndToEndFixture, TestLocalTimequery) {
     auto partition = app.partition_manager.local().get(ntp);
     auto log = partition->log();
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
     ASSERT_TRUE(archiver.sync_for_tests().get());
 
     const auto batches_per_segment = 1;
@@ -978,6 +985,7 @@ TEST_P(EndToEndFixture, TestCloudStorageTimequery) {
     auto partition = app.partition_manager.local().get(ntp);
     auto log = partition->log();
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
     ASSERT_TRUE(archiver.sync_for_tests().get());
 
     const auto batches_per_segment = 1;
@@ -1071,6 +1079,7 @@ TEST_F(ReadReplicaFixture, TestCloudStorageTimequeryReadReplicaMode) {
     auto partition = app.partition_manager.local().get(ntp);
     auto log = partition->log();
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
     ASSERT_TRUE(archiver.sync_for_tests().get());
     archiver.upload_topic_manifest().get();
 
@@ -1102,6 +1111,7 @@ TEST_F(ReadReplicaFixture, TestCloudStorageTimequeryReadReplicaMode) {
     auto rr_archiver_ref = rr_partition->archiver();
     ASSERT_TRUE(rr_archiver_ref.has_value());
     auto& rr_archiver = rr_partition->archiver()->get();
+    rr_archiver.initialize_probe();
     ASSERT_TRUE(rr_archiver.sync_for_tests().get());
     rr_archiver.sync_manifest().get();
     ASSERT_EQ(rr_archiver.manifest().size(), 5);
@@ -1168,6 +1178,7 @@ TEST_P(EndToEndFixture, TestMixedTimequery) {
     auto partition = app.partition_manager.local().get(ntp);
     auto log = partition->log();
     auto& archiver = partition->archiver().value().get();
+    archiver.initialize_probe();
     ASSERT_TRUE(archiver.sync_for_tests().get());
 
     // Generate batches [0, 10, 20, ..., 100]

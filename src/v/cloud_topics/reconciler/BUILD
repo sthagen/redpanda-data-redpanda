@@ -30,6 +30,7 @@ redpanda_cc_library(
     deps = [
         "//src/v/config",
         "//src/v/metrics",
+        "//src/v/utils:log_hist",
         "@seastar",
     ],
 )

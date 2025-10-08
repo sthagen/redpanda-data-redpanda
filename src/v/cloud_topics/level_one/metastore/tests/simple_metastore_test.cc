@@ -15,6 +15,9 @@
 
 using namespace cloud_topics;
 using namespace cloud_topics::l1;
+using ::testing::Field;
+using ::testing::IsEmpty;
+using ::testing::Optional;
 
 namespace {
 
@@ -402,7 +405,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
 
     auto tpr = model::topic_id_partition::from(tid_a);
     for (const auto& t : {1000_t, 1999_t}) {
-        auto get_res = m.get_first_ge(tpr, t).get();
+        auto get_res = m.get_first_ge(tpr, {}, t).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid1);
         ASSERT_EQ(get_res->footer_pos, 100);
@@ -411,7 +414,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->last_offset, 10_o);
     }
     for (const auto& t : {2000_t, 2999_t}) {
-        auto get_res = m.get_first_ge(tpr, t).get();
+        auto get_res = m.get_first_ge(tpr, {}, t).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid2);
         ASSERT_EQ(get_res->footer_pos, 100);
@@ -420,7 +423,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBasic) {
         ASSERT_EQ(get_res->last_offset, 20_o);
     }
     for (const auto& t : {3000_t, 3999_t}) {
-        auto get_res = m.get_first_ge(tpr, t).get();
+        auto get_res = m.get_first_ge(tpr, {}, t).get();
         ASSERT_TRUE(get_res.has_value());
         ASSERT_EQ(get_res->oid, oid3);
         ASSERT_EQ(get_res->footer_pos, 100);
@@ -443,7 +446,7 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampBelowStart) {
     ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
     auto get_res
-      = m.get_first_ge(model::topic_id_partition::from(tid_a), 999_t).get();
+      = m.get_first_ge(model::topic_id_partition::from(tid_a), {}, 999_t).get();
     ASSERT_TRUE(get_res.has_value());
     ASSERT_EQ(get_res->oid, oid1);
 }
@@ -460,10 +463,47 @@ TEST(SimpleMetastoreTest, TestAddGetTimestampOutOfRange) {
     ASSERT_TRUE(add_res.has_value());
     ASSERT_TRUE(add_res.value().corrected_next_offsets.empty());
 
-    auto get_res
-      = m.get_first_ge(model::topic_id_partition::from(tid_a), 3000_t).get();
+    auto get_res = m.get_first_ge(
+                      model::topic_id_partition::from(tid_a), {}, 3000_t)
+                     .get();
     ASSERT_FALSE(get_res.has_value());
     ASSERT_EQ(metastore::errc::out_of_range, get_res.error());
+}
+
+TEST(SimpleMetastoreTest, TestAddGetTimestampCustomStart) {
+    simple_metastore m;
+    om_list_t ometas;
+    ometas.push_back(
+      om_builder(oid1, 100, 1100).add(tid_a, 0_o, 10_o, 2000_t, 0, 99).build());
+    ometas.push_back(om_builder(oid2, 100, 1100)
+                       .add(tid_a, 11_o, 20_o, 1000_t, 0, 99)
+                       .build());
+    auto add_res = m.add_objects(
+                      ometas, terms_builder().add(tid_a, 0_tm, 0_o).build())
+                     .get();
+    auto corrected_next_offsets
+      = &metastore::add_response::corrected_next_offsets;
+    EXPECT_THAT(add_res, Optional(Field(corrected_next_offsets, IsEmpty())));
+
+    auto object_oid = &metastore::object_response::oid;
+    auto get_res = m.get_first_ge(
+                      model::topic_id_partition::from(tid_a), 5_o, 500_t)
+                     .get();
+    EXPECT_THAT(get_res, Optional(Field(object_oid, oid1)));
+    get_res = m.get_first_ge(
+                 model::topic_id_partition::from(tid_a), 10_o, 500_t)
+                .get();
+    EXPECT_THAT(get_res, Optional(Field(object_oid, oid1)));
+    get_res = m.get_first_ge(
+                 model::topic_id_partition::from(tid_a), 11_o, 500_t)
+                .get();
+    EXPECT_THAT(get_res, Optional(Field(object_oid, oid2)));
+    get_res = m.get_first_ge(
+                 model::topic_id_partition::from(tid_a), 21_o, 500_t)
+                .get();
+    EXPECT_EQ(
+      get_res.error_or(metastore::errc::transport_error),
+      metastore::errc::out_of_range);
 }
 
 TEST(StateUpdateTest, TestReplaceBasic) {
@@ -1533,9 +1573,9 @@ TEST(SimpleMetastoreTest, TestDirtyRatio) {
         ASSERT_TRUE(compact_res.has_value());
     }
 
-    auto to_sample = metastore::compaction_sample_spec{
+    auto to_collect = metastore::compaction_info_spec{
       .tidp = tp, .tombstone_removal_upper_bound_ts = 3000_t};
-    auto compaction_info = m.get_compaction_info(to_sample).get();
+    auto compaction_info = m.get_compaction_info(to_collect).get();
     ASSERT_TRUE(compaction_info.has_value());
     ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 1.0);
 
@@ -1552,7 +1592,7 @@ TEST(SimpleMetastoreTest, TestDirtyRatio) {
         ASSERT_TRUE(compact_res.has_value());
     }
 
-    compaction_info = m.get_compaction_info(to_sample).get();
+    compaction_info = m.get_compaction_info(to_collect).get();
     ASSERT_TRUE(compaction_info.has_value());
     ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 0.5);
 
@@ -1569,7 +1609,7 @@ TEST(SimpleMetastoreTest, TestDirtyRatio) {
         ASSERT_TRUE(compact_res.has_value());
     }
 
-    compaction_info = m.get_compaction_info(to_sample).get();
+    compaction_info = m.get_compaction_info(to_collect).get();
     ASSERT_TRUE(compaction_info.has_value());
     ASSERT_FLOAT_EQ(compaction_info->dirty_ratio, 0.0);
 }

@@ -259,6 +259,7 @@ TEST(ProtobufCompat, Wellknown) {
     proto::example::well_known_protos original;
     original.set_single_duration(
       absl::Seconds(123456) + absl::Nanoseconds(789012));
+    original.get_repeated_duration().emplace_back(absl::Seconds(1));
     original.get_repeated_duration().emplace_back(
       absl::Seconds(123) + absl::Nanoseconds(789));
     original.get_repeated_duration().emplace_back(
@@ -297,6 +298,8 @@ TEST(ProtobufCompat, Wellknown) {
       (deserialized = proto::example::well_known_protos::from_proto(
                         iobuf::from(libpb.SerializeAsString()))
                         .get()));
+    EXPECT_EQ(libpb.repeated_duration().at(0).nanos(), 0);
+    EXPECT_EQ(libpb.repeated_duration().at(0).seconds(), 1);
     EXPECT_EQ(original, deserialized);
 
     deserialized = {};
@@ -325,6 +328,8 @@ TEST(ProtobufCompat, Wellknown) {
                         iobuf::from(libpb_serialized))
                         .get()))
       << "JSON: " << libpb_serialized;
+    EXPECT_EQ(libpb.repeated_duration().at(0).nanos(), 0);
+    EXPECT_EQ(libpb.repeated_duration().at(0).seconds(), 1);
     EXPECT_EQ(original, deserialized)
       << "Proto: " << fmt::format("{}", original)
       << "Deserialized: " << fmt::format("{}", deserialized);

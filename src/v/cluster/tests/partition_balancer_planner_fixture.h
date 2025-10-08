@@ -25,6 +25,7 @@
 #include "cluster/topic_updates_dispatcher.h"
 #include "cluster/types.h"
 #include "config/configuration.h"
+#include "config/node_config.h"
 #include "container/chunked_vector.h"
 #include "features/feature_table.h"
 #include "model/metadata.h"
@@ -34,6 +35,7 @@
 #include <seastar/core/chunked_fifo.hh>
 #include <seastar/core/sharded.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/core/smp.hh>
 
 #include <boost/test/unit_test.hpp>
 
@@ -69,6 +71,9 @@ struct controller_workers {
 public:
     controller_workers()
       : dispatcher(allocator, table, state) {
+        ss::smp::invoke_on_all([] {
+            config::node().node_id.set_value(model::node_id{1});
+        }).get();
         migrated_resources.start().get();
         table
           .start(ss::sharded_parameter([this] {

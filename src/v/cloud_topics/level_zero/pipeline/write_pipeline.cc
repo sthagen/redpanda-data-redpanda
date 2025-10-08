@@ -15,6 +15,7 @@
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
 #include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "cloud_topics/logger.h"
+#include "config/configuration.h"
 #include "resource_mgmt/memory_groups.h"
 #include "utils/human.h"
 
@@ -48,7 +49,11 @@ size_t get_cloud_topics_l0_write_path_memory() {
 
 template<class Clock>
 write_pipeline<Clock>::write_pipeline()
-  : _mem_budget(get_cloud_topics_l0_write_path_memory(), "write-pipeline") {
+  : _mem_budget(get_cloud_topics_l0_write_path_memory(), "write-pipeline")
+  , _probe(
+      "write",
+      config::shard_local_cfg().disable_metrics(),
+      config::shard_local_cfg().disable_public_metrics()) {
     vlog(
       cd_log.trace,
       "write_pipeline created, memory budget: {}",
@@ -71,11 +76,23 @@ write_pipeline<Clock>::write_and_debounce(
     // the request processing.
     auto data_chunk = co_await l0::serialize_batches(std::move(batches));
     auto sz = data_chunk.payload.size_bytes();
+
+    // Register data influx
+    _probe.register_bytes_in(sz);
+    _probe.set_memory_usage_gauge(_current_size + sz);
+    _probe.register_request();
+    auto lat_measure = _probe.register_request_processing_time();
+    auto err_probe = ss::defer([this] { _probe.register_request_error(); });
+
     // Grab the semaphore after the size of the write request
     // is known. It's impossible to do this in advance because
     // the memory is actually allocated before this call.
-    auto units = co_await ss::get_units(
-      _mem_budget, sz, this->get_root_rtc().root_abort_source());
+    auto units = ss::try_get_units(_mem_budget, sz);
+    if (!units) {
+        auto measure = _probe.register_memory_pressure_blocked(sz);
+        units = co_await ss::get_units(
+          _mem_budget, sz, this->get_root_rtc().root_abort_source());
+    }
     _current_size += sz;
     _bytes_total += sz;
     auto d = ss::defer([this, sz] { _current_size -= sz; });
@@ -98,8 +115,14 @@ write_pipeline<Clock>::write_and_debounce(
 
     auto res = co_await std::move(fut);
     if (res.has_error()) {
+        if (res.error() == errc::timeout) {
+            err_probe.cancel();
+            _probe.register_request_timeout();
+        }
         co_return res.error();
     }
+    err_probe.cancel();
+    _probe.register_request_completed();
     co_return std::move(res.value());
 }
 

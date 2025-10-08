@@ -41,8 +41,8 @@ func NewNetTuner(
 		fs, t, irqProcFile, irqDeviceInfo, ethtool, irqBalanceService, cpuMasks, executor)
 	return NewAggregatedTunable(
 		[]Tunable{
-			// RX queue count tuner should always be first in order as others will re-read queue counts
-			factory.NewRxQueueCountTuner(interfaces, mode, cpuMask),
+			// RX/TX queue count tuner should always be first in order as others will re-read queue counts
+			factory.NewRxTxQueueCountTuner(interfaces, mode, cpuMask),
 			factory.NewNICsBalanceServiceTuner(interfaces),
 			factory.NewNICsIRQsAffinityTuner(interfaces, mode, cpuMask),
 			factory.NewNICsRpsTuner(interfaces, mode, cpuMask),
@@ -56,7 +56,7 @@ func NewNetTuner(
 }
 
 type NetTunersFactory interface {
-	NewRxQueueCountTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable
+	NewRxTxQueueCountTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable
 	NewNICsBalanceServiceTuner(interfaces []string) Tunable
 	NewNICsIRQsAffinityTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable
 	NewNICsRpsTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable
@@ -104,24 +104,24 @@ func NewNetTunersFactory(
 	}
 }
 
-func (f *netTunersFactory) NewRxQueueCountTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable {
+func (f *netTunersFactory) NewRxTxQueueCountTuner(interfaces []string, mode irq.Mode, cpuMask string) Tunable {
 	return f.tuneNonVirtualInterfaces(
 		interfaces,
 		func(nic network.Nic) Checker {
-			return f.checkersFactory.NewNicRxQueueCountChecker(nic, mode, cpuMask)
+			return f.checkersFactory.NewNicRxTxQueueCountChecker(nic, mode, cpuMask)
 		},
 		func(nic network.Nic) TuneResult {
-			if !f.t.GetAllowRxQueueTuner() {
-				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as it's disabled by configuration")
+			if !f.t.GetAllowRxTxQueueTuner() {
+				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as it's disabled by configuration")
 				return NewTuneResult(false)
 			}
 
-			supportsIrqLowering, err := nic.SupportsRxQueueLowering()
+			supportsIrqLowering, err := nic.SupportsRxTxQueueLowering()
 			if err != nil {
 				return NewTuneError(err)
 			}
 			if !supportsIrqLowering {
-				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as using an unknown driver")
+				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as using an unknown driver")
 				return NewTuneResult(false)
 			}
 

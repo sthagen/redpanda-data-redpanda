@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "cloud_topics/level_zero/common/level_zero_probe.h"
 #include "cloud_topics/level_zero/pipeline/base_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
 #include "cloud_topics/level_zero/pipeline/pipeline_stage.h"
@@ -188,5 +189,7 @@ private:
     size_t _bytes_total{0};
     // Semaphore that represents memory budget that we have
     ssx::named_semaphore<Clock> _mem_budget;
+
+    pipeline_probe _probe;
 };
 } // namespace cloud_topics::l0

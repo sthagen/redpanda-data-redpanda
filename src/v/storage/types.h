@@ -332,7 +332,7 @@ struct local_log_reader_config {
       , max_offset(max_offset)
       , max_bytes(max_bytes)
       , type_filter(type_filter)
-      , first_timestamp(time)
+      , timestamp(time)
       , abort_source(as)
       , client_address(std::move(client_addr))
       , strict_max_bytes(strict_max_bytes) {}
@@ -363,9 +363,9 @@ struct local_log_reader_config {
     // observed in read).
     std::optional<model::record_batch_type> type_filter;
 
-    /// \brief gurantees first_timestamp >= record_batch.first_timestamp
-    /// it is the std::lower_bound
-    std::optional<model::timestamp> first_timestamp;
+    /// For timequeries: this timestamp allows us to skip all such batches where
+    /// `timestamp > batch.header().max_timestamp`.
+    std::optional<model::timestamp> timestamp;
 
     /// abort source for read operations
     model::opt_abort_source_t abort_source;

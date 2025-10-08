@@ -28,6 +28,7 @@
 using namespace cloud_topics;
 using cloud_topics::reconciler::test::fake_source;
 using cloud_topics::reconciler::test::unreliable_io;
+using cloud_topics::reconciler::test::unreliable_metastore;
 
 namespace {
 
@@ -47,10 +48,12 @@ public:
     void reconcile() { _reconciler.reconcile().get(); }
 
     unreliable_io& io() { return _io; }
+    unreliable_metastore& metastore() { return _metastore; }
+    reconciler::reconciler& reconciler() { return _reconciler; }
 
 private:
     unreliable_io _io;
-    l1::simple_metastore _metastore;
+    unreliable_metastore _metastore;
     reconciler::reconciler _reconciler{&_io, &_metastore};
 };
 
@@ -95,6 +98,21 @@ std::optional<uint64_t> get_object_upload_failed() {
 std::optional<uint64_t> get_empty_objects_skipped() {
     return test_utils::find_metric_value<uint64_t>(
       "cloud_topics_reconciler_empty_objects_skipped");
+}
+
+std::optional<uint64_t> get_metastore_retries() {
+    return test_utils::find_metric_value<uint64_t>(
+      "cloud_topics_reconciler_metastore_retries");
+}
+
+std::optional<uint64_t> get_offset_corrections() {
+    return test_utils::find_metric_value<uint64_t>(
+      "cloud_topics_reconciler_offset_corrections");
+}
+
+std::optional<uint64_t> get_rounds_failed() {
+    return test_utils::find_metric_value<uint64_t>(
+      "cloud_topics_reconciler_rounds_failed");
 }
 
 } // namespace
@@ -175,4 +193,129 @@ TEST_F(ReconcilerMetricsTest, FailedObjectsCounter) {
 
     EXPECT_THAT(get_object_upload_failed(), Optional(1));
     EXPECT_THAT(get_objects_uploaded(), Optional(1));
+}
+
+TEST_F(ReconcilerMetricsTest, HistogramMetrics) {
+    auto src = add_source();
+    src->add_batch({.count = 10});
+
+    reconcile();
+
+    const auto& probe = reconciler().get_probe_for_tests();
+
+    auto object_upload_duration = probe.get_object_upload_duration_for_tests();
+    EXPECT_GT(object_upload_duration.sample_count, 0);
+
+    auto metastore_add_objects_duration
+      = probe.get_metastore_add_objects_duration_for_tests();
+    EXPECT_GT(metastore_add_objects_duration.sample_count, 0);
+}
+
+// This test depends on the simple metastore packing all sources into one
+// object.
+TEST_F(ReconcilerMetricsTest, ObjectMetrics) {
+    auto src1 = add_source();
+    auto src2 = add_source();
+
+    src1->add_batch({.count = 10});
+    src2->add_batch({.count = 5});
+
+    reconcile();
+
+    const auto& probe = reconciler().get_probe_for_tests();
+
+    auto object_size = probe.get_object_size_bytes_for_tests();
+    EXPECT_EQ(object_size.sample_count, 1);
+
+    auto sources_per_object = probe.get_sources_per_object_for_tests();
+    EXPECT_EQ(sources_per_object.sample_count, 1);
+
+    src1->add_batch({.count = 15});
+
+    reconcile();
+
+    object_size = probe.get_object_size_bytes_for_tests();
+    EXPECT_EQ(object_size.sample_count, 2);
+
+    sources_per_object = probe.get_sources_per_object_for_tests();
+    EXPECT_EQ(sources_per_object.sample_count, 2);
+}
+
+TEST_F(ReconcilerMetricsTest, MetastoreRetries) {
+    EXPECT_THAT(get_metastore_retries(), Optional(0));
+    EXPECT_THAT(get_offset_corrections(), Optional(0));
+
+    auto src = add_source();
+    src->add_batch({.count = 10});
+
+    metastore().fail_add_objects_transiently(2);
+
+    reconcile();
+
+    EXPECT_THAT(get_metastore_retries(), Optional(2));
+    EXPECT_THAT(get_objects_uploaded(), Optional(1));
+
+    src->add_batch({.count = 5});
+    reconcile();
+
+    EXPECT_THAT(get_metastore_retries(), Optional(2));
+    EXPECT_THAT(get_objects_uploaded(), Optional(2));
+}
+
+// For more explanation of offset correction, see the LROUpdateFailure
+// reconciler unit test.
+TEST_F(ReconcilerMetricsTest, OffsetCorrection) {
+    auto src = add_source();
+
+    src->add_batch({.count = 10});
+    src->fail_set_lro(true);
+
+    reconcile();
+
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{});
+    EXPECT_THAT(get_offset_corrections(), Optional(0));
+
+    src->add_batch({.count = 10});
+    src->fail_set_lro(false);
+
+    reconcile();
+
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{9});
+    EXPECT_THAT(get_offset_corrections(), Optional(1));
+
+    reconcile();
+
+    EXPECT_EQ(src->last_reconciled_offset(), kafka::offset{19});
+    EXPECT_THAT(get_offset_corrections(), Optional(1));
+}
+
+TEST_F(ReconcilerMetricsTest, ReconciliationRoundsFailed) {
+    EXPECT_THAT(get_rounds_failed(), Optional(0));
+
+    auto src = add_source();
+
+    // Reconciling with nothing to do is not a failure.
+    reconcile();
+
+    EXPECT_THAT(get_rounds_failed(), Optional(0));
+    EXPECT_THAT(get_objects_uploaded(), Optional(0));
+
+    // OK, now let's do some work and fail it.
+    src->add_batch({.count = 10});
+
+    metastore().fail_add_objects(true);
+
+    reconcile();
+
+    // We create an orphan T_T.
+    EXPECT_THAT(get_rounds_failed(), Optional(1));
+    EXPECT_THAT(get_objects_uploaded(), Optional(1));
+
+    // Finally, let reconciliation succeed.
+    metastore().fail_add_objects(false);
+
+    reconcile();
+
+    EXPECT_THAT(get_rounds_failed(), Optional(1));
+    EXPECT_THAT(get_objects_uploaded(), Optional(2));
 }

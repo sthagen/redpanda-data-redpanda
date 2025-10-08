@@ -10,6 +10,7 @@
 
 #pragma once
 
+#include "cloud_topics/level_zero/common/level_zero_probe.h"
 #include "cloud_topics/level_zero/pipeline/base_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/circuit_breaker.h"
 #include "cloud_topics/level_zero/pipeline/event_filter.h"
@@ -130,5 +131,7 @@ private:
     ssx::named_semaphore<Clock> _mem_quota;
 
     circuit_breaker<Clock> _breaker;
+
+    pipeline_probe _probe;
 };
 } // namespace cloud_topics::l0

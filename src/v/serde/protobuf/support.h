@@ -279,13 +279,15 @@ public:
         while (parser.bytes_left() > 0) {
             auto tag = parser.read_tag();
             if (tag.field_number == 1) {
-                seconds
-                  = parser.template read_singular_varint<full_name, int64_t>(
-                    tag);
+                seconds = parser.template read_singular_varint<
+                  full_name,
+                  int64_t,
+                  zigzag::no>(tag);
             } else if (tag.field_number == 2) {
-                nanos
-                  = parser.template read_singular_varint<full_name, int32_t>(
-                    tag);
+                nanos = parser.template read_singular_varint<
+                  full_name,
+                  int32_t,
+                  zigzag::no>(tag);
             } else {
                 parser.skip_unknown(tag);
             }
@@ -345,11 +347,11 @@ inline iobuf duration_to_proto(absl::Duration d) {
     // seconds
     serde::pb::tag::write(
       {.wire_type = serde::pb::wire_type::varint, .field_number = 1}, &buf);
-    serde::pb::write_varint(d / absl::Seconds(1), &buf);
+    serde::pb::write_varint<int64_t, zigzag::no>(d / absl::Seconds(1), &buf);
     // nanos
     serde::pb::tag::write(
       {.wire_type = serde::pb::wire_type::varint, .field_number = 2}, &buf);
-    serde::pb::write_varint(
+    serde::pb::write_varint<int32_t, zigzag::no>(
       static_cast<int32_t>((d % absl::Seconds(1)) / absl::Nanoseconds(1)),
       &buf);
     return buf;

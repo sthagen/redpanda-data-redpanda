@@ -110,6 +110,8 @@ public:
         // This should be the same as `build_sync().size_bytes()`
         return _batch_data.size_bytes() + sizeof(model::record_batch_header);
     }
+    // The number of records in the batch so far.
+    int32_t num_records() const { return _num_records; }
 
     // The memory usage of the accumulated batch once it's built
     size_t memory_usage() const {
@@ -132,11 +134,11 @@ private:
     kafka::offset _base_offset = kafka::offset{0};
     kafka::offset _last_offset;
     term_id _term;
-    int64_t _producer_id{0};
+    int64_t _producer_id{-1};
     int32_t _num_records{0};
-    int32_t _base_sequence{0};
+    int32_t _base_sequence{-1};
     int32_t _max_offset_delta = std::numeric_limits<int32_t>::min();
-    int16_t _producer_epoch{0};
+    int16_t _producer_epoch{-1};
     record_batch_type _batch_type = record_batch_type::raft_data;
     compression _compression = compression::none;
 

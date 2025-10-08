@@ -186,8 +186,8 @@ topic_table::apply(topic_lifecycle_transition soft_del, model::offset offset) {
 
         // Create lifecycle markers
 
-        const auto& topic_properties
-          = tp->second.get_configuration().properties;
+        const auto& topic_cfg = tp->second.get_configuration();
+        const auto& topic_properties = topic_cfg.properties;
 
         if (topic_properties.requires_remote_erase()) {
             auto tombstone = nt_lifecycle_marker{
@@ -223,6 +223,32 @@ topic_table::apply(topic_lifecycle_transition soft_del, model::offset offset) {
               "created iceberg tombstone for topic {} (revision: {})",
               it->first,
               it->second.last_deleted_revision);
+        }
+
+        if (
+          topic_properties.cloud_topic_enabled
+          && !topic_properties.read_replica.value_or(false)
+          && topic_properties.remote_delete) {
+            auto tp_id = topic_cfg.tp_id;
+            if (tp_id.has_value()) {
+                auto tombstone = nt_cloud_topic_tombstone{
+                  .topic_id = *tp_id,
+                };
+                _cloud_topic_tombstones.emplace(soft_del.topic, tombstone);
+                vlog(
+                  clusterlog.debug,
+                  "Created cloud topic {} (revision: {}) tombstone for "
+                  "topic_id {}",
+                  tp->first,
+                  tp->second.get_revision(),
+                  *tp_id);
+            } else {
+                vlog(
+                  clusterlog.error,
+                  "Cloud topic {} (revision: {}) does not have topic ID",
+                  tp->first,
+                  tp->second.get_revision());
+            }
         }
 
         [[fallthrough]]; // proceed to local deletion
@@ -283,6 +309,22 @@ topic_table::apply(topic_lifecycle_transition soft_del, model::offset offset) {
               tombstone_it->second.last_deleted_revision);
 
             _iceberg_tombstones.erase(tombstone_it);
+            return ss::make_ready_future<std::error_code>(errc::success);
+        }
+        case topic_purge_domain::cloud_topic: {
+            auto tombstone_it = _cloud_topic_tombstones.find(soft_del.topic);
+            if (tombstone_it == _cloud_topic_tombstones.end()) {
+                return ss::make_ready_future<std::error_code>(
+                  errc::topic_not_exists);
+            }
+            const auto& [nt_rev, tombstone] = *tombstone_it;
+            vlog(
+              clusterlog.debug,
+              "Purged cloud topic tombstone for {}: {}",
+              nt_rev,
+              tombstone.topic_id);
+
+            _cloud_topic_tombstones.erase(tombstone_it);
             return ss::make_ready_future<std::error_code>(errc::success);
         }
         default:
@@ -1683,6 +1725,9 @@ ss::future<> topic_table::apply_snapshot(
 
     _iceberg_tombstones.replace(
       controller_snap.topics.iceberg_tombstones.values().copy());
+
+    _cloud_topic_tombstones.replace(
+      controller_snap.topics.cloud_topic_tombstones.values().copy());
 
     // 2. re-calculate derived state
 

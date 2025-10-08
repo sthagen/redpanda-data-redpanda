@@ -73,8 +73,10 @@ public:
     ss::future<std::expected<object_response, errc>>
     get_first_ge(const model::topic_id_partition&, kafka::offset) override;
 
-    ss::future<std::expected<object_response, errc>>
-    get_first_ge(const model::topic_id_partition&, model::timestamp) override;
+    ss::future<std::expected<object_response, errc>> get_first_ge(
+      const model::topic_id_partition&,
+      kafka::offset,
+      model::timestamp) override;
 
     ss::future<std::expected<kafka::offset, errc>> get_first_offset_for_bytes(
       const model::topic_id_partition&, uint64_t size) override;
@@ -95,7 +97,7 @@ public:
       const model::topic_id_partition&, model::timestamp) override;
 
     ss::future<std::expected<compaction_info_response, errc>>
-    get_compaction_info(const compaction_sample_spec&) override;
+    get_compaction_info(const compaction_info_spec&) override;
 
 private:
     friend class domain_manager;
@@ -104,7 +106,10 @@ private:
     static std::expected<object_response, errc>
     get_first_ge(const state&, const model::topic_id_partition&, kafka::offset);
     static std::expected<object_response, errc> get_first_ge(
-      const state&, const model::topic_id_partition&, model::timestamp);
+      const state&,
+      const model::topic_id_partition&,
+      kafka::offset,
+      model::timestamp);
     static std::expected<kafka::offset, errc> get_first_offset_for_bytes(
       const state&, const model::topic_id_partition&, uint64_t size);
     static std::expected<compaction_offsets_response, errc>

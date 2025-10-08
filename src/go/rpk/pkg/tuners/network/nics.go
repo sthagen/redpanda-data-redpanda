@@ -152,7 +152,7 @@ func GetHwInterfaceIRQsDistribution(
 		return nil, err
 	}
 
-	supportsIrqLowering, err := nic.SupportsRxQueueLowering()
+	supportsIrqLowering, err := nic.SupportsRxTxQueueLowering()
 	if err != nil {
 		return nil, err
 	}
@@ -236,13 +236,15 @@ func GetHwInterfaceIRQsDistribution(
 	// Find the cut off for live IRQs
 	irqCutOffIndex := getIrqCutOffIndex(allIRQs, rxQueues)
 
-	fmt.Printf("Distributing '%s' IRQs handling Rx queues\n", nic.Name())
+	zap.L().Sugar().Debugf("Cut-off-index: %d, sorted irq list: %v", irqCutOffIndex, IrqInfosToIDs(allIRQs))
+
+	zap.L().Sugar().Debugf("Distributing '%s' IRQs handling Rx/Tx queues", nic.Name())
 	IRQsDistribution, err := cpuMasks.GetIRQsDistributionMasks(
 		IrqInfosToIDs(allIRQs[0:irqCutOffIndex]), irqCPUMask)
 	if err != nil {
 		return nil, err
 	}
-	fmt.Printf("Distributing rest of '%s' IRQs\n", nic.Name())
+	zap.L().Sugar().Debugf("Distributing rest of '%s' IRQs\n", nic.Name())
 	restIRQsDistribution, err := cpuMasks.GetIRQsDistributionMasks(
 		IrqInfosToIDs(allIRQs[irqCutOffIndex:]), irqCPUMask)
 	if err != nil {
@@ -303,6 +305,7 @@ func GetCurrentAndTargetChannels(
 
 	targetChannels = currentChannels
 	targetChannels.RxCount = min(currentChannels.MaxRx, uint32(puCount))
+	targetChannels.TxCount = min(currentChannels.MaxTx, uint32(puCount))
 	targetChannels.CombinedCount = min(currentChannels.MaxCombined, uint32(puCount))
 
 	zap.L().Sugar().Debugf("Got current channels for '%s': %+v, target channels: %+v", nic.Name(), currentChannels, targetChannels)

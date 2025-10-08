@@ -31,6 +31,7 @@ redpanda_cc_gtest(
         "//src/v/config",
         "//src/v/kafka/server/tests:kafka_test_utils",
         "//src/v/model",
+        "//src/v/model:batch_builder",
         "//src/v/random:generators",
         "//src/v/redpanda/tests:fixture",
         "//src/v/ssx:sformat",

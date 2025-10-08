@@ -98,6 +98,7 @@ public:
     ss::future<> stop();
 
     void setup_metrics_for_tests() { _probe.setup_metrics(); }
+    const reconciler_probe& get_probe_for_tests() const { return _probe; }
 
     void attach_partition(
       const model::ntp&,

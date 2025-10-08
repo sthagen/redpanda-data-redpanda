@@ -26,8 +26,8 @@ import (
 )
 
 type NetCheckersFactory interface {
-	NewNicRxQueueCountCheckers(interfaces []string, mode irq.Mode, cpuMask string) []Checker
-	NewNicRxQueueCountChecker(nic network.Nic, mode irq.Mode, cpuMask string) Checker
+	NewNicRxTxQueueCountCheckers(interfaces []string, mode irq.Mode, cpuMask string) []Checker
+	NewNicRxTxQueueCountChecker(nic network.Nic, mode irq.Mode, cpuMask string) Checker
 	NewNicIRQAffinityStaticChecker(interfaces []string) Checker
 	NewNicIRQAffinityCheckers(interfaces []string, mode irq.Mode, mask string) []Checker
 	NewNicIRQAffinityChecker(nic network.Nic, mode irq.Mode, mask string) Checker
@@ -96,26 +96,26 @@ func (f *netCheckersFactory) DedicatedMaskForComputations(interfaces []string) s
 	return mask
 }
 
-func (f *netCheckersFactory) NewNicRxQueueCountChecker(
+func (f *netCheckersFactory) NewNicRxTxQueueCountChecker(
 	nic network.Nic, mode irq.Mode, cpuMask string,
 ) Checker {
 	return NewEqualityChecker(
-		NicRxQueueCountChecker,
-		fmt.Sprintf("NIC %s RX queue count set", nic.Name()),
+		NicRxTxQueueCountChecker,
+		fmt.Sprintf("NIC %s RX/TX queue count set", nic.Name()),
 		Warning,
 		true,
 		func() (interface{}, error) {
-			if !f.t.GetAllowRxQueueTuner() {
-				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as it's disabled by configuration")
+			if !f.t.GetAllowRxTxQueueTuner() {
+				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as it's disabled by configuration")
 				return true, nil
 			}
 
-			supportsIrqLowering, err := nic.SupportsRxQueueLowering()
+			supportsIrqLowering, err := nic.SupportsRxTxQueueLowering()
 			if err != nil {
 				return false, err
 			}
 			if !supportsIrqLowering {
-				zap.L().Sugar().Debugf("Skipping RxQueue Tuner as using an unknown driver")
+				zap.L().Sugar().Debugf("Skipping RX/TX Queue Tuner as using an unknown driver")
 				return true, nil
 			}
 
@@ -125,20 +125,21 @@ func (f *netCheckersFactory) NewNicRxQueueCountChecker(
 			}
 
 			rxCheck := currentChannels.RxCount == targetChannels.RxCount
+			txCheck := currentChannels.TxCount == targetChannels.TxCount
 			combinedCheck := currentChannels.CombinedCount == targetChannels.CombinedCount
 
-			// We need both to be true because for the not in use one the check will always be true (0 == 0)
-			return rxCheck && combinedCheck, nil
+			// We need all to be true because for the not in use one the check will always be true (0 == 0)
+			return rxCheck && txCheck && combinedCheck, nil
 		},
 	)
 }
 
-func (f *netCheckersFactory) NewNicRxQueueCountCheckers(
+func (f *netCheckersFactory) NewNicRxTxQueueCountCheckers(
 	interfaces []string, mode irq.Mode, cpuMask string,
 ) []Checker {
 	return f.forNonVirtualInterfaces(interfaces,
 		func(nic network.Nic) Checker {
-			return f.NewNicRxQueueCountChecker(nic, mode, cpuMask)
+			return f.NewNicRxTxQueueCountChecker(nic, mode, cpuMask)
 		})
 }
 

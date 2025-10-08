@@ -15,6 +15,7 @@
 #include "cloud_topics/level_zero/pipeline/write_pipeline.h"
 #include "cloud_topics/level_zero/pipeline/write_request.h"
 #include "cloud_topics/logger.h"
+#include "config/configuration.h"
 
 #include <seastar/core/loop.hh>
 #include <seastar/core/lowres_clock.hh>
@@ -30,13 +31,15 @@ template<class Clock>
 throttler<Clock>::throttler(
   size_t tput_limit, l0::write_pipeline<Clock>::stage s)
   : _write_tput_tb(tput_limit, "ct:throttler")
-  , _my_stage(std::move(s)) {}
+  , _my_stage(std::move(s))
+  , _probe(config::shard_local_cfg().disable_metrics()) {}
 
 template<class Clock>
 throttler<Clock>::throttler(
   size_t tput_limit, ss::sharded<l0::write_pipeline<Clock>>& pipeline)
   : _write_tput_tb(tput_limit, "ct:throttler")
-  , _my_stage(pipeline.local().register_write_pipeline_stage()) {}
+  , _my_stage(pipeline.local().register_write_pipeline_stage())
+  , _probe(config::shard_local_cfg().disable_metrics()) {}
 
 template<class Clock>
 ss::future<> throttler<Clock>::start() {
@@ -78,8 +81,13 @@ void throttler<Clock>::throttle_tput(size_t overshoot) {
 
         _throttle_by_tput++;
         _outstanding_throttled_requests++;
+        _probe.register_throttle_event();
+        auto tracker = _probe.track_throttled_bytes(req->size_bytes());
         ssx::background = _write_tput_tb.maybe_throttle(req->size_bytes(), _as)
-                            .finally([this, req, h = _gate.hold()]() noexcept {
+                            .finally([this,
+                                      req,
+                                      h = _gate.hold(),
+                                      t = std::move(tracker)]() noexcept {
                                 auto r = req.get();
                                 if (r != nullptr) {
                                     _my_stage.push_next_stage(*r);

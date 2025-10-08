@@ -180,8 +180,8 @@ type (
 		CoresPerDedicatedInterruptCore *int `yaml:"cores_per_dedicated_interrupt_core,omitempty" json:"cores_per_dedicated_interrupt_core"`
 		// Use GetAllowDedicatedInterruptMode to read
 		AllowDedicatedInterruptMode *bool `yaml:"allow_dedicated_interrupt_mode,omitempty" json:"allow_dedicated_interrupt_mode"`
-		// Use GetAllowRxQueueTuner to read
-		AllowRxQueueTuner *bool `yaml:"allow_rx_queue_tuner,omitempty" json:"allow_rx_queue_tuner"`
+		// Use GetAllowRxTxQueueTuner to read
+		AllowRxTxQueueTuner *bool `yaml:"allow_rx_tx_queue_tuner,omitempty" json:"allow_rx_tx_queue_tuner"`
 	}
 
 	RpkKafkaAPI struct {
@@ -221,9 +221,9 @@ func (t *RpkNodeTuners) GetAllowDedicatedInterruptMode() bool {
 	return false
 }
 
-func (t *RpkNodeTuners) GetAllowRxQueueTuner() bool {
-	if t.AllowRxQueueTuner != nil {
-		return *t.AllowRxQueueTuner
+func (t *RpkNodeTuners) GetAllowRxTxQueueTuner() bool {
+	if t.AllowRxTxQueueTuner != nil {
+		return *t.AllowRxTxQueueTuner
 	}
 	return true
 }

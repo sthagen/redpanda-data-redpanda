@@ -61,6 +61,11 @@ using random_generators::rng;
 constexpr int get_int_0 = 1822407592;
 constexpr int get_int_1 = 1412255784;
 
+// capture some global get_int calls, to see what happens before the
+// test hooks run
+const int global_get_int_0 = get_int<int>();
+const int global_get_int_1 = get_int<int>();
+
 using namespace random_generators::internal;
 
 // return true if the global seeding mode is other than "fixed"
@@ -76,6 +81,15 @@ void check_two_random_numbers() {
     }
     RPTEST_EXPECT_EQ(get_int<int>(), get_int_0);
     RPTEST_EXPECT_EQ(get_int<int>(), get_int_1);
+}
+
+MAKE_TEST_CASE(test_expected_global) {
+    if (not_fixed()) {
+        // only applies in fixed mode
+        return;
+    }
+    RPTEST_EXPECT_EQ(global_get_int_0, get_int_0);
+    RPTEST_EXPECT_EQ(global_get_int_1, get_int_1);
 }
 
 MAKE_TEST_CASE(test_expected_values) { check_two_random_numbers(); }

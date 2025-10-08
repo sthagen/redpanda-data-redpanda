@@ -209,6 +209,7 @@ ss::future<> reconciler::reconcile() {
           lg.warn,
           "Could not create object metadata builder: {}",
           metadata_builder_res.error());
+        _probe.increment_rounds_failed();
         co_return;
     }
     auto& metadata_builder = metadata_builder_res.value();
@@ -219,6 +220,7 @@ ss::future<> reconciler::reconcile() {
           src->topic_id_partition());
         if (!oid.has_value()) {
             vlog(lg.warn, "Could not get object: {}", oid.error());
+            _probe.increment_rounds_failed();
             co_return;
         }
         oid_to_sources[oid.value()].push_back(src);
@@ -285,6 +287,8 @@ ss::future<> reconciler::reconcile() {
 
     // Check if we have any successful objects to commit.
     if (successful_objects.empty()) {
+        // NB: This doesn't count as failing the round because it may be that
+        // all sources are fully reconciled.
         vlog(lg.debug, "No successful objects to commit to metastore");
         co_return;
     }
@@ -296,6 +300,7 @@ ss::future<> reconciler::reconcile() {
         log_error(commit_result.error().with_context(
           "Abandoning reconciliation run because the L1 metastore operation "
           "failed"));
+        _probe.increment_rounds_failed();
         co_return;
     }
 }
@@ -374,6 +379,9 @@ reconciler::build_and_put_object(
     }
 
     _probe.increment_objects_uploaded();
+    _probe.add_bytes_reconciled(obj_meta.object_info.size_bytes);
+    _probe.record_object_size_bytes(obj_meta.object_info.size_bytes);
+    _probe.record_sources_per_object(obj_meta.commits.size());
 
     co_return obj_meta;
 }
@@ -455,6 +463,7 @@ reconciler::build_object(
 
 ss::future<std::expected<void, reconcile_error>>
 reconciler::put_object(const l1::object_id& oid, builder_context& ctx) {
+    auto metrics_duration = _probe.measure_object_upload_duration();
     auto put_result = co_await _l1_io->put_object(oid, ctx.staging.get(), &_as);
     if (!put_result.has_value()) {
         co_return std::unexpected(reconcile_error(
@@ -567,8 +576,11 @@ reconciler::add_objects_with_retry(
     retry_chain_node rtc(_as, ss::lowres_clock::now() + timeout, backoff);
     retry_chain_logger ctxlog(lg, rtc, "add_objects");
     for (auto permit = rtc.retry(); permit.is_allowed; permit = rtc.retry()) {
+        auto metrics_duration_add_objects
+          = _probe.measure_metastore_add_objects_duration();
         auto add_result = co_await _metastore->add_objects(
           *meta_builder, terms);
+        metrics_duration_add_objects.reset();
 
         if (add_result.has_value()) {
             co_return std::move(add_result).value();
@@ -580,6 +592,7 @@ reconciler::add_objects_with_retry(
               add_result.error()));
         }
 
+        _probe.increment_metastore_retries();
         co_await ss::sleep_abortable(permit.delay, rtc.root_abort_source());
     }
 
@@ -625,6 +638,7 @@ ss::future<std::expected<void, reconcile_error>> reconciler::commit_objects(
             kafka::offset lro = commit.metadata.last_offset;
             auto it = corrected_next_offsets.find(tidp);
             if (it != corrected_next_offsets.end()) {
+                _probe.increment_offset_corrections();
                 // We want the previous offset, because that is what was last
                 // reconciled. During next reconciliation we should get the
                 // offset *after* the LRO to start reading from.

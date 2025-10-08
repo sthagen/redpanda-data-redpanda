@@ -57,6 +57,7 @@ redpanda_cc_library(
         "//src/v/cloud_topics:cluster_services_interface",
         "//src/v/cloud_topics:types",
         "//src/v/cloud_topics/level_zero/cluster_services_impl",
+        "//src/v/cloud_topics/level_zero/common:level_zero_probe",
         "//src/v/cloud_topics/level_zero/pipeline:event_filter",
         "//src/v/cloud_topics/level_zero/pipeline:pipeline_stage",
         "//src/v/cloud_topics/level_zero/pipeline:write_pipeline",

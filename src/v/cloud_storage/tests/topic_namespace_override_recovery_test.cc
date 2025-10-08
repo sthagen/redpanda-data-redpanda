@@ -96,6 +96,7 @@ TEST_F(TopicRecoveryFixture, TestTopicNamespaceOverrideRecovery) {
         auto archiver_ref = partition->archiver();
         ASSERT_TRUE(archiver_ref.has_value());
         auto& archiver = archiver_ref.value().get();
+        archiver.initialize_probe();
 
         // Produce some records to the partition.
         tests::remote_segment_generator gen(
@@ -184,6 +185,7 @@ TEST_F(TopicRecoveryFixture, TestTopicNamespaceOverrideRecovery) {
     auto archiver_ref = partition->archiver();
     ASSERT_TRUE(archiver_ref.has_value());
     auto& archiver = archiver_ref.value().get();
+    archiver.initialize_probe();
 
     tests::remote_segment_generator gen(make_kafka_client().get(), *partition);
     auto deferred_g_close = ss::defer([&gen] { gen.stop().get(); });

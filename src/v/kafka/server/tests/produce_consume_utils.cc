@@ -13,14 +13,19 @@
 #include "bytes/iobuf.h"
 #include "container/chunked_vector.h"
 #include "kafka/client/transport.h"
+#include "kafka/protocol/list_offset.h"
 #include "kafka/protocol/produce.h"
 #include "kafka/protocol/schemata/produce_request.h"
+#include "kafka/protocol/types.h"
+#include "model/metadata.h"
 #include "storage/record_batch_builder.h"
 #include "utils/to_string.h"
 
 #include <seastar/util/log.hh>
 
 #include <chrono>
+#include <stdexcept>
+#include <utility>
 
 using namespace std::chrono_literals;
 
@@ -351,6 +356,46 @@ kafka_consume_transport::raw_consume_from_partition(
         }
     }
     co_return records;
+}
+
+ss::future<kafka::offset> kafka_produce_transport::produce_to_partition(
+  const model::ntp& ntp, model::record_batch batch) {
+    if (ntp.ns != model::kafka_namespace) {
+        throw std::runtime_error(
+          fmt::format("cannot produce to ntp with namespace {}", ntp.ns));
+    }
+    return produce_to_partition(
+      ntp.tp.topic, ntp.tp.partition, std::move(batch));
+}
+
+ss::future<kafka::offset> kafka_consume_transport::timequery(
+  model::topic_partition tp, model::timestamp time) {
+    kafka::list_offsets_request req;
+    req.data.isolation_level = std::to_underlying(
+      model::isolation_level::read_uncommitted);
+    req.data.topics.push_back(
+      kafka::list_offset_topic{
+        .name = tp.topic,
+        .partitions = {{
+          .partition_index = tp.partition,
+          .current_leader_epoch = kafka::invalid_leader_epoch,
+          .timestamp = time,
+        }},
+      });
+    auto api_resp = co_await _transport.dispatch(
+      std::move(req), kafka::api_version(5));
+    for (const auto& topic : api_resp.data.topics) {
+        if (topic.name != tp.topic) {
+            continue;
+        }
+        for (const auto& partition : topic.partitions) {
+            if (partition.partition_index != tp.partition) {
+                continue;
+            }
+            co_return model::offset_cast(partition.offset);
+        }
+    }
+    throw std::runtime_error(fmt::format("list offsets result missing {}", tp));
 }
 
 } // namespace tests

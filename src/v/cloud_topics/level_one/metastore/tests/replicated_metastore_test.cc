@@ -271,11 +271,11 @@ TEST_F(ReplicatedMetastoreTest, TestBasicAdd) {
 
         // Check that our timestamps seem sane.
         for (int t : {0, 10000}) {
-            auto offset_ts_obj = meta.get_first_ge(tp, ts{t}).get();
+            auto offset_ts_obj = meta.get_first_ge(tp, o{}, ts{t}).get();
             ASSERT_TRUE(offset_ts_obj.has_value());
         }
         // Going past the end should result in an error.
-        auto offset_ts_obj = meta.get_first_ge(tp, ts{10001}).get();
+        auto offset_ts_obj = meta.get_first_ge(tp, o{}, ts{10001}).get();
         ASSERT_FALSE(offset_ts_obj.has_value());
         ASSERT_EQ(offset_ts_obj.error(), metastore::errc::out_of_range);
 
@@ -360,11 +360,11 @@ TEST_F(ReplicatedMetastoreTest, TestBasicCompact) {
 
         // Check that our timestamps seem sane.
         for (int t : {0, 10000}) {
-            auto offset_ts_obj = meta.get_first_ge(tp, ts{t}).get();
+            auto offset_ts_obj = meta.get_first_ge(tp, o{}, ts{t}).get();
             ASSERT_TRUE(offset_ts_obj.has_value());
         }
         // Going past the end should result in an error.
-        auto offset_ts_obj = meta.get_first_ge(tp, ts{10001}).get();
+        auto offset_ts_obj = meta.get_first_ge(tp, o{}, ts{10001}).get();
         ASSERT_FALSE(offset_ts_obj.has_value());
         ASSERT_EQ(offset_ts_obj.error(), metastore::errc::out_of_range);
 

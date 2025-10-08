@@ -52,7 +52,8 @@ write_request_scheduler::write_request_scheduler(write_pipeline<>::stage s)
       config::shard_local_cfg()
         .cloud_topics_produce_cardinality_threshold.bind())
   , _scheduling_interval(
-      config::shard_local_cfg().cloud_topics_produce_upload_interval.bind()) {}
+      config::shard_local_cfg().cloud_topics_produce_upload_interval.bind())
+  , _probe(config::shard_local_cfg().disable_metrics()) {}
 
 ss::future<> write_request_scheduler::start() {
     // Start the background time based fallback loop on shard 0
@@ -123,8 +124,9 @@ ss::future<> write_request_scheduler::bg_data_threshold() {
 
         // Propagate to the next stage
         _stage.process(
-          [](const l0::write_request<>&) noexcept
+          [this](const l0::write_request<>& r) noexcept
             -> checked<l0::request_processing_result, errc> {
+              _probe.register_data_threshold(r.size_bytes());
               return l0::request_processing_result::advance_and_continue;
           });
     }
@@ -190,11 +192,12 @@ ss::future<> write_request_scheduler::apply_time_based_fallback() {
 
     if (max_shard_bytes > 0) {
         co_await container().invoke_on_all(
-          [target_shard](write_request_scheduler& scheduler) {
+          [this, target_shard](write_request_scheduler& scheduler) {
               if (ss::this_shard_id() == target_shard) {
                   // Fast path: process requests locally
                   // This shard is the one that has the most data.
-                  scheduler._stage.process([](write_request<>&) noexcept {
+                  scheduler._stage.process([this](write_request<>& r) noexcept {
+                      _probe.register_time_fallback(r.size_bytes());
                       return request_processing_result::advance_and_continue;
                   });
               } else {
@@ -249,6 +252,8 @@ ss::future<> write_request_scheduler::bg_time_based_fallback() {
 ss::future<std::expected<write_request_scheduler::foreign_ptr_t, errc>>
 write_request_scheduler::proxy_write_request(write_request<>* req) noexcept {
     auto h = _gate.hold();
+    _probe.register_time_fallback(req->size_bytes());
+    _probe.register_receive_xshard(req->size_bytes());
     write_request<> proxy(
       req->ntp,
       shallow_copy(req->data_chunk),
@@ -303,6 +308,7 @@ ss::future<> write_request_scheduler::roundtrip(
     chunked_vector<result_t> results;
     for (auto& req : list.requests) {
         results.push_back(result_t{.request = &req});
+        _probe.register_send_xshard(req.size_bytes());
     }
     co_await container().invoke_on(
       shard, [&results](write_request_scheduler& balancer) mutable {

@@ -368,13 +368,9 @@ ss::future<> level_zero_log_reader_impl::materialize_batches(
               local_batch.data,
               [this, &local_batch_header, &batches_it](
                 const cloud_topics::extent_meta&) {
-                  model::record_batch batch = std::move(*batches_it);
+                  model::record_batch batch = apply_placeholder_to_batch(
+                    local_batch_header, std::move(*batches_it));
                   ++batches_it;
-                  auto size = batch.header().size_bytes;
-                  batch.header() = local_batch_header;
-                  batch.header().type = model::record_batch_type::raft_data;
-                  batch.header().size_bytes = size;
-                  batch.header().reset_size_checksum_metadata(batch.data());
                   // Propagate materialized batches to the record batch cache
                   if (cache_enabled()) {
                       vlog(

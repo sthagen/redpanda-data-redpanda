@@ -328,7 +328,7 @@ tx_snapshot_v6::tx_snapshot_v6(tx_snapshot_v5 snap_v5, raft::group_id group)
         auto& state = producer_states[pid.get_id()];
         state.id = pid;
         state.group = group;
-        state.transaction_state = {};
+        state.transaction_state = producer_partition_transaction_state{};
         state.transaction_state->first = data.first;
         state.transaction_state->last = data.last;
         state.transaction_state->sequence = model::tx_seq{-1};

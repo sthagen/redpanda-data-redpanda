@@ -287,6 +287,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/cluster",
+        "//src/v/config",
         "//src/v/model",
         "//src/v/raft",
         "//src/v/test_utils:gtest",
@@ -337,6 +338,7 @@ redpanda_cc_gtest(
     ],
     deps = [
         "//src/v/cluster",
+        "//src/v/config",
         "//src/v/model",
         "//src/v/raft:fundamental",
         "//src/v/random:generators",

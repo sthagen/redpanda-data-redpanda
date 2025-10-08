@@ -67,6 +67,16 @@ def main():
         f"[bench-wrapper] command           : {' '.join(sys.argv[1:])}", file=sys.stderr
     )
 
+    def printenv(name: str):
+        v = os.getenv(name, None)
+        v = "(unset)" if v is None else v
+        print(f"{name}={v} ", file=sys.stderr, end="")
+
+    print("[bench-wrapper] ", end="", file=sys.stderr)
+    printenv("REDPANDA_RNG_SEEDING_MODE")
+    printenv("REDPANDA_RNG_SEEDING_MODE_DEFAULT")
+    print(file=sys.stderr)
+
     if verbose != 0:
         print("[bench-wrapper] env begin:", file=sys.stderr)
         for k, v in os.environ.items():

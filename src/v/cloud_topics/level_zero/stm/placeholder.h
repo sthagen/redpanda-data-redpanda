@@ -62,4 +62,10 @@ model::record_batch
 
 ctp_placeholder parse_placeholder_batch(model::record_batch);
 
+// Create a batch for a reader from the uploaded batch and a replicated
+// placeholder batch header.
+model::record_batch apply_placeholder_to_batch(
+  const model::record_batch_header& placeholder_batch_header,
+  model::record_batch uploaded_batch);
+
 } // namespace cloud_topics
