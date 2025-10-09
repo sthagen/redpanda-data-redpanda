@@ -182,6 +182,7 @@ public:
     ss::future<> upload_until_term_change(archival::ntp_archiver& archiver) {
         auto sync_timeout = config::shard_local_cfg()
                               .cloud_storage_metadata_sync_timeout_ms.value();
+        archiver.initialize_probe();
         return archiver._parent.archival_meta_stm()
           ->sync(sync_timeout)
           .then([&](const auto& sync_result) {

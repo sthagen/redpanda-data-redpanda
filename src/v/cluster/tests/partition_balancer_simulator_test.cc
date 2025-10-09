@@ -476,10 +476,14 @@ private:
                 }
             }
         }
-        BOOST_REQUIRE_MESSAGE(
-          !offending_pair,
-          "validation failed, offending pair: " << offending_pair->first << ", "
-                                                << offending_pair->second);
+
+        auto failure_msg = offending_pair.has_value()
+                             ? fmt::format(
+                                 "validation failed, offending pair: {}, {}",
+                                 offending_pair->first,
+                                 offending_pair->second)
+                             : "";
+        BOOST_REQUIRE_MESSAGE(!offending_pair, failure_msg);
     }
 
     cluster::cluster_health_report create_health_report() const {

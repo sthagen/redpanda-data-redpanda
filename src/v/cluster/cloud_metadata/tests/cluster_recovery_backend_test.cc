@@ -184,6 +184,7 @@ TEST_P(ClusterRecoveryBackendLeadershipParamTest, TestRecoveryControllerState) {
             continue;
         }
         auto& archiver = p->archiver().value().get();
+        archiver.initialize_probe();
         archiver.sync_for_tests().get();
         auto res = archiver
                      .upload_next_candidates(

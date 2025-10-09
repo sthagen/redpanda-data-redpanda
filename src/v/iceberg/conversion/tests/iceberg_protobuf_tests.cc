@@ -29,6 +29,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
 
 using namespace iceberg;
 using namespace iceberg::testing;
@@ -223,7 +224,6 @@ TEST_CORO(values_protobuf, TestSimpleValueConversion) {
     message.set_email("test@redpanda.com");
     message.mutable_dept()->set_name("Redpanda test dept");
     message.mutable_dept()->set_id(1024);
-    message.set_test_coverage("test coverage");
 
     auto result = co_await serialize_and_convert(message);
 
@@ -242,7 +242,7 @@ TEST_CORO(values_protobuf, TestSimpleValueConversion) {
         IcebergStruct(
           OptionalIcebergPrimitive<int_value>(1024),
           OptionalIcebergPrimitive<string_value>("Redpanda test dept")),
-        OptionalIcebergPrimitive<string_value>("test coverage")));
+        Eq(std::nullopt)));
 }
 
 Partition

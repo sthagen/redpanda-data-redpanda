@@ -21,6 +21,7 @@
 #include <fmt/format.h>
 
 #include <compare>
+#include <limits>
 #include <string_view>
 #include <type_traits>
 
@@ -66,7 +67,7 @@ auto compare_field_variant(
   const serde::pb::field::value_t& vb,
   const std::vector<int32_t>& field_path) {
     return std::visit(
-      [&field_path](const auto& a, const auto& b) -> std::partial_ordering {
+      [&field_path](const auto& a, const auto& b) -> std::strong_ordering {
           using A = std::remove_cvref_t<decltype(a)>;
           using B = std::remove_cvref_t<decltype(b)>;
 
@@ -80,12 +81,12 @@ auto compare_field_variant(
             || std::is_same_v<B, std::monostate>) {
               // Handle monostate (unset fields)
               if constexpr (std::is_same_v<A, B>) {
-                  return std::partial_ordering::equivalent;
+                  return std::strong_ordering::equal;
               } else {
                   // A=null -> A < B; B=null -> A > B
                   return std::is_same_v<A, std::monostate>
-                           ? std::partial_ordering::less
-                           : std::partial_ordering::greater;
+                           ? std::strong_ordering::less
+                           : std::strong_ordering::greater;
               }
           } else if constexpr (!std::is_same_v<A, B>) {
               throw serde::pb::rpc::internal_exception(
@@ -93,6 +94,21 @@ auto compare_field_variant(
           } else if constexpr (std::is_same_v<A, serde::pb::raw_enum_value>) {
               // Compare enums by their variant number
               return a.number <=> b.number;
+          } else if constexpr (std::is_floating_point_v<A>) {
+              if (a < b) {
+                  return std::strong_ordering::less;
+              } else if (a > b) {
+                  return std::strong_ordering::greater;
+              }
+              using integral_type = std::
+                conditional_t<sizeof(A) == sizeof(int32_t), int32_t, int64_t>;
+              // Normalize nans so they compare equal
+              auto abits = std::bit_cast<integral_type, A>(
+                std::isnan(a) ? std::numeric_limits<A>::quiet_NaN() : a);
+              auto bbits = std::bit_cast<integral_type, B>(
+                std::isnan(b) ? std::numeric_limits<B>::quiet_NaN() : b);
+              // Comparing the same bits covers NaN, and also -0 vs 0
+              return abits <=> bbits;
           } else {
               return a <=> b;
           }
@@ -177,13 +193,7 @@ bool sort_order::operator()(
         auto cmp = compare_field_variant(
           fa->value, fb->value, comp.field_numbers);
 
-        if (cmp == std::partial_ordering::unordered) {
-            // Treat unordered (e.g. NaN) as less so they appear first when
-            // sorting in ascending order (e.g. NaN < 42.0 -> true)
-            cmp = std::partial_ordering::less;
-        }
-
-        if (cmp != std::partial_ordering::equivalent) {
+        if (cmp != std::strong_ordering::equal) {
             // Ascending: cmp as is. Descending: invert
             return comp.ord == component::order::ascending
                      ? cmp == std::partial_ordering::less

@@ -200,11 +200,35 @@ TEST_F(AIPOrderingTest, FloatFieldOrdering) {
     auto& m3 = msgs.emplace_back();
     m3.set_float_field(std::numeric_limits<float>::quiet_NaN());
 
+    auto& m4 = msgs.emplace_back();
+    m4.set_float_field(std::numeric_limits<float>::signaling_NaN());
+
+    auto& m5 = msgs.emplace_back();
+    m5.set_float_field(0.0f);
+
+    auto& m6 = msgs.emplace_back();
+    m6.set_float_field(-0.0f);
+
+    auto& m7 = msgs.emplace_back();
+    m7.set_float_field(std::numeric_limits<float>::infinity());
+
+    auto& m8 = msgs.emplace_back();
+    m8.set_float_field(-std::numeric_limits<float>::infinity());
+
     auto order = parse("float_field");
     std::ranges::sort(msgs, order);
-    EXPECT_TRUE(std::isnan(msgs[0].get_float_field()));
-    EXPECT_EQ(msgs[1].get_float_field(), 1.5f);
-    EXPECT_EQ(msgs[2].get_float_field(), 2.5f);
+    EXPECT_EQ(
+      msgs[0].get_float_field(), -std::numeric_limits<float>::infinity());
+    EXPECT_EQ(msgs[1].get_float_field(), -0.0f);
+    EXPECT_TRUE(std::signbit(msgs[1].get_float_field()));
+    EXPECT_EQ(msgs[2].get_float_field(), 0.0f);
+    EXPECT_FALSE(std::signbit(msgs[2].get_float_field()));
+    EXPECT_EQ(msgs[3].get_float_field(), 1.5f);
+    EXPECT_EQ(msgs[4].get_float_field(), 2.5f);
+    EXPECT_EQ(
+      msgs[5].get_float_field(), std::numeric_limits<float>::infinity());
+    EXPECT_TRUE(std::isnan(msgs[6].get_float_field()));
+    EXPECT_TRUE(std::isnan(msgs[7].get_float_field()));
 }
 
 TEST_F(AIPOrderingTest, WhitespaceHandling) {

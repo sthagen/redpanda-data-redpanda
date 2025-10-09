@@ -10,5 +10,5 @@ message Person {
     int32 id = 2;
     string email = 3;
     Department dept = 4;
-    string test_coverage = 5;
+    optional string test_coverage = 5;
 }
